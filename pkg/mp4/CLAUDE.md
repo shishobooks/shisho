@@ -418,6 +418,7 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 - Decimal numbers and ranges handled through `seriesnum.ParseRange`
 - Range start, end, and unit are an atomic scanner group; M4B leaves unit nil
 - Whitespace trimmed from extracted names
+- A blank freeform `SERIES` value does not mask a valid grouping fallback
 - Malformed numeric ranges are discarded as a whole while preserving the series name
 
 **Atomic Write Pattern:**

@@ -216,6 +216,7 @@ func TestConvertRawMetadata_SeriesFromFreeform(t *testing.T) {
 	t.Run("malformed freeform SERIES-PART is discarded atomically", func(t *testing.T) {
 		t.Parallel()
 		raw := &rawMetadata{
+			grouping: "Fallback Series #7-9",
 			freeform: map[string]string{
 				"com.apple.iTunes:SERIES":      "Expanse",
 				"com.apple.iTunes:SERIES-PART": "3-1",
@@ -225,6 +226,23 @@ func TestConvertRawMetadata_SeriesFromFreeform(t *testing.T) {
 		assert.Equal(t, "Expanse", meta.Series)
 		assert.Nil(t, meta.SeriesNumber)
 		assert.Nil(t, meta.SeriesNumberEnd)
+	})
+
+	t.Run("whitespace freeform SERIES falls back to grouping", func(t *testing.T) {
+		t.Parallel()
+		raw := &rawMetadata{
+			grouping: "Fallback Series #7-9",
+			freeform: map[string]string{
+				"com.apple.iTunes:SERIES":      "   ",
+				"com.apple.iTunes:SERIES-PART": "1-3",
+			},
+		}
+		meta := convertRawMetadata(raw)
+		assert.Equal(t, "Fallback Series", meta.Series)
+		require.NotNil(t, meta.SeriesNumber)
+		require.NotNil(t, meta.SeriesNumberEnd)
+		assert.InDelta(t, 7, *meta.SeriesNumber, 0.001)
+		assert.InDelta(t, 9, *meta.SeriesNumberEnd, 0.001)
 	})
 
 	t.Run("freeform SERIES without SERIES-PART", func(t *testing.T) {
@@ -278,25 +296,41 @@ func TestConvertRawMetadata_SeriesFromGrouping(t *testing.T) {
 		assert.InDelta(t, 3.0, *meta.SeriesNumber, 0.001)
 	})
 
-	t.Run("grouping with range", func(t *testing.T) {
-		t.Parallel()
-		raw := &rawMetadata{grouping: "Mistborn #1-3"}
-		meta := convertRawMetadata(raw)
-		assert.Equal(t, "Mistborn", meta.Series)
-		require.NotNil(t, meta.SeriesNumber)
-		require.NotNil(t, meta.SeriesNumberEnd)
-		assert.InDelta(t, 1, *meta.SeriesNumber, 0.001)
-		assert.InDelta(t, 3, *meta.SeriesNumberEnd, 0.001)
-	})
+	for _, grouping := range []string{
+		"Mistborn #1.5-3.5",
+		"Mistborn, Book 1.5-3.5",
+		"Mistborn - Volume 1.5-3.5",
+		"Mistborn (Book 1.5-3.5)",
+		"Mistborn #1.5-3.5 ",
+	} {
+		t.Run("grouping range "+grouping, func(t *testing.T) {
+			t.Parallel()
+			raw := &rawMetadata{grouping: grouping}
+			meta := convertRawMetadata(raw)
+			assert.Equal(t, "Mistborn", meta.Series)
+			require.NotNil(t, meta.SeriesNumber)
+			require.NotNil(t, meta.SeriesNumberEnd)
+			assert.InDelta(t, 1.5, *meta.SeriesNumber, 0.001)
+			assert.InDelta(t, 3.5, *meta.SeriesNumberEnd, 0.001)
+		})
+	}
 
-	t.Run("malformed grouping range preserves series name", func(t *testing.T) {
-		t.Parallel()
-		raw := &rawMetadata{grouping: "Mistborn #3-1"}
-		meta := convertRawMetadata(raw)
-		assert.Equal(t, "Mistborn", meta.Series)
-		assert.Nil(t, meta.SeriesNumber)
-		assert.Nil(t, meta.SeriesNumberEnd)
-	})
+	for _, grouping := range []string{
+		"Mistborn #3-1",
+		"Mistborn #1-1",
+		"Mistborn #1-",
+		"Mistborn #invalid",
+		"Mistborn #1-2-3",
+	} {
+		t.Run("malformed grouping range "+grouping, func(t *testing.T) {
+			t.Parallel()
+			raw := &rawMetadata{grouping: grouping}
+			meta := convertRawMetadata(raw)
+			assert.Equal(t, "Mistborn", meta.Series)
+			assert.Nil(t, meta.SeriesNumber)
+			assert.Nil(t, meta.SeriesNumberEnd)
+		})
+	}
 }
 
 // TestConvertRawMetadata_AlbumIsNotSeriesSource verifies that series is NOT

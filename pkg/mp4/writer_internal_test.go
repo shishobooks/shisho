@@ -32,6 +32,35 @@ func TestWrite_SeriesRangeAtoms(t *testing.T) {
 	assert.Equal(t, "1-3", raw.freeform["com.apple.iTunes:SERIES-PART"])
 }
 
+func TestWrite_ClearingSeriesRangeRemovesStaleAtom(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-clear-series-range-*")
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Collected Stories",
+		Duration: 1,
+	})
+	metadata, err := ParseFull(path)
+	require.NoError(t, err)
+	start, end := 1.0, 3.0
+	metadata.Series = "Saga"
+	metadata.SeriesNumber = &start
+	metadata.SeriesNumberEnd = &end
+	require.NoError(t, Write(path, metadata, WriteOptions{}))
+
+	metadata, err = ParseFull(path)
+	require.NoError(t, err)
+	metadata.SeriesNumber = nil
+	metadata.SeriesNumberEnd = nil
+	require.NoError(t, Write(path, metadata, WriteOptions{}))
+
+	raw, err := readMetadata(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Saga", raw.grouping)
+	_, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]
+	assert.False(t, ok)
+}
+
 func TestWrite_InvalidSeriesRangeIsDiscarded(t *testing.T) {
 	t.Parallel()
 	testgen.SkipIfNoFFmpeg(t)

@@ -230,8 +230,8 @@ func TestM4BGenerator_Generate(t *testing.T) {
 			BookID:          book.ID,
 			SeriesID:        series.ID,
 			SortOrder:       1,
-			SeriesNumber:    pointerutil.Float64(1),
-			SeriesNumberEnd: pointerutil.Float64(3),
+			SeriesNumber:    pointerutil.Float64(1.5),
+			SeriesNumberEnd: pointerutil.Float64(3.5),
 		}
 		_, err = db.NewInsert().Model(membership).Exec(ctx)
 		require.NoError(t, err)
@@ -263,8 +263,8 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, parsed.SeriesNumber)
 		require.NotNil(t, parsed.SeriesNumberEnd)
-		assert.InDelta(t, 1, *parsed.SeriesNumber, 0.001)
-		assert.InDelta(t, 3, *parsed.SeriesNumberEnd, 0.001)
+		assert.InDelta(t, 1.5, *parsed.SeriesNumber, 0.001)
+		assert.InDelta(t, 3.5, *parsed.SeriesNumberEnd, 0.001)
 		assert.Nil(t, parsed.SeriesNumberUnit)
 	})
 

@@ -105,8 +105,9 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 	//   2. ©grp Grouping atom (format: "Series Name #N", "Series Name, Book N", etc.)
 	// ©alb Album is intentionally NOT a series source — the writer now uses
 	// album for the book title, so parsing series from it would be wrong.
-	if name, ok := raw.freeform["com.apple.iTunes:SERIES"]; ok && name != "" {
-		meta.Series = strings.TrimSpace(name)
+	freeformSeries := strings.TrimSpace(raw.freeform["com.apple.iTunes:SERIES"])
+	if freeformSeries != "" {
+		meta.Series = freeformSeries
 		if part, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]; ok && part != "" {
 			if start, end, ok := seriesnum.ParseRange(part); ok {
 				meta.SeriesNumber = &start
@@ -232,13 +233,13 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 // Handles patterns like "Dungeon Crawler Carl #7", "Series Name, Book 3",
 // and "Series Name - Volume 2".
 func parseSeriesFromGrouping(grouping string) seriesInfo {
-	numberPattern := `([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\s*[-–—]\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+))?)`
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`^(.+?)\s*#` + numberPattern + `$`),
-		regexp.MustCompile(`^(.+?),\s*[Bb]ook\s+` + numberPattern + `$`),
-		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?\s*` + numberPattern + `$`),
-		regexp.MustCompile(`^(.+?)\s*\((?:[Bb]ook\s+)?` + numberPattern + `\)$`),
+		regexp.MustCompile(`^(.+?)\s*#\s*(.*)$`),
+		regexp.MustCompile(`^(.+?),\s*[Bb]ook\s*(.*)$`),
+		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?\s*(.*)$`),
+		regexp.MustCompile(`^(.+?)\s*\((?:[Bb]ook\s+)?(.*)\)$`),
 	}
+	grouping = strings.TrimSpace(grouping)
 	for _, pattern := range patterns {
 		matches := pattern.FindStringSubmatch(grouping)
 		if len(matches) != 3 {
