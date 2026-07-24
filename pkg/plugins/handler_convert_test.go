@@ -92,6 +92,71 @@ func TestConvertFieldsToMetadata_SeriesNumber(t *testing.T) {
 	assert.InDelta(t, 2.5, *md.SeriesNumber, 0.001)
 }
 
+func TestConvertFieldsToMetadata_SeriesNumberRangeUsesSnakeCase(t *testing.T) {
+	t.Parallel()
+	fields := map[string]any{
+		"series_number":      float64(1),
+		"series_number_end":  float64(3),
+		"series_number_unit": "volume",
+	}
+
+	md := convertFieldsToMetadata(fields)
+
+	require.NotNil(t, md.SeriesNumber)
+	require.NotNil(t, md.SeriesNumberEnd)
+	require.NotNil(t, md.SeriesNumberUnit)
+	assert.InDelta(t, 1, *md.SeriesNumber, 0.001)
+	assert.InDelta(t, 3, *md.SeriesNumberEnd, 0.001)
+	assert.Equal(t, "volume", *md.SeriesNumberUnit)
+}
+
+func TestConvertFieldsToMetadata_DiscardsMalformedSeriesNumberGroupsAtomically(t *testing.T) {
+	t.Parallel()
+
+	fields := map[string]any{
+		"series_number":      float64(3),
+		"series_number_end":  float64(1),
+		"series_number_unit": "volume",
+	}
+	md := convertFieldsToMetadata(fields)
+	assert.Nil(t, md.SeriesNumber)
+	assert.Nil(t, md.SeriesNumberEnd)
+	assert.Nil(t, md.SeriesNumberUnit)
+}
+
+func TestExtractSeriesEntries_RangeUsesSnakeCaseAndIsAtomic(t *testing.T) {
+	t.Parallel()
+
+	got := extractSeriesEntries(map[string]any{
+		"series": []any{
+			map[string]any{
+				"name":               "Saga",
+				"number":             float64(1),
+				"series_number_end":  float64(3),
+				"series_number_unit": "volume",
+			},
+			map[string]any{
+				"name":               "Broken",
+				"number":             float64(4),
+				"series_number_end":  math.Inf(1),
+				"series_number_unit": "chapter",
+			},
+		},
+	})
+
+	require.NotNil(t, got)
+	require.Len(t, *got, 2)
+	require.NotNil(t, (*got)[0].Number)
+	require.NotNil(t, (*got)[0].NumberEnd)
+	require.NotNil(t, (*got)[0].SeriesNumberUnit)
+	assert.InDelta(t, 1, *(*got)[0].Number, 0.001)
+	assert.InDelta(t, 3, *(*got)[0].NumberEnd, 0.001)
+	assert.Equal(t, "volume", *(*got)[0].SeriesNumberUnit)
+	assert.Nil(t, (*got)[1].Number)
+	assert.Nil(t, (*got)[1].NumberEnd)
+	assert.Nil(t, (*got)[1].SeriesNumberUnit)
+}
+
 func TestConvertFieldsToMetadata_ReleaseDate_DateOnly(t *testing.T) {
 	t.Parallel()
 	fields := map[string]any{
@@ -359,6 +424,7 @@ func TestConvertFieldsToMetadata_AbridgedMissing(t *testing.T) {
 func TestConvertFieldsToMetadata_SeriesNumberUnit(t *testing.T) {
 	t.Parallel()
 	fields := map[string]any{
+		"series_number":      float64(1),
 		"series_number_unit": "chapter",
 	}
 
@@ -371,6 +437,7 @@ func TestConvertFieldsToMetadata_SeriesNumberUnit(t *testing.T) {
 func TestConvertFieldsToMetadata_SeriesNumberUnitVolume(t *testing.T) {
 	t.Parallel()
 	fields := map[string]any{
+		"series_number":      float64(1),
 		"series_number_unit": "volume",
 	}
 

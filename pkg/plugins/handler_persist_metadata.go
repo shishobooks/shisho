@@ -172,8 +172,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 				}
 				if entry.Number != nil {
 					bs.SeriesNumber = entry.Number
-				}
-				if entry.SeriesNumberUnit != nil {
+					bs.SeriesNumberEnd = entry.NumberEnd
 					bs.SeriesNumberUnit = entry.SeriesNumberUnit
 				}
 				if err := h.enrich.relStore.CreateBookSeries(ctx, bs); err != nil {
@@ -190,6 +189,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 					BookID:           book.ID,
 					SeriesID:         seriesRecord.ID,
 					SeriesNumber:     md.SeriesNumber,
+					SeriesNumberEnd:  md.SeriesNumberEnd,
 					SeriesNumberUnit: md.SeriesNumberUnit,
 					SortOrder:        1,
 				}); err != nil {

@@ -241,6 +241,54 @@ describe("IdentifyReviewForm component", () => {
     expect(screen.getByText("Narrators")).toBeInTheDocument();
   });
 
+  it("surfaces an incoming omnibus series range", () => {
+    renderForm({
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    });
+
+    expect(
+      screen.getByRole("spinbutton", { name: "Series start" }),
+    ).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "Series end" })).toHaveValue(
+      3,
+    );
+  });
+
+  it("accepting a single series number replaces an existing range group", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({
+        book_series: [
+          {
+            book_id: 1,
+            series_id: 10,
+            series_number: 1,
+            series_number_end: 3,
+            series_number_unit: "volume",
+            series: { id: 10, library_id: 1, name: "Some Series" },
+          } as never,
+        ],
+      }),
+      result: makeResult({ series: "Some Series", series_number: 2 }),
+    });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    expect(applyMock.mock.calls[0][0].fields.series).toEqual([
+      {
+        name: "Some Series",
+        number: 2,
+        series_number_end: undefined,
+        series_number_unit: undefined,
+      },
+    ]);
+  });
+
   it("clears series when the Remove button is pressed on the series row", async () => {
     const user = createUser();
     renderForm({

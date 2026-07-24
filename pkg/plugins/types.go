@@ -234,6 +234,7 @@ type SetFieldSettingsPayload struct {
 type SeriesEntry struct {
 	Name             string
 	Number           *float64
+	NumberEnd        *float64
 	SeriesNumberUnit *string
 }
 

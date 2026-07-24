@@ -1447,15 +1447,19 @@ func TestFilterMetadataFields_DisabledFieldsZeroed(t *testing.T) {
 }
 
 // TestFilterMetadataFields_SeriesGrouping verifies that the "series" field declaration
-// controls both series name and seriesNumber.
+// controls the series name and complete number group.
 func TestFilterMetadataFields_SeriesGrouping(t *testing.T) {
 	t.Parallel()
 
 	seriesNum := float64(5)
+	seriesNumEnd := float64(8)
+	unit := models.SeriesNumberUnitVolume
 	md := &mediafile.ParsedMetadata{
-		Title:        "Test Title",
-		Series:       "Epic Series",
-		SeriesNumber: &seriesNum,
+		Title:            "Test Title",
+		Series:           "Epic Series",
+		SeriesNumber:     &seriesNum,
+		SeriesNumberEnd:  &seriesNumEnd,
+		SeriesNumberUnit: &unit,
 	}
 
 	// Declare title and series (which controls both series and seriesNumber)
@@ -1471,6 +1475,36 @@ func TestFilterMetadataFields_SeriesGrouping(t *testing.T) {
 	assert.Equal(t, "Test Title", filtered.Title)
 	assert.Empty(t, filtered.Series, "series name should be zeroed when 'series' is disabled")
 	assert.Nil(t, filtered.SeriesNumber, "seriesNumber should be zeroed when 'series' is disabled")
+	assert.Nil(t, filtered.SeriesNumberEnd, "seriesNumberEnd should be zeroed when 'series' is disabled")
+	assert.Nil(t, filtered.SeriesNumberUnit, "seriesNumberUnit should be zeroed when 'series' is disabled")
+}
+
+func TestFilterMetadataFields_UndeclaredSeriesRangeUsesWarningPath(t *testing.T) {
+	t.Parallel()
+
+	seriesNum := float64(1)
+	seriesNumEnd := float64(3)
+	unit := models.SeriesNumberUnitVolume
+	md := &mediafile.ParsedMetadata{
+		Series:           "Epic Series",
+		SeriesNumber:     &seriesNum,
+		SeriesNumberEnd:  &seriesNumEnd,
+		SeriesNumberUnit: &unit,
+	}
+	warnedFields := make([]string, 0, 4)
+
+	filtered := filterMetadataFields(md, nil, nil, "test-plugin", func(_ string, data logger.Data) {
+		field, ok := data["field"].(string)
+		if ok {
+			warnedFields = append(warnedFields, field)
+		}
+	})
+
+	assert.ElementsMatch(t, []string{"series", "seriesNumber", "seriesNumberEnd", "seriesNumberUnit"}, warnedFields)
+	assert.Empty(t, filtered.Series)
+	assert.Nil(t, filtered.SeriesNumber)
+	assert.Nil(t, filtered.SeriesNumberEnd)
+	assert.Nil(t, filtered.SeriesNumberUnit)
 }
 
 // TestFilterMetadataFields_SeriesNumberAliasForSeries verifies that "seriesNumber"

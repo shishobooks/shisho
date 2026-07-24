@@ -618,7 +618,7 @@ func TestApplyMetadata_ExplicitFileName_PreservesEditionName_NonPrimaryFile(t *t
 		"file.NameSource must NOT be replaced by the plugin source")
 }
 
-func TestApplyMetadata_ScalarSeries_WritesSeriesNumberUnit(t *testing.T) {
+func TestApplyMetadata_ScalarSeries_WritesSeriesNumberRange(t *testing.T) {
 	t.Parallel()
 
 	book := newApplyTestBook(t, "Book")
@@ -629,6 +629,7 @@ func TestApplyMetadata_ScalarSeries_WritesSeriesNumberUnit(t *testing.T) {
 	c := newApplyEchoContext(t, map[string]any{
 		"series":             "Naruto",
 		"series_number":      5.0,
+		"series_number_end":  8.0,
 		"series_number_unit": "volume",
 	})
 
@@ -639,6 +640,8 @@ func TestApplyMetadata_ScalarSeries_WritesSeriesNumberUnit(t *testing.T) {
 	bs := rel.capturedBookSeries[0]
 	require.NotNil(t, bs.SeriesNumber)
 	assert.InDelta(t, 5.0, *bs.SeriesNumber, 0.001)
+	require.NotNil(t, bs.SeriesNumberEnd, "scalar series path must write SeriesNumberEnd")
+	assert.InDelta(t, 8.0, *bs.SeriesNumberEnd, 0.001)
 	require.NotNil(t, bs.SeriesNumberUnit, "scalar series path must write SeriesNumberUnit")
 	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
 }

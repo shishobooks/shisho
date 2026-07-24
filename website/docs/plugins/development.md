@@ -268,6 +268,7 @@ The full set of fields you can return:
 | `narrators` | `[string]` | List of narrator names |
 | `series` | `string` | Series name |
 | `seriesNumber` | `number` | Position in series (supports decimals like `1.5`) |
+| `seriesNumberEnd` | `number` | Optional inclusive end of an omnibus range; must be greater than `seriesNumber` |
 | `genres` | `[string]` | Genre names |
 | `tags` | `[string]` | Tag names |
 | `description` | `string` | Book description |
@@ -297,7 +298,7 @@ When Shisho stores an identifier emitted by a plugin, it canonicalizes the `valu
 :::note[Field groupings for enrichers]
 When declaring `fields` in an enricher manifest, some return fields are grouped under a single logical name:
 - **`cover`** controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
-- **`series`** controls both `series` and `seriesNumber`
+- **`series`** controls `series`, `seriesNumber`, `seriesNumberEnd`, and `seriesNumberUnit`. The number fields form an atomic group: `seriesNumber` must be finite, `seriesNumberEnd` is optional and must be finite and greater than the start, and malformed groups are discarded completely.
 :::
 
 **Manifest capability:**
@@ -378,6 +379,7 @@ var plugin = (function() {
               narrators: item.narrators,
               series: item.seriesName,
               seriesNumber: item.seriesNumber,
+              seriesNumberEnd: item.seriesNumberEnd,
               genres: item.genres,
               tags: item.tags,
               description: item.description,
@@ -406,6 +408,7 @@ var plugin = (function() {
 | `narrators` | `string[]` | Narrator names (audiobooks) |
 | `series` | `string` | Series name |
 | `seriesNumber` | `number` | Position in series |
+| `seriesNumberEnd` | `number` | Optional inclusive end of an omnibus range; must be greater than `seriesNumber` |
 | `genres` | `string[]` | Genre classification |
 | `tags` | `string[]` | Freeform labels |
 | `description` | `string` | Book description |

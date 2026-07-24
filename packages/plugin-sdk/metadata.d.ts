@@ -36,6 +36,8 @@ export interface ParsedMetadata {
   narrators?: string[];
   series?: string;
   seriesNumber?: number;
+  /** Optional inclusive end for an omnibus series range. Must be greater than seriesNumber. */
+  seriesNumberEnd?: number;
   /** Whether the series number refers to a volume or a chapter. CBZ only. */
   seriesNumberUnit?: "volume" | "chapter";
   genres?: string[];

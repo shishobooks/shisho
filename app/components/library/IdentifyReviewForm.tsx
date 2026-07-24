@@ -102,6 +102,7 @@ interface AuthorEntry {
 interface SeriesEntry {
   name: string;
   number: string;
+  numberEnd: string;
   unit: "" | "volume" | "chapter";
 }
 
@@ -493,6 +494,7 @@ export function IdentifyReviewForm({
       (book.book_series ?? []).map((bs) => ({
         name: bs.series?.name ?? "",
         number: bs.series_number?.toString() ?? "",
+        numberEnd: bs.series_number_end?.toString() ?? "",
         unit: (bs.series_number_unit ?? "") as SeriesEntry["unit"],
       })),
     [book.book_series],
@@ -532,6 +534,7 @@ export function IdentifyReviewForm({
           {
             name: result.series,
             number: result.series_number?.toString() ?? "",
+            numberEnd: result.series_number_end?.toString() ?? "",
             unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
           },
         ]
@@ -744,7 +747,7 @@ export function IdentifyReviewForm({
     };
 
     const seriesKey = (s: SeriesEntry) =>
-      `${s.name.trim()}|${s.number.trim()}|${s.unit}`;
+      `${s.name.trim()}|${s.number.trim()}|${s.numberEnd.trim()}|${s.unit}`;
     const seriesSavedKeys = currentSeriesEntries.map(seriesKey).sort();
     const seriesCurrentKeys = seriesEntries.map(seriesKey).sort();
     const seriesMatch =
@@ -1104,6 +1107,8 @@ export function IdentifyReviewForm({
         .map((s) => ({
           name: s.name,
           number: s.number !== "" ? parseFloat(s.number) : undefined,
+          series_number_end:
+            s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
           series_number_unit: s.unit !== "" ? s.unit : undefined,
         }));
     }
@@ -1437,7 +1442,7 @@ export function IdentifyReviewForm({
                             (s) =>
                               `${s.name}${
                                 s.number
-                                  ? ` ${formatSeriesNumber(parseFloat(s.number), null, s.unit || null, anyCBZ ? "cbz" : null)}`
+                                  ? ` ${formatSeriesNumber(parseFloat(s.number), s.numberEnd ? parseFloat(s.numberEnd) : null, s.unit || null, anyCBZ ? "cbz" : null)}`
                                   : ""
                               }`,
                           )
@@ -1483,7 +1488,7 @@ export function IdentifyReviewForm({
                       if (seriesEntries.some((s) => s.name === name)) return;
                       setSeriesEntries([
                         ...seriesEntries,
-                        { name, number: "", unit: "" },
+                        { name, number: "", numberEnd: "", unit: "" },
                       ]);
                     }}
                     onRemove={(index) => {
@@ -1495,15 +1500,28 @@ export function IdentifyReviewForm({
                     renderExtras={(entry, idx) => (
                       <>
                         <Input
-                          className="w-24"
+                          aria-label="Series start"
+                          className="w-20"
                           onChange={(e) => {
                             const updated = [...seriesEntries];
                             updated[idx].number = e.target.value;
                             setSeriesEntries(updated);
                           }}
-                          placeholder="#"
+                          placeholder="Start"
                           type="number"
                           value={entry.number}
+                        />
+                        <Input
+                          aria-label="Series end"
+                          className="w-20"
+                          onChange={(e) => {
+                            const updated = [...seriesEntries];
+                            updated[idx].numberEnd = e.target.value;
+                            setSeriesEntries(updated);
+                          }}
+                          placeholder="End"
+                          type="number"
+                          value={entry.numberEnd}
                         />
                         <div className="w-32">
                           <Select
