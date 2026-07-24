@@ -133,6 +133,25 @@ describe("BookEditDialog series range editing", () => {
     });
   });
 
+  it("protects an edited range end as an unsaved change", async () => {
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(makeBook("cbz"));
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Advanced settings for Test Series",
+      }),
+    );
+    await user.type(screen.getByLabelText("End"), "3");
+    await user.keyboard("{Escape}");
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByText("Unsaved Changes")).toBeInTheDocument();
+  });
+
   it("hides the unit control for a non-CBZ book", async () => {
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,

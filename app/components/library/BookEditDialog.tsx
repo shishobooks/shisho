@@ -204,7 +204,7 @@ export function BookEditDialog({
       subtitle: initialSubtitle,
       description: initialDescription,
       authors: initialAuthors,
-      series: initialSeries,
+      series: initialSeries.map((entry) => ({ ...entry })),
       genres: [...initialGenres].sort(),
       tags: [...initialTags].sort(),
       reviewOverride: initialReviewOverride,
@@ -411,7 +411,7 @@ export function BookEditDialog({
       subtitle,
       description,
       authors: [...authors],
-      series: [...seriesEntries],
+      series: seriesEntries.map((entry) => ({ ...entry })),
       genres: [...genres].sort(),
       tags: [...tags].sort(),
       reviewOverride: draftReviewOverride,
@@ -609,12 +609,20 @@ export function BookEditDialog({
                   entry.numberEnd === ""
                     ? undefined
                     : parseFloat(entry.numberEnd);
+                const summary = Number.isFinite(parsedNumber)
+                  ? formatSeriesNumber(
+                      parsedNumber,
+                      Number.isFinite(parsedEnd) ? parsedEnd : undefined,
+                      entry.unit || null,
+                      hasCBZFiles ? "cbz" : null,
+                    )
+                  : "";
 
                 return (
                   <>
                     <Input
                       aria-label={`Series number for ${entry.name}`}
-                      className="w-24"
+                      className="w-16 sm:w-24"
                       onChange={(e) =>
                         handleSeriesNumberChange(idx, e.target.value)
                       }
@@ -623,14 +631,14 @@ export function BookEditDialog({
                       type="number"
                       value={entry.number}
                     />
-                    {showSummary && Number.isFinite(parsedNumber) && (
-                      <Badge className="whitespace-nowrap" variant="secondary">
-                        {formatSeriesNumber(
-                          parsedNumber,
-                          Number.isFinite(parsedEnd) ? parsedEnd : undefined,
-                          entry.unit || null,
-                          hasCBZFiles ? "cbz" : null,
-                        )}
+                    {showSummary && summary && (
+                      <Badge
+                        className="max-w-20 sm:max-w-28"
+                        variant="secondary"
+                      >
+                        <span className="truncate" title={summary}>
+                          {summary}
+                        </span>
                       </Badge>
                     )}
                     <Popover modal>
