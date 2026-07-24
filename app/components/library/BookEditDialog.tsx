@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -72,6 +73,26 @@ interface SeriesEntry {
   number: string;
   numberEnd: string;
   unit: "" | "volume" | "chapter"; // "" means unspecified
+}
+
+function getSeriesRangeError(entry: SeriesEntry): string | null {
+  if (entry.number === "") {
+    if (entry.numberEnd !== "" || entry.unit !== "") {
+      return "Enter a start number before setting an end or unit.";
+    }
+    return null;
+  }
+
+  const start = Number(entry.number);
+  const end = Number(entry.numberEnd);
+  if (!Number.isFinite(start)) return "Start must be a valid number.";
+  if (entry.numberEnd !== "" && !Number.isFinite(end)) {
+    return "End must be a valid number.";
+  }
+  if (entry.numberEnd !== "" && end < start) {
+    return "End must be greater than or equal to the start.";
+  }
+  return null;
 }
 
 export function BookEditDialog({
@@ -298,7 +319,13 @@ export function BookEditDialog({
     setSeriesEntries(updated);
   };
 
+  const hasInvalidSeriesRange = seriesEntries.some(
+    (entry) => getSeriesRangeError(entry) !== null,
+  );
+
   const handleSubmit = async () => {
+    if (hasInvalidSeriesRange) return;
+
     const payload: {
       title?: string;
       sort_title?: string;
@@ -609,6 +636,7 @@ export function BookEditDialog({
                   entry.numberEnd === ""
                     ? undefined
                     : parseFloat(entry.numberEnd);
+                const rangeError = getSeriesRangeError(entry);
                 const summary = Number.isFinite(parsedNumber)
                   ? formatSeriesNumber(
                       parsedNumber,
@@ -646,6 +674,7 @@ export function BookEditDialog({
                         <Button
                           aria-label={`Advanced settings for ${entry.name}`}
                           size="icon"
+                          title="Advanced series settings"
                           type="button"
                           variant="ghost"
                         >
@@ -658,6 +687,12 @@ export function BookEditDialog({
                             End
                           </Label>
                           <Input
+                            aria-describedby={
+                              rangeError
+                                ? `series-number-error-${idx}`
+                                : undefined
+                            }
+                            aria-invalid={rangeError ? true : undefined}
                             id={`series-number-end-${idx}`}
                             onChange={(e) =>
                               handleSeriesNumberEndChange(idx, e.target.value)
@@ -667,6 +702,15 @@ export function BookEditDialog({
                             type="number"
                             value={entry.numberEnd}
                           />
+                          {rangeError && (
+                            <p
+                              className="text-xs text-destructive"
+                              id={`series-number-error-${idx}`}
+                              role="alert"
+                            >
+                              {rangeError}
+                            </p>
+                          )}
                         </div>
                         {hasCBZFiles && (
                           <div className="space-y-2">
@@ -688,6 +732,7 @@ export function BookEditDialog({
                             >
                               <SelectTrigger
                                 className="cursor-pointer"
+                                disabled={entry.number === ""}
                                 id={`series-number-unit-${idx}`}
                               >
                                 <SelectValue placeholder="Unit" />
@@ -784,15 +829,13 @@ export function BookEditDialog({
         </DialogBody>
 
         <DialogFooter>
+          <DialogClose asChild>
+            <Button size="sm" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button
-            onClick={() => onOpenChange(false)}
-            size="sm"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={updateBookMutation.isPending}
+            disabled={updateBookMutation.isPending || hasInvalidSeriesRange}
             onClick={handleSubmit}
             size="sm"
           >

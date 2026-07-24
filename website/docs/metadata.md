@@ -45,7 +45,7 @@ A book can belong to multiple series, each with an optional series number. Serie
 
 In series listings, individually numbered books appear before omnibuses. Omnibuses are then ordered by their range start and end. Download filenames and OPDS descriptions display the complete range. Kobo sync and EPUB metadata use the range start because their numeric series fields cannot represent an end.
 
-The API, [book sidecars](./sidecar-files#book-sidecar-format), and web book editor can set and preserve ranges. In the book editor, the start stays inline while the advanced settings button on each series row opens the optional end field. An ordinary scan preserves a sidecar-backed range. Refresh and reset intentionally discard cached sidecars, so a format that only supplies the start can reduce the range to a single number.
+The API, [book sidecars](./sidecar-files#book-sidecar-format), and web book editor can set and preserve ranges. In the book editor, the start stays inline while the advanced settings button on each series row opens the optional end field. The end must be greater than or equal to the start. An ordinary scan preserves a sidecar-backed range. Refresh and reset intentionally discard cached sidecars, so a format that only supplies the start can reduce the range to a single number.
 
 ### Genres and Tags
 

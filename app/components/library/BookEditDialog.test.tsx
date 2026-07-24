@@ -63,7 +63,10 @@ describe("BookEditDialog handleSubmit sort title logic", () => {
   });
 });
 
-function makeBook(fileType: "cbz" | "epub"): Book {
+function makeBook(
+  fileType: "cbz" | "epub",
+  series: { numberEnd?: number; unit?: "volume" | "chapter" } = {},
+): Book {
   return {
     id: 1,
     title: "Test Book",
@@ -76,6 +79,8 @@ function makeBook(fileType: "cbz" | "epub"): Book {
         book_id: 1,
         series_id: 42,
         series_number: 1,
+        series_number_end: series.numberEnd,
+        series_number_unit: series.unit,
         series: { id: 42, library_id: 1, name: "Test Series" },
       } as never,
     ],
@@ -90,9 +95,9 @@ function makeBook(fileType: "cbz" | "epub"): Book {
   } as unknown as Book;
 }
 
-function renderDialog(book: Book) {
+function renderDialog(book: Book, onOpenChange = vi.fn()) {
   return render(
-    <BookEditDialog book={book} onOpenChange={vi.fn()} open={true} />,
+    <BookEditDialog book={book} onOpenChange={onOpenChange} open={true} />,
   );
 }
 
@@ -111,8 +116,10 @@ describe("BookEditDialog series range editing", () => {
       }),
     );
     await user.type(screen.getByLabelText("End"), "3");
+    await user.click(screen.getByLabelText("Unit"));
+    await user.click(screen.getByRole("option", { name: "Chapter" }));
 
-    expect(screen.getByText("Vol. 1-3")).toBeInTheDocument();
+    expect(screen.getByText("Ch. 1-3")).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
@@ -125,6 +132,49 @@ describe("BookEditDialog series range editing", () => {
             {
               name: "Test Series",
               number: 1,
+              number_end: 3,
+              series_number_unit: "chapter",
+            },
+          ],
+        },
+      });
+    });
+  });
+
+  it("loads and preserves an existing range when the start changes", async () => {
+    mocks.updateBook.mockClear();
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(makeBook("cbz", { numberEnd: 3 }));
+
+    expect(screen.getByText("Vol. 1-3")).toBeInTheDocument();
+    const start = screen.getByLabelText("Series number for Test Series");
+    await user.clear(start);
+    await user.click(
+      screen.getByRole("button", {
+        name: "Advanced settings for Test Series",
+      }),
+    );
+    expect(screen.getByLabelText("End")).toHaveValue(3);
+    expect(
+      screen.getByText("Enter a start number before setting an end or unit."),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.type(start, "2");
+    expect(screen.getByText("Vol. 2-3")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => {
+      expect(mocks.updateBook).toHaveBeenCalledWith({
+        id: "1",
+        payload: {
+          series: [
+            {
+              name: "Test Series",
+              number: 2,
               number_end: 3,
             },
           ],
@@ -152,6 +202,47 @@ describe("BookEditDialog series range editing", () => {
     expect(screen.getByText("Unsaved Changes")).toBeInTheDocument();
   });
 
+  it("protects an edited range when Cancel is clicked", async () => {
+    const onOpenChange = vi.fn();
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(makeBook("cbz"), onOpenChange);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Advanced settings for Test Series",
+      }),
+    );
+    await user.type(screen.getByLabelText("End"), "3");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByText("Unsaved Changes")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("prevents saving a range whose end is below its start", async () => {
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(makeBook("cbz"));
+
+    const advancedButton = screen.getByRole("button", {
+      name: "Advanced settings for Test Series",
+    });
+    expect(advancedButton).toHaveAttribute("title", "Advanced series settings");
+    await user.click(advancedButton);
+    await user.type(screen.getByLabelText("End"), "0");
+
+    expect(
+      screen.getByText("End must be greater than or equal to the start."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Save Changes").closest("button")).toBeDisabled();
+  });
+
   it("hides the unit control for a non-CBZ book", async () => {
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,
@@ -167,5 +258,7 @@ describe("BookEditDialog series range editing", () => {
 
     expect(screen.getByLabelText("End")).toBeInTheDocument();
     expect(screen.queryByText("Unit")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("End"), "3");
+    expect(screen.getByText("1-3")).toBeInTheDocument();
   });
 });
