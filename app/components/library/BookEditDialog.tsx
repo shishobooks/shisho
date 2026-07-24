@@ -732,7 +732,9 @@ export function BookEditDialog({
                             >
                               <SelectTrigger
                                 className="cursor-pointer"
-                                disabled={entry.number === ""}
+                                disabled={
+                                  entry.number === "" && entry.unit === ""
+                                }
                                 id={`series-number-unit-${idx}`}
                               >
                                 <SelectValue placeholder="Unit" />

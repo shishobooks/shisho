@@ -147,9 +147,9 @@ describe("BookEditDialog series range editing", () => {
       advanceTimers: vi.advanceTimersByTime,
       delay: null,
     });
-    renderDialog(makeBook("cbz", { numberEnd: 3 }));
+    renderDialog(makeBook("cbz", { numberEnd: 3, unit: "chapter" }));
 
-    expect(screen.getByText("Vol. 1-3")).toBeInTheDocument();
+    expect(screen.getByText("Ch. 1-3")).toBeInTheDocument();
     const start = screen.getByLabelText("Series number for Test Series");
     await user.clear(start);
     await user.click(
@@ -161,6 +161,9 @@ describe("BookEditDialog series range editing", () => {
     expect(
       screen.getByText("Enter a start number before setting an end or unit."),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Unit")).toBeEnabled();
+    await user.click(screen.getByLabelText("Unit"));
+    await user.click(screen.getByRole("option", { name: "Unspecified" }));
 
     await user.keyboard("{Escape}");
     await user.type(start, "2");
