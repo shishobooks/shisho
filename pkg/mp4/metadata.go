@@ -2,46 +2,47 @@ package mp4
 
 import (
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 // Metadata represents extracted M4B audiobook metadata.
 type Metadata struct {
-	Title         string
-	Subtitle      string                       // from ----:com.apple.iTunes:SUBTITLE or ----:com.pilabor.tone:SUBTITLE
-	Authors       []mediafile.ParsedAuthor     // from ©ART (artist)
-	Narrators     []string                     // from ©nrt (narrator) or ©cmp (composer)
-	Album         string                       // from ©alb
-	Series        string                       // parsed from com.apple.iTunes:SERIES freeform or ©grp
-	SeriesNumber  *float64                     // parsed from com.apple.iTunes:SERIES-PART freeform or ©grp
-	Genre         string                       // from ©gen or gnre (original, may be comma-separated)
-	Genres        []string                     // parsed from ©gen (comma-separated)
-	Tags          []string                     // from ----:com.shisho:tags freeform atom
-	Description   string                       // from desc
-	Publisher     string                       // from ©pub
-	URL           string                       // from com.shisho:url freeform
-	ReleaseDate   *time.Time                   // parsed from rldt or ©day
-	Comment       string                       // from ©cmt
-	Year          string                       // from ©day
-	Copyright     string                       // from ©cpy
-	Encoder       string                       // from ©too
-	CoverData     []byte                       // cover artwork
-	CoverMimeType string                       // "image/jpeg" or "image/png"
-	Duration      time.Duration                // from mvhd
-	Bitrate       int                          // bps from esds
-	Codec         string                       // audio codec with profile (e.g., "AAC-LC", "xHE-AAC")
-	Chapters      []Chapter                    // chapter list (Phase 3)
-	MediaType     int                          // from stik (2 = audiobook)
-	Freeform      map[string]string            // freeform (----) atoms like com.apple.iTunes:ASIN
-	Identifiers   []mediafile.ParsedIdentifier // parsed identifiers from freeform atoms
-	Language      *string                      // from com.pilabor.tone:LANGUAGE or com.apple.iTunes:LANGUAGE freeform atom
-	Abridged      *bool                        // from com.pilabor.tone:ABRIDGED freeform atom
-	UnknownAtoms  []RawAtom                    // preserved unrecognized atoms from source
+	Title           string
+	Subtitle        string                       // from ----:com.apple.iTunes:SUBTITLE or ----:com.pilabor.tone:SUBTITLE
+	Authors         []mediafile.ParsedAuthor     // from ©ART (artist)
+	Narrators       []string                     // from ©nrt (narrator) or ©cmp (composer)
+	Album           string                       // from ©alb
+	Series          string                       // parsed from com.apple.iTunes:SERIES freeform or ©grp
+	SeriesNumber    *float64                     // range start parsed from com.apple.iTunes:SERIES-PART freeform or ©grp
+	SeriesNumberEnd *float64                     // optional range end parsed from com.apple.iTunes:SERIES-PART freeform or ©grp
+	Genre           string                       // from ©gen or gnre (original, may be comma-separated)
+	Genres          []string                     // parsed from ©gen (comma-separated)
+	Tags            []string                     // from ----:com.shisho:tags freeform atom
+	Description     string                       // from desc
+	Publisher       string                       // from ©pub
+	URL             string                       // from com.shisho:url freeform
+	ReleaseDate     *time.Time                   // parsed from rldt or ©day
+	Comment         string                       // from ©cmt
+	Year            string                       // from ©day
+	Copyright       string                       // from ©cpy
+	Encoder         string                       // from ©too
+	CoverData       []byte                       // cover artwork
+	CoverMimeType   string                       // "image/jpeg" or "image/png"
+	Duration        time.Duration                // from mvhd
+	Bitrate         int                          // bps from esds
+	Codec           string                       // audio codec with profile (e.g., "AAC-LC", "xHE-AAC")
+	Chapters        []Chapter                    // chapter list (Phase 3)
+	MediaType       int                          // from stik (2 = audiobook)
+	Freeform        map[string]string            // freeform (----) atoms like com.apple.iTunes:ASIN
+	Identifiers     []mediafile.ParsedIdentifier // parsed identifiers from freeform atoms
+	Language        *string                      // from com.pilabor.tone:LANGUAGE or com.apple.iTunes:LANGUAGE freeform atom
+	Abridged        *bool                        // from com.pilabor.tone:ABRIDGED freeform atom
+	UnknownAtoms    []RawAtom                    // preserved unrecognized atoms from source
 }
 
 // RawAtom represents an MP4 atom preserved in its raw form.
@@ -59,8 +60,9 @@ type Chapter struct {
 
 // seriesInfo holds parsed series information.
 type seriesInfo struct {
-	series string
-	number *float64
+	series    string
+	number    *float64
+	numberEnd *float64
 }
 
 // convertRawMetadata converts rawMetadata to the public Metadata struct.
@@ -103,17 +105,20 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 	//   2. ©grp Grouping atom (format: "Series Name #N", "Series Name, Book N", etc.)
 	// ©alb Album is intentionally NOT a series source — the writer now uses
 	// album for the book title, so parsing series from it would be wrong.
-	if name, ok := raw.freeform["com.apple.iTunes:SERIES"]; ok && name != "" {
-		meta.Series = strings.TrimSpace(name)
+	freeformSeries := strings.TrimSpace(raw.freeform["com.apple.iTunes:SERIES"])
+	if freeformSeries != "" {
+		meta.Series = freeformSeries
 		if part, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]; ok && part != "" {
-			if num, err := strconv.ParseFloat(strings.TrimSpace(part), 64); err == nil {
-				meta.SeriesNumber = &num
+			if start, end, ok := seriesnum.ParseRange(part); ok {
+				meta.SeriesNumber = &start
+				meta.SeriesNumberEnd = end
 			}
 		}
 	} else if raw.grouping != "" {
 		if parsed := parseSeriesFromGrouping(raw.grouping); parsed.series != "" {
 			meta.Series = parsed.series
 			meta.SeriesNumber = parsed.number
+			meta.SeriesNumberEnd = parsed.numberEnd
 		}
 	}
 
@@ -228,47 +233,28 @@ func convertRawMetadata(raw *rawMetadata) *Metadata {
 // Handles patterns like "Dungeon Crawler Carl #7", "Series Name, Book 3",
 // and "Series Name - Volume 2".
 func parseSeriesFromGrouping(grouping string) seriesInfo {
-	// Pattern: "Series Name #N" or "Series Name #N.N"
-	hashPattern := regexp.MustCompile(`^(.+?)\s*#(\d+(?:\.\d+)?)$`)
-	if matches := hashPattern.FindStringSubmatch(grouping); len(matches) == 3 {
-		seriesName := strings.TrimSpace(matches[1])
-		if num, err := strconv.ParseFloat(matches[2], 64); err == nil {
-			return seriesInfo{series: seriesName, number: &num}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`^(.+?)\s*#\s*(.*)$`),
+		regexp.MustCompile(`^(.+?),\s*[Bb]ook\s+(.*)$`),
+		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?\s+(.*)$`),
+		regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?([+-]?(?:\d|\.).*)$`),
+		regexp.MustCompile(`^(.+?)\s*\([Bb]ook\s+(.*)\)$`),
+		regexp.MustCompile(`^(.+?)\s*\(([+-]?(?:\d|\.).*)\)$`),
+	}
+	grouping = strings.TrimSpace(grouping)
+	for _, pattern := range patterns {
+		matches := pattern.FindStringSubmatch(grouping)
+		if len(matches) != 3 {
+			continue
 		}
-		return seriesInfo{series: seriesName, number: nil}
+		seriesName := strings.TrimSpace(matches[1])
+		start, end, ok := seriesnum.ParseRange(matches[2])
+		if !ok {
+			return seriesInfo{series: seriesName}
+		}
+		return seriesInfo{series: seriesName, number: &start, numberEnd: end}
 	}
 
-	// Pattern: "Series Name, Book N"
-	bookPattern := regexp.MustCompile(`^(.+?),\s*[Bb]ook\s+(\d+(?:\.\d+)?)$`)
-	if matches := bookPattern.FindStringSubmatch(grouping); len(matches) == 3 {
-		seriesName := strings.TrimSpace(matches[1])
-		if num, err := strconv.ParseFloat(matches[2], 64); err == nil {
-			return seriesInfo{series: seriesName, number: &num}
-		}
-		return seriesInfo{series: seriesName, number: nil}
-	}
-
-	// Pattern: "Series Name - Volume N" or "Series Name - Vol N" or "Series Name - Vol. N"
-	volPattern := regexp.MustCompile(`^(.+?)\s*[-–]\s*[Vv]ol(?:ume)?\.?\s*(\d+(?:\.\d+)?)$`)
-	if matches := volPattern.FindStringSubmatch(grouping); len(matches) == 3 {
-		seriesName := strings.TrimSpace(matches[1])
-		if num, err := strconv.ParseFloat(matches[2], 64); err == nil {
-			return seriesInfo{series: seriesName, number: &num}
-		}
-		return seriesInfo{series: seriesName, number: nil}
-	}
-
-	// Pattern: "Series Name (Book N)" or "Series Name (N)"
-	parenPattern := regexp.MustCompile(`^(.+?)\s*\((?:[Bb]ook\s+)?(\d+(?:\.\d+)?)\)$`)
-	if matches := parenPattern.FindStringSubmatch(grouping); len(matches) == 3 {
-		seriesName := strings.TrimSpace(matches[1])
-		if num, err := strconv.ParseFloat(matches[2], 64); err == nil {
-			return seriesInfo{series: seriesName, number: &num}
-		}
-		return seriesInfo{series: seriesName, number: nil}
-	}
-
-	// If no pattern matches, return empty
 	return seriesInfo{}
 }
 

@@ -5,9 +5,105 @@ import (
 	"math"
 	"testing"
 
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestWrite_SeriesRangeAtoms(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-series-atoms-*")
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Collected Stories",
+		Duration: 1,
+	})
+	metadata, err := ParseFull(path)
+	require.NoError(t, err)
+	start, end := 1.0, 3.0
+	metadata.Series = "Saga"
+	metadata.SeriesNumber = &start
+	metadata.SeriesNumberEnd = &end
+	require.NoError(t, Write(path, metadata, WriteOptions{}))
+
+	raw, err := readMetadata(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Saga #1-3", raw.grouping)
+	assert.Equal(t, "1-3", raw.freeform["com.apple.iTunes:SERIES-PART"])
+}
+
+func TestWrite_ClearingSeriesRangeRemovesStaleAtom(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-clear-series-range-*")
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Collected Stories",
+		Duration: 1,
+	})
+	metadata, err := ParseFull(path)
+	require.NoError(t, err)
+	start, end := 1.0, 3.0
+	metadata.Series = "Saga"
+	metadata.SeriesNumber = &start
+	metadata.SeriesNumberEnd = &end
+	require.NoError(t, Write(path, metadata, WriteOptions{}))
+
+	metadata, err = ParseFull(path)
+	require.NoError(t, err)
+	metadata.SeriesNumber = nil
+	metadata.SeriesNumberEnd = nil
+	require.NoError(t, Write(path, metadata, WriteOptions{}))
+
+	raw, err := readMetadata(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Saga", raw.grouping)
+	_, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]
+	assert.False(t, ok)
+}
+
+func TestWrite_InvalidSeriesRangeIsDiscarded(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+
+	tests := []struct {
+		name  string
+		start *float64
+		end   *float64
+	}{
+		{name: "end without start", end: float64Pointer(3)},
+		{name: "reversed range", start: float64Pointer(3), end: float64Pointer(1)},
+		{name: "non-finite start", start: float64Pointer(math.NaN())},
+		{name: "non-finite end", start: float64Pointer(1), end: float64Pointer(math.Inf(1))},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := testgen.TempDir(t, "mp4-invalid-series-range-*")
+			path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+				Title:    "Collected Stories",
+				Duration: 1,
+			})
+			metadata, err := ParseFull(path)
+			require.NoError(t, err)
+			metadata.Series = "Saga"
+			metadata.SeriesNumber = tc.start
+			metadata.SeriesNumberEnd = tc.end
+			require.NoError(t, Write(path, metadata, WriteOptions{}))
+
+			raw, err := readMetadata(path)
+			require.NoError(t, err)
+			assert.Equal(t, "Saga", raw.grouping)
+			assert.Equal(t, "Saga", raw.freeform["com.apple.iTunes:SERIES"])
+			_, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]
+			assert.False(t, ok)
+		})
+	}
+}
+
+func float64Pointer(value float64) *float64 {
+	return &value
+}
 
 // These tests exercise the chunk-offset shift helpers directly. The integration
 // tests in writer_chunkoffset_test.go can only produce small files that always

@@ -59,7 +59,7 @@ mdat                      # Media data box (audio)
 | `©cmt` | Comment | Description (written alongside desc) |
 | `desc` | Description | Description (preferred) |
 | `©pub` | Publisher | Publisher name |
-| `©grp` | Grouping | Series info: "Series Name #N" |
+| `©grp` | Grouping | Series info: "Series Name #N" or "Series Name #N-M" |
 | `©cpy` | Copyright | Copyright notice |
 | `©too` | Encoder | Encoding tool info |
 | `covr` | Cover art | Cover image data (JPEG/PNG/BMP) |
@@ -74,7 +74,7 @@ Custom metadata uses freeform atoms with namespace:
 ----:com.apple.iTunes:SUBTITLE     # Subtitle (preferred)
 ----:com.pilabor.tone:SUBTITLE     # Subtitle (fallback, Tone audiobook player)
 ----:com.apple.iTunes:SERIES       # Series name (preferred)
-----:com.apple.iTunes:SERIES-PART  # Series number (preferred)
+----:com.apple.iTunes:SERIES-PART  # Series number or range (preferred)
 ----:com.shisho:tags               # Tags (comma-separated)
 ----:com.shisho:url                # URL
 ----:com.pilabor.tone:LANGUAGE     # Language (BCP 47 tag, preferred)
@@ -111,7 +111,7 @@ Freeform atom structure:
 | Authors | `©ART` | Split by comma/semicolon |
 | Narrators | `©nrt` → `©cmp` → `©wrt` | Fallback chain |
 | Series Name | `com.apple.iTunes:SERIES` freeform → `©grp` | Freeform preferred, grouping fallback |
-| Series Number | `com.apple.iTunes:SERIES-PART` freeform → `©grp` | Freeform parses as float; grouping uses regex |
+| Series Number Range | `com.apple.iTunes:SERIES-PART` freeform → `©grp` | Parses integer or decimal `start-end` ranges through `seriesnum.ParseRange`; malformed ranges are discarded atomically |
 | Genres | `©gen` | Comma-separated text |
 | Tags | `com.shisho:tags` | Freeform atom, comma-separated |
 | Description | `desc` or `©cmt` | desc preferred |
@@ -134,7 +134,7 @@ Regex patterns extract series from the grouping (`©grp`) field when the `com.ap
 "Series Name - Volume N"   → Series: "Series Name", Number: N
 "Series Name (Book N)"     → Series: "Series Name", Number: N
 ```
-Supports decimal numbers (e.g., "3.5").
+Supports decimal numbers (e.g., "3.5") and strictly increasing ranges (e.g., "1-3" or "1.5-3.5").
 
 **Narrator Fallback Chain:**
 1. `©nrt` (dedicated narrator atom) - preferred
@@ -166,10 +166,10 @@ Uses `mp4.WriteToFile()` for atomic writes.
 | Authors | `©ART` | Joined author names |
 | Narrators | `©nrt` AND `©cmp` | Written to both for compatibility |
 | Album | `©alb` | book.Title (always, for audiobook player compatibility) |
-| Grouping | `©grp` | "Series Name #N" when series exists |
+| Grouping | `©grp` | "Series Name #N" or "Series Name #N-M" when series exists |
 | Subtitle | `com.apple.iTunes:SUBTITLE` | book.Subtitle |
 | Series | `----:com.apple.iTunes:SERIES` | Series name when set |
-| Series Part | `----:com.apple.iTunes:SERIES-PART` | Series number when set |
+| Series Part | `----:com.apple.iTunes:SERIES-PART` | Series number or range when set |
 | Genres | `©gen` | Comma-separated |
 | Tags | `com.shisho:tags` | Comma-separated |
 | Description | `desc` | book.Description |
@@ -262,7 +262,10 @@ chapters don't show up in the downloaded audiobook" bug.
 
 **Series Formatting:**
 - With number: `"Series Name #1"` or `"Series Name #1.5"`
+- With range: `"Series Name #1-3"` or `"Series Name #1.5-3.5"`
 - Without number: `"Series Name"`
+- `SERIES-PART` uses the same numeric core without the series-name prefix
+- Invalid numeric groups are omitted from both atoms while the series name is preserved
 
 ### Key Types
 
@@ -283,9 +286,10 @@ type Metadata struct {
     URL          string
     Authors      []ParsedAuthor
     Narrators    []string
-    Series       string
-    SeriesNumber *float64
-    Tags         []string
+    Series          string
+    SeriesNumber    *float64
+    SeriesNumberEnd *float64
+    Tags            []string
     Duration     time.Duration
     Bitrate      int              // bits per second
     MediaType    int              // 2 = audiobook
@@ -410,10 +414,13 @@ Narrators written to BOTH `©nrt` AND `©cmp` for maximum compatibility across p
 Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-for-byte through round-trips.
 
 **Series Parsing Robustness:**
-- Multiple format patterns supported
-- Decimal numbers handled (e.g., "3.5")
+- Multiple grouping formats supported
+- Decimal numbers and ranges handled through `seriesnum.ParseRange`
+- Range start, end, and unit are an atomic scanner group; M4B leaves unit nil
 - Whitespace trimmed from extracted names
-- Empty string returned if no pattern matches
+- A blank freeform `SERIES` value does not mask a valid grouping fallback
+- Grouping keywords require token boundaries so unrelated labels such as `Booker Prize` and `Volunteer Work` are not interpreted as series metadata
+- Malformed numeric ranges are discarded as a whole while preserving the series name
 
 **Atomic Write Pattern:**
 ```

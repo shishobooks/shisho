@@ -5,11 +5,11 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 // WriteOptions configures the write operation.
@@ -522,11 +522,15 @@ func buildIlst(metadata *Metadata) []byte {
 	// round-tripped through Metadata (no Grouping field) — series data is
 	// expected to live in the DB, not in file tags.
 	if metadata.Series != "" {
-		grouping := formatSeriesGrouping(metadata.Series, metadata.SeriesNumber)
+		seriesPart, hasSeriesPart := formatSeriesRange(metadata.SeriesNumber, metadata.SeriesNumberEnd)
+		grouping := metadata.Series
+		if hasSeriesPart {
+			grouping += " #" + seriesPart
+		}
 		content.Write(buildItunesTextAtom(AtomGrouping, grouping))
 		content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES", metadata.Series))
-		if metadata.SeriesNumber != nil {
-			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", formatSeriesNumber(*metadata.SeriesNumber)))
+		if hasSeriesPart {
+			content.Write(buildFreeformAtom("com.apple.iTunes", "SERIES-PART", seriesPart))
 		}
 	}
 
@@ -730,23 +734,14 @@ func splitFreeformKey(key string) (namespace, name string, ok bool) {
 	return key[:idx], key[idx+1:], true
 }
 
-// formatSeriesGrouping formats series info as a grouping string: "Series Name #N".
-func formatSeriesGrouping(series string, number *float64) string {
-	if series == "" {
-		return ""
-	}
+// formatSeriesRange formats a valid series number group for embedded metadata.
+func formatSeriesRange(number, numberEnd *float64) (string, bool) {
 	if number == nil {
-		return series
+		return "", false
 	}
-	return series + " #" + formatSeriesNumber(*number)
-}
-
-// formatSeriesNumber formats a series number as integer when whole, decimal otherwise.
-func formatSeriesNumber(num float64) string {
-	if num == float64(int(num)) {
-		return strconv.Itoa(int(num))
-	}
-	return strconv.FormatFloat(num, 'f', -1, 64)
+	formatted := seriesnum.FormatRange(*number, numberEnd)
+	_, _, ok := seriesnum.ParseRange(formatted)
+	return formatted, ok
 }
 
 // buildItunesDataAtom builds an iTunes atom with a data box.

@@ -110,6 +110,31 @@ func TestParse_SeriesExtraction(t *testing.T) {
 	assert.InDelta(t, 7.0, *metadata.SeriesNumber, 0.001)
 }
 
+func TestParse_SeriesRangeReachesParsedMetadata(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-series-range-*")
+
+	path := testgen.GenerateM4B(t, dir, "test.m4b", testgen.M4BOptions{
+		Title:    "Collected Stories",
+		Duration: 1.0,
+	})
+	meta, err := mp4.ParseFull(path)
+	require.NoError(t, err)
+	meta.Series = "Saga"
+	meta.SeriesNumber = pointerutil.Float64(1)
+	meta.SeriesNumberEnd = pointerutil.Float64(3)
+	require.NoError(t, mp4.Write(path, meta, mp4.WriteOptions{}))
+
+	parsed, err := mp4.Parse(path)
+	require.NoError(t, err)
+	require.NotNil(t, parsed.SeriesNumber)
+	require.NotNil(t, parsed.SeriesNumberEnd)
+	assert.InDelta(t, 1, *parsed.SeriesNumber, 0.001)
+	assert.InDelta(t, 3, *parsed.SeriesNumberEnd, 0.001)
+	assert.Nil(t, parsed.SeriesNumberUnit)
+}
+
 // TestParse_GroupingExtraction verifies the ©grp atom is extracted.
 // We exercise it by round-tripping through the writer: write a Metadata
 // struct with Series + SeriesNumber, then re-parse and expect the series
@@ -262,14 +287,16 @@ func TestWrite_SeriesAtoms(t *testing.T) {
 	testgen.SkipIfNoFFmpeg(t)
 
 	tests := []struct {
-		name         string
-		series       string
-		seriesNumber *float64
-		expectedPart string
+		name            string
+		series          string
+		seriesNumber    *float64
+		seriesNumberEnd *float64
+		expectedPart    string
 	}{
-		{"integer number", "Test Series", pointerutil.Float64(1), "1"},
-		{"decimal number", "Test Series", pointerutil.Float64(1.5), "1.5"},
-		{"no number", "Test Series", nil, ""},
+		{"integer number", "Test Series", pointerutil.Float64(1), nil, "1"},
+		{"decimal number", "Test Series", pointerutil.Float64(1.5), nil, "1.5"},
+		{"range", "Test Series", pointerutil.Float64(1), pointerutil.Float64(3), "1-3"},
+		{"no number", "Test Series", nil, nil, ""},
 	}
 
 	for _, tc := range tests {
@@ -288,6 +315,7 @@ func TestWrite_SeriesAtoms(t *testing.T) {
 			meta.Album = meta.Title
 			meta.Series = tc.series
 			meta.SeriesNumber = tc.seriesNumber
+			meta.SeriesNumberEnd = tc.seriesNumberEnd
 
 			err = mp4.Write(path, meta, mp4.WriteOptions{})
 			require.NoError(t, err)
@@ -305,6 +333,12 @@ func TestWrite_SeriesAtoms(t *testing.T) {
 				assert.InDelta(t, *tc.seriesNumber, *modified.SeriesNumber, 0.001)
 			} else {
 				assert.Nil(t, modified.SeriesNumber)
+			}
+			if tc.seriesNumberEnd != nil {
+				require.NotNil(t, modified.SeriesNumberEnd)
+				assert.InDelta(t, *tc.seriesNumberEnd, *modified.SeriesNumberEnd, 0.001)
+			} else {
+				assert.Nil(t, modified.SeriesNumberEnd)
 			}
 
 			// Raw freeform map should contain the Audible-style atoms.
