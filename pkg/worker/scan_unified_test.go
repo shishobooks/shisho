@@ -1252,6 +1252,44 @@ func TestScanFileCore_Series_HigherPriority(t *testing.T) {
 	assert.InDelta(t, 2.0, *updatedBook.BookSeries[0].SeriesNumber, 0.0001)
 }
 
+func TestScanFileCore_CBZSeriesRange_PersistsAtomicGroup(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	book := &models.Book{
+		LibraryID: 1, Filepath: libraryPath, Title: "Saga", TitleSource: models.DataSourceFilepath,
+		SortTitle: "Saga", AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+	file := &models.File{
+		LibraryID: 1, BookID: book.ID, Filepath: filepath.Join(libraryPath, "saga.cbz"),
+		FileType: models.FileTypeCBZ, FilesizeBytes: 1000,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+	unit := models.SeriesNumberUnitChapter
+	metadata := &mediafile.ParsedMetadata{
+		Series: "Saga", SeriesNumber: seriesFloatPtr(5), SeriesNumberEnd: seriesFloatPtr(8),
+		SeriesNumberUnit: &unit, DataSource: models.DataSourceCBZMetadata,
+	}
+
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	require.NoError(t, err)
+	updatedBook, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+	require.Len(t, updatedBook.BookSeries, 1)
+	membership := updatedBook.BookSeries[0]
+	require.NotNil(t, membership.SeriesNumber)
+	require.NotNil(t, membership.SeriesNumberEnd)
+	require.NotNil(t, membership.SeriesNumberUnit)
+	assert.InDelta(t, 5, *membership.SeriesNumber, 0.001)
+	assert.InDelta(t, 8, *membership.SeriesNumberEnd, 0.001)
+	assert.Equal(t, unit, *membership.SeriesNumberUnit)
+	require.NotNil(t, membership.Series)
+	assert.Equal(t, models.DataSourceCBZMetadata, membership.Series.NameSource)
+}
+
 func TestScanFileCore_Genres_HigherPriority(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

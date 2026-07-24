@@ -253,7 +253,9 @@ The pipeline lives in `pkg/fileutils/naming.go`:
 - `ExtractSeriesFromTitle` — splits a normalized title into the series name, start, optional end, and unit.
 - `formatSeriesNumber` / `IsOrganizedName` — handle the inverse, formatting single numbers and ranges as `v{N}` or `c{N}` suffixes.
 
-When a library has file organization enabled, chapter-numbered files use `Title c042.cbz` or `Title c005-008.cbz`, while volume-numbered files use `Title v042.cbz` or `Title v001-003.cbz`. Both endpoints and the unit round-trip through organization and rescanning.
+When a library has file organization enabled, the range is a folder suffix: chapter-numbered books use layouts such as `Title c042/Title.cbz` or `Title c005-008/Title.cbz`, while volume-numbered books use `Title v042/Title.cbz` or `Title v001-003/Title.cbz`.
+
+ComicInfo `Number` round-trips the endpoints but cannot encode the volume/chapter unit. The unit round-trips only when the complete atomic group comes from one source that can represent it, such as the filename or sidecar. Shisho never combines ComicInfo endpoints with a filename-derived unit.
 
 ## Scanner Integration
 

@@ -40,6 +40,11 @@ func TestNormalizeSeriesNumberInTitle(t *testing.T) {
 		{"hash range defaults to volume", "Saga #1 - 3", "cbz", "Saga v001-003", "volume", true},
 		{"spaced hash range defaults to volume", "Saga # 1 - 3", "cbz", "Saga v001-003", "volume", true},
 		{"bare trailing range defaults to volume", "Saga 1-3", "cbz", "Saga v001-003", "volume", true},
+		{"negative single volume", "Saga v-1", "cbz", "Saga v-001", "volume", true},
+		{"negative volume range", "Saga v-3--1", "cbz", "Saga v-003--001", "volume", true},
+		{"spaced reversed range rejected", "Saga v3 - 1", "cbz", "Saga v3 - 1", "", false},
+		{"spaced equal range rejected", "Saga c3 - 3", "cbz", "Saga c3 - 3", "", false},
+		{"spaced extra endpoint rejected", "Saga v1 - 3 - 5", "cbz", "Saga v1 - 3 - 5", "", false},
 		// Non-CBZ short-circuits
 		{"epub returns false", "Some Book v3", "epub", "Some Book v3", "", false},
 		{"m4b returns false", "Some Book v3", "m4b", "Some Book v3", "", false},
@@ -282,6 +287,9 @@ func TestIsOrganizedName_Chapter(t *testing.T) {
 	assert.True(t, IsOrganizedName("Naruto #042.cbz"))
 	assert.True(t, IsOrganizedName("Naruto #001-003.cbz"))
 	assert.True(t, IsOrganizedName("Naruto 001-003.cbz"))
+	assert.True(t, IsOrganizedName("Naruto v-003--001.cbz"))
+	assert.False(t, IsOrganizedName("Naruto v003-001.cbz"))
+	assert.False(t, IsOrganizedName("Naruto c005-005.cbz"))
 	assert.True(t, IsOrganizedName("[Author] Title.cbz"))
 }
 
@@ -323,6 +331,19 @@ func TestGenerateOrganizedFolderName_Range(t *testing.T) {
 		FileType:         "cbz",
 	})
 	assert.Equal(t, "One Piece c005-008", got)
+}
+
+func TestGenerateOrganizedFolderName_ReplacesOrClearsExistingRange(t *testing.T) {
+	t.Parallel()
+	volumeUnit := "volume"
+
+	assert.Equal(t, "Saga v001-004", GenerateOrganizedFolderName(OrganizedNameOptions{
+		Title:            "Saga v001-003",
+		SeriesNumber:     floatPtr(1),
+		SeriesNumberEnd:  floatPtr(4),
+		SeriesNumberUnit: &volumeUnit,
+		FileType:         "cbz",
+	}))
 }
 
 func TestGenerateOrganizedFolderName_TitleAlreadyHasChapter(t *testing.T) {

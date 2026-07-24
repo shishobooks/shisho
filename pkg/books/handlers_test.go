@@ -2335,7 +2335,7 @@ func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 
 	book := &models.Book{
 		LibraryID:       library.ID,
-		Title:           "Saga",
+		Title:           "Saga v001-003",
 		TitleSource:     models.DataSourceManual,
 		SortTitle:       "Saga",
 		SortTitleSource: models.DataSourceFilepath,
@@ -2364,6 +2364,9 @@ func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 	}).Exec(ctx)
 	require.NoError(t, err)
 
+	epubPath := filepath.Join(oldBookDir, "Saga.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0o644))
+	setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
 	cbzPath := filepath.Join(oldBookDir, "Saga.cbz")
 	require.NoError(t, os.WriteFile(cbzPath, []byte("cbz"), 0o644))
 	file := setupTestFile(t, db, book, models.FileTypeCBZ, cbzPath)
@@ -2377,7 +2380,7 @@ func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 
 	var updatedFile models.File
 	require.NoError(t, db.NewSelect().Model(&updatedFile).Where("f.id = ?", file.ID).Scan(ctx))
-	assert.Equal(t, filepath.Join(libraryDir, "Saga v001-004", "Saga.cbz"), updatedFile.Filepath)
+	assert.Equal(t, filepath.Join(libraryDir, "Saga v001-004"), filepath.Dir(updatedFile.Filepath))
 	_, err = os.Stat(updatedFile.Filepath)
 	require.NoError(t, err)
 	_, err = os.Stat(oldBookDir)

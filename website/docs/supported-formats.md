@@ -26,7 +26,7 @@ Audiobooks encoded with the newer xHE-AAC codec only play in Safari (and other i
 
 ## Comics
 
-- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language. Omnibus series ranges round-trip through ComicInfo `Number` values such as `1-3` and organized names such as `Title v001-003` or `Title c005-008`. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
+- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language. Omnibus series ranges round-trip through ComicInfo `Number` values such as `1-3` and organized folder names such as `Title v001-003` or `Title c005-008`. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
 
 ## Downloads
 

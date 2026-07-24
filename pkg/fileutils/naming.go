@@ -33,8 +33,8 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 	}
 
 	// Strip a normalized CBZ number from the title before applying the current
-	// atomic number group. This lets edits to either endpoint update the name
-	// instead of preserving a stale suffix.
+	// atomic number group. This updates changed endpoints without treating a
+	// title suffix as disposable when no series membership exists.
 	title := opts.Title
 	if opts.SeriesNumber != nil && opts.FileType == models.FileTypeCBZ {
 		if seriesName, _, _, _, ok := ExtractSeriesFromTitle(title, opts.FileType); ok {
@@ -136,11 +136,21 @@ func IsOrganizedName(name string) bool {
 	// Remove extension for analysis
 	nameWithoutExt := strings.TrimSuffix(name, filepath.Ext(name))
 
-	// Basic pattern: starts with [Author] or contains series number indicators
-	authorPattern := regexp.MustCompile(`^\[.+\]`)
-	seriesNumberPattern := regexp.MustCompile(`(?i)(?:[vc]\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?|#\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?|\d+(?:\.\d+)?-\d+(?:\.\d+)?)$`)
+	if regexp.MustCompile(`^\[.+\]`).MatchString(nameWithoutExt) {
+		return true
+	}
 
-	return authorPattern.MatchString(nameWithoutExt) || seriesNumberPattern.MatchString(nameWithoutExt)
+	prefixed := regexp.MustCompile(`(?i)[vc#]\s*(` + seriesRangeRE + `)$`).FindStringSubmatch(nameWithoutExt)
+	if len(prefixed) == 2 {
+		_, _, ok := seriesnum.ParseRange(prefixed[1])
+		return ok
+	}
+	bareRange := regexp.MustCompile(`(` + seriesNumberRE + `\s*[-–—]\s*` + seriesNumberRE + `)$`).FindStringSubmatch(nameWithoutExt)
+	if len(bareRange) == 2 {
+		_, _, ok := seriesnum.ParseRange(bareRange[1])
+		return ok
+	}
+	return false
 }
 
 // seriesNumberPatterns is the regex pattern table used by NormalizeSeriesNumberInTitle.
@@ -148,22 +158,23 @@ func IsOrganizedName(name string) bool {
 // explicit chapter patterns precede explicit volume patterns; ambiguous indicators
 // (#, bare numbers) default to volume to preserve historical behavior.
 const (
-	seriesNumberRE = `\d+(?:\.\d+)?`
+	seriesNumberRE = `[+-]?\d+(?:\.\d+)?`
 	seriesRangeRE  = seriesNumberRE + `(?:\s*[-–—]\s*` + seriesNumberRE + `)?`
+	seriesValueRE  = `([+-]?\d.*?)`
 )
 
 var seriesNumberPatterns = []struct {
 	re   *regexp.Regexp
 	unit string
 }{
-	{regexp.MustCompile(`(?i)\s*chapter\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s*ch\.?\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s+c\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s*#\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s+v\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s*vol\.?\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s*volume\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`\s+(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*chapter\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*ch\.?\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s+c\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*#\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s+v\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*volume\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*vol\.?\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`\s+` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
 }
 
 // NormalizeSeriesNumberInTitle normalizes volume- or chapter-style number
@@ -186,7 +197,7 @@ func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string
 		}
 		start, end, ok := seriesnum.ParseRange(matches[1])
 		if !ok {
-			continue
+			return title, "", false
 		}
 		baseTitle := strings.TrimSpace(p.re.ReplaceAllString(title, ""))
 		prefix := "v"
@@ -210,14 +221,19 @@ func formatPaddedSeriesRange(start float64, end *float64) string {
 
 func formatPaddedSeriesEndpoint(number float64) string {
 	formatted := seriesnum.FormatRange(number, nil)
+	sign := ""
+	if strings.HasPrefix(formatted, "-") {
+		sign = "-"
+		formatted = strings.TrimPrefix(formatted, "-")
+	}
 	integer, fraction, hasFraction := strings.Cut(formatted, ".")
 	if len(integer) < 3 {
 		integer = strings.Repeat("0", 3-len(integer)) + integer
 	}
 	if hasFraction {
-		return integer + "." + fraction
+		return sign + integer + "." + fraction
 	}
-	return integer
+	return sign + integer
 }
 
 // extractSeriesNumberFromTitle extracts a normalized series number suffix
