@@ -138,7 +138,7 @@ func IsOrganizedName(name string) bool {
 
 	// Basic pattern: starts with [Author] or contains series number indicators
 	authorPattern := regexp.MustCompile(`^\[.+\]`)
-	seriesNumberPattern := regexp.MustCompile(`([vc]\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?|#\d+(?:\.\d+)?)$`)
+	seriesNumberPattern := regexp.MustCompile(`(?i)(?:[vc]\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?|#\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?|\d+(?:\.\d+)?-\d+(?:\.\d+)?)$`)
 
 	return authorPattern.MatchString(nameWithoutExt) || seriesNumberPattern.MatchString(nameWithoutExt)
 }
@@ -158,9 +158,9 @@ var seriesNumberPatterns = []struct {
 }{
 	{regexp.MustCompile(`(?i)\s*chapter\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
 	{regexp.MustCompile(`(?i)\s*ch\.?\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s+c(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s*#(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s+v(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s+c\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*#\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s+v\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
 	{regexp.MustCompile(`(?i)\s*vol\.?\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
 	{regexp.MustCompile(`(?i)\s*volume\s*(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},
 	{regexp.MustCompile(`\s+(` + seriesRangeRE + `)\s*$`), models.SeriesNumberUnitVolume},

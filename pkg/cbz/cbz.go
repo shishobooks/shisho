@@ -225,16 +225,15 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	// The filename provides a fallback number group and the volume/chapter unit.
-	// When ComicInfo has the number, retain its endpoints but still honor an
-	// explicit filename unit, matching the existing single-number behavior.
-	filenameStart, filenameEnd, filenameUnit := extractSeriesNumberFromFilename(filepath.Base(path))
-	if seriesNumber == nil && filenameStart != nil {
-		seriesNumber = filenameStart
-		seriesNumberEnd = filenameEnd
-	}
-	if filenameUnit != nil {
-		seriesNumberUnit = filenameUnit
+	// The filename provides a fallback atomic number group only when ComicInfo
+	// does not provide one. Never combine endpoints and units from two sources.
+	if seriesNumber == nil {
+		filenameStart, filenameEnd, filenameUnit := extractSeriesNumberFromFilename(filepath.Base(path))
+		if filenameStart != nil {
+			seriesNumber = filenameStart
+			seriesNumberEnd = filenameEnd
+			seriesNumberUnit = filenameUnit
+		}
 	}
 
 	// Extract language from LanguageISO

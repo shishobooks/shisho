@@ -39,6 +39,36 @@ func TestParseCBZ_SeriesRange(t *testing.T) {
 	assert.InDelta(t, 3, *metadata.SeriesNumberEnd, 0.001)
 }
 
+func TestParseCBZ_ComicInfoRangeDoesNotMixFilenameUnit(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	cbzPath := filepath.Join(tmpDir, "Saga c05-08.cbz")
+	f, err := os.Create(cbzPath)
+	require.NoError(t, err)
+	zw := zip.NewWriter(f)
+
+	imgWriter, err := zw.Create("page001.jpg")
+	require.NoError(t, err)
+	_, err = imgWriter.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
+	require.NoError(t, err)
+
+	comicInfoWriter, err := zw.Create("ComicInfo.xml")
+	require.NoError(t, err)
+	_, err = comicInfoWriter.Write([]byte(`<ComicInfo><Title>Saga</Title><Series>Saga</Series><Number>1-3</Number></ComicInfo>`))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	require.NoError(t, f.Close())
+
+	metadata, err := Parse(cbzPath)
+	require.NoError(t, err)
+	require.NotNil(t, metadata.SeriesNumber)
+	require.NotNil(t, metadata.SeriesNumberEnd)
+	assert.InDelta(t, 1, *metadata.SeriesNumber, 0.001)
+	assert.InDelta(t, 3, *metadata.SeriesNumberEnd, 0.001)
+	assert.Nil(t, metadata.SeriesNumberUnit)
+}
+
 func TestParseCBZ_Identifiers(t *testing.T) {
 	t.Parallel()
 	// Create test CBZ with ComicInfo.xml containing GTIN

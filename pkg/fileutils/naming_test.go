@@ -32,10 +32,13 @@ func TestNormalizeSeriesNumberInTitle(t *testing.T) {
 		{"fractional chapter", "One Piece c5.5", "cbz", "One Piece c005.5", "chapter", true},
 		// Omnibus ranges preserve the unit and normalize both endpoints.
 		{"compact volume range", "Naruto v01-03", "cbz", "Naruto v001-003", "volume", true},
+		{"spaced compact volume range", "Naruto v 01-03", "cbz", "Naruto v001-003", "volume", true},
 		{"volume word decimal range", "Naruto volume 1.5 — 3.5", "cbz", "Naruto v001.5-003.5", "volume", true},
 		{"chapter abbreviation range", "One Piece ch. 5–8", "cbz", "One Piece c005-008", "chapter", true},
 		{"compact chapter decimal range", "One Piece c05.5 - 08.5", "cbz", "One Piece c005.5-008.5", "chapter", true},
+		{"spaced compact chapter range", "One Piece c 05-08", "cbz", "One Piece c005-008", "chapter", true},
 		{"hash range defaults to volume", "Saga #1 - 3", "cbz", "Saga v001-003", "volume", true},
+		{"spaced hash range defaults to volume", "Saga # 1 - 3", "cbz", "Saga v001-003", "volume", true},
 		{"bare trailing range defaults to volume", "Saga 1-3", "cbz", "Saga v001-003", "volume", true},
 		// Non-CBZ short-circuits
 		{"epub returns false", "Some Book v3", "epub", "Some Book v3", "", false},
@@ -277,6 +280,8 @@ func TestIsOrganizedName_Chapter(t *testing.T) {
 	assert.True(t, IsOrganizedName("Naruto v001-003.cbz"))
 	assert.True(t, IsOrganizedName("Naruto c005.5-008.5.cbz"))
 	assert.True(t, IsOrganizedName("Naruto #042.cbz"))
+	assert.True(t, IsOrganizedName("Naruto #001-003.cbz"))
+	assert.True(t, IsOrganizedName("Naruto 001-003.cbz"))
 	assert.True(t, IsOrganizedName("[Author] Title.cbz"))
 }
 

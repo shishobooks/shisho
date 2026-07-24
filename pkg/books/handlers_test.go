@@ -2313,21 +2313,75 @@ func TestUpdateFile_IsPreferredCover_ClearingPreferred(t *testing.T) {
 	assert.False(t, f.IsPreferredCover, "preferred should be cleared")
 }
 
-func TestSeriesNumberGroupChangedForOrganization_EndOnly(t *testing.T) {
+func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 	t.Parallel()
 
-	oldMembership := &models.BookSeries{
+	db := setupTestDB(t)
+	ctx := context.Background()
+	libraryDir := t.TempDir()
+	oldBookDir := filepath.Join(libraryDir, "Saga v001-003")
+	require.NoError(t, os.MkdirAll(oldBookDir, 0o755))
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         models.CoverAspectRatioBook,
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Saga",
+		TitleSource:     models.DataSourceManual,
+		SortTitle:       "Saga",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        oldBookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	series := &models.Series{
+		LibraryID:      library.ID,
+		Name:           "Saga",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Saga",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(series).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.BookSeries{
+		BookID:           book.ID,
+		SeriesID:         series.ID,
 		SeriesNumber:     pointerutil.Float64(1),
 		SeriesNumberEnd:  pointerutil.Float64(3),
 		SeriesNumberUnit: pointerutil.String(models.SeriesNumberUnitVolume),
-	}
-	newMembership := SeriesInput{
-		Number:           pointerutil.Float64(1),
-		NumberEnd:        pointerutil.Float64(4),
-		SeriesNumberUnit: pointerutil.String(models.SeriesNumberUnitVolume),
-	}
+		SortOrder:        1,
+	}).Exec(ctx)
+	require.NoError(t, err)
 
-	assert.True(t, seriesNumberGroupChangedForOrganization(oldMembership, &newMembership))
+	cbzPath := filepath.Join(oldBookDir, "Saga.cbz")
+	require.NoError(t, os.WriteFile(cbzPath, []byte("cbz"), 0o644))
+	file := setupTestFile(t, db, book, models.FileTypeCBZ, cbzPath)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"series":[{"name":"Saga","number":1,"number_end":4,"series_number_unit":"volume"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updatedFile models.File
+	require.NoError(t, db.NewSelect().Model(&updatedFile).Where("f.id = ?", file.ID).Scan(ctx))
+	assert.Equal(t, filepath.Join(libraryDir, "Saga v001-004", "Saga.cbz"), updatedFile.Filepath)
+	_, err = os.Stat(updatedFile.Filepath)
+	require.NoError(t, err)
+	_, err = os.Stat(oldBookDir)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestUpdateBook_SeriesNumberRange_PersistsAndReturnsEnd(t *testing.T) {
