@@ -26,7 +26,7 @@ The ComicInfo.xml file follows the ComicRack schema.
 <ComicInfo>
   <Title>Comic Title</Title>
   <Series>Series Name</Series>
-  <Number>5</Number>           <!-- Issue number, can be decimal like "1.5" -->
+  <Number>5</Number>           <!-- Issue number, decimal like "1.5", or range like "1-3" -->
   <Volume>1</Volume>
   <Year>2024</Year>
   <Month>6</Month>
@@ -101,7 +101,7 @@ Multiple creators per role are comma-separated:
 |-------|-------------|-------|
 | Title | `<Title>` | Direct extraction |
 | Series | `<Series>` | Series name |
-| Series Number | `<Number>` | Parsed as float (supports decimals) |
+| Series Number | `<Number>` | Parsed as a single number or increasing range (supports decimals) |
 | Volume | `<Volume>` | Volume number |
 | Authors | 8 creator fields | Each role mapped to AuthorInfo with role |
 | Genres | `<Genre>` | Comma-separated, split into array |
@@ -120,7 +120,7 @@ Multiple creators per role are comma-separated:
 3. Use first image file alphabetically
 
 **Series Number Fallback:**
-If not in ComicInfo, regex patterns extract from filename: `#7`, `v7`, `c7`, `ch.7`, ` 7` at end of filename. Volume indicators (`v`, `#`, bare numbers) set the unit to `volume`; chapter indicators (`c`, `ch.`, `chapter`) set it to `chapter`.
+If not in ComicInfo, filename patterns extract single numbers and contiguous ranges such as `v01-03`, `vol. 1-3`, `#1-3`, bare `1-3`, `ch. 5-8`, and `c05-08`. Hyphen, en dash, and em dash separators are accepted on read. Volume indicators (`v`, `vol`, `volume`, `#`, bare numbers) set the unit to `volume`; chapter indicators (`c`, `ch.`, `chapter`) set it to `chapter`.
 
 **Data Source:** All extracted metadata tagged with `models.DataSourceCBZMetadata`
 
@@ -143,7 +143,7 @@ When generating CBZ files, Shisho:
 |-------|-------------------|--------|
 | Title | `<Title>` | book.Title |
 | Series | `<Series>` | Primary BookSeries (sorted by SortOrder) |
-| Number | `<Number>` | Primary series number |
+| Number | `<Number>` | Primary series number or range, formatted as `1-3` |
 | All 8 author roles | Role-specific elements | Authors mapped by role, comma-separated |
 | Genres | `<Genre>` | Comma-separated from BookGenres |
 | Tags | `<Tags>` | Comma-separated from BookTags |
@@ -244,16 +244,18 @@ Images are sorted **naturally** (page2 < page10) to determine page order.
 
 ## Filename Parsing for Series Number Unit
 
-CBZ filenames can encode either a volume (`v01`, `vol.5`, `volume 12`, `#001`, bare trailing number) or a chapter (`Ch.5`, `chapter 5`, `c042`). The scanner normalizes both into the title (`Title v003` for volumes, `Title c042` for chapters) and stores the parsed unit on `book_series.series_number_unit`.
+CBZ filenames can encode either a volume (`v01`, `vol.5`, `volume 12`, `#001`, bare trailing number) or a chapter (`Ch.5`, `chapter 5`, `c042`). Each form also accepts a strictly increasing contiguous range. The scanner normalizes them into the title (`Title v003` or `Title v001-003` for volumes, `Title c042` or `Title c005-008` for chapters) and stores the parsed start, end, and unit as one atomic group.
 
 Volume vs chapter is determined by the explicit indicator. Ambiguous indicators (`#001`, bare trailing numbers like `Title 5`) default to `volume` to preserve historical behavior; existing scanned files don't shift semantics on rescan.
 
 The pipeline lives in `pkg/fileutils/naming.go`:
 - `NormalizeSeriesNumberInTitle` — recognizes the indicators and produces a normalized title with the parsed unit.
-- `ExtractSeriesFromTitle` — splits a normalized title into series name and number, returning the unit alongside.
-- `formatSeriesNumber` / `IsOrganizedName` — handle the inverse, formatting numbers as `v{N}` or `c{N}` for organized filenames.
+- `ExtractSeriesFromTitle` — splits a normalized title into the series name, start, optional end, and unit.
+- `formatSeriesNumber` / `IsOrganizedName` — handle the inverse, formatting single numbers and ranges as `v{N}` or `c{N}` suffixes.
 
-When a library has file organization enabled, chapter-numbered files are renamed to `Title c042.cbz` and volume-numbered files to `Title v042.cbz` — the unit round-trips through organize → rescan.
+When a library has file organization enabled, the range is a folder suffix: chapter-numbered books use layouts such as `Title c042/Title.cbz` or `Title c005-008/Title.cbz`, while volume-numbered books use `Title v042/Title.cbz` or `Title v001-003/Title.cbz`.
+
+ComicInfo `Number` round-trips the endpoints but cannot encode the volume/chapter unit. The unit round-trips only when the complete atomic group comes from one source that can represent it, such as the filename or sidecar. Shisho never combines ComicInfo endpoints with a filename-derived unit.
 
 ## Scanner Integration
 
@@ -294,9 +296,10 @@ CBZ files can be converted to fixed-layout KePub for Kobo devices. See `pkg/kepu
 - Default to Writer field during generation
 - Parsed as writer role if found in Writer field
 
-**Decimal Series Numbers:**
-- `1.5` formatted as "1.5" (string)
-- `1.0` formatted as "1" (no decimal)
+**Decimal Series Numbers and Ranges:**
+- `1.5` is formatted as `1.5`
+- `1.0` is formatted as `1`
+- A range from `1.5` to `3.5` is formatted as `1.5-3.5` in ComicInfo and `v001.5-003.5` or `c001.5-003.5` in organized names
 
 **Missing ComicInfo.xml:**
 - Generator creates new ComicInfo.xml with all metadata

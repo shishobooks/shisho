@@ -897,10 +897,22 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 
 	// Get series number and unit from first BookSeries entry (if any)
 	var seriesNumber *float64
+	var seriesNumberEnd *float64
 	var seriesNumberUnit *string
 	if len(book.BookSeries) > 0 {
 		seriesNumber = book.BookSeries[0].SeriesNumber
+		seriesNumberEnd = book.BookSeries[0].SeriesNumberEnd
 		seriesNumberUnit = book.BookSeries[0].SeriesNumberUnit
+	}
+
+	// Use CBZ folder naming whenever the book has a main CBZ. Hybrid books must
+	// not change range behavior based on file creation order.
+	folderFileType := files[0].FileType
+	for _, file := range files {
+		if file.FileRole == models.FileRoleMain && file.FileType == models.FileTypeCBZ {
+			folderFileType = models.FileTypeCBZ
+			break
+		}
 	}
 
 	// Create organized name options from current book metadata
@@ -908,7 +920,9 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		AuthorNames:      authorNames,
 		Title:            book.Title,
 		SeriesNumber:     seriesNumber,
+		SeriesNumberEnd:  seriesNumberEnd,
 		SeriesNumberUnit: seriesNumberUnit,
+		FileType:         folderFileType,
 	}
 
 	// Track path updates for database

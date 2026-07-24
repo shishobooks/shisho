@@ -18,6 +18,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 type ComicInfo struct {
@@ -126,16 +127,17 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	authors := []mediafile.ParsedAuthor{}
 	series := ""
 	var seriesNumber *float64
+	var seriesNumberEnd *float64
+	var seriesNumberUnit *string
 
 	if comicInfo != nil {
 		title = comicInfo.Title
 		series = comicInfo.Series
 
-		// Use series number from ComicInfo if available
-		if comicInfo.Number != "" {
-			if num, err := strconv.ParseFloat(comicInfo.Number, 64); err == nil {
-				seriesNumber = &num
-			}
+		// ComicInfo Number may contain either a single number or an omnibus range.
+		if start, end, ok := seriesnum.ParseRange(comicInfo.Number); ok {
+			seriesNumber = &start
+			seriesNumberEnd = end
 		}
 
 		// Collect all creator fields with their roles
@@ -223,11 +225,14 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	// If no series number from ComicInfo, try to extract from filename
+	// The filename provides a fallback atomic number group only when ComicInfo
+	// does not provide one. Never combine endpoints and units from two sources.
 	if seriesNumber == nil {
-		filename := filepath.Base(path)
-		if num := extractSeriesNumberFromFilename(filename); num != nil {
-			seriesNumber = num
+		filenameStart, filenameEnd, filenameUnit := extractSeriesNumberFromFilename(filepath.Base(path))
+		if filenameStart != nil {
+			seriesNumber = filenameStart
+			seriesNumberEnd = filenameEnd
+			seriesNumberUnit = filenameUnit
 		}
 	}
 
@@ -253,24 +258,26 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	}
 
 	return &mediafile.ParsedMetadata{
-		Title:         title,
-		Authors:       authors,
-		Series:        series,
-		SeriesNumber:  seriesNumber,
-		Genres:        genres,
-		Tags:          tags,
-		Description:   description,
-		Publisher:     publisher,
-		URL:           url,
-		ReleaseDate:   releaseDate,
-		Language:      language,
-		CoverMimeType: coverMimeType,
-		CoverData:     coverData,
-		CoverPage:     coverPage,
-		PageCount:     pageCount,
-		DataSource:    models.DataSourceCBZMetadata,
-		Identifiers:   identifiersList,
-		Chapters:      chapters,
+		Title:            title,
+		Authors:          authors,
+		Series:           series,
+		SeriesNumber:     seriesNumber,
+		SeriesNumberEnd:  seriesNumberEnd,
+		SeriesNumberUnit: seriesNumberUnit,
+		Genres:           genres,
+		Tags:             tags,
+		Description:      description,
+		Publisher:        publisher,
+		URL:              url,
+		ReleaseDate:      releaseDate,
+		Language:         language,
+		CoverMimeType:    coverMimeType,
+		CoverData:        coverData,
+		CoverPage:        coverPage,
+		PageCount:        pageCount,
+		DataSource:       models.DataSourceCBZMetadata,
+		Identifiers:      identifiersList,
+		Chapters:         chapters,
 	}, nil
 }
 
@@ -394,29 +401,17 @@ func splitCreators(creators string) []string {
 // cbzParensRE matches parenthesized metadata sections like (2020), (Digital), (group).
 var cbzParensRE = regexp.MustCompile(`\([^)]*\)`)
 
-func extractSeriesNumberFromFilename(filename string) *float64 {
-	// Remove extension for processing
+func extractSeriesNumberFromFilename(filename string) (start, end *float64, unit *string) {
 	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
+	nameWithoutExt = strings.TrimSpace(cbzParensRE.ReplaceAllString(nameWithoutExt, ""))
 
-	// Strip parenthesized metadata (year, quality, group) before matching volume
-	nameWithoutExt = cbzParensRE.ReplaceAllString(nameWithoutExt, "")
-	nameWithoutExt = strings.TrimSpace(nameWithoutExt)
-
-	// Try patterns: #7, v7, or just 7 at the end
-	patterns := []string{
-		`(?i)#(\d+(?:\.\d+)?)$`,   // matches #7 or #7.5
-		`(?i)v(\d+(?:\.\d+)?)$`,   // matches v7 or v7.5
-		`(?i)\s+(\d+(?:\.\d+)?)$`, // matches " 7" or " 7.5"
+	normalized, parsedUnit, ok := fileutils.NormalizeSeriesNumberInTitle(nameWithoutExt, models.FileTypeCBZ)
+	if !ok {
+		return nil, nil, nil
 	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		if matches := re.FindStringSubmatch(nameWithoutExt); len(matches) >= 2 {
-			if num, err := strconv.ParseFloat(matches[1], 64); err == nil {
-				return &num
-			}
-		}
+	_, start, end, parsedUnit, ok = fileutils.ExtractSeriesFromTitle(normalized, models.FileTypeCBZ)
+	if !ok {
+		return nil, nil, nil
 	}
-
-	return nil
+	return start, end, &parsedUnit
 }

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 // OrganizedNameOptions contains the data needed to generate organized file/folder names.
@@ -16,6 +16,7 @@ type OrganizedNameOptions struct {
 	NarratorNames    []string // Narrator names for M4B file naming
 	Title            string
 	SeriesNumber     *float64
+	SeriesNumberEnd  *float64
 	SeriesNumberUnit *string // for CBZ: models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter; nil treated as volume
 	FileType         string  // for determining number formatting
 }
@@ -31,23 +32,25 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 		parts = append(parts, fmt.Sprintf("[%s]", author))
 	}
 
-	// Add title
-	if opts.Title != "" {
-		title := sanitizeForFilename(opts.Title)
-		parts = append(parts, title)
+	// Strip a normalized CBZ number from the title before applying the current
+	// atomic number group. This updates changed endpoints without treating a
+	// title suffix as disposable when no series membership exists.
+	title := opts.Title
+	if opts.SeriesNumber != nil && opts.FileType == models.FileTypeCBZ {
+		if seriesName, _, _, _, ok := ExtractSeriesFromTitle(title, opts.FileType); ok {
+			title = seriesName
+		}
+	}
+	if title != "" {
+		parts = append(parts, sanitizeForFilename(title))
 	}
 
-	// Add series number only for CBZ files (manga/comic). But only if the title
-	// doesn't already encode a number.
 	if opts.SeriesNumber != nil && opts.FileType == models.FileTypeCBZ {
-		existingNum, _ := extractSeriesNumberFromTitle(opts.Title)
-		if existingNum == nil {
-			unit := ""
-			if opts.SeriesNumberUnit != nil {
-				unit = *opts.SeriesNumberUnit
-			}
-			parts = append(parts, formatSeriesNumber(*opts.SeriesNumber, unit, opts.FileType))
+		unit := ""
+		if opts.SeriesNumberUnit != nil {
+			unit = *opts.SeriesNumberUnit
 		}
+		parts = append(parts, formatSeriesNumber(*opts.SeriesNumber, opts.SeriesNumberEnd, unit, opts.FileType))
 	}
 
 	name := strings.Join(parts, " ")
@@ -73,6 +76,7 @@ func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath strin
 
 	optsForFilename := opts
 	optsForFilename.SeriesNumber = nil
+	optsForFilename.SeriesNumberEnd = nil
 	optsForFilename.AuthorNames = nil
 	baseName := GenerateOrganizedFolderName(optsForFilename)
 
@@ -89,21 +93,15 @@ func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath strin
 // "v" for volume (and the empty-unit default), "c" for chapter. Non-CBZ files keep
 // the legacy "#N" form, which is currently unused since this helper is only invoked
 // for CBZ in GenerateOrganizedFolderName.
-func formatSeriesNumber(number float64, unit string, fileType string) string {
+func formatSeriesNumber(number float64, numberEnd *float64, unit string, fileType string) string {
 	if fileType == models.FileTypeCBZ {
 		prefix := "v"
 		if unit == models.SeriesNumberUnitChapter {
 			prefix = "c"
 		}
-		if number == float64(int(number)) {
-			return fmt.Sprintf("%s%d", prefix, int(number))
-		}
-		return fmt.Sprintf("%s%.1f", prefix, number)
+		return prefix + formatPaddedSeriesRange(number, numberEnd)
 	}
-	if number == float64(int(number)) {
-		return fmt.Sprintf("#%d", int(number))
-	}
-	return fmt.Sprintf("#%.1f", number)
+	return "#" + seriesnum.FormatRange(number, numberEnd)
 }
 
 // sanitizeForFilename removes or replaces characters that are not safe for filenames.
@@ -138,29 +136,45 @@ func IsOrganizedName(name string) bool {
 	// Remove extension for analysis
 	nameWithoutExt := strings.TrimSuffix(name, filepath.Ext(name))
 
-	// Basic pattern: starts with [Author] or contains series number indicators
-	authorPattern := regexp.MustCompile(`^\[.+\]`)
-	seriesNumberPattern := regexp.MustCompile(`([vc]\d+(?:\.\d+)?|#\d+(?:\.\d+)?)$`)
+	if regexp.MustCompile(`^\[.+\]`).MatchString(nameWithoutExt) {
+		return true
+	}
 
-	return authorPattern.MatchString(nameWithoutExt) || seriesNumberPattern.MatchString(nameWithoutExt)
+	prefixed := regexp.MustCompile(`(?i)[vc#]\s*(` + seriesRangeRE + `)$`).FindStringSubmatch(nameWithoutExt)
+	if len(prefixed) == 2 {
+		_, _, ok := seriesnum.ParseRange(prefixed[1])
+		return ok
+	}
+	bareRange := regexp.MustCompile(`(` + seriesNumberRE + `\s*[-–—]\s*` + seriesNumberRE + `)$`).FindStringSubmatch(nameWithoutExt)
+	if len(bareRange) == 2 {
+		_, _, ok := seriesnum.ParseRange(bareRange[1])
+		return ok
+	}
+	return false
 }
 
 // seriesNumberPatterns is the regex pattern table used by NormalizeSeriesNumberInTitle.
 // Each entry pairs a compiled regexp with the unit it implies. First match wins;
 // explicit chapter patterns precede explicit volume patterns; ambiguous indicators
 // (#, bare numbers) default to volume to preserve historical behavior.
+const (
+	seriesNumberRE = `[+-]?\d+(?:\.\d+)?`
+	seriesRangeRE  = seriesNumberRE + `(?:\s*[-–—]\s*` + seriesNumberRE + `)?`
+	seriesValueRE  = `([+-]?\d.*?)`
+)
+
 var seriesNumberPatterns = []struct {
 	re   *regexp.Regexp
 	unit string
 }{
-	{regexp.MustCompile(`(?i)\s*chapter\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s*ch\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s+c(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitChapter},
-	{regexp.MustCompile(`(?i)\s*#(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s+v(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s*vol\.?\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`(?i)\s*volume\s*(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
-	{regexp.MustCompile(`\s+(\d+(?:\.\d+)?)\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*chapter\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*ch\.?\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s+c\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitChapter},
+	{regexp.MustCompile(`(?i)\s*#\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s+v\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*volume\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`(?i)\s*vol\.?\s*` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
+	{regexp.MustCompile(`\s+` + seriesValueRE + `\s*$`), models.SeriesNumberUnitVolume},
 }
 
 // NormalizeSeriesNumberInTitle normalizes volume- or chapter-style number
@@ -181,48 +195,64 @@ func NormalizeSeriesNumberInTitle(title string, fileType string) (string, string
 		if len(matches) < 2 {
 			continue
 		}
-		baseTitle := strings.TrimSpace(p.re.ReplaceAllString(title, ""))
-		number, err := strconv.ParseFloat(matches[1], 64)
-		if err != nil {
-			continue
+		start, end, ok := seriesnum.ParseRange(matches[1])
+		if !ok {
+			return title, "", false
 		}
+		baseTitle := strings.TrimSpace(p.re.ReplaceAllString(title, ""))
 		prefix := "v"
 		if p.unit == models.SeriesNumberUnitChapter {
 			prefix = "c"
 		}
-		var normalized string
-		if number == float64(int(number)) {
-			normalized = fmt.Sprintf("%s %s%03d", baseTitle, prefix, int(number))
-		} else {
-			intPart := int(number)
-			fracStr := strconv.FormatFloat(number-float64(intPart), 'f', -1, 64)
-			// fracStr is "0.5"; strip the leading "0".
-			normalized = fmt.Sprintf("%s %s%03d%s", baseTitle, prefix, intPart, fracStr[1:])
-		}
+		normalized := fmt.Sprintf("%s %s%s", baseTitle, prefix, formatPaddedSeriesRange(start, end))
 		return strings.TrimSpace(normalized), p.unit, true
 	}
 
 	return title, "", false
 }
 
+func formatPaddedSeriesRange(start float64, end *float64) string {
+	formatted := formatPaddedSeriesEndpoint(start)
+	if end != nil {
+		formatted += "-" + formatPaddedSeriesEndpoint(*end)
+	}
+	return formatted
+}
+
+func formatPaddedSeriesEndpoint(number float64) string {
+	formatted := seriesnum.FormatRange(number, nil)
+	sign := ""
+	if strings.HasPrefix(formatted, "-") {
+		sign = "-"
+		formatted = strings.TrimPrefix(formatted, "-")
+	}
+	integer, fraction, hasFraction := strings.Cut(formatted, ".")
+	if len(integer) < 3 {
+		integer = strings.Repeat("0", 3-len(integer)) + integer
+	}
+	if hasFraction {
+		return sign + integer + "." + fraction
+	}
+	return sign + integer
+}
+
 // extractSeriesNumberFromTitle extracts a normalized series number suffix
-// ("v003" or "c042") from a title. Returns the number and unit, or (nil, "")
-// if no suffix is present.
-func extractSeriesNumberFromTitle(title string) (*float64, string) {
-	seriesNumberPattern := regexp.MustCompile(`\s+([vc])(\d+(?:\.\d+)?)\s*$`)
+// ("v003", "c042", or a range such as "v001-003") from a title.
+func extractSeriesNumberFromTitle(title string) (start, end *float64, unit string) {
+	seriesNumberPattern := regexp.MustCompile(`\s+([vc])(` + seriesRangeRE + `)\s*$`)
 	matches := seriesNumberPattern.FindStringSubmatch(title)
 	if len(matches) < 3 {
-		return nil, ""
+		return nil, nil, ""
 	}
-	number, err := strconv.ParseFloat(matches[2], 64)
-	if err != nil {
-		return nil, ""
+	startValue, end, ok := seriesnum.ParseRange(matches[2])
+	if !ok {
+		return nil, nil, ""
 	}
-	unit := models.SeriesNumberUnitVolume
+	unit = models.SeriesNumberUnitVolume
 	if strings.EqualFold(matches[1], "c") {
 		unit = models.SeriesNumberUnitChapter
 	}
-	return &number, unit
+	return &startValue, end, unit
 }
 
 // SplitNames splits a string of names by common delimiters (comma and semicolon),
@@ -245,30 +275,28 @@ func SplitNames(s string) []string {
 	return parts
 }
 
-// ExtractSeriesFromTitle extracts series name and number from a normalized CBZ title.
-// Returns the base title (series name), number, unit (models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter), and
-// whether extraction succeeded. Only applies to CBZ files with normalized "v{N}"
-// or "c{N}" suffixes.
-func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, number *float64, unit string, ok bool) {
+// ExtractSeriesFromTitle extracts a series name and atomic number group from a
+// normalized CBZ title. It accepts "v{N}" / "c{N}" suffixes and their ranges.
+func ExtractSeriesFromTitle(title string, fileType string) (seriesName string, start, end *float64, unit string, ok bool) {
 	if fileType != models.FileTypeCBZ {
-		return "", nil, "", false
+		return "", nil, nil, "", false
 	}
-	seriesNumberPattern := regexp.MustCompile(`^(.+?)\s+([vc])(\d+(?:\.\d+)?)\s*$`)
+	seriesNumberPattern := regexp.MustCompile(`^(.+?)\s+([vc])(` + seriesRangeRE + `)\s*$`)
 	matches := seriesNumberPattern.FindStringSubmatch(title)
 	if len(matches) < 4 {
-		return "", nil, "", false
+		return "", nil, nil, "", false
 	}
 	seriesName = strings.TrimSpace(matches[1])
 	if seriesName == "" {
-		return "", nil, "", false
+		return "", nil, nil, "", false
 	}
-	parsed, err := strconv.ParseFloat(matches[3], 64)
-	if err != nil {
-		return "", nil, "", false
+	startValue, end, ok := seriesnum.ParseRange(matches[3])
+	if !ok {
+		return "", nil, nil, "", false
 	}
-	parsedUnit := models.SeriesNumberUnitVolume
+	unit = models.SeriesNumberUnitVolume
 	if strings.EqualFold(matches[2], "c") {
-		parsedUnit = models.SeriesNumberUnitChapter
+		unit = models.SeriesNumberUnitChapter
 	}
-	return seriesName, &parsed, parsedUnit, true
+	return seriesName, &startValue, end, unit, true
 }

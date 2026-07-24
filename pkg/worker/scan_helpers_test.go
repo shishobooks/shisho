@@ -347,6 +347,17 @@ func TestGenerateCBZFileName(t *testing.T) {
 			want:     "Comic Title v001",
 		},
 		{
+			name: "series range used when title is empty",
+			metadata: &mediafile.ParsedMetadata{
+				Series:           "Demon Slayer",
+				SeriesNumber:     floatPtr(5),
+				SeriesNumberEnd:  floatPtr(8),
+				SeriesNumberUnit: workerStringPtr(models.SeriesNumberUnitChapter),
+			},
+			filename: "Demon Slayer.cbz",
+			want:     "Demon Slayer c005-008",
+		},
+		{
 			name: "series only when no number",
 			metadata: &mediafile.ParsedMetadata{
 				Title:        "",
@@ -405,6 +416,8 @@ func TestGenerateCBZFileName(t *testing.T) {
 		})
 	}
 }
+
+func workerStringPtr(value string) *string { return &value }
 
 func TestCleanCBZFilename(t *testing.T) {
 	t.Parallel()

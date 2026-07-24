@@ -2800,9 +2800,10 @@ func applyFilepathFallbacks(metadata *mediafile.ParsedMetadata, filePath, bookPa
 	// Series fallback from title (e.g., "My Series v3" → series="My Series", number=3)
 	if metadata.Series == "" {
 		title := metadata.Title
-		if seriesName, seriesNumber, unit, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
+		if seriesName, seriesNumber, seriesNumberEnd, unit, ok := fileutils.ExtractSeriesFromTitle(title, fileType); ok {
 			metadata.Series = seriesName
 			metadata.SeriesNumber = seriesNumber
+			metadata.SeriesNumberEnd = seriesNumberEnd
 			if unit != "" && metadata.SeriesNumberUnit == nil {
 				u := unit
 				metadata.SeriesNumberUnit = &u

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/kepub"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 // CBZGenerator generates CBZ comic book files with modified metadata.
@@ -352,7 +352,7 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 			comicInfo.Series = first.Series.Name
 		}
 		if first.SeriesNumber != nil {
-			comicInfo.Number = formatCBZNumber(*first.SeriesNumber)
+			comicInfo.Number = seriesnum.FormatRange(*first.SeriesNumber, first.SeriesNumberEnd)
 		} else {
 			comicInfo.Number = ""
 		}
@@ -524,15 +524,6 @@ func readCBZZipFile(f *zip.File) ([]byte, error) {
 	defer r.Close()
 
 	return io.ReadAll(r)
-}
-
-// formatCBZNumber formats a float64 for series number.
-// Whole numbers display without decimal (e.g., "1"), decimals are preserved (e.g., "1.5").
-func formatCBZNumber(f float64) string {
-	if f == math.Floor(f) {
-		return strconv.Itoa(int(f))
-	}
-	return fmt.Sprintf("%g", f)
 }
 
 // selectGTIN selects the best identifier to use as GTIN (priority: ISBN-13 > ISBN-10 > Other > ASIN).
