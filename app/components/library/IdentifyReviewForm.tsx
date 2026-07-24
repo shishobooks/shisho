@@ -602,8 +602,8 @@ export function IdentifyReviewForm({
     () => narrators.map((name) => ({ name })),
     [narrators],
   );
-  const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
-    defaults.series.value,
+  const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(() =>
+    defaults.series.value.map((entry) => ({ ...entry })),
   );
   const [genres, setGenres] = useState<string[]>(defaults.genres.value);
   const [tags, setTags] = useState<string[]>(defaults.tags.value);
@@ -1049,7 +1049,7 @@ export function IdentifyReviewForm({
     setDescription(defaults.description.value);
     setAuthors(defaults.authors.value);
     setNarrators(defaults.narrators.value);
-    setSeriesEntries(defaults.series.value);
+    setSeriesEntries(defaults.series.value.map((entry) => ({ ...entry })));
     setGenres(defaults.genres.value);
     setTags(defaults.tags.value);
     setPublisher(defaults.publisher.value);

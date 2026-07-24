@@ -182,6 +182,7 @@ function renderForm(
     book?: Book;
     result?: PluginSearchResult;
     fileId?: number;
+    onHasChangesChange?: (hasChanges: boolean) => void;
   } = {},
 ) {
   const queryClient = new QueryClient({
@@ -200,6 +201,7 @@ function renderForm(
           fileId={opts.fileId}
           onBack={onBack}
           onClose={onClose}
+          onHasChangesChange={opts.onHasChangesChange}
           result={opts.result ?? makeResult()}
         />
       </Dialog>
@@ -326,6 +328,33 @@ describe("IdentifyReviewForm component", () => {
     expect(
       screen.queryByRole("spinbutton", { name: "Series start" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("tracks series end edits and restores the suggested range", async () => {
+    const user = createUser();
+    const onHasChangesChange = vi.fn();
+    renderForm({
+      onHasChangesChange,
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_end: 3,
+      }),
+    });
+
+    const end = screen.getByRole("spinbutton", { name: "Series end" });
+    await user.clear(end);
+    await user.type(end, "4");
+    await waitFor(() =>
+      expect(onHasChangesChange).toHaveBeenLastCalledWith(true),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Restore suggestions" }),
+    );
+    expect(screen.getByRole("spinbutton", { name: "Series end" })).toHaveValue(
+      3,
+    );
   });
 
   it("accepting a single series number replaces an existing range group", async () => {
