@@ -1211,6 +1211,7 @@ const BookDetail = () => {
                         <Badge className="text-xs" variant="outline">
                           {formatSeriesNumber(
                             bs.series_number,
+                            bs.series_number_end,
                             bs.series_number_unit,
                             anyCBZ ? "cbz" : null,
                           )}

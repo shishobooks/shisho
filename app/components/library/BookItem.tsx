@@ -106,6 +106,7 @@ const BookItem = ({
     ? book.book_series?.find((bs) => bs.series_id === seriesId)
     : undefined;
   const seriesNumber = seriesEntry?.series_number;
+  const seriesNumberEnd = seriesEntry?.series_number_end;
   const seriesNumberUnit = seriesEntry?.series_number_unit;
   const anyCBZ = hasAnyCBZFile(book);
 
@@ -305,6 +306,7 @@ const BookItem = ({
                 <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
                   {formatSeriesNumber(
                     seriesNumber,
+                    seriesNumberEnd,
                     seriesNumberUnit,
                     anyCBZ ? "cbz" : null,
                   )}
