@@ -273,7 +273,11 @@ describe("IdentifyReviewForm component", () => {
           } as never,
         ],
       }),
-      result: makeResult({ series: "Some Series", series_number: 2 }),
+      result: makeResult({
+        series: "Some Series",
+        series_number: 1,
+        series_number_unit: "volume",
+      }),
     });
 
     await user.click(getApplyButton());
@@ -282,9 +286,9 @@ describe("IdentifyReviewForm component", () => {
     expect(applyMock.mock.calls[0][0].fields.series).toEqual([
       {
         name: "Some Series",
-        number: 2,
+        number: 1,
         series_number_end: undefined,
-        series_number_unit: undefined,
+        series_number_unit: "volume",
       },
     ]);
   });

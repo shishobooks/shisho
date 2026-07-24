@@ -288,7 +288,8 @@ function resolveSeries(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
-  const key = (s: SeriesEntry) => `${s.name}|${s.number}|${s.unit}`;
+  const key = (s: SeriesEntry) =>
+    `${s.name}|${s.number}|${s.numberEnd}|${s.unit}`;
   const curKeys = current.map(key).sort();
   const incKeys = incoming.map(key).sort();
   if (
@@ -1498,7 +1499,7 @@ export function IdentifyReviewForm({
                     }}
                     onReorder={setSeriesEntries}
                     renderExtras={(entry, idx) => (
-                      <>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Input
                           aria-label="Series start"
                           className="w-20"
@@ -1549,7 +1550,7 @@ export function IdentifyReviewForm({
                             </SelectContent>
                           </Select>
                         </div>
-                      </>
+                      </div>
                     )}
                   />
                 </FieldRow>
