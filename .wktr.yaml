@@ -1,7 +1,7 @@
 layout:
   direction: vertical
   panes:
-    - command: "claude --dangerously-skip-permissions"
+    - command: "pi"
     - command: "mise start"
       run: false
     - command: "mise setup"
