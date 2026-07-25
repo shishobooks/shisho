@@ -26,8 +26,8 @@
     "directory": "packages/plugin-sdk"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.9.3",
-    "linkedom": "^0.18.12",
+    "fast-xml-parser": "^5.10.1",
+    "linkedom": "^0.18.13",
     "yaml": "^2.9.0"
   }
 }
