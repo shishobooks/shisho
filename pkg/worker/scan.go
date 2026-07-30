@@ -701,7 +701,7 @@ func (w *Worker) runInputConverters(ctx context.Context, filesToScan []string, j
 				}
 				mimeMatch := false
 				for _, allowed := range converterCap.MIMETypes {
-					if mtype.String() == allowed {
+					if mtype.Is(allowed) {
 						mimeMatch = true
 						break
 					}
