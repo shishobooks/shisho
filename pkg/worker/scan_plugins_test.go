@@ -266,6 +266,64 @@ func TestScanWithPluginFileParser_MIMEValidation_ValidFile(t *testing.T) {
 	assert.Equal(t, "Zip Archive Book", allBooks[0].Title)
 }
 
+func TestScanWithPluginFileParser_MIMEValidation_Alias(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "matroska-parser",
+  "name": "Matroska Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses Matroska files using a legacy MIME alias",
+      "types": ["mkvtest"],
+      "mimeTypes": ["video/x-matroska"]
+    }
+  }
+}`
+
+	mainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Matroska Book" };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "matroska-parser", manifest, mainJS)
+
+	err := tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Matroska Book")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	matroskaContent := []byte{
+		0x1A, 0x45, 0xDF, 0xA3,
+		0x42, 0x82, 0x88,
+		'm', 'a', 't', 'r', 'o', 's', 'k', 'a',
+	}
+	matroskaPath := filepath.Join(bookDir, "book.mkvtest")
+	err = os.WriteFile(matroskaPath, matroskaContent, 0644)
+	require.NoError(t, err)
+
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Matroska Book", allBooks[0].Title)
+}
+
 // TestScanWithPluginInputConverter verifies that input converters run during scan
 // and the converted files get parsed.
 func TestScanWithPluginInputConverter(t *testing.T) {
@@ -404,6 +462,71 @@ func TestScanWithPluginInputConverter_MIMEValidation(t *testing.T) {
 	convertedPath := filepath.Join(bookDir, "converted.epub")
 	_, statErr := os.Stat(convertedPath)
 	assert.True(t, os.IsNotExist(statErr), "converter should not produce output when MIME type doesn't match")
+}
+
+func TestScanWithPluginInputConverter_MIMEValidation_Alias(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "matroska-converter",
+  "name": "Matroska Converter",
+  "version": "1.0.0",
+  "capabilities": {
+    "inputConverter": {
+      "description": "Converts Matroska files using a legacy MIME alias",
+      "sourceTypes": ["mkvconv"],
+      "mimeTypes": ["video/x-matroska"],
+      "targetType": "epub"
+    }
+  }
+}`
+
+	mainJS := `var plugin = (function() {
+  return {
+    inputConverter: {
+      convert: function(ctx) {
+        var targetPath = ctx.targetDir + "/converted.epub";
+        shisho.fs.writeTextFile(targetPath, "converted");
+        return { success: true, targetPath: targetPath };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "matroska-converter", manifest, mainJS)
+
+	pluginService := plugins.NewService(tc.db)
+	err := pluginService.AppendToOrder(context.Background(), models.PluginHookInputConverter, "test", "matroska-converter")
+	require.NoError(t, err)
+
+	err = tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Matroska Conversion")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	matroskaContent := []byte{
+		0x1A, 0x45, 0xDF, 0xA3,
+		0x42, 0x82, 0x88,
+		'm', 'a', 't', 'r', 'o', 's', 'k', 'a',
+	}
+	matroskaPath := filepath.Join(bookDir, "book.mkvconv")
+	err = os.WriteFile(matroskaPath, matroskaContent, 0644)
+	require.NoError(t, err)
+
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	convertedPath := filepath.Join(bookDir, "converted.epub")
+	_, statErr := os.Stat(convertedPath)
+	assert.NoError(t, statErr, "converter should accept a declared MIME alias")
 }
 
 // TestScanWithPluginMetadataEnricher verifies that enrichers are called during scan
