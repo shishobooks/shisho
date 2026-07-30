@@ -7,10 +7,7 @@ import type { PluginVersion } from "@/hooks/queries/plugins";
 import { ChangelogMarkdown } from "./ChangelogMarkdown";
 
 export type PluginVersionCardState =
-  | "installed"
-  | "available"
-  | "latest"
-  | "older";
+  "installed" | "available" | "latest" | "older";
 
 export interface PluginVersionCardProps {
   releaseUrl?: string;

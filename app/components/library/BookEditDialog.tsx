@@ -111,14 +111,12 @@ export function BookEditDialog({
     })) || [],
   );
   const [seriesEntries, setSeriesEntries] = useState<SeriesEntry[]>(
-    book.book_series?.map(
-      (bs): SeriesEntry => ({
-        name: bs.series?.name || "",
-        number: bs.series_number?.toString() || "",
-        numberEnd: bs.series_number_end?.toString() || "",
-        unit: bs.series_number_unit ?? "",
-      }),
-    ) || [],
+    book.book_series?.map((bs): SeriesEntry => ({
+      name: bs.series?.name || "",
+      number: bs.series_number?.toString() || "",
+      numberEnd: bs.series_number_end?.toString() || "",
+      unit: bs.series_number_unit ?? "",
+    })) || [],
   );
   const [genres, setGenres] = useState<string[]>(
     book.book_genres?.map((bg) => bg.genre?.name || "").filter(Boolean) || [],
@@ -367,14 +365,12 @@ export function BookEditDialog({
 
     // Check if series changed
     const originalSeries: SeriesEntry[] =
-      book.book_series?.map(
-        (bs): SeriesEntry => ({
-          name: bs.series?.name || "",
-          number: bs.series_number?.toString() || "",
-          numberEnd: bs.series_number_end?.toString() || "",
-          unit: bs.series_number_unit ?? "",
-        }),
-      ) || [];
+      book.book_series?.map((bs): SeriesEntry => ({
+        name: bs.series?.name || "",
+        number: bs.series_number?.toString() || "",
+        numberEnd: bs.series_number_end?.toString() || "",
+        unit: bs.series_number_unit ?? "",
+      })) || [];
     if (JSON.stringify(seriesEntries) !== JSON.stringify(originalSeries)) {
       payload.series = seriesEntries
         .filter((s) => s.name.trim())
