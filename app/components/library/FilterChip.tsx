@@ -4,11 +4,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 
 export type FilterChipKind =
-  | "fileType"
-  | "genre"
-  | "tag"
-  | "language"
-  | "reviewState";
+  "fileType" | "genre" | "tag" | "language" | "reviewState";
 
 const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
   {

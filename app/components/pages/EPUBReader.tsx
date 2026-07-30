@@ -45,8 +45,7 @@ interface RelocateDetail {
 
 const flattenToc = (
   nodes:
-    | Array<{ label: string; href: string; subitems?: unknown[] }>
-    | undefined,
+    Array<{ label: string; href: string; subitems?: unknown[] }> | undefined,
 ): TocEntry[] => {
   if (!nodes) return [];
   const out: TocEntry[] = [];
@@ -252,14 +251,12 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
 
   const goPrev = useCallback(() => {
     const view = viewRef.current as
-      | (HTMLElement & { goLeft?: () => void })
-      | null;
+      (HTMLElement & { goLeft?: () => void }) | null;
     view?.goLeft?.();
   }, []);
   const goNext = useCallback(() => {
     const view = viewRef.current as
-      | (HTMLElement & { goRight?: () => void })
-      | null;
+      (HTMLElement & { goRight?: () => void }) | null;
     view?.goRight?.();
   }, []);
 
@@ -277,8 +274,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
 
   const handleTocChange = (href: string) => {
     const view = viewRef.current as
-      | (HTMLElement & { goTo?: (target: string) => void })
-      | null;
+      (HTMLElement & { goTo?: (target: string) => void }) | null;
     view?.goTo?.(href);
   };
 
@@ -286,8 +282,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     const rect = e.currentTarget.getBoundingClientRect();
     const target = (e.clientX - rect.left) / rect.width;
     const view = viewRef.current as
-      | (HTMLElement & { goToFraction?: (f: number) => void })
-      | null;
+      (HTMLElement & { goToFraction?: (f: number) => void }) | null;
     view?.goToFraction?.(Math.max(0, Math.min(1, target)));
   };
 

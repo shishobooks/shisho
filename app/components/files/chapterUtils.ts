@@ -182,8 +182,7 @@ export const normalizeChapterOrder = (
  */
 export const countDescendants = (chapter: Chapter | ChapterInput): number => {
   const children = (chapter.children?.filter(Boolean) ?? []) as (
-    | Chapter
-    | ChapterInput
+    Chapter | ChapterInput
   )[];
   if (children.length === 0) {
     return 0;

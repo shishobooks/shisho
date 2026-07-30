@@ -56,8 +56,7 @@ export function MergeBooksDialog({
 
   const isLoadingBooks = bookQueries.some((q) => q.isLoading);
   const bookQueryError = bookQueries.find((q) => q.error)?.error as
-    | ShishoAPIError
-    | undefined;
+    ShishoAPIError | undefined;
   const books = useMemo(
     () => bookQueries.map((q) => q.data).filter((b): b is Book => b != null),
     [bookQueries],
