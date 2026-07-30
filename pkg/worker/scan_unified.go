@@ -3106,10 +3106,9 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 					if mErr != nil {
 						return nil, errors.Wrap(mErr, "failed to detect MIME type")
 					}
-					detected := strings.ToLower(mtype.String())
 					mimeMatch := false
 					for _, allowed := range declaredMIMEs {
-						if strings.HasPrefix(detected, strings.ToLower(allowed)) {
+						if mtype.Is(allowed) {
 							mimeMatch = true
 							break
 						}
