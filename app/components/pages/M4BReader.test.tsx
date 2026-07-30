@@ -65,6 +65,7 @@ const file = {
   book_id: 7,
   file_type: "m4b",
   filepath: "/lib/book.m4b",
+  updated_at: "2024-01-01T00:00:00Z",
   audiobook_duration_seconds: 3600,
   narrators: [{ id: 1, file_id: 42, person_id: 9, person: narratorPerson }],
 } as unknown as File;
@@ -154,10 +155,12 @@ describe("M4BReader", () => {
     expect(screen.getByText(/Jane Narrator/)).toBeInTheDocument();
   });
 
-  it("renders the book cover with a cache-busted URL", () => {
+  it("renders the selected file's cover with a cache-busted URL", () => {
     renderReader();
     const img = screen.getByRole("img") as HTMLImageElement;
-    expect(img.getAttribute("src")).toBe("/api/books/7/cover?v=7-123");
+    expect(img.getAttribute("src")).toBe(
+      "/api/books/files/42/cover?v=2024-01-01T00:00:00Z",
+    );
   });
 
   it("sets the browser tab title to the book title", () => {
