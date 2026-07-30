@@ -295,13 +295,10 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const authorNames = joinNames(book?.authors);
   const narratorNames = joinNames(file.narrators);
 
-  const coverCacheKey = book?.cover_cache_key;
-  const coverUrl =
-    book?.id != null
-      ? coverCacheKey
-        ? `/api/books/${book.id}/cover?v=${coverCacheKey}`
-        : `/api/books/${book.id}/cover`
-      : null;
+  const coverCacheKey = file.updated_at;
+  const coverUrl = coverCacheKey
+    ? `/api/books/files/${file.id}/cover?v=${coverCacheKey}`
+    : `/api/books/files/${file.id}/cover`;
 
   const sliderMax = duration > 0 ? duration : 1;
 
