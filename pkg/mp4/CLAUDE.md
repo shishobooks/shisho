@@ -156,7 +156,7 @@ Supports decimal numbers (e.g., "3.5") and strictly increasing ranges (e.g., "1-
 
 ### Generation (`pkg/filegen/m4b.go`)
 
-Uses `mp4.WriteToFile()` for atomic writes.
+Uses `mp4.ParseFullContext()` and `mp4.WriteToFileContext()` so request cancellation reaches parsing and atomic writes.
 
 **Metadata Written Back:**
 
@@ -186,6 +186,14 @@ Uses `mp4.WriteToFile()` for atomic writes.
 - Unknown atoms (e.g., `aART`, `cprt`)
 - All freeform atoms not explicitly overwritten
 
+**Bounded-memory rewrite architecture.**
+
+The writer inspects top-level box headers through `io.ReaderAt`, including 64-bit `largesize` headers, without reading their payloads. It loads and rebuilds only `moov` plus explicitly modified metadata, cover data, and chapter samples. Every unchanged top-level box, especially the audio `mdat`, is copied to the temporary destination through a fixed 64 KiB buffer in original order. Peak memory therefore depends on modified MP4 structures rather than audiobook size.
+
+Before copying, the writer calculates the rebuilt `moov` size and the final chapter-sample offset. This allows it to patch all absolute offsets while `moov` is still in memory. The context-aware copy loop checks cancellation between chunks. An error or cancellation closes and removes the unique temporary file created beside the destination, while a successful rewrite syncs and renames the completed temporary file atomically. Unique temporary names prevent concurrent generations from sharing an inode and avoid following a predictable temporary-file symlink. The source size and modification time are checked after copying so a concurrently changed source is not published. `Write` uses the same rewrite path for in-place updates, resolves symlinks so their targets retain the old in-place behavior, and preserves the source file mode. Source and rewritten `moov` boxes are limited to 256 MiB, and top-level box count is limited to 100,000, so malformed files cannot force unbounded structure allocations.
+
+Regression coverage is in `writer_streaming_test.go`. It runs `M4BGenerator.Generate` with a valid M4B whose final `mdat` is expanded sparsely to 64 MiB, then asserts that total allocation remains below 8 MiB. Restoring whole-file buffering therefore makes the test fail without adding a large fixture to the repository. It also verifies cancellation after copy progress preserves an existing destination and removes partial output. Request-level coverage for both GET and HEAD is in `handlers_download_m4b_test.go`.
+
 **Chunk-offset patching on moov resize (faststart layout) — CRITICAL.**
 Rewriting metadata rebuilds the `moov` box, which almost always changes its size
 (adding cover art grows it by hundreds of KB). When the source file is laid out
@@ -193,7 +201,7 @@ Rewriting metadata rebuilds the `moov` box, which almost always changes its size
 and what ffmpeg produces with `-movflags +faststart`), growing `moov` shifts
 `mdat` (and every box after `moov`) down by the size delta. The `stco`/`co64`
 chunk-offset tables inside `moov`'s sample tables hold **absolute file offsets**
-into `mdat`, so `writeMetadataToBytes` (`writer.go`) shifts every `stco`/`co64`
+into `mdat`, so `rewriteToFile` (`writer.go`) shifts every `stco`/`co64`
 entry by that same delta. Without this, the offsets keep pointing at the old
 positions — now inside the resized `moov` — and the AAC decoder reads metadata as
 audio (`channel element ... is not allocated`), so Apple Books / Bound refuse to
@@ -223,7 +231,7 @@ QuickTime first) prefer the QuickTime track. So writing chapters only to `chpl`
 source titles still sitting in the QuickTime track. That was the visible "manual
 chapters don't show up in the downloaded audiobook" bug.
 
-`writeMetadataToBytes` now rebuilds the QuickTime chapter text track from
+`rewriteToFile` rebuilds the QuickTime chapter text track from
 `metadata.Chapters` (in `writer_chapters.go`) in addition to writing `chpl`:
 
 - The existing chapter text `trak` is located the same way the reader does: by
@@ -235,17 +243,20 @@ chapters don't show up in the downloaded audiobook" bug.
   reference and the track ID stay valid); only the `stts`/`stsc`/`stsz` tables
   are regenerated and the chunk offset is emitted as a 64-bit `co64`
   (overflow-safe).
-- **The audio `mdat` is never touched.** The new chapter text samples
-  (`[uint16 len][utf8 title][12-byte encd atom]`, matching ffmpeg/Apple) are
-  written into a **new trailing `mdat` appended at EOF**. The original chapter
-  samples are left as harmless dead bytes inside the audio `mdat` (nothing
-  references them).
+- **Existing audio sample bytes are never modified.** The new chapter text
+  samples (`[uint16 len][utf8 title][12-byte encd atom]`, matching ffmpeg/Apple)
+  are normally written into a new trailing `mdat` appended at EOF. When the
+  source already ends in a size-zero `mdat` that extends to EOF, the samples are
+  appended directly to that box instead. This keeps valid media boxes larger
+  than 4 GiB streamable without converting their headers or moving audio bytes.
+  Original chapter samples remain as harmless dead bytes because nothing
+  references them.
 - **Offset interaction with the faststart shift:** the chapter track's `co64`
-  points at the trailing `mdat`, a different base than the audio `stco` (which
-  the faststart shift moves by the moov delta). The writer parks a safe
-  placeholder in the `co64` so the shift cannot underflow it, then patches the
-  real absolute trailing-`mdat` offset after reassembly. So the audio offsets are
-  shifted by the moov delta; the chapter `co64` is set absolutely.
+  points either at the new trailing `mdat` or at the appended bytes in the final
+  size-zero `mdat`. The writer parks a safe placeholder in `co64` so the
+  faststart shift cannot underflow it, then patches the real absolute chapter
+  sample offset after calculating the streamed output layout. Audio offsets are
+  shifted only by the `moov` delta; the chapter `co64` is set absolutely.
 - **Scope:** this rebuilds an *existing* chapter text track. A source with no
   QuickTime track (only `chpl`, or no chapters) keeps the `chpl`-only path
   (`rebuildChapterTextTrack` returns `ok=false`); `chpl` is the correct fallback
@@ -256,7 +267,7 @@ chapters don't show up in the downloaded audiobook" bug.
   derive chapter boundaries from the sample table (`stts`), so a stale track
   duration is cosmetic. Validated against a real Audible export and via ffprobe.
 - Regression tests in `writer_chapters_test.go` (titles, timestamps, count
-  changes, mdat-first layout, ffprobe-visible + clean-decode) and the two-table
+  changes, mdat-first layout, size-zero final `mdat`, ffprobe-visible + clean-decode) and the two-table
   audio-integrity guard `TestWriteToFile_FaststartWithChaptersPreservesAudioAndChapters`
   in `writer_chunkoffset_test.go`.
 
@@ -324,12 +335,14 @@ func Parse(path string) (*mediafile.ParsedMetadata, error)
 
 // Parse full metadata including chapters, duration, unknown atoms
 func ParseFull(path string) (*Metadata, error)
+func ParseFullContext(ctx context.Context, path string) (*Metadata, error)
 
 // Modify file in place with optional backup
 func Write(path string, metadata *Metadata, opts WriteOptions) error
 
 // Atomic write to new file (temp file + rename)
 func WriteToFile(srcPath, destPath string, metadata *Metadata) error
+func WriteToFileContext(ctx context.Context, srcPath, destPath string, metadata *Metadata) error
 
 // Generate M4B with updated metadata
 func (g *M4BGenerator) Generate(ctx, srcPath, destPath string, book *models.Book, file *models.File) error
@@ -424,17 +437,20 @@ Custom atoms like `aART` (album artist), `cprt` (copyright) are preserved byte-f
 
 **Atomic Write Pattern:**
 ```
-1. Read source file
-2. Modify in-memory
-3. Write to destPath.tmp
-4. Rename .tmp → destPath (atomic on POSIX)
-5. On error, cleanup .tmp
+1. Inspect top-level headers and load moov
+2. Rebuild moov and calculate final offsets
+3. Create a unique temporary file beside the destination
+4. Stream rewritten moov and unchanged boxes to the temporary file
+5. Verify the source did not change and sync the temporary file
+6. Rename the temporary file to destPath atomically and sync its directory
+7. Remove the temporary file on errors or cancellation
 ```
 
 **Overflow Safety:**
-- Box offsets and sizes are bounds-checked against the buffer length while scanning (`topLevelBoxes`, `shiftChunkOffsetsInChildren`); 64-bit largesize boxes are rejected when they exceed the file length
-- Chunk-offset shifts are range-checked: a 32-bit `stco` entry that would exceed `uint32` (or drop below zero) after the shift returns an error instead of wrapping
-- Box sizes limited to prevent allocation bombs
+- Top-level box offsets and sizes are bounds-checked against the file size while scanning (`inspectTopLevelBoxes`); 64-bit `largesize` boxes are rejected when they exceed the file length
+- Source and rewritten `moov` boxes are limited to 256 MiB before further processing, and top-level box count is limited to 100,000
+- Nested `moov` box sizes are bounds-checked against the in-memory `moov` buffer (`shiftChunkOffsetsInChildren`)
+- Chunk-offset shifts are range-checked: a 32-bit `stco` entry that would exceed `uint32` and a 64-bit `co64` entry that would exceed supported file offsets, overflow, or drop below zero returns an error instead of wrapping
 - UTF-16 decoding includes null terminator handling
 
 ## Related Files

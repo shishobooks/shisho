@@ -2,9 +2,12 @@ package mp4
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -21,114 +24,237 @@ type WriteOptions struct {
 // Write updates the metadata in an M4B/MP4 file.
 // This modifies the file in place. Use CreateBackup option to create a backup first.
 func Write(path string, metadata *Metadata, opts WriteOptions) error {
-	// Create backup if requested
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	if opts.CreateBackup {
 		if err := createBackup(path); err != nil {
 			return errors.WithStack(err)
 		}
 	}
-
-	// Read the existing file
-	inputData, err := os.ReadFile(path)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Modify the metadata
-	outputData, err := writeMetadataToBytes(inputData, metadata)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Write back
-	if err := os.WriteFile(path, outputData, 0600); err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return writeToFileContext(context.Background(), resolvedPath, resolvedPath, metadata, nil)
 }
 
-// WriteToFile writes modified metadata to a new file (source → destination).
-// Uses atomic write pattern with temp file + rename.
+// WriteToFile writes modified metadata to a new file using a bounded-memory,
+// atomic rewrite. Unchanged top-level boxes are copied incrementally.
 func WriteToFile(srcPath, destPath string, metadata *Metadata) error {
-	// Read the source file
-	inputData, err := os.ReadFile(srcPath)
+	return WriteToFileContext(context.Background(), srcPath, destPath, metadata)
+}
+
+// WriteToFileContext is WriteToFile with cancellation support. Cancellation
+// interrupts incremental copying and removes the temporary destination.
+func WriteToFileContext(ctx context.Context, srcPath, destPath string, metadata *Metadata) error {
+	mode := os.FileMode(0600)
+	return writeToFileContext(ctx, srcPath, destPath, metadata, &mode)
+}
+
+func writeToFileContext(ctx context.Context, srcPath, destPath string, metadata *Metadata, requestedMode *os.FileMode) error {
+	if err := ctx.Err(); err != nil {
+		return errors.WithStack(err)
+	}
+
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer src.Close()
+
+	info, err := src.Stat()
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Modify the metadata
-	outputData, err := writeMetadataToBytes(inputData, metadata)
+	boxes, err := inspectTopLevelBoxes(ctx, src, info.Size())
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Atomic write: temp file + rename
-	tmpPath := destPath + ".tmp"
-	if err := os.WriteFile(tmpPath, outputData, 0600); err != nil {
+	mode := info.Mode().Perm()
+	if requestedMode != nil {
+		mode = *requestedMode
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(destPath), "."+filepath.Base(destPath)+".tmp-*")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+	}()
+	if err := tmp.Chmod(mode); err != nil {
 		return errors.WithStack(err)
 	}
 
+	if err := rewriteToFile(ctx, src, tmp, info.Size(), boxes, metadata); err != nil {
+		return errors.WithStack(err)
+	}
+	afterInfo, err := src.Stat()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if afterInfo.Size() != info.Size() || !afterInfo.ModTime().Equal(info.ModTime()) {
+		return errors.New("source file changed during M4B rewrite")
+	}
+	if err := tmp.Sync(); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := tmp.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return errors.WithStack(err)
+	}
 	if err := os.Rename(tmpPath, destPath); err != nil {
-		os.Remove(tmpPath) // cleanup on failure
 		return errors.WithStack(err)
 	}
-
+	if err := syncDirectory(filepath.Dir(destPath)); err != nil {
+		return errors.WithStack(err)
+	}
 	return nil
 }
 
-// createBackup creates a backup of the file with .bak extension.
-func createBackup(path string) error {
-	data, err := os.ReadFile(path)
+func syncDirectory(path string) error {
+	dir, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path+".bak", data, 0600)
+	defer dir.Close()
+	return dir.Sync()
 }
 
-// writeMetadataToBytes modifies the metadata in the MP4 data and returns the
-// new bytes.
-//
-// The moov box is rebuilt with the new metadata, which usually changes its size
-// (e.g. when cover art is added). When moov sits before mdat — the "faststart"
-// layout that Audible/Apple Books exports use — growing moov shifts mdat (and
-// every box after moov) down by the size delta. The stco/co64 chunk offset
-// tables inside moov hold absolute file offsets into mdat, so they must be
-// shifted by the same delta; otherwise they keep pointing at the old positions,
-// which now land inside the resized moov, and the audio becomes undecodable.
-func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
-	boxes, err := topLevelBoxes(input)
+// createBackup creates a backup of the file with .bak extension without
+// materializing the source in memory.
+func createBackup(path string) error {
+	src, err := os.Open(path)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return err
+	}
+	defer src.Close()
+
+	dest, err := os.OpenFile(path+".bak", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.CopyBuffer(dest, src, make([]byte, copyBufferSize)); err != nil {
+		_ = dest.Close()
+		return err
+	}
+	return dest.Close()
+}
+
+const (
+	copyBufferSize      = 64 * 1024
+	maxInMemoryMoovSize = 256 * 1024 * 1024
+	maxTopLevelBoxCount = 100_000
+)
+
+type fileBox struct {
+	typ        string
+	offset     int64
+	size       int64
+	headerSize int64
+	toEOF      bool
+}
+
+func inspectTopLevelBoxes(ctx context.Context, input io.ReaderAt, fileSize int64) ([]fileBox, error) {
+	var boxes []fileBox
+	offset := int64(0)
+	for fileSize-offset >= 8 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		header := make([]byte, 16)
+		if _, err := input.ReadAt(header[:8], offset); err != nil {
+			return nil, err
+		}
+
+		size := int64(binary.BigEndian.Uint32(header[:4]))
+		headerSize := int64(8)
+		toEOF := false
+		switch size {
+		case 1:
+			if fileSize-offset < 16 {
+				return nil, errors.New("truncated 64-bit box header")
+			}
+			if _, err := input.ReadAt(header[8:16], offset+8); err != nil {
+				return nil, err
+			}
+			size64 := binary.BigEndian.Uint64(header[8:16])
+			if size64 > math.MaxInt64 {
+				return nil, errors.New("box size exceeds supported file size")
+			}
+			size = int64(size64)
+			headerSize = 16
+		case 0:
+			size = fileSize - offset
+			toEOF = true
+		}
+		if size < headerSize || size > fileSize-offset {
+			return nil, errors.New("invalid box size")
+		}
+
+		if len(boxes) >= maxTopLevelBoxCount {
+			return nil, errors.Errorf("top-level box count exceeds %d-box safety limit", maxTopLevelBoxCount)
+		}
+		boxes = append(boxes, fileBox{
+			typ:        string(header[4:8]),
+			offset:     offset,
+			size:       size,
+			headerSize: headerSize,
+			toEOF:      toEOF,
+		})
+		offset += size
+	}
+	if offset != fileSize {
+		if len(boxes) >= maxTopLevelBoxCount {
+			return nil, errors.Errorf("top-level box count exceeds %d-box safety limit", maxTopLevelBoxCount)
+		}
+		boxes = append(boxes, fileBox{offset: offset, size: fileSize - offset})
+	}
+	return boxes, nil
+}
+
+func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize int64, boxes []fileBox, metadata *Metadata) error {
+	if sourceSize < 0 {
+		return errors.New("source file size is negative")
 	}
 
-	var moov *topLevelBox
-	firstMdatOffset := 0
-	haveMdat := false
+	var moov *fileBox
+	var firstMdat *fileBox
 	for i := range boxes {
 		switch boxes[i].typ {
 		case "moov":
 			moov = &boxes[i]
 		case "mdat":
-			if !haveMdat {
-				firstMdatOffset = boxes[i].offset
-				haveMdat = true
+			if firstMdat == nil {
+				firstMdat = &boxes[i]
 			}
 		}
 	}
 	if moov == nil {
-		return nil, errors.New("moov box not found")
+		return errors.New("moov box not found")
+	}
+	if moov.size > maxInMemoryMoovSize {
+		return errors.Errorf("moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
-	// Rebuild moov with the new metadata (find and replace udta/meta/ilst).
-	origContent := input[moov.offset+moov.headerSize : moov.offset+moov.size]
+	// #nosec G115 -- moov.size is positive and bounded by maxInMemoryMoovSize.
+	moovData := make([]byte, int(moov.size))
+	if _, err := src.ReadAt(moovData, moov.offset); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	origContent := moovData[moov.headerSize:]
 	moovContent := replaceIlstInContent(origContent, metadata)
 
-	// Rebuild the QuickTime chapter text track from the chapters so the user's
-	// edited titles/timings land in the track players read preferentially, not
-	// only the Nero chpl box. The new text samples go into a trailing mdat
-	// (appended below), leaving the audio mdat untouched; the chapter track's
-	// co64 offset is patched to that mdat once its position is known.
 	var chapterMdat *rebuiltChapterTrack
 	if len(metadata.Chapters) > 0 {
 		if rebuilt, ok := rebuildChapterTextTrack(moovContent, metadata.Chapters); ok {
@@ -136,112 +262,130 @@ func writeMetadataToBytes(input []byte, metadata *Metadata) ([]byte, error) {
 			chapterMdat = &rebuilt
 		}
 	}
-
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	newMoov := buildBox("moov", moovContent)
-
-	// Park a safe placeholder in the chapter track's co64 entry so the faststart
-	// shift below cannot underflow it; the real absolute offset is written after
-	// reassembly. len(input) exceeds any moov-resize delta in magnitude.
-	if chapterMdat != nil {
-		binary.BigEndian.PutUint64(newMoov[8+chapterMdat.co64FieldOffset:], uint64(len(input)))
+	if int64(len(newMoov)) > maxInMemoryMoovSize {
+		return errors.Errorf("rewritten moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
 	}
 
-	// Only when moov precedes mdat does rewriting moov relocate the audio.
-	if haveMdat && moov.offset < firstMdatOffset {
-		delta := int64(len(newMoov)) - int64(moov.size)
+	if chapterMdat != nil {
+		// #nosec G115 -- sourceSize is checked as non-negative above.
+		binary.BigEndian.PutUint64(newMoov[8+chapterMdat.co64FieldOffset:], uint64(sourceSize))
+	}
+	if firstMdat != nil && moov.offset < firstMdat.offset {
+		delta := int64(len(newMoov)) - moov.size
 		if delta != 0 {
 			if err := shiftChunkOffsets(newMoov, delta); err != nil {
-				return nil, errors.WithStack(err)
+				return err
 			}
 		}
 	}
 
-	// Reassemble the file in original box order, substituting the rebuilt moov.
-	var output bytes.Buffer
-	moovOutputStart := 0
-	for _, b := range boxes {
-		if b.offset == moov.offset {
-			moovOutputStart = output.Len()
-			output.Write(newMoov)
-		} else {
-			output.Write(input[b.offset : b.offset+b.size])
-		}
+	var finalBox *fileBox
+	if len(boxes) > 0 {
+		finalBox = &boxes[len(boxes)-1]
 	}
-	outBytes := output.Bytes()
+	appendChaptersToFinalMdat := chapterMdat != nil && finalBox != nil && finalBox.toEOF && finalBox.typ == "mdat"
+	promoteFinalBox := chapterMdat != nil && finalBox != nil && finalBox.toEOF &&
+		finalBox.offset != moov.offset && !appendChaptersToFinalMdat && finalBox.size > math.MaxUint32
 
-	// Append the rebuilt chapter samples as a trailing mdat and point the
-	// chapter track's co64 at the sample data (after the mdat's 8-byte header).
+	outputSize := int64(0)
+	for i, box := range boxes {
+		partSize := box.size
+		if box.offset == moov.offset {
+			partSize = int64(len(newMoov))
+		} else if promoteFinalBox && i == len(boxes)-1 {
+			if partSize > math.MaxInt64-8 {
+				return errors.New("promoted final box exceeds supported file size")
+			}
+			partSize += 8
+		}
+		if partSize > math.MaxInt64-outputSize {
+			return errors.New("rewritten file size exceeds supported file size")
+		}
+		outputSize += partSize
+	}
 	if chapterMdat != nil {
-		// A box with a size-0 header means "extends to EOF" and is only legal as
-		// the last box. Appending the chapter mdat after one would make that box
-		// swallow it for strict parsers, so rewrite its size to a concrete value
-		// first. (The audio chunk offsets are unaffected: only the 4-byte size
-		// header changes, not any sample bytes.) Skip moov: it was rebuilt to a
-		// different length than its source box, so len(outBytes)-last.size would
-		// not locate its start.
-		last := boxes[len(boxes)-1]
-		if last.offset != moov.offset &&
-			binary.BigEndian.Uint32(input[last.offset:last.offset+4]) == 0 && last.size <= math.MaxUint32 {
-			lastOutputStart := len(outBytes) - last.size
-			// #nosec G115 -- last.size bounded by math.MaxUint32 above
-			binary.BigEndian.PutUint32(outBytes[lastOutputStart:lastOutputStart+4], uint32(last.size))
+		sampleDataOffset := outputSize
+		if !appendChaptersToFinalMdat {
+			if sampleDataOffset > math.MaxInt64-8 {
+				return errors.New("chapter sample offset exceeds supported file size")
+			}
+			sampleDataOffset += 8
 		}
-
-		mdatBox := buildBox("mdat", chapterMdat.sampleData)
-		sampleDataOffset := len(outBytes) + 8
-		patchPos := moovOutputStart + 8 + chapterMdat.co64FieldOffset
-		// #nosec G115 -- file offset is non-negative and within int64 range
-		binary.BigEndian.PutUint64(outBytes[patchPos:patchPos+8], uint64(sampleDataOffset))
-		outBytes = append(outBytes, mdatBox...)
+		if int64(len(chapterMdat.sampleData)) > math.MaxInt64-sampleDataOffset {
+			return errors.New("chapter samples exceed supported file size")
+		}
+		patchPos := 8 + chapterMdat.co64FieldOffset
+		// #nosec G115 -- sampleDataOffset is non-negative and checked for overflow above.
+		binary.BigEndian.PutUint64(newMoov[patchPos:patchPos+8], uint64(sampleDataOffset))
 	}
 
-	return outBytes, nil
-}
-
-// topLevelBox describes a box at the root of the file.
-type topLevelBox struct {
-	typ        string
-	offset     int
-	size       int
-	headerSize int
-}
-
-// topLevelBoxes scans the root-level box structure of an MP4 file.
-func topLevelBoxes(input []byte) ([]topLevelBox, error) {
-	var boxes []topLevelBox
-	offset := 0
-	for offset+8 <= len(input) {
-		size := int(binary.BigEndian.Uint32(input[offset:]))
-		headerSize := 8
-		switch size {
-		case 1:
-			// 64-bit largesize follows the type field.
-			if offset+16 > len(input) {
-				return nil, errors.New("truncated 64-bit box header")
-			}
-			size64 := binary.BigEndian.Uint64(input[offset+8:])
-			if size64 > uint64(len(input)) {
-				return nil, errors.New("box size exceeds file length")
-			}
-			// #nosec G115 -- bounds checked against len(input) above
-			size = int(size64)
-			headerSize = 16
-		case 0:
-			// Box extends to EOF.
-			size = len(input) - offset
+	buffer := make([]byte, copyBufferSize)
+	for i, box := range boxes {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		if size < headerSize || offset+size > len(input) {
-			return nil, errors.New("invalid box size")
+		if box.offset == moov.offset {
+			if _, err := dest.Write(newMoov); err != nil {
+				return err
+			}
+			continue
 		}
-		boxes = append(boxes, topLevelBox{
-			typ:        string(input[offset+4 : offset+8]),
-			offset:     offset,
-			size:       size,
-			headerSize: headerSize,
-		})
-		offset += size
+
+		if chapterMdat != nil && i == len(boxes)-1 && box.toEOF && !appendChaptersToFinalMdat {
+			if promoteFinalBox {
+				header := make([]byte, 16)
+				binary.BigEndian.PutUint32(header[:4], 1)
+				copy(header[4:8], box.typ)
+				// #nosec G115 -- the promoted size is checked against MaxInt64 above.
+				binary.BigEndian.PutUint64(header[8:16], uint64(box.size+8))
+				if _, err := dest.Write(header); err != nil {
+					return err
+				}
+				if err := copySectionContext(ctx, dest, src, box.offset+8, box.size-8, buffer); err != nil {
+					return err
+				}
+				continue
+			}
+
+			header := make([]byte, 4)
+			// #nosec G115 -- box.size is bounded by MaxUint32 when promotion is false.
+			binary.BigEndian.PutUint32(header, uint32(box.size))
+			if _, err := dest.Write(header); err != nil {
+				return err
+			}
+			if err := copySectionContext(ctx, dest, src, box.offset+4, box.size-4, buffer); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := copySectionContext(ctx, dest, src, box.offset, box.size, buffer); err != nil {
+			return err
+		}
 	}
-	return boxes, nil
+
+	if chapterMdat != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		chapterOutput := chapterMdat.sampleData
+		if !appendChaptersToFinalMdat {
+			chapterOutput = buildBox("mdat", chapterOutput)
+		}
+		if _, err := dest.Write(chapterOutput); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copySectionContext(ctx context.Context, dest io.Writer, src io.ReaderAt, offset, size int64, buffer []byte) error {
+	reader := &contextReadSeeker{ctx: ctx, ReadSeeker: io.NewSectionReader(src, offset, size)}
+	_, err := io.CopyBuffer(dest, reader, buffer)
+	return err
 }
 
 // chunkOffsetContainers are the box types on the path to the stco/co64 chunk
@@ -348,12 +492,20 @@ func shiftCo64(box []byte, delta int64) error {
 		if pos+8 > len(box) {
 			return errors.New("co64 box truncated")
 		}
-		// #nosec G115 -- chunk offsets are file positions, always within int64
-		shifted := int64(binary.BigEndian.Uint64(box[pos:pos+8])) + delta
-		if shifted < 0 {
+		rawOffset := binary.BigEndian.Uint64(box[pos : pos+8])
+		if rawOffset > math.MaxInt64 {
+			return errors.New("chunk offset exceeds supported file size")
+		}
+		// #nosec G115 -- rawOffset is bounded by MaxInt64 above.
+		shifted := int64(rawOffset)
+		if delta > 0 && shifted > math.MaxInt64-delta {
+			return errors.New("chunk offset overflows int64 after shift")
+		}
+		if delta == math.MinInt64 || delta < 0 && shifted < -delta {
 			return errors.New("chunk offset underflows below zero after shift")
 		}
-		// #nosec G115 -- shifted is guaranteed non-negative above
+		shifted += delta
+		// #nosec G115 -- shifted is guaranteed non-negative above.
 		binary.BigEndian.PutUint64(box[pos:pos+8], uint64(shifted))
 		pos += 8
 	}

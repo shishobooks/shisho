@@ -21,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -241,7 +242,8 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	// real instance so RecomputeReviewedFor{File,Book} actually runs after
 	// mutations — otherwise reviewed flag tests give false greens.
 	g := e.Group("/books")
-	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, nil, appsettings.NewService(db))
+	downloadCache := downloadcache.NewCache(cfg.CacheDir, cfg.DownloadCacheMaxSizeBytes())
+	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, appsettings.NewService(db))
 
 	return e
 }

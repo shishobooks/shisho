@@ -2,6 +2,7 @@ package mp4
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 
@@ -40,27 +41,55 @@ type rawMetadata struct {
 	unknownAtoms []RawAtom         // unrecognized atoms to preserve
 }
 
-// readMetadata reads metadata from an MP4 file using go-mp4.
-func readMetadata(path string) (*rawMetadata, error) {
+func readMetadataContext(ctx context.Context, path string) (*rawMetadata, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	defer f.Close()
 
-	meta, err := readMetadataFromReader(f)
+	reader := &contextReadSeeker{ctx: ctx, ReadSeeker: f}
+	meta, err := readMetadataFromReader(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	// Second pass: read chapters
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	// Second pass: read chapters.
+	if _, err := reader.Seek(0, io.SeekStart); err != nil {
 		return nil, errors.WithStack(err)
 	}
-	chapters, _ := readChapters(f)
+	chapters, err := readChapters(reader)
+	if err != nil && ctx.Err() != nil {
+		return nil, errors.WithStack(ctx.Err())
+	}
 	meta.chapters = chapters
 
 	return meta, nil
+}
+
+// contextReadSeeker makes existing MP4 parsing cancellation-aware without
+// changing go-mp4's io.ReadSeeker-based API.
+type contextReadSeeker struct {
+	ctx context.Context
+	io.ReadSeeker
+}
+
+func (r *contextReadSeeker) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.ReadSeeker.Read(p)
+}
+
+func (r *contextReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.ReadSeeker.Seek(offset, whence)
 }
 
 // readMetadataFromReader reads metadata from an io.ReadSeeker.

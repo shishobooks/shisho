@@ -1,6 +1,8 @@
 package mp4_test
 
 import (
+	"encoding/binary"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -295,6 +297,57 @@ func TestWriteToFile_ChapterCountDiffersFromSource(t *testing.T) {
 		assert.Equal(t, []string{"A", "B", "C", "D"},
 			[]string{got[0].Title, got[1].Title, got[2].Title, got[3].Title})
 	})
+}
+
+func TestWriteToFile_SizeZeroFinalMdatRewritesChapterTrack(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "mp4-qtchapters-size-zero-*")
+
+	srcPath := testgen.GenerateM4B(t, dir, "src.m4b", testgen.M4BOptions{
+		Title:     "Chapter Test",
+		Duration:  5,
+		Faststart: true,
+		Chapters: []testgen.M4BChapter{
+			{Title: "Old One", Start: 0},
+			{Title: "Old Two", Start: 2},
+		},
+	})
+
+	_, srcMdat := boxPositions(t, srcPath)
+	srcInfo, err := os.Stat(srcPath)
+	require.NoError(t, err)
+	require.Equal(t, int64(srcMdat.offset+srcMdat.size), srcInfo.Size())
+
+	src, err := os.OpenFile(srcPath, os.O_RDWR, 0600)
+	require.NoError(t, err)
+	_, err = src.WriteAt([]byte{0, 0, 0, 0}, int64(srcMdat.offset))
+	require.NoError(t, err)
+	require.NoError(t, src.Close())
+
+	meta, err := mp4.ParseFull(srcPath)
+	require.NoError(t, err)
+	meta.Chapters[0].Title = "New One"
+	meta.Chapters[1].Title = "New Two"
+
+	destPath := filepath.Join(dir, "dest.m4b")
+	require.NoError(t, mp4.WriteToFile(srcPath, destPath, meta))
+
+	out, err := mp4.ParseFull(destPath)
+	require.NoError(t, err)
+	require.Len(t, out.Chapters, 2)
+	assert.Equal(t, "New One", out.Chapters[0].Title)
+	assert.Equal(t, "New Two", out.Chapters[1].Title)
+	assertAudioChunkOffsetsLocateSameAudio(t, srcPath, destPath)
+
+	_, destMdat := boxPositions(t, destPath)
+	dest, err := os.Open(destPath)
+	require.NoError(t, err)
+	sizeHeader := make([]byte, 4)
+	_, err = dest.ReadAt(sizeHeader, int64(destMdat.offset))
+	require.NoError(t, err)
+	require.NoError(t, dest.Close())
+	assert.Zero(t, binary.BigEndian.Uint32(sizeHeader), "final mdat should continue to extend to EOF")
 }
 
 // TestWriteToFile_MdatFirstLayoutRewritesChapterTrack covers the non-faststart
