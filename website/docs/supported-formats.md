@@ -32,4 +32,5 @@ Audiobooks encoded with the newer xHE-AAC codec only play in Safari (and other i
 
 Shisho can generate download files in additional formats:
 
+- **M4B**: Metadata-refreshed audiobook downloads preserve the source audio while applying current book and file metadata. The audio payload is copied incrementally, so generating a multi-gigabyte audiobook does not require memory proportional to the file size. Cancelling a download also cancels generation and removes partial cache output
 - **KePub** — Kobo-optimized EPUB format for [Kobo e-readers](./kobo-sync)

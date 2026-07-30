@@ -1,7 +1,9 @@
 package testgen
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -200,6 +202,77 @@ func GetM4BTags(t *testing.T, path string) map[string]string {
 
 // buildFFMetadata creates an ffmetadata format string with chapters.
 // See https://ffmpeg.org/ffmpeg-formats.html#Metadata-1 for format specification.
+// ExpandLastMdatSparse grows a standard-header mdat that is the final box.
+// Existing sample offsets remain valid because the payload start does not move.
+func ExpandLastMdatSparse(t *testing.T, path string, mdatSize int64) {
+	t.Helper()
+
+	file, err := os.OpenFile(path, os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatalf("failed to open M4B: %v", err)
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		t.Fatalf("failed to stat M4B: %v", err)
+	}
+
+	offset := int64(0)
+	mdatOffset := int64(-1)
+	mdatSizeBefore := int64(0)
+	mdatHeaderSize := int64(0)
+	for info.Size()-offset >= 8 {
+		header := make([]byte, 16)
+		if _, err := file.ReadAt(header[:8], offset); err != nil {
+			t.Fatalf("failed to read M4B box header: %v", err)
+		}
+		size := int64(binary.BigEndian.Uint32(header[:4]))
+		headerSize := int64(8)
+		switch size {
+		case 1:
+			if _, err := file.ReadAt(header[8:16], offset+8); err != nil {
+				t.Fatalf("failed to read M4B large-size header: %v", err)
+			}
+			size64 := binary.BigEndian.Uint64(header[8:16])
+			if size64 > math.MaxInt64 {
+				t.Fatalf("M4B box exceeds supported test file size")
+			}
+			// #nosec G115 -- size64 is bounded by MaxInt64 above.
+			size = int64(size64)
+			headerSize = 16
+		case 0:
+			size = info.Size() - offset
+		}
+		if size < headerSize || size > info.Size()-offset {
+			t.Fatalf("invalid M4B box size")
+		}
+		if string(header[4:8]) == "mdat" {
+			mdatOffset = offset
+			mdatSizeBefore = size
+			mdatHeaderSize = headerSize
+		}
+		offset += size
+	}
+
+	if offset != info.Size() || mdatOffset < 0 || mdatOffset+mdatSizeBefore != info.Size() {
+		t.Fatalf("M4B fixture must end with mdat")
+	}
+	if mdatHeaderSize != 8 || mdatSize < 8 || mdatSize > math.MaxUint32 {
+		t.Fatalf("sparse mdat size must fit a standard MP4 box header")
+	}
+
+	header := make([]byte, 4)
+	// #nosec G115 -- mdatSize is bounded by MaxUint32 above.
+	binary.BigEndian.PutUint32(header, uint32(mdatSize))
+	if _, err := file.WriteAt(header, mdatOffset); err != nil {
+		t.Fatalf("failed to update mdat size: %v", err)
+	}
+	if err := file.Truncate(mdatOffset + mdatSize); err != nil {
+		t.Fatalf("failed to expand sparse mdat: %v", err)
+	}
+}
+
 func buildFFMetadata(chapters []M4BChapter, totalDuration float64) string {
 	var content strings.Builder
 	content.WriteString(";FFMETADATA1\n")

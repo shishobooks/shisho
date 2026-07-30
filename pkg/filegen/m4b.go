@@ -29,7 +29,7 @@ func (g *M4BGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 	}
 
 	// Parse source file to preserve existing metadata (description, genre, chapters, etc.)
-	srcMeta, err := mp4.ParseFull(srcPath)
+	srcMeta, err := mp4.ParseFullContext(ctx, srcPath)
 	if err != nil {
 		return NewGenerationError(models.FileTypeM4B, err, "failed to parse source file")
 	}
@@ -47,8 +47,8 @@ func (g *M4BGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 		return NewGenerationError(models.FileTypeM4B, err, "context cancelled")
 	}
 
-	// Write to destination using atomic pattern
-	if err := mp4.WriteToFile(srcPath, destPath, newMeta); err != nil {
+	// Write to destination using an atomic, cancellation-aware pattern.
+	if err := mp4.WriteToFileContext(ctx, srcPath, destPath, newMeta); err != nil {
 		return NewGenerationError(models.FileTypeM4B, err, "failed to write file")
 	}
 

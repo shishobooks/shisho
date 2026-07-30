@@ -1,6 +1,7 @@
 package mp4
 
 import (
+	"context"
 	"encoding/binary"
 	"math"
 	"testing"
@@ -26,7 +27,7 @@ func TestWrite_SeriesRangeAtoms(t *testing.T) {
 	metadata.SeriesNumberEnd = &end
 	require.NoError(t, Write(path, metadata, WriteOptions{}))
 
-	raw, err := readMetadata(path)
+	raw, err := readMetadataContext(context.Background(), path)
 	require.NoError(t, err)
 	assert.Equal(t, "Saga #1-3", raw.grouping)
 	assert.Equal(t, "1-3", raw.freeform["com.apple.iTunes:SERIES-PART"])
@@ -54,7 +55,7 @@ func TestWrite_ClearingSeriesRangeRemovesStaleAtom(t *testing.T) {
 	metadata.SeriesNumberEnd = nil
 	require.NoError(t, Write(path, metadata, WriteOptions{}))
 
-	raw, err := readMetadata(path)
+	raw, err := readMetadataContext(context.Background(), path)
 	require.NoError(t, err)
 	assert.Equal(t, "Saga", raw.grouping)
 	_, ok := raw.freeform["com.apple.iTunes:SERIES-PART"]
@@ -91,7 +92,7 @@ func TestWrite_InvalidSeriesRangeIsDiscarded(t *testing.T) {
 			metadata.SeriesNumberEnd = tc.end
 			require.NoError(t, Write(path, metadata, WriteOptions{}))
 
-			raw, err := readMetadata(path)
+			raw, err := readMetadataContext(context.Background(), path)
 			require.NoError(t, err)
 			assert.Equal(t, "Saga", raw.grouping)
 			assert.Equal(t, "Saga", raw.freeform["com.apple.iTunes:SERIES"])
@@ -193,6 +194,20 @@ func TestShiftCo64_ErrorsWhenShiftUnderflowsBelowZero(t *testing.T) {
 	t.Parallel()
 	box := co64Box(100)
 	err := shiftCo64(box, -200)
+	require.Error(t, err)
+}
+
+func TestShiftCo64_ErrorsWhenOffsetExceedsSupportedFileSize(t *testing.T) {
+	t.Parallel()
+	box := co64Box(math.MaxUint64)
+	err := shiftCo64(box, 1)
+	require.Error(t, err)
+}
+
+func TestShiftCo64_ErrorsWhenShiftOverflowsInt64(t *testing.T) {
+	t.Parallel()
+	box := co64Box(math.MaxInt64 - 1)
+	err := shiftCo64(box, 2)
 	require.Error(t, err)
 }
 
