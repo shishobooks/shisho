@@ -46,6 +46,10 @@ Defaults are per user — saving doesn't affect other users.
 
 You can also edit the default from your **User Settings** page under Appearance.
 
+## Scrolling
+
+Gallery pages use natural page scrolling. When the toolbar and the current page of covers fit in the window, no vertical scrollbar is shown. When they exceed the available height, the page remains vertically scrollable.
+
 ## See also
 
 - [Gallery Sort](./gallery-sort.md) for sorting books by author, series, date added, and more.
