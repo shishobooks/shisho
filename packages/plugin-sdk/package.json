@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "fast-xml-parser": "^5.10.1",
-    "linkedom": "^0.18.12",
+    "linkedom": "^0.18.13",
     "yaml": "^2.9.0"
   }
 }
