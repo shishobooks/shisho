@@ -1,0 +1,55 @@
+{
+  "docsSidebar": [
+    "getting-started",
+    "supported-formats",
+    {
+      "type": "category",
+      "label": "Using Shisho",
+      "collapsed": false,
+      "items": [
+        "browsing-search-bulk-actions",
+        "reading-and-playback",
+        "managing-books-and-files",
+        "metadata",
+        "lists"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Administration",
+      "collapsed": true,
+      "items": [
+        "deployment-and-maintenance",
+        "configuration",
+        "libraries",
+        "users-and-permissions",
+        "plugins/overview",
+        "supplement-files",
+        "sidecar-files"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Integrations",
+      "collapsed": true,
+      "items": [
+        "opds",
+        "kobo-sync",
+        "ereader-browser"
+      ]
+    },
+    "troubleshooting",
+    {
+      "type": "category",
+      "label": "Developer",
+      "collapsed": true,
+      "items": [
+        "plugins/development",
+        "plugins/manifest-hooks-reference",
+        "plugins/host-api-reference",
+        "plugins/testing",
+        "plugins/publishing"
+      ]
+    }
+  ]
+}

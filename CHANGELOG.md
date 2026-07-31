@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.50] - 2026-07-31
+
+### Features
+- Add omnibus ranges to plugin metadata (#414)
+- Round-trip M4B omnibus ranges (#413)
+- Round-trip CBZ omnibus ranges (#412)
+- Add omnibus series range editing (#411)
+- Add omnibus series ranges (#408)
+
+### Bug Fixes
+- Stream large M4B metadata rewrites (#425)
+- Remove unnecessary gallery scrollbar (#421)
+- Show file cover in audiobook player (#420)
+- Regenerate favicons with transparent corners and full-bleed apple-touch-icon (#397)
+- Prevent horizontal overflow on the book detail page on mobile (#399)
+
+### Documentation
+- Define public demo terminology (#444)
+- Adopt Aurora documentation theme (#409)
+- Define omnibus series range architecture (#407)
+
+### Other
+- Reorganize end-user documentation (#426)
+- Bump the minor-and-patch group across 1 directory with 42 updates
+- Bump the minor-and-patch group with 43 updates
+- Bump the minor-and-patch group with 3 updates
+- Bump @eslint/js from 9.39.4 to 9.39.5
+- Bump @testing-library/jest-dom from 6.9.1 to 7.0.0
+- Bump fast-xml-parser from 5.9.3 to 5.10.1
+- Switch from claude to pi (#410)
+- Bump the minor-and-patch group across 1 directory with 8 updates
+- Bump the minor-and-patch group across 1 directory with 28 updates
+- Bump actions/setup-node from 6 to 7
+- Bump actions/setup-go from 6 to 7
+- Bump actions/cache from 5 to 6
+- Bump actions/checkout from 6 to 7
+
+
 ## [0.0.49] - 2026-06-25
 
 ### Bug Fixes
