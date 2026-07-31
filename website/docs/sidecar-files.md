@@ -1,43 +1,39 @@
----
-sidebar_position: 130
----
+# Sidecar Metadata Files
 
-# Sidecar Files
+Shisho stores portable metadata beside media files as JSON sidecars. Sidecars let scans recover supported book and file metadata without modifying the source media.
 
-Sidecar files are JSON files that store metadata alongside your book files on disk. They let you customize metadata without modifying the original files and ensure your edits survive file moves or re-imports.
+Sidecars are Shisho metadata portability artifacts, not complete database backups. They do not capture libraries, users, permissions, lists, review state, jobs, plugin configuration, source-priority history, or every database relationship. Intrinsic file properties such as file size, bitrate, duration, codec, and page count are intentionally excluded.
 
-## How They Work
+## Naming and Location
 
-When you edit metadata through the Shisho interface, the changes are saved both to the database and to `.metadata.json` sidecar files next to your book files. During library scans, Shisho reads these sidecars and applies them with higher priority than embedded file metadata, so your customizations are preserved.
+Shisho writes two sidecar levels:
 
-### File Locations
+- A **book sidecar** named `{book-name}.metadata.json`.
+- A **file sidecar** named `{complete-media-filename}.metadata.json`.
 
-Sidecar files are created alongside your book files:
+Directory-based book:
 
-**Directory-based books:**
-```
+```text
 [Author] Book Title/
 ├── book.epub
-├── book.epub.metadata.json       ← file sidecar
-└── Book Title.metadata.json      ← book sidecar (named after directory)
+├── book.epub.metadata.json
+└── [Author] Book Title.metadata.json
 ```
 
-**Root-level books:**
-```
+Root-level book:
+
+```text
 library/
 ├── Book Title.m4b
-├── Book Title.m4b.metadata.json  ← file sidecar
-└── Book Title.metadata.json      ← book sidecar (named after file, without extension)
+├── Book Title.m4b.metadata.json
+└── Book Title.metadata.json
 ```
 
-### Two Levels of Sidecars
+Keep sidecars beside the media they describe. Shisho-generated cover files use a separate naming convention and are not embedded in the JSON.
 
-There are two types of sidecar files, corresponding to the two levels of [metadata](./metadata) in Shisho:
+## Book Sidecar Schema
 
-- **Book sidecars** store book-level metadata: title, authors, series, genres, tags
-- **File sidecars** store file-level metadata: narrators, publisher, identifiers, chapters, language, abridged
-
-## Book Sidecar Format
+The current schema version is `1`:
 
 ```json
 {
@@ -50,41 +46,32 @@ There are two types of sidecar files, corresponding to the two levels of [metada
     {
       "name": "F. Scott Fitzgerald",
       "sort_name": "Fitzgerald, F. Scott",
-      "sort_order": 0
+      "sort_order": 0,
+      "role": "writer"
     }
   ],
   "series": [
     {
       "name": "Classic American Literature",
+      "sort_name": "Classic American Literature",
       "number": 1,
       "number_end": 3,
       "unit": "volume",
       "sort_order": 0
     }
   ],
-  "genres": ["Fiction", "Classic"],
-  "tags": ["american-literature", "1920s"]
+  "genres": ["Classic", "Fiction"],
+  "tags": ["1920s", "american-literature"]
 }
 ```
 
-The optional `number_end` field records the end of a contiguous omnibus range. It requires `number`, must be greater than `number`, and moves with `number` and `unit` as one group. Omit `number_end` for a normal single-numbered book. Malformed number groups are ignored together rather than partially applied.
+All metadata fields are optional, but keep `"version": 1`. Constraints include:
 
-The `unit` field on series entries is optional and applies to CBZ files only. Valid values are `"volume"` and `"chapter"`. When omitted, CBZ files default to volume rendering. Non-CBZ files always ignore this field (it is stored as `null`).
+- `number_end` requires `number` and must be greater than it. Shisho treats `number`, `number_end`, and `unit` as one group and ignores the whole group when it is malformed.
+- Series `unit` may be `"volume"` or `"chapter"`. It affects CBZ series numbering; other formats ignore it.
+- Author `role` applies to CBZ creator roles. Supported values are `writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_artist`, `editor`, and `translator`.
 
-For CBZ comics, authors can include a `role` field:
-
-```json
-{
-  "authors": [
-    { "name": "Alan Moore", "role": "writer" },
-    { "name": "Dave Gibbons", "role": "penciller" }
-  ]
-}
-```
-
-Valid roles: `writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_artist`, `editor`, `translator`
-
-## File Sidecar Format
+## File Sidecar Schema
 
 ```json
 {
@@ -119,48 +106,89 @@ Valid roles: `writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_arti
 }
 ```
 
-Chapter position fields are mutually exclusive based on file type:
-- **CBZ**: `start_page` (0-indexed page number)
-- **M4B**: `start_timestamp_ms` (milliseconds from start)
-- **EPUB**: `href` (content document reference)
+File-sidecar constraints include:
 
-The `language` field stores a BCP 47 language tag (e.g., `"en"`, `"en-US"`, `"zh-Hans"`).
+- `release_date` uses `YYYY-MM-DD`.
+- Built-in identifier types include `isbn_10`, `isbn_13`, `asin`, `uuid`, `goodreads`, `google`, and `other`. Plugins may define additional types.
+- `cover_page` is a zero-indexed page number for CBZ and PDF.
+- `language` is a BCP 47 tag such as `en`, `en-US`, or `zh-Hans`.
+- `abridged` is `true`, `false`, or omitted when unknown.
 
-The `abridged` field is a nullable boolean: `true` (abridged), `false` (unabridged), or omitted (unknown).
+Each chapter uses the position field for its media format:
 
-## Priority System
+| Format | Position Field | Meaning |
+|--------|----------------|---------|
+| EPUB | `href` | Content-document reference |
+| CBZ | `start_page` | Zero-indexed page number |
+| PDF | `start_page` | Zero-indexed page number |
+| M4B | `start_timestamp_ms` | Milliseconds from the start |
 
-Sidecar metadata sits between manual edits and embedded file metadata in the priority hierarchy:
+Do not mix position fields within a chapter. Chapters may include nested `children` where the format supports a hierarchy.
+
+## Priority and Aliases
+
+During a scan, metadata precedence is:
 
 | Priority | Source |
 |----------|--------|
-| Highest | Manual edits (web interface) |
-| | **Sidecar files** |
-| | [Plugin](./plugins/overview) data |
+| Highest | Manual edits in Shisho |
+| | Sidecar metadata |
+| | Plugin metadata |
 | | Embedded file metadata |
-| Lowest | Filepath |
+| Lowest | Filepath-derived metadata |
 
-This means:
-- Sidecar values **override** embedded file metadata and filepath-derived data
-- Manual edits through the interface **override** sidecar values
-- When you make a manual edit, the sidecar is also updated to stay in sync
+A sidecar can override plugin, embedded, and filepath values, but it does not override a field that still has manual priority in the database. See [Metadata](./metadata.md) for rescan and priority behavior.
 
-### Rescanning and Sidecars
+Names for authors, narrators, series, genres, tags, and publishers use Shisho's normal alias resolution. A sidecar name that matches an alias resolves to the existing canonical resource instead of creating a duplicate.
 
-The **Rescan** dialog on a book or file offers three modes that interact with sidecars differently:
+## Reading and Writing
 
-- **Scan for new metadata** — Reads file metadata and runs plugins. Sidecar values are applied as usual according to the priority system. Won't overwrite manual edits. If the underlying file has been replaced on disk (its size or modification time differs from what was last scanned), the cached file sidecar is dropped first so the new file's metadata takes effect instead of being masked by the old sidecar.
-- **Refresh all metadata** — Re-reads file metadata and runs plugins, bypassing the priority system. Cached sidecars are dropped before the scan runs so re-derivation actually takes effect; manual edits stored in the database are still subject to being overwritten by the fresh scan since this mode bypasses priority. The sidecar is rewritten from the new state at the end of the scan.
-- **Reset to file metadata** — Re-reads only the metadata embedded in the source file(s), skipping plugins. Cached sidecars are dropped along with the rest of the prior metadata state. Use this when plugin enrichment has matched incorrectly and you want to start fresh with just what's in the file.
+Library scans read sidecars and then write the resulting current metadata back to sidecars. Metadata edits in Shisho also write the affected sidecars. These writes are best-effort: a failed write does not roll back the scan or edit, and Shisho records the failure in its logs.
 
-## When Sidecars Are Read
+The operating-system account running Shisho needs write permission to the media directories. In a container deployment, verify both the mounted path's permissions and that the mount is not read-only. See [Deployment and Maintenance](./deployment-and-maintenance.md).
 
-Sidecar files are read during library scans, after parsing the embedded file metadata. If a sidecar exists, its values are applied according to the priority system.
+:::warning
+Do not edit sidecars while Shisho is scanning or while someone is editing the same metadata in the web interface. A later Shisho write can overwrite concurrent external changes. Back up the sidecars first, or wait until Shisho is idle before editing.
+:::
 
-Resource names in sidecars — authors, narrators, series, genres, tags, and publishers — are resolved through Shisho's standard name lookup, which checks [aliases](./metadata#aliases). If a name in a sidecar matches an alias, it resolves to the existing canonical resource instead of creating a duplicate. No changes to the sidecar format are needed to take advantage of aliases.
+## Troubleshooting
 
-## When Sidecars Are Written
+### A Sidecar Is Ignored
 
-Sidecar files are automatically written whenever you edit metadata through the Shisho interface. This keeps the on-disk sidecars in sync with the database, so the customizations persist if you ever need to re-scan or move your library.
+**Symptom:** A scan does not apply values from a sidecar.
 
-All fields in the sidecar are optional — only fields with values are included.
+**Likely cause:** The JSON is malformed, a field has the wrong type, or a manual-priority database value takes precedence.
+
+**Verify:** Validate the JSON against the schema above and check Shisho's logs for `failed to read book sidecar` or `failed to read file sidecar`. Compare the affected field's source in Shisho.
+
+**Fix:** Correct the JSON and use the appropriate rescan mode described in [Metadata](./metadata.md) when you intend to replace current manual metadata.
+
+### Sidecars Are Missing or Stale
+
+**Symptom:** A scan or metadata edit succeeds, but the corresponding JSON file is absent or unchanged.
+
+**Likely cause:** Shisho cannot write to the media directory or the mount is read-only.
+
+**Verify:** Check directory ownership, mount options, and Shisho's logs for a sidecar write failure.
+
+**Fix:** Grant the Shisho process write access to the media directory or make the mount writable, then repeat the scan or edit. See [Deployment and Maintenance](./deployment-and-maintenance.md).
+
+### Names Resolve Unexpectedly
+
+**Symptom:** A sidecar name links to an unexpected canonical resource or creates a new one.
+
+**Likely cause:** The spelling matches an existing alias, or no intended alias exists.
+
+**Verify:** Compare the sidecar spelling with the canonical name and aliases shown in Shisho.
+
+**Fix:** Correct the sidecar name or configure the intended alias before rescanning. See [Metadata](./metadata.md).
+
+### External Edits Disappear
+
+**Symptom:** A hand-edited sidecar is replaced with different content.
+
+**Likely cause:** A scan or web edit wrote the current database state while the external edit was in progress.
+
+**Verify:** Check whether a scan or metadata edit ran at the same time and preserve the current sidecar before making another change.
+
+**Fix:** Restore the external edit from backup when no scan or web edit is running, then rescan. See [Troubleshooting](./troubleshooting.md) for log guidance.

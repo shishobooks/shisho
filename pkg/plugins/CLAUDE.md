@@ -87,7 +87,7 @@ packages/plugin-sdk/
 ├── package.json       # @shisho/plugin-sdk
 ├── index.d.ts         # Re-exports everything + imports global declarations
 ├── global.d.ts        # Declares global `shisho` and `plugin` variables
-├── host-api.d.ts      # ShishoHostAPI (log, config, http, url, fs, archive, xml, html, yaml, ffmpeg, shell)
+├── host-api.d.ts      # ShishoHostAPI (dataDir, log, config, sleep, http, url, fs, archive, xml, html, yaml, ffmpeg, shell)
 ├── hooks.d.ts         # Hook contexts, return types, ShishoPlugin interface
 ├── metadata.d.ts      # ParsedMetadata, ParsedAuthor, ParsedIdentifier, ParsedChapter
 └── manifest.d.ts      # PluginManifest, Capabilities, ConfigSchema, ConfigField
@@ -95,12 +95,13 @@ packages/plugin-sdk/
 
 ## Plugin File Structure
 
-Plugins live at `{pluginDir}/{scope}/{id}/` with exactly two files:
+Plugins live at `{pluginDir}/{scope}/{id}/`. They require two files at the artifact root, but may include additional runtime files:
 
 ```
 shisho/goodreads-metadata/
   manifest.json   # Declares capabilities, config schema, permissions
-  main.js         # JavaScript IIFE defining a `plugin` global
+  main.js         # JavaScript defining a `plugin` global
+  assets/         # Optional additional runtime files
 ```
 
 ## Manifest Schema
@@ -117,7 +118,7 @@ shisho/goodreads-metadata/
   "minShishoVersion": "...",
   "capabilities": {
     "inputConverter": { "description": "", "sourceTypes": ["mobi"], "mimeTypes": [], "targetType": "epub" },
-    "fileParser": { "description": "", "types": ["pdf"], "mimeTypes": ["application/pdf"] },
+    "fileParser": { "description": "", "types": ["example"], "mimeTypes": ["application/x-example"] },
     "outputGenerator": { "description": "", "id": "mobi", "name": "MOBI", "sourceTypes": ["epub"] },
     "metadataEnricher": { "description": "", "fileTypes": ["epub", "cbz"], "fields": ["title", "authors", "description", "cover"] },
     "identifierTypes": [{ "id": "goodreads", "name": "Goodreads", "urlTemplate": "https://goodreads.com/book/show/{value}", "pattern": "^\\d+$" }],
@@ -157,7 +158,7 @@ shisho/goodreads-metadata/
 
 ## main.js Pattern
 
-All plugins use IIFE to define the `plugin` global:
+Plugin builds must define the global `plugin` object. An IIFE is a common bundling pattern, not a runtime requirement:
 
 ```javascript
 var plugin = (function() {
@@ -290,7 +291,7 @@ The `targetFilePath` argument is the absolute path of the file being enriched an
 **Field filtering:** Search results are filtered before merging:
 - Fields not declared in manifest → stripped + warning logged
 - Fields declared but disabled by user → stripped silently
-- Users configure field toggles globally and per-library via UI
+- Users configure field toggles globally in the current UI; per-library field-setting APIs also exist
 
 ### outputGenerator (5 min timeout)
 
@@ -301,8 +302,8 @@ outputGenerator: {
   generate: function(context) {
     // context.sourcePath - source book file
     // context.destPath   - output destination
-    // context.book       - book metadata object
-    // context.file       - file metadata object
+    // context.book       - book metadata; series is [{ name, number? }]
+    // context.file       - file metadata; the path key is lowercase filepath
     var content = shisho.fs.readTextFile(context.sourcePath);
     shisho.fs.writeTextFile(context.destPath, transformed);
   },
@@ -367,7 +368,7 @@ resp.arrayBuffer() // ArrayBuffer — response body as raw bytes
 
 ### shisho.url
 
-URL utilities that aren't available in Goja's ES5.1 runtime.
+URL utilities supplied by the host runtime.
 
 ```javascript
 // Encode/decode URL components (like browser APIs)
@@ -527,7 +528,7 @@ Lower number = higher priority. Higher priority overwrites lower.
 | 0 | Manual | User edits |
 | 1 | Sidecar | OPF sidecar files |
 | 2 | Plugin | `plugin:shisho/goodreads` |
-| 3 | File Metadata | `epub_metadata`, `cbz_metadata`, `m4b_metadata` |
+| 3 | File Metadata | `epub_metadata`, `cbz_metadata`, `m4b_metadata`, `pdf_metadata` |
 | 4 | Filepath | Parsed from file path |
 
 Plugin data sources use format `plugin:scope/id` (e.g., `plugin:shisho/goodreads-metadata`). The `models.PluginDataSource(scope, id)` helper creates these. Priority lookup uses prefix matching for `plugin:*` strings.
@@ -701,7 +702,7 @@ meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 4. Add tests in `hostapi_newapi_test.go`
 5. **Update `packages/plugin-sdk/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
 6. **Update `packages/plugin-sdk/testing/index.ts`** — `createMockShisho` returns a `ShishoHostAPI`, so any new required field must be provided (either as a working mock impl or a `notImplemented()` stub). Missing this breaks `tsc --noEmit` for every plugin author who upgrades the SDK.
-7. **Update `website/docs/plugins/development.md`** — add a section for the new API under "Host APIs" with an example and any gotchas
+7. **Update `website/docs/plugins/host-api-reference.md`** with the public contract, example, capability requirement, and relevant gotchas
 8. If a new manifest capability was added, update `packages/plugin-sdk/manifest.d.ts`
 
 ### Adding a new hook type
@@ -730,7 +731,7 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 
 ```go
 // File parser (no fields required)
-manifest := `{"manifestVersion":1,"id":"test","name":"Test","version":"1.0.0","capabilities":{"fileParser":{"types":["pdf"]}}}`
+manifest := `{"manifestVersion":1,"id":"test","name":"Test","version":"1.0.0","capabilities":{"fileParser":{"types":["example"]}}}`
 mainJS := `var plugin=(function(){return{fileParser:{parse:function(ctx){return{title:"Test"}}}};})();`
 installTestPlugin(tc, pluginDir, "test", manifest, mainJS)
 

@@ -10,9 +10,10 @@
 # DATABASE SETTINGS
 # =============================================================================
 
-# REQUIRED: Path to the SQLite database file
+# Path to the SQLite database file
 # Env: DATABASE_FILE_PATH
-database_file_path: /data/shisho.db
+# Default: /config/shisho.db
+database_file_path: /config/shisho.db
 
 # Enable SQL query logging (useful for debugging)
 # Env: DATABASE_DEBUG
@@ -43,7 +44,8 @@ database_max_retries: 5
 # SERVER SETTINGS
 # =============================================================================
 
-# Host address to bind the server to
+# Reserved for listener configuration. The current server binds all interfaces
+# and does not apply this value.
 # Env: SERVER_HOST
 # Default: 0.0.0.0
 server_host: 0.0.0.0
@@ -58,6 +60,7 @@ server_port: 3689
 # =============================================================================
 
 # How often to scan libraries for new content (in minutes)
+# Set to 0 to disable scheduled scans
 # Env: SYNC_INTERVAL_MINUTES
 # Default: 60
 sync_interval_minutes: 60
@@ -114,7 +117,7 @@ pdf_render_quality: 85
 plugin_dir: /config/plugins/installed
 
 # Directory where plugin persistent data is stored (caches, tokens, DB files)
-# Data survives plugin updates; optionally deleted on uninstall with delete_data=true
+# Data survives plugin updates and normal uninstalls
 # Env: PLUGIN_DATA_DIR
 # Default: /config/plugins/data
 plugin_data_dir: /config/plugins/data
@@ -147,7 +150,7 @@ library_monitor_enabled: true
 
 # Delay in seconds before processing detected filesystem changes
 # When a change is detected, the monitor waits this long before acting.
-# If more changes occur during the wait, the timer resets — this batches
+# If more changes occur during the wait, the timer resets, which batches
 # rapid changes (e.g., copying multiple files) into a single rescan.
 # Env: LIBRARY_MONITOR_DELAY_SECONDS
 # Default: 60
@@ -168,9 +171,9 @@ supplement_exclude_patterns:
   - "desktop.ini"
 
 # PDF basenames (case-insensitive, no extension) that should be auto-classified
-# as supplements when discovered next to a main EPUB / CBZ / M4B file. A PDF
-# alone in a directory always imports as a main file regardless of name.
-# Set to [] to disable. Substring matches are NOT applied — exact basename only.
+# as supplements when discovered in a book directory with a non-PDF main file.
+# A root-level PDF always imports as a main file regardless of name.
+# Set to [] to disable. Substring matches are NOT applied; exact basename only.
 # Env: PDF_SUPPLEMENT_FILENAMES (comma-separated)
 # Default: see list below
 pdf_supplement_filenames:

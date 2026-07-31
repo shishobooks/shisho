@@ -62,46 +62,47 @@ export interface SearchResponse {
   results: ParsedMetadata[];
 }
 
+/** Book metadata passed to output-generator hooks. */
+export interface OutputBookContext {
+  id?: number;
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  authors?: Array<{ name: string; role?: string }>;
+  series?: Array<{ name: string; number?: number }>;
+  genres?: string[];
+  tags?: string[];
+}
+
+/** File metadata passed to output-generator hooks. */
+export interface OutputFileContext {
+  id?: number;
+  filepath?: string;
+  fileType?: string;
+  fileRole?: string;
+  filesizeBytes?: number;
+  name?: string;
+  url?: string;
+  publisher?: string;
+  releaseDate?: string;
+  narrators?: string[];
+  identifiers?: Array<{ type: string; value: string }>;
+}
+
 /** Context passed to outputGenerator.generate(). */
 export interface OutputGeneratorContext {
   /** Path to the source book file. */
   sourcePath: string;
   /** Path where the output file should be written. */
   destPath: string;
-  /** Book metadata. */
-  book: {
-    title?: string;
-    authors?: Array<{ name: string; role?: string }>;
-    series?: string;
-    seriesNumber?: number;
-    publisher?: string;
-    description?: string;
-    genres?: string[];
-    tags?: string[];
-    identifiers?: Array<{ type: string; value: string }>;
-  };
-  /** File metadata. */
-  file: {
-    fileType?: string;
-    filePath?: string;
-  };
+  book: OutputBookContext;
+  file: OutputFileContext;
 }
 
 /** Context passed to outputGenerator.fingerprint(). */
 export interface FingerprintContext {
-  /** Book metadata. */
-  book: {
-    title?: string;
-    authors?: Array<{ name: string; role?: string }>;
-    series?: string;
-    seriesNumber?: number;
-    publisher?: string;
-  };
-  /** File metadata. */
-  file: {
-    fileType?: string;
-    filePath?: string;
-  };
+  book: OutputBookContext;
+  file: OutputFileContext;
 }
 
 /** Input converter hook. */
@@ -126,7 +127,7 @@ export interface OutputGeneratorHook {
   fingerprint(context: FingerprintContext): string;
 }
 
-/** The plugin object exported by main.js via IIFE. */
+/** The global plugin object created by main.js. */
 export interface ShishoPlugin {
   inputConverter?: InputConverterHook;
   fileParser?: FileParserHook;

@@ -1,36 +1,33 @@
----
-sidebar_position: 40
----
-
 # Supported Formats
 
-Shisho supports a variety of book formats across three media types.
+Shisho has native support for four main-file formats. See [Reading and Playback](./reading-and-playback.md) for the in-app readers, [Metadata](./metadata.md) for the fields Shisho manages, and [Getting Started](./getting-started.md) for library setup.
 
-All supported formats are fingerprinted with a content sha256 hash for move
-and rename detection. Future versions will add format-specific fuzzy
-fingerprints (cover pHash, text SimHash, etc.) — see
-[File Fingerprints](./file-fingerprints.md).
+## Capability Matrix
 
-## Ebooks
+| Format | Import | Metadata Extraction | In-App Reader or Player | Generated Download |
+|--------|--------|---------------------|-------------------------|--------------------|
+| **EPUB** | Yes | Package metadata, navigation, and embedded cover data | EPUB reader | EPUB with supported current metadata applied |
+| **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied |
+| **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
+| **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
 
-- **EPUB** — Full [metadata extraction](./metadata#epub) including title, authors, series, description, cover art, language, and more. Includes an in-app reader with font size, theme, flow (paginated or scrolled), and auto-hide controls
-- **PDF** — Full [metadata extraction](./metadata#pdf) including title, authors, description, cover art, page count, language, and chapter extraction from PDF bookmarks. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
+Generated downloads are format-specific. Each format can represent a different set of metadata, so Shisho cannot write every database field or replace a cover in every generated file. The source file is not modified.
 
-## Audiobooks
+CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parsers or converters for CBR and other formats.
 
-- **M4B**: Full [metadata extraction](./metadata#m4b) including title, authors, narrators, series, chapters, cover art, language, and abridged status. Omnibus series ranges round-trip through `SERIES-PART` values such as `1-3` and grouping values such as `Series Name #1-3`. Includes an in-app player with play/pause, a draggable seek bar, and elapsed/total time, showing the selected M4B file's cover along with the book title, author, and file narrator. This keeps each audiobook edition visually distinct when a book has multiple files. When the file has chapters, the player adds chapter navigation: a dropdown that jumps to a chapter's start, chapter markers along the seek bar, the current chapter shown and updated live as playback crosses a boundary, and previous/next chapter buttons (previous restarts the current chapter when more than about 5 seconds in, otherwise jumps to the prior chapter). It also has skip back and forward buttons (30 seconds), mapped to the left and right arrow keys, and an adjustable playback speed (0.5x to 3x in discrete steps) that applies immediately and is saved as a per-user setting, so the chosen speed carries across sessions and devices. A file with no chapters plays normally with chapter navigation absent
+## CBZ Page Images
 
-:::note[xHE-AAC browser support]
-Audiobooks encoded with the newer xHE-AAC codec only play in Safari (and other iOS browsers, which share Safari's WebKit engine). Firefox cannot play xHE-AAC at all, and Chrome only supports it through HLS, which Shisho's plain progressive stream does not use. When the in-app player encounters an xHE-AAC file in one of those browsers, it shows a message recommending Safari instead of failing silently, and a timeout guard keeps a seek that cannot complete from hanging the player. The far more common AAC-LC and HE-AAC codecs play and seek in every browser. A file's codec is shown on its book detail page and in its file details. For the technical background, see the [M4B package documentation](https://github.com/shishobooks/shisho/blob/master/pkg/mp4/CLAUDE.md).
-:::
+Native CBZ parsing recognizes these page image formats:
 
-## Comics
+- PNG
+- JPEG (`.jpg` and `.jpeg`)
+- WebP
+- GIF
 
-- **CBZ** — Full [metadata extraction](./metadata#cbz) from ComicInfo.xml including title, authors, series, cover art, and language. Omnibus series ranges round-trip through ComicInfo `Number` values such as `1-3` and organized folder names such as `Title v001-003` or `Title c005-008`. Includes an in-app viewer with fit-width/fit-height modes and auto-hide controls
+## KePub Generation
 
-## Downloads
+Shisho can generate Kobo-optimized KePub downloads from **EPUB and CBZ only**. M4B and PDF remain in their native formats. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for device delivery options.
 
-Shisho can generate download files in additional formats:
+## Audiobook Browser Compatibility
 
-- **M4B**: Metadata-refreshed audiobook downloads preserve the source audio while applying current book and file metadata. The audio payload is copied incrementally, so generating a multi-gigabyte audiobook does not require memory proportional to the file size. Cancelling a download also cancels generation and removes partial cache output
-- **KePub** — Kobo-optimized EPUB format for [Kobo e-readers](./kobo-sync)
+Most M4B files use AAC-LC or HE-AAC and play in current browsers. xHE-AAC playback is more limited: use Safari or an iOS browser for Shisho's direct audio stream. Firefox cannot play xHE-AAC, and Chrome does not support it in this progressive-streaming setup. If broad browser playback matters, encode audiobooks as AAC-LC or HE-AAC.

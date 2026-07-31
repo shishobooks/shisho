@@ -1,106 +1,111 @@
----
-sidebar_position: 1
----
+# Using Plugins
 
-# Overview
+Plugins extend Shisho with file conversion, file parsing, metadata lookup, and additional output formats. This page covers installing and managing plugins. To create one, start with [Developing Plugins](./development.md).
 
-Shisho has a plugin system that lets you extend its functionality with JavaScript. Plugins hook into the book processing pipeline to add support for new file formats, enrich metadata from external sources, and generate alternative output formats.
+## Open the Plugin Manager
 
-## What Plugins Can Do
+Go to **Settings > Plugins**. The page has two tabs:
 
-There are four types of plugins, each serving a different purpose:
+- **Installed** lists plugins already on this Shisho server, their versions, capabilities, status, source repository, and available updates.
+- **Discover** fetches the current indexes from configured repositories. Use search, capability, and source filters to find a plugin.
 
-| Type | Purpose | Example |
-|------|---------|---------|
-| **Input Converter** | Convert unsupported file formats into supported ones | MOBI to EPUB |
-| **File Parser** | Extract metadata from file formats Shisho doesn't natively support | PDF metadata extraction |
-| **Metadata Enricher** | Look up and add metadata from external APIs | Fetching descriptions and genres from Goodreads |
-| **Output Generator** | Generate alternative download formats from existing files | EPUB to MOBI conversion |
+Plugin management, including viewing this page, requires the **Config: Write** permission. Manual book identification requires **Books: Write** and access to the relevant library.
 
-Plugins run in a sandboxed environment with controlled access to the filesystem, network, and system commands. Each plugin declares exactly what permissions it needs in its manifest.
+## Install a Plugin
 
-:::note[Alias-aware resolution]
-Resource names returned by plugins — authors, narrators, series, genres, tags, and publishers — are resolved through Shisho's standard name lookup, which checks [aliases](../metadata#aliases). If a plugin returns a name that matches an alias, Shisho maps it to the existing canonical resource instead of creating a duplicate. No plugin changes are needed to take advantage of aliases.
+1. Open **Discover**.
+2. Select a plugin to review its description, version history, compatibility, homepage, and declared capabilities.
+3. Select **Install**.
+4. Review the capabilities in the **Install Plugin?** dialog, then select **Install Plugin**.
+
+An incompatible plugin version cannot be installed. A repository can provide several versions, but Shisho installs the first compatible version listed in its index.
+
+:::warning[Install only plugins you trust]
+A plugin executes code on the Shisho server. The sandbox limits access, but capabilities can grant network access, broad filesystem access, FFmpeg access, or specific executable commands. The installation dialog shows capabilities supplied by the repository publisher; Shisho does not currently verify that this preview matches the downloaded plugin manifest. A SHA256 checksum confirms that the downloaded bytes match the repository index, not that the code, publisher, or preview is trustworthy. Review the publisher, homepage, source, and requested capabilities before installing.
 :::
 
-## Installing Plugins
+## Understand Statuses
 
-Plugins are installed from **[plugin repositories](./repositories)** — curated lists of available plugins hosted on GitHub. Shisho ships with an official repository enabled by default.
+| Status | Meaning |
+|--------|---------|
+| No badge | The plugin is active and loaded. |
+| **Disabled** | The plugin is installed but its **Enabled** switch is off. |
+| **Error** | The plugin failed to load. Open it to see the load error. |
+| **Incompatible** | Its `minShishoVersion` requires a newer Shisho version. |
 
-To install a plugin:
+A plugin can be globally enabled while one of its hooks is set to **Never**. The status controls whether the plugin is loaded at all. Hook modes control when each loaded capability runs.
 
-1. Go to **Admin > Plugins**
-2. Browse the **Discover** tab to see plugins from enabled repositories
-3. Click **Install** on the plugin you want
+## Configure a Plugin
 
-Plugins can also be installed by placing them directly in the plugin directory for [development or testing](./development#local-development) purposes.
+Select an installed plugin to open its detail page. The page can show:
 
-## Plugin Status
+- **Configuration** fields declared by the plugin, including masked secret fields
+- **Metadata Fields** for an enricher, which globally control which declared fields it may set
+- **Auto-identify confidence threshold**, which overrides the server default for that enricher
+- **Hook execution order**, capabilities, manifest, version history, and update information
 
-Each installed plugin has a status that determines whether it runs. You can see the status on the **Installed** tab and on each plugin's detail page.
+Select **Save** after changing configuration or global metadata field controls. The default confidence threshold is configured with `enrichment_confidence_threshold`; see [Configuration](../configuration.md).
 
-| Status | What it means |
-|--------|---------------|
-| **Active** | Plugin is loaded and participating in scans/enrichment per its mode. |
-| **Disabled** | You turned the plugin off via its enable toggle. Turn it back on to re-enable. |
-| **Error** | The plugin is installed but failed to load — usually a manifest or runtime problem. The detail page shows the underlying error. |
-| **Incompatible** | The plugin's `minShishoVersion` is higher than your running version. Update Shisho to use this plugin. |
+## Set Global Order and Modes
 
-When enabling a plugin fails, a toast shows the load error and the plugin row is marked **Error**. Open the plugin's detail page to see the full error text in monospace; use it to fix the plugin's manifest or code. If the plugin came from a repository, check for an updated version — the error may already be fixed upstream.
+From **Settings > Plugins**, select the gear button labeled **Advanced plugin settings**, then open **Order**.
 
-## Configuring Plugins
+1. Choose a **Hook Type**.
+2. Use the up and down arrow buttons to set execution order.
+3. Choose when each hook runs:
+   - **For every new file** runs during automatic processing and is also available for manual identification.
+   - **Only when manually identifying** skips automatic processing but remains available for manual identification. This choice is available only for metadata enrichers.
+   - **Never** makes that hook inactive.
+4. Select **Save Order**.
 
-Many plugins have configuration options, such as API keys for external services. After installing a plugin:
+For metadata enrichment, order matters per field. During automatic scans, the first enricher in order that supplies an enabled field wins. File metadata fills fields that no enricher supplies. A result below the effective confidence threshold is skipped; a result without `confidence` is eligible to apply.
 
-1. Go to **Admin > Plugins**
-2. Click a plugin in the **Installed** tab to open its detail page
-3. Fill in the required configuration fields in the **Configuration** section
-4. Save
+## Customize a Library
 
-### Execution Order and Plugin Modes
+A library can override global hook order and modes. Open the library settings described in [Libraries](../libraries.md), find **Plugin Order**, choose a hook type, and select **Customize**. Use the mode selector and arrow buttons, then **Save**. **Reset to Default** restores the global order and modes for that hook type.
 
-When multiple plugins of the same type are installed (e.g., two metadata enrichers), you can control the order they run in and set their mode. Go to **Admin > Plugins**, click the gear icon in the top-right to open the **Advanced plugin settings** dialog, and use the **Order** section to drag plugins to reorder them within each hook type.
+Library settings do not expose per-library metadata field controls. Enricher field switches are managed globally on the plugin detail page.
 
-Each plugin can be set to one of three modes:
+## Update or Uninstall a Plugin
 
-| Mode | Automated Scans | Manual Identification | Use Case |
-|------|----------------|----------------------|----------|
-| **Enabled** | Runs automatically | Available | Default — plugin participates fully |
-| **Manual Only** | Skipped | Available | Rate-limited APIs, pay-per-use enrichers |
-| **Disabled** | Skipped | Unavailable | Temporarily turn off without uninstalling |
+When a repository reports a newer compatible version, the **Installed** tab shows an update badge and an **Update** action. The plugin detail page shows the installed version, available version, changelog, release date, and optional **View release** link. Updating replaces the installed artifact and loads the new version without a server restart.
 
-**Manual Only** mode is only available for metadata enrichers. It lets you keep a plugin available for on-demand use (e.g., clicking "Identify" on a specific book) without having it run on every file during a library scan.
+To remove a plugin, open its detail page and select **Uninstall** in **Danger zone**. This removes the installed plugin files and saved plugin configuration. Persistent files under `plugin_data_dir` remain unless the plugin removes them during its `onUninstalling` callback. An error in that callback does not block uninstalling.
 
-### Per-Library Settings
+## Manage Repositories
 
-Plugins can be customized on a per-library basis. In the library settings, you can:
+Open **Advanced plugin settings > Repositories**.
 
-- **Set the mode** for specific plugins in that library (enabled, manual only, or disabled)
-- **Reorder** plugin execution for that library
-- **Toggle individual fields** for metadata enrichers (e.g., allow a plugin to set genres but not the description)
+### Add a Repository
 
-If no per-library customization is set, the global plugin settings apply.
+Enter both:
 
-### Field Controls for Metadata Enrichers
+- **Repository URL**: an HTTPS URL beginning with `https://raw.githubusercontent.com/`
+- **Scope**: the namespace expected in that repository's `repository.json`
 
-Metadata enrichers declare which fields they may modify (e.g., description, genres, cover). You can control this at two levels:
+The entered scope must match the `scope` in the repository index. A scope identifies both the repository and its plugins, so it must not collide with another configured repository.
 
-- **Global**: Enable or disable specific fields for a plugin across all libraries
-- **Per-library**: Override the global setting for individual libraries
+### Sync and Discover
 
-This gives you fine-grained control over what metadata each plugin is allowed to change.
+**Discover** fetches enabled repository indexes live whenever its data is refreshed. **Sync** is not required to populate Discover. Sync records the latest repository name, fetch status, and last-synced time, then refreshes update indicators for installed plugins in that repository. If update refresh fails after a successful fetch, Shisho warns that update indicators may be stale.
 
-## Updating Plugins
+There is no repository disable control in the current UI. The official Shisho repository cannot be removed. Removing a non-official repository leaves its installed plugins in place and working, but removes their source for repository updates and discovery.
 
-When a new version of a plugin is available, you'll see an update indicator in **Admin > Plugins**. Click **Update** to install the latest version. Updates are applied instantly without restarting the server.
+For repository authors, see [Publishing Plugins](./publishing.md).
 
-## Plugin Security
+## Troubleshooting
 
-Plugins run in a sandboxed JavaScript environment. Each plugin must declare its required permissions in its manifest:
+- **Nothing appears in Discover:** Check the repository URL, scope, and **Sync error** in **Advanced plugin settings > Repositories**. The repository URL must use `raw.githubusercontent.com`.
+- **Install fails:** Confirm the version is compatible, its ZIP URL starts with `https://github.com/`, and the repository SHA256 matches the ZIP exactly.
+- **Plugin shows Error:** Open the plugin and read **Plugin failed to load**. Common causes are invalid `manifest.json`, missing `main.js`, invalid JavaScript, an undeclared hook capability, or an invalid enricher field.
+- **Plugin does not run:** Check the global **Enabled** switch, the hook's mode and order, any library-specific order customization, the enricher's global **Metadata Fields**, and required plugin configuration.
+- **Local changes do not appear:** Local reload is available only for active plugins with scope `local`. See [Developing Plugins](./development.md#test-in-shisho).
+- **Need server evidence:** Use plugin-tagged application logs and relevant job logs. See [Troubleshooting](../troubleshooting.md).
 
-- **HTTP access**: Which domains the plugin can make requests to (this also applies to `coverUrl` downloads — the server validates the URL domain against the plugin's allowed list)
-- **File access**: Whether the plugin can read or write files beyond its own directory
-- **FFmpeg access**: Whether the plugin can use FFmpeg for media processing
-- **Shell access**: Which specific shell commands the plugin can execute
+## Developer Documentation
 
-These permissions are visible when installing a plugin so you can review what access it needs before enabling it.
+- [Developing Plugins](./development.md)
+- [Manifest and Hooks Reference](./manifest-hooks-reference.md)
+- [Host API Reference](./host-api-reference.md)
+- [Testing Plugins](./testing.md)
+- [Publishing Plugins](./publishing.md)
