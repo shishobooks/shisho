@@ -74,6 +74,14 @@ _Avoid_: rescan (in new code; some existing identifiers, comments, and docs/UI c
 **Sidecar**:
 A `.metadata.json` file placed alongside a book or file that provides metadata overrides.
 
+### Deployment Modes
+
+**Demo Mode**:
+A planned application mode for presenting an immutable library for evaluation. Visitors will be able to browse and consume its prepared media, but will not be able to cause persistent changes.
+
+**Public Demo**:
+The planned publicly hosted Shisho instance at `demo.shishobooks.com` that will run in Demo Mode.
+
 ## Relationships
 
 - A **Library** contains many **Books**, **Series**, **Persons**, **Genres**, **Tags**, and **Publishers**
