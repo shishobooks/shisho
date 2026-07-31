@@ -625,10 +625,7 @@ h3 {
 
 /* ---- HOMEPAGE: QUICKSTART ---- */
 .docs-home__quickstart {
-  align-items: start;
-  display: grid;
-  gap: 3rem;
-  grid-template-columns: 1fr 1.2fr;
+  max-width: 52rem;
 }
 
 .docs-home__quickstart-steps {

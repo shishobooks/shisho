@@ -1,71 +1,98 @@
----
-sidebar_position: 120
----
-
 # Users and Permissions
 
-Shisho has a role-based access control system that lets you manage who can view and edit your libraries.
+Shisho combines role permissions with a per-user library access list. Both checks must allow an action.
 
-## Roles
+Open **Settings > Users** to manage accounts and roles. Access to this page and its actions depends on the current user's Users permissions.
 
-There are three built-in roles:
+## Built-In Roles
 
-| Role | Description |
-|------|-------------|
-| **Admin** | Full read and write access to everything, including server configuration, user management, and job monitoring |
-| **Editor** | Read and write access to libraries, books, series, and people. Cannot manage users, server config, or jobs |
-| **Viewer** | Read-only access to libraries, books, series, and people |
+Shisho creates three system roles with these default permissions:
 
-The built-in roles cannot be renamed or deleted.
+| Role | Default Permissions |
+|------|---------------------|
+| **admin** | Read and Write for Libraries, Books, Series, People, Users, Jobs, and Config |
+| **editor** | Read and Write for Libraries, Books, Series, and People |
+| **viewer** | Read for Libraries, Books, Series, and People |
 
-### Permissions Reference
+System roles cannot be renamed or deleted, but an administrator can edit their permission selections.
 
-Each role is defined by a set of resource/operation pairs:
+:::caution[Role Changes Affect Every Assigned User]
+Changing a role can grant or remove access for every user assigned to it. Review the role's user assignments and the complete permission matrix before saving, especially when changing a built-in role.
+:::
 
-| Resource | Admin | Editor | Viewer |
-|----------|-------|--------|--------|
-| Libraries | Read, Write | Read, Write | Read |
-| Books | Read, Write | Read, Write | Read |
-| Series | Read, Write | Read, Write | Read |
-| People | Read, Write | Read, Write | Read |
-| Users | Read, Write | | |
-| Jobs | Read, Write | | |
-| Config | Read, Write | | |
+Permissions are available as Read and Write operations for these resources:
+
+- Libraries
+- Books
+- Series
+- People
+- Users
+- Jobs
+- Config
+
+Write permissions permit the create, edit, or delete operations associated with that resource. Read access does not imply Write access.
+
+## Custom Roles
+
+On **Settings > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role in the **Roles** section to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.
+
+A user has one role. Assign the narrowest permissions needed for that person's work.
 
 ## Library Access
 
-In addition to role-based permissions, each user has a **library access list** that controls which libraries they can see. This works independently of their role:
+Role permissions and library access intersect:
 
-- **All libraries**: The user can access every library, including ones created in the future
-- **Specific libraries**: The user can only access the libraries you select
+1. The assigned role must grant the required resource operation.
+2. The user must also have access to the library containing the requested data.
 
-For example, you might give a family member the Viewer role with access only to your shared fiction library, while keeping your reference library private.
+For example, a user with Books Write but access to only one library can edit books only in that library. Library access does not add permissions that the role lacks.
 
-## Managing Users
+When creating or editing a user, choose one of these options under **Library Access**:
 
-### Creating a User
+- **Access to all libraries** grants access to every current library and automatically includes libraries created in the future.
+- Clear **Access to all libraries**, then use **Select Libraries** to grant only the selected current libraries. Future libraries are not added automatically.
 
-1. Go to **Admin > Users**
-2. Click **Add User**
-3. Set the username, optional email, password, and role
-4. (Optional) Enable **Require password reset on first login** to force the user to choose a new password after they sign in
-5. Choose which libraries the user can access
-6. Save
+## Account Requirements
 
-Usernames and email addresses must be unique (case-insensitive).
+User accounts follow these requirements:
 
-### Deactivating a User
+- Username is required and must contain 3 to 50 characters.
+- Password is required and must contain at least 8 characters.
+- Email is optional.
+- Usernames and email addresses must be unique without regard to letter case.
 
-You can deactivate a user to revoke their access without deleting their account. Deactivated users cannot log in.
+The initial setup screen creates the first user with the built-in admin role.
 
-### Changing Passwords
+## Create and Edit Users
 
-Admins can reset any user's password from the user management page. When resetting another user's password, admins can also enable **Require user to reset password on next login**.
+To create an account:
 
-Users can change their own password from their user security settings. If a user's account is marked as requiring a password reset, Shisho redirects them to security settings until they set a new password, and that forced-reset form only asks for the new password.
+1. Open **Settings > Users**.
+2. Select **Add User**.
+3. Enter the account information.
+4. Optionally select **Require password reset on first login**.
+5. Select a role.
+6. Configure **Library Access**.
+7. Select **Create User**.
 
-## Authentication
+Select a username on the **Users** list to edit its username, optional email, role, and library access.
 
-Shisho uses JWT-based authentication. Sessions last 7 days before requiring a new login.
+## Password Changes and Forced Resets
 
-[OPDS](./opds) endpoints also support HTTP Basic Auth for compatibility with e-reader apps that don't handle cookie-based authentication.
+Any signed-in user can open the user menu, select **Security**, and use **Change Password**. A normal self-service change requires the current password.
+
+A user with Users Write permission can open another account under **Settings > Users**, select **Reset Password**, and optionally select **Require user to reset password on next login**. A user marked for forced reset must choose a new password before continuing in Shisho.
+
+## Deactivate Users
+
+:::warning[Verify the Account Before Deactivation]
+Deactivation immediately prevents that user from logging in. It does not delete the account, but Shisho currently has no reactivation control. You cannot deactivate your own account.
+:::
+
+A user with Users Write permission can select another active account and choose **Deactivate User**. The account and its historical records remain stored.
+
+## Sessions
+
+Shisho uses one server-wide session duration with a fixed default of 30 days. There is no per-user duration or remember-me setting. Administrators can change the global `SESSION_DURATION_DAYS` setting; existing tokens remain governed by how they were issued. See [Configuration](./configuration.md#authentication).
+
+The [OPDS Catalog](./opds.md) also supports HTTP Basic Auth for clients that do not use Shisho's browser session. OPDS catalog contents follow the user's library access.

@@ -19,44 +19,33 @@ import { Github } from "../components/GithubIcon";
 const workflowSteps = [
   {
     icon: FolderOpen,
-    title: "Point it at your books",
-    desc: "Mount a directory of ebooks, audiobooks, or comics. Shisho scans the folder, imports everything it finds automatically, and organizes everything on the file system.",
+    title: "Mount your supported books",
+    desc: "Mount a directory of supported ebooks, audiobooks, or comics. Shisho scans the folder and imports compatible files. Moving and renaming files is an optional library setting.",
   },
   {
     icon: ScanSearch,
     title: "Metadata is extracted and enriched",
-    desc: "Titles, authors, narrators, series info, covers, and identifiers are pulled from each file. Metadata enricher plugins matches books against online sources to fill in any gaps.",
+    desc: "Shisho extracts format-specific metadata from each file. Optional metadata enricher plugins can match books against online sources.",
   },
   {
     icon: MonitorSmartphone,
-    title: "Read, listen, or download from anywhere",
-    desc: "Browse your library from any device. Read in the browser, sync to your Kobo, connect via OPDS, or download files directly.",
+    title: "Read, listen, or download",
+    desc: "Use the browser, Kobo sync, OPDS, or direct downloads from devices that can reach your Shisho server.",
   },
 ];
 
 const formatCategories = [
   {
     category: "Ebooks",
-    formats: [
-      { name: "EPUB", planned: false },
-      { name: "PDF", planned: false },
-      { name: "MOBI", planned: true },
-    ],
+    formats: [{ name: "EPUB" }, { name: "PDF" }],
   },
   {
     category: "Audiobooks",
-    formats: [
-      { name: "M4B", planned: false },
-      { name: "M4A", planned: true },
-      { name: "MP3", planned: true },
-    ],
+    formats: [{ name: "M4B" }],
   },
   {
     category: "Comics",
-    formats: [
-      { name: "CBZ", planned: false },
-      { name: "CBR", planned: true },
-    ],
+    formats: [{ name: "CBZ" }],
   },
 ];
 
@@ -69,12 +58,12 @@ const features = [
   {
     icon: Shield,
     title: "Self-Hosted & Private",
-    desc: "Your books stay on your hardware. No cloud, no subscriptions, no data leaving your network. Docker makes setup trivial.",
+    desc: "Shisho runs on hardware you control with no required subscription. Enabled plugins and integrations may connect to services you configure.",
   },
   {
     icon: Layers,
     title: "Rich Metadata",
-    desc: "Automatically extracts titles, authors, narrators, series, covers, genres, and identifiers from every supported format.",
+    desc: "Extract format-specific titles, contributors, series, covers, languages, chapters, and identifiers, then review or edit them.",
   },
   {
     icon: BookOpen,
@@ -93,65 +82,12 @@ const features = [
   },
 ];
 
-const dockerCompose = `services:
-  shisho:
-    image: ghcr.io/shishobooks/shisho:latest
-    container_name: shisho
-    restart: unless-stopped
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./data:/data
-      - ./config:/config
-      - /path/to/books:/media
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - DATABASE_FILE_PATH=/data/shisho.db
-      - JWT_SECRET=your-secret-key`;
-
-function DockerComposeHighlighted(): ReactNode {
-  const lines = dockerCompose.split("\n");
-  return (
-    <>
-      <span className="qs-comment"># docker-compose.yml</span>
-      {"\n"}
-      {lines.map((line, i) => {
-        const highlighted = line
-          .replace(
-            /^(\s*)([\w_]+)(:)/gm,
-            (_, indent, key, colon) => `${indent}<k>${key}</k>${colon}`,
-          )
-          .replace(/(".*?")/g, "<s>$1</s>")
-          .replace(
-            /(ghcr\.io\/shishobooks\/shisho:latest|unless-stopped)/g,
-            "<s>$1</s>",
-          );
-        return (
-          <span key={i}>
-            <span
-              dangerouslySetInnerHTML={{
-                __html: highlighted
-                  .replace(/<k>/g, '<span class="qs-key">')
-                  .replace(/<\/k>/g, "</span>")
-                  .replace(/<s>/g, '<span class="qs-string">')
-                  .replace(/<\/s>/g, "</span>"),
-              }}
-            />
-            {"\n"}
-          </span>
-        );
-      })}
-    </>
-  );
-}
-
 export default function Home(): ReactNode {
   const { siteConfig } = useDocusaurusContext();
 
   return (
     <Layout
-      description="Shisho documentation for setup, operation, and architecture."
+      description="Shisho documentation for evaluation, setup, operation, integrations, and plugin development."
       title={siteConfig.title}
     >
       <main className="docs-home">
@@ -160,12 +96,11 @@ export default function Home(): ReactNode {
           <div className="docs-home__hero-inner">
             <p className="docs-home__eyebrow">Self-Hosted Book Management</p>
             <h1 className="docs-home__title">
-              One library for <em>every</em> book you own
+              One library for your <em>digital</em> books
             </h1>
             <p className="docs-home__subtitle">
-              Shisho is an open-source, self-hosted system that brings ebooks,
-              audiobooks, and comics together in a single unified library. No
-              more juggling separate apps.
+              Shisho is an open-source, self-hosted system that brings supported
+              ebooks, audiobooks, and comics together in a unified library.
             </p>
             <div className="docs-home__actions">
               <Link
@@ -173,6 +108,12 @@ export default function Home(): ReactNode {
                 to="/docs/getting-started"
               >
                 Get Started
+              </Link>
+              <Link
+                className="docs-home__btn docs-home__btn--ghost"
+                to="/docs/supported-formats"
+              >
+                Check Formats
               </Link>
               <a
                 className="docs-home__btn docs-home__btn--ghost"
@@ -191,11 +132,11 @@ export default function Home(): ReactNode {
         <section className="docs-home__section">
           <p className="docs-home__section-label">How It Works</p>
           <h2 className="docs-home__section-heading">
-            From folder to library in minutes
+            From supported files to a searchable library
           </h2>
           <p className="docs-home__section-desc">
-            Shisho turns a directory of files into an organized, searchable
-            library with rich metadata. No manual cataloging required.
+            Shisho scans compatible files, extracts available metadata, and
+            gives you tools to review and manage the resulting library.
           </p>
           <div className="docs-home__workflow">
             {workflowSteps.map((step, i) => (
@@ -215,11 +156,12 @@ export default function Home(): ReactNode {
         <section className="docs-home__section">
           <p className="docs-home__section-label">Format Support</p>
           <h2 className="docs-home__section-heading">
-            Native support for every book format
+            Native support for popular book formats
           </h2>
           <p className="docs-home__section-desc">
-            Full metadata extraction, cover art, and chapter detection. All
-            built in, no plugins required.
+            Capabilities vary by format, including metadata extraction, browser
+            reading, and generated downloads. See the complete{" "}
+            <Link to="/docs/supported-formats">Supported Formats</Link> guide.
           </p>
           <div className="docs-home__formats">
             {formatCategories.map((cat) => (
@@ -229,14 +171,8 @@ export default function Home(): ReactNode {
                 </span>
                 <div className="docs-home__format-items">
                   {cat.formats.map((fmt) => (
-                    <span
-                      className={`docs-home__format-tag${fmt.planned ? " docs-home__format-tag--planned" : ""}`}
-                      key={fmt.name}
-                    >
+                    <span className="docs-home__format-tag" key={fmt.name}>
                       {fmt.name}
-                      {fmt.planned && (
-                        <span className="docs-home__format-soon">Soon</span>
-                      )}
                     </span>
                   ))}
                 </div>
@@ -252,8 +188,13 @@ export default function Home(): ReactNode {
             Everything you need to manage your library
           </h2>
           <p className="docs-home__section-desc">
-            From metadata to device syncing, Shisho gives you full control over
-            your books.
+            Choose the guide for your task:{" "}
+            <Link to="/docs/metadata">use Shisho</Link>,{" "}
+            <Link to="/docs/configuration">administer a deployment</Link>,
+            connect through <Link to="/docs/opds">OPDS</Link>,{" "}
+            <Link to="/docs/kobo-sync">Kobo Sync</Link>, or the{" "}
+            <Link to="/docs/ereader-browser">eReader Browser</Link>, or{" "}
+            <Link to="/docs/plugins/development">develop plugins</Link>.
           </p>
           <div className="docs-home__features">
             {features.map((feat) => (
@@ -274,38 +215,40 @@ export default function Home(): ReactNode {
             <div>
               <p className="docs-home__section-label">Quick Start</p>
               <h2 className="docs-home__section-heading">
-                Up and running in minutes
+                Start with the deployment checklist
               </h2>
               <p className="docs-home__section-desc docs-home__section-desc--tight">
-                Shisho runs as a Docker container. Point it at your book
-                collection and you're done.
+                Shisho runs as a Docker container. Before starting, review the{" "}
+                <Link to="/docs/getting-started">
+                  complete deployment steps
+                </Link>{" "}
+                for persistent storage, a strong JWT secret, and host file
+                permissions.
               </p>
               <div className="docs-home__quickstart-steps">
                 <div className="docs-home__quickstart-step">
-                  <h4>Create a docker-compose.yml</h4>
+                  <h4>Review and adapt the compose file</h4>
                   <p>
-                    Copy the configuration and adjust the paths to your book
-                    library.
+                    Set persistent paths and mount the library at the container
+                    path you plan to configure in Shisho.
                   </p>
                 </div>
                 <div className="docs-home__quickstart-step">
-                  <h4>Start the container</h4>
+                  <h4>Set the secret and permissions</h4>
                   <p>
-                    Run <code>docker compose up -d</code> and visit port 5173.
+                    Generate a JWT secret and match PUID and PGID to the host
+                    account that owns the mounted files.
                   </p>
                 </div>
                 <div className="docs-home__quickstart-step">
-                  <h4>Create a library</h4>
+                  <h4>Start Shisho and create a library</h4>
                   <p>
-                    Point Shisho at your mounted media directory. It scans
-                    automatically.
+                    Start the container, visit port 5173, and create a library
+                    using the mounted container path.
                   </p>
                 </div>
               </div>
             </div>
-            <pre className="docs-home__quickstart-code">
-              <DockerComposeHighlighted />
-            </pre>
           </div>
         </section>
 
@@ -313,10 +256,10 @@ export default function Home(): ReactNode {
         <section className="docs-home__section docs-home__section--no-border">
           <div className="docs-home__cta">
             <h2 className="docs-home__cta-heading">
-              Ready to organize your library?
+              Ready to build your Shisho library?
             </h2>
             <p className="docs-home__cta-text">
-              Shisho is free, open-source, and always will be.
+              Shisho is free and open source.
             </p>
             <div className="docs-home__actions">
               <Link

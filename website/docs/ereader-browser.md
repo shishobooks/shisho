@@ -1,68 +1,88 @@
----
-sidebar_position: 100
----
-
 # eReader Browser
 
-The eReader browser is a lightweight, text-based interface for browsing and downloading books directly from an e-reader's built-in web browser. It's designed for the constraints of e-ink screens — simple HTML, minimal styling, and no JavaScript.
-
-## How It Works
-
-E-readers like Kindle, Kobo, and PocketBook have built-in web browsers. The eReader browser gives them a stripped-down view of your library where you can browse, search, and download books. Each device gets its own URL with an embedded API key, so no login form is needed.
+The eReader Browser is a lightweight, server-rendered interface for downloading books from simple e-ink web browsers. It uses minimal HTML and no JavaScript.
 
 ## Setup
 
-### 1. Add a device in Shisho
+### 1. Add a Device
 
-Go to **Settings > Security** and click **Add Device** under the eReader Browser Access section. Give it a name (e.g., "Bedroom Kindle").
+Open the user menu and select **Security**. Under **eReader Browser Access**, click **Add Device**, enter a device name, and click **Add Device**.
 
-### 2. Get the short URL
+### 2. Generate the Setup URL
 
-Click **Setup** on the device. Shisho generates a short URL like `http://your-server/e/abc123` that's easy to type on an e-reader keyboard. This short URL expires in 30 minutes — it's only used once to get to the full URL.
+Click **Setup** for the device. Shisho displays a short URL such as:
 
-### 3. Open and bookmark
+```text
+https://your-server/e/abc123
+```
 
-On your e-reader, open the web browser and type in the short URL. It redirects to the full eReader browser URL. **Bookmark this page** so you can return to it anytime without needing to generate another short URL.
+The short URL is reusable for 30 minutes. Opening it redirects to a full URL under `/ereader/key/...` that contains the device API key. Expiration of the short URL does not expire the full URL.
+
+### 3. Bookmark the Full URL
+
+:::warning
+The redirected full URL contains the device API key. Treat it like a password. Do not share it, publish it, include it in screenshots, or bookmark it on a device you do not control. Removing the device under **Security** revokes the URL and cannot be undone. If access may be needed later, keep the device entry and protect its URL instead.
+:::
+
+Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. The full URL remains valid until the device is removed from Shisho and its API key is revoked.
 
 ## Features
 
-### Browsing
+The current browser provides:
 
-The eReader browser provides the same navigation as the main web UI:
+- A list of libraries the device owner's user can access.
+- Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
+- EPUB, CBZ, M4B, and PDF type filters.
+- Book details and a separate download for every main-file edition.
+- The user's saved per-library sort on **All Books**, author, and search results, or **Date Added, Newest First** when none is saved. Series books follow series-number order.
+- An optional cover toggle.
 
-- **Libraries** — Browse your libraries
-- **All books** — Paginated list of every book in a library
-- **Series** — Paginated list of books in a series
-- **Authors** — Paginated list of books by an author
-- **Search** — Paginated full-text search within a library
+Supplement files are not offered as book downloads. See [Libraries, Scanning, and File Organization](./libraries.md), [Browsing, Search, and Bulk Actions](./browsing-search-bulk-actions.md), and [Supported Formats](./supported-formats.md).
 
-All book listings are paged in fixed-size batches (50 books per page) with **← Prev** / **Next →** links at the bottom. This keeps each page small enough for the limited memory of e-ink browsers — even libraries with prolific authors (e.g., 500+ book runs) render quickly.
+## Downloads
 
-### File type filtering
+Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B and PDF remain generated downloads in their native formats.
 
-Use the type filter to show only specific formats. This is useful if your library has both ebooks and audiobooks but your device only reads EPUBs.
+Covers are off by default. Leave them off on slow devices or networks to reduce page size and image requests.
 
-### Cover toggle
+## Troubleshooting
 
-Covers can be turned on or off. Disabling covers makes pages load faster on slow e-ink browsers and reduces data usage.
+### The Short URL Expired
 
-### KePub downloads
+**Symptom:** Opening `/e/...` no longer redirects to the eReader Browser.
 
-When a Kobo device is detected (via its User-Agent string), EPUB and CBZ downloads are automatically served as KePub files for better integration with the Kobo reading system.
+**Likely cause:** The 30-minute setup window expired.
 
-## Supported Devices
+**Verify:** Try the bookmarked full `/ereader/key/...` URL, if one was saved.
 
-The eReader browser works with any device that has a web browser, including:
+**Fix:** Keep using a valid full bookmark, or open the device's **Setup** dialog and generate another short URL.
 
-- **Kindle** — Via the Experimental Browser
-- **Kobo** — Via the built-in browser (though [Kobo sync](kobo-sync.md) is a better option for Kobos)
-- **PocketBook** — Via the built-in browser
-- **Phones/tablets** — Works as a lightweight alternative to the main UI
+### The Bookmark Returns Unauthorized
 
-## Authentication
+**Symptom:** A previously working bookmark returns an unauthorized response.
 
-Each device gets its own API key. The key is embedded in the URL, so there's no login prompt. You can revoke access to a specific device at any time by removing it from the Security settings — the URL immediately stops working.
+**Likely cause:** The bookmark is incomplete or the device was removed and its API key was revoked.
 
-## Sort order
+**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that the device still appears under **Security**.
 
-The eReader browser's book listings (library index, author, series, genre pages) apply the authenticated user's saved default sort for the relevant library. If no default has been saved, the browser falls back to the builtin default: **Date added, newest first**. See [Gallery Sort](./gallery-sort.md) for how to save a different default for a library.
+**Fix:** If the device was removed, add it again and replace the bookmark. The old key cannot be restored.
+
+### The Page Does Not Load Through a Proxy
+
+**Symptom:** The main web interface works, but the setup URL, eReader pages, covers, or downloads do not.
+
+**Likely cause:** The proxy does not forward both eReader route families or the device cannot trust the external hostname.
+
+**Verify:** Confirm that `/e/` and `/ereader/` both reach Shisho with their complete paths, and that the eReader can resolve the hostname and trust its certificate.
+
+**Fix:** Forward `/e/` for setup URLs and `/ereader/` for the full browser, covers, and downloads. See [Deployment and Maintenance](./deployment-and-maintenance.md) and [Troubleshooting](./troubleshooting.md).
+
+### Books or Libraries Are Missing
+
+**Symptom:** The browser opens, but an expected library or book is absent.
+
+**Likely cause:** The owning user lacks library access, a file-type filter is active, or the expected file is a supplement.
+
+**Verify:** Check the user's library access, clear the filter, and confirm the book has a main file.
+
+**Fix:** Grant the intended [library access](./users-and-permissions.md) or select a matching main-file type. Supplements are not offered.

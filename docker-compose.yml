@@ -1,24 +1,25 @@
 services:
   shisho:
+    # Build the current checkout for local development and testing.
     build: .
+    # To use a published release instead, comment out build and uncomment image.
+    # Prefer a pinned release tag for deployments.
+    # image: ghcr.io/shishobooks/shisho:latest
     container_name: shisho
     restart: unless-stopped
     ports:
       - "5173:5173"
     volumes:
-      # Persistent data (database)
-      - shisho-data:/app/data
-      # Configuration
-      - shisho-config:/app/config
-      # Mount your media library (adjust path as needed)
-      # - /path/to/your/books:/media:ro
+      # Persist the database, cache, installed plugins, and plugin data.
+      - ./config:/config
+      # WARNING: This is writable. Shisho creates covers and sidecars, and the
+      # default library organization setting can move and rename media files.
+      # Replace this path and back up the media before creating a library.
+      - /path/to/your/books:/media
     environment:
-      # Custom UID/GID (optional, defaults to 1000:1000)
-      # - PUID=1000
-      # - PGID=1000
-    # Uncomment to use a pre-built image instead of building locally
-    # image: ghcr.io/shishobooks/shisho:latest
-
-volumes:
-  shisho-data:
-  shisho-config:
+      # PUID/PGID select the process identity. Host permissions still control access.
+      PUID: "1000"
+      PGID: "1000"
+      # Generate once with: openssl rand -hex 32
+      # Provide JWT_SECRET through your deployment's environment or secret manager.
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET before starting Shisho}"

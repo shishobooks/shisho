@@ -1,86 +1,85 @@
----
-sidebar_position: 110
----
+# OPDS Catalog
 
-# OPDS
+Shisho provides an OPDS 1.2 catalog for browsing and downloading books from compatible reading apps.
 
-Shisho provides an OPDS 1.2 catalog feed, allowing any OPDS-compatible app to browse and download books from your library. OPDS (Open Publication Distribution System) is an open standard that many reading apps support natively.
+## Catalog URLs
 
-## Feed URL
+Use this root catalog URL:
 
-The base catalog URL is:
-
-```
-http://your-server/opds/v1/{types}/catalog
+```text
+https://your-server/opds/v1/{types}/catalog
 ```
 
-Replace `{types}` with the file formats you want to see:
+Replace `{types}` with one or more of `epub`, `cbz`, `m4b`, and `pdf`. Join multiple types with `+`:
 
-| Types | Description |
-|-------|-------------|
-| `epub` | EPUBs only |
-| `cbz` | Comics only |
-| `m4b` | Audiobooks only |
-| `epub+cbz` | EPUBs and comics |
-| `epub+cbz+m4b` | All formats |
-
-For example, to browse only EPUBs: `http://your-server/opds/v1/epub/catalog`
-
-### KePub variant
-
-For Kobo devices or apps that benefit from KePub formatting (see [Kobo Sync](./kobo-sync) for the dedicated sync feature), use the KePub feed:
-
-```
-http://your-server/opds/v1/kepub/{types}/catalog
+```text
+https://your-server/opds/v1/epub/catalog
+https://your-server/opds/v1/epub+cbz/catalog
+https://your-server/opds/v1/epub+cbz+m4b+pdf/catalog
 ```
 
-This serves the same catalog but EPUB and CBZ downloads are converted to KePub format.
+Any non-empty combination of those four types is accepted. Order does not change the catalog behavior.
 
-## Authentication
+### KePub Catalog
 
-OPDS uses HTTP Basic Authentication with your Shisho username and password — the same credentials you use to log in to the web UI. Most OPDS apps prompt for these when you add a new catalog.
+To request KePub downloads where conversion is supported, insert `/kepub` before the type selection:
 
-### Behind a reverse proxy
+```text
+https://your-server/opds/v1/kepub/epub+cbz/catalog
+```
 
-If you're running Shisho behind an HTTPS-terminating reverse proxy (Nginx Proxy Manager, Traefik, etc.), the upstream proxy must forward `X-Forwarded-Proto: https` so Shisho generates `https://` hrefs in feed entries. OPDS clients like KOReader drop the `Authorization` header when following an `http://` → `https://` redirect, which surfaces as 401s on sub-feeds.
+In a KePub catalog, EPUB and CBZ files are converted to KePub. M4B and PDF files remain in their native formats. See [Supported Formats](./supported-formats.md) for generated-download limitations.
 
-The bundled Caddy config trusts `X-Forwarded-*` headers from any RFC1918 private-range address, which covers the usual Docker/LAN topology. If your upstream proxy is on a public IP or in a non-RFC1918 range (some VPN networks, CGNAT, etc.), you'll need to override the Caddyfile and add the upstream's address to Caddy's [`trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies).
+## Authentication and Access
+
+OPDS uses HTTP Basic Authentication. Add the catalog with the same Shisho username and password used for the web interface. Use HTTPS whenever the catalog is reachable outside a trusted local network.
+
+The root catalog lists only libraries the authenticated user can access. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md).
 
 ## Catalog Structure
 
-The feed is organized as:
+After the root catalog, clients follow these routes under `/opds/v1/{types}`:
 
-1. **Root catalog** — Lists your libraries
-2. **Library** — Navigation page with links to All Books, Series, and Authors
-3. **All Books** — Paginated list of every book in the library
-4. **Series** — Alphabetical list of series, then books within each series
-5. **Authors** — Alphabetical list of authors, then books by each author
+| Catalog | Route |
+|---------|-------|
+| Library navigation | `/libraries/{libraryID}` |
+| All books | `/libraries/{libraryID}/all` |
+| Series list | `/libraries/{libraryID}/series` |
+| Books in a series | `/libraries/{libraryID}/series/{seriesID}` |
+| Authors list | `/libraries/{libraryID}/authors` |
+| Books by an author | `/libraries/{libraryID}/authors/{authorName}` |
+| Search | `/libraries/{libraryID}/search?q={query}` |
 
-Each level supports pagination (50 books per page).
+KePub catalogs use the same routes under `/opds/v1/kepub/{types}`. There are no separate genre, tag, recently added, or cross-library book routes.
 
-## Search
+## Search and Sort
 
-Each library has an integrated OpenSearch endpoint. OPDS apps that support search will show a search bar when browsing a library. Search matches against book titles, authors, and series names.
+Catalog search matches book titles, subtitles, book and file paths, authors, narrators, and series. Author, narrator, and series aliases are searchable. It does not search genres, tags, or descriptions.
 
-## Compatible Apps
+The **All Books**, author, and search book feeds use the authenticated user's saved sort for that library. Without a saved sort, they use **Date Added, Newest First**. Books within a series follow series-number order. See [Browsing, Search, and Bulk Actions](./browsing-search-bulk-actions.md).
 
-OPDS is widely supported. Some popular apps include:
+## Client Compatibility
 
-- **KOReader** — Open-source reader for Kindle, Kobo, and other devices
-- **Panels** — Comic reader for iOS/macOS
-- **Librera** — Android reader
-- **Cantook** — iOS/Android reader
-- **Moon+ Reader** — Android reader
-- **Thunderclap** — macOS OPDS browser
+Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clients may work, but client support for authentication, search, multiple acquisition links, and file types varies. Consult the client's documentation when adding the catalog.
 
-Consult your app's documentation for how to add a new OPDS catalog.
+## Troubleshooting
 
-## Library Access
+### Repeated Login Prompts or 401 Responses
 
-The feed respects your user's [library permissions](./users-and-permissions#library-access). You only see books from libraries you have access to.
+**Symptom:** The root catalog opens, but a sub-feed or download prompts again or returns `401 Unauthorized`.
 
-## Sort order
+**Likely cause:** The reverse proxy dropped the `Authorization` header or generated an incorrect scheme. An HTTP-to-HTTPS redirect can make an OPDS client drop Basic Auth.
 
-Book-listing feeds (library, series, author, genre, tag, all-books, recently-added) apply the authenticated user's saved default sort for the relevant library. If no default has been saved, the feed falls back to the builtin default: **Date added, newest first**. See [Gallery Sort](./gallery-sort.md) for how to save a different default for a library.
+**Verify:** Confirm that `/opds/` reaches Shisho without a redirect and that generated links use the external HTTPS scheme.
 
-When a feed is not scoped to a single library (for example, the all-books root feed across a user's libraries), Shisho uses the same builtin default — **Date added, newest first** — because `user_library_settings` is per-library by design.
+**Fix:** Forward `/opds/`, preserve `Authorization`, and pass the original scheme with `X-Forwarded-Proto: https`. If another proxy is in front of Shisho's bundled Caddy server, configure it as a trusted proxy before relying on forwarded headers. See [Deployment and Maintenance](./deployment-and-maintenance.md) and [Troubleshooting](./troubleshooting.md).
+
+### Missing Libraries or Books
+
+**Symptom:** A library or expected book is absent from the catalog.
+
+**Likely cause:** The account lacks library access, the `{types}` selection excludes the book's main formats, or the file is a supplement.
+
+**Verify:** Check the user's library access and compare the book's main-file types with the type segment in the catalog URL.
+
+**Fix:** Grant the intended [library access](./users-and-permissions.md) or update the catalog URL to include the required type. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).

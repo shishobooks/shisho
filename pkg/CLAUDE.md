@@ -33,7 +33,7 @@ Each domain (books, jobs, libraries, chapters) has:
 
 - Processes jobs from database queue
 - Main job type: scan job that processes ebook/audiobook files
-- Extracts metadata from EPUB (via `pkg/epub/`) and M4B files (via `pkg/mp4/`)
+- Extracts metadata from EPUB, CBZ, M4B, and PDF files through the format packages listed below
 - Generates cover images with filename-based storage strategy
 - **Library monitor** (`monitor.go`): watches library paths for filesystem changes via fsnotify, debounces events, and triggers targeted single-file rescans. Remove/Rename events landing on a directory path (which fsnotify emits for the directory itself, not the files inside) are queued as `pendingEvent{IsDirectory: true}` and fan out to per-file cleanup for every DB file whose filepath sits under that directory, so removing or renaming a book folder cleans up its book/file rows instead of leaving them orphaned. **Move detection via content hashing.** When the monitor processes a batch that contains any REMOVE events, it computes sha256 synchronously for CREATE events in the same batch and looks up matches in `file_fingerprints`. If an existing file row has a matching sha256 and its stored path is gone from disk, the monitor repurposes that row's `filepath` rather than deleting + recreating. This preserves book identity and user-edited metadata across folder renames. The scan job performs the same reconciliation as a safety net after its walk phase, handling cases where renames happened while the server was offline. Sha256 hashes are populated by a background `hash_generation` job queued at the end of every scan and every monitor batch that creates new files. Fingerprints are invalidated when a file's size/mtime changes so the next job run recomputes them against the new content.
 
@@ -124,7 +124,7 @@ Metadata sources ranked (lower number = higher precedence):
 0: Manual (highest)
 1: Sidecar
 2: Plugin (enrichers and file parsers)
-3: File Metadata (epub_metadata, cbz_metadata, m4b_metadata)
+3: File Metadata (epub_metadata, cbz_metadata, m4b_metadata, pdf_metadata)
 4: Filepath (lowest)
 ```
 
@@ -502,7 +502,7 @@ for _, id := range newGenreIDs {
 ## File Processing Flow
 
 1. **Scan Job Creation**: User triggers scan via API
-2. **File Discovery**: Worker scans library paths for `.epub`, `.m4b`, `.cbz` files
+2. **File Discovery**: Worker scans library paths for native `.epub`, `.m4b`, `.cbz`, and `.pdf` files plus extensions registered by plugin parsers and converters
 3. **Metadata Extraction**: Parse files to extract title, authors, cover images
 4. **Database Storage**: Create/update Book and File records
 5. **Cover Generation**: Save individual covers + generate canonical covers
@@ -510,7 +510,7 @@ for _, id := range newGenreIDs {
 
 ## Chapters System
 
-Chapters are file-level metadata extracted from CBZ, EPUB, and M4B files.
+Chapters are file-level metadata extracted from CBZ, PDF, EPUB, and M4B files.
 
 ### Database Model (`pkg/models/chapter.go`)
 
@@ -521,7 +521,7 @@ type Chapter struct {
     ParentID         *int      // Self-referential for nested chapters (EPUB)
     SortOrder        int       // Order within parent (0-indexed)
     Title            string
-    StartPage        *int      // CBZ: 0-indexed page number
+    StartPage        *int      // CBZ/PDF: 0-indexed page number
     StartTimestampMs *int64    // M4B: milliseconds from start
     Href             *string   // EPUB: content document href
     Children         []*Chapter // Loaded via relation
@@ -560,13 +560,14 @@ Chapters are synced during file scan in `pkg/worker/scan.go`:
 | File Type | Position Field | Example |
 |-----------|---------------|---------|
 | CBZ | `StartPage` | `0` (first page) |
+| PDF | `StartPage` | `0` (first page) |
 | M4B | `StartTimestampMs` | `3600000` (1 hour) |
 | EPUB | `Href` | `"chapter1.xhtml"` |
 
 ### Validation
 
 PUT endpoint validates chapters against file constraints:
-- CBZ: `start_page` must be < `file.PageCount`
+- CBZ/PDF: `start_page` must be < `file.PageCount`
 - M4B: `start_timestamp_ms` must be <= `file.AudiobookDurationSeconds * 1000`
 
 ## Key Directories
@@ -576,7 +577,7 @@ PUT endpoint validates chapters against file constraints:
 | Entry point | `cmd/api/main.go` |
 | Models | `pkg/models/` |
 | Domain services | `pkg/{domain}/` (books, jobs, libraries, chapters, etc.) |
-| File parsers | `pkg/epub/`, `pkg/cbz/`, `pkg/mp4/` |
+| File parsers | `pkg/epub/`, `pkg/cbz/`, `pkg/mp4/`, `pkg/pdf/` |
 | File generators | `pkg/filegen/` |
 | Scanner/Worker | `pkg/worker/` |
 | Sidecars | `pkg/sidecar/` |

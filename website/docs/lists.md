@@ -1,67 +1,67 @@
----
-sidebar_position: 80
----
-
 # Lists
 
-Lists are user-created collections that let you organize books across libraries. Unlike libraries, which map to directories on disk, lists are virtual groupings you define yourself — like a reading queue, a favorites shelf, or a themed collection.
+Lists are virtual collections of books from one or more libraries. Use them for a reading queue, favorites, rankings, or any collection that should not change the filesystem.
 
-## Creating a List
+## Creating Lists and Using Templates
 
-You can create a list from the **Lists** page in the sidebar. Each list has a name, an optional description, and a choice between **ordered** and **unordered** mode.
+Create a list from **Lists**. Set its name, optional description, and mode:
 
-You can also quick-start with a built-in template:
+- **Ordered** lists have a manual sequence.
+- **Unordered** lists use an automatic sort.
 
-- **To Be Read** — An ordered list for tracking your reading queue
-- **Favorites** — An unordered list for books you love
+Built-in templates provide a quick starting point:
 
-## Ordered vs. Unordered
+- **To Be Read** creates an ordered reading queue.
+- **Favorites** creates an unordered collection.
 
-**Ordered lists** let you arrange books in a specific sequence using drag-and-drop. This is useful for reading queues or ranked lists where position matters. The default sort for ordered lists is manual.
-
-**Unordered lists** sort books automatically by criteria like title, author, or when they were added. You can change the sort at any time and save it as the list's default.
-
-Available sort options for unordered lists:
-
-- Recently added / Oldest added
-- Title A–Z / Z–A
-- Author A–Z / Z–A
+Templates set initial values only. You can edit the resulting list normally.
 
 ## Adding Books
 
-There are several ways to add books to a list:
+Add books using either current workflow:
 
-- **From a book's detail page** — Use the "Add to List" action to select which lists the book belongs to
-- **From bulk selection** — Select multiple books in a library view and use the "Add to List" toolbar button
-- **From the list itself** — Use the add button on the list detail page
+- On a book detail page, choose **Add to List**.
+- In a library gallery, click **Select**, select one or more books, then choose **Add** and **Add to List**.
 
-Books from any library can be added to the same list.
+The list detail page does not currently provide an add-books picker. A list can contain books from different libraries, subject to each viewer's library access.
 
-## Reordering
+## Sorting and Reordering
 
-In ordered lists, you can reorder books by dragging them to a new position. For paginated lists where the target position is on a different page, use the "Move to Position" option to specify an exact position number.
+Ordered lists default to manual order. Drag and drop is available only on page 1 when all list items fit on that page. If the list spans pages, the current interface does not provide cross-page drag reordering or a **Move to Position** command.
+
+Unordered lists can sort by:
+
+- **Recently added** or **Oldest added**
+- **Title A–Z** or **Title Z–A**
+- **Author A–Z** or **Author Z–A**
+
+Save the chosen sort as the list default when you want other visits to open in that order.
+
+## Converting List Modes
+
+You can convert an existing list at any time:
+
+- Switching to ordered assigns positions by when books were added, oldest first, and changes the sort to manual.
+- Switching to unordered clears manual positions and changes the sort to recently added.
+
+Conversion changes ordering behavior, not list membership.
 
 ## Sharing
 
-Lists can be shared with other users at three permission levels:
+The owner has full control, including deletion. Shares use these list-specific roles:
 
-| Permission | Can View | Can Add/Remove Books | Can Edit List | Can Share |
-|------------|----------|----------------------|---------------|-----------|
-| **Viewer** | Yes | | | |
-| **Editor** | Yes | Yes | | |
+| Role | View | Add or Remove Books | Edit List | Manage Sharing |
+|---|---:|---:|---:|---:|
+| **Viewer** | Yes | No | No | No |
+| **Editor** | Yes | Yes | No | No |
 | **Manager** | Yes | Yes | Yes | Yes |
 
-The list owner always has full control, including the ability to delete the list.
+The backend also requires the global `users:read` permission to view or change sharing because sharing exposes user information. A list **Manager** without `users:read` cannot manage shares, even if the interface presents a sharing control. With the default roles, only **Admin** has `users:read`.
 
-Shared lists show attribution for who added each book, so collaborators can see each other's contributions.
+Shared lists record who added each book.
 
-### Library Access Filtering
+## Library Access Filtering
 
-When viewing a shared list, you only see books from libraries you have access to. If a book is in a library you can't access, it's hidden from your view — but it isn't removed from the list. If you later gain access to that library, the book reappears.
+Each viewer sees only list books from libraries they can access. Hidden books remain members of the list and reappear if the viewer later gains access. List sharing never grants access to a library.
 
-## Switching Between Ordered and Unordered
-
-You can convert an existing list between ordered and unordered at any time:
-
-- **Switching to ordered** assigns positions to all books based on when they were added (oldest first) and sets the sort to manual
-- **Switching to unordered** clears all positions and sets the sort to recently added
+See [Users and Permissions](./users-and-permissions.md) for global roles and library grants, and [Browsing, Search, and Bulk Actions](./browsing-search-bulk-actions.md) for gallery selection and size controls.

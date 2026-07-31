@@ -1,98 +1,118 @@
----
-sidebar_position: 140
----
-
 # Supplement Files
 
-Supplement files are additional files associated with a book that aren't the primary readable media — things like companion PDFs, liner notes, artwork, or reference material. Shisho discovers these automatically during library scans and links them to the parent book.
+Supplement files are additional files associated with a book, such as companion guides, liner notes, maps, artwork, and errata. Shisho discovers them during [library scans](./libraries.md).
 
-## What Counts as a Supplement
+## Main Files and Supplements
 
-Any file in a book's directory that isn't a main file type (EPUB, CBZ, M4B) is treated as a supplement. Common examples:
+Shisho's native main-file formats are EPUB, CBZ, M4B, and PDF. CBR is not native unless a [plugin](./plugins/overview.md) adds support. Files that are not recognized as main files can be linked to a nearby book as supplements.
 
-- PDF companion guides or liner notes
-- Text files with notes or errata
-- Image files (artwork, maps)
-- Any other non-media files
+A supplement's display name is derived from its filename. Shisho does not extract embedded book or file metadata from supplements.
 
-## How Supplements Are Discovered
+## Directory-Based Discovery
 
-Discovery works differently depending on whether the book is in a directory or at the library root.
+For a book stored in its own directory, Shisho recursively links eligible non-main files anywhere below that book directory:
 
-### Directory-Based Books
-
-All non-main files in the book's directory (and its subdirectories) are linked as supplements:
-
-```
+```text
 [Author] Book Title/
-├── book.epub              ← main file
-├── companion-guide.pdf    ← supplement
-├── notes.txt              ← supplement
+├── book.epub
+├── companion-guide.txt
+├── notes.txt
 └── extras/
-    ├── map.jpg            ← supplement
-    └── appendix.pdf       ← supplement
+    ├── map.jpg
+    └── appendix.txt
 ```
 
-### Root-Level Books
+All four files other than `book.epub` are candidates for supplement discovery.
 
-For books that aren't in their own directory, only files with a **matching basename** are linked:
-
-```
-library/
-├── My Book.m4b            ← main file
-├── My Book.pdf            ← supplement (same basename)
-├── My Book - Notes.txt    ← NOT linked (different basename)
-└── Other File.pdf         ← NOT linked (different basename)
-```
-
-## Excluded Files
-
-Some files are automatically excluded from supplement discovery:
-
-- **Main file types**: `.epub`, `.cbz`, `.cbr`, `.m4b`
-- **Shisho internal files**: cover images (`*.cover.*`) and [sidecar files](./sidecar-files) (`*.metadata.json`)
-- **Hidden and system files**: configurable via `supplement_exclude_patterns`
-
-### Exclude Patterns
-
-The `supplement_exclude_patterns` [configuration](./configuration) option controls which files are skipped. The default patterns are:
-
-```yaml
-supplement_exclude_patterns:
-  - ".*"
-  - ".DS_Store"
-  - "Thumbs.db"
-  - "desktop.ini"
-```
-
-The `.*` pattern matches all hidden files (files starting with a dot). You can add additional patterns using glob syntax (e.g., `*.tmp`, `backup-*`).
-
-## PDF Auto-Classification
-
-Companion PDFs that share a directory with a main book file are sometimes named generically (`Supplement.pdf`, `Bonus Material.pdf`, etc.). To avoid manually demoting these every scan, Shisho automatically classifies a PDF as a supplement when:
-
-1. Its basename matches an entry in `pdf_supplement_filenames` (case-insensitive, exact match — substrings do not match), AND
-2. A sibling main file (`.epub`, `.cbz`, `.m4b`, or a [plugin-registered](./plugins/overview) file extension) exists in the same directory tree.
-
-A PDF alone in its directory always imports as a main file regardless of name, so books are never silently dropped.
-
-```
-[Author] My Book/
-├── My Book.epub          ← main file
-└── Supplement.pdf        ← classified as supplement (matches default list)
-```
-
-The check runs only at file creation. Existing main-file PDFs whose names happen to match the list are not retroactively reclassified. To change which names trigger classification, see the [`pdf_supplement_filenames` setting](./configuration#supplement-discovery).
-
-## Working with Supplements
-
-Supplements appear on the book detail page alongside the main files. You can:
-
-- **Download** any supplement file
-- **Rename** the display name
-- **Promote** a supplement to a main file if it should be treated as a primary format
-- **Demote** a main file to a supplement if it shouldn't be a primary format
-
-:::tip
-Promoting a supplement to a main file will trigger [metadata extraction](./metadata#how-metadata-is-extracted) for that file. Demoting a main file to a supplement clears its format-specific metadata (cover, chapters, audiobook data, etc.).
+:::warning
+Directory grouping is intentionally broad. If one directory contains unrelated books or general-purpose files, those files may all be attached to the same book. Keep each directory limited to one logical book and its extras.
 :::
+
+## Root-Level Discovery
+
+For a main file stored directly at a configured library root, Shisho checks files in that same root. A candidate matches when its basename is equal to, or starts with, the main file's basename.
+
+```text
+library/
+├── My Book.m4b
+├── My Book.pdf
+├── My Book - Notes.txt
+├── My Booklet.jpg
+└── Other Book.txt
+```
+
+`My Book - Notes.txt` and `My Booklet.jpg` match the `My Book.m4b` prefix and become supplements. `Other Book.txt` does not match. `My Book.pdf` remains a native main file rather than becoming a supplement because main-file extensions are excluded before prefix matching.
+
+Prefix matching is literal and can be broader than expected. For example, `My Booklet.jpg` matches `My Book`. Use distinctive main filenames or put the book in its own directory if similarly named files should remain separate.
+
+## Exclusions
+
+Discovery skips:
+
+- Native main-file extensions and files already tracked by Shisho as main files.
+- Shisho cover files and [Sidecar Metadata Files](./sidecar-files.md).
+- Files matching `supplement_exclude_patterns`.
+- Directories when evaluating root-level candidates.
+
+The default exclusion patterns cover hidden files and common operating-system files. Configure exceptions and additional globs in [Configuration](./configuration.md#supplement-discovery) instead of relying on repeated manual demotion.
+
+## PDF Auto-Demotion
+
+A newly created PDF is automatically imported as a supplement only when all of these conditions are true:
+
+1. It is part of a directory-based book, not a file at a configured library root.
+2. Its basename is an exact, case-insensitive match for a configured `pdf_supplement_filenames` value.
+3. The same book directory already has a Shisho book or contains a non-PDF main file, such as EPUB, CBZ, M4B, or a plugin-registered format.
+
+For example, `Supplement.pdf` can be auto-demoted beside `Book.epub` when `supplement` is configured. `My Supplement.pdf` is not an exact match for `supplement`.
+
+The rule runs only when the PDF is first created in Shisho. Existing PDFs are not reclassified by later scans. A root-level PDF remains a main PDF even when its basename matches the configured list.
+
+## Managing Supplements
+
+Changing file roles requires **Books Write** permission and access to the book's library. See [Users and Permissions](./users-and-permissions.md).
+
+:::warning
+Demoting a main file clears its extracted format metadata, including its cover and chapters, but does not delete the media file from disk. Verify that the metadata can be recovered from the source or a backup before demoting. Leave the file as main if you only need to download it normally.
+:::
+
+You can:
+
+- Download a supplement.
+- Rename its display name.
+- **Promote** a supported supplement to a main file. Promotion triggers metadata extraction for that format.
+- **Demote** a main file to a supplement. Demotion clears its format-specific metadata.
+
+Supplements are excluded from Kobo Sync and normal bulk-download selection. They are also excluded from surfaces that distribute main reading files, even if the supplement itself uses EPUB, CBZ, M4B, or PDF.
+
+## Troubleshooting
+
+### A File Was Not Discovered
+
+**Symptom:** An expected supplement does not appear on the book.
+
+**Likely cause:** It is outside the book directory, its root-level basename does not match, an exclusion pattern matched it, or Shisho already treats it as a main file.
+
+**Verify:** Compare its location and basename with the discovery rules above, then review `supplement_exclude_patterns` and its current file role.
+
+**Fix:** Move or rename the file to match the intended book, adjust the exclusion configuration if appropriate, and rescan.
+
+### An Unrelated File Was Attached
+
+**Symptom:** A book shows a supplement that belongs elsewhere.
+
+**Likely cause:** The book directory contains unrelated files or a root-level filename shares a broad prefix.
+
+**Verify:** Check the candidate's directory and compare its basename with the main file's basename.
+
+**Fix:** Separate books into distinct directories or rename root-level files to avoid the shared prefix, then rescan.
+
+### A PDF Has the Wrong Role
+
+**Symptom:** A companion PDF stayed main, or a new PDF became a supplement unexpectedly.
+
+**Likely cause:** Auto-demotion depends on creation time, directory placement, an exact configured basename, and an appropriate sibling.
+
+**Verify:** Check whether the PDF was newly created in a directory-based book, then compare its exact basename with `pdf_supplement_filenames` and inspect the other recognized files in that directory tree.
+
+**Fix:** Promote or demote the file manually for the current book. Adjust `pdf_supplement_filenames` only if the automatic rule should change for future files. See [Libraries, Scanning, and File Organization](./libraries.md), [Configuration](./configuration.md), and [Troubleshooting](./troubleshooting.md).
