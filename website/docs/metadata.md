@@ -50,6 +50,8 @@ Use **Edit** on a book or file for direct changes. Use **Identify** to search co
 
 When [file organization](./libraries.md#file-organization) is enabled for the library, Identify reorganizes files after applying path-affecting changes. This includes an explicitly selected file **Name** and removal of the final series membership, which removes obsolete series-number suffixes from organized CBZ and hybrid book folders.
 
+When you apply a plugin-proposed file Name unchanged, it remains plugin-sourced. If you edit the proposed Name before applying it, Shisho treats the result as a manual edit, so normal scans protect it from plugin, embedded, and filepath metadata.
+
 ## Metadata Source Priority
 
 During a normal scan, Shisho resolves conflicting values in this order:

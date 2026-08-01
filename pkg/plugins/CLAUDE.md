@@ -69,9 +69,14 @@ Conventions and gotchas specific to this surface:
   payload structs (e.g. `InstallPluginPayload.Name`) carry `,omitempty` solely so
   tygo emits `?`; payloads are only unmarshaled server-side, so this never
   affects the wire.
-- **`SeriesEntry` / `ApplyOverrides` are not wire types**: they're parsed out of
-  `PluginApplyPayload.Fields`' untyped map. Their generated TS mirrors are a
-  side effect the frontend never imports.
+- **`SeriesEntry` / `ApplyOverrides` are not wire types**: `SeriesEntry` is
+  parsed out of `PluginApplyPayload.Fields`, while `ApplyOverrides` is assembled
+  from the payload's apply-only signals. Their generated TS mirrors are a side
+  effect the frontend never imports.
+- **`file_name_source` is Identify source intent, not canonical attribution**:
+  the request accepts only `plugin` or `user`. `applyMetadata` maps those values
+  to `plugin:<scope>/<id>` or `manual` before constructing `ApplyOverrides`, so
+  raw intent values never reach `files.name_source`.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.

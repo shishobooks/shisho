@@ -122,26 +122,6 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	return md
 }
 
-// convertFieldsToOverrides extracts apply-path-only signals from the
-// untyped fields map. Returns nil when no overrides are present, so
-// callers can cheaply skip the explicit-write code path.
-func convertFieldsToOverrides(fields map[string]any) *ApplyOverrides {
-	var out *ApplyOverrides
-	if v, ok := fields["file_name"].(string); ok && v != "" {
-		if out == nil {
-			out = &ApplyOverrides{}
-		}
-		out.FileName = &v
-	}
-	if v, ok := fields["file_name_source"].(string); ok && v != "" {
-		if out == nil {
-			out = &ApplyOverrides{}
-		}
-		out.FileNameSource = &v
-	}
-	return out
-}
-
 // extractSeriesEntries checks whether fields["series"] is an array of
 // objects (the multi-series format sent by the identify form). Returns
 // nil when the key is absent or is a string (handled by convertFieldsToMetadata).

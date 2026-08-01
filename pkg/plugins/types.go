@@ -164,6 +164,12 @@ type PluginSearchPayload struct {
 	Identifiers []mediafile.ParsedIdentifier `json:"identifiers,omitempty" tstype:"ParsedIdentifier[]"`
 }
 
+const (
+	//tygo:emit export type FileNameSourceIntent = typeof FileNameSourceIntentPlugin | typeof FileNameSourceIntentUser;
+	FileNameSourceIntentPlugin = "plugin"
+	FileNameSourceIntentUser   = "user"
+)
+
 // PluginApplyPayload is the body of POST /plugins/apply. Fields carries the
 // user-selected metadata as an untyped map (converted server-side by
 // convertFieldsToMetadata / extractSeriesEntries).
@@ -175,9 +181,10 @@ type PluginApplyPayload struct {
 	// empty string as absent; only set when the user explicitly opts the
 	// Name field into the apply payload.
 	FileName *string `json:"file_name"`
-	// FileNameSource is the source attribution for file.Name: "plugin" when
-	// the saved value matches the plugin's proposal, "user" when edited.
-	FileNameSource *string `json:"file_name_source" tstype:"'plugin' | 'user'"`
+	// FileNameSource is Identify source intent: "plugin" when the saved value
+	// matches the plugin proposal, or "user" when edited. The apply boundary
+	// maps this intent to a canonical DataSource before persistence.
+	FileNameSource *string `json:"file_name_source" validate:"omitempty,oneof=plugin user" tstype:"FileNameSourceIntent"`
 	PluginScope    string  `json:"plugin_scope" validate:"required"`
 	PluginID       string  `json:"plugin_id" validate:"required"`
 }
@@ -247,7 +254,7 @@ type ApplyOverrides struct {
 	// Empty string is treated as nil (treat absent or "" as no-op so
 	// callers don't need to special-case empty inputs).
 	FileName *string
-	// FileNameSource is the value to write to file.NameSource. Nil
+	// FileNameSource is the canonical value to write to file.NameSource. Nil
 	// means "default to the plugin source for this apply call".
 	FileNameSource *string
 	// SeriesEntries, when non-nil, replaces the book's series associations
