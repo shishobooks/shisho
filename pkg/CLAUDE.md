@@ -436,6 +436,9 @@ When a metadata field that affects file paths is edited via API, trigger file re
 - `file.Narrators` - affects the filename for audiobooks
 - `book.Authors` - affects the directory structure
 - `book.Title` - affects the directory structure
+- `book.BookSeries` membership and series number fields - affect CBZ and hybrid book folder suffixes
+
+Path-affecting removal operations must also trigger reorganization. For example, Identify represents clearing all series memberships as a present but empty series collection, which must remain distinct from an absent series field.
 
 **Pattern in handlers:**
 ```go

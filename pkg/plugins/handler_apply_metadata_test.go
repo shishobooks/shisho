@@ -29,14 +29,18 @@ func (s *stubBookStoreForApply) OrganizeBookFiles(_ context.Context, _ *models.B
 // stubRelStoreForApply is a no-op relationStore for applyMetadata tests.
 // When captureBookSeries is non-nil, CreateBookSeries appends to it.
 type stubRelStoreForApply struct {
-	capturedBookSeries []*models.BookSeries
+	capturedBookSeries     []*models.BookSeries
+	deleteBookSeriesCalled bool
 }
 
 func (s *stubRelStoreForApply) DeleteAuthors(_ context.Context, _ int) error { return nil }
 func (s *stubRelStoreForApply) CreateAuthor(_ context.Context, _ *models.Author) error {
 	return nil
 }
-func (s *stubRelStoreForApply) DeleteBookSeries(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) DeleteBookSeries(_ context.Context, _ int) error {
+	s.deleteBookSeriesCalled = true
+	return nil
+}
 func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, bs *models.BookSeries) error {
 	s.capturedBookSeries = append(s.capturedBookSeries, bs)
 	return nil
@@ -151,6 +155,45 @@ func newApplyTestBookWithFile(t *testing.T, title string, fileType string) (*mod
 	}
 	book.Files = []*models.File{file}
 	return book, file
+}
+
+func TestApplyMetadata_OrganizesFiles_WhenExplicitFileNameChanges(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	oldName := "Old Name"
+	file.Name = &oldName
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", models.DataSourceManual)
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "New Name", *file.Name)
+	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when an explicit file Name changes")
+}
+
+func TestApplyMetadata_OrganizesFiles_WhenAllSeriesMembershipsAreCleared(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	book.BookSeries = []*models.BookSeries{{BookID: book.ID, SeriesID: 1}}
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h, rel := newApplyTestHandlerWithRelStore(store)
+	c := newApplyEchoContext(t, map[string]any{"series": []any{}})
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.True(t, rel.deleteBookSeriesCalled, "all series memberships should be deleted")
+	assert.Empty(t, rel.capturedBookSeries, "no series memberships should be recreated")
+	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when all series memberships are cleared")
 }
 
 func TestApplyMetadata_OrganizesFiles_WhenTitleChanges(t *testing.T) {
