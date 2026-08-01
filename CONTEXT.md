@@ -64,6 +64,23 @@ The process of discovering and importing files from the filesystem into a librar
 **Identify**:
 An interactive workflow where a user matches a book against an external source (via plugins) to enrich metadata.
 
+The following terms describe accepted semantics for planned Identify provenance work in #448. They are not yet fully implemented.
+
+**Plugin Proposal**:
+A metadata value or relationship collection suggested by a plugin during Identify.
+
+**Proposal Acceptance**:
+When the user has not made an Explicit Clear, their final metadata result differs semantically from the current metadata and matches the Plugin Proposal. This remains a Proposal Acceptance if the user temporarily edited the proposal before restoring it, unless the final result is also a no-op against the current metadata.
+
+**Metadata Provenance**:
+The source responsible for establishing the current meaning of a metadata value or relationship. Under the planned Identify rules, a no-op preserves existing provenance, an Explicit Clear removes provenance, a Proposal Acceptance has plugin provenance, and any other changed nonempty result has manual provenance.
+
+**Relationship Provenance**:
+The provenance of a relationship collection as a whole. The planned Identify rules use Relationship Provenance for Authors, Genres, Tags, Narrators, and Series memberships. Identifiers additionally retain provenance for each entry.
+
+**Explicit Clear**:
+A user's deliberate removal of a metadata value or all entries in a relationship. Under the planned Identify rules, the resulting absence has no enduring provenance and may be repopulated by a later Scan.
+
 **Merge**:
 Combining two resources of the same type into one, transferring all associations from the source to the target and deleting the source.
 
