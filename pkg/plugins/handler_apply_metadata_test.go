@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -167,7 +168,7 @@ func TestApplyMetadata_OrganizesFiles_WhenExplicitFileNameChanges(t *testing.T) 
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
 	h := newApplyTestHandler(store)
-	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", models.DataSourceManual)
+	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", FileNameSourceIntentUser)
 
 	err := h.applyMetadata(c)
 	require.NoError(t, err)
@@ -612,11 +613,7 @@ func TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault(t *test
 		"absent file_name_source defaults to the plugin source for this apply call")
 }
 
-// TestApplyMetadata_ExplicitFileName_HonorsExplicitSource verifies that
-// when the payload carries file_name_source, that exact value is written
-// to file.NameSource. This lets the Phase 2 frontend distinguish "user
-// accepted the plugin's proposed Name" from "user edited Name manually".
-func TestApplyMetadata_ExplicitFileName_HonorsExplicitSource(t *testing.T) {
+func TestApplyMetadata_ExplicitFileName_UserIntentUsesManualSource(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
@@ -627,7 +624,7 @@ func TestApplyMetadata_ExplicitFileName_HonorsExplicitSource(t *testing.T) {
 	c := newApplyEchoContextWithFileName(t,
 		map[string]any{"title": "New Title"},
 		"My Custom Edition Name",
-		models.DataSourceManual)
+		"user")
 
 	err := h.applyMetadata(c)
 	require.NoError(t, err)
@@ -635,8 +632,52 @@ func TestApplyMetadata_ExplicitFileName_HonorsExplicitSource(t *testing.T) {
 	require.NotNil(t, file.Name)
 	assert.Equal(t, "My Custom Edition Name", *file.Name)
 	require.NotNil(t, file.NameSource)
-	assert.Equal(t, models.DataSourceManual, *file.NameSource,
-		"explicit file_name_source must be written verbatim")
+	assert.Equal(t, models.DataSourceManual, *file.NameSource)
+}
+
+func TestApplyMetadata_ExplicitFileName_PluginIntentUsesSpecificPluginSource(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContextWithFileName(t,
+		map[string]any{"title": "New Title"},
+		"New Title",
+		"plugin")
+
+	err := h.applyMetadata(c)
+	require.NoError(t, err)
+
+	require.NotNil(t, file.Name)
+	assert.Equal(t, "New Title", *file.Name)
+	require.NotNil(t, file.NameSource)
+	assert.Equal(t, models.PluginDataSource("test", "enricher"), *file.NameSource)
+}
+
+func TestApplyMetadata_ExplicitFileName_RejectsUnsupportedSourceIntent(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
+	store := &stubBookStoreForApply{
+		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	}
+	h := newApplyTestHandler(store)
+	c := newApplyEchoContextWithFileName(t,
+		map[string]any{"title": "New Title"},
+		"New Title",
+		models.DataSourceManual)
+
+	err := h.applyMetadata(c)
+	require.Error(t, err)
+
+	var ec *errcodes.Error
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, http.StatusUnprocessableEntity, ec.HTTPCode)
+	assert.Nil(t, file.Name)
+	assert.Nil(t, file.NameSource)
 }
 
 // TestApplyMetadata_ExplicitFileName_PreservesEditionName_NonPrimaryFile is

@@ -62,7 +62,14 @@ import {
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
-import { AuthorRoleWriter, FileTypeCBZ, type Book, type File } from "@/types";
+import {
+  AuthorRoleWriter,
+  FileNameSourceIntentPlugin,
+  FileNameSourceIntentUser,
+  FileTypeCBZ,
+  type Book,
+  type File,
+} from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatDuration, formatMetadataFieldLabel } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
@@ -1169,7 +1176,10 @@ export function IdentifyReviewForm({
 
     if (decisions.name && name.trim()) {
       payload.file_name = name;
-      payload.file_name_source = name === initialName ? "plugin" : "user";
+      payload.file_name_source =
+        name === initialName
+          ? FileNameSourceIntentPlugin
+          : FileNameSourceIntentUser;
     }
 
     try {
