@@ -647,6 +647,92 @@ describe("IdentifyReviewForm component", () => {
     expect(payload.file_name_source).toBe("user");
   });
 
+  it("blocks a selected blank Title with a visible validation error", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({
+        title: "Saved Title",
+        title_source: DataSourceFilepath,
+      }),
+      result: makeResult({ title: "Suggested Title" }),
+    });
+
+    const titleRow = screen
+      .getByText("Title", { selector: "label" })
+      .closest("div.grid");
+    expect(titleRow).not.toBeNull();
+    await user.clear(
+      within(titleRow as HTMLElement).getByDisplayValue("Suggested Title"),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Title cannot be blank",
+    );
+    expect(getApplyButton()).toBeDisabled();
+    expect(applyMock).not.toHaveBeenCalled();
+  });
+
+  it("submits selected clears for strings, collections, abridged, and Name", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({
+        subtitle: "Saved Subtitle",
+        files: [
+          makeFile({
+            name: "Saved Edition",
+            abridged: true,
+            identifiers: [
+              {
+                id: 1,
+                file_id: 1,
+                type: "isbn_13",
+                value: "9780316769488",
+                source: DataSourceManual,
+                created_at: "2024-01-01T00:00:00Z",
+                updated_at: "2024-01-01T00:00:00Z",
+              },
+            ],
+          }),
+        ],
+      }),
+      result: makeResult({ abridged: true }),
+    });
+
+    await user.click(screen.getByRole("button", { name: /^all$/i }));
+    await user.click(
+      screen.getByRole("button", { name: /toggle book section/i }),
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: /apply subtitle/i }));
+    await user.clear(screen.getByDisplayValue("Saved Subtitle"));
+
+    const nameRow = screen.getByText("Name").closest("div.grid");
+    expect(nameRow).not.toBeNull();
+    await user.clear(
+      within(nameRow as HTMLElement).getByDisplayValue("Some Title"),
+    );
+
+    await user.click(
+      screen.getByRole("checkbox", { name: /apply identifiers/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /remove isbn-13/i }));
+
+    await user.click(screen.getByRole("checkbox", { name: /apply abridged/i }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /mark as abridged/i }),
+    );
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    const payload = applyMock.mock.calls[0][0];
+    expect(payload.fields.subtitle).toBe("");
+    expect(payload.fields.identifiers).toEqual([]);
+    expect(payload.fields.abridged).toBeNull();
+    expect(payload.file_name).toBe("");
+    expect(payload.file_name_source).toBe("user");
+  });
+
   it("hides unchanged rows in the default Changed filter, shows them in All", async () => {
     const user = createUser();
     renderForm({

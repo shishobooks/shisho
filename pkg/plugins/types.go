@@ -177,9 +177,8 @@ type PluginApplyPayload struct {
 	BookID int            `json:"book_id" validate:"required"`
 	FileID *int           `json:"file_id"`
 	Fields map[string]any `json:"fields" validate:"required"`
-	// FileName is an optional override for file.Name. The backend treats an
-	// empty string as absent; only set when the user explicitly opts the
-	// Name field into the apply payload.
+	// FileName is an optional override for file.Name. Omitted leaves the name
+	// untouched; an explicitly selected blank string clears it.
 	FileName *string `json:"file_name"`
 	// FileNameSource is Identify source intent: "plugin" when the saved value
 	// matches the plugin proposal, or "user" when edited. The apply boundary
@@ -250,9 +249,12 @@ type SeriesEntry struct {
 // contract). These come exclusively from the identify apply payload —
 // plugins do not model them.
 type ApplyOverrides struct {
-	// FileName is the value to write to file.Name. Nil = no change.
-	// Empty string is treated as nil (treat absent or "" as no-op so
-	// callers don't need to special-case empty inputs).
+	// SelectedFields records valid fields explicitly included in the Identify
+	// apply payload. It preserves the distinction between omitted zero values
+	// (leave untouched) and selected zero values (clear).
+	SelectedFields map[string]bool
+	// FileName is the normalized value to write to file.Name. Nil = no change.
+	// A pointer to an empty string explicitly clears the name.
 	FileName *string
 	// FileNameSource is the canonical value to write to file.NameSource. Nil
 	// means "default to the plugin source for this apply call".

@@ -541,12 +541,21 @@ func TestExtractSeriesEntries_SkipsEmptyNames(t *testing.T) {
 	got := extractSeriesEntries(map[string]any{
 		"series": []any{
 			map[string]any{"name": ""},
+			map[string]any{"name": "   "},
 			map[string]any{"name": "Valid"},
 		},
 	})
 	require.NotNil(t, got)
 	require.Len(t, *got, 1)
 	assert.Equal(t, "Valid", (*got)[0].Name)
+}
+
+func TestExtractSeriesEntries_MalformedNonEmptyArrayIsAbsent(t *testing.T) {
+	t.Parallel()
+	got := extractSeriesEntries(map[string]any{
+		"series": []any{map[string]any{"name": "   "}},
+	})
+	assert.Nil(t, got)
 }
 
 func TestExtractSeriesEntries_InvalidUnit(t *testing.T) {
@@ -570,4 +579,45 @@ func TestConvertFieldsToMetadata_SeriesArrayDoesNotSetScalar(t *testing.T) {
 	}
 	md := convertFieldsToMetadata(fields)
 	assert.Empty(t, md.Series, "array format must not populate the scalar Series field")
+}
+
+func TestConvertFieldsToOverrides_NilWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	fields := map[string]any{}
+	got := convertFieldsToOverrides(fields, convertFieldsToMetadata(fields))
+	require.Nil(t, got)
+}
+
+func TestConvertFieldsToOverrides_TracksSelectedEmptyValues(t *testing.T) {
+	t.Parallel()
+
+	fields := map[string]any{
+		"subtitle":     "",
+		"authors":      []any{},
+		"release_date": "",
+		"abridged":     nil,
+	}
+	got := convertFieldsToOverrides(fields, convertFieldsToMetadata(fields))
+	require.NotNil(t, got)
+	assert.True(t, got.SelectedFields["subtitle"])
+	assert.True(t, got.SelectedFields["authors"])
+	assert.True(t, got.SelectedFields["release_date"])
+	assert.True(t, got.SelectedFields["abridged"])
+}
+
+func TestConvertFieldsToOverrides_IgnoresMalformedValues(t *testing.T) {
+	t.Parallel()
+
+	fields := map[string]any{
+		"authors":      []any{map[string]any{"name": "   ", "role": "writer"}},
+		"narrators":    []any{"   "},
+		"genres":       []any{"   "},
+		"tags":         []any{"   "},
+		"identifiers":  []any{map[string]any{"type": "isbn_13", "value": "   "}},
+		"language":     "not a language",
+		"release_date": "not a date",
+	}
+	got := convertFieldsToOverrides(fields, convertFieldsToMetadata(fields))
+	assert.Nil(t, got)
 }

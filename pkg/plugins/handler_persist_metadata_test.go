@@ -34,7 +34,9 @@ func makePersistTestJPEG(width, height int) []byte {
 // persistMetadata cover-write tests. Only UpdateFile and RetrieveBook
 // need to produce meaningful results for the cover-only persist path.
 type stubBookStoreForPersist struct {
-	book *models.Book
+	book                   *models.Book
+	deletedNarratorFileIDs []int
+	updatedFileColumns     [][]string
 }
 
 func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, _ []string) error {
@@ -45,11 +47,13 @@ func (s *stubBookStoreForPersist) RetrieveBook(_ context.Context, _ int) (*model
 	return s.book, nil
 }
 
-func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, _ *models.File, _ []string) error {
+func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, _ *models.File, columns []string) error {
+	s.updatedFileColumns = append(s.updatedFileColumns, append([]string(nil), columns...))
 	return nil
 }
 
-func (s *stubBookStoreForPersist) DeleteNarratorsForFile(_ context.Context, _ int) (int, error) {
+func (s *stubBookStoreForPersist) DeleteNarratorsForFile(_ context.Context, fileID int) (int, error) {
+	s.deletedNarratorFileIDs = append(s.deletedNarratorFileIDs, fileID)
 	return 0, nil
 }
 
@@ -467,6 +471,26 @@ func TestPersistMetadata_AllBlanksPreservesExistingIdentifiers(t *testing.T) {
 	assert.Empty(t, identStore.bulkCalls, "bulk insert must NOT fire when no valid identifiers")
 }
 
+func TestPersistMetadata_IdentifierClearUpdatesSourceAndReviewState(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	source := models.DataSourceManual
+	file.IdentifierSource = &source
+	store := &stubBookStoreForPersist{book: book}
+	identStore := &stubIdentStoreForPersist{}
+	h := &handler{enrich: &enrichDeps{bookStore: store, identStore: identStore}}
+	overrides := &ApplyOverrides{SelectedFields: map[string]bool{"identifiers": true}}
+
+	err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
+	require.NoError(t, err)
+
+	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
+	assert.Nil(t, file.IdentifierSource)
+	require.Len(t, store.updatedFileColumns, 1)
+	assert.Contains(t, store.updatedFileColumns[0], "identifier_source", "UpdateFile recomputes review state")
+}
+
 // Plugin returns coverPage for a non-page-based format (EPUB) — coverPage is
 // silently ignored, coverData (if provided) is applied.
 func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {
@@ -612,7 +636,7 @@ func TestPersistMetadata_IndexesNewSeries(t *testing.T) {
 func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
 	t.Parallel()
 
-	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeM4B)
 	indexer := &stubSearchIndexer{}
 	h := &handler{
 		enrich: &enrichDeps{
@@ -637,6 +661,30 @@ func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
 	assert.Len(t, indexer.indexedPersonIDs, 2, "both new author and new narrator must be added to persons_fts")
 	assert.Len(t, indexer.indexedGenreIDs, 1, "new genre must be added to genres_fts")
 	assert.Len(t, indexer.indexedTagIDs, 1, "new tag must be added to tags_fts")
+}
+
+func TestPersistMetadata_ReindexesAttachedSeriesWhenAuthorsCleared(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	series := &models.Series{ID: 99, LibraryID: book.LibraryID, Name: "Series"}
+	book.BookSeries = []*models.BookSeries{{BookID: book.ID, SeriesID: series.ID, Series: series}}
+	person := &models.Person{ID: 7, LibraryID: book.LibraryID, Name: "Author"}
+	book.Authors = []*models.Author{{BookID: book.ID, PersonID: person.ID, Person: person}}
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+	overrides := &ApplyOverrides{SelectedFields: map[string]bool{"authors": true}}
+
+	err := h.persistMetadata(context.Background(), book, nil, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
+	require.NoError(t, err)
+
+	assert.Contains(t, indexer.indexedSeriesIDs, series.ID)
 }
 
 // TestPersistMetadata_ReindexesDetachedOldSeries verifies that when an apply
@@ -862,14 +910,9 @@ func TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor(t *testing.T) {
 	assert.NotContains(t, indexer.indexedPersonIDs, 1, "author whose attachment did not change must NOT be re-indexed (avoids persons_fts churn)")
 }
 
-// TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent locks in
-// the boundary invariant that an `ApplyOverrides` with an empty FileName does
-// not write through to file.Name, even when paired with a non-empty
-// FileNameSource. The applyMetadata wire layer already guards on
-// `payload.FileName != ""`, but persistMetadata is also reachable from
-// future internal callers (or hand-built test payloads), so the same shape
-// must be defended at the function boundary.
-func TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent(t *testing.T) {
+// TestPersistMetadata_ExplicitFileName_EmptyStringClears verifies that an
+// explicitly selected empty file name clears both Name and NameSource.
+func TestPersistMetadata_ExplicitFileName_EmptyStringClears(t *testing.T) {
 	t.Parallel()
 
 	libraryDir := t.TempDir()
@@ -909,8 +952,6 @@ func TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent(t *testin
 	err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
 	require.NoError(t, err)
 
-	require.NotNil(t, file.Name)
-	assert.Equal(t, "Original Custom Name", *file.Name, "file.Name must NOT be blanked by an empty-string FileName override")
-	require.NotNil(t, file.NameSource)
-	assert.Equal(t, "manual", *file.NameSource, "file.NameSource must NOT be replaced when FileName is empty (the override is treated as absent)")
+	assert.Nil(t, file.Name)
+	assert.Nil(t, file.NameSource)
 }

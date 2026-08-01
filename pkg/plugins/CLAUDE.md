@@ -69,10 +69,15 @@ Conventions and gotchas specific to this surface:
   payload structs (e.g. `InstallPluginPayload.Name`) carry `,omitempty` solely so
   tygo emits `?`; payloads are only unmarshaled server-side, so this never
   affects the wire.
-- **`SeriesEntry` / `ApplyOverrides` are not wire types**: `SeriesEntry` is
-  parsed out of `PluginApplyPayload.Fields`, while `ApplyOverrides` is assembled
-  from the payload's apply-only signals. Their generated TS mirrors are a side
-  effect the frontend never imports.
+- **`SeriesEntry` / `ApplyOverrides` are not wire types**: `SeriesEntry` and
+  selected-field presence are parsed from `PluginApplyPayload.Fields`, while
+  other apply-only signals are assembled from the payload. Their generated TS
+  mirrors are a side effect the frontend never imports.
+  `ApplyOverrides.SelectedFields` preserves valid selected zero values for
+  Identify: omitted means no change, while an explicitly selected empty
+  optional value means clear. Title is required, so a selected blank Title is
+  rejected. Keep this presence state out of the public
+  `mediafile.ParsedMetadata` plugin contract.
 - **`file_name_source` is Identify source intent, not canonical attribution**:
   the request accepts only `plugin` or `user`. `applyMetadata` maps those values
   to `plugin:<scope>/<id>` or `manual` before constructing `ApplyOverrides`, so
