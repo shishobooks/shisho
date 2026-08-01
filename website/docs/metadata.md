@@ -42,7 +42,13 @@ Merging these resources moves their relationships to the target, adds the source
 
 ## Editing and Identify
 
+:::warning[Identify Can Move Files]
+When **Organize file structure during scans** is enabled, applying path-affecting fields can rename or move media files. These path changes are not automatically reversible. Back up the media and verify the selected library before applying changes, or turn off organization under **Settings > Libraries** first if you need to preserve the current layout.
+:::
+
 Use **Edit** on a book or file for direct changes. Use **Identify** to search configured metadata plugins, compare proposed book and file values, and choose which fields to apply. Review every checked field when identifying a second edition because shared book metadata may differ between editions.
+
+When [file organization](./libraries.md#file-organization) is enabled for the library, Identify reorganizes files after applying path-affecting changes. This includes an explicitly selected file **Name** and removal of the final series membership, which removes obsolete series-number suffixes from organized CBZ and hybrid book folders.
 
 ## Metadata Source Priority
 

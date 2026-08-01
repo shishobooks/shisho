@@ -94,12 +94,14 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
 
-	// Organize files if title, authors, narrators, or series changed (these affect directory/file names).
-	// Trim title/series first so whitespace-only values don't trigger a no-op organize pass —
-	// persistMetadata already trims before persisting, so untrimmed values would never change the book.
+	// Organize files if title, authors, narrators, series, or an explicit file Name changed
+	// because these fields affect directory or file names. Trim title/series first so
+	// whitespace-only values don't trigger a no-op organize pass; persistMetadata already
+	// trims before persisting, so untrimmed values would never change the book.
 	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
-	hasSeriesEntries := overrides != nil && overrides.SeriesEntries != nil && len(*overrides.SeriesEntries) > 0
-	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" || hasSeriesEntries {
+	hasFileName := overrides != nil && overrides.FileName != nil
+	hasSeriesEntries := overrides != nil && overrides.SeriesEntries != nil
+	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" || hasFileName || hasSeriesEntries {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 		if err != nil {
 			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})
