@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -32,14 +33,22 @@ func (s *stubBookStoreForApply) OrganizeBookFiles(_ context.Context, _ *models.B
 type stubRelStoreForApply struct {
 	capturedBookSeries     []*models.BookSeries
 	deleteBookSeriesCalled bool
+	deletedAuthors         []int
+	deletedSeries          []int
+	deletedGenres          []int
+	deletedTags            []int
 }
 
-func (s *stubRelStoreForApply) DeleteAuthors(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) DeleteAuthors(_ context.Context, bookID int) error {
+	s.deletedAuthors = append(s.deletedAuthors, bookID)
+	return nil
+}
 func (s *stubRelStoreForApply) CreateAuthor(_ context.Context, _ *models.Author) error {
 	return nil
 }
-func (s *stubRelStoreForApply) DeleteBookSeries(_ context.Context, _ int) error {
+func (s *stubRelStoreForApply) DeleteBookSeries(_ context.Context, bookID int) error {
 	s.deleteBookSeriesCalled = true
+	s.deletedSeries = append(s.deletedSeries, bookID)
 	return nil
 }
 func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, bs *models.BookSeries) error {
@@ -49,11 +58,17 @@ func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, bs *models.Bo
 func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, _ string, _ int, _ string) (*models.Series, error) {
 	return &models.Series{ID: 1}, nil
 }
-func (s *stubRelStoreForApply) DeleteBookGenres(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) DeleteBookGenres(_ context.Context, bookID int) error {
+	s.deletedGenres = append(s.deletedGenres, bookID)
+	return nil
+}
 func (s *stubRelStoreForApply) CreateBookGenre(_ context.Context, _ *models.BookGenre) error {
 	return nil
 }
-func (s *stubRelStoreForApply) DeleteBookTags(_ context.Context, _ int) error { return nil }
+func (s *stubRelStoreForApply) DeleteBookTags(_ context.Context, bookID int) error {
+	s.deletedTags = append(s.deletedTags, bookID)
+	return nil
+}
 func (s *stubRelStoreForApply) CreateBookTag(_ context.Context, _ *models.BookTag) error {
 	return nil
 }
@@ -178,6 +193,44 @@ func TestApplyMetadata_OrganizesFiles_WhenExplicitFileNameChanges(t *testing.T) 
 	assert.True(t, store.organizeCalled, "OrganizeBookFiles should be called when an explicit file Name changes")
 }
 
+func TestApplyMetadata_WhitespaceFileNameClearsAndOrganizes(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book Title", models.FileTypeEPUB)
+	name := "Old Name"
+	source := models.DataSourceManual
+	file.Name = &name
+	file.NameSource = &source
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+	h := newApplyTestHandler(store)
+	fileID := file.ID
+	blankName := "   "
+	intent := FileNameSourceIntentUser
+	payload := PluginApplyPayload{
+		BookID:         book.ID,
+		FileID:         &fileID,
+		Fields:         map[string]any{},
+		FileName:       &blankName,
+		FileNameSource: &intent,
+		PluginScope:    "test",
+		PluginID:       "enricher",
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	c := e.NewContext(req, httptest.NewRecorder())
+	c.Set("user", &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
+
+	err = h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Nil(t, file.Name)
+	assert.Nil(t, file.NameSource)
+	assert.True(t, store.organizeCalled)
+}
+
 func TestApplyMetadata_OrganizesFiles_WhenAllSeriesMembershipsAreCleared(t *testing.T) {
 	t.Parallel()
 
@@ -236,7 +289,7 @@ func TestApplyMetadata_OrganizesFiles_WhenAuthorsChange(t *testing.T) {
 func TestApplyMetadata_OrganizesFiles_WhenNarratorsChange(t *testing.T) {
 	t.Parallel()
 
-	book := newApplyTestBook(t, "Book")
+	book, _ := newApplyTestBookWithFile(t, "Book", models.FileTypeM4B)
 	store := &stubBookStoreForApply{
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
@@ -325,7 +378,7 @@ func TestApplyMetadata_SkipsOrganize_WhenNoRelevantFieldsChange(t *testing.T) {
 	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when only description changes")
 }
 
-func TestApplyMetadata_SkipsOrganize_WhenOnlyWhitespaceTitleAndSeries(t *testing.T) {
+func TestApplyMetadata_RejectsSelectedBlankTitle(t *testing.T) {
 	t.Parallel()
 
 	book := newApplyTestBook(t, "Book")
@@ -333,33 +386,150 @@ func TestApplyMetadata_SkipsOrganize_WhenOnlyWhitespaceTitleAndSeries(t *testing
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
 	h := newApplyTestHandler(store)
-	c := newApplyEchoContext(t, map[string]any{
-		"title":  "   ",
-		"series": "\t\n",
-	})
+	c := newApplyEchoContext(t, map[string]any{"title": "   "})
 
 	err := h.applyMetadata(c)
-	require.NoError(t, err)
+	require.Error(t, err)
 
-	assert.False(t, store.organizeCalled, "OrganizeBookFiles should NOT be called when title and series are whitespace-only")
+	assert.Contains(t, err.Error(), "Title cannot be blank")
+	assert.Equal(t, "Book", book.Title)
+	assert.False(t, store.organizeCalled)
 }
 
-func TestApplyMetadata_SkipsSubtitle_WhenWhitespaceOnly(t *testing.T) {
+func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	t.Parallel()
 
-	book := newApplyTestBook(t, "Book")
-	store := &stubBookStoreForApply{
-		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeM4B)
+	subtitle := "Subtitle"
+	description := "Description"
+	name := "Edition Name"
+	url := "https://example.com"
+	language := "en"
+	abridged := true
+	releaseDate := time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC)
+	publisherID := 9
+	source := models.DataSourceManual
+	book.Subtitle = &subtitle
+	book.SubtitleSource = &source
+	book.Description = &description
+	book.DescriptionSource = &source
+	book.Authors = []*models.Author{{BookID: book.ID, PersonID: 1, Person: &models.Person{ID: 1, Name: "Author"}}}
+	book.BookGenres = []*models.BookGenre{{BookID: book.ID, GenreID: 1, Genre: &models.Genre{ID: 1, Name: "Genre"}}}
+	book.BookTags = []*models.BookTag{{BookID: book.ID, TagID: 1, Tag: &models.Tag{ID: 1, Name: "Tag"}}}
+	file.Name = &name
+	file.NameSource = &source
+	file.URL = &url
+	file.URLSource = &source
+	file.Language = &language
+	file.LanguageSource = &source
+	file.Abridged = &abridged
+	file.AbridgedSource = &source
+	file.ReleaseDate = &releaseDate
+	file.ReleaseDateSource = &source
+	file.PublisherID = &publisherID
+	file.Publisher = &models.Publisher{ID: publisherID, Name: "Publisher"}
+	file.PublisherSource = &source
+	file.Narrators = []*models.Narrator{{FileID: file.ID, PersonID: 2, Person: &models.Person{ID: 2, Name: "Narrator"}}}
+	file.Identifiers = []*models.FileIdentifier{{FileID: file.ID, Type: "isbn_13", Value: "9780316769488"}}
+
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+	h, rel := newApplyTestHandlerWithRelStore(store)
+	identStore := &stubIdentStoreForPersist{}
+	h.enrich.identStore = identStore
+	emptyName := ""
+	payload := PluginApplyPayload{
+		BookID:   book.ID,
+		FileID:   &file.ID,
+		FileName: &emptyName,
+		Fields: map[string]any{
+			"subtitle":     "",
+			"description":  "",
+			"authors":      []any{},
+			"narrators":    []any{},
+			"genres":       []any{},
+			"tags":         []any{},
+			"publisher":    "",
+			"release_date": "   ",
+			"url":          "",
+			"language":     "   ",
+			"abridged":     nil,
+			"identifiers":  []any{},
+		},
+		PluginScope: "test",
+		PluginID:    "enricher",
 	}
-	h := newApplyTestHandler(store)
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	c := e.NewContext(req, httptest.NewRecorder())
+	c.Set("user", &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
+
+	err = h.applyMetadata(c)
+	require.NoError(t, err)
+
+	assert.Nil(t, book.Subtitle)
+	assert.Nil(t, book.Description)
+	assert.Equal(t, []int{book.ID}, rel.deletedAuthors)
+	assert.Equal(t, []int{book.ID}, rel.deletedGenres)
+	assert.Equal(t, []int{book.ID}, rel.deletedTags)
+	assert.Nil(t, file.Name)
+	assert.Nil(t, file.NameSource)
+	assert.Nil(t, file.URL)
+	assert.Nil(t, file.Language)
+	assert.Nil(t, file.Abridged)
+	assert.Nil(t, file.ReleaseDate)
+	assert.Nil(t, file.PublisherID)
+	assert.Nil(t, file.Publisher)
+	assert.Equal(t, []int{file.ID}, store.deletedNarratorFileIDs)
+	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
+}
+
+func TestApplyMetadata_MalformedSelectedValuesDoNotClearMetadata(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	subtitle := "Subtitle"
+	description := "Description"
+	language := "en"
+	book.Subtitle = &subtitle
+	book.Description = &description
+	book.Authors = []*models.Author{{BookID: book.ID, PersonID: 1, Person: &models.Person{ID: 1, Name: "Author"}}}
+	book.BookSeries = []*models.BookSeries{{BookID: book.ID, SeriesID: 1, Series: &models.Series{ID: 1, Name: "Series"}}}
+	book.BookGenres = []*models.BookGenre{{BookID: book.ID, GenreID: 1, Genre: &models.Genre{ID: 1, Name: "Genre"}}}
+	book.BookTags = []*models.BookTag{{BookID: book.ID, TagID: 1, Tag: &models.Tag{ID: 1, Name: "Tag"}}}
+	file.Language = &language
+	file.Narrators = []*models.Narrator{{FileID: file.ID, PersonID: 1, Person: &models.Person{ID: 1, Name: "Narrator"}}}
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+	h, rel := newApplyTestHandlerWithRelStore(store)
 	c := newApplyEchoContext(t, map[string]any{
-		"subtitle": "   ",
+		"subtitle":    42,
+		"description": "<p></p>",
+		"authors":     []any{map[string]any{"name": "   "}},
+		"series":      "   ",
+		"genres":      []any{"   "},
+		"tags":        []any{"   "},
+		"language":    "not a language",
+		"identifiers": []any{map[string]any{"type": "isbn_13"}},
+		"narrators":   []any{},
 	})
 
 	err := h.applyMetadata(c)
 	require.NoError(t, err)
 
-	assert.Nil(t, book.Subtitle, "book.Subtitle should not be set to a pointer-to-empty-string for whitespace-only input")
+	require.NotNil(t, book.Subtitle)
+	assert.Equal(t, "Subtitle", *book.Subtitle)
+	require.NotNil(t, book.Description)
+	assert.Equal(t, "Description", *book.Description)
+	require.NotNil(t, file.Language)
+	assert.Equal(t, "en", *file.Language)
+	assert.Empty(t, rel.deletedAuthors)
+	assert.Empty(t, rel.deletedSeries)
+	assert.Empty(t, rel.deletedGenres)
+	assert.Empty(t, rel.deletedTags)
+	assert.Empty(t, store.deletedNarratorFileIDs, "narrators only apply to M4B files")
+	assert.False(t, store.organizeCalled)
 }
 
 // TestApplyMetadata_DoesNotAutoSyncMainFileName_WhenOnlyTitleSent verifies

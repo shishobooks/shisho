@@ -767,7 +767,6 @@ export function IdentifyReviewForm({
       const s = saved?.trim() ?? "";
       const c = current.trim();
       if (!s && c) return "new";
-      if (s && !c) return "unchanged";
       if (s === c) return "unchanged";
       return "changed";
     };
@@ -787,7 +786,6 @@ export function IdentifyReviewForm({
 
     const arrayStatus = (saved: string[], current: string[]): FieldStatus => {
       if (saved.length === 0 && current.length > 0) return "new";
-      if (saved.length > 0 && current.length === 0) return "unchanged";
       const s = [...saved].sort();
       const c = [...current].sort();
       if (s.length === c.length && s.every((v, i) => v === c[i]))
@@ -797,7 +795,6 @@ export function IdentifyReviewForm({
 
     const authorsStatus = (): FieldStatus => {
       if (currentAuthors.length === 0 && authors.length > 0) return "new";
-      if (currentAuthors.length > 0 && authors.length === 0) return "unchanged";
       const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
       const s = currentAuthors.map(key).sort();
       const c = authors.map(key).sort();
@@ -809,7 +806,6 @@ export function IdentifyReviewForm({
     const abridgedStatus = (): FieldStatus => {
       const saved = file?.abridged ?? null;
       if (saved === null && abridged !== null) return "new";
-      if (saved !== null && abridged === null) return "unchanged";
       if (saved === abridged) return "unchanged";
       return "changed";
     };
@@ -817,8 +813,6 @@ export function IdentifyReviewForm({
     const identifiersStatus = (): FieldStatus => {
       if (currentIdentifiers.length === 0 && identifiers.length > 0)
         return "new";
-      if (currentIdentifiers.length > 0 && identifiers.length === 0)
-        return "unchanged";
       const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
       const s = currentIdentifiers.map(key).sort();
       const c = identifiers.map(key).sort();
@@ -911,6 +905,8 @@ export function IdentifyReviewForm({
   const seriesValidationError = decisions.series
     ? validateSeriesEntries(seriesEntries)
     : undefined;
+  const titleValidationError =
+    decisions.title && !title.trim() ? "Title cannot be blank" : undefined;
 
   // The cover image dimensions load asynchronously, so `hasCoverChoice` and
   // therefore `fieldStatus.cover` can flip from "unchanged" to "new"/"changed"
@@ -1122,8 +1118,8 @@ export function IdentifyReviewForm({
 
   // ---- Submit ----
   const handleSubmit = async () => {
-    if (seriesValidationError) {
-      toast.error(seriesValidationError);
+    if (titleValidationError || seriesValidationError) {
+      toast.error(titleValidationError ?? seriesValidationError);
       return;
     }
     const fields: Record<string, unknown> = {};
@@ -1151,7 +1147,7 @@ export function IdentifyReviewForm({
     if (decisions.release_date) fields.release_date = releaseDate;
     if (decisions.url) fields.url = url;
     if (decisions.language) fields.language = language;
-    if (decisions.abridged && abridged !== null) fields.abridged = abridged;
+    if (decisions.abridged) fields.abridged = abridged;
     if (decisions.identifiers) {
       fields.identifiers = identifiers.map((id) => ({
         type: id.type,
@@ -1174,7 +1170,7 @@ export function IdentifyReviewForm({
       plugin_id: result.plugin_id,
     };
 
-    if (decisions.name && name.trim()) {
+    if (decisions.name) {
       payload.file_name = name;
       payload.file_name_source =
         name === initialName
@@ -1346,11 +1342,19 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("title", v)}
                   status={fieldStatus.title}
                 >
-                  <Input
-                    disabled={isDisabled("title")}
-                    onChange={(e) => setTitle(e.target.value)}
-                    value={title}
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      aria-invalid={titleValidationError !== undefined}
+                      disabled={isDisabled("title")}
+                      onChange={(e) => setTitle(e.target.value)}
+                      value={title}
+                    />
+                    {titleValidationError && (
+                      <p className="text-xs text-destructive" role="alert">
+                        {titleValidationError}
+                      </p>
+                    )}
+                  </div>
                 </FieldRow>
 
                 {/* Subtitle */}
@@ -2130,6 +2134,7 @@ export function IdentifyReviewForm({
             disabled={
               applyMutation.isPending ||
               totalSelected === 0 ||
+              titleValidationError !== undefined ||
               seriesValidationError !== undefined
             }
             onClick={handleSubmit}

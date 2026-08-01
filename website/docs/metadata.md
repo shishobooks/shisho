@@ -52,6 +52,14 @@ When [file organization](./libraries.md#file-organization) is enabled for the li
 
 When you apply a plugin-proposed file Name unchanged, it remains plugin-sourced. If you edit the proposed Name before applying it, Shisho treats the result as a manual edit, so normal scans protect it from plugin, embedded, and filepath metadata.
 
+Each Identify field has its own apply checkbox. An unchecked field is left untouched.
+
+:::warning[Clearing Metadata]
+Clearing a checked field removes that value or relationship from the book or file and rewrites its sidecar metadata. It does not delete the media file or shared people, genre, tag, series, or publisher records. Before applying, verify every checked row and back up the database and sidecars if the current metadata matters. You can restore a value by editing it, identifying again, or scanning it from an available source, but a custom value may not be recoverable. Leave a field unchecked to preserve it.
+:::
+
+If you check a field and remove its value, applying the result clears that metadata, including lists such as authors, genres, narrators, and identifiers. Title is required and cannot be cleared. Cover selection only replaces a cover, and narrators are available only for M4B files.
+
 ## Metadata Source Priority
 
 During a normal scan, Shisho resolves conflicting values in this order:

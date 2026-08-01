@@ -2,8 +2,10 @@ package plugins
 
 import (
 	"math"
+	"strings"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 )
 
@@ -27,7 +29,7 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 		md.URL = v
 	}
 	if v, ok := fields["series"].(string); ok {
-		md.Series = v
+		md.Series = strings.TrimSpace(v)
 	}
 	if v, ok := fields["cover_url"].(string); ok {
 		md.CoverURL = v
@@ -46,13 +48,16 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	}
 
 	// Release date
-	if v, ok := fields["release_date"].(string); ok && v != "" {
-		t, err := time.Parse("2006-01-02", v)
-		if err != nil {
-			t, err = time.Parse(time.RFC3339, v)
-		}
-		if err == nil {
-			md.ReleaseDate = &t
+	if v, ok := fields["release_date"].(string); ok {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			t, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				t, err = time.Parse(time.RFC3339, v)
+			}
+			if err == nil {
+				md.ReleaseDate = &t
+			}
 		}
 	}
 
@@ -62,6 +67,8 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 			if m, ok := item.(map[string]any); ok {
 				name, _ := m["name"].(string)
 				role, _ := m["role"].(string)
+				name = strings.TrimSpace(name)
+				role = strings.TrimSpace(role)
 				if name != "" {
 					md.Authors = append(md.Authors, mediafile.ParsedAuthor{Name: name, Role: role})
 				}
@@ -72,8 +79,8 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	// Narrators: []string
 	if v, ok := fields["narrators"].([]any); ok {
 		for _, item := range v {
-			if s, ok := item.(string); ok && s != "" {
-				md.Narrators = append(md.Narrators, s)
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				md.Narrators = append(md.Narrators, strings.TrimSpace(s))
 			}
 		}
 	}
@@ -81,8 +88,8 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	// Genres: []string
 	if v, ok := fields["genres"].([]any); ok {
 		for _, item := range v {
-			if s, ok := item.(string); ok && s != "" {
-				md.Genres = append(md.Genres, s)
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				md.Genres = append(md.Genres, strings.TrimSpace(s))
 			}
 		}
 	}
@@ -90,8 +97,8 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	// Tags: []string
 	if v, ok := fields["tags"].([]any); ok {
 		for _, item := range v {
-			if s, ok := item.(string); ok && s != "" {
-				md.Tags = append(md.Tags, s)
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				md.Tags = append(md.Tags, strings.TrimSpace(s))
 			}
 		}
 	}
@@ -102,6 +109,8 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 			if m, ok := item.(map[string]any); ok {
 				idType, _ := m["type"].(string)
 				idValue, _ := m["value"].(string)
+				idType = strings.TrimSpace(idType)
+				idValue = strings.TrimSpace(idValue)
 				if idType != "" && idValue != "" {
 					md.Identifiers = append(md.Identifiers, mediafile.ParsedIdentifier{Type: idType, Value: idValue})
 				}
@@ -110,8 +119,11 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	}
 
 	// Language
-	if v, ok := fields["language"].(string); ok && v != "" {
-		md.Language = mediafile.NormalizeLanguage(v)
+	if v, ok := fields["language"].(string); ok {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			md.Language = mediafile.NormalizeLanguage(v)
+		}
 	}
 
 	// Abridged
@@ -120,6 +132,56 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 	}
 
 	return md
+}
+
+// convertFieldsToOverrides extracts apply-path-only signals from the
+// untyped fields map. SelectedFields only includes values with a valid outer
+// shape. Non-empty collections must contain at least one valid item, so
+// malformed plugin output cannot masquerade as an explicit clear.
+func convertFieldsToOverrides(fields map[string]any, md *mediafile.ParsedMetadata) *ApplyOverrides {
+	selected := make(map[string]bool)
+	for _, key := range []string{"title", "subtitle", "publisher", "url"} {
+		if _, ok := fields[key].(string); ok {
+			selected[key] = true
+		}
+	}
+	if v, ok := fields["description"].(string); ok && (strings.TrimSpace(v) == "" || htmlutil.StripTags(v) != "") {
+		selected["description"] = true
+	}
+	if v, ok := fields["release_date"].(string); ok && (strings.TrimSpace(v) == "" || md.ReleaseDate != nil) {
+		selected["release_date"] = true
+	}
+	if v, ok := fields["language"].(string); ok && (strings.TrimSpace(v) == "" || md.Language != nil) {
+		selected["language"] = true
+	}
+	if v, ok := fields["authors"].([]any); ok && (len(v) == 0 || len(md.Authors) > 0) {
+		selected["authors"] = true
+	}
+	if v, ok := fields["narrators"].([]any); ok && (len(v) == 0 || len(md.Narrators) > 0) {
+		selected["narrators"] = true
+	}
+	if v, ok := fields["genres"].([]any); ok && (len(v) == 0 || len(md.Genres) > 0) {
+		selected["genres"] = true
+	}
+	if v, ok := fields["tags"].([]any); ok && (len(v) == 0 || len(md.Tags) > 0) {
+		selected["tags"] = true
+	}
+	if v, ok := fields["identifiers"].([]any); ok && (len(v) == 0 || len(md.Identifiers) > 0) {
+		selected["identifiers"] = true
+	}
+	if v, ok := fields["abridged"]; ok && (v == nil || isBool(v)) {
+		selected["abridged"] = true
+	}
+
+	if len(selected) == 0 {
+		return nil
+	}
+	return &ApplyOverrides{SelectedFields: selected}
+}
+
+func isBool(v any) bool {
+	_, ok := v.(bool)
+	return ok
 }
 
 // extractSeriesEntries checks whether fields["series"] is an array of
@@ -143,6 +205,7 @@ func extractSeriesEntries(fields map[string]any) *[]SeriesEntry {
 			continue
 		}
 		name, _ := m["name"].(string)
+		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
@@ -154,6 +217,9 @@ func extractSeriesEntries(fields map[string]any) *[]SeriesEntry {
 		}
 		entry.Number, entry.NumberEnd, entry.SeriesNumberUnit = seriesNumberGroupFromFields(groupFields)
 		entries = append(entries, entry)
+	}
+	if len(arr) > 0 && len(entries) == 0 {
+		return nil
 	}
 	return &entries
 }

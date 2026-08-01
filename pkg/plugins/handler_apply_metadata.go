@@ -24,6 +24,10 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
+	if title, ok := payload.Fields["title"].(string); ok && strings.TrimSpace(title) == "" {
+		return errcodes.ValidationError("Title cannot be blank")
+	}
+
 	// Look up plugin runtime (for httpAccess domain validation on cover download)
 	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
 	if rt == nil {
@@ -57,22 +61,21 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Convert fields map to ParsedMetadata
 	md := convertFieldsToMetadata(payload.Fields)
 
-	// Build apply-path overrides from explicit top-level payload fields.
-	// Empty strings count as absent so callers don't accidentally write
-	// blank values into file.Name / file.NameSource. The gate is on
-	// FileName specifically — file_name_source on its own is a no-op
-	// (there's nothing to source) and would be wasted state if it
-	// triggered the persist-side write block.
-	var overrides *ApplyOverrides
-	if payload.FileName != nil && *payload.FileName != "" {
+	// Build apply-path overrides from valid selected fields and explicit
+	// top-level file-name fields. A pointer to an empty or whitespace-only
+	// file name is an intentional clear; an omitted pointer leaves it untouched.
+	overrides := convertFieldsToOverrides(payload.Fields, md)
+	if payload.FileName != nil {
+		fileName := strings.TrimSpace(*payload.FileName)
 		fileNameSource, err := canonicalFileNameSource(payload.FileNameSource, payload.PluginScope, payload.PluginID)
 		if err != nil {
 			return err
 		}
-		overrides = &ApplyOverrides{
-			FileName:       payload.FileName,
-			FileNameSource: fileNameSource,
+		if overrides == nil {
+			overrides = &ApplyOverrides{}
 		}
+		overrides.FileName = &fileName
+		overrides.FileNameSource = fileNameSource
 	}
 
 	// Extract multi-series entries from fields (array format from identify form).
@@ -98,14 +101,13 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
 
-	// Organize files if title, authors, narrators, series, or an explicit file Name changed
-	// because these fields affect directory or file names. Trim title/series first so
-	// whitespace-only values don't trigger a no-op organize pass; persistMetadata already
-	// trims before persisting, so untrimmed values would never change the book.
-	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
+	// Organize files after path-affecting updates and clears. Presence matters
+	// for authors, file Name, and series because empty selected values remove
+	// metadata that may already be represented in an organized path.
 	hasFileName := overrides != nil && overrides.FileName != nil
 	hasSeriesEntries := overrides != nil && overrides.SeriesEntries != nil
-	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" || hasFileName || hasSeriesEntries {
+	hasM4BNarrators := targetFile != nil && targetFile.FileType == models.FileTypeM4B && applyFieldSelected(overrides, "narrators")
+	if strings.TrimSpace(md.Title) != "" || applyFieldSelected(overrides, "authors") || hasM4BNarrators || strings.TrimSpace(md.Series) != "" || hasFileName || hasSeriesEntries {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 		if err != nil {
 			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})
