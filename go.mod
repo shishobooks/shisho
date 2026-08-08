@@ -18,13 +18,13 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
-	github.com/klippa-app/go-pdfium v1.19.4
-	github.com/knadh/koanf/parsers/yaml v1.1.0
+	github.com/klippa-app/go-pdfium v1.19.6
+	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
-	github.com/knadh/koanf/v2 v2.3.5
+	github.com/knadh/koanf/v2 v2.3.6
 	github.com/labstack/echo/v4 v4.15.4
-	github.com/pdfcpu/pdfcpu v0.13.0
+	github.com/pdfcpu/pdfcpu v0.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/robinjoseph08/golib v0.5.2
 	github.com/segmentio/encoding v0.5.4
@@ -52,9 +52,7 @@ require (
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/gosimple/slug v1.15.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
-	github.com/hhrutter/lzw v1.0.0 // indirect
-	github.com/hhrutter/pkcs7 v0.2.2 // indirect
-	github.com/hhrutter/tiff v1.0.3 // indirect
+	github.com/hhrutter/tiff v1.0.6 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jolestar/go-commons-pool/v2 v2.1.2 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
@@ -62,7 +60,7 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/mattn/go-runewidth v0.0.24 // indirect
+	github.com/mattn/go-runewidth v0.0.27 // indirect
 	github.com/mattn/go-sqlite3 v1.14.34 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
@@ -82,11 +80,10 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	modernc.org/libc v1.68.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
