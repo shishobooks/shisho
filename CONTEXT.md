@@ -94,10 +94,15 @@ A `.metadata.json` file placed alongside a book or file that provides metadata o
 ### Deployment Modes
 
 **Demo Mode**:
-A planned application mode for presenting an immutable library for evaluation. Visitors will be able to browse and consume its prepared media, but will not be able to cause persistent changes.
+A server configuration that presents a prepared, immutable library for evaluation. Visitors sign in with a shared credential and can browse, search, read, and listen. Any request that would persist a change is rejected up front; nothing is accepted and later reset. Preferences kept only in the visitor's browser are allowed.
+_Avoid_: read-only mode, sandbox, demo instance (that is the Public Demo)
 
 **Public Demo**:
-The planned publicly hosted Shisho instance at `demo.shishobooks.com` that will run in Demo Mode.
+The publicly hosted Shisho instance at `demo.shishobooks.com`. It runs in Demo Mode, serves the Demo Corpus, and is signed into with one shared credential published alongside every link to it.
+
+**Demo Corpus**:
+The prepared set of legally redistributable Books, Files, covers, and the database that the Public Demo serves. It is authored deliberately, replaced only by redeployment, and never changed by visitors. Every work in it carries a recorded source, license basis, credit, and note of any modification.
+_Avoid_: sample library, fixtures (those are test data)
 
 ## Relationships
 
