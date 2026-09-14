@@ -34,8 +34,9 @@ type Config struct {
 	ServerPort int    `koanf:"server_port" json:"server_port"`
 
 	// Application settings
-	SyncIntervalMinutes int `koanf:"sync_interval_minutes" json:"sync_interval_minutes"`
-	WorkerProcesses     int `koanf:"worker_processes" json:"worker_processes"`
+	DemoMode            bool `koanf:"demo_mode" json:"demo_mode"`
+	SyncIntervalMinutes int  `koanf:"sync_interval_minutes" json:"sync_interval_minutes"`
+	WorkerProcesses     int  `koanf:"worker_processes" json:"worker_processes"`
 
 	// Job retention settings
 	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
@@ -96,6 +97,7 @@ func defaults() *Config {
 		DatabaseMaxRetries:            5,
 		ServerHost:                    "0.0.0.0",
 		ServerPort:                    3689,
+		DemoMode:                      false,
 		SyncIntervalMinutes:           60,
 		WorkerProcesses:               2,
 		JobRetentionDays:              30,

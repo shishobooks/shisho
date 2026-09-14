@@ -44,9 +44,20 @@ The stock production image expects the backend on port `3689`. Changing `SERVER_
 
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
+| `demo_mode` | `DEMO_MODE` | `false` | Present a prepared library without allowing API edits, including by admins. Disables background work, plugins, integrations, and explicit original, KePub, and bulk downloads. See [Demo Mode](#demo-mode) |
 | `sync_interval_minutes` | `SYNC_INTERVAL_MINUTES` | `60` | How often to scan libraries for new content, in minutes. Set to `0` to disable scheduled scans |
 | `worker_processes` | `WORKER_PROCESSES` | `2` | Number of background worker processes |
 | `job_retention_days` | `JOB_RETENTION_DAYS` | `30` | Days to retain completed and failed jobs before cleanup. Set to `0` to disable cleanup |
+
+### Demo Mode
+
+Set `demo_mode: true` or `DEMO_MODE=true` to let visitors browse, search, read EPUB, CBZ, and PDF files, and stream M4B audio without changing the library through the API. The restriction applies to every user, including admins. Sign-in and sign-out still work; edits, setup, password changes, and server-side preference updates return `403` with code `demo_mode` and message `This action is unavailable in the demo.`
+
+Prepare the library and user accounts before enabling Demo Mode. Scans, filesystem monitoring, job processing, and plugin loading are disabled regardless of their other settings. OPDS, eReader, Kobo, and plugin endpoints are unavailable.
+
+Explicit original, KePub, and bulk downloads are blocked. Reader delivery remains available, including generated EPUB files that can still be saved by URL. Demo Mode is not copy protection; only publish media you have permission to redistribute. Reader caches and startup database migrations still require writable storage.
+
+Restart after changing this setting. To curate the library or manage accounts again, disable Demo Mode on a private instance rather than making a public instance writable.
 
 ### Library Monitor
 

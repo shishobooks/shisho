@@ -63,13 +63,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	e.Use(logger.Middleware())
 	e.Use(recovery.Middleware())
+	if cfg.DemoMode {
+		e.Use(demoModeMiddleware)
+	}
 	e.Use(middleware.CORS())
 
 	health.RegisterRoutes(e)
 
 	// Register test-only routes when in test mode
 	// These endpoints allow E2E tests to set up and tear down test data
-	if cfg.IsTestMode() {
+	if cfg.IsTestMode() && !cfg.DemoMode {
 		// Allow localhost download URLs so E2E tests can install the fixture
 		// plugin from /test/plugins/fixture.zip. Safe because these hosts are
 		// only added in test mode (ENVIRONMENT=test).
@@ -81,7 +84,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	}
 
 	// Register auth routes and get the auth service
-	authService := auth.RegisterRoutes(e, db, cfg.JWTSecret, cfg.SessionDuration())
+	authService := auth.RegisterRoutes(e, db, cfg.JWTSecret, cfg.SessionDuration(), cfg.DemoMode)
 	authMiddleware := auth.NewMiddleware(authService)
 
 	// Register user and role management routes
@@ -95,14 +98,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	// These routes require authentication and appropriate permissions
 	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm, broker, dlCache, cbzCache, pdfCache)
 
-	// Register OPDS routes with Basic Auth
-	opds.RegisterRoutes(e, db, cfg, authMiddleware)
+	if !cfg.DemoMode {
+		// Register OPDS routes with Basic Auth
+		opds.RegisterRoutes(e, db, cfg, authMiddleware)
 
-	// Register eReader routes (API key auth for stock browser support)
-	ereader.RegisterRoutes(e, db, dlCache)
+		// Register eReader routes (API key auth for stock browser support)
+		ereader.RegisterRoutes(e, db, dlCache)
 
-	// Register Kobo sync routes (API key auth for Kobo device sync)
-	kobo.RegisterRoutes(e, db, dlCache)
+		// Register Kobo sync routes (API key auth for Kobo device sync)
+		kobo.RegisterRoutes(e, db, dlCache)
+	}
 
 	// Config routes (require authentication)
 	config.RegisterRoutesWithAuth(e, cfg, authMiddleware)
@@ -157,7 +162,9 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	libraries.RegisterRoutesWithGroup(librariesGroup, db, authMiddleware, libraries.RegisterRoutesOptions{
 		OnLibraryChanged: w.RefreshMonitorWatches,
 	})
-	plugins.RegisterLibraryRoutes(librariesGroup, plugins.NewService(db), pm, authMiddleware)
+	if !cfg.DemoMode {
+		plugins.RegisterLibraryRoutes(librariesGroup, plugins.NewService(db), pm, authMiddleware)
+	}
 	books.RegisterLibraryRoutes(librariesGroup, db, authMiddleware)
 
 	// Jobs routes
@@ -208,6 +215,10 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	searchGroup.Use(authMiddleware.Authenticate)
 	searchGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	search.RegisterRoutesWithGroup(searchGroup, db)
+
+	if cfg.DemoMode {
+		return
+	}
 
 	// Plugin identify routes (editors can search/apply metadata)
 	pluginService := plugins.NewService(db)

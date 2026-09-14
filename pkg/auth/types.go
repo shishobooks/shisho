@@ -15,6 +15,7 @@ type SetupPayload struct {
 
 // StatusResponse represents the auth status response.
 type StatusResponse struct {
+	DemoMode   bool `json:"demo_mode"`
 	NeedsSetup bool `json:"needs_setup"`
 }
 

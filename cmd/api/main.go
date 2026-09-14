@@ -86,7 +86,9 @@ func main() {
 	// Plugin system
 	pluginService := plugins.NewService(db)
 	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir, cfg.PluginDataDir)
-	if err := pluginManager.LoadAll(ctx); err != nil {
+	if cfg.DemoMode {
+		log.Info("demo mode enabled: plugins and background worker disabled")
+	} else if err := pluginManager.LoadAll(ctx); err != nil {
 		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
 	}
 
@@ -127,8 +129,10 @@ func main() {
 		log.Info("server stopped")
 	}()
 
-	wrkr.Start()
-	log.Info("worker started")
+	if !cfg.DemoMode {
+		wrkr.Start()
+		log.Info("worker started")
+	}
 
 	<-graceful
 	log.Info("starting graceful shutdown")
@@ -168,8 +172,11 @@ func main() {
 	}
 	log.Info("server shutdown")
 
-	wrkr.Shutdown()
-	log.Info("worker shutdown")
+	// Shutdown waits for worker goroutines, so only call it if Start ran.
+	if !cfg.DemoMode {
+		wrkr.Shutdown()
+		log.Info("worker shutdown")
+	}
 
 	err = db.Close()
 	if err != nil {

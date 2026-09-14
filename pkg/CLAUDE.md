@@ -15,6 +15,21 @@ This file documents backend patterns and conventions specific to Shisho.
 
 `cmd/api/main.go` starts both HTTP server and background worker.
 
+### Demo Mode
+
+`demo_mode` / `DEMO_MODE` defaults to `false`. When enabled, `pkg/server/demo_mode.go` runs globally via `e.Use` after logger and recovery, before authentication and handlers. Use matched `c.Path()` patterns, not raw URLs; do not move this middleware to `e.Pre`.
+
+- Allow `GET`, `HEAD`, and `OPTIONS`, subject to normal authentication and permissions.
+- Allow only `POST /auth/login` and `POST /auth/logout` among write methods.
+- Deny `GET /books/files/:id/download/original`, `GET /books/files/:id/download/kepub`, and `GET /jobs/:id/download`.
+- Reject every other method/path with `403`, code `demo_mode`, message `This action is unavailable in the demo.` Admins have no bypass. Unknown write paths are rejected too.
+- Keep generated reader downloads (`/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
+- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), either `/plugins` group, per-library plugin routes (`/libraries/:id/plugins/*`), or test routes (`/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
+- Skip `pluginManager.LoadAll` and `wrkr.Start` in `cmd/api/main.go`. Also skip `wrkr.Shutdown`, which waits for goroutines that only `Start` creates. Reader caches and startup migrations still run.
+- `GET /auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
+
+Any new route family or download path must be classified here as allowed, denied, or unregistered in Demo Mode, with corresponding middleware or route-registration tests. New GET/HEAD handlers must not introduce persistent user changes.
+
 ### Core Services Pattern
 
 Each domain (books, jobs, libraries, chapters) has:
