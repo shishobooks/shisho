@@ -58,6 +58,12 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 - **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
 - **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.
 
+### Request errors and retries
+
+- The shared QueryClient does not retry `ShishoAPIError` responses with status `401`, `403`, `404`, or `422`. Other query failures retain the three-retry limit. Keep permission failures out of the retry path, including Demo Mode rejections.
+- Async UI event handlers must consume mutation rejections and show an inline error or toast. `BookEditDialog` shows metadata/review save errors inline and preserves its draft; the top-nav `ResyncButton` reports scan-creation failures with a toast.
+- `CreateListDialog` treats a resolved `onCreate`/`onUpdate` promise as success. Parent callbacks that show an error toast must rethrow so the dialog stays open and retains unsaved-changes protection. Test these flows through their callers, not just the dialog with a rejecting stub: a caller swallowing the rejection is the failure to catch.
+
 ### React Query Cache Invalidation
 
 When a mutation modifies a resource (update/delete/merge), invalidate related queries so the UI refreshes.
