@@ -46,6 +46,15 @@ func Forbidden(action string) error {
 	}
 }
 
+// DemoMode returns a 403 error for actions disabled in Demo Mode.
+func DemoMode() error {
+	return &Error{
+		http.StatusForbidden,
+		"This action is unavailable in the demo.",
+		"demo_mode",
+	}
+}
+
 // NotFound returns a 404 error with a message indicating the given resource.
 func NotFound(resource string) error {
 	return &Error{

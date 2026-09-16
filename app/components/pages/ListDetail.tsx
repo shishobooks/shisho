@@ -154,11 +154,11 @@ const ListDetail = () => {
     try {
       await updateListMutation.mutateAsync({ listId, payload });
       toast.success("List updated");
-      setEditDialogOpen(false);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to update list",
       );
+      throw error; // Let CreateListDialog preserve the draft on failure.
     }
   };
 
@@ -295,7 +295,10 @@ const ListDetail = () => {
             {canManage && sort && sort !== list.default_sort && (
               <Button
                 disabled={updateListMutation.isPending}
-                onClick={() => handleUpdate({ default_sort: sort })}
+                onClick={() => {
+                  // handleUpdate displays the error; no dialog awaits this action.
+                  void handleUpdate({ default_sort: sort }).catch(() => {});
+                }}
                 size="sm"
                 title="Save as default sort"
                 variant="ghost"

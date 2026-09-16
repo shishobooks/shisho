@@ -63,6 +63,8 @@ Shisho discovers and reconciles content in three ways:
 - **Filesystem monitor:** `library_monitor_enabled` is enabled by default. It watches library paths and performs targeted rescans after changes settle. The default `library_monitor_delay_seconds` of 60 seconds acts as a debounce, so each new event restarts the wait. Some network filesystems do not provide reliable filesystem events, so scheduled or manual scans remain important.
 - **Manual scans:** A user with `jobs:write` can open **Settings > Jobs** and select **Trigger Scan** for an immediate full reconciliation. The scan runs as a background job; `jobs:read` is required to monitor its progress and errors.
 
+You can also start a library scan with the resync button beside the library picker in the top navigation. If Shisho rejects the request or cannot start the scan, an error notification appears. The button becomes available for another attempt.
+
 See [Configuration](./configuration.md) for the server settings behind the schedule and monitor.
 
 ## Scan Outcomes

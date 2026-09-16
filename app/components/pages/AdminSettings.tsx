@@ -142,6 +142,11 @@ const AdminSettings = () => {
           </h2>
           <div className="space-y-0">
             <ConfigRow
+              description="Read-only API with background work and integrations disabled"
+              label="Demo Mode"
+              value={config.demo_mode}
+            />
+            <ConfigRow
               description="How often libraries are scanned for new content"
               label="Sync Interval"
               value={`${config.sync_interval_minutes} minutes`}

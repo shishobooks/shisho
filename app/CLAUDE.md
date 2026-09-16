@@ -25,7 +25,8 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 | Hover backgrounds | `hover:bg-muted/50` |
 | Selected card | `border-primary bg-primary/5` + `border-transparent` when unselected |
 | Selected toggle chip | `border-primary bg-primary/5 text-primary` |
-| Inline warning | `rounded-md bg-destructive/10 border border-destructive/20 p-3` |
+| Inset inline warning | `rounded-md bg-destructive/10 border border-destructive/20 p-3` |
+| Full-width dialog error banner above footer | `shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-3 text-sm text-destructive`, square edges and no side borders |
 | Danger zone section | `space-y-3 rounded-md border border-destructive/40 p-4 md:p-6` with `text-lg font-semibold text-destructive` title (see `PluginDangerZone.tsx`) |
 | Muted status badge | `bg-muted text-muted-foreground` |
 
@@ -57,6 +58,12 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 **IMPORTANT - List Limits:**
 - **Default list limit is 50** - All list endpoints have a max limit of 50 items per request
 - **Always use server-side search** - Never rely on client-side filtering for searchable lists; always pass search queries to the API. This ensures users can find items beyond the initial 50 loaded.
+
+### Request errors and retries
+
+- The shared QueryClient does not retry `ShishoAPIError` responses with status `401`, `403`, `404`, or `422`. Other query failures retain the three-retry limit. Keep permission failures out of the retry path, including Demo Mode rejections.
+- Async UI event handlers must consume mutation rejections and show an inline error or toast. `BookEditDialog` shows metadata/review save errors inline and preserves its draft; the top-nav `ResyncButton` reports scan-creation failures with a toast.
+- `CreateListDialog` treats a resolved `onCreate`/`onUpdate` promise as success. Parent callbacks that show an error toast must rethrow so the dialog stays open and retains unsaved-changes protection. Test these flows through their callers, not just the dialog with a rejecting stub: a caller swallowing the rejection is the failure to catch.
 
 ### React Query Cache Invalidation
 

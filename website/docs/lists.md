@@ -16,6 +16,8 @@ Built-in templates provide a quick starting point:
 
 Templates set initial values only. You can edit the resulting list normally.
 
+If creating or editing a list fails, an error notification appears and the dialog keeps your name, description, and ordering choice. Correct the problem and retry without re-entering them.
+
 ## Adding Books
 
 Add books using either current workflow:

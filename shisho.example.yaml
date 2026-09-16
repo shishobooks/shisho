@@ -59,6 +59,13 @@ server_port: 3689
 # APPLICATION SETTINGS
 # =============================================================================
 
+# Present a prepared library without allowing API edits, even by admins.
+# Disables background work, plugins, integrations, and explicit downloads.
+# Reading and audio streaming remain available. Set up users and media first.
+# Env: DEMO_MODE
+# Default: false
+demo_mode: false
+
 # How often to scan libraries for new content (in minutes)
 # Set to 0 to disable scheduled scans
 # Env: SYNC_INTERVAL_MINUTES
