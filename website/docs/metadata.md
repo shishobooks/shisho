@@ -48,7 +48,7 @@ When **Organize file structure during scans** is enabled, applying path-affectin
 
 Use **Edit** on a book or file for direct changes. Use **Identify** to search configured metadata plugins, compare proposed book and file values, and choose which fields to apply. Review every checked field when identifying a second edition because shared book metadata may differ between editions.
 
-If **Save Changes** fails in **Edit Book**, the dialog shows the error and keeps your edits so you can retry. A review-state update can fail after metadata has already saved; the error does not roll back that saved metadata.
+If **Save Changes** fails in **Edit Book**, the dialog shows an error banner above the save buttons and keeps your edits so you can retry. A review-state update can fail after metadata has already saved; the error does not roll back that saved metadata.
 
 When [file organization](./libraries.md#file-organization) is enabled for the library, Identify reorganizes files after applying path-affecting changes. This includes an explicitly selected file **Name** and removal of the final series membership, which removes obsolete series-number suffixes from organized CBZ and hybrid book folders.
 

@@ -25,7 +25,8 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 | Hover backgrounds | `hover:bg-muted/50` |
 | Selected card | `border-primary bg-primary/5` + `border-transparent` when unselected |
 | Selected toggle chip | `border-primary bg-primary/5 text-primary` |
-| Inline warning | `rounded-md bg-destructive/10 border border-destructive/20 p-3` |
+| Inset inline warning | `rounded-md bg-destructive/10 border border-destructive/20 p-3` |
+| Full-width dialog error banner above footer | `shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-3 text-sm text-destructive`, square edges and no side borders |
 | Danger zone section | `space-y-3 rounded-md border border-destructive/40 p-4 md:p-6` with `text-lg font-semibold text-destructive` title (see `PluginDangerZone.tsx`) |
 | Muted status badge | `bg-muted text-muted-foreground` |
 

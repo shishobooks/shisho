@@ -838,7 +838,7 @@ export function BookEditDialog({
 
         {saveError && (
           <p
-            className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive"
+            className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-3 text-sm text-destructive"
             role="alert"
           >
             {saveError}
