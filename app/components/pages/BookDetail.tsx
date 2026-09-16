@@ -28,6 +28,7 @@ import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmatio
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
+import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
@@ -222,6 +223,9 @@ const FileRow = ({
           >
             {file.file_type}
           </Badge>
+
+          {/* Unreadable file warning */}
+          <FileScanErrorBadge className="text-xs shrink-0" file={file} />
 
           {/* Name */}
           <Link

@@ -217,6 +217,13 @@ func fileContentChanged(path string, existing *models.File, forceRefresh bool) (
 	if forceRefresh {
 		return true, nil
 	}
+	// A file flagged unreadable must always be re-parsed. A failed parse
+	// leaves the stored size/mtime at their last good values, so a repair
+	// that restores both (e.g. cp -p from a backup) would otherwise look
+	// unchanged and the flag would never clear.
+	if existing.ScanError != nil {
+		return true, nil
+	}
 	if existing.FileModifiedAt == nil {
 		return true, nil
 	}
@@ -518,6 +525,12 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	//   - Scan mode when the file on disk has changed since we last recorded
 	//     its size/mtime — the cached sidecar is stale extraction data and
 	//     would mask the new file's metadata.
+	//
+	// The decision is made here, but the sidecar is only removed once the new
+	// file has actually been parsed. If the replacement file is unreadable
+	// (e.g. a truncated zip), the old sidecar is the last on-disk record of
+	// the file's metadata and must not be thrown away.
+	discardSidecar := false
 	if !opts.Reset && file.FileRole != models.FileRoleSupplement {
 		// Only treat the file as "swapped" on positive evidence of change. A
 		// nil FileModifiedAt means we don't know — could be a pre-migration
@@ -525,9 +538,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		fileSwapped := file.FileModifiedAt != nil &&
 			(fileStat.Size() != file.FilesizeBytes ||
 				!fileStat.ModTime().Truncate(time.Second).Equal(file.FileModifiedAt.Truncate(time.Second)))
-		if opts.ForceRefresh || fileSwapped {
-			removeFileSidecar(file.Filepath, logWarn)
-		}
+		discardSidecar = opts.ForceRefresh || fileSwapped
 	}
 
 	// File exists on disk - parse metadata
@@ -546,9 +557,17 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		var err error
 		metadata, err = w.parseFileMetadata(ctx, file.Filepath, file.FileType)
 		if err != nil {
+			w.recordFileScanError(ctx, file, err, logWarn)
 			return nil, errors.Wrap(err, "failed to parse file metadata")
 		}
 	}
+
+	if discardSidecar {
+		removeFileSidecar(file.Filepath, logWarn)
+	}
+
+	// The file parsed, so any error recorded by an earlier scan is stale.
+	w.clearFileScanError(ctx, file, logWarn)
 
 	// Get parent book for scanFileCore
 	book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
@@ -2695,6 +2714,53 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	}
 
 	return title
+}
+
+// maxScanErrorLength caps the stored scan error so a plugin stack trace or a
+// runaway message cannot bloat the row or the tooltip that renders it.
+const maxScanErrorLength = 500
+
+// scanErrorMessage reduces a parse failure to a short, single-line message
+// suitable for storing on the file row and showing in the UI: the innermost
+// cause (e.g. "zip: not a valid zip file") rather than the wrapped chain,
+// first line only, capped in length, with a generic fallback for empty text.
+func scanErrorMessage(scanErr error) string {
+	msg := strings.TrimSpace(errors.Cause(scanErr).Error())
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = strings.TrimSpace(msg[:i])
+	}
+	if msg == "" {
+		return "file could not be parsed"
+	}
+	if len(msg) > maxScanErrorLength {
+		msg = msg[:maxScanErrorLength-3] + "..."
+	}
+	return msg
+}
+
+// recordFileScanError persists a parse failure on the file row so the UI can
+// show that the file is unreadable without digging through job logs.
+func (w *Worker) recordFileScanError(ctx context.Context, file *models.File, scanErr error, logWarn func(msg string, data logger.Data)) {
+	msg := scanErrorMessage(scanErr)
+	if file.ScanError != nil && *file.ScanError == msg {
+		return
+	}
+	file.ScanError = &msg
+	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"scan_error"}}); err != nil {
+		logWarn("failed to record file scan error", logger.Data{"file_id": file.ID, "error": err.Error()})
+	}
+}
+
+// clearFileScanError removes a previously recorded parse failure once the
+// file has been read successfully again.
+func (w *Worker) clearFileScanError(ctx context.Context, file *models.File, logWarn func(msg string, data logger.Data)) {
+	if file.ScanError == nil {
+		return
+	}
+	file.ScanError = nil
+	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"scan_error"}}); err != nil {
+		logWarn("failed to clear file scan error", logger.Data{"file_id": file.ID, "error": err.Error()})
+	}
 }
 
 // removeFileSidecar deletes the file sidecar at filePath. ENOENT is silent;

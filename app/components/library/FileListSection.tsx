@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
+import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +142,7 @@ export function FileListSection({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <FileMetaInfo file={file} />
+              <FileScanErrorBadge file={file} />
               <Badge variant="outline">{file.file_type?.toUpperCase()}</Badge>
             </div>
           </Link>

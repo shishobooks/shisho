@@ -24,11 +24,38 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+// extensionsToScan maps each built-in extension to the mime types the detector
+// may report for a genuine file of that format. M4B containers vary by the tool
+// that wrote them: the "M4A " brand detects as audio/x-m4a, the "M4B " brand as
+// audio/mp4, and generic "isom"/"mp42" brands as video/mp4. All three are real
+// audiobooks and must be accepted.
 var extensionsToScan = map[string]map[string]struct{}{
 	".epub": {"application/epub+zip": {}},
-	".m4b":  {"audio/x-m4a": {}, "video/mp4": {}},
+	".m4b":  {"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}},
 	".cbz":  {"application/zip": {}},
 	".pdf":  {"application/pdf": {}},
+}
+
+// checkExpectedMimeType detects the mime type of a file with a built-in
+// extension and reports whether it is one the format's parser can handle.
+// Files can carry any extension, so this guards against e.g. a text file named
+// .epub reaching the zip reader. Extensions that are not built-in are accepted
+// as-is (plugin parsers do their own validation). The detected mime type is
+// returned for logging.
+//
+// Both the library scan walker and the filesystem monitor must use this so a
+// file cannot be rejected by one entry point and imported by the other.
+func checkExpectedMimeType(path string) (string, bool, error) {
+	expectedMimeTypes, ok := extensionsToScan[strings.ToLower(filepath.Ext(path))]
+	if !ok {
+		return "", true, nil
+	}
+	mtype, err := mimetype.DetectFile(path)
+	if err != nil {
+		return "", false, errors.WithStack(err)
+	}
+	_, ok = expectedMimeTypes[mtype.String()]
+	return mtype.String(), ok, nil
 }
 
 var (
@@ -407,9 +434,8 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 					return nil
 				}
 				// TODO: support having cover.jpg and cover_audiobook.jpg
-				ext := filepath.Ext(path)
-				expectedMimeTypes, ok := extensionsToScan[ext]
-				if !ok {
+				ext := strings.ToLower(filepath.Ext(path))
+				if _, ok := extensionsToScan[ext]; !ok {
 					// Check plugin-registered extensions (file parsers and converter source types)
 					if w.pluginManager != nil {
 						extNoDot := strings.TrimPrefix(ext, ".")
@@ -434,17 +460,14 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 					return nil
 				}
 
-				mtype, err := mimetype.DetectFile(path)
+				mimeType, expected, err := checkExpectedMimeType(path)
 				if err != nil {
 					// We can't detect the mime type, so we just skip it.
 					jobLog.Warn("can't detect the mime type of a file with a valid extension", logger.Data{"path": path, "err": err.Error()})
 					return nil
 				}
-				if _, ok := expectedMimeTypes[mtype.String()]; !ok {
-					// Since files can have any extension, we try to check it against the mime type that we expect it to
-					// be. This might be overly restrictive in the future, so it might be something that we remove, but
-					// we can keep it for now.
-					jobLog.Warn("mime type is not expected for extension", logger.Data{"path": path, "mimetype": mtype.String()})
+				if !expected {
+					jobLog.Warn("mime type is not expected for extension", logger.Data{"path": path, "mimetype": mimeType})
 					return nil
 				}
 

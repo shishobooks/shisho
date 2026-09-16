@@ -40,6 +40,24 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("FileDetailsTab", () => {
+  describe("scan error", () => {
+    it("shows an unreadable alert with the scan error message", () => {
+      const file = makeFile({ scan_error: "zip: not a valid zip file" });
+
+      render(wrap(<FileDetailsTab file={file} />, "1"));
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("could not be read");
+      expect(alert).toHaveTextContent("zip: not a valid zip file");
+    });
+
+    it("renders no alert when the file has no scan error", () => {
+      render(wrap(<FileDetailsTab file={makeFile()} />, "1"));
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   describe("publisher link", () => {
     it("renders publisher name as a link to the publisher detail page", () => {
       const file = makeFile({

@@ -452,3 +452,49 @@ func TestMonitor_DetectsFileMove_CrossTypeCollisionIgnored(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ghostFile.Filepath, ghostAfter.Filepath, "ghost PDF row must not be repurposed")
 }
+
+// TestMonitor_DetectsFileMove_ClearsStaleScanError verifies that a row
+// repurposed by move detection does not carry a scan error recorded against
+// the old path. The moved file is rescanned so the flag reflects its content.
+func TestMonitor_DetectsFileMove_ClearsStaleScanError(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	oldDir := testgen.CreateSubDir(t, libDir, "Author - Old Location")
+	epubPath := testgen.GenerateEPUB(t, oldDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Moveable Feast",
+		Authors: []string{"Author"},
+	})
+
+	m, libID := newTestMonitorWithWorker(tc, libDir)
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{Op: fsnotify.Create, LibraryID: libID})
+	require.NotNil(t, result)
+	require.True(t, result.FileCreated)
+
+	file := tc.listFiles()[0]
+	hash, err := computeFileSHA256(epubPath)
+	require.NoError(t, err)
+	require.NoError(t, tc.fingerprintService.Insert(tc.ctx, file.ID, models.FingerprintAlgorithmSHA256, hash))
+
+	// Simulate a scan error left over from an earlier damaged write.
+	stale := "zip: not a valid zip file"
+	file.ScanError = &stale
+	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{Columns: []string{"scan_error"}}))
+
+	newDir := testgen.CreateSubDir(t, libDir, "Author - New Location")
+	newPath := filepath.Join(newDir, "book.epub")
+	require.NoError(t, os.Rename(epubPath, newPath))
+
+	injectMonitorEvent(m, epubPath, fsnotify.Remove, libID, false)
+	injectMonitorEvent(m, newPath, fsnotify.Create, libID, false)
+	m.processPendingEvents()
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	assert.Equal(t, file.ID, files[0].ID)
+	assert.Equal(t, newPath, files[0].Filepath)
+	assert.Nil(t, files[0].ScanError, "moved file is readable, so the stale scan error must be cleared")
+}

@@ -34,11 +34,29 @@ Before enabling file organization, back up the library and test the setting on a
 
 **Symptom:** Files copied into a library do not appear automatically, or a manual scan finds files that the real-time monitor missed.
 
-**Likely cause:** The host path is not mounted at the path configured for the library, the file type is unsupported, the monitor is disabled, a network filesystem does not deliver filesystem events, the monitor delay has not elapsed, or Linux exhausted its inotify watches.
+**Likely cause:** The host path is not mounted at the path configured for the library, the file type is unsupported, the file's content does not match its extension, the monitor is disabled, a network filesystem does not deliver filesystem events, the monitor delay has not elapsed, or Linux exhausted its inotify watches.
 
 **Verify:** Confirm the file is visible at the configured path from the container and compare its extension with [Supported Formats](./supported-formats.md). Run a library scan. If the scan finds the file but monitoring does not, inspect the monitor settings and current-session server logs. On Linux, check for inotify watch errors. Network storage that misses events points to a monitor limitation rather than a parser failure.
 
 **Fix:** Correct the mount or library path, wait for the configured monitor delay, or increase the Linux watch limit as documented in [Configuration](./configuration.md). For network filesystems that do not support reliable events, disable the real-time monitor and rely on scheduled or manual scans. See [Libraries](./libraries.md) and [Deployment and Maintenance](./deployment-and-maintenance.md).
+
+## A File Is Marked Unreadable
+
+**Symptom:** A file shows an **Unreadable** badge on the book page, or the file details page shows a "This file could not be read" notice. The scan job log contains `failed to parse file metadata` for the same path, often with `zip: not a valid zip file` for EPUB and CBZ files.
+
+**Likely cause:** The file on disk is damaged. The most common case is a zip-based file (EPUB, CBZ) whose central directory was cut off by an interrupted copy or a reader application that rewrote the file over a network share. The book keeps the metadata from the last successful scan, but the in-app reader and KePub conversion will fail for that file until it is repaired.
+
+**Verify:** Run `unzip -t` on the file. A truncated archive reports that it cannot find the end-of-central-directory signature.
+
+**Fix:** For a truncated zip, the content entries are usually intact and `zip -FF` can rebuild the archive:
+
+```bash
+zip -FF "Book.epub" --out "Book.repaired.epub"
+unzip -t "Book.repaired.epub"
+mv "Book.repaired.epub" "Book.epub"
+```
+
+Otherwise replace the file with a good copy. Shisho picks up the change on the next monitor event or scan, refreshes the metadata, and clears the badge. The book keeps its existing metadata and [sidecar](./sidecar-files.md) while the file is unreadable.
 
 ## A Background Job Failed
 
