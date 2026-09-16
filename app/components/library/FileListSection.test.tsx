@@ -77,6 +77,26 @@ function makeQueryResult(
 }
 
 describe("FileListSection", () => {
+  it("flags files whose last scan could not read them", () => {
+    render(
+      wrap(
+        <FileListSection
+          libraryId="1"
+          query={makeQueryResult(
+            [
+              makeFile(1, { scan_error: "zip: not a valid zip file" }),
+              makeFile(2),
+            ],
+            2,
+          )}
+          title="Files"
+        />,
+      ),
+    );
+
+    expect(screen.getAllByText("Unreadable")).toHaveLength(1);
+  });
+
   it("renders section title", () => {
     const files = [makeFile(1)];
     render(
