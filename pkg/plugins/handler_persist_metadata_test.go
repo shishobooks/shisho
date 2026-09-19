@@ -850,7 +850,9 @@ func TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied(t *testing.T) 
 		Series:   existingSeries,
 	}}
 	existingPerson := &models.Person{ID: 1, LibraryID: book.LibraryID, Name: "Same Author"}
+	role := "writer"
 	book.Authors = []*models.Author{{
+		Role:     &role,
 		BookID:   book.ID,
 		PersonID: existingPerson.ID,
 		Person:   existingPerson,

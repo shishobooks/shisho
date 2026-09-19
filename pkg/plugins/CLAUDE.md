@@ -38,6 +38,7 @@ pkg/plugins/
   handler_apply_metadata.go - applyMetadata (POST /apply)
   handler_persist_metadata.go - persistMetadata (shared by apply path)
   handler_attribution.go    - Identify source attribution: intent validation, no-op helpers (ADR 0006)
+  handler_relationships.go  - Resolve-then-compare for Authors, Genres, Tags, and Narrators
   handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
@@ -113,10 +114,22 @@ Conventions and gotchas specific to this surface:
     granularity.
   - Identifier objects in `fields.identifiers` reserve an optional per-entry
     `source` intent. It is validated but not yet consumed.
-  - Relationships, series, identifiers, and covers still stamp the plugin
-    source until their slices (#455 to #458) land. The end-to-end regression
-    net is `TestIdentifyApply_ThenOrdinaryScan` in
-    `pkg/worker/scan_identify_attribution_test.go`.
+  - Authors, Genres, Tags, and Narrators use aggregate provenance. Resolve
+    every entry through the existing find-or-create service before comparing
+    IDs. Authors compare ordered Person IDs and roles, treating nil and empty
+    roles equally. Narrators compare ordered Person IDs. Genres and Tags
+    compare unordered sets and deduplicate aliases resolving to the same ID.
+    A no-op preserves the source and skips relationship writes and FTS work.
+    Lookup and insert failures must return errors, not silently drop entries.
+    Complete clears null the aggregate source, including stale sources on
+    already-empty collections; partial edits use the submitted intent.
+    `books.author_source` is nullable after migration `20260919000001`; its
+    Go field remains a `nullzero` string, so clearing assigns `""`.
+  - Series, identifiers, and covers still stamp the plugin source until their
+    slices (#456 to #458) land. End-to-end regression tests live in
+    `pkg/worker/scan_identify_attribution_test.go`,
+    `pkg/worker/scan_identify_relationships_test.go`, and
+    `pkg/worker/identify_relationship_apply_test.go`.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.

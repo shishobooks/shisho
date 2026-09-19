@@ -17,6 +17,7 @@ import {
   DataSourceFilepath,
   DataSourceManual,
   FileRoleMain,
+  FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
   type Book,
@@ -888,6 +889,502 @@ describe("IdentifyReviewForm component", () => {
       const payload = await submit(user);
       expect(payload.fields.subtitle).toBe("");
       expect(payload.sources.subtitle).toBe("user");
+    });
+  });
+
+  describe("source intents for relationships", () => {
+    const proposal = () =>
+      makeResult({
+        authors: [
+          { name: "Proposed Author", role: "" },
+          { name: "Second Author", role: "writer" },
+        ],
+        narrators: ["Proposed Narrator", "Second Narrator"],
+        genres: ["Fantasy", "Adventure"],
+        tags: ["Favorite", "Unread"],
+      });
+
+    const relationshipBook = () =>
+      makeBook({
+        author_source: DataSourceFilepath,
+        genre_source: DataSourceFilepath,
+        tag_source: DataSourceFilepath,
+        files: [makeFile({ file_type: FileTypeM4B })],
+      });
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    const savedRelationshipBook = () => {
+      const resource = (name: string, id: number) =>
+        ({
+          id,
+          name,
+          library_id: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+          sort_name: name,
+          sort_name_source: DataSourceManual,
+          book_count: 1,
+        }) as const;
+      return makeBook({
+        ...relationshipBook(),
+        authors: [
+          {
+            id: 1,
+            book_id: 1,
+            person_id: 1,
+            sort_order: 0,
+            person: resource("Proposed Author", 1),
+          },
+          {
+            id: 2,
+            book_id: 1,
+            person_id: 2,
+            sort_order: 1,
+            role: "writer",
+            person: resource("Second Author", 2),
+          },
+        ],
+        book_genres: [
+          { id: 1, book_id: 1, genre_id: 1, genre: resource("Fantasy", 1) },
+          { id: 2, book_id: 1, genre_id: 2, genre: resource("Adventure", 2) },
+        ],
+        book_tags: [
+          { id: 1, book_id: 1, tag_id: 1, tag: resource("Favorite", 1) },
+          { id: 2, book_id: 1, tag_id: 2, tag: resource("Unread", 2) },
+        ],
+        files: [
+          makeFile({
+            file_type: FileTypeM4B,
+            narrators: [
+              {
+                id: 1,
+                file_id: 1,
+                person_id: 3,
+                sort_order: 0,
+                person: resource("Proposed Narrator", 3),
+              },
+              {
+                id: 2,
+                file_id: 1,
+                person_id: 4,
+                sort_order: 1,
+                person: resource("Second Narrator", 4),
+              },
+            ],
+          }),
+        ],
+      });
+    };
+
+    it("shows and selects reordered author and narrator proposals as changes", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedRelationshipBook(),
+        result: makeResult({
+          ...proposal(),
+          authors: [
+            { name: "Second Author", role: "writer" },
+            { name: "Proposed Author", role: "" },
+          ],
+          narrators: ["Second Narrator", "Proposed Narrator"],
+        }),
+      });
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Authors" }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Narrators" }),
+      ).toBeChecked();
+      const payload = await submit(user);
+      expect(payload.fields.authors).toEqual([
+        { name: "Second Author", role: "writer" },
+        { name: "Proposed Author", role: "" },
+      ]);
+      expect(payload.fields.narrators).toEqual([
+        "Second Narrator",
+        "Proposed Narrator",
+      ]);
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+      });
+    });
+
+    const labels = ["Authors", "Narrators", "Genres", "Tags"];
+
+    const addEntry = async (
+      user: ReturnType<typeof createUser>,
+      label: string,
+      name: string,
+    ) => {
+      await user.click(screen.getByText(new RegExp(`^Add ${label}`, "i")));
+      await user.type(screen.getByPlaceholderText(`Search ${label}...`), name);
+      await user.click(
+        screen.getByRole("option", {
+          name: `Create new ${label} "${name.trim()}"`,
+        }),
+      );
+      if (label === "genre" || label === "tag") await user.keyboard("{Escape}");
+    };
+
+    it.each([
+      { matchingProposal: true, intent: "plugin" },
+      { matchingProposal: false, intent: "user" },
+    ])(
+      "sends $intent for selected unchanged relationships with matchingProposal=$matchingProposal",
+      async ({ matchingProposal, intent }) => {
+        const user = createUser();
+        renderForm({
+          book: savedRelationshipBook(),
+          result: matchingProposal ? proposal() : makeResult(),
+        });
+        for (const label of labels) {
+          expect(
+            screen.queryByRole("checkbox", { name: `Apply ${label}` }),
+          ).not.toBeInTheDocument();
+        }
+        await user.click(screen.getByRole("button", { name: "All" }));
+        await user.click(
+          screen.getByRole("button", { name: "Toggle BOOK section" }),
+        );
+        for (const label of labels) {
+          const checkbox = screen.getByRole("checkbox", {
+            name: `Apply ${label}`,
+          });
+          expect(checkbox).not.toBeChecked();
+          await user.click(checkbox);
+        }
+        const payload = await submit(user);
+        expect(payload.fields).toMatchObject({
+          authors: [
+            { name: "Proposed Author", role: undefined },
+            { name: "Second Author", role: "writer" },
+          ],
+          narrators: ["Proposed Narrator", "Second Narrator"],
+          genres: ["Fantasy", "Adventure"],
+          tags: ["Favorite", "Unread"],
+        });
+        expect(payload.sources).toMatchObject({
+          authors: intent,
+          narrators: intent,
+          genres: intent,
+          tags: intent,
+        });
+      },
+    );
+
+    it("sends user for partial removals from each relationship", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      for (const name of [
+        "Second Author",
+        "Second Narrator",
+        "Adventure",
+        "Unread",
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+      }
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [{ name: "Proposed Author", role: "" }],
+        narrators: ["Proposed Narrator"],
+        genres: ["Fantasy"],
+        tags: ["Favorite"],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "user",
+        narrators: "user",
+        genres: "user",
+        tags: "user",
+      });
+    });
+
+    it("sends user for Explicit Clears of each relationship", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      for (const name of [
+        "Proposed Author",
+        "Second Author",
+        "Proposed Narrator",
+        "Second Narrator",
+        "Fantasy",
+        "Adventure",
+        "Favorite",
+        "Unread",
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+      }
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [],
+        narrators: [],
+        genres: [],
+        tags: [],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "user",
+        narrators: "user",
+        genres: "user",
+        tags: "user",
+      });
+    });
+
+    it("omits unchecked relationship values and intents", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      for (const label of labels)
+        await user.click(
+          screen.getByRole("checkbox", { name: `Apply ${label}` }),
+        );
+      const payload = await submit(user);
+      for (const field of ["authors", "narrators", "genres", "tags"]) {
+        expect(payload.fields).not.toHaveProperty(field);
+        expect(payload.sources).not.toHaveProperty(field);
+      }
+    });
+
+    it("sends plugin after restoring relationship suggestions", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      for (const name of [
+        "Second Author",
+        "Second Narrator",
+        "Adventure",
+        "Unread",
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+      }
+      await user.click(
+        screen.getByRole("button", { name: "Restore suggestions" }),
+      );
+      const payload = await submit(user);
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it("sends user for author and narrator order edits and keeps their changed status visible", async () => {
+      const user = createUser();
+      renderForm({ book: savedRelationshipBook(), result: proposal() });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      await user.click(
+        screen.getByRole("button", { name: "Toggle BOOK section" }),
+      );
+      for (const label of ["Authors", "Narrators"])
+        await user.click(
+          screen.getByRole("checkbox", { name: `Apply ${label}` }),
+        );
+      await user.click(
+        screen.getByRole("button", { name: "Remove Proposed Author" }),
+      );
+      await addEntry(user, "author", "Proposed Author");
+      await user.click(
+        screen.getByRole("button", { name: "Remove Proposed Narrator" }),
+      );
+      await addEntry(user, "narrator", "Proposed Narrator");
+      await user.click(screen.getByRole("button", { name: "Changed" }));
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Authors" }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Narrators" }),
+      ).toBeChecked();
+      const payload = await submit(user);
+      expect(payload.fields.authors).toEqual([
+        { name: "Second Author", role: "writer" },
+        { name: "Proposed Author", role: undefined },
+      ]);
+      expect(payload.fields.narrators).toEqual([
+        "Second Narrator",
+        "Proposed Narrator",
+      ]);
+      expect(payload.sources).toMatchObject({
+        authors: "user",
+        narrators: "user",
+      });
+    });
+
+    it("ignores genre and tag proposal order for defaults and intent", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedRelationshipBook(),
+        result: makeResult({
+          ...proposal(),
+          genres: ["Adventure", "Fantasy"],
+          tags: ["Unread", "Favorite"],
+        }),
+      });
+      expect(
+        screen.queryByRole("checkbox", { name: "Apply Genres" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("checkbox", { name: "Apply Tags" }),
+      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "All" }));
+      await user.click(
+        screen.getByRole("button", { name: "Toggle BOOK section" }),
+      );
+      for (const label of ["Genres", "Tags"])
+        await user.click(
+          screen.getByRole("checkbox", { name: `Apply ${label}` }),
+        );
+      const payload = await submit(user);
+      expect(payload.fields.genres).toEqual(["Fantasy", "Adventure"]);
+      expect(payload.fields.tags).toEqual(["Favorite", "Unread"]);
+      expect(payload.sources).toMatchObject({
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it.each([
+      { restore: false, intent: "user", status: "Changed", role: "writer" },
+      { restore: true, intent: "plugin", status: "Unchanged", role: undefined },
+    ])(
+      "sends $intent for an author role edit with restore=$restore",
+      async ({ restore, intent, status, role }) => {
+        const user = createUser();
+        const book = savedRelationshipBook();
+        renderForm({
+          book: makeBook({
+            ...book,
+            authors: book.authors?.slice(0, 1),
+            files: [makeFile({ file_type: FileTypeCBZ })],
+          }),
+          result: makeResult({
+            authors: [{ name: "Proposed Author", role: "" }],
+          }),
+        });
+        await user.click(screen.getByRole("button", { name: "All" }));
+        await user.click(
+          screen.getByRole("button", { name: "Toggle BOOK section" }),
+        );
+        await user.click(
+          screen.getByRole("checkbox", { name: "Apply Authors" }),
+        );
+        await user.click(screen.getByText("No role").closest("button")!);
+        await user.click(screen.getByRole("option", { name: "Writer" }));
+        if (restore) {
+          await user.click(screen.getByText("Writer").closest("button")!);
+          await user.click(screen.getByRole("option", { name: "No role" }));
+        }
+        const row = screen
+          .getByText("Authors", { selector: "label" })
+          .closest("div.grid");
+        expect(
+          within(row as HTMLElement).getByText(status),
+        ).toBeInTheDocument();
+        const payload = await submit(user);
+        expect(payload.fields.authors).toEqual([
+          { name: "Proposed Author", role },
+        ]);
+        expect(payload.sources.authors).toBe(intent);
+      },
+    );
+
+    it("sends plugin when removed entries are re-added with trimmed proposal names", async () => {
+      const user = createUser();
+      renderForm({
+        book: relationshipBook(),
+        result: makeResult({
+          authors: [{ name: " Proposed Author ", role: "" }],
+          narrators: [" Proposed Narrator "],
+          genres: [" Fantasy ", "Adventure"],
+          tags: [" Favorite ", "Unread"],
+        }),
+      });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      for (const [label, name] of [
+        ["author", "Proposed Author"],
+        ["narrator", "Proposed Narrator"],
+        ["genre", "Fantasy"],
+        ["tag", "Favorite"],
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+        await addEntry(user, label, name);
+      }
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [{ name: "Proposed Author", role: undefined }],
+        narrators: ["Proposed Narrator"],
+        genres: ["Adventure", "Fantasy"],
+        tags: ["Unread", "Favorite"],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it("compares genre and tag entries as trimmed raw sets", async () => {
+      const user = createUser();
+      renderForm({
+        book: relationshipBook(),
+        result: makeResult({
+          ...proposal(),
+          genres: [" Fantasy ", "Adventure", "Fantasy"],
+          tags: [" Favorite ", "Unread", "Favorite"],
+        }),
+      });
+      // Removing duplicate trimmed names leaves the same set, not an edit.
+      await user.click(
+        screen.getAllByRole("button", {
+          name: "Remove Fantasy",
+        })[1],
+      );
+      await user.click(
+        screen.getAllByRole("button", {
+          name: "Remove Favorite",
+        })[1],
+      );
+      const payload = await submit(user);
+      expect(payload.fields.genres).toEqual([" Fantasy ", "Adventure"]);
+      expect(payload.fields.tags).toEqual([" Favorite ", "Unread"]);
+      expect(payload.sources).toMatchObject({
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it("sends plugin for accepted relationship proposals", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [
+          { name: "Proposed Author", role: "" },
+          { name: "Second Author", role: "writer" },
+        ],
+        narrators: ["Proposed Narrator", "Second Narrator"],
+        genres: ["Fantasy", "Adventure"],
+        tags: ["Favorite", "Unread"],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+        genres: "plugin",
+        tags: "plugin",
+      });
     });
   });
 
