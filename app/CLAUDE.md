@@ -65,6 +65,14 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 - Async UI event handlers must consume mutation rejections and show an inline error or toast. `BookEditDialog` shows metadata/review save errors inline and preserves its draft; the top-nav `ResyncButton` reports scan-creation failures with a toast.
 - `CreateListDialog` treats a resolved `onCreate`/`onUpdate` promise as success. Parent callbacks that show an error toast must rethrow so the dialog stays open and retains unsaved-changes protection. Test these flows through their callers, not just the dialog with a rejecting stub: a caller swallowing the rejection is the failure to catch.
 
+### Demo Mode
+
+`useAuth()` exposes `demoMode`, sourced from the unauthenticated `GET /auth/status` response. Use this flag for Demo Mode UI behavior rather than checking the hostname or username.
+
+`ShishoAPI.checkStatus` maps a `403` response with the `demo_mode` code to the toast `This action is unavailable in the demo.` Keep mutating controls visible unless the Public Demo specification explicitly hides them. The backend remains the write boundary.
+
+Preferences stay browser-local in Demo Mode. User settings use the `shisho-demo-user-settings` local storage key. Per-library settings use `shisho-demo-library-settings-{libraryId}`. The query hooks fetch server defaults first, merge stored values over those defaults, and write Demo Mode mutations to local storage and the TanStack Query cache without sending a write request.
+
 ### React Query Cache Invalidation
 
 When a mutation modifies a resource (update/delete/merge), invalidate related queries so the UI refreshes.

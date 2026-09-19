@@ -44,7 +44,11 @@ class MockEventSource {
   }
 }
 
-function createWrapper(isAuthenticated: boolean, queryClient: QueryClient) {
+function createWrapper(
+  isAuthenticated: boolean,
+  queryClient: QueryClient,
+  demoMode = false,
+) {
   const authValue: AuthContextValue = {
     user: isAuthenticated
       ? {
@@ -59,6 +63,7 @@ function createWrapper(isAuthenticated: boolean, queryClient: QueryClient) {
     isLoading: false,
     isAuthenticated,
     needsSetup: false,
+    demoMode,
     login: vi.fn(),
     logout: vi.fn(),
     hasPermission: () => true,
@@ -103,6 +108,14 @@ describe("useSSE", () => {
   it("does not open EventSource when not authenticated", () => {
     renderHook(() => useSSE(), {
       wrapper: createWrapper(false, queryClient),
+    });
+
+    expect(MockEventSource.instances).toHaveLength(0);
+  });
+
+  it("does not open EventSource in Demo Mode", () => {
+    renderHook(() => useSSE(), {
+      wrapper: createWrapper(true, queryClient, true),
     });
 
     expect(MockEventSource.instances).toHaveLength(0);

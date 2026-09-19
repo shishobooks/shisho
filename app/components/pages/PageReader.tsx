@@ -173,13 +173,13 @@ export default function PageReader({
   };
 
   return (
-    <div className="fixed inset-0 bg-background flex flex-col">
+    <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col">
       {/* Header */}
       <header
         className={cn(
           "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           hideChrome &&
-            "fixed top-0 inset-x-0 z-20 transition-transform duration-300",
+            "fixed top-[var(--demo-banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "-translate-y-full",
         )}
       >
@@ -279,7 +279,9 @@ export default function PageReader({
       <main
         className={cn(
           "flex bg-black relative",
-          hideChrome ? "fixed inset-0" : "flex-1",
+          hideChrome
+            ? "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)]"
+            : "flex-1",
           fitMode === "fit-width"
             ? "items-start justify-start overflow-auto"
             : "items-center justify-center overflow-hidden",

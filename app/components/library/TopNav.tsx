@@ -25,7 +25,7 @@ import { cn } from "@/libraries/utils";
 
 const TopNav = () => {
   const { libraryId } = useParams();
-  const { hasPermission } = useAuth();
+  const { demoMode, hasPermission } = useAuth();
   const { toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
@@ -96,7 +96,7 @@ const TopNav = () => {
               <GlobalSearch />
             </div>
 
-            {canAccessAdmin && (
+            {canAccessAdmin && !demoMode && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>

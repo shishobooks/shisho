@@ -183,8 +183,12 @@ const AdminReviewCriteria = () => {
     }
     try {
       await executeSave(false);
-    } catch {
-      toast.error("Failed to save review criteria.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to save review criteria.",
+      );
     }
   };
 
@@ -192,8 +196,12 @@ const AdminReviewCriteria = () => {
     setSaveDialogOpen(false);
     try {
       await executeSave(clearOverrides);
-    } catch {
-      toast.error("Failed to save review criteria.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to save review criteria.",
+      );
     }
   };
 
@@ -216,8 +224,12 @@ const AdminReviewCriteria = () => {
     }
     try {
       await executeRecompute(false);
-    } catch {
-      toast.error("Failed to queue recompute job.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to queue recompute job.",
+      );
     }
   };
 
@@ -225,8 +237,12 @@ const AdminReviewCriteria = () => {
     setRecomputeDialogOpen(false);
     try {
       await executeRecompute(clearOverrides);
-    } catch {
-      toast.error("Failed to queue recompute job.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to queue recompute job.",
+      );
     }
   };
 

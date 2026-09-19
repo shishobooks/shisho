@@ -1,4 +1,5 @@
 import QueryString from "qs";
+import { toast } from "sonner";
 
 import type { APIKey, APIKeyShortURL } from "@/types/generated/apikeys";
 
@@ -15,6 +16,26 @@ export class ShishoAPIError extends Error {
     this.name = "ShishoError";
   }
 }
+
+const DEMO_MODE_MESSAGE = "This action is unavailable in the demo.";
+
+const scheduleDemoModeToast = () => {
+  // Caller-level error handlers run before the next task. Give them a chance
+  // to show the same message, then provide the global fallback only if needed.
+  setTimeout(() => {
+    const alreadyVisible = toast
+      .getToasts()
+      .some(
+        (item) =>
+          "title" in item &&
+          item.title === DEMO_MODE_MESSAGE &&
+          !("dismiss" in item && item.dismiss),
+      );
+    if (!alreadyVisible) {
+      toast.error(DEMO_MODE_MESSAGE, { id: "demo-mode" });
+    }
+  }, 0);
+};
 
 class ShishoAPI {
   private uri: string;
@@ -38,11 +59,11 @@ class ShishoAPI {
     if (response.status >= 200 && response.status < 300) {
       return resp;
     }
-    throw new ShishoAPIError(
-      resp.error.message,
-      resp.code || resp.error?.code,
-      response.status,
-    );
+    const code = resp.code || resp.error?.code;
+    if (response.status === 403 && code === "demo_mode") {
+      scheduleDemoModeToast();
+    }
+    throw new ShishoAPIError(resp.error.message, code, response.status);
   }
 
   request<T, U = unknown, V = unknown>(

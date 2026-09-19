@@ -267,7 +267,7 @@ export const router = createBrowserRouter([
       {
         path: "user/security",
         element: (
-          <ProtectedRoute>
+          <ProtectedRoute unavailableInDemo>
             <SecuritySettings />
           </ProtectedRoute>
         ),

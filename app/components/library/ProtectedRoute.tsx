@@ -11,17 +11,20 @@ interface ProtectedRouteProps {
     operation: string;
   };
   checkLibraryAccess?: boolean; // If true, checks libraryId param against user's library access
+  unavailableInDemo?: boolean;
 }
 
 const ProtectedRoute = ({
   checkLibraryAccess,
   children,
   requiredPermission,
+  unavailableInDemo,
 }: ProtectedRouteProps) => {
   const {
     isAuthenticated,
     isLoading,
     needsSetup,
+    demoMode,
     hasPermission,
     hasLibraryAccess,
     user,
@@ -53,8 +56,16 @@ const ProtectedRoute = ({
     );
   }
 
+  if (unavailableInDemo && demoMode) {
+    return <Navigate replace to="/" />;
+  }
+
   // Force users with temporary passwords to go to security settings
-  if (user?.must_change_password && location.pathname !== "/user/security") {
+  if (
+    !demoMode &&
+    user?.must_change_password &&
+    location.pathname !== "/user/security"
+  ) {
     const redirectTo = location.pathname + location.search;
     return (
       <Navigate

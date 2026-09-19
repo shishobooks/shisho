@@ -6,6 +6,7 @@ Cross-area layout components shared between the library and admin/settings pages
 
 | File | What it owns |
 |------|--------------|
+| `DemoBanner.tsx` | Persistent Demo Mode notice and links, rendered once by the protected-route root layout. |
 | `Sidebar.tsx` | Collapsible sidebar chrome: collapse state + `shisho-sidebar-collapsed` localStorage persistence, `NavItem` rendering, tooltip-when-collapsed, collapse toggle, version footer. Takes `items: SidebarItem[]`. |
 | `UserMenu.tsx` | Avatar dropdown with username/role label and Lists / Security / User Settings / Sign out actions. Used in both library `TopNav` and admin header. |
 | `topNavClasses.ts` | `cn()`-wrapped class constants (`TOP_NAV_WRAPPER`, `TOP_NAV_INNER`, `TOP_NAV_ROW`) for the outer top-nav geometry. Both `TopNav` and `AdminHeader` use these to guarantee identical container styling. |
@@ -16,7 +17,7 @@ Area-specific sidebars (`app/components/library/LibrarySidebar.tsx`, `app/compon
 
 ## Top Nav and Sidebar Geometry
 
-`TOP_NAV_ROW` sets a 3.5rem mobile or 4rem desktop content height, while `TOP_NAV_WRAPPER` adds a 1px bottom border. The sidebar's sticky offset and viewport height calculation must include that extra pixel. Subtracting only the row height makes the document always overflow vertically by 1px. If the top-nav heights or border change, update the calculations in `Sidebar.tsx` together.
+`TOP_NAV_ROW` sets a 3.5rem mobile or 4rem desktop content height, while `TOP_NAV_WRAPPER` adds a 1px bottom border. `DemoBanner` measures its rendered height into `--demo-banner-height`; the top nav, sidebar, mobile drawer, full-screen readers, and shared layouts use that variable for their offsets and viewport heights. The sidebar calculations must include both the banner height and top-nav border. If any of this geometry changes, update these consumers together.
 
 ## When to Add Here
 
