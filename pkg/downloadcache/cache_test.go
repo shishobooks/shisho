@@ -487,3 +487,43 @@ func createTestEPUB(t *testing.T, path, title string, authors []string) {
 
 	require.NoError(t, w.Close())
 }
+
+// Background cleanups write a lock file into the cache directory. Callers
+// that remove the directory (tests using t.TempDir, mostly) must be able to
+// wait for them, or RemoveAll races the lock file and fails with "directory
+// not empty".
+func TestCache_WaitBlocksUntilBackgroundCleanupFinishes(t *testing.T) {
+	t.Parallel()
+
+	cache := NewCache(t.TempDir(), 1<<20)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	cache.ShouldSkipCleanup = func() bool {
+		close(started)
+		<-release
+		return true
+	}
+
+	cache.triggerCleanupAsync()
+	<-started
+
+	waited := make(chan struct{})
+	go func() {
+		cache.Wait()
+		close(waited)
+	}()
+
+	select {
+	case <-waited:
+		close(release)
+		t.Fatal("Wait returned while a background cleanup was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after the background cleanup finished")
+	}
+}
