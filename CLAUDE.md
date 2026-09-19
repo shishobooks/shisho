@@ -180,8 +180,9 @@ For detailed architecture information, see:
 - Sample library files in `tmp/library/` for testing
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - **While iterating, run only the targeted subset of checks relevant to what you changed.** `mise check:quiet` fans out four heavy parallel pipelines that peg CPU; running it between every iteration is wasteful when you only touched one stack. Subset cheat sheet:
-  - Go-only edits → `mise lint test`
-  - Frontend-only edits → `mise lint:js test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
+  - Go-only edits → `mise run lint ::: test`
+  - Frontend-only edits → `mise run lint:js ::: test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
+  - Separate tasks with `:::`. `mise lint test` passes `test` to the linter as an argument and silently skips the tests.
   - Both → run both
   - Migrations → also `mise db:rollback && mise db:migrate`
   - App E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
