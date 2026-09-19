@@ -730,9 +730,9 @@ func TestApplyMetadata_TrimsPublisherURL(t *testing.T) {
 }
 
 // newApplyEchoContextWithFileName builds an Echo context where the apply
-// payload carries an explicit top-level file_name and (optionally) a
-// file_name_source — the new Phase 1 wire signal.
-func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileName string, fileNameSource string) echo.Context {
+// payload carries an explicit top-level file_name and (optionally) its
+// sources.file_name intent.
+func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileName string, fileNameIntent string) echo.Context {
 	t.Helper()
 	payload := PluginApplyPayload{
 		BookID:      1,
@@ -744,8 +744,8 @@ func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileNa
 		fn := fileName
 		payload.FileName = &fn
 	}
-	if fileNameSource != "" {
-		payload.Sources = map[string]string{SourcesKeyFileName: fileNameSource}
+	if fileNameIntent != "" {
+		payload.Sources = map[string]string{SourcesKeyFileName: fileNameIntent}
 	}
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)

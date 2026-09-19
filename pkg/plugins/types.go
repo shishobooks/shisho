@@ -170,7 +170,11 @@ const (
 	// equals the proposal; the server decides no-op against stored state and
 	// maps the intent to a canonical DataSource. Intent values never reach a
 	// source column verbatim.
+	//
+	// SourceIntents is the payload map. It is emitted here because a tstype tag
+	// cannot contain the comma in Record<K, V>.
 	//tygo:emit export type SourceIntent = typeof SourceIntentPlugin | typeof SourceIntentUser;
+	//tygo:emit export type SourceIntents = Record<string, SourceIntent>;
 	SourceIntentPlugin = "plugin"
 	SourceIntentUser   = "user"
 )
@@ -193,7 +197,7 @@ type PluginApplyPayload struct {
 	// plus SourcesKeyFileName. A selected field with no entry is treated as
 	// "user". Identifier objects inside Fields["identifiers"] additionally
 	// reserve an optional per-entry "source" intent with the same values.
-	Sources     map[string]string `json:"sources,omitempty" validate:"omitempty,dive,oneof=plugin user" tstype:"Record<string, SourceIntent>"`
+	Sources     map[string]string `json:"sources,omitempty" validate:"omitempty,dive,oneof=plugin user" tstype:"SourceIntents"`
 	PluginScope string            `json:"plugin_scope" validate:"required"`
 	PluginID    string            `json:"plugin_id" validate:"required"`
 }
