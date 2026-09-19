@@ -1,4 +1,10 @@
-import type { Book, File } from "@/types";
+import {
+  SourceIntentPlugin,
+  SourceIntentUser,
+  type Book,
+  type File,
+  type SourceIntent,
+} from "@/types";
 
 export type FieldStatus = "unchanged" | "changed" | "new";
 
@@ -128,4 +134,34 @@ export function resolveIdentifiers(
     [...currentSet].every((k) => incomingSet.has(k));
 
   return { value: dedupedIncoming, status: same ? "unchanged" : "changed" };
+}
+
+/**
+ * Identify source intent for a scalar (ADR 0006): "plugin" when the final
+ * value equals the Plugin Proposal, "user" otherwise. Equality is a trimmed
+ * raw comparison, so editing and then restoring the proposal is "plugin".
+ * Whether the value is a no-op against stored metadata is decided by the
+ * server, which holds the canonical stored state.
+ */
+export function scalarSourceIntent(
+  finalValue: string,
+  proposal: string | undefined | null,
+): SourceIntent {
+  return finalValue.trim() === (proposal ?? "").trim()
+    ? SourceIntentPlugin
+    : SourceIntentUser;
+}
+
+/**
+ * scalarSourceIntent for a nullable boolean, where `null` is an Explicit
+ * Clear and `undefined` means the plugin proposed nothing. Neither can match
+ * a proposal, which keeps `false` distinct from absence.
+ */
+export function booleanSourceIntent(
+  finalValue: boolean | null,
+  proposal: boolean | undefined | null,
+): SourceIntent {
+  return finalValue !== null && finalValue === proposal
+    ? SourceIntentPlugin
+    : SourceIntentUser;
 }

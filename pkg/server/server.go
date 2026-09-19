@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -224,7 +223,7 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	pluginService := plugins.NewService(db)
 	appSettingsSvc := appsettings.NewService(db)
 	bookSvc := books.NewService(db).WithAppSettings(appSettingsSvc)
-	bookAdapter := &bookUpdaterAdapter{svc: bookSvc}
+	bookAdapter := books.NewPluginMetadataStore(bookSvc)
 	pageExtractor := books.NewPluginPageExtractor(cbzCache, pdfCache)
 	enrichDeps := &plugins.EnrichDeps{
 		BookStore:       bookAdapter,
@@ -253,77 +252,4 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 func notFoundHandler(c echo.Context) error {
 	c.SetPath("/:path")
 	return errcodes.NotFound("Page")
-}
-
-// bookUpdaterAdapter adapts books.Service to plugins.BookUpdater.
-type bookUpdaterAdapter struct {
-	svc *books.Service
-}
-
-func (a *bookUpdaterAdapter) UpdateBook(ctx context.Context, book *models.Book, columns []string) error {
-	return a.svc.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: columns})
-}
-
-func (a *bookUpdaterAdapter) RetrieveBook(ctx context.Context, bookID int) (*models.Book, error) {
-	return a.svc.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
-}
-
-func (a *bookUpdaterAdapter) DeleteAuthors(ctx context.Context, bookID int) error {
-	return a.svc.DeleteAuthors(ctx, bookID)
-}
-
-func (a *bookUpdaterAdapter) CreateAuthor(ctx context.Context, author *models.Author) error {
-	return a.svc.CreateAuthor(ctx, author)
-}
-
-func (a *bookUpdaterAdapter) DeleteBookSeries(ctx context.Context, bookID int) error {
-	return a.svc.DeleteBookSeries(ctx, bookID)
-}
-
-func (a *bookUpdaterAdapter) CreateBookSeries(ctx context.Context, bs *models.BookSeries) error {
-	return a.svc.CreateBookSeries(ctx, bs)
-}
-
-func (a *bookUpdaterAdapter) FindOrCreateSeries(ctx context.Context, name string, libraryID int, nameSource string) (*models.Series, error) {
-	return a.svc.FindOrCreateSeries(ctx, name, libraryID, nameSource)
-}
-
-func (a *bookUpdaterAdapter) DeleteBookGenres(ctx context.Context, bookID int) error {
-	return a.svc.DeleteBookGenres(ctx, bookID)
-}
-
-func (a *bookUpdaterAdapter) CreateBookGenre(ctx context.Context, bg *models.BookGenre) error {
-	return a.svc.CreateBookGenre(ctx, bg)
-}
-
-func (a *bookUpdaterAdapter) DeleteBookTags(ctx context.Context, bookID int) error {
-	return a.svc.DeleteBookTags(ctx, bookID)
-}
-
-func (a *bookUpdaterAdapter) CreateBookTag(ctx context.Context, bt *models.BookTag) error {
-	return a.svc.CreateBookTag(ctx, bt)
-}
-
-func (a *bookUpdaterAdapter) DeleteIdentifiersForFile(ctx context.Context, fileID int) (int, error) {
-	return a.svc.DeleteIdentifiersForFile(ctx, fileID)
-}
-
-func (a *bookUpdaterAdapter) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifiers []*models.FileIdentifier) error {
-	return a.svc.BulkCreateFileIdentifiers(ctx, fileIdentifiers)
-}
-
-func (a *bookUpdaterAdapter) UpdateFile(ctx context.Context, file *models.File, columns []string) error {
-	return a.svc.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: columns})
-}
-
-func (a *bookUpdaterAdapter) DeleteNarratorsForFile(ctx context.Context, fileID int) (int, error) {
-	return a.svc.DeleteNarratorsForFile(ctx, fileID)
-}
-
-func (a *bookUpdaterAdapter) CreateNarrator(ctx context.Context, narrator *models.Narrator) error {
-	return a.svc.CreateNarrator(ctx, narrator)
-}
-
-func (a *bookUpdaterAdapter) OrganizeBookFiles(ctx context.Context, book *models.Book) error {
-	return a.svc.OrganizeBookFiles(ctx, book)
 }

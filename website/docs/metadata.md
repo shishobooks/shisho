@@ -52,7 +52,15 @@ If **Save Changes** fails in **Edit Book**, the dialog shows an error banner abo
 
 When [file organization](./libraries.md#file-organization) is enabled for the library, Identify reorganizes files after applying path-affecting changes. This includes an explicitly selected file **Name** and removal of the final series membership, which removes obsolete series-number suffixes from organized CBZ and hybrid book folders.
 
-When you apply a plugin-proposed file Name unchanged, it remains plugin-sourced. If you edit the proposed Name before applying it, Shisho treats the result as a manual edit, so normal scans protect it from plugin, embedded, and filepath metadata.
+Identify records a source for each applied **Title**, **Subtitle**, **Description**, **Name**, **Publisher**, **Language**, **Release Date**, **URL**, and **Abridged** value, based on the value you end up applying:
+
+- **Proposed value applied unchanged**: the value is plugin-sourced, so a later scan can replace it with newer plugin metadata. Editing a field and then restoring the plugin's proposal counts as applying it unchanged.
+- **Proposed value changed before applying**: the value is a manual edit, so normal scans protect it from plugin, embedded, and filepath metadata, the same as a change made through **Edit**.
+- **Value already matches what is saved**: nothing changes, including the source. Applying an unchanged manual value keeps it manual. Differences in surrounding whitespace do not count as a change.
+
+Changing **Title** through Identify also regenerates the sort title, unless you set the sort title yourself in **Edit**. A sort title you set stays as it is.
+
+See [Metadata Source Priority](#metadata-source-priority) for how sources are ranked during a scan.
 
 Each Identify field has its own apply checkbox. An unchecked field is left untouched.
 
@@ -61,6 +69,8 @@ Clearing a checked field removes that value or relationship from the book or fil
 :::
 
 If you check a field and remove its value, applying the result clears that metadata, including lists such as authors, genres, narrators, and identifiers. Title is required and cannot be cleared. Cover selection only replaces a cover, and narrators are available only for M4B files.
+
+Clearing **Subtitle**, **Description**, **Name**, **Publisher**, **Language**, **Release Date**, **URL**, or **Abridged** removes the value together with its source. The field is then empty rather than protected, so the next normal scan can fill it again from plugin or embedded file metadata. Clearing does not keep a field empty permanently.
 
 ## Metadata Source Priority
 

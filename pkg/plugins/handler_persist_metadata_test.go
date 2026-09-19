@@ -36,10 +36,12 @@ func makePersistTestJPEG(width, height int) []byte {
 type stubBookStoreForPersist struct {
 	book                   *models.Book
 	deletedNarratorFileIDs []int
+	updatedBookColumns     [][]string
 	updatedFileColumns     [][]string
 }
 
-func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, _ []string) error {
+func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, columns []string) error {
+	s.updatedBookColumns = append(s.updatedBookColumns, append([]string(nil), columns...))
 	return nil
 }
 
@@ -943,10 +945,9 @@ func TestPersistMetadata_ExplicitFileName_EmptyStringClears(t *testing.T) {
 	}
 
 	emptyName := ""
-	manualSource := "manual"
 	overrides := &ApplyOverrides{
-		FileName:       &emptyName,
-		FileNameSource: &manualSource,
+		FileName: &emptyName,
+		Intents:  map[string]string{SourcesKeyFileName: SourceIntentUser},
 	}
 
 	err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())

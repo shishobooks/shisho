@@ -21,6 +21,10 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		return errcodes.ValidationError(err.Error())
 	}
 
+	if err := validateSourceIntents(&payload); err != nil {
+		return err
+	}
+
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
@@ -67,15 +71,17 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	overrides := convertFieldsToOverrides(payload.Fields, md)
 	if payload.FileName != nil {
 		fileName := strings.TrimSpace(*payload.FileName)
-		fileNameSource, err := canonicalFileNameSource(payload.FileNameSource, payload.PluginScope, payload.PluginID)
-		if err != nil {
-			return err
-		}
 		if overrides == nil {
 			overrides = &ApplyOverrides{}
 		}
 		overrides.FileName = &fileName
-		overrides.FileNameSource = fileNameSource
+	}
+
+	if len(payload.Sources) > 0 {
+		if overrides == nil {
+			overrides = &ApplyOverrides{}
+		}
+		overrides.Intents = payload.Sources
 	}
 
 	// Extract multi-series entries from fields (array format from identify form).
@@ -125,26 +131,4 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, updatedBook)
-}
-
-// canonicalFileNameSource maps Identify's semantic source intent to the
-// canonical metadata source stored on files. A nil or empty intent preserves
-// compatibility with older clients by letting persistence default to the
-// specific plugin source.
-func canonicalFileNameSource(intent *string, pluginScope, pluginID string) (*string, error) {
-	if intent == nil || *intent == "" {
-		return nil, nil
-	}
-
-	var source string
-	switch *intent {
-	case FileNameSourceIntentPlugin:
-		source = models.PluginDataSource(pluginScope, pluginID)
-	case FileNameSourceIntentUser:
-		source = models.DataSourceManual
-	default:
-		return nil, errcodes.ValidationError("file_name_source must be one of: plugin, user")
-	}
-
-	return &source, nil
 }

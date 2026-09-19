@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -17,6 +18,9 @@ type Cache struct {
 	dir               string
 	maxSize           int64
 	ShouldSkipCleanup func() bool
+
+	// cleanups tracks background cleanups so Wait can drain them.
+	cleanups sync.WaitGroup
 }
 
 // NewCache creates a new Cache with the given directory and max size.
@@ -90,8 +94,7 @@ func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *mode
 		return "", "", errors.Wrap(err, "failed to write cache metadata")
 	}
 
-	// Trigger cleanup in background
-	go c.TriggerCleanup()
+	c.triggerCleanupAsync()
 
 	return destPath, downloadFilename, nil
 }
@@ -167,8 +170,7 @@ func (c *Cache) GetOrGenerateKepub(ctx context.Context, book *models.Book, file 
 		return "", "", errors.Wrap(err, "failed to write kepub cache metadata")
 	}
 
-	// Trigger cleanup in background
-	go c.TriggerCleanup()
+	c.triggerCleanupAsync()
 
 	return destPath, downloadFilename, nil
 }
@@ -251,8 +253,7 @@ func (c *Cache) GetOrGeneratePlugin(ctx context.Context, book *models.Book, file
 		return "", "", errors.Wrap(err, "failed to write plugin cache metadata")
 	}
 
-	// Trigger cleanup in background
-	go c.TriggerCleanup()
+	c.triggerCleanupAsync()
 
 	return destPath, downloadFilename, nil
 }
@@ -320,6 +321,24 @@ func (c *Cache) runCleanup() error {
 	}()
 
 	return RunCleanup(c.dir, c.maxSize)
+}
+
+// triggerCleanupAsync runs a best-effort cleanup in the background so a
+// download never waits on cache eviction.
+func (c *Cache) triggerCleanupAsync() {
+	c.cleanups.Add(1)
+	go func() {
+		defer c.cleanups.Done()
+		c.TriggerCleanup()
+	}()
+}
+
+// Wait blocks until every background cleanup started so far has finished. A
+// cleanup writes a lock file into the cache directory, so anything that
+// removes the directory (tests using t.TempDir, mostly) must Wait first or the
+// removal can fail with "directory not empty".
+func (c *Cache) Wait() {
+	c.cleanups.Wait()
 }
 
 // Dir returns the cache directory path.

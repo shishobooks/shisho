@@ -243,6 +243,9 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	// mutations — otherwise reviewed flag tests give false greens.
 	g := e.Group("/books")
 	downloadCache := downloadcache.NewCache(cfg.CacheDir, cfg.DownloadCacheMaxSizeBytes())
+	// Registered after cfg.CacheDir's TempDir, so it runs first: drain background
+	// cache cleanups before the directory is removed.
+	t.Cleanup(downloadCache.Wait)
 	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, appsettings.NewService(db))
 
 	return e

@@ -37,6 +37,7 @@ pkg/plugins/
   handler_enrich.go         - searchMetadata (POST /search), DownloadCoverFromURL
   handler_apply_metadata.go - applyMetadata (POST /apply)
   handler_persist_metadata.go - persistMetadata (shared by apply path)
+  handler_attribution.go    - Identify source attribution: intent validation, no-op helpers (ADR 0006)
   handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
@@ -78,10 +79,44 @@ Conventions and gotchas specific to this surface:
   optional value means clear. Title is required, so a selected blank Title is
   rejected. Keep this presence state out of the public
   `mediafile.ParsedMetadata` plugin contract.
-- **`file_name_source` is Identify source intent, not canonical attribution**:
-  the request accepts only `plugin` or `user`. `applyMetadata` maps those values
-  to `plugin:<scope>/<id>` or `manual` before constructing `ApplyOverrides`, so
-  raw intent values never reach `files.name_source`.
+- **`sources` is Identify source intent, not canonical attribution (ADR 0006)**:
+  `PluginApplyPayload.Sources` maps a field key (the keys of `fields`, plus
+  `file_name` via `SourcesKeyFileName`) to a finite `SourceIntent`: `plugin`
+  when the final value equals the Plugin Proposal, `user` otherwise. The
+  browser computes that because the proposal is never stored. The server owns
+  the other half in `persistMetadata`: canonicalize, compare against stored
+  state, and treat a semantic no-op as "write nothing, keep the stored source"
+  (so a stored `manual` is never downgraded). Only a changed value has its
+  intent mapped, via `applyAttribution.sourceFor`, to `plugin:<scope>/<id>` or
+  `manual`. A selected field with no entry is `user`; an unknown intent is a
+  validation error (`validateSourceIntents`, plus the `oneof` tag); raw intent
+  strings never reach a source column. Helpers live in
+  `handler_attribution.go`.
+  - An Explicit Clear nulls the value AND its source column in the same column
+    set. A source left on an empty slot outranks embedded metadata and blocks
+    Scan repopulation. `applyOptional` therefore treats "value already absent,
+    source still set" as a change, not a no-op, so a leftover source can always
+    be healed by clearing again. Pre-ADR clears left exactly that state behind;
+    migration `20260919000000` nulls those sources, but only plugin ones. Never
+    widen it to every source: the Edit form stores a cleared value as NULL plus
+    `manual` on purpose, as a protected empty slot.
+  - The `oneof` tag on `Sources` and `validateSourceIntents` overlap on
+    purpose. The tag documents the contract and fires in the binder; the
+    function also covers the identifier entries the tag cannot express and
+    callers that bypass the custom binder (most handler tests).
+  - A Title change regenerates the sort title only when `sort_title_source` is
+    not `manual`, and stamps it `filepath` (Edit form convention). Never write
+    `manual` or a plugin source to `sort_title_source`.
+  - Publisher is resolve-then-compare: `FindOrCreatePublisher` first, then
+    compare IDs, so an alias of the stored publisher is a no-op.
+  - Release dates compare by UTC calendar day because the form edits at day
+    granularity.
+  - Identifier objects in `fields.identifiers` reserve an optional per-entry
+    `source` intent. It is validated but not yet consumed.
+  - Relationships, series, identifiers, and covers still stamp the plugin
+    source until their slices (#455 to #458) land. The end-to-end regression
+    net is `TestIdentifyApply_ThenOrdinaryScan` in
+    `pkg/worker/scan_identify_attribution_test.go`.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.

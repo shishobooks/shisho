@@ -527,11 +527,13 @@ describe("MyComponent", () => {
 ### Fake Timers and `userEvent`
 
 - `vitest.setup.ts` enables fake timers globally with `shouldAdvanceTime: true`
-- When a test uses `userEvent.setup()`, pass `advanceTimers: vi.advanceTimersByTime` so clicks and typing don't stall or hit the 5s test timeout under heavy load
+- When a test uses `userEvent.setup()`, pass `advanceTimers: vi.advanceTimersByTime` so clicks and typing don't stall or hit the test timeout under heavy load
 
 ```typescript
 const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 ```
+
+- `testTimeout` is 15s (`vitest.config.ts`), not vitest's 5s default. `mise check:quiet` runs the unit suite in parallel with the Go tests, linters, and e2e pipelines, and heavy jsdom tests that take 2-3s idle were timing out at random under that load. Don't lower it, and don't "fix" a load-induced timeout by bumping one test's own timeout. If a test is slow on an idle machine, make it cheaper instead (for example, render one card rather than a full page when the assertion doesn't depend on the count).
 
 ### E2E Tests
 

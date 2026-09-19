@@ -64,11 +64,11 @@ import {
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   AuthorRoleWriter,
-  FileNameSourceIntentPlugin,
-  FileNameSourceIntentUser,
   FileTypeCBZ,
+  SourcesKeyFileName,
   type Book,
   type File,
+  type SourceIntents,
 } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatDuration, formatMetadataFieldLabel } from "@/utils/format";
@@ -81,7 +81,9 @@ import {
   type FieldScope,
 } from "./identify-decisions";
 import {
+  booleanSourceIntent,
   resolveIdentifiers,
+  scalarSourceIntent,
   type FieldStatus,
   type IdentifierEntry,
 } from "./identify-utils";
@@ -1123,9 +1125,22 @@ export function IdentifyReviewForm({
       return;
     }
     const fields: Record<string, unknown> = {};
-    if (decisions.title) fields.title = title;
-    if (decisions.subtitle) fields.subtitle = subtitle;
-    if (decisions.description) fields.description = description;
+    // Per-field source intent (ADR 0006), keyed like `fields`. Only scalars
+    // report one so far; a selected field without an entry is treated as
+    // "user" by the server.
+    const sources: SourceIntents = {};
+    if (decisions.title) {
+      fields.title = title;
+      sources.title = scalarSourceIntent(title, result.title);
+    }
+    if (decisions.subtitle) {
+      fields.subtitle = subtitle;
+      sources.subtitle = scalarSourceIntent(subtitle, result.subtitle);
+    }
+    if (decisions.description) {
+      fields.description = description;
+      sources.description = scalarSourceIntent(description, result.description);
+    }
     if (decisions.authors) {
       fields.authors = authors.map((a) => ({ name: a.name, role: a.role }));
     }
@@ -1143,11 +1158,29 @@ export function IdentifyReviewForm({
     }
     if (decisions.genres) fields.genres = genres;
     if (decisions.tags) fields.tags = tags;
-    if (decisions.publisher) fields.publisher = publisher;
-    if (decisions.release_date) fields.release_date = releaseDate;
-    if (decisions.url) fields.url = url;
-    if (decisions.language) fields.language = language;
-    if (decisions.abridged) fields.abridged = abridged;
+    if (decisions.publisher) {
+      fields.publisher = publisher;
+      sources.publisher = scalarSourceIntent(publisher, result.publisher);
+    }
+    if (decisions.release_date) {
+      fields.release_date = releaseDate;
+      sources.release_date = scalarSourceIntent(
+        releaseDate,
+        result.release_date?.split("T")[0],
+      );
+    }
+    if (decisions.url) {
+      fields.url = url;
+      sources.url = scalarSourceIntent(url, result.url);
+    }
+    if (decisions.language) {
+      fields.language = language;
+      sources.language = scalarSourceIntent(language, result.language);
+    }
+    if (decisions.abridged) {
+      fields.abridged = abridged;
+      sources.abridged = booleanSourceIntent(abridged, result.abridged);
+    }
     if (decisions.identifiers) {
       fields.identifiers = identifiers.map((id) => ({
         type: id.type,
@@ -1166,16 +1199,14 @@ export function IdentifyReviewForm({
       book_id: book.id,
       file_id: fileId,
       fields,
+      sources,
       plugin_scope: result.plugin_scope,
       plugin_id: result.plugin_id,
     };
 
     if (decisions.name) {
       payload.file_name = name;
-      payload.file_name_source =
-        name === initialName
-          ? FileNameSourceIntentPlugin
-          : FileNameSourceIntentUser;
+      sources[SourcesKeyFileName] = scalarSourceIntent(name, initialName);
     }
 
     try {

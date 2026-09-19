@@ -606,7 +606,7 @@ describe("IdentifyReviewForm component", () => {
     ).toHaveAttribute("data-state", "unchecked");
   });
 
-  it("emits file_name and file_name_source when Name is checked", async () => {
+  it("emits file_name with a plugin intent when Name is checked", async () => {
     const user = createUser();
     renderForm({
       result: makeResult({ title: "Plugin Title" }),
@@ -618,10 +618,10 @@ describe("IdentifyReviewForm component", () => {
     await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
     const payload = applyMock.mock.calls[0][0];
     expect(payload.file_name).toBe("Plugin Title");
-    expect(payload.file_name_source).toBe("plugin");
+    expect(payload.sources.file_name).toBe("plugin");
   });
 
-  it("marks file_name_source as user when the Name field is edited", async () => {
+  it("marks the Name intent as user when the Name field is edited", async () => {
     const user = createUser();
     renderForm({
       result: makeResult({ title: "Plugin Title" }),
@@ -644,7 +644,7 @@ describe("IdentifyReviewForm component", () => {
     await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
     const payload = applyMock.mock.calls[0][0];
     expect(payload.file_name).toBe("Edition Suffix");
-    expect(payload.file_name_source).toBe("user");
+    expect(payload.sources.file_name).toBe("user");
   });
 
   it("blocks a selected blank Title with a visible validation error", async () => {
@@ -730,7 +730,165 @@ describe("IdentifyReviewForm component", () => {
     expect(payload.fields.identifiers).toEqual([]);
     expect(payload.fields.abridged).toBeNull();
     expect(payload.file_name).toBe("");
-    expect(payload.file_name_source).toBe("user");
+    expect(payload.sources.file_name).toBe("user");
+  });
+
+  // The browser only reports whether the final value equals the Plugin
+  // Proposal. Whether the value is a no-op against stored metadata is the
+  // server's call (ADR 0006), so an unchanged value still carries an intent.
+  describe("source intents for scalars", () => {
+    const scalarBook = () =>
+      makeBook({
+        title: "Saved Title",
+        title_source: DataSourceFilepath,
+        subtitle: "Saved Subtitle",
+        subtitle_source: DataSourceFilepath,
+        description: "Saved description",
+        description_source: DataSourceFilepath,
+        files: [
+          makeFile({
+            url: "https://example.com/saved",
+            language: "en",
+            release_date: "2020-01-02T00:00:00Z",
+            abridged: false,
+          }),
+        ],
+      });
+
+    // Name also defaults to the proposed title, so scope to the Title row.
+    const getTitleInput = () => {
+      const row = screen
+        .getByText("Title", { selector: "label" })
+        .closest("div.grid");
+      expect(row).not.toBeNull();
+      return within(row as HTMLElement).getByDisplayValue("Proposed Title");
+    };
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    it("sends plugin for accepted proposals", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({
+          title: "Proposed Title",
+          subtitle: "Proposed Subtitle",
+          description: "Proposed description",
+          publisher: "Proposed Publisher",
+          url: "https://example.com/proposed",
+          language: "fr",
+          release_date: "2021-03-04T00:00:00Z",
+          abridged: true,
+        }),
+      });
+
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        title: "Proposed Title",
+        release_date: "2021-03-04",
+        abridged: true,
+      });
+      expect(payload.sources).toMatchObject({
+        title: "plugin",
+        subtitle: "plugin",
+        description: "plugin",
+        publisher: "plugin",
+        url: "plugin",
+        language: "plugin",
+        release_date: "plugin",
+        abridged: "plugin",
+      });
+    });
+
+    it("sends user when the final value has no matching proposal", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        // The plugin proposes nothing for URL, so the file-level row submits
+        // the saved value unchanged. The server resolves that as a no-op.
+        result: makeResult({ title: "Saved Title" }),
+      });
+
+      // Unchanged rows are hidden and default OFF, so opt in explicitly.
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(screen.getByRole("checkbox", { name: /apply url/i }));
+      const payload = await submit(user);
+      expect(payload.fields.url).toBe("https://example.com/saved");
+      expect(payload.sources.url).toBe("user");
+    });
+
+    it("sends user for an edited value", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({ title: "Proposed Title" }),
+      });
+
+      const titleInput = getTitleInput();
+      await user.clear(titleInput);
+      await user.type(titleInput, "My Title");
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      expect(applyMock.mock.calls[0][0].fields.title).toBe("My Title");
+      expect(applyMock.mock.calls[0][0].sources.title).toBe("user");
+    });
+
+    it("sends plugin when an edit is restored to the proposal", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({ title: "Proposed Title" }),
+      });
+
+      const titleInput = getTitleInput();
+      await user.clear(titleInput);
+      await user.type(titleInput, "My Title");
+      await user.clear(titleInput);
+      // Surrounding whitespace is not an edit: equality is trimmed.
+      await user.type(titleInput, "Proposed Title ");
+
+      const payload = await submit(user);
+      expect(payload.sources.title).toBe("plugin");
+    });
+
+    it("omits both the value and the intent for unchecked fields", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({
+          title: "Proposed Title",
+          subtitle: "Proposed Subtitle",
+        }),
+      });
+
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply subtitle/i }),
+      );
+      const payload = await submit(user);
+      expect(payload.fields).not.toHaveProperty("subtitle");
+      expect(payload.sources).not.toHaveProperty("subtitle");
+      expect(payload.sources.title).toBe("plugin");
+    });
+
+    it("sends user for an Explicit Clear", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({
+          title: "Saved Title",
+          subtitle: "Proposed Subtitle",
+        }),
+      });
+
+      await user.clear(screen.getByDisplayValue("Proposed Subtitle"));
+      const payload = await submit(user);
+      expect(payload.fields.subtitle).toBe("");
+      expect(payload.sources.subtitle).toBe("user");
+    });
   });
 
   it("hides unchanged rows in the default Changed filter, shows them in All", async () => {

@@ -39,6 +39,11 @@ func equalIntSets(a, b map[int]struct{}) bool {
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
 func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) error {
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
+	// Scalars follow the ADR 0006 attribution contract: a semantic no-op keeps
+	// the stored value and source, and a changed value gets the canonical
+	// source for its intent. Relationships, identifiers, and covers stamp
+	// pluginSource.
+	attr := newApplyAttribution(pluginSource, overrides)
 	var columns []string
 
 	// Accumulate file-level column updates so Title/Narrator/Publisher/etc.
@@ -54,40 +59,35 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Title
 	title := strings.TrimSpace(md.Title)
-	if title != "" {
-		titleChanged := book.Title != title
+	if title != "" && title != book.Title {
 		book.Title = title
-		book.TitleSource = pluginSource
-		book.SortTitle = sortname.ForTitle(title)
-		book.SortTitleSource = pluginSource
-		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
-		if titleChanged {
-			seriesAggregateMayBeStale = true
+		book.TitleSource = attr.sourceFor("title")
+		columns = append(columns, "title", "title_source")
+		// Same convention as the Edit form: a derived sort title is regenerated
+		// unless the user pinned it, and is never stamped manual or plugin, so
+		// a later Title edit still regenerates it.
+		if book.SortTitleSource != models.DataSourceManual {
+			book.SortTitle = sortname.ForTitle(title)
+			book.SortTitleSource = models.DataSourceFilepath
+			columns = append(columns, "sort_title", "sort_title_source")
 		}
+		seriesAggregateMayBeStale = true
 	}
 
 	// Subtitle
 	subtitle := strings.TrimSpace(md.Subtitle)
 	if subtitle != "" || applyFieldSelected(overrides, "subtitle") {
-		if subtitle == "" {
-			book.Subtitle = nil
-		} else {
-			book.Subtitle = &subtitle
+		if applyOptionalString(subtitle, &book.Subtitle, &book.SubtitleSource, attr.sourceFor("subtitle")) {
+			columns = append(columns, "subtitle", "subtitle_source")
 		}
-		book.SubtitleSource = &pluginSource
-		columns = append(columns, "subtitle", "subtitle_source")
 	}
 
 	// Description
 	desc := htmlutil.StripTags(strings.TrimSpace(md.Description))
 	if desc != "" || applyFieldSelected(overrides, "description") {
-		if desc == "" {
-			book.Description = nil
-		} else {
-			book.Description = &desc
+		if applyOptionalString(desc, &book.Description, &book.DescriptionSource, attr.sourceFor("description")) {
+			columns = append(columns, "description", "description_source")
 		}
-		book.DescriptionSource = &pluginSource
-		columns = append(columns, "description", "description_source")
 	}
 
 	// Apply scalar column updates
@@ -366,18 +366,23 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// Publisher (file-level, applied to target file)
 	publisherName := strings.TrimSpace(md.Publisher)
 	if targetFile != nil && applyFieldSelected(overrides, "publisher") && publisherName == "" {
-		targetFile.PublisherID = nil
-		targetFile.Publisher = nil
-		targetFile.PublisherSource = &pluginSource
-		fileColumns = append(fileColumns, "publisher_id", "publisher_source")
+		if targetFile.PublisherID != nil || targetFile.PublisherSource != nil {
+			targetFile.PublisherID = nil
+			targetFile.Publisher = nil
+			targetFile.PublisherSource = nil
+			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
+		}
 	} else if publisherName != "" && targetFile != nil && h.enrich.publisherFinder != nil {
+		// Resolve first, then compare IDs, so an alias or different spelling of
+		// the stored publisher is a no-op rather than a change.
 		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
 		if pErr != nil {
 			log.Warn("failed to find/create publisher", logger.Data{"name": publisherName, "error": pErr.Error()})
-		} else {
+		} else if targetFile.PublisherID == nil || *targetFile.PublisherID != publisher.ID {
+			publisherSource := attr.sourceFor("publisher")
 			targetFile.PublisherID = &publisher.ID
 			targetFile.Publisher = publisher
-			targetFile.PublisherSource = &pluginSource
+			targetFile.PublisherSource = &publisherSource
 			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
 			if h.enrich.searchIndexer != nil {
 				if err := h.enrich.searchIndexer.IndexPublisher(ctx, publisher); err != nil {
@@ -390,64 +395,39 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// URL (file-level, applied to target file)
 	url := strings.TrimSpace(md.URL)
 	if (url != "" || applyFieldSelected(overrides, "url")) && targetFile != nil {
-		if url == "" {
-			targetFile.URL = nil
-		} else {
-			targetFile.URL = &url
+		if applyOptionalString(url, &targetFile.URL, &targetFile.URLSource, attr.sourceFor("url")) {
+			fileColumns = append(fileColumns, "url", "url_source")
 		}
-		targetFile.URLSource = &pluginSource
-		fileColumns = append(fileColumns, "url", "url_source")
 	}
 
 	// Name (file-level, applied to target file). Only written when the
 	// caller explicitly opted in via overrides.FileName. An empty selected
 	// value clears the edition name so naming falls back to book.Title.
 	if overrides != nil && overrides.FileName != nil && targetFile != nil {
-		if *overrides.FileName == "" {
-			targetFile.Name = nil
-			targetFile.NameSource = nil
-		} else {
-			nameCopy := *overrides.FileName
-			targetFile.Name = &nameCopy
-
-			nameSource := pluginSource
-			if overrides.FileNameSource != nil && *overrides.FileNameSource != "" {
-				nameSource = *overrides.FileNameSource
-			}
-			nameSourceCopy := nameSource
-			targetFile.NameSource = &nameSourceCopy
+		if applyOptionalString(*overrides.FileName, &targetFile.Name, &targetFile.NameSource, attr.sourceFor(SourcesKeyFileName)) {
+			fileColumns = append(fileColumns, "name", "name_source")
 		}
-
-		fileColumns = append(fileColumns, "name", "name_source")
 	}
 
 	// Release date (file-level, applied to target file)
 	if (md.ReleaseDate != nil || applyFieldSelected(overrides, "release_date")) && targetFile != nil {
-		targetFile.ReleaseDate = md.ReleaseDate
-		targetFile.ReleaseDateSource = &pluginSource
-		fileColumns = append(fileColumns, "release_date", "release_date_source")
+		if applyOptional(md.ReleaseDate, &targetFile.ReleaseDate, &targetFile.ReleaseDateSource, attr.sourceFor("release_date"), sameCalendarDate) {
+			fileColumns = append(fileColumns, "release_date", "release_date_source")
+		}
 	}
 
 	// Language (file-level, applied to target file)
 	if (md.Language != nil || applyFieldSelected(overrides, "language")) && targetFile != nil {
-		targetFile.Language = md.Language
-		if md.Language == nil {
-			targetFile.LanguageSource = nil
-		} else {
-			targetFile.LanguageSource = &pluginSource
+		if applyOptionalValue(md.Language, &targetFile.Language, &targetFile.LanguageSource, attr.sourceFor("language")) {
+			fileColumns = append(fileColumns, "language", "language_source")
 		}
-		fileColumns = append(fileColumns, "language", "language_source")
 	}
 
 	// Abridged (file-level, applied to target file)
 	if (md.Abridged != nil || applyFieldSelected(overrides, "abridged")) && targetFile != nil {
-		targetFile.Abridged = md.Abridged
-		if md.Abridged == nil {
-			targetFile.AbridgedSource = nil
-		} else {
-			targetFile.AbridgedSource = &pluginSource
+		if applyOptionalValue(md.Abridged, &targetFile.Abridged, &targetFile.AbridgedSource, attr.sourceFor("abridged")) {
+			fileColumns = append(fileColumns, "abridged", "abridged_source")
 		}
-		fileColumns = append(fileColumns, "abridged", "abridged_source")
 	}
 
 	// Identifiers (file-level, applied to target file). A valid selected empty
