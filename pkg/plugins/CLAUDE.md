@@ -95,10 +95,11 @@ Conventions and gotchas specific to this surface:
   - An Explicit Clear nulls the value AND its source column in the same column
     set. A source left on an empty slot outranks embedded metadata and blocks
     Scan repopulation. `applyOptional` therefore treats "value already absent,
-    source still set" as a change, not a no-op: pre-ADR clears left exactly
-    that state behind, and clearing again is how it gets healed. Do not
-    "fix" this with a migration that nulls sources on NULL values; the Edit
-    form stores a cleared value as NULL plus `manual` on purpose.
+    source still set" as a change, not a no-op, so a leftover source can always
+    be healed by clearing again. Pre-ADR clears left exactly that state behind;
+    migration `20260919000000` nulls those sources, but only plugin ones. Never
+    widen it to every source: the Edit form stores a cleared value as NULL plus
+    `manual` on purpose, as a protected empty slot.
   - The `oneof` tag on `Sources` and `validateSourceIntents` overlap on
     purpose. The tag documents the contract and fires in the binder; the
     function also covers the identifier entries the tag cannot express and
