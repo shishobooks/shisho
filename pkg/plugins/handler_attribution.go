@@ -21,8 +21,8 @@ type applyAttribution struct {
 	intents      map[string]string
 }
 
-func newApplyAttribution(pluginScope, pluginID string, overrides *ApplyOverrides) applyAttribution {
-	attr := applyAttribution{pluginSource: models.PluginDataSource(pluginScope, pluginID)}
+func newApplyAttribution(pluginSource string, overrides *ApplyOverrides) applyAttribution {
+	attr := applyAttribution{pluginSource: pluginSource}
 	if overrides != nil {
 		attr.intents = overrides.Intents
 	}
@@ -71,51 +71,51 @@ func validateSourceIntents(payload *PluginApplyPayload) error {
 	return nil
 }
 
-// applyOptionalString writes a canonicalized optional string and its source.
-// It reports false, leaving both untouched, when the value is a no-op. An
-// empty value is an Explicit Clear: it nulls the value and its source so a
-// later Scan may repopulate the field.
-func applyOptionalString(value string, stored, storedSource **string, source string) bool {
-	current := ""
-	if *stored != nil {
-		current = **stored
-	}
-	if value == current {
-		return false
-	}
-	if value == "" {
+// applyOptional writes a canonicalized optional value and its source, where a
+// nil value is an Explicit Clear. It reports false, leaving both untouched,
+// when the value is a semantic no-op.
+//
+// A clear nulls the value and its source so a later Scan may repopulate the
+// field. That includes a source left behind on an already-absent value:
+// before ADR 0006 a clear kept the plugin source, which outranks embedded
+// metadata, so clearing again has to be able to heal it.
+func applyOptional[T any](value *T, stored **T, storedSource **string, source string, equal func(a, b T) bool) bool {
+	if value == nil {
+		if *stored == nil && *storedSource == nil {
+			return false
+		}
 		*stored = nil
 		*storedSource = nil
 		return true
 	}
-	*stored = &value
+	if *stored != nil && equal(*value, **stored) {
+		return false
+	}
+	*stored = value
 	*storedSource = &source
 	return true
 }
 
-// applyOptionalValue is applyOptionalString for nullable comparable values,
-// where nil (rather than a zero value) means absent. This keeps a stored
-// `false` distinct from absence for Abridged.
+// applyOptionalValue is applyOptional for comparable values. Absence is nil
+// rather than a zero value, which keeps a stored `false` distinct from absence
+// for Abridged.
 func applyOptionalValue[T comparable](value *T, stored **T, storedSource **string, source string) bool {
-	if (value == nil) == (*stored == nil) && (value == nil || *value == **stored) {
-		return false
-	}
-	*stored = value
-	if value == nil {
-		*storedSource = nil
-	} else {
-		*storedSource = &source
-	}
-	return true
+	return applyOptional(value, stored, storedSource, source, func(a, b T) bool { return a == b })
 }
 
-// sameCalendarDate reports whether two optional dates fall on the same UTC
-// day. Identify edits release dates at day granularity, so a stored time of
-// day must not turn an untouched date into a change.
-func sameCalendarDate(a, b *time.Time) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
+// applyOptionalString is applyOptionalValue for canonicalized strings, where
+// an empty string is the Explicit Clear.
+func applyOptionalString(value string, stored, storedSource **string, source string) bool {
+	if value == "" {
+		return applyOptionalValue(nil, stored, storedSource, source)
 	}
+	return applyOptionalValue(&value, stored, storedSource, source)
+}
+
+// sameCalendarDate reports whether two dates fall on the same UTC day.
+// Identify edits release dates at day granularity, so a stored time of day
+// must not turn an untouched date into a change.
+func sameCalendarDate(a, b time.Time) bool {
 	ay, am, ad := a.UTC().Date()
 	by, bm, bd := b.UTC().Date()
 	return ay == by && am == bm && ad == bd

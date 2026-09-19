@@ -94,7 +94,15 @@ Conventions and gotchas specific to this surface:
   `handler_attribution.go`.
   - An Explicit Clear nulls the value AND its source column in the same column
     set. A source left on an empty slot outranks embedded metadata and blocks
-    Scan repopulation.
+    Scan repopulation. `applyOptional` therefore treats "value already absent,
+    source still set" as a change, not a no-op: pre-ADR clears left exactly
+    that state behind, and clearing again is how it gets healed. Do not
+    "fix" this with a migration that nulls sources on NULL values; the Edit
+    form stores a cleared value as NULL plus `manual` on purpose.
+  - The `oneof` tag on `Sources` and `validateSourceIntents` overlap on
+    purpose. The tag documents the contract and fires in the binder; the
+    function also covers the identifier entries the tag cannot express and
+    callers that bypass the custom binder (most handler tests).
   - A Title change regenerates the sort title only when `sort_title_source` is
     not `manual`, and stamps it `filepath` (Edit form convention). Never write
     `manual` or a plugin source to `sort_title_source`.

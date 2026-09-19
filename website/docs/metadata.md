@@ -58,6 +58,8 @@ Identify records a source for each applied **Title**, **Subtitle**, **Descriptio
 - **Proposed value changed before applying**: the value is a manual edit, so normal scans protect it from plugin, embedded, and filepath metadata, the same as a change made through **Edit**.
 - **Value already matches what is saved**: nothing changes, including the source. Applying an unchanged manual value keeps it manual. Differences in surrounding whitespace do not count as a change.
 
+Changing **Title** through Identify also regenerates the sort title, unless you set the sort title yourself in **Edit**. A sort title you set stays as it is.
+
 See [Metadata Source Priority](#metadata-source-priority) for how sources are ranked during a scan.
 
 Each Identify field has its own apply checkbox. An unchecked field is left untouched.

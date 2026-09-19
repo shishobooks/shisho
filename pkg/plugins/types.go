@@ -164,15 +164,13 @@ type PluginSearchPayload struct {
 	Identifiers []mediafile.ParsedIdentifier `json:"identifiers,omitempty" tstype:"ParsedIdentifier[]"`
 }
 
+// SourceIntent is Identify's per-field attribution intent (ADR 0006). The
+// browser holds the Plugin Proposal, so it reports whether the final value
+// equals the proposal; the server decides no-op against stored state and maps
+// the intent to a canonical DataSource. Intent values never reach a source
+// column verbatim. SourceIntents is the payload map, emitted here because a
+// tstype tag cannot contain the comma in Record<K, V>.
 const (
-	// SourceIntent is Identify's per-field attribution intent (ADR 0006). The
-	// browser holds the Plugin Proposal, so it reports whether the final value
-	// equals the proposal; the server decides no-op against stored state and
-	// maps the intent to a canonical DataSource. Intent values never reach a
-	// source column verbatim.
-	//
-	// SourceIntents is the payload map. It is emitted here because a tstype tag
-	// cannot contain the comma in Record<K, V>.
 	//tygo:emit export type SourceIntent = typeof SourceIntentPlugin | typeof SourceIntentUser;
 	//tygo:emit export type SourceIntents = Record<string, SourceIntent>;
 	SourceIntentPlugin = "plugin"

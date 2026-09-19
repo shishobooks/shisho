@@ -151,3 +151,17 @@ export function scalarSourceIntent(
     ? SourceIntentPlugin
     : SourceIntentUser;
 }
+
+/**
+ * scalarSourceIntent for a nullable boolean, where `null` is an Explicit
+ * Clear and `undefined` means the plugin proposed nothing. Neither can match
+ * a proposal, which keeps `false` distinct from absence.
+ */
+export function booleanSourceIntent(
+  finalValue: boolean | null,
+  proposal: boolean | undefined | null,
+): SourceIntent {
+  return finalValue !== null && finalValue === proposal
+    ? SourceIntentPlugin
+    : SourceIntentUser;
+}

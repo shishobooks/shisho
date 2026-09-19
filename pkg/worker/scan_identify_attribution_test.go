@@ -44,7 +44,8 @@ const identifyTestParserJS = `var plugin = (function() {
           publisher: "Embedded Publisher",
           url: "https://example.com/embedded",
           releaseDate: "2020-01-02",
-          language: "en"
+          language: "en",
+          abridged: true
         };
       }
     }
@@ -118,10 +119,15 @@ func postIdentifyApply(t *testing.T, e *echo.Echo, payload plugins.PluginApplyPa
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
 
-// TestIdentifyApply_ThenOrdinaryScan verifies Identify attribution by its
-// user-visible consequence: what the next ordinary Scan does to the values.
-func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
-	t.Parallel()
+// identifyScanFixture is a scanned one-file library whose embedded metadata
+// comes from the idtest parser and whose auto-enricher proposes a description
+// and publisher on every ordinary Scan.
+type identifyScanFixture struct {
+	tc *testContext
+}
+
+func newIdentifyScanFixture(t *testing.T) *identifyScanFixture {
+	t.Helper()
 
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)
@@ -137,17 +143,36 @@ func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.idtest"), []byte("content"), 0644))
 
 	require.NoError(t, tc.runScan())
+	return &identifyScanFixture{tc: tc}
+}
 
-	retrieve := func() (*models.Book, *models.File) {
-		allBooks := tc.listBooks()
-		require.Len(t, allBooks, 1)
-		book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &allBooks[0].ID})
-		require.NoError(t, err)
-		require.Len(t, book.Files, 1)
-		return book, book.Files[0]
-	}
+func (f *identifyScanFixture) retrieve(t *testing.T) (*models.Book, *models.File) {
+	t.Helper()
+	allBooks := f.tc.listBooks()
+	require.Len(t, allBooks, 1)
+	book, err := f.tc.bookService.RetrieveBook(f.tc.ctx, books.RetrieveBookOptions{ID: &allBooks[0].ID})
+	require.NoError(t, err)
+	require.Len(t, book.Files, 1)
+	return book, book.Files[0]
+}
 
-	book, file := retrieve()
+// ordinaryScan rescans the file the way a plain Resync does: no refresh, no
+// reset, auto-enrichers on.
+func (f *identifyScanFixture) ordinaryScan(t *testing.T, fileID int) {
+	t.Helper()
+	_, err := f.tc.worker.scanInternal(f.tc.ctx, ScanOptions{FileID: fileID}, nil)
+	require.NoError(t, err)
+}
+
+// TestIdentifyApply_ThenOrdinaryScan verifies Identify attribution by its
+// user-visible consequence: what the next ordinary Scan does to the values.
+func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
+	t.Parallel()
+
+	f := newIdentifyScanFixture(t)
+	tc := f.tc
+
+	book, file := f.retrieve(t)
 	require.Equal(t, "Plugin description", *book.Description, "precondition: the auto-enricher wins the first Scan")
 	require.Equal(t, "Plugin Publisher", file.Publisher.Name)
 	require.Equal(t, "Embedded Subtitle", *book.Subtitle)
@@ -173,7 +198,7 @@ func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
 		PluginID:    "auto-enricher",
 	})
 
-	book, file = retrieve()
+	book, file = f.retrieve(t)
 	require.Equal(t, "My edited description", *book.Description)
 	require.Equal(t, models.DataSourceManual, *book.DescriptionSource)
 	require.Equal(t, "My Publisher", file.Publisher.Name)
@@ -187,10 +212,9 @@ func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
 	require.Nil(t, file.Language)
 	require.Nil(t, file.LanguageSource)
 
-	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID}, nil)
-	require.NoError(t, err)
+	f.ordinaryScan(t, file.ID)
 
-	book, file = retrieve()
+	book, file = f.retrieve(t)
 	assert.Equal(t, "My edited description", *book.Description, "a manual Identify edit must survive auto-enrichment")
 	assert.Equal(t, models.DataSourceManual, *book.DescriptionSource)
 	assert.Equal(t, "My Publisher", file.Publisher.Name, "a manual Identify edit must survive auto-enrichment")
@@ -204,4 +228,46 @@ func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
 	assert.Equal(t, "2020-01-02", file.ReleaseDate.UTC().Format("2006-01-02"))
 	require.NotNil(t, file.Language, "a cleared language must be repopulated from embedded metadata")
 	assert.Equal(t, "en", *file.Language)
+}
+
+// TestIdentifyApply_ClearedEnricherFields_ThenOrdinaryScan covers the cleared
+// fields the first test spends on manual edits, plus Abridged.
+func TestIdentifyApply_ClearedEnricherFields_ThenOrdinaryScan(t *testing.T) {
+	t.Parallel()
+
+	f := newIdentifyScanFixture(t)
+
+	book, file := f.retrieve(t)
+	require.NotNil(t, file.Abridged, "precondition: the first Scan reads embedded abridged")
+	require.True(t, *file.Abridged)
+
+	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
+		BookID: book.ID,
+		FileID: &file.ID,
+		Fields: map[string]any{
+			"description": "",
+			"publisher":   "",
+			"abridged":    nil,
+		},
+		PluginScope: "test",
+		PluginID:    "auto-enricher",
+	})
+
+	book, file = f.retrieve(t)
+	require.Nil(t, book.Description)
+	require.Nil(t, book.DescriptionSource)
+	require.Nil(t, file.PublisherID)
+	require.Nil(t, file.PublisherSource)
+	require.Nil(t, file.Abridged)
+	require.Nil(t, file.AbridgedSource)
+
+	f.ordinaryScan(t, file.ID)
+
+	book, file = f.retrieve(t)
+	require.NotNil(t, book.Description, "a cleared description must be repopulated by the next Scan")
+	assert.Equal(t, "Plugin description", *book.Description)
+	require.NotNil(t, file.Publisher, "a cleared publisher must be repopulated by the next Scan")
+	assert.Equal(t, "Plugin Publisher", file.Publisher.Name)
+	require.NotNil(t, file.Abridged, "a cleared abridged flag must be repopulated from embedded metadata")
+	assert.True(t, *file.Abridged)
 }

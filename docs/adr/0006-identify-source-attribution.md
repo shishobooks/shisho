@@ -16,9 +16,11 @@ Identify lets an editor review and change a Plugin Proposal before applying it. 
 
 **Sort title.** A Title change regenerates the sort title only when the stored `sort_title_source` is not `manual`, and stamps the regenerated value `filepath`, exactly like the Edit form. Identify never writes `manual` or a plugin source to `sort_title_source`. Sharing the Title's source would have stamped `manual` on a derived value, and the Edit form only regenerates the sort title when its source is not `manual`, so a later Title edit would silently stop updating it.
 
-**Atomicity.** A value and its source are always written in the same `UpdateBook` or `UpdateFile` column set, so a partial failure cannot leave a value attributed to the wrong source. Wrapping the whole apply path in a database transaction is out of scope.
+**Atomicity.** A value and its source are always written in the same `UpdateBook` or `UpdateFile` column set, so a partial failure cannot leave a value attributed to the wrong source. Relationship insert failures return an error instead of a warning, so a half-written collection is never attributed as if it were complete. Wrapping the whole apply path in a database transaction is out of scope.
 
 **Explicit Clears leave no tombstone.** Clearing a value nulls both the value and its source column. The absence has no provenance, so a later Scan may repopulate it from embedded metadata. A source left on an empty slot would outrank file metadata and block that. Title cannot be cleared.
+
+Earlier Identify clears did leave the plugin source on the absent value. Those rows are not migrated in this slice. A blanket "null the source wherever the value is absent" migration is wrong, because the Edit form stores a cleared value as absent plus `manual` on purpose, as a protected empty slot. A migration limited to plugin-sourced empty slots would be safe and can be added later. Until then, clearing an already-absent value through Identify still nulls a leftover source, so an editor can heal a stuck field by clearing it again.
 
 **Relationships use aggregate provenance.** Authors and Narrators are ordered collections (Person identity and order are significant, plus role for Authors, where an empty role equals a nil role). Genres and Tags are unordered sets. The server resolves each entry through the normal find-or-create path and compares resolved IDs against the current relations, deleting and reinserting only when they differ. There is no per-entry provenance for Authors, Genres, Tags, Narrators, or Series memberships.
 

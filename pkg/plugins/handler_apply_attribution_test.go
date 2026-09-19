@@ -447,3 +447,48 @@ func TestApplyMetadata_Attribution_UnchangedNamePreservesStoredSource(t *testing
 	assert.Equal(t, models.DataSourceManual, *file.NameSource)
 	assert.Empty(t, store.updatedFileColumns)
 }
+
+// Before ADR 0006 an Identify clear left the plugin source on the now-absent
+// value, which outranks embedded metadata and blocks Scan repopulation.
+// Clearing such a field again must heal it, even though the value is already
+// absent.
+func TestApplyMetadata_Attribution_ClearingAbsentValueRemovesStaleSource(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Stored Title", models.FileTypeEPUB)
+	stale := applyTestPluginSource
+	book.SubtitleSource = &stale
+	book.DescriptionSource = &stale
+	file.NameSource = &stale
+	file.PublisherSource = &stale
+	file.URLSource = &stale
+	file.ReleaseDateSource = &stale
+	file.LanguageSource = &stale
+	file.AbridgedSource = &stale
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+	h := newApplyTestHandler(store)
+	emptyName := ""
+
+	err := applyForAttribution(t, h, PluginApplyPayload{
+		BookID:   book.ID,
+		FileID:   &file.ID,
+		FileName: &emptyName,
+		Fields: map[string]any{
+			"subtitle": "", "description": "", "publisher": "", "url": "",
+			"language": "", "release_date": "", "abridged": nil,
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Nil(t, book.SubtitleSource)
+	assert.Nil(t, book.DescriptionSource)
+	assert.Nil(t, file.NameSource)
+	assert.Nil(t, file.PublisherSource)
+	assert.Nil(t, file.URLSource)
+	assert.Nil(t, file.ReleaseDateSource)
+	assert.Nil(t, file.LanguageSource)
+	assert.Nil(t, file.AbridgedSource)
+	require.Len(t, store.updatedBookColumns, 1)
+	assert.ElementsMatch(t, []string{"subtitle", "subtitle_source", "description", "description_source"}, store.updatedBookColumns[0])
+	require.Len(t, store.updatedFileColumns, 1)
+}

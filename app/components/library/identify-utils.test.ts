@@ -3,10 +3,39 @@ import { describe, expect, it } from "vitest";
 import type { Book, File } from "@/types";
 
 import {
+  booleanSourceIntent,
   computeIdentifyEmptyState,
   pickInitialFile,
   resolveIdentifiers,
+  scalarSourceIntent,
 } from "./identify-utils";
+
+describe("scalarSourceIntent", () => {
+  it("is plugin when the final value equals the proposal, ignoring whitespace", () => {
+    expect(scalarSourceIntent("Dune", "Dune")).toBe("plugin");
+    expect(scalarSourceIntent(" Dune ", "Dune")).toBe("plugin");
+  });
+
+  it("is user when the final value differs from or lacks a proposal", () => {
+    expect(scalarSourceIntent("Dune Messiah", "Dune")).toBe("user");
+    expect(scalarSourceIntent("Dune", undefined)).toBe("user");
+    expect(scalarSourceIntent("", "Dune")).toBe("user");
+  });
+});
+
+describe("booleanSourceIntent", () => {
+  it("is plugin only when a non-null final value equals the proposal", () => {
+    expect(booleanSourceIntent(true, true)).toBe("plugin");
+    expect(booleanSourceIntent(false, false)).toBe("plugin");
+  });
+
+  it("keeps false, absence, and an Explicit Clear distinct", () => {
+    expect(booleanSourceIntent(false, undefined)).toBe("user");
+    expect(booleanSourceIntent(false, true)).toBe("user");
+    expect(booleanSourceIntent(null, undefined)).toBe("user");
+    expect(booleanSourceIntent(null, null)).toBe("user");
+  });
+});
 
 describe("computeIdentifyEmptyState", () => {
   const baseInput = {

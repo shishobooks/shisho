@@ -41,9 +41,9 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	// Scalars follow the ADR 0006 attribution contract: a semantic no-op keeps
 	// the stored value and source, and a changed value gets the canonical
-	// source for its intent. Relationships, identifiers, and covers still stamp
-	// pluginSource until their slices of the contract land.
-	attr := newApplyAttribution(pluginScope, pluginID, overrides)
+	// source for its intent. Relationships, identifiers, and covers stamp
+	// pluginSource.
+	attr := newApplyAttribution(pluginSource, overrides)
 	var columns []string
 
 	// Accumulate file-level column updates so Title/Narrator/Publisher/etc.
@@ -366,7 +366,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// Publisher (file-level, applied to target file)
 	publisherName := strings.TrimSpace(md.Publisher)
 	if targetFile != nil && applyFieldSelected(overrides, "publisher") && publisherName == "" {
-		if targetFile.PublisherID != nil {
+		if targetFile.PublisherID != nil || targetFile.PublisherSource != nil {
 			targetFile.PublisherID = nil
 			targetFile.Publisher = nil
 			targetFile.PublisherSource = nil
@@ -410,15 +410,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Release date (file-level, applied to target file)
-	if (md.ReleaseDate != nil || applyFieldSelected(overrides, "release_date")) && targetFile != nil && !sameCalendarDate(md.ReleaseDate, targetFile.ReleaseDate) {
-		targetFile.ReleaseDate = md.ReleaseDate
-		if md.ReleaseDate == nil {
-			targetFile.ReleaseDateSource = nil
-		} else {
-			releaseDateSource := attr.sourceFor("release_date")
-			targetFile.ReleaseDateSource = &releaseDateSource
+	if (md.ReleaseDate != nil || applyFieldSelected(overrides, "release_date")) && targetFile != nil {
+		if applyOptional(md.ReleaseDate, &targetFile.ReleaseDate, &targetFile.ReleaseDateSource, attr.sourceFor("release_date"), sameCalendarDate) {
+			fileColumns = append(fileColumns, "release_date", "release_date_source")
 		}
-		fileColumns = append(fileColumns, "release_date", "release_date_source")
 	}
 
 	// Language (file-level, applied to target file)

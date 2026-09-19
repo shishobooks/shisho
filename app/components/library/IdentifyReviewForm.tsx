@@ -65,8 +65,6 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   AuthorRoleWriter,
   FileTypeCBZ,
-  SourceIntentPlugin,
-  SourceIntentUser,
   SourcesKeyFileName,
   type Book,
   type File,
@@ -83,6 +81,7 @@ import {
   type FieldScope,
 } from "./identify-decisions";
 import {
+  booleanSourceIntent,
   resolveIdentifiers,
   scalarSourceIntent,
   type FieldStatus,
@@ -1180,10 +1179,7 @@ export function IdentifyReviewForm({
     }
     if (decisions.abridged) {
       fields.abridged = abridged;
-      sources.abridged =
-        abridged !== null && abridged === result.abridged
-          ? SourceIntentPlugin
-          : SourceIntentUser;
+      sources.abridged = booleanSourceIntent(abridged, result.abridged);
     }
     if (decisions.identifiers) {
       fields.identifiers = identifiers.map((id) => ({
