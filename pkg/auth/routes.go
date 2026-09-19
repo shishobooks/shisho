@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all auth routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, jwtSecret string, sessionDuration time.Duration, demoMode bool) *Service {
+func RegisterRoutes(e *echo.Group, db *bun.DB, jwtSecret string, sessionDuration time.Duration, demoMode bool) *Service {
 	authService := NewService(db, jwtSecret, sessionDuration)
 
 	h := &handler{

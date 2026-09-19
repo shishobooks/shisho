@@ -146,10 +146,9 @@ func TestBookToEntry_SeriesRangeInSummary(t *testing.T) {
 
 // TestBookToEntry_CoverLinkUsesOPDSPath verifies that the cover image link
 // in an OPDS entry stays inside the /opds/v1 path. The cover endpoint must
-// live under the OPDS group so it can authenticate via Basic Auth and so
-// the Caddy /opds/* handler proxies it to the backend in production —
-// linking to /books/:id/cover (the React route) returns the SPA shell to
-// OPDS clients.
+// live under the OPDS group so it can authenticate via Basic Auth.
+// Linking to /books/:id/cover returns the SPA shell, while /api/books
+// requires session authentication that OPDS clients do not use.
 func TestBookToEntry_CoverLinkUsesOPDSPath(t *testing.T) {
 	t.Parallel()
 
@@ -185,9 +184,9 @@ func TestBookToEntry_CoverLinkUsesOPDSPath(t *testing.T) {
 }
 
 // TestBookToEntry_CoverLinkRespectsForwardedPrefix verifies that when the
-// baseURL carries a reverse-proxy prefix (e.g. Caddy adds X-Forwarded-Prefix
-// /api in dev), the cover URL keeps the prefix so it round-trips through
-// the same proxy. Stripping /opds/v1 and reattaching to a bare host would
+// baseURL carries an upstream prefix-stripping proxy's X-Forwarded-Prefix,
+// the cover URL keeps the prefix so it round-trips through the same proxy.
+// Stripping /opds/v1 and reattaching to a bare host would
 // drop the prefix and route the cover to a different handler.
 func TestBookToEntry_CoverLinkRespectsForwardedPrefix(t *testing.T) {
 	t.Parallel()

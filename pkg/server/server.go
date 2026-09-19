@@ -1,15 +1,15 @@
 package server
 
 import (
-	"fmt"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/echo/v4/health"
-	"github.com/robinjoseph08/golib/echo/v4/middleware/logger"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/recovery"
 	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
@@ -26,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/filesystem"
+	"github.com/shishobooks/shisho/pkg/frontend"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
@@ -60,14 +61,17 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	}
 	e.Binder = b
 
-	e.Use(logger.Middleware())
+	e.Pre(forwardedHeadersMiddleware)
+	e.Use(requestLoggerMiddleware)
 	e.Use(recovery.Middleware())
+	e.Use(securityHeadersMiddleware)
+	e.Use(compressionMiddleware())
 	if cfg.DemoMode {
 		e.Use(demoModeMiddleware)
 	}
-	e.Use(middleware.CORS())
 
 	health.RegisterRoutes(e)
+	api := e.Group("/api")
 
 	// Register test-only routes when in test mode
 	// These endpoints allow E2E tests to set up and tear down test data
@@ -79,23 +83,23 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 			"http://127.0.0.1:",
 			"http://localhost:",
 		)
-		testutils.RegisterRoutes(e, db, pm, plugins.NewInstaller(cfg.PluginDir))
+		testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir))
 	}
 
 	// Register auth routes and get the auth service
-	authService := auth.RegisterRoutes(e, db, cfg.JWTSecret, cfg.SessionDuration(), cfg.DemoMode)
+	authService := auth.RegisterRoutes(api, db, cfg.JWTSecret, cfg.SessionDuration(), cfg.DemoMode)
 	authMiddleware := auth.NewMiddleware(authService)
 
 	// Register user and role management routes
-	users.RegisterRoutes(e, db, authMiddleware)
-	roles.RegisterRoutes(e, db, authMiddleware)
+	users.RegisterRoutes(api, db, authMiddleware)
+	roles.RegisterRoutes(api, db, authMiddleware)
 
 	// API Keys routes
-	apikeys.RegisterRoutes(e, db, authMiddleware)
+	apikeys.RegisterRoutes(api, db, authMiddleware)
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(e, db, cfg, authMiddleware, w, pm, broker, dlCache, cbzCache, pdfCache)
+	registerProtectedRoutes(api, db, cfg, authMiddleware, w, pm, broker, dlCache, cbzCache, pdfCache)
 
 	if !cfg.DemoMode {
 		// Register OPDS routes with Basic Auth
@@ -109,35 +113,55 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	}
 
 	// Config routes (require authentication)
-	config.RegisterRoutesWithAuth(e, cfg, authMiddleware)
+	config.RegisterRoutesWithAuth(api, cfg, authMiddleware)
 
 	// Filesystem routes (require authentication)
-	filesystem.RegisterRoutesWithAuth(e, authMiddleware)
+	filesystem.RegisterRoutesWithAuth(api, authMiddleware)
 
 	// Settings routes (require authentication)
-	settings.RegisterRoutes(e, db, authMiddleware)
+	settings.RegisterRoutes(api, db, authMiddleware)
 
 	// SSE event stream
-	events.RegisterRoutes(e, broker, authMiddleware)
+	events.RegisterRoutes(api, broker, authMiddleware)
 
 	// Log viewer endpoint (admin only)
-	logs.RegisterRoutes(e, logBuffer, authMiddleware)
+	logs.RegisterRoutes(api, logBuffer, authMiddleware)
 
 	// Audnexus chapter lookup (books:write required)
 	audnexusService := audnexus.NewService(audnexus.ServiceConfig{
 		UserAgent: "Shisho/" + version.Version,
 	})
-	audnexus.RegisterRoutes(e, audnexusService, authMiddleware)
+	audnexus.RegisterRoutes(api, audnexusService, authMiddleware)
 
 	// Cache management routes (admin only; requires config:read to list, config:write to clear)
 	cacheHandler := cache.NewHandler(dlCache, cbzCache, pdfCache)
-	cache.RegisterRoutes(e, cacheHandler, authMiddleware)
+	cache.RegisterRoutes(api, cacheHandler, authMiddleware)
 
-	echo.NotFoundHandler = notFoundHandler
+	// Echo's Group.Use adds authenticated not-found handlers. Unknown paths
+	// must return JSON 404 without running a route family's authentication.
+	for _, route := range e.Routes() {
+		if route.Method == echo.RouteNotFound {
+			e.RouteNotFound(route.Path, notFoundHandler)
+		}
+	}
+
+	spa := echo.WrapHandler(frontend.Handler())
+	e.RouteNotFound("/*", func(c echo.Context) error {
+		path := c.Request().URL.Path
+		for _, prefix := range []string{"/api", "/opds", "/kobo", "/ereader", "/e"} {
+			if path == prefix || strings.HasPrefix(path, prefix+"/") {
+				return notFoundHandler(c)
+			}
+		}
+		if c.Request().Method != http.MethodGet && c.Request().Method != http.MethodHead {
+			return notFoundHandler(c)
+		}
+		return spa(c)
+	})
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 
 	srv := &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort),
+		Addr:              net.JoinHostPort(cfg.ServerHost, strconv.Itoa(cfg.ServerPort)),
 		Handler:           e,
 		ReadHeaderTimeout: 3 * time.Second,
 	}
@@ -146,7 +170,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) {
+func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) {
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
@@ -249,7 +273,6 @@ func registerProtectedRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authM
 	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller, db, enrichDeps)
 }
 
-func notFoundHandler(c echo.Context) error {
-	c.SetPath("/:path")
+func notFoundHandler(_ echo.Context) error {
 	return errcodes.NotFound("Page")
 }

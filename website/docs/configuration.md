@@ -35,10 +35,12 @@ Keep the database on persistent storage. The standard image layout persists it t
 
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
-| `server_host` | `SERVER_HOST` | `0.0.0.0` | Reserved for listener configuration. The current server binds all interfaces and does not apply this value |
-| `server_port` | `SERVER_PORT` | `3689` | Internal backend port. The production image publishes its Caddy frontend on container port `5173` |
+| `server_host` | `SERVER_HOST` | `0.0.0.0` | Address to bind the HTTP listener to. Use `127.0.0.1` to accept only local connections outside Docker |
+| `server_port` | `SERVER_PORT` | `3689` | HTTP port for both the web interface and API. The production image sets `SERVER_PORT=5173` |
 
-The stock production image expects the backend on port `3689`. Changing `SERVER_PORT` without also rebuilding the image's entrypoint and Caddy configuration prevents the image from starting correctly. Publish container port `5173`, not backend port `3689`, for normal Docker deployments.
+The built-in port default stays `3689` for local development and non-container runs. The production image's `SERVER_PORT=5173` environment variable overrides a YAML `server_port` value. Publish container port `5173` for normal Docker deployments. To change only the host-facing port, change the left side of the Compose mapping, for example `8080:5173`.
+
+Keep `SERVER_HOST=0.0.0.0` inside Docker so published ports can reach the listener. If you override the container's `SERVER_PORT`, update its port mapping and health check URL too; the image's health check targets port `5173`. See [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies) for reverse proxy routing and forwarded-header trust.
 
 ### Application
 
@@ -158,15 +160,13 @@ Changing `JWT_SECRET` invalidates current sessions. Session duration is global, 
 ## Container-Only Environment Variables
 
 :::info
-The variables in this section configure the production container wrapper or its bundled Caddy server. They are not YAML fields in Shisho's application configuration.
+The variables in this section select the container's runtime identity and log format. They are not YAML fields in Shisho's application configuration.
 :::
 
 | Env Variable | Image Default | Description |
 |--------------|---------------|-------------|
-| `CADDY_ACCESS_LOG_OUTPUT` | `discard` | Caddy access log output. Set to `stdout` to enable access logs |
-| `PUID` | `1000` | User ID selected for Shisho and Caddy processes inside the container. This does not grant host filesystem access |
-| `PGID` | `1000` | Group ID selected for Shisho and Caddy processes inside the container. This does not grant host filesystem access |
-| `STARTUP_TIMEOUT_SECONDS` | `120` | Seconds the entrypoint waits for the internal backend health endpoint before exiting |
-| `LOG_FORMAT` | `json` | Log format for the image entrypoint, backend, and Caddy. Use `console` for human-readable output |
+| `PUID` | `1000` | User ID selected for the Shisho process inside the container. This does not grant host filesystem access |
+| `PGID` | `1000` | Group ID selected for the Shisho process inside the container. This does not grant host filesystem access |
+| `LOG_FORMAT` | `json` | Log format for Shisho. Use `console` for human-readable output |
 
 The image creates and changes ownership of `/config`, but it does not create or change ownership of `/data`, `/media`, or custom paths. Configure host permissions for the selected `PUID` and `PGID`.

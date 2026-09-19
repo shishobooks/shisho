@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutesWithAuth registers filesystem routes with authentication.
-func RegisterRoutesWithAuth(e *echo.Echo, authMiddleware *auth.Middleware) {
+func RegisterRoutesWithAuth(e *echo.Group, authMiddleware *auth.Middleware) {
 	filesystemService := NewService()
 
 	h := &handler{

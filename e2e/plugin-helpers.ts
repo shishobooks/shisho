@@ -16,7 +16,7 @@ export interface FixtureInfo {
 export async function getFixtureInfo(
   api: APIRequestContext,
 ): Promise<FixtureInfo> {
-  const resp = await api.get("/test/plugins/fixture-info");
+  const resp = await api.get("/api/test/plugins/fixture-info");
   expect(resp.ok()).toBeTruthy();
   return resp.json();
 }
@@ -37,17 +37,17 @@ export async function seedPlugin(
   api: APIRequestContext,
   body: SeedPluginBody,
 ): Promise<void> {
-  const resp = await api.post("/test/plugins", { data: body });
+  const resp = await api.post("/api/test/plugins", { data: body });
   expect(resp.status()).toBe(201);
 }
 
 export async function clearPlugins(api: APIRequestContext): Promise<void> {
-  const resp = await api.delete("/test/plugins?include_official=true");
+  const resp = await api.delete("/api/test/plugins?include_official=true");
   expect(resp.ok()).toBeTruthy();
 }
 
 export async function loginApi(api: APIRequestContext): Promise<void> {
-  const resp = await api.post("/auth/login", {
+  const resp = await api.post("/api/auth/login", {
     data: {
       username: PLUGIN_TEST_USERNAME,
       password: PLUGIN_TEST_PASSWORD,
@@ -69,9 +69,9 @@ export async function resetAndLogin(
   page: Page,
 ): Promise<void> {
   await clearPlugins(api);
-  await api.delete("/test/ereader");
-  await api.delete("/test/users");
-  await api.post("/test/users", {
+  await api.delete("/api/test/ereader");
+  await api.delete("/api/test/users");
+  await api.post("/api/test/users", {
     data: {
       username: PLUGIN_TEST_USERNAME,
       password: PLUGIN_TEST_PASSWORD,

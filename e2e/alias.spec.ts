@@ -33,14 +33,14 @@ test.describe("Alias workflows", () => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
 
-    await apiContext.post("/test/users", {
+    await apiContext.post("/api/test/users", {
       data: { username: USERNAME, password: PASSWORD },
     });
 
-    const libraryResp = await apiContext.post("/test/libraries", {
+    const libraryResp = await apiContext.post("/api/test/libraries", {
       data: { name: "Alias Test Library" },
     });
     const library = (await libraryResp.json()) as { id: number };
@@ -52,8 +52,8 @@ test.describe("Alias workflows", () => {
   test.afterAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
     await apiContext.dispose();
   });
 
@@ -70,7 +70,7 @@ test.describe("Alias workflows", () => {
     apiContext,
   }) => {
     // Create a series via test API.
-    const seriesResp = await apiContext.post("/test/series", {
+    const seriesResp = await apiContext.post("/api/test/series", {
       data: { libraryId: testData.libraryId, name: "Fantasy Saga" },
     });
     const series = (await seriesResp.json()) as { id: number };
@@ -134,7 +134,7 @@ test.describe("Alias workflows", () => {
     apiContext,
   }) => {
     // Create a series via test API.
-    const seriesResp = await apiContext.post("/test/series", {
+    const seriesResp = await apiContext.post("/api/test/series", {
       data: { libraryId: testData.libraryId, name: "No-Enter Alias Test" },
     });
     const series = (await seriesResp.json()) as { id: number };
@@ -187,7 +187,7 @@ test.describe("Alias workflows", () => {
     apiContext,
   }) => {
     // Create a series.
-    const seriesResp = await apiContext.post("/test/series", {
+    const seriesResp = await apiContext.post("/api/test/series", {
       data: { libraryId: testData.libraryId, name: "Mystery Novels" },
     });
     const series = (await seriesResp.json()) as { id: number };
@@ -241,18 +241,18 @@ test.describe("Alias workflows", () => {
     apiContext,
   }) => {
     // Create target and source series, each with a book so merge makes sense.
-    const targetResp = await apiContext.post("/test/series", {
+    const targetResp = await apiContext.post("/api/test/series", {
       data: { libraryId: testData.libraryId, name: "Dune Chronicles" },
     });
     const target = (await targetResp.json()) as { id: number };
 
-    const sourceResp = await apiContext.post("/test/series", {
+    const sourceResp = await apiContext.post("/api/test/series", {
       data: { libraryId: testData.libraryId, name: "Dune Saga" },
     });
     const source = (await sourceResp.json()) as { id: number };
 
     // Create books linked to each series.
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title: "Dune",
@@ -260,7 +260,7 @@ test.describe("Alias workflows", () => {
         seriesId: target.id,
       },
     });
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title: "Dune Messiah",
@@ -323,7 +323,7 @@ test.describe("Alias workflows", () => {
     page,
     apiContext,
   }) => {
-    const seriesResp = await apiContext.post("/test/series", {
+    const seriesResp = await apiContext.post("/api/test/series", {
       data: { libraryId: testData.libraryId, name: "The Lord of the Rings" },
     });
     const series = (await seriesResp.json()) as { id: number };
@@ -381,7 +381,7 @@ test.describe("Alias workflows", () => {
     apiContext,
   }) => {
     // Create a series.
-    const seriesResp = await apiContext.post("/test/series", {
+    const seriesResp = await apiContext.post("/api/test/series", {
       data: {
         libraryId: testData.libraryId,
         name: "A Song of Ice and Fire",

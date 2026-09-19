@@ -9,8 +9,13 @@ node = "24.13.0"
 # === Build ===
 
 [tasks.build]
-description = "Build production API binary"
+description = "Build production binary with embedded frontend"
+depends = ["tygo"]
 run = '''
+pnpm build
+# Keep the tracked placeholder, but remove assets from previous builds.
+find pkg/frontend/dist -mindepth 1 -maxdepth 1 ! -name placeholder.html -exec rm -rf {} +
+cp -R build/app/. pkg/frontend/dist/
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
 CGO_ENABLED=0 go build -o ./build/api/api -installsuffix cgo \
   -ldflags "-w -s -X github.com/shishobooks/shisho/pkg/version.Version=$VERSION" \

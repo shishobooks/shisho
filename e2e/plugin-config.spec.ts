@@ -13,9 +13,9 @@ test.describe("Plugin config save", () => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const api = await request.newContext({ baseURL: apiBaseURL });
     await clearPlugins(api);
-    await api.delete("/test/ereader");
-    await api.delete("/test/users");
-    await api.post("/test/users", {
+    await api.delete("/api/test/ereader");
+    await api.delete("/api/test/users");
+    await api.post("/api/test/users", {
       data: {
         username: PLUGIN_TEST_USERNAME,
         password: PLUGIN_TEST_PASSWORD,
@@ -54,7 +54,7 @@ test.describe("Plugin config save", () => {
     await Promise.all([
       page.waitForResponse(
         (response) =>
-          response.url().includes("/plugins/installed/test/fixture") &&
+          response.url().includes("/api/plugins/installed/test/fixture") &&
           response.request().method() === "PATCH" &&
           response.ok(),
       ),
@@ -62,7 +62,9 @@ test.describe("Plugin config save", () => {
     ]);
 
     // Assert the save succeeded: the value round-trips via the API.
-    const resp = await apiContext.get("/plugins/installed/test/fixture/config");
+    const resp = await apiContext.get(
+      "/api/plugins/installed/test/fixture/config",
+    );
     expect(resp.ok()).toBeTruthy();
     const body: { values: Record<string, unknown> } = await resp.json();
     // Secret values are masked on read as "***" — asserting the masked

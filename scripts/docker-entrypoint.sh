@@ -18,7 +18,6 @@ log() {
 }
 
 log_info() { log "info" "$1"; }
-log_error() { log "error" "$1"; }
 
 # =============================================================================
 # User/Group Setup
@@ -62,98 +61,8 @@ if [ "$(id -u)" = "0" ]; then
     chown -R "$PUID:$PGID" /config
 
     log_info "Starting as shisho (UID=$PUID, GID=$PGID)"
-
-    # Re-exec this script as the shisho user
-    exec su-exec shisho "$0" "$@"
+    exec su-exec shisho /app/shisho "$@"
 fi
-
-# =============================================================================
-# Start Services (running as non-root user)
-# =============================================================================
 
 log_info "Running as $(id -un) (UID=$(id -u), GID=$(id -g))"
-
-# Signal handler to forward signals to both processes
-SHISHO_PID=""
-CADDY_PID=""
-
-cleanup() {
-    log_info "Received shutdown signal, forwarding to child processes"
-
-    # Forward signal to both processes
-    if [ -n "$CADDY_PID" ] && kill -0 $CADDY_PID 2>/dev/null; then
-        log_info "Stopping Caddy (PID $CADDY_PID)"
-        kill -TERM $CADDY_PID 2>/dev/null
-    fi
-
-    if [ -n "$SHISHO_PID" ] && kill -0 $SHISHO_PID 2>/dev/null; then
-        log_info "Stopping backend (PID $SHISHO_PID)"
-        kill -TERM $SHISHO_PID 2>/dev/null
-    fi
-
-    # Wait for processes to terminate
-    if [ -n "$CADDY_PID" ]; then
-        wait $CADDY_PID 2>/dev/null
-    fi
-    if [ -n "$SHISHO_PID" ]; then
-        wait $SHISHO_PID 2>/dev/null
-    fi
-
-    log_info "Shutdown complete"
-    exit 0
-}
-
-# Trap SIGTERM and SIGINT
-trap cleanup TERM INT
-
-# Start the Go backend in the background
-/app/shisho &
-SHISHO_PID=$!
-
-# Wait for backend to be ready
-# STARTUP_TIMEOUT_SECONDS can be increased for slow storage (e.g., NAS devices)
-STARTUP_TIMEOUT=${STARTUP_TIMEOUT_SECONDS:-120}
-log_info "Waiting for backend to start (timeout: ${STARTUP_TIMEOUT}s)"
-BACKEND_READY=0
-for i in $(seq 1 "$STARTUP_TIMEOUT"); do
-    if wget -q --spider http://localhost:3689/health 2>/dev/null; then
-        log_info "Backend is ready"
-        BACKEND_READY=1
-        break
-    fi
-    if ! kill -0 $SHISHO_PID 2>/dev/null; then
-        log_error "Backend process died unexpectedly"
-        exit 1
-    fi
-    sleep 1
-done
-
-if [ "$BACKEND_READY" = "0" ]; then
-    log_error "Backend failed to start within ${STARTUP_TIMEOUT} seconds (set STARTUP_TIMEOUT_SECONDS to increase)"
-    kill -TERM $SHISHO_PID 2>/dev/null || true
-    exit 1
-fi
-
-# Start Caddy in the background (so we can manage both processes)
-caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
-CADDY_PID=$!
-
-log_info "Started Caddy (PID $CADDY_PID) and backend (PID $SHISHO_PID)"
-
-# Wait for either process to exit
-# If one exits unexpectedly, the other should be stopped too
-while true; do
-    if ! kill -0 $SHISHO_PID 2>/dev/null; then
-        log_error "Backend process exited"
-        kill -TERM $CADDY_PID 2>/dev/null
-        wait $CADDY_PID 2>/dev/null
-        exit 1
-    fi
-    if ! kill -0 $CADDY_PID 2>/dev/null; then
-        log_error "Caddy process exited"
-        kill -TERM $SHISHO_PID 2>/dev/null
-        wait $SHISHO_PID 2>/dev/null
-        exit 1
-    fi
-    sleep 1
-done
+exec /app/shisho "$@"

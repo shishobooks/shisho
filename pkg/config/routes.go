@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutesWithAuth registers config routes with authentication.
-func RegisterRoutesWithAuth(e *echo.Echo, cfg *Config, authMiddleware *auth.Middleware) {
+func RegisterRoutesWithAuth(e *echo.Group, cfg *Config, authMiddleware *auth.Middleware) {
 	configService := NewService(cfg)
 	h := &handler{configService: configService}
 

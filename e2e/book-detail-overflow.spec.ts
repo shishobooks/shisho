@@ -34,14 +34,14 @@ test.describe("Book detail overflow", () => {
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
     // Clean slate
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
 
-    await apiContext.post("/test/users", {
+    await apiContext.post("/api/test/users", {
       data: { username: USERNAME, password: PASSWORD },
     });
 
-    const libraryResp = await apiContext.post("/test/libraries", {
+    const libraryResp = await apiContext.post("/api/test/libraries", {
       data: { name: "Overflow Test Library" },
     });
     const library = (await libraryResp.json()) as { id: number };
@@ -53,8 +53,8 @@ test.describe("Book detail overflow", () => {
   test.afterAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
     await apiContext.dispose();
   });
 
@@ -75,7 +75,7 @@ test.describe("Book detail overflow", () => {
     // long title with unbroken tokens. Both the stats/actions row and the
     // title are unbounded-content nodes that could push the page wider than
     // the viewport.
-    const bookResp = await apiContext.post("/test/books", {
+    const bookResp = await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title:

@@ -115,6 +115,58 @@ jobs:
           path: .gotest-timings
           key: gotest-timings-${{ github.ref }}-${{ github.sha }}
 
+  image-smoke:
+    name: Image Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: shisho:smoke
+          cache-from: type=gha,scope=image-smoke
+          cache-to: type=gha,mode=max,scope=image-smoke
+      - name: Verify container startup and embedded frontend
+        run: |
+          docker run -d --name shisho-smoke \
+            -p 127.0.0.1:5173:5173 \
+            -e JWT_SECRET=ci-image-smoke-test-secret \
+            shisho:smoke
+
+          ready=false
+          for _ in $(seq 1 120); do
+            if [ "$(docker inspect --format '{{.State.Running}}' shisho-smoke)" != true ]; then
+              echo "Container exited before becoming ready"
+              exit 1
+            fi
+            status=$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/health || true)
+            if [ "$status" = 200 ]; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "Container did not become ready within 120 attempts"
+            exit 1
+          fi
+
+          status=$(curl -sS --max-time 5 -D /tmp/shisho-headers -o /tmp/shisho-index.html -w '%{http_code}' http://127.0.0.1:5173/)
+          test "$status" = 200
+          grep -qi '^content-type: text/html' /tmp/shisho-headers
+          grep -q '<div id="root"></div>' /tmp/shisho-index.html
+          grep -q 'src="/assets/[^" ]*\.js"' /tmp/shisho-index.html
+          test "$(docker exec shisho-smoke cat /proc/1/comm)" = shisho
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs shisho-smoke || true
+          docker rm -f shisho-smoke || true
+
   lint-js:
     name: JS Lint
     runs-on: ubuntu-latest

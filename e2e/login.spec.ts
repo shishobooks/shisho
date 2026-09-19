@@ -14,9 +14,9 @@ test.describe("Login Flow", () => {
   test.beforeAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
-    await apiContext.post("/test/users", {
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
+    await apiContext.post("/api/test/users", {
       data: { username: "testadmin", password: "password123" },
     });
     await apiContext.dispose();

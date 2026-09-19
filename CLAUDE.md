@@ -122,7 +122,9 @@ The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the re
 - `mise docs` - Start documentation dev server
 
 ### Build
-- `mise build` - Build production API binary
+- `mise build` - Generate API types, build the frontend, copy it into `pkg/frontend/dist`, and compile a self-contained production binary
+
+`pkg/frontend` embeds the SPA. Keep `pkg/frontend/dist/placeholder.html` checked in so plain `go build` and `go test ./...` work without Node or a frontend build. Generated `index.html` and assets are gitignored; the handler serves the placeholder's "frontend not built" page only when `index.html` is absent. Do not overwrite the tracked placeholder with build output. Use `mise build` for a complete local binary; `pnpm build` alone does not refresh the embedded files.
 
 ### Linting
 - `mise lint` - Run Go linting with golangci-lint
@@ -168,6 +170,12 @@ This allows the Dockerfile to use `pnpm install --prod` to skip installing test/
 - **Backend**: Go with Echo web framework, Bun ORM, SQLite database
 - **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
 - **Development**: mise for tool/version management and task running, Air for Go hot reload
+
+### Production serving
+
+The Alpine image runs a single Go process through `su-exec` after resolving `PUID`/`PGID` and preparing `/config` ownership. It has no Caddy layer, startup health polling, or signal-forwarding shell. The image sets `SERVER_PORT=5173`; the application default stays `3689`. The listener honors `server_host`.
+
+The Go server owns `/api` directly. Vite forwards `/api` unchanged, without injecting `X-Forwarded-Prefix`. Keep `/health`, `/opds`, `/kobo`, `/ereader`, and `/e` at the root. Forwarded-header trust, compression exclusions, security headers, and frontend cache behavior belong to the Go server, not a bundled proxy. See ADR 0007 (`docs/adr/0007-single-binary-image.md`) for the trade-offs.
 
 For detailed architecture information, see:
 - **Backend details**: `pkg/CLAUDE.md`

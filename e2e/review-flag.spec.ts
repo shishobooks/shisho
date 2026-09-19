@@ -32,14 +32,14 @@ test.describe("Review flag", () => {
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
     // Clean slate
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
 
-    await apiContext.post("/test/users", {
+    await apiContext.post("/api/test/users", {
       data: { username: USERNAME, password: PASSWORD },
     });
 
-    const libraryResp = await apiContext.post("/test/libraries", {
+    const libraryResp = await apiContext.post("/api/test/libraries", {
       data: { name: "Review Flag Test Library" },
     });
     const library = (await libraryResp.json()) as { id: number };
@@ -51,8 +51,8 @@ test.describe("Review flag", () => {
   test.afterAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
     await apiContext.dispose();
   });
 
@@ -77,7 +77,7 @@ test.describe("Review flag", () => {
     apiContext,
   }) => {
     // Seed a book — new books have reviewed=null (needs review).
-    const bookResp = await apiContext.post("/test/books", {
+    const bookResp = await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title: "Unreviewed Book",
@@ -122,7 +122,7 @@ test.describe("Review flag", () => {
     apiContext,
   }) => {
     // Seed a book and immediately mark it reviewed.
-    const bookResp = await apiContext.post("/test/books", {
+    const bookResp = await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title: "Toggle Back Book",
@@ -170,14 +170,14 @@ test.describe("Review flag", () => {
     apiContext,
   }) => {
     // Seed two unreviewed books.
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title: "Bulk Book Alpha",
         fileType: "epub",
       },
     });
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: testData.libraryId,
         title: "Bulk Book Beta",
