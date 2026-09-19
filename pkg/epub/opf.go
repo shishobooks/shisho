@@ -420,30 +420,21 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 
 	// Extract URL. The shisho:url meta is what Shisho's own generator writes, so
 	// it is authoritative. dc:relation and dc:source are heuristics for files
-	// from elsewhere.
-	var url string
+	// from elsewhere. Every candidate must be http(s): the URL is rendered as a
+	// link, and the file is untrusted input.
+	var urlCandidates []string
 	for _, m := range pkg.Metadata.Meta {
 		if m.Name == "shisho:url" {
-			if content := strings.TrimSpace(m.Content); content != "" {
-				url = content
-				break
-			}
+			urlCandidates = append(urlCandidates, strings.TrimSpace(m.Content))
 		}
 	}
-	if url == "" {
-		for _, rel := range pkg.Metadata.Relation {
-			if strings.HasPrefix(rel, "http://") || strings.HasPrefix(rel, "https://") {
-				url = rel
-				break
-			}
-		}
-	}
-	if url == "" {
-		for _, src := range pkg.Metadata.Source {
-			if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
-				url = src
-				break
-			}
+	urlCandidates = append(urlCandidates, pkg.Metadata.Relation...)
+	urlCandidates = append(urlCandidates, pkg.Metadata.Source...)
+	var url string
+	for _, candidate := range urlCandidates {
+		if strings.HasPrefix(candidate, "http://") || strings.HasPrefix(candidate, "https://") {
+			url = candidate
+			break
 		}
 	}
 

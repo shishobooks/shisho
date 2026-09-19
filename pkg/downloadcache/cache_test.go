@@ -27,6 +27,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		createTestEPUB(t, srcPath, "Original Title", []string{"Original Author"})
 
 		cache := NewCache(cacheDir, 1024*1024*1024) // 1GB
+		t.Cleanup(cache.Wait)                       // drain background cleanups before TempDir removal
 
 		book := &models.Book{
 			Title: "Test Book",
@@ -70,6 +71,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		createTestEPUB(t, srcPath, "Test Title", []string{"Test Author"})
 
 		cache := NewCache(cacheDir, 1024*1024*1024)
+		t.Cleanup(cache.Wait) // drain background cleanups before TempDir removal
 
 		book := &models.Book{
 			Title: "Test Book",
@@ -117,6 +119,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		createTestEPUB(t, srcPath, "Test Title", []string{"Author"})
 
 		cache := NewCache(cacheDir, 1024*1024*1024)
+		t.Cleanup(cache.Wait) // drain background cleanups before TempDir removal
 
 		book := &models.Book{
 			Title: "Original Title",
@@ -163,6 +166,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		require.NoError(t, os.MkdirAll(cacheDir, 0755))
 
 		cache := NewCache(cacheDir, 1024*1024*1024)
+		t.Cleanup(cache.Wait) // drain background cleanups before TempDir removal
 
 		book := &models.Book{Title: "Test"}
 		file := &models.File{
@@ -188,6 +192,7 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 		createTestEPUB(t, srcPath, "Test Title", []string{"Author"})
 
 		cache := NewCache(cacheDir, 1024*1024*1024)
+		t.Cleanup(cache.Wait) // drain background cleanups before TempDir removal
 
 		book := &models.Book{
 			Title: "Test Book",
@@ -245,6 +250,7 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 		createTestEPUB(t, srcPath, "Test Title", []string{"Author"})
 
 		cache := NewCache(cacheDir, 1024*1024*1024)
+		t.Cleanup(cache.Wait) // drain background cleanups before TempDir removal
 
 		book := &models.Book{
 			Title: "Test Book",
@@ -305,6 +311,7 @@ func TestCache_Invalidate(t *testing.T) {
 		createTestEPUB(t, srcPath, "Test Title", []string{"Author"})
 
 		cache := NewCache(cacheDir, 1024*1024*1024)
+		t.Cleanup(cache.Wait) // drain background cleanups before TempDir removal
 
 		book := &models.Book{Title: "Test"}
 		file := &models.File{

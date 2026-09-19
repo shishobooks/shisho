@@ -330,6 +330,13 @@ func TestParseOPF_URL(t *testing.T) {
 			want: "https://example.com/source",
 		},
 		{
+			// The URL is rendered as a link, so shisho:url gets the same http(s)
+			// guard as the dc: heuristics.
+			name:     "ignores a shisho:url that is not http(s)",
+			metadata: `<dc:source>https://example.com/source</dc:source><meta name="shisho:url" content="javascript:alert(1)"/>`,
+			want:     "https://example.com/source",
+		},
+		{
 			name:     "ignores a blank shisho:url",
 			metadata: `<dc:relation>https://example.com/relation</dc:relation><meta name="shisho:url" content="  "/>`,
 			want:     "https://example.com/relation",

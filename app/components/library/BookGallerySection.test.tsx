@@ -143,8 +143,8 @@ describe("BookGallerySection", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onPageChange = vi.fn();
     // The page math only reads `total`, so one card is enough. Rendering a
-    // full page of cards made these clicks slow enough to hit the 5s test
-    // timeout when the whole check suite runs in parallel.
+    // full page of cards made these clicks slow enough to time out when the
+    // whole check suite runs in parallel.
     const books = [makeBook(1)];
     render(
       wrap(

@@ -15,9 +15,11 @@ import (
 //
 // Only plugin sources are cleared. The Edit form stores a cleared value as
 // NULL plus 'manual' on purpose, as a protected empty slot, and the scanner
-// never writes an empty value, so a plugin source on a NULL value can only
-// come from one of those Identify clears. Language, Abridged, and Name are
-// not listed because their clears always nulled the source.
+// never writes an empty value. A plugin source on a NULL value therefore
+// describes nothing. It comes from one of those Identify clears or, for
+// publisher_id, from deleting the publisher, and either way it only blocks
+// repopulation. Language, Abridged, and Name are not listed because their
+// clears always nulled the source.
 func clearPluginSourcesOnEmptyIdentifyValues(ctx context.Context, db *bun.DB) error {
 	targets := []struct {
 		table, value, source string
