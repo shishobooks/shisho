@@ -418,12 +418,24 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 		}
 	}
 
-	// Extract URL from dc:relation or dc:source
+	// Extract URL. The shisho:url meta is what Shisho's own generator writes, so
+	// it is authoritative. dc:relation and dc:source are heuristics for files
+	// from elsewhere.
 	var url string
-	for _, rel := range pkg.Metadata.Relation {
-		if strings.HasPrefix(rel, "http://") || strings.HasPrefix(rel, "https://") {
-			url = rel
-			break
+	for _, m := range pkg.Metadata.Meta {
+		if m.Name == "shisho:url" {
+			if content := strings.TrimSpace(m.Content); content != "" {
+				url = content
+				break
+			}
+		}
+	}
+	if url == "" {
+		for _, rel := range pkg.Metadata.Relation {
+			if strings.HasPrefix(rel, "http://") || strings.HasPrefix(rel, "https://") {
+				url = rel
+				break
+			}
 		}
 	}
 	if url == "" {

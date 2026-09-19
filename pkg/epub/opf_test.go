@@ -289,3 +289,59 @@ func TestParseOPF_Language_Missing(t *testing.T) {
 
 	assert.Nil(t, result.OPF.Language)
 }
+
+// Shisho's EPUB generator writes the file URL as <meta name="shisho:url">.
+// The parser has to read it back, or a generated EPUB loses its URL when it
+// is imported again.
+func TestParseOPF_URL(t *testing.T) {
+	t.Parallel()
+
+	opf := func(metadata string) string {
+		return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    ` + metadata + `
+  </metadata>
+</package>`
+	}
+
+	tests := []struct {
+		name     string
+		metadata string
+		want     string
+	}{
+		{
+			name:     "reads the generator's shisho:url meta",
+			metadata: `<meta name="shisho:url" content="https://example.com/shisho"/>`,
+			want:     "https://example.com/shisho",
+		},
+		{
+			name: "shisho:url wins over the dc:relation and dc:source heuristics",
+			metadata: `<dc:relation>https://example.com/relation</dc:relation>
+    <dc:source>https://example.com/source</dc:source>
+    <meta name="shisho:url" content=" https://example.com/shisho "/>`,
+			want: "https://example.com/shisho",
+		},
+		{
+			name: "falls back to dc:relation, then dc:source",
+			metadata: `<dc:relation>urn:isbn:9780316769488</dc:relation>
+    <dc:source>https://example.com/source</dc:source>`,
+			want: "https://example.com/source",
+		},
+		{
+			name:     "ignores a blank shisho:url",
+			metadata: `<dc:relation>https://example.com/relation</dc:relation><meta name="shisho:url" content="  "/>`,
+			want:     "https://example.com/relation",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opf(tt.metadata))))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, result.OPF.URL)
+		})
+	}
+}
