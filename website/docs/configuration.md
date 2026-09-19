@@ -55,7 +55,9 @@ Set `demo_mode: true` or `DEMO_MODE=true` to let visitors browse, search, read E
 
 Prepare the library and user accounts before enabling Demo Mode. Scans, filesystem monitoring, job processing, and plugin loading are disabled regardless of their other settings. OPDS, eReader, Kobo, and plugin endpoints are unavailable.
 
-Explicit original, KePub, and bulk downloads are blocked. Reader delivery remains available, including generated EPUB files that can still be saved by URL. Demo Mode is not copy protection; only publish media you have permission to redistribute. Reader caches and startup database migrations still require writable storage.
+Original, KePub, supplement, and bulk download controls are hidden, and the original, KePub, and bulk download routes stay blocked. Reader delivery stays available, including generated EPUB files that can still be saved by URL. Demo Mode is not copy protection; only publish media you have permission to redistribute. Reader caches and startup database migrations still require writable storage.
+
+The sign-in page identifies Demo Mode. After sign-in, a banner stays visible across the app and readers. The interface hides administration links and security settings, while rejected edits show `This action is unavailable in the demo.` Gallery size, default sort, and reader preferences are stored in each visitor's browser instead of the server.
 
 Restart after changing this setting. To curate the library or manage accounts again, disable Demo Mode on a private instance rather than making a public instance writable.
 

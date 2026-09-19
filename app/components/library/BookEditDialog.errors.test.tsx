@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Book } from "@/types";
@@ -36,6 +37,13 @@ const book: Book = {
     },
   ],
 };
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    getToasts: vi.fn(() => []),
+  },
+}));
 
 function Editor() {
   const [open, setOpen] = useState(true);
@@ -122,4 +130,48 @@ describe("book save failures", () => {
       }
     },
   );
+
+  it("shows a Demo Mode rejection inline without the fallback toast", async () => {
+    vi.stubGlobal("__APP_VERSION__", "test");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input).split("?")[0];
+      if (init?.method !== "GET") {
+        return Response.json(
+          {
+            error: {
+              code: "demo_mode",
+              message: "This action is unavailable in the demo.",
+            },
+          },
+          { status: 403 },
+        );
+      }
+      if (url === "/api/settings/review-criteria") {
+        return Response.json({ book_fields: [], audiobook_fields: [] });
+      }
+      return Response.json({ items: [], total: 0 });
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <Editor />
+      </QueryClientProvider>,
+    );
+    try {
+      await user.type(screen.getByLabelText("Title", { exact: true }), "!");
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "This action is unavailable in the demo.",
+      );
+      await vi.runOnlyPendingTimersAsync();
+      expect(toast.error).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
 });

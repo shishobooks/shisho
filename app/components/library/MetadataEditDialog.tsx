@@ -16,6 +16,7 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { markErrorDisplayed } from "@/libraries/api";
 import { DataSourceManual, type DataSource } from "@/types";
 import { resolveAliases } from "@/utils/aliases";
 import { forPerson, forTitle } from "@/utils/sortname";
@@ -230,6 +231,7 @@ export function MetadataEditDialog({
       requestClose();
     } catch (err) {
       if (err instanceof Error) {
+        markErrorDisplayed(err);
         setServerError(err.message);
       }
     }

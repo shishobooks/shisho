@@ -1,4 +1,5 @@
 import QueryString from "qs";
+import { toast } from "sonner";
 
 import type { APIKey, APIKeyShortURL } from "@/types/generated/apikeys";
 
@@ -7,6 +8,8 @@ export class ShishoAPIError extends Error {
   public code: string;
   // The response status code.
   public status: number;
+  // Set by markErrorDisplayed when a caller renders the error itself.
+  public displayed = false;
 
   constructor(message: string, code: string, status: number) {
     super(message);
@@ -15,6 +18,37 @@ export class ShishoAPIError extends Error {
     this.name = "ShishoError";
   }
 }
+
+const DEMO_MODE_MESSAGE = "This action is unavailable in the demo.";
+
+// Call from a catch block that renders the error inline (e.g. a dialog error
+// banner) so the global Demo Mode toast does not repeat the same message.
+export const markErrorDisplayed = (error: unknown) => {
+  if (error instanceof ShishoAPIError) {
+    error.displayed = true;
+  }
+};
+
+const scheduleDemoModeToast = (error: ShishoAPIError) => {
+  // Caller-level error handlers run before the next task. Give them a chance
+  // to show the same message, then provide the global fallback only if needed.
+  setTimeout(() => {
+    if (error.displayed) return;
+    // Callers often toast the server message themselves, sometimes with a
+    // prefix ("Failed to save: ..."). getToasts() only returns active toasts.
+    const alreadyVisible = toast
+      .getToasts()
+      .some(
+        (item) =>
+          "title" in item &&
+          typeof item.title === "string" &&
+          item.title.includes(error.message),
+      );
+    if (!alreadyVisible) {
+      toast.error(DEMO_MODE_MESSAGE, { id: "demo-mode" });
+    }
+  }, 0);
+};
 
 class ShishoAPI {
   private uri: string;
@@ -38,11 +72,15 @@ class ShishoAPI {
     if (response.status >= 200 && response.status < 300) {
       return resp;
     }
-    throw new ShishoAPIError(
+    const error = new ShishoAPIError(
       resp.error.message,
       resp.code || resp.error?.code,
       response.status,
     );
+    if (error.status === 403 && error.code === "demo_mode") {
+      scheduleDemoModeToast(error);
+    }
+    throw error;
   }
 
   request<T, U = unknown, V = unknown>(

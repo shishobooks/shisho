@@ -46,6 +46,7 @@ import {
 } from "@/hooks/queries/entity-search";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { markErrorDisplayed } from "@/libraries/api";
 import {
   AuthorRoleWriter,
   DataSourceManual,
@@ -430,6 +431,7 @@ export function BookEditDialog({
         });
       }
     } catch (error) {
+      markErrorDisplayed(error);
       setSaveError(
         error instanceof Error ? error.message : "Failed to save book",
       );

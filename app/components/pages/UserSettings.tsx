@@ -12,6 +12,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { GallerySize } from "@/types";
 
@@ -49,6 +50,7 @@ const UserSettings = () => {
   usePageTitle("User Settings");
 
   const { theme, setTheme } = useTheme();
+  const { demoMode } = useAuth();
   const userSettingsQuery = useUserSettings();
   const updateUserSettings = useUpdateUserSettings();
   const gallerySize: GallerySize =
@@ -155,22 +157,24 @@ const UserSettings = () => {
           </div>
 
           {/* Security Settings Link */}
-          <div className="rounded-md border border-border p-4 md:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Security</h2>
-                <p className="text-sm text-muted-foreground">
-                  Manage your password and API keys
-                </p>
+          {!demoMode && (
+            <div className="rounded-md border border-border p-4 md:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Security</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Manage your password and API keys
+                  </p>
+                </div>
+                <Button asChild variant="outline">
+                  <Link to="/user/security">
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    Security Settings
+                  </Link>
+                </Button>
               </div>
-              <Button asChild variant="outline">
-                <Link to="/user/security">
-                  <KeyRound className="mr-2 h-4 w-4" />
-                  Security Settings
-                </Link>
-              </Button>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
