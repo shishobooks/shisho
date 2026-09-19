@@ -17,9 +17,9 @@ describe("DemoBanner", () => {
   it("shows the Demo Mode restrictions and useful links", () => {
     render(<DemoBanner />);
 
-    expect(
-      screen.getByText("Read-only demo. Edits and downloads are disabled."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("complementary")).toHaveTextContent(
+      "Read-only demo. Edits and downloads are disabled.",
+    );
     expect(
       screen.getByRole("link", { name: "Install Shisho" }),
     ).toHaveAttribute(
@@ -33,6 +33,17 @@ describe("DemoBanner", () => {
     expect(
       screen.getByRole("link", { name: "About this library" }),
     ).toHaveAttribute("href", "https://www.shishobooks.com/docs/demo");
+  });
+
+  it("makes installing the only filled action", () => {
+    render(<DemoBanner />);
+
+    const filled = screen
+      .getAllByRole("link")
+      .filter((link) => link.classList.contains("bg-primary"))
+      .map((link) => link.getAttribute("aria-label"));
+
+    expect(filled).toEqual(["Install Shisho"]);
   });
 
   it("is hidden outside Demo Mode", () => {

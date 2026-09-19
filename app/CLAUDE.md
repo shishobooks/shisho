@@ -71,6 +71,8 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 
 `ShishoAPI.checkStatus` maps a `403` response with the `demo_mode` code to the toast `This action is unavailable in the demo.` Keep mutating controls visible unless the Public Demo specification explicitly hides them. The backend remains the write boundary.
 
+The toast is a fallback for callers with no error UI of their own. A caller that renders the request error inline (the `BookEditDialog` banner, the `MetadataEditDialog` and `PublisherEditDialog` server errors) must call `markErrorDisplayed(error)` from `@/libraries/api` in its `catch` block, which suppresses the toast so the message is not reported twice. The toast is deferred by one task, so the call has to happen synchronously in the `catch`, not after another `await`. A caller that shows its own failure toast is deduplicated only when that toast's text contains `error.message` (verbatim or prefixed, e.g. `Failed to save: ${error.message}`). A caller that toasts a fixed string must call `markErrorDisplayed(error)` too, or Demo Mode shows two toasts.
+
 Preferences stay browser-local in Demo Mode. User settings use the `shisho-demo-user-settings` local storage key. Per-library settings use `shisho-demo-library-settings-{libraryId}`. The query hooks fetch server defaults first, merge stored values over those defaults, and write Demo Mode mutations to local storage and the TanStack Query cache without sending a write request.
 
 ### React Query Cache Invalidation

@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API, ShishoAPIError } from "./api";
+import { API, markErrorDisplayed, ShishoAPIError } from "./api";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -57,6 +57,27 @@ describe("ShishoAPI Demo Mode errors", () => {
     vi.mocked(toast.getToasts).mockReturnValue([visibleDemoToast]);
 
     await API.checkStatus(demoModeResponse()).catch(() => undefined);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("does not add a fallback when the caller showed the message with a prefix", async () => {
+    vi.mocked(toast.getToasts).mockReturnValue([
+      {
+        ...visibleDemoToast,
+        title: "Failed to save: This action is unavailable in the demo.",
+      },
+    ]);
+
+    await API.checkStatus(demoModeResponse()).catch(() => undefined);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("does not add a fallback when the caller displays the error inline", async () => {
+    await API.checkStatus(demoModeResponse()).catch(markErrorDisplayed);
     await vi.runOnlyPendingTimersAsync();
 
     expect(toast.error).not.toHaveBeenCalled();

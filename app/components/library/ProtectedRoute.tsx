@@ -34,7 +34,7 @@ const ProtectedRoute = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -81,7 +81,7 @@ const ProtectedRoute = ({
     !hasPermission(requiredPermission.resource, requiredPermission.operation)
   ) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
           <p className="text-muted-foreground">
@@ -97,7 +97,7 @@ const ProtectedRoute = ({
     const libraryId = parseInt(params.libraryId, 10);
     if (!isNaN(libraryId) && !hasLibraryAccess(libraryId)) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
           <div className="text-center">
             <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
             <p className="text-muted-foreground">

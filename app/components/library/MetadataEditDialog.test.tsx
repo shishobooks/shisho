@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
+
 import { MetadataEditDialog } from "./MetadataEditDialog";
 
 const createUser = () =>
@@ -1011,6 +1013,41 @@ describe("MetadataEditDialog", () => {
       // But the user DID make changes from the initial state!
       // Save button should STILL be enabled
       expect(saveButton).not.toBeDisabled();
+    });
+  });
+
+  describe("save errors", () => {
+    it("shows a rejected save inline and marks it displayed", async () => {
+      const user = createUser();
+      const error = new ShishoAPIError(
+        "This action is unavailable in the demo.",
+        "demo_mode",
+        403,
+      );
+      const onSave = vi.fn().mockRejectedValue(error);
+
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <MetadataEditDialog
+            entityName="Original Name"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const nameInput = await screen.findByDisplayValue("Original Name");
+      await user.type(nameInput, " Edited");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(
+        await screen.findByText("This action is unavailable in the demo."),
+      ).toBeInTheDocument();
+      // Suppresses the global Demo Mode toast (see markErrorDisplayed).
+      expect(error.displayed).toBe(true);
     });
   });
 });
