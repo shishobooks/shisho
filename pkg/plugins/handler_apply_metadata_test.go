@@ -183,7 +183,7 @@ func TestApplyMetadata_OrganizesFiles_WhenExplicitFileNameChanges(t *testing.T) 
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
 	h := newApplyTestHandler(store)
-	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", FileNameSourceIntentUser)
+	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", SourceIntentUser)
 
 	err := h.applyMetadata(c)
 	require.NoError(t, err)
@@ -205,15 +205,14 @@ func TestApplyMetadata_WhitespaceFileNameClearsAndOrganizes(t *testing.T) {
 	h := newApplyTestHandler(store)
 	fileID := file.ID
 	blankName := "   "
-	intent := FileNameSourceIntentUser
 	payload := PluginApplyPayload{
-		BookID:         book.ID,
-		FileID:         &fileID,
-		Fields:         map[string]any{},
-		FileName:       &blankName,
-		FileNameSource: &intent,
-		PluginScope:    "test",
-		PluginID:       "enricher",
+		BookID:      book.ID,
+		FileID:      &fileID,
+		Fields:      map[string]any{},
+		FileName:    &blankName,
+		Sources:     map[string]string{SourcesKeyFileName: SourceIntentUser},
+		PluginScope: "test",
+		PluginID:    "enricher",
 	}
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -470,18 +469,25 @@ func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, book.Subtitle)
+	assert.Nil(t, book.SubtitleSource)
 	assert.Nil(t, book.Description)
+	assert.Nil(t, book.DescriptionSource)
 	assert.Equal(t, []int{book.ID}, rel.deletedAuthors)
 	assert.Equal(t, []int{book.ID}, rel.deletedGenres)
 	assert.Equal(t, []int{book.ID}, rel.deletedTags)
 	assert.Nil(t, file.Name)
 	assert.Nil(t, file.NameSource)
 	assert.Nil(t, file.URL)
+	assert.Nil(t, file.URLSource)
 	assert.Nil(t, file.Language)
+	assert.Nil(t, file.LanguageSource)
 	assert.Nil(t, file.Abridged)
+	assert.Nil(t, file.AbridgedSource)
 	assert.Nil(t, file.ReleaseDate)
+	assert.Nil(t, file.ReleaseDateSource)
 	assert.Nil(t, file.PublisherID)
 	assert.Nil(t, file.Publisher)
+	assert.Nil(t, file.PublisherSource)
 	assert.Equal(t, []int{file.ID}, store.deletedNarratorFileIDs)
 	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
 }
@@ -609,6 +615,7 @@ func TestApplyMetadata_ExplicitFileName_AppliesToSupplement(t *testing.T) {
 		FileID:      &supplementID,
 		Fields:      map[string]any{},
 		FileName:    func() *string { s := "Cribsheet (Updated)"; return &s }(),
+		Sources:     map[string]string{SourcesKeyFileName: SourceIntentPlugin},
 		PluginScope: "test",
 		PluginID:    "enricher",
 	}
@@ -738,8 +745,7 @@ func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileNa
 		payload.FileName = &fn
 	}
 	if fileNameSource != "" {
-		fns := fileNameSource
-		payload.FileNameSource = &fns
+		payload.Sources = map[string]string{SourcesKeyFileName: fileNameSource}
 	}
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -756,11 +762,10 @@ func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileNa
 	return c
 }
 
-// TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault verifies
-// that a payload carrying file_name (without file_name_source) writes
-// file.Name and stamps NameSource with the plugin source — the default for
-// a value the user accepted as-is from the plugin's proposal.
-func TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault(t *testing.T) {
+// TestApplyMetadata_ExplicitFileName_MissingIntentDefaultsToManual verifies
+// that a selected file_name with no sources entry is treated as "user". The
+// SPA ships with the server, so there is no older-client default to preserve.
+func TestApplyMetadata_ExplicitFileName_MissingIntentDefaultsToManual(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
@@ -779,8 +784,7 @@ func TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault(t *test
 	require.NotNil(t, file.Name, "file.Name must be set when file_name is explicit")
 	assert.Equal(t, "New Title", *file.Name)
 	require.NotNil(t, file.NameSource, "file.NameSource must be set when file_name is explicit")
-	assert.Equal(t, "plugin:test/enricher", *file.NameSource,
-		"absent file_name_source defaults to the plugin source for this apply call")
+	assert.Equal(t, models.DataSourceManual, *file.NameSource)
 }
 
 func TestApplyMetadata_ExplicitFileName_UserIntentUsesManualSource(t *testing.T) {
