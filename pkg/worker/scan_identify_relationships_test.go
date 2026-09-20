@@ -1,12 +1,14 @@
 package worker
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +41,7 @@ const identifyRelationshipEnricherJS = `var plugin = {
 
 // Native M4B metadata has lower priority than plugin metadata, unlike a plugin
 // parser. This fixture catches a source left behind after a complete clear.
-func newIdentifyRelationshipScanFixture(t *testing.T, autoEnrich bool) *identifyScanFixture {
+func newIdentifyRelationshipScanFixture(t *testing.T, autoEnrich, rootLevel bool) *identifyScanFixture {
 	t.Helper()
 	testgen.SkipIfNoFFmpeg(t)
 
@@ -55,7 +57,10 @@ func newIdentifyRelationshipScanFixture(t *testing.T, autoEnrich bool) *identify
 
 	libraryPath := t.TempDir()
 	tc.createLibrary([]string{libraryPath})
-	bookDir := testgen.CreateSubDir(t, libraryPath, "Embedded Title")
+	bookDir := libraryPath
+	if !rootLevel {
+		bookDir = testgen.CreateSubDir(t, libraryPath, "Embedded Title")
+	}
 	path := testgen.GenerateM4B(t, bookDir, "book.m4b", testgen.M4BOptions{
 		Title:    "Embedded Title",
 		Artist:   "Embedded Author One, Embedded Author Two",
@@ -122,7 +127,7 @@ func assertIdentifyRelationships(t *testing.T, book *models.Book, file *models.F
 func TestIdentifyApply_RelationshipClear_ThenOrdinaryScan(t *testing.T) {
 	t.Parallel()
 
-	f := newIdentifyRelationshipScanFixture(t, false)
+	f := newIdentifyRelationshipScanFixture(t, false, false)
 	book, file := f.retrieve(t)
 	assertIdentifyRelationships(t, book, file, "Embedded", true, models.DataSourceM4BMetadata)
 	require.False(t, t.Failed(), "precondition: all four relationships come from native M4B metadata")
@@ -176,10 +181,69 @@ func TestIdentifyApply_RelationshipClear_ThenOrdinaryScan(t *testing.T) {
 	assertIdentifyRelationships(t, book, file, "Embedded", true, models.DataSourceM4BMetadata)
 }
 
+func TestIdentifyApply_OrganizedRelationshipClear_ThenOrdinaryScan(t *testing.T) {
+	t.Parallel()
+
+	f := newIdentifyRelationshipScanFixture(t, false, true)
+	book, file := f.retrieve(t)
+	libraryPath := filepath.Dir(file.Filepath)
+	_, err := f.tc.db.NewUpdate().Model((*models.Library)(nil)).
+		Set("organize_file_structure = ?", true).Where("id = ?", book.LibraryID).Exec(f.tc.ctx)
+	require.NoError(t, err)
+	e := newIdentifyApplyServer(t, f.tc)
+
+	postIdentifyApply(t, e, plugins.PluginApplyPayload{
+		BookID: book.ID, FileID: &file.ID,
+		Fields: map[string]any{
+			"authors":   []map[string]string{{"name": "Org Author"}},
+			"narrators": []string{"Org Narrator"},
+		},
+		PluginScope: "test", PluginID: "relationship-enricher",
+	})
+	book, file = f.retrieve(t)
+	require.Equal(t, filepath.Join(libraryPath, "[Org Author] Embedded Title"), book.Filepath)
+	require.Equal(t, filepath.Join(book.Filepath, "Embedded Title {Org Narrator}.m4b"), file.Filepath)
+	require.FileExists(t, file.Filepath)
+
+	postIdentifyApply(t, e, plugins.PluginApplyPayload{
+		BookID: book.ID, FileID: &file.ID,
+		Fields:      map[string]any{"authors": []any{}, "narrators": []string{}},
+		PluginScope: "test", PluginID: "relationship-enricher",
+	})
+	book, file = f.retrieve(t)
+	require.Empty(t, book.Authors)
+	require.Empty(t, book.AuthorSource)
+	require.Empty(t, file.Narrators)
+	require.Nil(t, file.NarratorSource)
+	require.Equal(t, filepath.Join(libraryPath, "Embedded Title"), book.Filepath)
+	require.Equal(t, filepath.Join(book.Filepath, "Embedded Title.m4b"), file.Filepath)
+	require.FileExists(t, file.Filepath)
+	bookSidecar, err := sidecar.ReadBookSidecarFromModel(book, file)
+	require.NoError(t, err)
+	require.NotNil(t, bookSidecar)
+	assert.Empty(t, bookSidecar.Authors, "organization must not restore the old author in the book sidecar")
+	fileSidecar, err := sidecar.ReadFileSidecar(file.Filepath)
+	require.NoError(t, err)
+	require.NotNil(t, fileSidecar)
+	assert.Empty(t, fileSidecar.Narrators)
+
+	f.ordinaryScan(t, file.ID)
+	book, file = f.retrieve(t)
+	require.Len(t, book.Authors, 2)
+	assert.Equal(t, "Embedded Author One", book.Authors[0].Person.Name)
+	assert.Equal(t, "Embedded Author Two", book.Authors[1].Person.Name)
+	assert.Equal(t, models.DataSourceM4BMetadata, book.AuthorSource)
+	require.Len(t, file.Narrators, 2)
+	assert.Equal(t, "Embedded Narrator One", file.Narrators[0].Person.Name)
+	assert.Equal(t, "Embedded Narrator Two", file.Narrators[1].Person.Name)
+	assert.Equal(t, models.DataSourceM4BMetadata, *file.NarratorSource)
+	require.FileExists(t, file.Filepath)
+}
+
 func TestIdentifyApply_RelationshipPartialRemoval_ThenOrdinaryScan(t *testing.T) {
 	t.Parallel()
 
-	f := newIdentifyRelationshipScanFixture(t, true)
+	f := newIdentifyRelationshipScanFixture(t, true, false)
 	book, file := f.retrieve(t)
 	assertIdentifyRelationships(t, book, file, "Plugin", true, models.PluginDataSource("test", "relationship-enricher"))
 	require.False(t, t.Failed(), "precondition: auto-enrichment supplies two entries for every relationship")

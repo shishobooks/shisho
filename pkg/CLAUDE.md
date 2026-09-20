@@ -470,6 +470,8 @@ When a metadata field that affects file paths is edited via API, trigger file re
 
 Path-affecting removal operations must also trigger reorganization. For example, Identify represents clearing all series memberships as a present but empty series collection, which must remain distinct from an absent series field.
 
+For directory-backed books, folder organization owns the book sidecar. Rename the files inside that folder with `RenameOrganizedFileOnly`, not `RenameOrganizedFile`. A file previously moved from the library root can carry a leftover basename-based book sidecar. Renaming that sidecar during a narrator change can overwrite the current folder-based sidecar and restore stale metadata on the next Scan.
+
 **Pattern in handlers:**
 ```go
 // After updating the field
@@ -481,7 +483,7 @@ if fieldChanged && library.OrganizeFileStructure {
         Title:         title,  // Use file.Name if available
         FileType:      file.FileType,
     }
-    newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+    newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
     if err != nil {
         // Handle error
     }
