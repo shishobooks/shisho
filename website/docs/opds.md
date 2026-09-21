@@ -72,7 +72,7 @@ Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clien
 
 **Verify:** Confirm that `/opds/` reaches Shisho without a redirect and that generated links use the external HTTPS scheme.
 
-**Fix:** Forward `/opds/`, preserve `Authorization`, and pass the original scheme with `X-Forwarded-Proto: https`. If another proxy is in front of Shisho's bundled Caddy server, configure it as a trusted proxy before relying on forwarded headers. See [Deployment and Maintenance](./deployment-and-maintenance.md) and [Troubleshooting](./troubleshooting.md).
+**Fix:** Forward `/opds/`, preserve `Authorization` and the public `Host`, and pass the original scheme with `X-Forwarded-Proto: https`. Shisho trusts forwarded headers only from private-network direct peers, so the proxy's connection to Shisho must meet the [forwarded-header trust rules](./deployment-and-maintenance.md#https-and-reverse-proxies). OPDS also honors `X-Forwarded-Prefix` from a trusted peer when a proxy strips a catalog URL prefix; this does not make a path-prefixed deployment of the web interface supported. See [Troubleshooting](./troubleshooting.md) for other proxy symptoms.
 
 ### Missing Libraries or Books
 

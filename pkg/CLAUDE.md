@@ -13,20 +13,28 @@ This file documents backend patterns and conventions specific to Shisho.
 
 ### Entry Point
 
-`cmd/api/main.go` starts both HTTP server and background worker.
+`cmd/api/main.go` starts both HTTP server and background worker. The listener uses `http.Server.Addr`, built with `net.JoinHostPort` from `server_host` and `server_port`.
+
+### HTTP routing
+
+- `pkg/server` registers API routes beneath `e.Group("/api")`. API registration helpers accept `*echo.Group`; device route helpers still accept `*echo.Echo` because `/opds`, `/kobo`, `/ereader`, and `/e` stay at the root, alongside `/health`.
+- The router serves `pkg/frontend.Handler()` for unknown GET/HEAD paths outside the API and device prefixes. Reserved prefixes match whole path segments, so `/apiary` is a frontend route. Missing API/device routes return JSON 404, including omitted device routes in demo mode.
+- Use per-router `RouteNotFound` handlers, never mutate `echo.NotFoundHandler`. Echo adds authenticated group fallbacks when `Group.Use` runs; server construction replaces those fallbacks after all routes are registered so missing paths return JSON 404 rather than authentication errors. Existing endpoint authentication is unchanged.
+- Vite proxies `/api` unchanged, without rewriting paths or adding `X-Forwarded-Prefix`. OPDS is available at `/opds` in development too. Frontend routes and APIs share one origin; the server does not enable CORS.
+- Forwarded-header sanitization runs with `e.Pre` before routing. Request logging, recovery, security headers, compression, and demo enforcement run with `e.Use`. Keep the frontend fallback pattern `/*` recognizable to request logging.
 
 ### Demo Mode
 
 `demo_mode` / `DEMO_MODE` defaults to `false`. When enabled, `pkg/server/demo_mode.go` runs globally via `e.Use` after logger and recovery, before authentication and handlers. Use matched `c.Path()` patterns, not raw URLs; do not move this middleware to `e.Pre`.
 
 - Allow `GET`, `HEAD`, and `OPTIONS`, subject to normal authentication and permissions.
-- Allow only `POST /auth/login` and `POST /auth/logout` among write methods.
-- Deny `GET /books/files/:id/download/original`, `GET /books/files/:id/download/kepub`, and `GET /jobs/:id/download`.
+- Allow only `POST /api/auth/login` and `POST /api/auth/logout` among write methods.
+- Deny `GET /api/books/files/:id/download/original`, `GET /api/books/files/:id/download/kepub`, and `GET /api/jobs/:id/download`.
 - Reject every other method/path with `403`, code `demo_mode`, message `This action is unavailable in the demo.` Admins have no bypass. Unknown write paths are rejected too.
-- Keep generated reader downloads (`/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
-- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), either `/plugins` group, per-library plugin routes (`/libraries/:id/plugins/*`), or test routes (`/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
+- Keep generated reader downloads (`/api/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
+- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), either `/api/plugins` group, per-library plugin routes (`/api/libraries/:id/plugins/*`), or test routes (`/api/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
 - Skip `pluginManager.LoadAll` and `wrkr.Start` in `cmd/api/main.go`. Also skip `wrkr.Shutdown`, which waits for goroutines that only `Start` creates. Reader caches and startup migrations still run.
-- `GET /auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
+- `GET /api/auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
 
 Any new route family or download path must be classified here as allowed, denied, or unregistered in Demo Mode, with corresponding middleware or route-registration tests. New GET/HEAD handlers must not introduce persistent user changes.
 
@@ -91,7 +99,7 @@ When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if
 ### Cover Image System
 
 - Individual file covers: `{filename}.cover.{ext}`
-- API endpoints: `/books/{id}/cover` and `/files/{id}/cover`
+- API endpoints: `/api/books/{id}/cover` and `/api/books/files/{id}/cover`
 
 **CRITICAL - CoverImageFilename stores FILENAME ONLY:**
 
@@ -155,7 +163,7 @@ Used to determine which metadata to keep when conflicts occur. During scans, enr
 
 - OPDS v1.2 server hosted in the application
 - As new functionality is added, keep the OPDS server up-to-date with the new features
-- **Cover URLs in feeds must point at `/opds/v1/books/:id/cover`**, not the books API. Reasons mirror eReader: OPDS uses Basic Auth (the books group requires session auth), and in production the Caddy `/opds/*` handler proxies to the backend while bare `/books/*` falls through to the SPA. The cover endpoint lives in `pkg/opds/handlers.go` (`bookCover`) and is built off `apiBase + "/opds/v1"` in `bookToEntryWithKepub` so an `X-Forwarded-Prefix` (e.g. `/api` in dev) is preserved.
+- **Cover URLs in feeds must point at `/opds/v1/books/:id/cover`**, not the books API. OPDS uses Basic Auth while `/api/books` requires session auth. The Go server serves OPDS directly; bare `/books/*` paths belong to the SPA. The cover endpoint lives in `pkg/opds/handlers.go` (`bookCover`) and is built off `apiBase + "/opds/v1"` in `bookToEntryWithKepub` so an `X-Forwarded-Prefix` from a trusted prefix-stripping proxy is preserved. Vite does not set that header.
 
 ### eReader Browser UI (`pkg/ereader/`)
 
@@ -222,7 +230,8 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 
 **Group-level permission (all routes in group):**
 ```go
-booksGroup := e.Group("/books")
+api := e.Group("/api")
+booksGroup := api.Group("/books")
 booksGroup.Use(authMiddleware.Authenticate)
 booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 ```
@@ -345,7 +354,7 @@ Check existing queries in `pkg/books/service.go` for reference. Common aliases: 
 
 - **Unified `LogLevel` enum (`pkg/models/log_level.go`)**: A single `LogLevel` (`debug`, `info`, `warn`, `error`, `fatal`) is the canonical log-severity enum, shared by `models.JobLog.Level` (job logs) and `logs.LogEntry.Level` (app/server logs). There is no separate `JobLogLevel` — use `models.LogLevel*` consts everywhere, and `tstype:"LogLevel"` on level fields / `tstype:"LogLevel[]"` on level query filters. Both level query validators (`joblogs.ListJobLogsQuery.Level`, `logs.ListLogsQuery.Level`) carry the full `oneof=debug info warn error fatal`. The frontend imports `LogLevel*` from `@/types` (generated into `models.ts`).
 
-- **Jobs / job logs / app logs follow the `{ items, total }` envelope** like every other list endpoint: `jobs.ListJobsResponse` (`items: Job[]`), `joblogs.ListJobLogsResponse` (`items: JobLog[]`), and `logs.ListLogsResponse` (`items: LogEntry[]`). The foreign-model slices use a field-level `tstype:"Job[]"` / `tstype:"JobLog[]"` override plus a frontmatter import (the publishers `ListPublisherFilesResponse` pattern) so tygo emits a clean `Job[]` rather than `(any | undefined)[]`. **The joblogs list response no longer bundles the `job`** — the handler only does an existence check (404 on unknown job); the client fetches the job separately via `GET /jobs/:id` (the `useJob` hook). `POST /auth/logout` returns `204 No Content` (pure acknowledgment), not a JSON message body.
+- **Jobs / job logs / app logs follow the `{ items, total }` envelope** like every other list endpoint: `jobs.ListJobsResponse` (`items: Job[]`), `joblogs.ListJobLogsResponse` (`items: JobLog[]`), and `logs.ListLogsResponse` (`items: LogEntry[]`). The foreign-model slices use a field-level `tstype:"Job[]"` / `tstype:"JobLog[]"` override plus a frontmatter import (the publishers `ListPublisherFilesResponse` pattern) so tygo emits a clean `Job[]` rather than `(any | undefined)[]`. **The joblogs list response no longer bundles the `job`** — the handler only does an existence check (404 on unknown job); the client fetches the job separately via `GET /api/jobs/:id` (the `useJob` hook). `POST /api/auth/logout` returns `204 No Content` (pure acknowledgment), not a JSON message body.
 
 ### Config
 
@@ -569,8 +578,8 @@ func (svc *Service) DeleteChaptersForFile(ctx, fileID) error
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/books/files/:id/chapters` | List chapters (nested tree) |
-| PUT | `/books/files/:id/chapters` | Replace chapters (requires write permission) |
+| GET | `/api/books/files/:id/chapters` | List chapters (nested tree) |
+| PUT | `/api/books/files/:id/chapters` | Replace chapters (requires write permission) |
 
 ### Worker Integration
 

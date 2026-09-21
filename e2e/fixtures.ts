@@ -9,8 +9,8 @@
  *   import { expect, test } from "./fixtures";
  *
  *   test.beforeAll(async ({ apiContext }) => {
- *     await apiContext.delete("/test/users");
- *     await apiContext.post("/test/users", { data: { ... } });
+ *     await apiContext.delete("/api/test/users");
+ *     await apiContext.post("/api/test/users", { data: { ... } });
  *   });
  */
 
@@ -28,7 +28,9 @@ interface BrowserApiConfig {
 }
 
 /**
- * Get the API base URL for a browser. Use this in beforeAll hooks.
+ * Get the backend origin for a browser. Use this in beforeAll hooks.
+ * Request paths must include /api explicitly. A leading slash replaces any
+ * path in baseURL; device routes such as /ereader stay at the origin root.
  *
  * @param browserName - The browser name (e.g., "chromium", "firefox")
  * @returns The API base URL (e.g., "http://localhost:12345")

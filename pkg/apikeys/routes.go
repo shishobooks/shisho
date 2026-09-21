@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes registers API key management routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
+func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	service := NewService(db)
 	h := newHandler(service)
 

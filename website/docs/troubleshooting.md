@@ -6,9 +6,9 @@ Start with the symptom below, preserve the relevant logs, and make the least des
 
 **Symptom:** The container stops before the web interface becomes available, restarts repeatedly, or reports a configuration or permission error.
 
-**Likely cause:** `JWT_SECRET` is missing, a persistent path is not mounted or writable, the database cannot be opened, or startup on slow storage exceeded its timeout.
+**Likely cause:** `JWT_SECRET` is missing, a persistent path is not mounted or writable, the database cannot be opened, or the configured listener address cannot be bound.
 
-**Verify:** Read the container's startup output before restarting it again. Confirm that `/config` is persistent, any custom database path is inside a writable mount, and `JWT_SECRET` is set without printing its value into a support request.
+**Verify:** Read the container's startup output before restarting it again. Confirm that `/config` is persistent, any custom database path is inside a writable mount, and `JWT_SECRET` is set without printing its value into a support request. Check listener errors against `SERVER_HOST` and `SERVER_PORT`. If the container is still running but unhealthy, check whether migrations are still running and whether the health check targets the configured port.
 
 **Fix:** Follow the Compose and secret-configuration steps in [Getting Started](./getting-started.md). Match the container's `PUID` and `PGID` to the host files, correct the mounts, and review startup and database settings in [Configuration](./configuration.md). See [Deployment and Maintenance](./deployment-and-maintenance.md) before moving an existing database or changing storage.
 
@@ -96,11 +96,11 @@ Do not delete the database or its related files to clear a lock. Back it up befo
 
 **Symptom:** Login succeeds and immediately appears logged out, generated links use the wrong scheme or host, or the main interface works while API or device routes return the frontend page or a proxy error.
 
-**Likely cause:** The proxy is not preserving the public host and HTTPS scheme, the browser and server are switching between HTTP and HTTPS, or only the single-page application route is forwarded.
+**Likely cause:** The proxy is not preserving the public host and HTTPS scheme, Shisho does not trust the proxy's direct peer address, the browser and server are switching between HTTP and HTTPS, or the proxy strips or misroutes endpoint prefixes.
 
-**Verify:** Confirm the public URL stays on one scheme and host. Inspect whether the proxy forwards `X-Forwarded-Proto` and `X-Forwarded-Host`, and whether requests under `/api/`, `/opds/`, `/kobo/`, `/ereader/`, and `/e/` reach Shisho. A session cookie set for HTTPS will not be sent over a later HTTP request.
+**Verify:** Confirm the public URL stays on one scheme and host. Inspect whether the proxy preserves `Host` and supplies `X-Forwarded-Proto` and `X-Forwarded-Host`. Check the proxy's direct connection address against the [forwarded-header trust rules](./deployment-and-maintenance.md#https-and-reverse-proxies). Confirm requests under `/api/`, `/opds/`, `/kobo/`, `/ereader/`, and `/e/` reach Shisho without stripping those prefixes. A session cookie set for HTTPS will not be sent over a later HTTP request.
 
-**Fix:** Configure one canonical public HTTPS URL, forward the public scheme and host, and route all Shisho endpoint prefixes rather than only the frontend. Review [Deployment and Maintenance](./deployment-and-maintenance.md) and the integration page for the affected route.
+**Fix:** Configure one canonical public HTTPS URL for both the frontend and API, forward the public scheme and host, and route all Shisho endpoint prefixes unchanged. Connect the proxy to Shisho over a trusted private network; headers arriving directly from a public-address peer are discarded. Review [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies) and the integration page for the affected route.
 
 ## OPDS Returns 401
 
@@ -110,7 +110,7 @@ Do not delete the database or its related files to clear a lock. Back it up befo
 
 **Verify:** Use the exact catalog URL and the same username and password used for Shisho. Confirm the user can access the target library. Check generated sub-feed links for the wrong scheme and inspect the proxy's `X-Forwarded-Proto` handling.
 
-**Fix:** Correct the credentials or library access. Behind an HTTPS-terminating proxy, forward `X-Forwarded-Proto: https` so Shisho generates HTTPS feed links without a redirect. See [OPDS Catalog](./opds.md) and [Users and Permissions](./users-and-permissions.md).
+**Fix:** Correct the credentials or library access. Behind an HTTPS-terminating proxy, forward `X-Forwarded-Proto: https` over a connection Shisho trusts so generated feed links stay on HTTPS. See [OPDS Catalog](./opds.md#repeated-login-prompts-or-401-responses), [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies), and [Users and Permissions](./users-and-permissions.md).
 
 ## Kobo Sync or the eReader Browser Cannot Connect
 

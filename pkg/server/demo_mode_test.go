@@ -45,13 +45,13 @@ func TestDemoModeMiddleware(t *testing.T) {
 			e.HTTPErrorHandler = errcodes.NewHandler().Handle
 			e.Use(demoModeMiddleware)
 			called := false
-			e.Add(tt.method, tt.pattern, func(c echo.Context) error {
+			e.Group("/api").Add(tt.method, tt.pattern, func(c echo.Context) error {
 				called = true
 				return c.NoContent(http.StatusNoContent)
 			})
 
 			rec := httptest.NewRecorder()
-			e.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.target, nil))
+			e.ServeHTTP(rec, httptest.NewRequest(tt.method, "/api"+tt.target, nil))
 
 			assert.Equal(t, tt.allowed, called, "rejected requests must not reach the handler")
 			if tt.allowed {

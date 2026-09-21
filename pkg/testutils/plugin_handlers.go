@@ -51,7 +51,7 @@ func buildFixtureZip() ([]byte, string, error) {
 }
 
 // fixtureZip serves the fixture plugin as a zip.
-// GET /test/plugins/fixture.zip.
+// GET /api/test/plugins/fixture.zip.
 func (h *handler) fixtureZip(c echo.Context) error {
 	data, _, err := buildFixtureZip()
 	if err != nil {
@@ -69,7 +69,7 @@ type fixtureInfoResponse struct {
 }
 
 // fixtureInfo returns metadata about the fixture plugin.
-// GET /test/plugins/fixture-info.
+// GET /api/test/plugins/fixture-info.
 func (h *handler) fixtureInfo(c echo.Context) error {
 	_, sum, err := buildFixtureZip()
 	if err != nil {
@@ -79,7 +79,7 @@ func (h *handler) fixtureInfo(c echo.Context) error {
 	if c.Request().TLS != nil {
 		scheme = "https"
 	}
-	downloadURL := scheme + "://" + c.Request().Host + "/test/plugins/fixture.zip"
+	downloadURL := scheme + "://" + c.Request().Host + "/api/test/plugins/fixture.zip"
 	return c.JSON(http.StatusOK, fixtureInfoResponse{
 		Scope:       fixtureScope,
 		ID:          fixtureID,
@@ -106,7 +106,7 @@ type seedPluginRequest struct {
 // files to disk under {pluginDir}/{scope}/{id}/ and inserts a plugins row with
 // the caller-specified metadata. Optionally calls manager.LoadPlugin so the
 // runtime is available.
-// POST /test/plugins.
+// POST /api/test/plugins.
 func (h *handler) seedPlugin(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -180,7 +180,7 @@ type deleteAllPluginsResponse struct {
 
 // deleteAllPlugins wipes all plugin state: unloads runtimes, removes the
 // plugin directory contents, and truncates all plugin-related tables.
-// DELETE /test/plugins.
+// DELETE /api/test/plugins.
 func (h *handler) deleteAllPlugins(c echo.Context) error {
 	ctx := c.Request().Context()
 	var resp deleteAllPluginsResponse

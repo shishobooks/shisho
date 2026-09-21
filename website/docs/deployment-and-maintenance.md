@@ -2,6 +2,8 @@
 
 This page covers operating a Docker deployment after the initial [Getting Started](./getting-started.md) setup.
 
+The image runs one Shisho process that serves both the web interface and API on container port `5173`. It does not require a separate web server inside the container. The entrypoint prepares `/config` ownership and starts Shisho as `PUID` and `PGID`; Shisho handles shutdown directly.
+
 ## Choose an Image Tag
 
 Published images support Linux AMD64 and ARM64.
@@ -106,11 +108,17 @@ Follow container output with:
 docker compose logs -f shisho
 ```
 
-The image emits JSON logs by default. Set `CADDY_ACCESS_LOG_OUTPUT=stdout` if you also need Caddy access logs. The **Settings > Logs** page shows recent application logs to users with Config Read permission, but container logs remain important for startup failures and reverse proxy issues.
+The image emits JSON logs by default. Set `LOG_FORMAT=console` for human-readable output. Successful frontend asset requests are omitted from request logs; application API, integration, and error responses are logged. The **Settings > Logs** page shows recent application logs to users with Config Read permission, but container logs remain important for startup failures and reverse proxy issues.
 
 ## HTTPS and Reverse Proxies
 
-Do not expose an unauthenticated HTTP origin to the public internet. Terminate HTTPS at a trusted reverse proxy and proxy to Shisho's container port `5173`. Preserve the original host and scheme with standard forwarded headers.
+:::warning[Protect the HTTP Origin]
+Shisho trusts forwarded headers from private-network peers. A client that can reach the origin through such a peer can influence generated URLs and secure-cookie handling if the proxy passes through client-supplied headers. Restrict origin access to your trusted proxy and have it overwrite forwarded headers before exposing the service. Keep direct access on a trusted local network if you do not need public access.
+:::
+
+Terminate HTTPS at a trusted reverse proxy and proxy to Shisho's container port `5173`. Preserve the original `Host` and supply `X-Forwarded-Proto` for the public scheme. Kobo also uses `X-Forwarded-Host` and `X-Forwarded-Port` when provided.
+
+Shisho accepts `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Prefix`, and `X-Forwarded-For` only when the direct TCP peer is loopback, link-local, an RFC 1918 IPv4 address, or an IPv6 unique-local address in `fc00::/7`. It strips these headers from public-address peers. Trust depends on the direct connection, not an address claimed in `X-Forwarded-For`. Connect a remote proxy over a private network if its public address would otherwise reach Shisho directly.
 
 Shisho currently must be served from the origin root, such as `https://books.example.com/`. Deploying it below a path prefix such as `https://example.com/shisho/` is not supported.
 
@@ -122,9 +130,17 @@ The reverse proxy must pass all of these public route families without rewriting
 - `/ereader/*` for the eReader browser
 - `/e/*` for short eReader setup URLs
 
-Also pass `/health` if your external monitor uses it. Avoid response buffering for streaming API responses.
+Do not strip `/api` before forwarding it. Also pass `/health` if your external monitor uses it. Avoid response buffering for streaming API responses. The browser interface and API must share an origin; Shisho does not send CORS permission headers for cross-origin browser access.
 
 Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and API keys as secrets.
+
+### Response Handling
+
+Shisho uses gzip for eligible responses of at least 1 KiB when the client accepts it. Event streams, covers, page images, and file downloads bypass gzip. Keep proxy buffering disabled for event streams so live updates arrive promptly.
+
+Hashed frontend files under `/assets/` carry `Cache-Control: public, max-age=31536000, immutable`. The frontend's `index.html` uses `Cache-Control: no-cache` so browsers revalidate it. Do not override these with a blanket proxy cache rule. Unknown paths under `/api`, `/opds`, `/kobo`, `/ereader`, and `/e` return JSON errors rather than the frontend page; other unknown paths open the frontend.
+
+Responses include `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin`. Shisho does not emit a `Server` header or the deprecated `X-XSS-Protection` header. A reverse proxy may add its own headers, so check the public response when auditing the deployment.
 
 ## Outbound Connections
 

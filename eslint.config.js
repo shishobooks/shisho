@@ -11,6 +11,7 @@ export default tseslint.config(
   {
     ignores: [
       "build/*",
+      "pkg/frontend/dist/**",
       "website/build/**",
       "website/.docusaurus/**",
       "app/types/generated/*",

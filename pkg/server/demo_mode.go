@@ -14,14 +14,14 @@ func demoModeMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		switch c.Request().Method {
 		case http.MethodGet:
 			switch c.Path() {
-			case "/books/files/:id/download/original", "/books/files/:id/download/kepub", "/jobs/:id/download":
+			case "/api/books/files/:id/download/original", "/api/books/files/:id/download/kepub", "/api/jobs/:id/download":
 				return errcodes.DemoMode()
 			}
 			return next(c)
 		case http.MethodHead, http.MethodOptions:
 			return next(c)
 		case http.MethodPost:
-			if c.Path() == "/auth/login" || c.Path() == "/auth/logout" {
+			if c.Path() == "/api/auth/login" || c.Path() == "/api/auth/logout" {
 				return next(c)
 			}
 		}

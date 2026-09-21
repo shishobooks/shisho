@@ -55,9 +55,6 @@ ARG VERSION=dev
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache gcc musl-dev
-
 # Install dependencies first (better layer caching)
 COPY go.mod go.sum ./
 RUN go mod download
@@ -66,6 +63,7 @@ RUN go mod download
 COPY cmd/ ./cmd/
 COPY pkg/ ./pkg/
 COPY internal/ ./internal/
+COPY --from=frontend-builder /app/build/app/ ./pkg/frontend/dist/
 
 # Build static binary with version
 RUN CGO_ENABLED=0 go build -o /app/shisho -installsuffix cgo \
@@ -75,39 +73,33 @@ RUN CGO_ENABLED=0 go build -o /app/shisho -installsuffix cgo \
 # =============================================================================
 # Stage 4: Final Production Image
 # =============================================================================
-FROM caddy:2-alpine
+FROM alpine:3.23
 
-# Install su-exec for dropping privileges
-RUN apk add --no-cache su-exec
+# Install certificates for outbound HTTPS and su-exec for dropping privileges
+RUN apk add --no-cache ca-certificates su-exec
 
 # Create default non-root user
 RUN addgroup -g 1000 shisho && \
     adduser -u 1000 -G shisho -s /bin/sh -D shisho
 
 # Create necessary directories
-RUN mkdir -p /config /srv && \
+RUN mkdir -p /config && \
     chown -R shisho:shisho /config
 
 WORKDIR /app
 
-# Copy built artifacts
-COPY --from=frontend-builder /app/build/app /srv
+# Copy the binary with its embedded frontend and the entrypoint
 COPY --from=backend-builder /app/shisho /app/shisho
-
-# Copy Caddyfile and entrypoint
-COPY Caddyfile /etc/caddy/Caddyfile
 COPY scripts/docker-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Set environment variables
 ENV LOG_FORMAT=json
+ENV SERVER_PORT=5173
 
 # Default UID/GID (can be overridden with environment variables)
 ENV PUID=1000
 ENV PGID=1000
-
-# Startup timeout for backend health check (increase for slow storage like NAS)
-ENV STARTUP_TIMEOUT_SECONDS=120
 
 # Expose HTTP port
 EXPOSE 5173

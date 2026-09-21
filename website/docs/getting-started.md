@@ -37,6 +37,8 @@ services:
 
 Replace `/path/to/your/books` with the host path to your media. The container path `/media` is the path you will enter when creating the library.
 
+The `5173:5173` mapping exposes both the web interface and API. No separate frontend container is needed. For another host port, change only the left side of the mapping. See [Configuration](./configuration.md#server) for listener settings.
+
 The single `/config` mount persists the default SQLite database at `/config/shisho.db`, caches, installed plugins, and plugin data. `DATABASE_FILE_PATH` does not need to be set for this layout.
 
 ## Generate the JWT Secret
@@ -55,7 +57,7 @@ Provide that value as `JWT_SECRET` using the environment or secret-management me
 
 ## Configure PUID and PGID
 
-`PUID` and `PGID` select the user and group IDs used by the processes inside the container. They do not grant access to host files.
+`PUID` and `PGID` select the user and group IDs used by the Shisho process inside the container. They do not grant access to host files.
 
 Find the IDs that should own Shisho-created files:
 

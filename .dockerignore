@@ -5,6 +5,8 @@ vendor/
 # Build artifacts
 build/
 dist/
+pkg/frontend/dist/*
+!pkg/frontend/dist/placeholder.html
 *.exe
 *.dll
 *.so

@@ -763,10 +763,9 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 	apiBase = strings.TrimSuffix(apiBase, "/opds/v1")
 
 	// OPDS-mounted base for cover links. Covers must live inside /opds/v1
-	// so they authenticate via Basic Auth (the books API uses session
-	// cookies) and so the production Caddy /opds/* handler proxies them
-	// to the backend instead of returning the SPA shell. For non-kepub
-	// feeds this is just baseURL; for kepub feeds we drop the /kepub
+	// so they authenticate via Basic Auth. The books API uses session
+	// cookies, and bare /books paths serve the SPA. For non-kepub feeds
+	// this is just baseURL; for kepub feeds we drop the /kepub
 	// suffix so covers point at the canonical (format-agnostic) endpoint.
 	opdsBase := strings.TrimSuffix(baseURL, "/kepub")
 

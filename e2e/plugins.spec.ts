@@ -32,10 +32,10 @@ test.describe("Plugins UI (redesigned)", () => {
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
     // Wipe plugin state left behind by any preceding plugin-lifecycle / -config
     // specs so the "no plugins installed" empty-state test is independent.
-    await apiContext.delete("/test/plugins?include_official=true");
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
-    await apiContext.post("/test/users", {
+    await apiContext.delete("/api/test/plugins?include_official=true");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
+    await apiContext.post("/api/test/users", {
       data: { username: "plugintest", password: "password123" },
     });
     await apiContext.dispose();

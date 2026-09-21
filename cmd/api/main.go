@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -106,9 +105,7 @@ func main() {
 	graceful := signals.Setup()
 
 	go func() {
-		addr := fmt.Sprintf(":%d", cfg.ServerPort)
-		lc := net.ListenConfig{}
-		listener, err := lc.Listen(ctx, "tcp", addr)
+		listener, err := listenServer(ctx, srv)
 		if err != nil {
 			log.Err(err).Fatal("failed to bind port")
 		}
@@ -183,6 +180,12 @@ func main() {
 		log.Err(err).Error("database close error")
 	}
 	log.Info("database closed")
+}
+
+// listenServer binds the address built from server_host and server_port.
+func listenServer(ctx context.Context, srv *http.Server) (net.Listener, error) {
+	lc := net.ListenConfig{}
+	return lc.Listen(ctx, "tcp", srv.Addr)
 }
 
 // initCacheDir creates the cache directories and verifies write permissions.
