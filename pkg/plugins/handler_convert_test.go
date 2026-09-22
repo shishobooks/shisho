@@ -141,7 +141,7 @@ func TestConvertFieldsToMetadata_DiscardsMalformedSeriesNumberGroupsAtomically(t
 func TestExtractSeriesEntries_RangeUsesSnakeCaseAndIsAtomic(t *testing.T) {
 	t.Parallel()
 
-	got := extractSeriesEntries(map[string]any{
+	got, err := extractSeriesEntries(map[string]any{
 		"series": []any{
 			map[string]any{
 				"name":               "Saga",
@@ -149,26 +149,45 @@ func TestExtractSeriesEntries_RangeUsesSnakeCaseAndIsAtomic(t *testing.T) {
 				"series_number_end":  float64(3),
 				"series_number_unit": "volume",
 			},
-			map[string]any{
-				"name":               "Broken",
-				"number":             float64(4),
-				"series_number_end":  math.Inf(1),
-				"series_number_unit": "chapter",
-			},
 		},
 	})
+	require.NoError(t, err)
 
 	require.NotNil(t, got)
-	require.Len(t, *got, 2)
+	require.Len(t, *got, 1)
 	require.NotNil(t, (*got)[0].Number)
 	require.NotNil(t, (*got)[0].NumberEnd)
 	require.NotNil(t, (*got)[0].SeriesNumberUnit)
 	assert.InDelta(t, 1, *(*got)[0].Number, 0.001)
 	assert.InDelta(t, 3, *(*got)[0].NumberEnd, 0.001)
 	assert.Equal(t, "volume", *(*got)[0].SeriesNumberUnit)
-	assert.Nil(t, (*got)[1].Number)
-	assert.Nil(t, (*got)[1].NumberEnd)
-	assert.Nil(t, (*got)[1].SeriesNumberUnit)
+}
+
+// A malformed group anywhere in the array rejects the whole apply before any
+// mutation, instead of being dropped from an otherwise attributed collection.
+func TestExtractSeriesEntries_RejectsMalformedGroups(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]map[string]any{
+		"infinite end":       {"name": "Broken", "number": float64(4), "series_number_end": math.Inf(1), "series_number_unit": "chapter"},
+		"reversed range":     {"name": "Broken", "number": float64(3), "series_number_end": float64(1)},
+		"end without start":  {"name": "Broken", "series_number_end": float64(3)},
+		"unit without start": {"name": "Broken", "series_number_unit": "volume"},
+		"invalid unit":       {"name": "Broken", "number": float64(1), "series_number_unit": "bogus"},
+		"non-numeric start":  {"name": "Broken", "number": "one"},
+		"non-numeric end":    {"name": "Broken", "number": float64(1), "series_number_end": "3"},
+		"non-string unit":    {"name": "Broken", "number": float64(1), "series_number_unit": float64(1)},
+	}
+	for name, entry := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := extractSeriesEntries(map[string]any{
+				"series": []any{map[string]any{"name": "Saga", "number": float64(1)}, entry},
+			})
+			require.Error(t, err)
+			assert.Nil(t, got)
+		})
+	}
 }
 
 func TestConvertFieldsToMetadata_ReleaseDate_DateOnly(t *testing.T) {
@@ -487,30 +506,34 @@ func TestConvertFieldsToMetadata_SeriesNumberUnitMissing(t *testing.T) {
 
 func TestExtractSeriesEntries_NilWhenAbsent(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{"title": "Book"})
+	got, err := extractSeriesEntries(map[string]any{"title": "Book"})
+	require.NoError(t, err)
 	assert.Nil(t, got, "absent series key must yield nil")
 }
 
 func TestExtractSeriesEntries_NilWhenString(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{"series": "My Series"})
+	got, err := extractSeriesEntries(map[string]any{"series": "My Series"})
+	require.NoError(t, err)
 	assert.Nil(t, got, "scalar string must yield nil — handled by convertFieldsToMetadata")
 }
 
 func TestExtractSeriesEntries_EmptyArray(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{"series": []any{}})
+	got, err := extractSeriesEntries(map[string]any{"series": []any{}})
+	require.NoError(t, err)
 	require.NotNil(t, got, "empty array must return non-nil pointer (meaning clear all)")
 	assert.Empty(t, *got)
 }
 
 func TestExtractSeriesEntries_SingleEntry(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{
+	got, err := extractSeriesEntries(map[string]any{
 		"series": []any{
 			map[string]any{"name": "Naruto", "number": 3.0, "series_number_unit": "volume"},
 		},
 	})
+	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Len(t, *got, 1)
 	assert.Equal(t, "Naruto", (*got)[0].Name)
@@ -522,12 +545,13 @@ func TestExtractSeriesEntries_SingleEntry(t *testing.T) {
 
 func TestExtractSeriesEntries_MultipleEntries(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{
+	got, err := extractSeriesEntries(map[string]any{
 		"series": []any{
 			map[string]any{"name": "Series A", "number": 1.0},
 			map[string]any{"name": "Series B"},
 		},
 	})
+	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Len(t, *got, 2)
 	assert.Equal(t, "Series A", (*got)[0].Name)
@@ -538,13 +562,14 @@ func TestExtractSeriesEntries_MultipleEntries(t *testing.T) {
 
 func TestExtractSeriesEntries_SkipsEmptyNames(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{
+	got, err := extractSeriesEntries(map[string]any{
 		"series": []any{
 			map[string]any{"name": ""},
 			map[string]any{"name": "   "},
 			map[string]any{"name": "Valid"},
 		},
 	})
+	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Len(t, *got, 1)
 	assert.Equal(t, "Valid", (*got)[0].Name)
@@ -552,22 +577,25 @@ func TestExtractSeriesEntries_SkipsEmptyNames(t *testing.T) {
 
 func TestExtractSeriesEntries_MalformedNonEmptyArrayIsAbsent(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{
+	got, err := extractSeriesEntries(map[string]any{
 		"series": []any{map[string]any{"name": "   "}},
 	})
+	require.NoError(t, err)
 	assert.Nil(t, got)
 }
 
-func TestExtractSeriesEntries_InvalidUnit(t *testing.T) {
+func TestExtractSeriesEntries_NullGroupFieldsAreAbsent(t *testing.T) {
 	t.Parallel()
-	got := extractSeriesEntries(map[string]any{
+	got, err := extractSeriesEntries(map[string]any{
 		"series": []any{
-			map[string]any{"name": "S", "series_number_unit": "bogus"},
+			map[string]any{"name": "S", "number": nil, "series_number_end": nil, "series_number_unit": nil},
 		},
 	})
+	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Len(t, *got, 1)
-	assert.Nil(t, (*got)[0].SeriesNumberUnit, "invalid unit must be dropped")
+	assert.Nil(t, (*got)[0].Number)
+	assert.Nil(t, (*got)[0].SeriesNumberUnit)
 }
 
 func TestConvertFieldsToMetadata_SeriesArrayDoesNotSetScalar(t *testing.T) {

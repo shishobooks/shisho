@@ -31,6 +31,7 @@ func (s *stubBookStoreForApply) OrganizeBookFiles(_ context.Context, _ *models.B
 // stubRelStoreForApply is a no-op relationStore for applyMetadata tests.
 // When captureBookSeries is non-nil, CreateBookSeries appends to it.
 type stubRelStoreForApply struct {
+	seriesIDs              map[string]int
 	capturedBookSeries     []*models.BookSeries
 	deleteBookSeriesCalled bool
 	deletedAuthors         []int
@@ -55,8 +56,19 @@ func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, bs *models.Bo
 	s.capturedBookSeries = append(s.capturedBookSeries, bs)
 	return nil
 }
-func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, _ string, _ int, _ string) (*models.Series, error) {
-	return &models.Series{ID: 1}, nil
+
+// FindOrCreateSeries hands out one ID per distinct name, starting at 1, so
+// tests that pre-attach series ID 1 keep matching the first resolved name.
+func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, name string, _ int, _ string) (*models.Series, error) {
+	if s.seriesIDs == nil {
+		s.seriesIDs = map[string]int{}
+	}
+	id, ok := s.seriesIDs[name]
+	if !ok {
+		id = len(s.seriesIDs) + 1
+		s.seriesIDs[name] = id
+	}
+	return &models.Series{ID: id, Name: name}, nil
 }
 func (s *stubRelStoreForApply) DeleteBookGenres(_ context.Context, bookID int) error {
 	s.deletedGenres = append(s.deletedGenres, bookID)

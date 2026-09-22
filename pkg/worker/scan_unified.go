@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"math"
@@ -16,6 +17,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/chapters"
@@ -1101,15 +1103,19 @@ func (w *Worker) scanFileCore(
 			}
 		}
 
-		// Update series relationship (from metadata)
+		// Update series relationship (from metadata). books.series_source is
+		// the membership collection's own provenance; a Series name's source
+		// says nothing about who attached this Book to it.
 		if metadata.Series != "" {
 			existingSeriesSource := ""
-			for _, bs := range book.BookSeries {
-				if bs.Series != nil && existingSeriesSource == "" {
-					existingSeriesSource = bs.Series.NameSource
-				}
+			if book.SeriesSource != nil {
+				existingSeriesSource = *book.SeriesSource
 			}
 
+			// A renamed Series whose old name is an Alias is the same Series,
+			// so compare by its current name instead of replacing the
+			// membership on every scan.
+			metadata.Series = w.canonicalAttachedSeriesName(ctx, metadata.Series, book)
 			seriesSource := metadata.SourceForField("series")
 			if shouldUpdateParsedSeries(metadata, book.BookSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
@@ -1139,23 +1145,29 @@ func (w *Worker) scanFileCore(
 						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        1,
 					})
+
+					// Update series membership source
+					book.SeriesSource = &seriesSource
+					if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"series_source"}}); err != nil {
+						return nil, errors.Wrap(err, "failed to update series source")
+					}
 				}
 			}
 		}
 		// Update series relationship (from sidecar)
 		if bookSidecarData != nil && len(bookSidecarData.Series) > 0 {
-			sidecarSeriesNames := make([]string, 0, len(bookSidecarData.Series))
-			for _, s := range bookSidecarData.Series {
-				if s.Name != "" {
-					sidecarSeriesNames = append(sidecarSeriesNames, s.Name)
+			hasSidecarSeriesNames := false
+			for i := range bookSidecarData.Series {
+				if bookSidecarData.Series[i].Name == "" {
+					continue
 				}
+				hasSidecarSeriesNames = true
+				bookSidecarData.Series[i].Name = w.canonicalAttachedSeriesName(ctx, bookSidecarData.Series[i].Name, book)
 			}
 			existingSeries := book.BookSeries
 			existingSeriesSource := ""
-			for _, bs := range existingSeries {
-				if bs.Series != nil && existingSeriesSource == "" {
-					existingSeriesSource = bs.Series.NameSource
-				}
+			if book.SeriesSource != nil {
+				existingSeriesSource = *book.SeriesSource
 			}
 			// Compare the sidecar against any metadata replacement staged above,
 			// not only the stale stored relations. This lets the higher-priority
@@ -1165,7 +1177,7 @@ func (w *Worker) scanFileCore(
 				existingSeriesSource = metadata.SourceForField("series")
 			}
 
-			if len(sidecarSeriesNames) > 0 && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
+			if hasSidecarSeriesNames && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces any metadata collection)
@@ -1198,6 +1210,12 @@ func (w *Worker) scanFileCore(
 						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        i + 1,
 					})
+				}
+
+				// Update series membership source
+				book.SeriesSource = &sidecarSource
+				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"series_source"}}); err != nil {
+					return nil, errors.Wrap(err, "failed to update series source")
 				}
 			}
 		}
@@ -1911,7 +1929,12 @@ func (w *Worker) scanFileCore(
 	// changes need this pass even when a sibling file already restored authors.
 	// Full scans defer organization until discovery and processing finish.
 	narratorsChanged := file.FileType == models.FileTypeM4B && relUpdates.DeleteNarrators
-	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged) && isResync {
+	// Series numbers are part of organized folder names whenever the book has
+	// a main CBZ (the organizer's own rule for hybrid books), so a restored or
+	// replaced membership is path-affecting even when the scanned file is
+	// the book's EPUB.
+	seriesChanged := relUpdates.DeleteSeries && bookHasMainCBZ(book, file)
+	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged || seriesChanged) && isResync {
 		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 		if err != nil {
 			logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
@@ -4074,6 +4097,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	book.SubtitleSource = nil
 	book.Description = nil
 	book.DescriptionSource = nil
+	book.SeriesSource = nil
 	book.GenreSource = nil
 	book.TagSource = nil
 
@@ -4087,7 +4111,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	bookColumns := []string{
 		"subtitle", "subtitle_source",
 		"description", "description_source",
-		"genre_source", "tag_source",
+		"series_source", "genre_source", "tag_source",
 		"title_source", "sort_title_source", "author_source",
 	}
 	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
@@ -4416,4 +4440,47 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldR
 			}
 		}
 	}
+}
+
+// canonicalAttachedSeriesName returns the current name of an attached Series
+// when name is that Series' name or one of its Aliases (case-insensitive), and
+// name unchanged otherwise. A user who renames a Series and keeps the old name
+// as an Alias must not see every scan move the book to a duplicate Series.
+func (w *Worker) canonicalAttachedSeriesName(ctx context.Context, name string, book *models.Book) string {
+	if len(book.BookSeries) == 0 {
+		return name
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil && strings.EqualFold(bs.Series.Name, name) {
+			return bs.Series.Name
+		}
+	}
+	seriesID, err := aliases.FindResourceIDByAlias(ctx, w.db, aliases.SeriesConfig, name, book.LibraryID)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			logger.FromContext(ctx).Warn("failed to look up series alias", logger.Data{"name": name, "error": err.Error()})
+		}
+		return name
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil && bs.Series.ID == seriesID {
+			return bs.Series.Name
+		}
+	}
+	return name
+}
+
+// bookHasMainCBZ mirrors the organizer's folder-naming rule: CBZ naming applies
+// whenever any main file is a CBZ, including the file being scanned when the
+// book's files are not loaded.
+func bookHasMainCBZ(book *models.Book, file *models.File) bool {
+	if file != nil && file.FileRole == models.FileRoleMain && file.FileType == models.FileTypeCBZ {
+		return true
+	}
+	for _, f := range book.Files {
+		if f.FileRole == models.FileRoleMain && f.FileType == models.FileTypeCBZ {
+			return true
+		}
+	}
+	return false
 }

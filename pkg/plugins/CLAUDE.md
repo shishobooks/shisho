@@ -38,7 +38,7 @@ pkg/plugins/
   handler_apply_metadata.go - applyMetadata (POST /apply)
   handler_persist_metadata.go - persistMetadata (shared by apply path)
   handler_attribution.go    - Identify source attribution: intent validation, no-op helpers (ADR 0006)
-  handler_relationships.go  - Resolve-then-compare for Authors, Genres, Tags, and Narrators
+  handler_relationships.go  - Resolve-then-compare for Authors, Series memberships, Genres, Tags, and Narrators
   handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
@@ -125,11 +125,28 @@ Conventions and gotchas specific to this surface:
     already-empty collections; partial edits use the submitted intent.
     `books.author_source` is nullable after migration `20260919000001`; its
     Go field remains a `nullzero` string, so clearing assigns `""`.
-  - Series, identifiers, and covers still stamp the plugin source until their
-    slices (#456 to #458) land. End-to-end regression tests live in
+  - Series memberships are an ordered collection with aggregate provenance in
+    `books.series_source` (nullable; migration `20260922000000` backfilled it
+    from the first membership's `series.name_source`). `applySeries` resolves
+    each entry through `FindOrCreateSeries` (which resolves Aliases), rejects
+    a Series listed twice (checked on resolved IDs, so an Alias plus its
+    Primary Name count as one; the check runs after resolution, so a rejected
+    apply can leave a freshly created, unattached Series behind), and
+    compares Series ID, order, and the atomic Series Number group (start,
+    end, unit). The source argument passed to
+    `FindOrCreateSeries` still describes the Series NAME and is untouched by
+    attribution; never read `Series.NameSource` as membership provenance. The
+    scalar `md.Series` path (plugin results) is routed through the same
+    function as the Identify array path. A malformed Series Number group in
+    `fields.series` is a validation error from `extractSeriesEntries` before
+    any field is persisted (`strictSeriesNumberGroupFromFields`); the plugin
+    SDK path (`seriesNumberGroupFromFields`) keeps dropping malformed groups.
+  - Identifiers and covers still stamp the plugin source until their slices
+    (#457, #458) land. End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
-    `pkg/worker/scan_identify_relationships_test.go`, and
-    `pkg/worker/identify_relationship_apply_test.go`.
+    `pkg/worker/scan_identify_relationships_test.go`,
+    `pkg/worker/identify_relationship_apply_test.go`, and
+    `pkg/worker/identify_series_apply_test.go`.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.

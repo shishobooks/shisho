@@ -2,10 +2,12 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -200,4 +202,124 @@ func collectionSource(length int, source string) *string {
 		return nil
 	}
 	return &source
+}
+
+// sameSeriesMembership reports whether two memberships attach the same Series
+// at the same Series Number group. The group is atomic (ADR 0005), so start,
+// end, and unit all take part in identity.
+func sameSeriesMembership(a, b *models.BookSeries) bool {
+	return a.SeriesID == b.SeriesID &&
+		equalFloatPointers(a.SeriesNumber, b.SeriesNumber) &&
+		equalFloatPointers(a.SeriesNumberEnd, b.SeriesNumberEnd) &&
+		equalStringPointers(a.SeriesNumberUnit, b.SeriesNumberUnit)
+}
+
+func equalFloatPointers(a, b *float64) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func equalStringPointers(a, b *string) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+// applySeries replaces the book's ordered Series memberships when the resolved
+// collection differs from the stored one, and attributes books.series_source
+// from the submitted intent. Series identity is resolved through
+// FindOrCreateSeries, so an Alias of an attached Series is the same
+// membership. The source passed to FindOrCreateSeries only concerns the Series
+// name and is unchanged here.
+//
+// reindexAttached asks for every membership that survives the apply to be
+// re-indexed too, because series_fts carries book title and author aggregates
+// that another field in the same apply may have changed.
+func (h *handler) applySeries(ctx context.Context, book *models.Book, entries []SeriesEntry, attr applyAttribution, reindexAttached bool, log logger.Logger) (bool, error) {
+	resolved := make([]*models.BookSeries, 0, len(entries))
+	seen := make(map[int]struct{}, len(entries))
+	for _, entry := range entries {
+		seriesRecord, err := h.enrich.relStore.FindOrCreateSeries(ctx, entry.Name, book.LibraryID, attr.pluginSource)
+		if err != nil {
+			return false, errors.Wrap(err, "failed to resolve series")
+		}
+		// Duplicates are known only after resolution, since an Alias and its
+		// Primary Name are one Series. A rejected apply may therefore have
+		// already created a Series resource; the orphan is harmless.
+		if _, dup := seen[seriesRecord.ID]; dup {
+			return false, errcodes.ValidationError(fmt.Sprintf("series %q is listed more than once", seriesRecord.Name))
+		}
+		seen[seriesRecord.ID] = struct{}{}
+		bs := &models.BookSeries{BookID: book.ID, SeriesID: seriesRecord.ID, Series: seriesRecord, SortOrder: len(resolved) + 1}
+		if entry.Number != nil {
+			bs.SeriesNumber = entry.Number
+			bs.SeriesNumberEnd = entry.NumberEnd
+			bs.SeriesNumberUnit = entry.SeriesNumberUnit
+		}
+		resolved = append(resolved, bs)
+	}
+
+	old := make(map[int]*models.Series, len(book.BookSeries))
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil {
+			old[bs.Series.ID] = bs.Series
+		}
+	}
+	same := slices.EqualFunc(book.BookSeries, resolved, sameSeriesMembership)
+	if same && (len(resolved) > 0 || book.SeriesSource == nil) {
+		if reindexAttached {
+			h.indexSeries(ctx, attachedSeries(book), log)
+		}
+		return false, nil
+	}
+	if !same {
+		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
+			return false, errors.Wrap(err, "failed to delete series")
+		}
+		for _, bs := range resolved {
+			if err := h.enrich.relStore.CreateBookSeries(ctx, bs); err != nil {
+				return false, errors.Wrap(err, "failed to create book series")
+			}
+		}
+		book.BookSeries = resolved
+		// Newly attached Series gain this book in their aggregates, detached
+		// ones lose it, and kept ones only need a refresh when the aggregates
+		// themselves changed.
+		var stale []*models.Series
+		for _, bs := range resolved {
+			if _, attached := old[bs.SeriesID]; !attached || reindexAttached {
+				stale = append(stale, bs.Series)
+			}
+			delete(old, bs.SeriesID)
+		}
+		for _, detached := range old {
+			stale = append(stale, detached)
+		}
+		h.indexSeries(ctx, stale, log)
+	}
+	book.SeriesSource = collectionSource(len(resolved), attr.sourceFor("series"))
+	if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"series_source"}); err != nil {
+		return false, errors.Wrap(err, "failed to update series source")
+	}
+	return !same, nil
+}
+
+func attachedSeries(book *models.Book) []*models.Series {
+	out := make([]*models.Series, 0, len(book.BookSeries))
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil {
+			out = append(out, bs.Series)
+		}
+	}
+	return out
+}
+
+// indexSeries re-indexes each Series so its series_fts aggregates reflect the
+// book's current title, authors, and memberships.
+func (h *handler) indexSeries(ctx context.Context, series []*models.Series, log logger.Logger) {
+	if h.enrich.searchIndexer == nil {
+		return
+	}
+	for _, record := range series {
+		if err := h.enrich.searchIndexer.IndexSeries(ctx, record); err != nil {
+			log.Warn("failed to update search index for series", logger.Data{"series_id": record.ID, "error": err.Error()})
+		}
+	}
 }

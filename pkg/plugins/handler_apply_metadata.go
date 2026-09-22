@@ -84,8 +84,14 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		overrides.Intents = payload.Sources
 	}
 
-	// Extract multi-series entries from fields (array format from identify form).
-	if seriesEntries := extractSeriesEntries(payload.Fields); seriesEntries != nil {
+	// Extract multi-series entries from fields (array format from identify
+	// form). A malformed Series Number group rejects the whole apply before
+	// any field is persisted.
+	seriesEntries, err := extractSeriesEntries(payload.Fields)
+	if err != nil {
+		return err
+	}
+	if seriesEntries != nil {
 		if overrides == nil {
 			overrides = &ApplyOverrides{}
 		}
