@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"math"
@@ -1155,12 +1156,13 @@ func (w *Worker) scanFileCore(
 		}
 		// Update series relationship (from sidecar)
 		if bookSidecarData != nil && len(bookSidecarData.Series) > 0 {
-			sidecarSeriesNames := make([]string, 0, len(bookSidecarData.Series))
-			for i, s := range bookSidecarData.Series {
-				if s.Name != "" {
-					bookSidecarData.Series[i].Name = w.canonicalAttachedSeriesName(ctx, s.Name, book)
-					sidecarSeriesNames = append(sidecarSeriesNames, bookSidecarData.Series[i].Name)
+			hasSidecarSeriesNames := false
+			for i := range bookSidecarData.Series {
+				if bookSidecarData.Series[i].Name == "" {
+					continue
 				}
+				hasSidecarSeriesNames = true
+				bookSidecarData.Series[i].Name = w.canonicalAttachedSeriesName(ctx, bookSidecarData.Series[i].Name, book)
 			}
 			existingSeries := book.BookSeries
 			existingSeriesSource := ""
@@ -1175,7 +1177,7 @@ func (w *Worker) scanFileCore(
 				existingSeriesSource = metadata.SourceForField("series")
 			}
 
-			if len(sidecarSeriesNames) > 0 && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
+			if hasSidecarSeriesNames && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces any metadata collection)
@@ -1927,9 +1929,11 @@ func (w *Worker) scanFileCore(
 	// changes need this pass even when a sibling file already restored authors.
 	// Full scans defer organization until discovery and processing finish.
 	narratorsChanged := file.FileType == models.FileTypeM4B && relUpdates.DeleteNarrators
-	// Series numbers are part of organized CBZ names, so a restored or
-	// replaced membership is path-affecting too.
-	seriesChanged := file.FileType == models.FileTypeCBZ && relUpdates.DeleteSeries
+	// Series numbers are part of organized folder names whenever the book has
+	// a main CBZ (the organizer's own rule for hybrid books), so a restored or
+	// replaced membership is path-affecting even when the scanned file is
+	// the book's EPUB.
+	seriesChanged := relUpdates.DeleteSeries && bookHasMainCBZ(book, file)
 	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged || seriesChanged) && isResync {
 		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 		if err != nil {
@@ -4453,6 +4457,9 @@ func (w *Worker) canonicalAttachedSeriesName(ctx context.Context, name string, b
 	}
 	seriesID, err := aliases.FindResourceIDByAlias(ctx, w.db, aliases.SeriesConfig, name, book.LibraryID)
 	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			logger.FromContext(ctx).Warn("failed to look up series alias", logger.Data{"name": name, "error": err.Error()})
+		}
 		return name
 	}
 	for _, bs := range book.BookSeries {
@@ -4461,4 +4468,19 @@ func (w *Worker) canonicalAttachedSeriesName(ctx context.Context, name string, b
 		}
 	}
 	return name
+}
+
+// bookHasMainCBZ mirrors the organizer's folder-naming rule: CBZ naming applies
+// whenever any main file is a CBZ, including the file being scanned when the
+// book's files are not loaded.
+func bookHasMainCBZ(book *models.Book, file *models.File) bool {
+	if file != nil && file.FileRole == models.FileRoleMain && file.FileType == models.FileTypeCBZ {
+		return true
+	}
+	for _, f := range book.Files {
+		if f.FileRole == models.FileRoleMain && f.FileType == models.FileTypeCBZ {
+			return true
+		}
+	}
+	return false
 }

@@ -384,15 +384,7 @@ function resolveSeries(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
-  // Memberships are ordered, so order takes part in the comparison.
-  const key = (s: SeriesEntry) =>
-    `${s.name}|${s.number}|${s.numberEnd}|${s.unit}`;
-  const curKeys = current.map(key);
-  const incKeys = incoming.map(key);
-  if (
-    curKeys.length === incKeys.length &&
-    curKeys.every((v, i) => v === incKeys[i])
-  ) {
+  if (seriesEntriesEqual(current, incoming)) {
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
@@ -835,14 +827,7 @@ export function IdentifyReviewForm({
       return "changed";
     };
 
-    const seriesKey = (s: SeriesEntry) =>
-      `${s.name.trim()}|${s.number.trim()}|${s.numberEnd.trim()}|${s.unit}`;
-    // Ordered like the saved memberships: a reorder is a change.
-    const seriesSavedKeys = currentSeriesEntries.map(seriesKey);
-    const seriesCurrentKeys = seriesEntries.map(seriesKey);
-    const seriesMatch =
-      seriesSavedKeys.length === seriesCurrentKeys.length &&
-      seriesSavedKeys.every((v, i) => v === seriesCurrentKeys[i]);
+    const seriesMatch = seriesEntriesEqual(currentSeriesEntries, seriesEntries);
     const seriesStatus: FieldStatus = seriesMatch
       ? "unchanged"
       : currentSeriesEntries.length === 0 && seriesEntries.length > 0
