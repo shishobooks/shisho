@@ -73,6 +73,7 @@ Each domain (books, jobs, libraries, chapters) has:
 - **`ProcessScanJob`** handles this by collecting book IDs into `booksToOrganize` and running organization in a batch after all files are scanned.
 - **`Monitor.processPendingEvents`** handles this by collecting book IDs from `FileCreated` results and calling `organizeBooks()` after processing all events.
 - **Any new caller of `scanInternal(FilePath)`** must also handle organization, or files will be left unorganized in the library root.
+- **Resync narrator changes must trigger organization after relationship persistence.** The earlier filename check uses the pre-scan narrators. Include M4B narrator updates in the post-`UpdateBookRelationships` organization condition, even when Title and Authors are unchanged. A hybrid book's EPUB may restore Authors before its M4B restores Narrators, so an author-only trigger leaves the audiobook filename stale.
 
 ### Scan Cache Must Include Supplements
 

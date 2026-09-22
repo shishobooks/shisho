@@ -1906,17 +1906,18 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
-	// Reorganize book directory on disk if title or authors changed and library has OrganizeFileStructure enabled.
-	// Only do this during resyncs - during full scans, organization would rename directories while
-	// other files are still being discovered/processed, breaking the scan.
-	// This must run AFTER UpdateBookRelationships so the fresh DB read includes the new authors.
-	if isMainFile && (bookTitleChanged || authorsChanged) && isResync {
+	// Reorganize after path-affecting relationships have been persisted. The
+	// earlier filename check runs before narrator updates, so narrator-only
+	// changes need this pass even when a sibling file already restored authors.
+	// Full scans defer organization until discovery and processing finish.
+	narratorsChanged := file.FileType == models.FileTypeM4B && relUpdates.DeleteNarrators
+	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged) && isResync {
 		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 		if err != nil {
 			logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
 		} else {
 			if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true}); err != nil {
-				logWarn("failed to organize book files after title/author change", logger.Data{
+				logWarn("failed to organize book files after metadata change", logger.Data{
 					"book_id": book.ID,
 					"error":   err.Error(),
 				})
