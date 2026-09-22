@@ -1,10 +1,12 @@
 package plugins
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 )
@@ -189,14 +191,14 @@ func isBool(v any) bool {
 // nil when the key is absent or is a string (handled by convertFieldsToMetadata).
 // Returns a non-nil pointer to an empty slice when the key is an empty array
 // (meaning "clear all series").
-func extractSeriesEntries(fields map[string]any) *[]SeriesEntry {
+func extractSeriesEntries(fields map[string]any) (*[]SeriesEntry, error) {
 	v, ok := fields["series"]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	arr, ok := v.([]any)
 	if !ok {
-		return nil // scalar string — handled by convertFieldsToMetadata
+		return nil, nil // scalar string, handled by convertFieldsToMetadata
 	}
 	entries := make([]SeriesEntry, 0, len(arr))
 	for _, item := range arr {
@@ -215,11 +217,18 @@ func extractSeriesEntries(fields map[string]any) *[]SeriesEntry {
 			"series_number_end":  m["series_number_end"],
 			"series_number_unit": m["series_number_unit"],
 		}
-		entry.Number, entry.NumberEnd, entry.SeriesNumberUnit = seriesNumberGroupFromFields(groupFields)
+		// A malformed group is rejected before any mutation rather than
+		// silently dropped: an Identify apply must never persist or attribute
+		// a membership whose Series Number group it could not represent.
+		var valid bool
+		entry.Number, entry.NumberEnd, entry.SeriesNumberUnit, valid = strictSeriesNumberGroupFromFields(groupFields)
+		if !valid {
+			return nil, errcodes.ValidationError(fmt.Sprintf("series %q has an invalid series number group", name))
+		}
 		entries = append(entries, entry)
 	}
 	if len(arr) > 0 && len(entries) == 0 {
-		return nil
+		return nil, nil
 	}
-	return &entries
+	return &entries, nil
 }

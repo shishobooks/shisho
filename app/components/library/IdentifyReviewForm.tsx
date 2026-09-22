@@ -273,6 +273,38 @@ function authorsEqual(
   );
 }
 
+/** The plugin proposes at most one membership; the form edits an ordered list. */
+function proposedSeriesEntries(result: PluginSearchResult): SeriesEntry[] {
+  if (!result.series) return [];
+  return [
+    {
+      name: result.series,
+      number: result.series_number?.toString() ?? "",
+      numberEnd: result.series_number_end?.toString() ?? "",
+      unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
+    },
+  ];
+}
+
+/** Memberships are ordered and their Series Number group is atomic, so the
+ *  name, start, end, and unit of each position must all match. Numbers compare
+ *  as values so "1" and "1.0" are the same position. */
+function seriesEntriesEqual(
+  current: SeriesEntry[],
+  incoming: SeriesEntry[],
+): boolean {
+  const numberKey = (value: string) => {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? String(parsed) : "";
+  };
+  const key = (s: SeriesEntry) =>
+    `${s.name.trim()}|${numberKey(s.number)}|${numberKey(s.numberEnd)}|${s.unit}`;
+  return (
+    current.length === incoming.length &&
+    current.every((entry, i) => key(entry) === key(incoming[i]))
+  );
+}
+
 function nameSetsEqual(current: string[], incoming: string[]): boolean {
   const currentSet = new Set(current.map((name) => name.trim()));
   const incomingSet = new Set(incoming.map((name) => name.trim()));
@@ -524,7 +556,7 @@ export function IdentifyReviewForm({
       title: book.title_source || undefined,
       subtitle: book.subtitle_source ?? undefined,
       authors: book.author_source || undefined,
-      series: undefined, // No series_source field on the book model.
+      series: book.series_source ?? undefined,
       genres: book.genre_source ?? undefined,
       tags: book.tag_source ?? undefined,
       description: book.description_source ?? undefined,
@@ -533,6 +565,7 @@ export function IdentifyReviewForm({
       book.title_source,
       book.subtitle_source,
       book.author_source,
+      book.series_source,
       book.genre_source,
       book.tag_source,
       book.description_source,
@@ -594,16 +627,7 @@ export function IdentifyReviewForm({
       result.identifiers ?? []
     ).map((id) => ({ type: id.type, value: id.value }));
 
-    const incomingSeries: SeriesEntry[] = result.series
-      ? [
-          {
-            name: result.series,
-            number: result.series_number?.toString() ?? "",
-            numberEnd: result.series_number_end?.toString() ?? "",
-            unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
-          },
-        ]
-      : [];
+    const incomingSeries = proposedSeriesEntries(result);
 
     return {
       title: resolveScalar(book.title, result.title),
@@ -1193,15 +1217,20 @@ export function IdentifyReviewForm({
         : SourceIntentUser;
     }
     if (decisions.series) {
-      fields.series = seriesEntries
-        .filter((s) => s.name.trim())
-        .map((s) => ({
-          name: s.name,
-          number: s.number !== "" ? parseFloat(s.number) : undefined,
-          series_number_end:
-            s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
-          series_number_unit: s.unit !== "" ? s.unit : undefined,
-        }));
+      const finalSeries = seriesEntries.filter((s) => s.name.trim());
+      fields.series = finalSeries.map((s) => ({
+        name: s.name,
+        number: s.number !== "" ? parseFloat(s.number) : undefined,
+        series_number_end:
+          s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
+        series_number_unit: s.unit !== "" ? s.unit : undefined,
+      }));
+      sources.series = seriesEntriesEqual(
+        finalSeries,
+        proposedSeriesEntries(result),
+      )
+        ? SourceIntentPlugin
+        : SourceIntentUser;
     }
     if (decisions.genres) {
       fields.genres = genres;

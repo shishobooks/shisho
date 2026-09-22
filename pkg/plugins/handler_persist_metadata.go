@@ -40,8 +40,9 @@ func equalIntSets(a, b map[int]struct{}) bool {
 func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) error {
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	// A semantic no-op preserves provenance. Changed scalars and relationship
-	// collections use the submitted intent; series, identifiers, and covers
-	// retain their existing attribution until their respective slices land.
+	// collections (including Series memberships) use the submitted intent;
+	// identifiers and covers retain their existing attribution until their
+	// respective slices land.
 	attr := newApplyAttribution(pluginSource, overrides)
 	var columns []string
 
@@ -108,92 +109,27 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		bookIndexChanged = bookIndexChanged || changed
 	}
 
-	// Series — multi-entry path (identify form) takes precedence over scalar (plugins).
-	multiSeries := overrides != nil && overrides.SeriesEntries != nil
-	if multiSeries || md.Series != "" {
-		bookIndexChanged = true
-		oldSeries := make(map[int]*models.Series, len(book.BookSeries))
-		for _, bs := range book.BookSeries {
-			if bs.Series != nil {
-				oldSeries[bs.Series.ID] = bs.Series
-			}
-		}
-		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete series")
-		}
-
-		newSeries := make(map[int]*models.Series)
-
-		if multiSeries {
-			for i, entry := range *overrides.SeriesEntries {
-				seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, entry.Name, book.LibraryID, pluginSource)
-				if sErr != nil {
-					log.Warn("failed to find/create series", logger.Data{"name": entry.Name, "error": sErr.Error()})
-					continue
-				}
-				bs := &models.BookSeries{
-					BookID:    book.ID,
-					SeriesID:  seriesRecord.ID,
-					SortOrder: i + 1,
-				}
-				if entry.Number != nil {
-					bs.SeriesNumber = entry.Number
-					bs.SeriesNumberEnd = entry.NumberEnd
-					bs.SeriesNumberUnit = entry.SeriesNumberUnit
-				}
-				if err := h.enrich.relStore.CreateBookSeries(ctx, bs); err != nil {
-					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
-				}
-				newSeries[seriesRecord.ID] = seriesRecord
-			}
-		} else {
-			seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, md.Series, book.LibraryID, pluginSource)
-			if sErr != nil {
-				log.Warn("failed to find/create series", logger.Data{"name": md.Series, "error": sErr.Error()})
-			} else {
-				if err := h.enrich.relStore.CreateBookSeries(ctx, &models.BookSeries{
-					BookID:           book.ID,
-					SeriesID:         seriesRecord.ID,
-					SeriesNumber:     md.SeriesNumber,
-					SeriesNumberEnd:  md.SeriesNumberEnd,
-					SeriesNumberUnit: md.SeriesNumberUnit,
-					SortOrder:        1,
-				}); err != nil {
-					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
-				}
-				newSeries[seriesRecord.ID] = seriesRecord
-			}
-		}
-
-		if h.enrich.searchIndexer != nil {
-			for id, rec := range newSeries {
-				_, stillAttached := oldSeries[id]
-				if !stillAttached || seriesAggregateMayBeStale {
-					if err := h.enrich.searchIndexer.IndexSeries(ctx, rec); err != nil {
-						log.Warn("failed to update search index for series", logger.Data{"series_id": id, "error": err.Error()})
-					}
-				}
-			}
-			for oldID, oldSer := range oldSeries {
-				if _, kept := newSeries[oldID]; kept {
-					continue
-				}
-				if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
-					log.Warn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
-				}
-			}
-		}
+	// Series. The multi-entry path (Identify form) takes precedence over the
+	// scalar path (plugin results). Both resolve, compare, and attribute the
+	// membership collection the same way.
+	var seriesEntries []SeriesEntry
+	seriesTouched := false
+	switch {
+	case overrides != nil && overrides.SeriesEntries != nil:
+		seriesEntries = *overrides.SeriesEntries
+		seriesTouched = true
+	case md.Series != "":
+		seriesEntries = []SeriesEntry{{Name: md.Series, Number: md.SeriesNumber, NumberEnd: md.SeriesNumberEnd, SeriesNumberUnit: md.SeriesNumberUnit}}
+		seriesTouched = true
 	}
-
-	if seriesAggregateMayBeStale && !multiSeries && md.Series == "" && h.enrich.searchIndexer != nil {
-		for _, bs := range book.BookSeries {
-			if bs.Series == nil {
-				continue
-			}
-			if err := h.enrich.searchIndexer.IndexSeries(ctx, bs.Series); err != nil {
-				log.Warn("failed to update search index for attached series", logger.Data{"series_id": bs.Series.ID, "error": err.Error()})
-			}
+	if seriesTouched && h.enrich.relStore != nil {
+		changed, err := h.applySeries(ctx, book, seriesEntries, attr, seriesAggregateMayBeStale, log)
+		if err != nil {
+			return err
 		}
+		bookIndexChanged = bookIndexChanged || changed
+	} else if seriesAggregateMayBeStale {
+		h.indexSeries(ctx, attachedSeries(book), log)
 	}
 
 	// Genres

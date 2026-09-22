@@ -2512,3 +2512,32 @@ func TestUpdateBook_SeriesNumberUnit_RejectsBogusUnit(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, bsRows)
 }
+
+// Editing memberships through the Edit form stamps books.series_source manual,
+// like genres and tags. Without it, the scanner would treat the collection as
+// replaceable, since it no longer reads the Series name's source as a proxy.
+func TestUpdateBook_Series_StampsManualMembershipSource(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+
+	for _, body := range []string{
+		`{"series":[{"name":"Saga","number":1}]}`,
+		// An emptied collection stays a protected manual empty slot, matching genres.
+		`{"series":[]}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := executeRequestWithUser(t, e, req, user)
+		require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+		var stored models.Book
+		require.NoError(t, db.NewSelect().Model(&stored).Where("b.id = ?", book.ID).Scan(ctx))
+		require.NotNil(t, stored.SeriesSource, body)
+		assert.Equal(t, models.DataSourceManual, *stored.SeriesSource, body)
+	}
+}

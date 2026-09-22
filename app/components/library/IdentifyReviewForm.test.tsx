@@ -14,6 +14,7 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import type { PluginSearchResult } from "@/hooks/queries/plugins";
 import {
+  DataSourceEPUBMetadata,
   DataSourceFilepath,
   DataSourceManual,
   FileRoleMain,
@@ -1464,5 +1465,133 @@ describe("IdentifyReviewForm component", () => {
     );
 
     expect(titleCheckbox).toHaveAttribute("data-state", "checked");
+  });
+
+  // Series memberships carry their own aggregate source (books.series_source),
+  // distinct from a Series resource's name source. It drives the default
+  // checkbox like every other book-level field, and the submitted intent
+  // reports whether the final memberships equal the proposal.
+  describe("series provenance", () => {
+    const savedSeriesBook = (seriesSource: Book["series_source"]) =>
+      makeBook({
+        series_source: seriesSource,
+        book_series: [
+          {
+            book_id: 1,
+            series_id: 10,
+            series_number: 1,
+            sort_order: 1,
+            series: { id: 10, library_id: 1, name: "Some Series" },
+          } as never,
+        ],
+      });
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    it("defaults Series OFF when the membership source is manual", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceManual),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      await user.click(
+        screen.getByRole("button", { name: /toggle book section/i }),
+      );
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Series" }),
+      ).toHaveAttribute("data-state", "unchecked");
+    });
+
+    it("defaults Series ON when the membership source is low-priority", () => {
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Series" }),
+      ).toHaveAttribute("data-state", "checked");
+    });
+
+    it("sends plugin when the proposed memberships are accepted", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({
+          series: "Other Series",
+          series_number: 1,
+          series_number_end: 3,
+          series_number_unit: "volume",
+        }),
+      });
+      const payload = await submit(user);
+      expect(payload.fields.series).toEqual([
+        {
+          name: "Other Series",
+          number: 1,
+          series_number_end: 3,
+          series_number_unit: "volume",
+        },
+      ]);
+      expect(payload.sources.series).toBe("plugin");
+    });
+
+    it("sends user when a series number is edited, and plugin once restored", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      const start = screen.getByRole("spinbutton", { name: "Series start" });
+      await user.clear(start);
+      await user.type(start, "5");
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      expect(applyMock.mock.calls[0][0].sources.series).toBe("user");
+
+      applyMock.mockClear();
+      await user.clear(start);
+      await user.type(start, "2");
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      expect(applyMock.mock.calls[0][0].sources.series).toBe("plugin");
+    });
+
+    it("sends user for an Explicit Clear", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      await user.click(
+        await screen.findByRole("button", { name: /remove other series/i }),
+      );
+      const payload = await submit(user);
+      expect(payload.fields.series).toEqual([]);
+      expect(payload.sources.series).toBe("user");
+    });
+
+    it("omits both the memberships and the intent when Series is unchecked", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          title: "Old Title",
+          title_source: DataSourceFilepath,
+        }),
+        result: makeResult({
+          title: "New Title",
+          series: "Other Series",
+          series_number: 2,
+        }),
+      });
+      await user.click(screen.getByRole("checkbox", { name: "Apply Series" }));
+      const payload = await submit(user);
+      expect(payload.fields).not.toHaveProperty("series");
+      expect(payload.sources).not.toHaveProperty("series");
+      expect(payload.sources.title).toBe("plugin");
+    });
   });
 });

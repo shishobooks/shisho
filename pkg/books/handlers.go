@@ -406,6 +406,11 @@ func (h *handler) update(c echo.Context) error {
 	// Update series
 	if params.Series != nil {
 		seriesChanged = true
+		// Membership provenance follows the Edit form convention for genres and
+		// tags: the whole collection becomes manual, including an emptied one.
+		seriesSource := models.DataSourceManual
+		book.SeriesSource = &seriesSource
+		opts.Columns = append(opts.Columns, "series_source")
 
 		// Check if series number changed for CBZ files (triggers file organization)
 		hasCBZFiles := false
@@ -432,8 +437,10 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 
-		// Create new series associations
-		for i, seriesInput := range params.Series {
+		// Create new series associations. A name and its Alias resolve to one
+		// Series, which a book may belong to at most once.
+		attachedSeries := make(map[int]struct{}, len(params.Series))
+		for _, seriesInput := range params.Series {
 			if seriesInput.Name == "" {
 				continue
 			}
@@ -442,13 +449,18 @@ func (h *handler) update(c echo.Context) error {
 				log.Error("failed to find/create series", logger.Data{"series": seriesInput.Name, "error": err.Error()})
 				continue
 			}
+			if _, dup := attachedSeries[seriesRecord.ID]; dup {
+				log.Warn("skipping series listed more than once", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID})
+				continue
+			}
+			attachedSeries[seriesRecord.ID] = struct{}{}
 			bookSeries := &models.BookSeries{
 				BookID:           book.ID,
 				SeriesID:         seriesRecord.ID,
 				SeriesNumber:     seriesInput.Number,
 				SeriesNumberEnd:  seriesInput.NumberEnd,
 				SeriesNumberUnit: seriesInput.SeriesNumberUnit,
-				SortOrder:        i + 1,
+				SortOrder:        len(attachedSeries),
 			}
 			if err := h.bookService.CreateBookSeries(ctx, bookSeries); err != nil {
 				log.Error("failed to create book series", logger.Data{"book_id": book.ID, "series_id": seriesRecord.ID, "error": err.Error()})

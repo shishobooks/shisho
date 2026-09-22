@@ -160,6 +160,8 @@ Metadata sources ranked (lower number = higher precedence):
 
 Used to determine which metadata to keep when conflicts occur. During scans, enricher plugins override file-embedded metadata per-field (enricher-first merge in `runMetadataEnrichers`).
 
+**Series memberships have their own source.** `books.series_source` is aggregate provenance for a Book's ordered membership collection and Series Number groups; `series.name_source` only describes the Series resource's name. The scanner, Identify, and the Edit form gate and stamp `books.series_source`. Never read `Series.NameSource` as a proxy for membership provenance (ADR 0006). A `FindOrCreateSeries` call still carries a name source, which may lower `name_source` on an existing Series, and that is independent of the membership source.
+
 ### OPDS
 
 - OPDS v1.2 server hosted in the application

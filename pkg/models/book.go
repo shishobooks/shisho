@@ -26,10 +26,14 @@ type Book struct {
 	Authors           []*Author     `bun:"rel:has-many,join:id=book_id" json:"authors,omitempty" tstype:"Author[]"`
 	AuthorSource      string        `bun:",nullzero" json:"author_source" tstype:"DataSource"`
 	BookSeries        []*BookSeries `bun:"rel:has-many,join:id=book_id" json:"book_series,omitempty" tstype:"BookSeries[]"`
-	BookGenres        []*BookGenre  `bun:"rel:has-many,join:id=book_id" json:"book_genres,omitempty" tstype:"BookGenre[]"`
-	GenreSource       *string       `json:"genre_source" tstype:"DataSource"`
-	BookTags          []*BookTag    `bun:"rel:has-many,join:id=book_id" json:"book_tags,omitempty" tstype:"BookTag[]"`
-	TagSource         *string       `json:"tag_source" tstype:"DataSource"`
-	Files             []*File       `bun:"rel:has-many" json:"files" tstype:"File[]"`
-	CoverCacheKey     string        `bun:"-" json:"cover_cache_key"`
+	// SeriesSource is aggregate provenance for the ordered membership
+	// collection and its Series Number groups. It never describes a Series
+	// resource's name; see Series.NameSource for that.
+	SeriesSource  *string      `json:"series_source" tstype:"DataSource"`
+	BookGenres    []*BookGenre `bun:"rel:has-many,join:id=book_id" json:"book_genres,omitempty" tstype:"BookGenre[]"`
+	GenreSource   *string      `json:"genre_source" tstype:"DataSource"`
+	BookTags      []*BookTag   `bun:"rel:has-many,join:id=book_id" json:"book_tags,omitempty" tstype:"BookTag[]"`
+	TagSource     *string      `json:"tag_source" tstype:"DataSource"`
+	Files         []*File      `bun:"rel:has-many" json:"files" tstype:"File[]"`
+	CoverCacheKey string       `bun:"-" json:"cover_cache_key"`
 }

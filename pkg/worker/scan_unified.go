@@ -1101,13 +1101,13 @@ func (w *Worker) scanFileCore(
 			}
 		}
 
-		// Update series relationship (from metadata)
+		// Update series relationship (from metadata). books.series_source is
+		// the membership collection's own provenance; a Series name's source
+		// says nothing about who attached this Book to it.
 		if metadata.Series != "" {
 			existingSeriesSource := ""
-			for _, bs := range book.BookSeries {
-				if bs.Series != nil && existingSeriesSource == "" {
-					existingSeriesSource = bs.Series.NameSource
-				}
+			if book.SeriesSource != nil {
+				existingSeriesSource = *book.SeriesSource
 			}
 
 			seriesSource := metadata.SourceForField("series")
@@ -1139,6 +1139,12 @@ func (w *Worker) scanFileCore(
 						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        1,
 					})
+
+					// Update series membership source
+					book.SeriesSource = &seriesSource
+					if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"series_source"}}); err != nil {
+						return nil, errors.Wrap(err, "failed to update series source")
+					}
 				}
 			}
 		}
@@ -1152,10 +1158,8 @@ func (w *Worker) scanFileCore(
 			}
 			existingSeries := book.BookSeries
 			existingSeriesSource := ""
-			for _, bs := range existingSeries {
-				if bs.Series != nil && existingSeriesSource == "" {
-					existingSeriesSource = bs.Series.NameSource
-				}
+			if book.SeriesSource != nil {
+				existingSeriesSource = *book.SeriesSource
 			}
 			// Compare the sidecar against any metadata replacement staged above,
 			// not only the stale stored relations. This lets the higher-priority
@@ -1198,6 +1202,12 @@ func (w *Worker) scanFileCore(
 						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        i + 1,
 					})
+				}
+
+				// Update series membership source
+				book.SeriesSource = &sidecarSource
+				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"series_source"}}); err != nil {
+					return nil, errors.Wrap(err, "failed to update series source")
 				}
 			}
 		}
@@ -4074,6 +4084,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	book.SubtitleSource = nil
 	book.Description = nil
 	book.DescriptionSource = nil
+	book.SeriesSource = nil
 	book.GenreSource = nil
 	book.TagSource = nil
 
@@ -4087,7 +4098,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	bookColumns := []string{
 		"subtitle", "subtitle_source",
 		"description", "description_source",
-		"genre_source", "tag_source",
+		"series_source", "genre_source", "tag_source",
 		"title_source", "sort_title_source", "author_source",
 	}
 	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {

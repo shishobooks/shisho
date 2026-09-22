@@ -43,14 +43,11 @@ func optionalJSString(value goja.Value) (*string, bool) {
 	return &exported, true
 }
 
+// seriesNumberGroupFromFields is the lenient variant for plugin results: a
+// malformed group is dropped as a whole rather than rejected.
 func seriesNumberGroupFromFields(fields map[string]any) (*float64, *float64, *string) {
-	start, startValid := optionalFloatField(fields, "series_number")
-	end, endValid := optionalFloatField(fields, "series_number_end")
-	unit, unitValid := optionalStringField(fields, "series_number_unit")
-	if !startValid || !endValid || !unitValid {
-		return nil, nil, nil
-	}
-	return normalizePluginSeriesNumberGroup(start, end, unit)
+	start, end, unit, _ := strictSeriesNumberGroupFromFields(fields)
+	return start, end, unit
 }
 
 func optionalFloatField(fields map[string]any, key string) (*float64, bool) {
@@ -88,4 +85,23 @@ func normalizePluginSeriesNumberGroup(start, end *float64, unit *string) (*float
 		return nil, nil, nil
 	}
 	return start, end, unit
+}
+
+// strictSeriesNumberGroupFromFields is seriesNumberGroupFromFields for the
+// Identify apply path. It reports false for a group that is present but
+// malformed (wrong types, non-finite values, end not after start, unknown
+// unit, or an end or unit without a start), instead of dropping it.
+func strictSeriesNumberGroupFromFields(fields map[string]any) (*float64, *float64, *string, bool) {
+	start, startValid := optionalFloatField(fields, "series_number")
+	end, endValid := optionalFloatField(fields, "series_number_end")
+	unit, unitValid := optionalStringField(fields, "series_number_unit")
+	if !startValid || !endValid || !unitValid {
+		return nil, nil, nil, false
+	}
+	present := start != nil || end != nil || unit != nil
+	start, end, unit = normalizePluginSeriesNumberGroup(start, end, unit)
+	if present && start == nil {
+		return nil, nil, nil, false
+	}
+	return start, end, unit, true
 }
