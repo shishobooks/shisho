@@ -16,6 +16,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/chapters"
@@ -1110,6 +1111,10 @@ func (w *Worker) scanFileCore(
 				existingSeriesSource = *book.SeriesSource
 			}
 
+			// A renamed Series whose old name is an Alias is the same Series,
+			// so compare by its current name instead of replacing the
+			// membership on every scan.
+			metadata.Series = w.canonicalAttachedSeriesName(ctx, metadata.Series, book)
 			seriesSource := metadata.SourceForField("series")
 			if shouldUpdateParsedSeries(metadata, book.BookSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
@@ -1151,9 +1156,10 @@ func (w *Worker) scanFileCore(
 		// Update series relationship (from sidecar)
 		if bookSidecarData != nil && len(bookSidecarData.Series) > 0 {
 			sidecarSeriesNames := make([]string, 0, len(bookSidecarData.Series))
-			for _, s := range bookSidecarData.Series {
+			for i, s := range bookSidecarData.Series {
 				if s.Name != "" {
-					sidecarSeriesNames = append(sidecarSeriesNames, s.Name)
+					bookSidecarData.Series[i].Name = w.canonicalAttachedSeriesName(ctx, s.Name, book)
+					sidecarSeriesNames = append(sidecarSeriesNames, bookSidecarData.Series[i].Name)
 				}
 			}
 			existingSeries := book.BookSeries
@@ -1921,7 +1927,10 @@ func (w *Worker) scanFileCore(
 	// changes need this pass even when a sibling file already restored authors.
 	// Full scans defer organization until discovery and processing finish.
 	narratorsChanged := file.FileType == models.FileTypeM4B && relUpdates.DeleteNarrators
-	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged) && isResync {
+	// Series numbers are part of organized CBZ names, so a restored or
+	// replaced membership is path-affecting too.
+	seriesChanged := file.FileType == models.FileTypeCBZ && relUpdates.DeleteSeries
+	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged || seriesChanged) && isResync {
 		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 		if err != nil {
 			logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
@@ -4427,4 +4436,29 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldR
 			}
 		}
 	}
+}
+
+// canonicalAttachedSeriesName returns the current name of an attached Series
+// when name is that Series' name or one of its Aliases (case-insensitive), and
+// name unchanged otherwise. A user who renames a Series and keeps the old name
+// as an Alias must not see every scan move the book to a duplicate Series.
+func (w *Worker) canonicalAttachedSeriesName(ctx context.Context, name string, book *models.Book) string {
+	if len(book.BookSeries) == 0 {
+		return name
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil && strings.EqualFold(bs.Series.Name, name) {
+			return bs.Series.Name
+		}
+	}
+	seriesID, err := aliases.FindResourceIDByAlias(ctx, w.db, aliases.SeriesConfig, name, book.LibraryID)
+	if err != nil {
+		return name
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil && bs.Series.ID == seriesID {
+			return bs.Series.Name
+		}
+	}
+	return name
 }
