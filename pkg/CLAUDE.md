@@ -73,6 +73,7 @@ Each domain (books, jobs, libraries, chapters) has:
 - **`ProcessScanJob`** handles this by collecting book IDs into `booksToOrganize` and running organization in a batch after all files are scanned.
 - **`Monitor.processPendingEvents`** handles this by collecting book IDs from `FileCreated` results and calling `organizeBooks()` after processing all events.
 - **Any new caller of `scanInternal(FilePath)`** must also handle organization, or files will be left unorganized in the library root.
+- **Resync narrator changes must trigger organization after relationship persistence.** The earlier filename check uses the pre-scan narrators. Include M4B narrator updates in the post-`UpdateBookRelationships` organization condition, even when Title and Authors are unchanged. A hybrid book's EPUB may restore Authors before its M4B restores Narrators, so an author-only trigger leaves the audiobook filename stale.
 
 ### Scan Cache Must Include Supplements
 
@@ -470,6 +471,8 @@ When a metadata field that affects file paths is edited via API, trigger file re
 
 Path-affecting removal operations must also trigger reorganization. For example, Identify represents clearing all series memberships as a present but empty series collection, which must remain distinct from an absent series field.
 
+For directory-backed books, folder organization owns the book sidecar. Rename the files inside that folder with `RenameOrganizedFileOnly`, not `RenameOrganizedFile`. A file previously moved from the library root can carry a leftover basename-based book sidecar. Renaming that sidecar during a narrator change can overwrite the current folder-based sidecar and restore stale metadata on the next Scan.
+
 **Pattern in handlers:**
 ```go
 // After updating the field
@@ -481,7 +484,7 @@ if fieldChanged && library.OrganizeFileStructure {
         Title:         title,  // Use file.Name if available
         FileType:      file.FileType,
     }
-    newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+    newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
     if err != nil {
         // Handle error
     }

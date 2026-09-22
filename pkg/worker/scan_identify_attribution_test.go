@@ -104,6 +104,7 @@ func newIdentifyApplyServer(t *testing.T, tc *testContext) *echo.Echo {
 		GenreFinder:     genres.NewService(tc.db),
 		TagFinder:       tags.NewService(tc.db),
 		PublisherFinder: publishers.NewService(tc.db),
+		SearchIndexer:   tc.worker.searchService,
 	})
 	return e
 }

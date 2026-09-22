@@ -1048,8 +1048,10 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				continue
 			}
 
-			// Rename the file to the organized name
-			newPath, err := fileutils.RenameOrganizedFile(currentPath, organizeOpts)
+			// The folder owns the book sidecar, which was handled above.
+			// Renaming a file must not move a leftover basename sidecar over
+			// it, or a narrator clear can restore old book metadata.
+			newPath, err := fileutils.RenameOrganizedFileOnly(currentPath, organizeOpts)
 			if err != nil {
 				log.Error("failed to rename file in folder", logger.Data{
 					"file_id": file.ID,

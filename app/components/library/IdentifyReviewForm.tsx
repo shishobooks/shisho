@@ -65,6 +65,8 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   AuthorRoleWriter,
   FileTypeCBZ,
+  SourceIntentPlugin,
+  SourceIntentUser,
   SourcesKeyFileName,
   type Book,
   type File,
@@ -250,6 +252,36 @@ function resolveAbridged(
   return { value: inc, status: "changed" };
 }
 
+function orderedNamesEqual(current: string[], incoming: string[]): boolean {
+  return (
+    current.length === incoming.length &&
+    current.every((name, i) => name.trim() === incoming[i].trim())
+  );
+}
+
+function authorsEqual(
+  current: AuthorEntry[],
+  incoming: AuthorEntry[],
+): boolean {
+  return (
+    current.length === incoming.length &&
+    current.every(
+      (author, i) =>
+        author.name.trim() === incoming[i].name.trim() &&
+        (author.role?.trim() ?? "") === (incoming[i].role?.trim() ?? ""),
+    )
+  );
+}
+
+function nameSetsEqual(current: string[], incoming: string[]): boolean {
+  const currentSet = new Set(current.map((name) => name.trim()));
+  const incomingSet = new Set(incoming.map((name) => name.trim()));
+  return (
+    currentSet.size === incomingSet.size &&
+    [...currentSet].every((name) => incomingSet.has(name))
+  );
+}
+
 function resolveArray(
   current: string[],
   incoming: string[],
@@ -269,6 +301,17 @@ function resolveArray(
   return { value: incoming, status: "changed" };
 }
 
+function resolveNarrators(
+  current: string[],
+  incoming: string[],
+): { value: string[]; status: FieldStatus } {
+  if (current.length === 0 && incoming.length > 0)
+    return { value: incoming, status: "new" };
+  if (incoming.length === 0 || orderedNamesEqual(current, incoming))
+    return { value: current, status: "unchanged" };
+  return { value: incoming, status: "changed" };
+}
+
 function resolveAuthors(
   current: AuthorEntry[],
   incoming: AuthorEntry[],
@@ -277,13 +320,7 @@ function resolveAuthors(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
-  const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
-  const curKeys = current.map(key).sort();
-  const incKeys = incoming.map(key).sort();
-  if (
-    curKeys.length === incKeys.length &&
-    curKeys.every((v, i) => v === incKeys[i])
-  ) {
+  if (authorsEqual(current, incoming)) {
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
@@ -573,7 +610,7 @@ export function IdentifyReviewForm({
       subtitle: resolveScalar(book.subtitle, result.subtitle),
       description: resolveScalar(book.description, result.description),
       authors: resolveAuthors(currentAuthors, incomingAuthors),
-      narrators: resolveArray(currentNarrators, result.narrators ?? []),
+      narrators: resolveNarrators(currentNarrators, result.narrators ?? []),
       series: resolveSeries(currentSeriesEntries, incomingSeries),
       genres: resolveArray(currentGenres, result.genres ?? []),
       tags: resolveArray(currentTags, result.tags ?? []),
@@ -797,12 +834,15 @@ export function IdentifyReviewForm({
 
     const authorsStatus = (): FieldStatus => {
       if (currentAuthors.length === 0 && authors.length > 0) return "new";
-      const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
-      const s = currentAuthors.map(key).sort();
-      const c = authors.map(key).sort();
-      if (s.length === c.length && s.every((v, i) => v === c[i]))
-        return "unchanged";
+      if (authorsEqual(currentAuthors, authors)) return "unchanged";
       return "changed";
+    };
+
+    const narratorsStatus = (): FieldStatus => {
+      if (currentNarrators.length === 0 && narrators.length > 0) return "new";
+      return orderedNamesEqual(currentNarrators, narrators)
+        ? "unchanged"
+        : "changed";
     };
 
     const abridgedStatus = (): FieldStatus => {
@@ -840,7 +880,7 @@ export function IdentifyReviewForm({
       description: scalarStatus(book.description, description),
       cover: coverStatus,
       name: scalarStatus(file?.name, name),
-      narrators: arrayStatus(currentNarrators, narrators),
+      narrators: narratorsStatus(),
       publisher: scalarStatus(file?.publisher?.name, publisher),
       language: scalarStatus(file?.language, language),
       release_date: scalarStatus(
@@ -1125,9 +1165,8 @@ export function IdentifyReviewForm({
       return;
     }
     const fields: Record<string, unknown> = {};
-    // Per-field source intent (ADR 0006), keyed like `fields`. Only scalars
-    // report one so far; a selected field without an entry is treated as
-    // "user" by the server.
+    // Intent compares the final value to the raw Plugin Proposal (ADR 0006).
+    // The server decides whether it is a no-op against stored metadata.
     const sources: SourceIntents = {};
     if (decisions.title) {
       fields.title = title;
@@ -1143,8 +1182,16 @@ export function IdentifyReviewForm({
     }
     if (decisions.authors) {
       fields.authors = authors.map((a) => ({ name: a.name, role: a.role }));
+      sources.authors = authorsEqual(authors, result.authors ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
     }
-    if (decisions.narrators) fields.narrators = narrators;
+    if (decisions.narrators) {
+      fields.narrators = narrators;
+      sources.narrators = orderedNamesEqual(narrators, result.narrators ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
+    }
     if (decisions.series) {
       fields.series = seriesEntries
         .filter((s) => s.name.trim())
@@ -1156,8 +1203,18 @@ export function IdentifyReviewForm({
           series_number_unit: s.unit !== "" ? s.unit : undefined,
         }));
     }
-    if (decisions.genres) fields.genres = genres;
-    if (decisions.tags) fields.tags = tags;
+    if (decisions.genres) {
+      fields.genres = genres;
+      sources.genres = nameSetsEqual(genres, result.genres ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
+    }
+    if (decisions.tags) {
+      fields.tags = tags;
+      sources.tags = nameSetsEqual(tags, result.tags ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
+    }
     if (decisions.publisher) {
       fields.publisher = publisher;
       sources.publisher = scalarSourceIntent(publisher, result.publisher);
