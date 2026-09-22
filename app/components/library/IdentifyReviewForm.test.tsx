@@ -1574,6 +1574,74 @@ describe("IdentifyReviewForm component", () => {
       expect(payload.sources.series).toBe("user");
     });
 
+    it("shows reordered memberships as changed and sends user", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          series_source: DataSourceEPUBMetadata,
+          book_series: [
+            {
+              book_id: 1,
+              series_id: 10,
+              series_number: 1,
+              sort_order: 1,
+              series: { id: 10, library_id: 1, name: "Alpha Ser" },
+            } as never,
+            {
+              book_id: 1,
+              series_id: 11,
+              series_number: 2,
+              sort_order: 2,
+              series: { id: 11, library_id: 1, name: "Beta Ser" },
+            } as never,
+          ],
+        }),
+      });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      await user.click(
+        screen.getByRole("button", { name: "Toggle BOOK section" }),
+      );
+      await user.click(screen.getByRole("checkbox", { name: "Apply Series" }));
+      // Rebuild the same two memberships in the opposite order.
+      await user.click(
+        screen.getByRole("button", { name: "Remove Alpha Ser" }),
+      );
+      await user.click(screen.getByText(/^Add Series/i));
+      await user.type(
+        screen.getByPlaceholderText("Search series..."),
+        "Alpha Ser",
+      );
+      await user.click(
+        screen.getByRole("option", { name: 'Create new series "Alpha Ser"' }),
+      );
+      const starts = screen.getAllByRole("spinbutton", {
+        name: "Series start",
+      });
+      expect(starts).toHaveLength(2);
+      await user.type(starts[1], "1");
+
+      await user.click(screen.getByRole("button", { name: "Changed" }));
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Series" }),
+      ).toBeChecked();
+      const payload = await submit(user);
+      expect(payload.fields.series).toEqual([
+        {
+          name: "Beta Ser",
+          number: 2,
+          series_number_end: undefined,
+          series_number_unit: undefined,
+        },
+        {
+          name: "Alpha Ser",
+          number: 1,
+          series_number_end: undefined,
+          series_number_unit: undefined,
+        },
+      ]);
+      expect(payload.sources.series).toBe("user");
+    });
+
     it("omits both the memberships and the intent when Series is unchecked", async () => {
       const user = createUser();
       renderForm({

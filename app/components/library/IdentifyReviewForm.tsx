@@ -384,10 +384,11 @@ function resolveSeries(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
+  // Memberships are ordered, so order takes part in the comparison.
   const key = (s: SeriesEntry) =>
     `${s.name}|${s.number}|${s.numberEnd}|${s.unit}`;
-  const curKeys = current.map(key).sort();
-  const incKeys = incoming.map(key).sort();
+  const curKeys = current.map(key);
+  const incKeys = incoming.map(key);
   if (
     curKeys.length === incKeys.length &&
     curKeys.every((v, i) => v === incKeys[i])
@@ -836,8 +837,9 @@ export function IdentifyReviewForm({
 
     const seriesKey = (s: SeriesEntry) =>
       `${s.name.trim()}|${s.number.trim()}|${s.numberEnd.trim()}|${s.unit}`;
-    const seriesSavedKeys = currentSeriesEntries.map(seriesKey).sort();
-    const seriesCurrentKeys = seriesEntries.map(seriesKey).sort();
+    // Ordered like the saved memberships: a reorder is a change.
+    const seriesSavedKeys = currentSeriesEntries.map(seriesKey);
+    const seriesCurrentKeys = seriesEntries.map(seriesKey);
     const seriesMatch =
       seriesSavedKeys.length === seriesCurrentKeys.length &&
       seriesSavedKeys.every((v, i) => v === seriesCurrentKeys[i]);
