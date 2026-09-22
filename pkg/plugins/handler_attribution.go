@@ -34,7 +34,13 @@ func newApplyAttribution(pluginSource string, overrides *ApplyOverrides) applyAt
 // "user": misattributing a plugin value as manual merely protects it from
 // Scans, while the reverse lets a Scan overwrite an edit.
 func (a applyAttribution) sourceFor(key string) string {
-	if a.intents[key] == SourceIntentPlugin {
+	return a.sourceForIntent(a.intents[key])
+}
+
+// sourceForIntent maps one validated intent value to a canonical source, for
+// callers that carry intent per entry rather than per field.
+func (a applyAttribution) sourceForIntent(intent string) string {
+	if intent == SourceIntentPlugin {
 		return a.pluginSource
 	}
 	return models.DataSourceManual
@@ -54,17 +60,8 @@ func validateSourceIntents(payload *PluginApplyPayload) error {
 			return errcodes.ValidationError(fmt.Sprintf("sources.%s must be one of: plugin, user", key))
 		}
 	}
-	entries, _ := payload.Fields["identifiers"].([]any)
-	for _, entry := range entries {
-		m, ok := entry.(map[string]any)
-		if !ok {
-			continue
-		}
-		raw, present := m["source"]
-		if !present {
-			continue
-		}
-		if intent, ok := raw.(string); !ok || !validSourceIntent(intent) {
+	for _, entry := range identifierFields(payload.Fields) {
+		if entry.HasIntent && !validSourceIntent(entry.Intent) {
 			return errcodes.ValidationError("identifiers source must be one of: plugin, user")
 		}
 	}

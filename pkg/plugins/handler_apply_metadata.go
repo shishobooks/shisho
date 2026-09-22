@@ -24,6 +24,9 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	if err := validateSourceIntents(&payload); err != nil {
 		return err
 	}
+	if err := validateIdentifierTypes(payload.Fields); err != nil {
+		return err
+	}
 
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)

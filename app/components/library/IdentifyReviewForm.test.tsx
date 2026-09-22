@@ -23,9 +23,14 @@ import {
   FileTypeM4B,
   type Book,
   type File,
+  type FileIdentifier,
 } from "@/types";
 
-import { resolveIdentifiers } from "./identify-utils";
+import {
+  identifierCollectionIntent,
+  identifierEntryIntent,
+  resolveIdentifiers,
+} from "./identify-utils";
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +44,69 @@ describe("resolveIdentifiers (incoming wins on type conflict)", () => {
     const result = resolveIdentifiers(current, incoming);
     expect(result.status).toBe("changed");
     expect(result.value).toEqual([{ type: "asin", value: "B02DEF5678" }]);
+  });
+});
+
+// The browser reports whether each entry, and the collection as a whole,
+// equals the Plugin Proposal (ADR 0006). Comparison is a trimmed raw match.
+describe("identifier source intents", () => {
+  const proposal = [
+    { type: "isbn_13", value: " 9780316769488 " },
+    { type: "asin", value: "B01ABC1234" },
+  ];
+
+  it("marks an entry plugin only when its type and trimmed value match the proposal", () => {
+    expect(
+      identifierEntryIntent(
+        { type: "isbn_13", value: "9780316769488" },
+        proposal,
+      ),
+    ).toBe("plugin");
+    expect(
+      identifierEntryIntent({ type: "asin", value: "B02DEF5678" }, proposal),
+    ).toBe("user");
+    expect(
+      identifierEntryIntent(
+        { type: "goodreads", value: "9780316769488" },
+        proposal,
+      ),
+    ).toBe("user");
+  });
+
+  it("marks the collection plugin only when it equals the proposal as a set", () => {
+    expect(
+      identifierCollectionIntent(
+        [
+          { type: "asin", value: "B01ABC1234" },
+          { type: "isbn_13", value: "9780316769488" },
+        ],
+        proposal,
+      ),
+    ).toBe("plugin");
+    expect(
+      identifierCollectionIntent(
+        [{ type: "isbn_13", value: "9780316769488" }],
+        proposal,
+      ),
+    ).toBe("user");
+    expect(identifierCollectionIntent([], proposal)).toBe("user");
+    expect(identifierCollectionIntent([], [])).toBe("user");
+  });
+
+  it("compares against the proposal with duplicate types collapsed, last wins", () => {
+    const duplicated = [
+      { type: "asin", value: "B01FIRST00" },
+      { type: "asin", value: "B01LAST000" },
+    ];
+    expect(
+      identifierCollectionIntent(
+        [{ type: "asin", value: "B01LAST000" }],
+        duplicated,
+      ),
+    ).toBe("plugin");
+    expect(
+      identifierEntryIntent({ type: "asin", value: "B01FIRST00" }, duplicated),
+    ).toBe("user");
   });
 });
 
@@ -730,6 +798,7 @@ describe("IdentifyReviewForm component", () => {
     const payload = applyMock.mock.calls[0][0];
     expect(payload.fields.subtitle).toBe("");
     expect(payload.fields.identifiers).toEqual([]);
+    expect(payload.sources.identifiers).toBe("user");
     expect(payload.fields.abridged).toBeNull();
     expect(payload.file_name).toBe("");
     expect(payload.sources.file_name).toBe("user");
@@ -1386,6 +1455,147 @@ describe("IdentifyReviewForm component", () => {
         genres: "plugin",
         tags: "plugin",
       });
+    });
+  });
+
+  describe("source intents for identifiers", () => {
+    const savedIdentifier = (
+      type: FileIdentifier["type"],
+      value: string,
+    ): FileIdentifier => ({
+      id: 1,
+      file_id: 1,
+      type,
+      value,
+      source: DataSourceManual,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    });
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    const addIdentifier = async (
+      user: ReturnType<typeof createUser>,
+      typeLabel: RegExp,
+      value: string,
+    ) => {
+      await user.click(
+        screen.getByRole("combobox", { name: /Identifier type/i }),
+      );
+      await user.click(screen.getByRole("option", { name: typeLabel }));
+      await user.type(screen.getByPlaceholderText(/value/i), value);
+      await user.click(screen.getByRole("button", { name: /^Add$/i }));
+    };
+
+    it("sends plugin per entry and for the field when the proposal is accepted", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [
+            { type: "isbn_13", value: "9780316769488" },
+            { type: "asin", value: "B01ABC1234" },
+          ],
+        }),
+      });
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "isbn_13", value: "9780316769488", source: "plugin" },
+        { type: "asin", value: "B01ABC1234", source: "plugin" },
+      ]);
+      expect(payload.sources.identifiers).toBe("plugin");
+    });
+
+    it("sends user for a retained entry and an added entry", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          files: [
+            makeFile({ identifiers: [savedIdentifier("asin", "B01ABC1234")] }),
+          ],
+        }),
+        result: makeResult(),
+      });
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply identifiers/i }),
+      );
+      await addIdentifier(user, /Goodreads/i, "12345");
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "asin", value: "B01ABC1234", source: "user" },
+        { type: "goodreads", value: "12345", source: "user" },
+      ]);
+      expect(payload.sources.identifiers).toBe("user");
+    });
+
+    it("keeps plugin on accepted entries inside a mixed collection", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [{ type: "isbn_13", value: "9780316769488" }],
+        }),
+      });
+      await addIdentifier(user, /Goodreads/i, "12345");
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "isbn_13", value: "9780316769488", source: "plugin" },
+        { type: "goodreads", value: "12345", source: "user" },
+      ]);
+      expect(payload.sources.identifiers).toBe("user");
+    });
+
+    it("sends user for an edited entry and plugin once it is restored", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [{ type: "asin", value: "B01ABC1234" }],
+        }),
+      });
+      // Removing the only entry makes the row unchanged, which the default
+      // Changed filter would hide.
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(screen.getByRole("button", { name: /remove asin/i }));
+      await addIdentifier(user, /ASIN/i, "B09EDITED0");
+
+      let payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "asin", value: "B09EDITED0", source: "user" },
+      ]);
+      expect(payload.sources.identifiers).toBe("user");
+
+      applyMock.mockClear();
+      await user.click(screen.getByRole("button", { name: /remove asin/i }));
+      await addIdentifier(user, /ASIN/i, "B01ABC1234");
+
+      payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "asin", value: "B01ABC1234", source: "plugin" },
+      ]);
+      expect(payload.sources.identifiers).toBe("plugin");
+    });
+
+    it("omits both the entries and the intent when Identifiers is unchecked", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [{ type: "asin", value: "B01ABC1234" }],
+          title: "New Title",
+        }),
+      });
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply identifiers/i }),
+      );
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toBeUndefined();
+      expect(payload.sources.identifiers).toBeUndefined();
     });
   });
 

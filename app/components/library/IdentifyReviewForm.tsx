@@ -84,6 +84,9 @@ import {
 } from "./identify-decisions";
 import {
   booleanSourceIntent,
+  identifierCollectionIntent,
+  identifierEntryIntent,
+  identifierSetsEqual,
   resolveIdentifiers,
   scalarSourceIntent,
   type FieldStatus,
@@ -866,12 +869,9 @@ export function IdentifyReviewForm({
     const identifiersStatus = (): FieldStatus => {
       if (currentIdentifiers.length === 0 && identifiers.length > 0)
         return "new";
-      const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
-      const s = currentIdentifiers.map(key).sort();
-      const c = identifiers.map(key).sort();
-      if (s.length === c.length && s.every((v, i) => v === c[i]))
-        return "unchanged";
-      return "changed";
+      return identifierSetsEqual(currentIdentifiers, identifiers)
+        ? "unchanged"
+        : "changed";
     };
 
     const coverStatus: FieldStatus =
@@ -1255,10 +1255,16 @@ export function IdentifyReviewForm({
       sources.abridged = booleanSourceIntent(abridged, result.abridged);
     }
     if (decisions.identifiers) {
+      const proposedIdentifiers = result.identifiers ?? [];
       fields.identifiers = identifiers.map((id) => ({
         type: id.type,
         value: id.value,
+        source: identifierEntryIntent(id, proposedIdentifiers),
       }));
+      sources.identifiers = identifierCollectionIntent(
+        identifiers,
+        proposedIdentifiers,
+      );
     }
     if (decisions.cover && coverSelection === "new") {
       if (newCoverUrl) {

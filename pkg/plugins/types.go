@@ -194,7 +194,7 @@ type PluginApplyPayload struct {
 	// Sources is the per-field SourceIntent, keyed by the same keys as Fields
 	// plus SourcesKeyFileName. A selected field with no entry is treated as
 	// "user". Identifier objects inside Fields["identifiers"] additionally
-	// reserve an optional per-entry "source" intent with the same values.
+	// carry an optional per-entry "source" intent with the same values.
 	Sources     map[string]string `json:"sources,omitempty" validate:"omitempty,dive,oneof=plugin user" tstype:"SourceIntents"`
 	PluginScope string            `json:"plugin_scope" validate:"required"`
 	PluginID    string            `json:"plugin_id" validate:"required"`
@@ -272,6 +272,10 @@ type ApplyOverrides struct {
 	// keyed like PluginApplyPayload.Sources. persistMetadata maps it to a
 	// canonical source only for fields whose value actually changed.
 	Intents map[string]string
+	// IdentifierIntents is the validated per-entry SourceIntent from the
+	// identifier objects in Fields["identifiers"], keyed by trimmed type.
+	// Types are unique within a collection (validateIdentifierTypes).
+	IdentifierIntents map[string]string
 	// SeriesEntries, when non-nil, replaces the book's series associations
 	// with the provided list. An empty slice clears all series. Nil means
 	// "don't touch series" (the identify form's series checkbox was off).

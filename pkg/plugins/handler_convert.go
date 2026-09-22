@@ -105,18 +105,10 @@ func convertFieldsToMetadata(fields map[string]any) *mediafile.ParsedMetadata {
 		}
 	}
 
-	// Identifiers: []{ type: string, value: string }
-	if v, ok := fields["identifiers"].([]any); ok {
-		for _, item := range v {
-			if m, ok := item.(map[string]any); ok {
-				idType, _ := m["type"].(string)
-				idValue, _ := m["value"].(string)
-				idType = strings.TrimSpace(idType)
-				idValue = strings.TrimSpace(idValue)
-				if idType != "" && idValue != "" {
-					md.Identifiers = append(md.Identifiers, mediafile.ParsedIdentifier{Type: idType, Value: idValue})
-				}
-			}
+	// Identifiers: []{ type: string, value: string, source?: SourceIntent }
+	for _, entry := range identifierFields(fields) {
+		if entry.Type != "" && entry.Value != "" {
+			md.Identifiers = append(md.Identifiers, mediafile.ParsedIdentifier{Type: entry.Type, Value: entry.Value})
 		}
 	}
 
@@ -175,10 +167,29 @@ func convertFieldsToOverrides(fields map[string]any, md *mediafile.ParsedMetadat
 		selected["abridged"] = true
 	}
 
-	if len(selected) == 0 {
+	identifierIntents := identifierIntentsFromFields(fields)
+
+	if len(selected) == 0 && len(identifierIntents) == 0 {
 		return nil
 	}
-	return &ApplyOverrides{SelectedFields: selected}
+	return &ApplyOverrides{SelectedFields: selected, IdentifierIntents: identifierIntents}
+}
+
+// identifierIntentsFromFields reads the optional per-entry "source" intent off
+// each identifier object, keyed by trimmed type. Intent values were already
+// validated by validateSourceIntents.
+func identifierIntentsFromFields(fields map[string]any) map[string]string {
+	var intents map[string]string
+	for _, entry := range identifierFields(fields) {
+		if entry.Type == "" || entry.Intent == "" {
+			continue
+		}
+		if intents == nil {
+			intents = make(map[string]string)
+		}
+		intents[entry.Type] = entry.Intent
+	}
+	return intents
 }
 
 func isBool(v any) bool {

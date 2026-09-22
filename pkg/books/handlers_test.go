@@ -2541,3 +2541,39 @@ func TestUpdateBook_Series_StampsManualMembershipSource(t *testing.T) {
 		assert.Equal(t, models.DataSourceManual, *stored.SeriesSource, body)
 	}
 }
+
+// Defect: existing identifiers were keyed on the raw stored value while
+// incoming entries were keyed on the normalized value, so a stored value that
+// predates normalization never matched and lost its source on every save.
+func TestUpdateFile_PreservesSourceForUnnormalizedStoredIdentifier(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Insert directly so the stored value bypasses BulkCreateFileIdentifiers'
+	// normalization, the way legacy rows were written.
+	pluginSource := models.PluginDataSource("shisho", "audnexus")
+	_, err := db.NewInsert().Model(&models.FileIdentifier{
+		FileID: file.ID, Type: "asin", Value: "b01abc1234", Source: pluginSource,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"identifiers":[{"type":"asin","value":"B01ABC1234"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "B01ABC1234", stored[0].Value)
+	assert.Equal(t, pluginSource, stored[0].Source, "an unchanged entry keeps its source regardless of stored formatting")
+}

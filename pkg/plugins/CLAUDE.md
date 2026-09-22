@@ -39,6 +39,7 @@ pkg/plugins/
   handler_persist_metadata.go - persistMetadata (shared by apply path)
   handler_attribution.go    - Identify source attribution: intent validation, no-op helpers (ADR 0006)
   handler_relationships.go  - Resolve-then-compare for Authors, Series memberships, Genres, Tags, and Narrators
+  handler_identifiers.go    - Duplicate-type validation and two-level Identifier attribution
   handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
@@ -112,8 +113,21 @@ Conventions and gotchas specific to this surface:
     compare IDs, so an alias of the stored publisher is a no-op.
   - Release dates compare by UTC calendar day because the form edits at day
     granularity.
-  - Identifier objects in `fields.identifiers` reserve an optional per-entry
-    `source` intent. It is validated but not yet consumed.
+  - Identifiers keep two layers. `file.IdentifierSource` is aggregate
+    provenance that gates Scan replacement of the whole collection and
+    follows the field-level intent (`sources.identifiers`); each entry's
+    `Source` records its origin and follows the optional per-entry `source`
+    intent on the identifier object (`ApplyOverrides.IdentifierIntents`,
+    keyed by trimmed type). `applyIdentifiers` builds the incoming rows with
+    their intent-mapped source, then `identifiers.ReconcileSources` (shared
+    with the Book edit handler in `pkg/books`) overwrites the source of every
+    entry whose `(type, normalized value)` already exists with the stored
+    one and reports whether the sets are equal. Equal sets are a no-op that
+    skips the delete/insert and keeps both layers; a clear nulls the
+    aggregate (including a stale one on an empty collection). Duplicate
+    types are rejected by `validateIdentifierTypes` in `applyMetadata` before
+    any field is persisted, because `BulkCreateFileIdentifiers` dedupes by
+    type and would otherwise silently drop one after the delete had run.
   - Authors, Genres, Tags, and Narrators use aggregate provenance. Resolve
     every entry through the existing find-or-create service before comparing
     IDs. Authors compare ordered Person IDs and roles, treating nil and empty
@@ -141,12 +155,15 @@ Conventions and gotchas specific to this surface:
     `fields.series` is a validation error from `extractSeriesEntries` before
     any field is persisted (`strictSeriesNumberGroupFromFields`); the plugin
     SDK path (`seriesNumberGroupFromFields`) keeps dropping malformed groups.
-  - Identifiers and covers still stamp the plugin source until their slices
-    (#457, #458) land. End-to-end regression tests live in
+  - Covers still stamp the plugin source until their slice (#458) lands.
+    End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
     `pkg/worker/scan_identify_relationships_test.go`,
-    `pkg/worker/identify_relationship_apply_test.go`, and
-    `pkg/worker/identify_series_apply_test.go`.
+    `pkg/worker/identify_relationship_apply_test.go`,
+    `pkg/worker/identify_series_apply_test.go`, and
+    `pkg/worker/identify_identifier_apply_test.go`. The shared
+    `auto-enricher` fixture there proposes a description, a publisher, and
+    two identifiers on every ordinary Scan.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.

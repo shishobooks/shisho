@@ -1106,40 +1106,26 @@ func (h *handler) updateFile(c echo.Context) error {
 			seen[id.Type] = struct{}{}
 		}
 
-		// Read existing identifiers so we can preserve `source` when an entry's
-		// (type, normalized value) is unchanged from what's already stored.
-		// Replacements and net-new entries get DataSourceManual since the user
-		// explicitly applied them via this endpoint.
+		// Read existing identifiers so an entry whose (type, normalized value)
+		// is unchanged keeps its source. Replacements and net-new entries get
+		// DataSourceManual since the user explicitly applied them here.
 		existingFile, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{ID: &file.ID})
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		type sourceKey struct {
-			Type            string
-			NormalizedValue string
-		}
-		existingSources := make(map[sourceKey]string, len(existingFile.Identifiers))
-		for _, ex := range existingFile.Identifiers {
-			existingSources[sourceKey{Type: ex.Type, NormalizedValue: ex.Value}] = ex.Source
-		}
-
-		if err := h.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
-			return errors.WithStack(err)
-		}
-
 		toInsert := make([]*models.FileIdentifier, 0, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
-			source := models.DataSourceManual
-			normValue := identifiers.NormalizeValue(id.Type, id.Value)
-			if prev, ok := existingSources[sourceKey{Type: id.Type, NormalizedValue: normValue}]; ok {
-				source = prev
-			}
 			toInsert = append(toInsert, &models.FileIdentifier{
 				FileID: file.ID,
 				Type:   id.Type,
 				Value:  id.Value,
-				Source: source,
+				Source: models.DataSourceManual,
 			})
+		}
+		identifiers.ReconcileSources(existingFile.Identifiers, toInsert)
+
+		if err := h.bookService.DeleteFileIdentifiers(ctx, file.ID); err != nil {
+			return errors.WithStack(err)
 		}
 		if err := h.bookService.BulkCreateFileIdentifiers(ctx, toInsert); err != nil {
 			return errors.WithStack(err)

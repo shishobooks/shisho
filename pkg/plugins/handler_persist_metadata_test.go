@@ -410,7 +410,13 @@ func TestPersistMetadata_BulkInsertsIdentifiers(t *testing.T) {
 		},
 	}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", nil, testLogger())
+	// Proposal Acceptance for the collection and each entry (ADR 0006); a
+	// missing intent would attribute the entries as manual.
+	overrides := &ApplyOverrides{
+		Intents:           map[string]string{"identifiers": SourceIntentPlugin},
+		IdentifierIntents: map[string]string{"asin": SourceIntentPlugin, "isbn_13": SourceIntentPlugin},
+	}
+	err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", overrides, testLogger())
 	require.NoError(t, err)
 
 	require.Equal(t, []int{file.ID}, identStore.deleteCalls)
@@ -487,7 +493,7 @@ func TestPersistMetadata_IdentifierClearUpdatesSourceAndReviewState(t *testing.T
 	err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
 	require.NoError(t, err)
 
-	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
+	assert.Empty(t, identStore.deleteCalls, "the collection is already empty; only the stale source is healed")
 	assert.Nil(t, file.IdentifierSource)
 	require.Len(t, store.updatedFileColumns, 1)
 	assert.Contains(t, store.updatedFileColumns[0], "identifier_source", "UpdateFile recomputes review state")
