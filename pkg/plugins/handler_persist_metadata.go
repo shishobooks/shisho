@@ -41,8 +41,8 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	// A semantic no-op preserves provenance. Changed scalars, relationship
 	// collections (including Series memberships), and identifiers use the
-	// submitted intent; covers retain their existing attribution until their
-	// slice lands.
+	// submitted intent. Covers have no edit state, so a chosen proposal is
+	// always stamped with the plugin source (see the cover block below).
 	attr := newApplyAttribution(pluginSource, overrides)
 	var columns []string
 
@@ -243,55 +243,24 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Apply cover data. Precedence is strict: page-based files (CBZ, PDF)
 	// only accept coverPage; other formats only accept coverData / coverUrl.
+	// Cover has no edit state: keeping the current Cover sends no cover field,
+	// and choosing the proposed Cover is always a Proposal Acceptance that
+	// stamps the plugin source. Both paths write the complete Cover state
+	// (filename, MIME type, source, and page where applicable) in one column
+	// set, and a failed download, extraction, or write leaves the previous
+	// Cover metadata untouched.
 	if targetFile != nil {
 		if models.IsPageBasedFileType(targetFile.FileType) {
 			// Page-based: apply coverPage, silently ignore coverData/coverUrl.
 			if md.CoverPage != nil {
-				page := *md.CoverPage
-				switch {
-				case page < 0:
-					log.Warn("plugin-provided coverPage is negative, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page})
-				case targetFile.PageCount == nil:
-					log.Warn("plugin-provided coverPage skipped: page count unknown", logger.Data{"file_id": targetFile.ID, "cover_page": page})
-				case page >= *targetFile.PageCount:
-					log.Warn("plugin-provided coverPage is out of range, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page, "page_count": *targetFile.PageCount})
-				case h.enrich.pageExtractor == nil:
-					log.Warn("plugin-provided coverPage skipped: no page extractor configured", logger.Data{"file_id": targetFile.ID})
-				default:
-					coverFilename, mimeType, extractErr := h.enrich.pageExtractor.ExtractCoverPage(targetFile, book.Filepath, page, log)
-					if extractErr != nil {
-						log.Warn("failed to extract plugin-provided cover page", logger.Data{"file_id": targetFile.ID, "cover_page": page, "error": extractErr.Error()})
-					} else {
-						targetFile.CoverPage = &page
-						targetFile.CoverImageFilename = &coverFilename
-						targetFile.CoverMimeType = &mimeType
-						source := models.PluginDataSource(pluginScope, pluginID)
-						targetFile.CoverSource = &source
-						fileColumns = append(fileColumns, "cover_page", "cover_image_filename", "cover_mime_type", "cover_source")
-					}
+				if h.applyCoverPage(targetFile, book.Filepath, *md.CoverPage, pluginSource, log) {
+					fileColumns = append(fileColumns, "cover_page", "cover_image_filename", "cover_mime_type", "cover_source")
 				}
 			}
-		} else {
-			// Non-page-based: existing coverData write path.
-			if len(md.CoverData) > 0 {
-				coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, targetFile.Filepath)
-				coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
-
-				normalizedData, normalizedMime, _ := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
-				coverExt := ".png"
-				if normalizedMime == md.CoverMimeType {
-					coverExt = md.CoverExtension()
-				}
-
-				coverFilename := coverBaseName + coverExt
-				coverFilepath := filepath.Join(coverDir, coverFilename)
-
-				if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
-					log.Warn("failed to write cover file", logger.Data{"error": err.Error()})
-				} else {
-					targetFile.CoverImageFilename = &coverFilename
-					fileColumns = append(fileColumns, "cover_image_filename")
-				}
+		} else if len(md.CoverData) > 0 {
+			// Image-based: write the downloaded or plugin-supplied bytes.
+			if applyCoverImage(targetFile, book.Filepath, md, pluginSource, log) {
+				fileColumns = append(fileColumns, "cover_image_filename", "cover_mime_type", "cover_source")
 			}
 		}
 	}
@@ -325,4 +294,79 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	return nil
+}
+
+// applyCoverPage extracts the given page as the file's cover and sets the
+// complete Cover state on targetFile. It returns true when the cover columns
+// changed. Cover identity for page-based files is the page number: when the
+// proposed page equals the stored cover_page and a cover image exists, nothing
+// is extracted and the existing provenance is preserved.
+func (h *handler) applyCoverPage(targetFile *models.File, bookFilepath string, page int, pluginSource string, log logger.Logger) bool {
+	switch {
+	case page < 0:
+		log.Warn("plugin-provided coverPage is negative, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page})
+		return false
+	case targetFile.CoverPage != nil && *targetFile.CoverPage == page && targetFile.CoverImageFilename != nil:
+		return false
+	case targetFile.PageCount == nil:
+		log.Warn("plugin-provided coverPage skipped: page count unknown", logger.Data{"file_id": targetFile.ID, "cover_page": page})
+		return false
+	case page >= *targetFile.PageCount:
+		log.Warn("plugin-provided coverPage is out of range, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page, "page_count": *targetFile.PageCount})
+		return false
+	case h.enrich.pageExtractor == nil:
+		log.Warn("plugin-provided coverPage skipped: no page extractor configured", logger.Data{"file_id": targetFile.ID})
+		return false
+	}
+
+	coverFilename, mimeType, err := h.enrich.pageExtractor.ExtractCoverPage(targetFile, bookFilepath, page, log)
+	if err != nil {
+		log.Warn("failed to extract plugin-provided cover page", logger.Data{"file_id": targetFile.ID, "cover_page": page, "error": err.Error()})
+		return false
+	}
+	coverFilename = filepath.Base(coverFilename)
+	targetFile.CoverPage = &page
+	targetFile.CoverImageFilename = &coverFilename
+	targetFile.CoverMimeType = &mimeType
+	targetFile.CoverSource = &pluginSource
+	return true
+}
+
+// applyCoverImage writes md.CoverData next to the file and sets the complete
+// Cover state on targetFile. It returns true when the cover columns changed.
+// The stored MIME type describes the normalized bytes on disk, not the
+// download's Content-Type. A previous cover with a different extension is
+// removed so a later scan cannot adopt it again by base name.
+func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string, log logger.Logger) bool {
+	coverDir := fileutils.ResolveCoverDirForWrite(bookFilepath, targetFile.Filepath)
+	coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
+
+	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
+	coverExt := ".png"
+	if normalizedMime == md.CoverMimeType {
+		coverExt = md.CoverExtension()
+	}
+	if coverExt == "" {
+		coverExt = ".png"
+	}
+
+	coverFilename := coverBaseName + coverExt
+	coverFilepath := filepath.Join(coverDir, coverFilename)
+
+	if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
+		log.Warn("failed to write cover file", logger.Data{"file_id": targetFile.ID, "path": coverFilepath, "error": err.Error()})
+		return false
+	}
+
+	if prev := targetFile.CoverImageFilename; prev != nil && *prev != "" && filepath.Base(*prev) != coverFilename {
+		stalePath := filepath.Join(coverDir, filepath.Base(*prev))
+		if err := os.Remove(stalePath); err != nil && !os.IsNotExist(err) {
+			log.Warn("failed to remove stale cover", logger.Data{"file_id": targetFile.ID, "path": stalePath, "error": err.Error()})
+		}
+	}
+
+	targetFile.CoverImageFilename = &coverFilename
+	targetFile.CoverMimeType = &normalizedMime
+	targetFile.CoverSource = &pluginSource
+	return true
 }

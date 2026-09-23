@@ -155,7 +155,19 @@ Conventions and gotchas specific to this surface:
     `fields.series` is a validation error from `extractSeriesEntries` before
     any field is persisted (`strictSeriesNumberGroupFromFields`); the plugin
     SDK path (`seriesNumberGroupFromFields`) keeps dropping malformed groups.
-  - Covers still stamp the plugin source until their slice (#458) lands.
+  - Covers have no edit state, so the form sends no cover field to keep the
+    current Cover and `cover_url` / `cover_page` to choose the proposal, which
+    is always a Proposal Acceptance stamped `plugin:<scope>/<id>`. Both paths
+    (`applyCoverImage`, `applyCoverPage`) write the complete Cover state
+    (`cover_image_filename` as a bare filename, `cover_mime_type` describing
+    the normalized bytes on disk, `cover_source`, plus `cover_page` for
+    page-based files) in one column set. Page-based Cover identity is the
+    page number: a proposed page equal to the stored `cover_page` with a
+    cover image present skips extraction and keeps the stored source.
+    Image-based Covers have no identity check (no content hashing), and only
+    page-based `cover_source` is consulted by the scanner. A failed download,
+    extraction, or write leaves the previous Cover columns untouched; the
+    image path also removes a previous cover whose extension differs.
     End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
     `pkg/worker/scan_identify_relationships_test.go`,
@@ -246,7 +258,7 @@ shisho/goodreads-metadata/
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - `series` → controls `series` (name), `seriesNumber`, `seriesNumberEnd`, AND `seriesNumberUnit`. The three number fields are atomic: a finite start is required, an optional finite end must be greater than the start, and malformed groups are discarded completely.
 
-**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning.
+**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning, and a `coverPage` equal to the file's current `cover_page` is a no-op that keeps the existing cover and its source.
 
 ## main.js Pattern
 
