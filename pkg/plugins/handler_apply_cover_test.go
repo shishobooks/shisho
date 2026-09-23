@@ -92,6 +92,15 @@ func TestApplyMetadata_Cover_ImageBased_WritesCompleteProvenance(t *testing.T) {
 			wantMime:     "image/jpeg",
 		},
 		{
+			// The nonstandard "image/jpg" alias must still land as a JPEG
+			// with a .jpg extension, not as JPEG bytes in a .png file.
+			name:         "jpg alias stays jpeg",
+			contentType:  "image/jpg",
+			body:         makePersistTestJPEG(400, 600),
+			wantFilename: "main.epub.cover.jpg",
+			wantMime:     "image/jpeg",
+		},
+		{
 			// A PNG mislabeled by the remote server is normalized to PNG on
 			// disk. The stored MIME type must describe the stored bytes, not
 			// echo the download's Content-Type.
@@ -121,7 +130,6 @@ func TestApplyMetadata_Cover_ImageBased_WritesCompleteProvenance(t *testing.T) {
 
 			require.NotNil(t, file.CoverImageFilename)
 			assert.Equal(t, tc.wantFilename, *file.CoverImageFilename, "stored filename must be a bare filename")
-			assert.Equal(t, filepath.Base(*file.CoverImageFilename), *file.CoverImageFilename)
 			require.NotNil(t, file.CoverMimeType)
 			assert.Equal(t, tc.wantMime, *file.CoverMimeType)
 			require.NotNil(t, file.CoverSource)
@@ -261,6 +269,7 @@ func TestApplyMetadata_Cover_PageBased_SamePageIsNoOp(t *testing.T) {
 	file.CoverImageFilename = &prevFilename
 	file.CoverMimeType = &prevMime
 	file.CoverSource = &prevSource
+	require.NoError(t, os.WriteFile(filepath.Join(book.Filepath, prevFilename), makePersistTestJPEG(10, 10), 0600))
 
 	extractor := &stubPageExtractor{filename: "main.cbz.cover.jpg", mimeType: "image/jpeg"}
 	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
@@ -280,27 +289,45 @@ func TestApplyMetadata_Cover_PageBased_SamePageIsNoOp(t *testing.T) {
 func TestApplyMetadata_Cover_PageBased_SamePageWithoutImageExtracts(t *testing.T) {
 	t.Parallel()
 
-	// cover_page is set but the cover image is missing (for example the
-	// extraction failed on an earlier scan). Identity alone is not enough:
-	// the page must be extracted so the file actually gets a cover.
-	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeCBZ)
-	pageCount := 10
-	file.PageCount = &pageCount
-	prevPage := 3
-	file.CoverPage = &prevPage
+	// cover_page is set but the cover image is missing, either because the
+	// column was never filled (extraction failed on an earlier scan) or
+	// because the file was deleted out of band. Identity alone is not
+	// enough: the page must be extracted so the file actually gets a cover.
+	tests := []struct {
+		name         string
+		prevFilename *string
+	}{
+		{name: "column nil", prevFilename: nil},
+		{name: "column set but file missing on disk", prevFilename: new(string)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	extractor := &stubPageExtractor{filename: "main.cbz.cover.jpg", mimeType: "image/jpeg"}
-	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
-	h := newCoverApplyTestHandler(store, nil, extractor)
+			book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeCBZ)
+			pageCount := 10
+			file.PageCount = &pageCount
+			prevPage := 3
+			file.CoverPage = &prevPage
+			if tc.prevFilename != nil {
+				*tc.prevFilename = "main.cbz.cover.jpg"
+				file.CoverImageFilename = tc.prevFilename
+			}
 
-	c := newApplyEchoContext(t, map[string]any{"cover_page": 3})
-	require.NoError(t, h.applyMetadata(c))
+			extractor := &stubPageExtractor{filename: "main.cbz.cover.jpg", mimeType: "image/jpeg"}
+			store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+			h := newCoverApplyTestHandler(store, nil, extractor)
 
-	require.Len(t, extractor.calls, 1)
-	require.Len(t, store.updatedFileColumns, 1)
-	assert.ElementsMatch(t, coverColumns, store.updatedFileColumns[0])
-	require.NotNil(t, file.CoverSource)
-	assert.Equal(t, models.PluginDataSource("test", "enricher"), *file.CoverSource)
+			c := newApplyEchoContext(t, map[string]any{"cover_page": 3})
+			require.NoError(t, h.applyMetadata(c))
+
+			require.Len(t, extractor.calls, 1)
+			require.Len(t, store.updatedFileColumns, 1)
+			assert.ElementsMatch(t, coverColumns, store.updatedFileColumns[0])
+			require.NotNil(t, file.CoverSource)
+			assert.Equal(t, models.PluginDataSource("test", "enricher"), *file.CoverSource)
+		})
+	}
 }
 
 func TestApplyMetadata_Cover_PageBased_FailedExtractionLeavesPreviousIntact(t *testing.T) {
@@ -380,7 +407,54 @@ func TestApplyMetadata_Cover_ImageBased_RemovesStaleCoverWithOtherExtension(t *t
 
 	// The previous cover is a PNG; the proposed cover is a JPEG. The stale
 	// PNG must not linger next to the new JPEG, otherwise a later scan could
-	// adopt it again by base name.
+	// adopt it again by base name. Stale covers are found on disk by base
+	// name, so this holds even when the DB column does not point at them.
+	tests := []struct {
+		name         string
+		columnPoints bool
+	}{
+		{name: "db column points at stale cover", columnPoints: true},
+		{name: "db column nil, stale cover only on disk", columnPoints: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+			require.NoError(t, os.WriteFile(file.Filepath, []byte("fake epub"), 0600))
+			stalePath := filepath.Join(book.Filepath, "main.epub.cover.png")
+			require.NoError(t, os.WriteFile(stalePath, makeApplyTestPNG(10, 10), 0600))
+			if tc.columnPoints {
+				prevFilename, prevMime, prevSource := "main.epub.cover.png", "image/png", models.DataSourceManual
+				file.CoverImageFilename = &prevFilename
+				file.CoverMimeType = &prevMime
+				file.CoverSource = &prevSource
+			}
+
+			srv := newCoverImageServer(t, http.StatusOK, "image/jpeg", makePersistTestJPEG(300, 450))
+			store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+			h := newCoverApplyTestHandler(store, srv, nil)
+
+			c := newApplyEchoContext(t, map[string]any{"cover_url": srv.URL + "/cover"})
+			require.NoError(t, h.applyMetadata(c))
+
+			_, err := os.Stat(filepath.Join(book.Filepath, "main.epub.cover.jpg"))
+			require.NoError(t, err)
+			_, err = os.Stat(stalePath)
+			assert.True(t, os.IsNotExist(err), "stale cover with the old extension must be removed")
+			assert.Equal(t, "main.epub.cover.jpg", *file.CoverImageFilename)
+			assert.Equal(t, "image/jpeg", *file.CoverMimeType)
+			assert.Equal(t, models.PluginDataSource("test", "enricher"), *file.CoverSource)
+		})
+	}
+}
+
+func TestApplyMetadata_Cover_ImageBased_UpdateFileFailureKeepsPreviousCoverOnDisk(t *testing.T) {
+	t.Parallel()
+
+	// The stale cover may only be removed once the database points at the
+	// new one. If the column write fails, the DB still names the old PNG,
+	// so that file must still exist.
 	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
 	require.NoError(t, os.WriteFile(file.Filepath, []byte("fake epub"), 0600))
 	stalePath := filepath.Join(book.Filepath, "main.epub.cover.png")
@@ -390,18 +464,49 @@ func TestApplyMetadata_Cover_ImageBased_RemovesStaleCoverWithOtherExtension(t *t
 	file.CoverMimeType = &prevMime
 	file.CoverSource = &prevSource
 
-	srv := newCoverImageServer(t, http.StatusOK, "image/jpeg", makePersistTestJPEG(300, 450))
+	srv := newCoverImageServer(t, http.StatusOK, "image/jpeg", makePersistTestJPEG(400, 600))
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book, updateFileErr: errors.New("db down")}}
+	h := newCoverApplyTestHandler(store, srv, nil)
+
+	c := newApplyEchoContext(t, map[string]any{"cover_url": srv.URL + "/cover"})
+	err := h.applyMetadata(c)
+	require.Error(t, err, "a failed column write must surface as an error, not a partially applied cover")
+
+	_, statErr := os.Stat(stalePath)
+	assert.NoError(t, statErr, "previous cover must remain on disk when the DB write fails")
+}
+
+func TestApplyMetadata_Cover_ImageBased_RejectsUndecodableBytes(t *testing.T) {
+	t.Parallel()
+
+	// A plugin cover URL can return something the download accepts (any
+	// image/* Content-Type) that is not a raster image: SVG, AVIF, or a CDN
+	// error body. That must never replace a working cover.
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	require.NoError(t, os.WriteFile(file.Filepath, []byte("fake epub"), 0600))
+	prevPath := filepath.Join(book.Filepath, "main.epub.cover.png")
+	prevBytes := makeApplyTestPNG(10, 10)
+	require.NoError(t, os.WriteFile(prevPath, prevBytes, 0600))
+	prevFilename, prevMime, prevSource := "main.epub.cover.png", "image/png", models.DataSourceManual
+	file.CoverImageFilename = &prevFilename
+	file.CoverMimeType = &prevMime
+	file.CoverSource = &prevSource
+
+	srv := newCoverImageServer(t, http.StatusOK, "image/svg+xml", []byte("<svg xmlns='http://www.w3.org/2000/svg'/>"))
 	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
 	h := newCoverApplyTestHandler(store, srv, nil)
 
 	c := newApplyEchoContext(t, map[string]any{"cover_url": srv.URL + "/cover"})
 	require.NoError(t, h.applyMetadata(c))
 
-	_, err := os.Stat(filepath.Join(book.Filepath, "main.epub.cover.jpg"))
+	assert.Empty(t, store.updatedFileColumns, "undecodable bytes must not be applied")
+	assert.Equal(t, prevFilename, *file.CoverImageFilename)
+	assert.Equal(t, prevMime, *file.CoverMimeType)
+	assert.Equal(t, prevSource, *file.CoverSource)
+	got, err := os.ReadFile(prevPath)
 	require.NoError(t, err)
-	_, err = os.Stat(stalePath)
-	assert.True(t, os.IsNotExist(err), "stale cover with the old extension must be removed")
-	assert.Equal(t, "main.epub.cover.jpg", *file.CoverImageFilename)
-	assert.Equal(t, "image/jpeg", *file.CoverMimeType)
-	assert.Equal(t, models.PluginDataSource("test", "enricher"), *file.CoverSource)
+	assert.Equal(t, prevBytes, got, "previous cover bytes must be untouched")
+	entries, err := filepath.Glob(filepath.Join(book.Filepath, "main.epub.cover.*"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{prevPath}, entries, "no new cover file may be written")
 }

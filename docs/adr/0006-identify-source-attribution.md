@@ -28,7 +28,7 @@ Earlier Identify clears did leave the plugin source on the absent value. A data 
 
 **Identifiers are the exception.** They keep two levels: aggregate provenance gates Scan replacement, and per-entry provenance records each entry's origin. An unchanged `(type, normalized value)` keeps its source, entries matching the proposal receive the plugin source, other new or edited entries become manual, and a whole collection equal to the proposal receives plugin aggregate provenance. Duplicate Identifier types are rejected before any delete or insert.
 
-**Cover identity is the page number.** For page-based files, choosing the proposed page when it equals the stored `cover_page` is a no-op that skips re-extraction and preserves provenance. Image-based Covers have no identity check, so choosing the proposed image is always a Proposal Acceptance. Both paths write the complete Cover state (filename, MIME type, source, and page where applicable) in one column set. Image-based Cover provenance is informational because no Scan path gates on it.
+**Cover identity is the page number.** For page-based files, choosing the proposed page when it equals the stored `cover_page` and that cover image is present on disk is a no-op that skips re-extraction and preserves provenance; a missing image is re-extracted as a Proposal Acceptance. Image-based Covers have no identity check, so choosing the proposed image is always a Proposal Acceptance. Both paths write the complete Cover state (filename, MIME type, source, and page where applicable) in one column set. Image-based Cover provenance is informational because no Scan path gates on it.
 
 ## Considered options
 

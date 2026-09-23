@@ -166,8 +166,11 @@ Conventions and gotchas specific to this surface:
     cover image present skips extraction and keeps the stored source.
     Image-based Covers have no identity check (no content hashing), and only
     page-based `cover_source` is consulted by the scanner. A failed download,
-    extraction, or write leaves the previous Cover columns untouched; the
-    image path also removes a previous cover whose extension differs.
+    extraction, or write leaves the previous Cover columns untouched, and
+    bytes that do not decode as a raster image are rejected. The image path
+    finds previous covers on disk by base name (every `CoverImageExtensions`
+    entry, the same way the scanner discovers covers) and removes them only
+    after the `UpdateFile` flush succeeds.
     End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
     `pkg/worker/scan_identify_relationships_test.go`,
@@ -258,7 +261,7 @@ shisho/goodreads-metadata/
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - `series` → controls `series` (name), `seriesNumber`, `seriesNumberEnd`, AND `seriesNumberUnit`. The three number fields are atomic: a finite start is required, an optional finite end must be greater than the start, and malformed groups are discarded completely.
 
-**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning, and a `coverPage` equal to the file's current `cover_page` is a no-op that keeps the existing cover and its source.
+**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning, and a `coverPage` equal to the file's current `cover_page` is a no-op that keeps the existing cover and its source when that cover image is present on disk.
 
 ## main.js Pattern
 

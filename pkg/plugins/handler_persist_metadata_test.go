@@ -38,6 +38,7 @@ type stubBookStoreForPersist struct {
 	deletedNarratorFileIDs []int
 	updatedBookColumns     [][]string
 	updatedFileColumns     [][]string
+	updateFileErr          error
 }
 
 func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, columns []string) error {
@@ -50,6 +51,9 @@ func (s *stubBookStoreForPersist) RetrieveBook(_ context.Context, _ int) (*model
 }
 
 func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, _ *models.File, columns []string) error {
+	if s.updateFileErr != nil {
+		return s.updateFileErr
+	}
 	s.updatedFileColumns = append(s.updatedFileColumns, append([]string(nil), columns...))
 	return nil
 }

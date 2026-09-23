@@ -159,6 +159,23 @@ func TestDownloadCoverFromURL_Success(t *testing.T) {
 	assert.Equal(t, "image/jpeg", md.CoverMimeType)
 }
 
+func TestDownloadCoverFromURL_StripsContentTypeParameters(t *testing.T) {
+	t.Parallel()
+
+	fakeJPEG := []byte{0xFF, 0xD8, 0xFF, 0xE0}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg; charset=utf-8")
+		w.Write(fakeJPEG)
+	}))
+	defer srv.Close()
+
+	md := &mediafile.ParsedMetadata{CoverURL: srv.URL + "/cover.jpg"}
+	ok := DownloadCoverFromURL(context.Background(), md, []string{testServerHost(srv)}, testLogger())
+
+	assert.True(t, ok)
+	assert.Equal(t, "image/jpeg", md.CoverMimeType, "parameters must be stripped so the JPEG is not re-encoded as PNG")
+}
+
 func TestDownloadCoverFromURL_CoverDataTakesPrecedence(t *testing.T) {
 	t.Parallel()
 
