@@ -226,22 +226,27 @@ func TestApplyMetadata_Attribution_RejectsUnknownIntent(t *testing.T) {
 func TestApplyMetadata_Attribution_RejectsUnknownIdentifierEntryIntent(t *testing.T) {
 	t.Parallel()
 
-	book, file, _, h := newAttributionFixture(t, "epub_metadata")
-	identStore := &stubIdentStoreForPersist{}
-	h.enrich.identStore = identStore
+	for name, intent := range map[string]any{"canonical source": "manual", "non-string": 42, "null": nil} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			book, file, _, h := newAttributionFixture(t, "epub_metadata")
+			identStore := &stubIdentStoreForPersist{}
+			h.enrich.identStore = identStore
 
-	err := applyForAttribution(t, h, PluginApplyPayload{
-		BookID: book.ID,
-		FileID: &file.ID,
-		Fields: map[string]any{
-			"identifiers": []any{map[string]any{"type": "isbn_13", "value": "9780316769488", "source": "manual"}},
-		},
-	})
+			err := applyForAttribution(t, h, PluginApplyPayload{
+				BookID: book.ID,
+				FileID: &file.ID,
+				Fields: map[string]any{
+					"identifiers": []any{map[string]any{"type": "isbn_13", "value": "9780316769488", "source": intent}},
+				},
+			})
 
-	var ec *errcodes.Error
-	require.ErrorAs(t, err, &ec)
-	assert.Equal(t, http.StatusUnprocessableEntity, ec.HTTPCode)
-	assert.Empty(t, identStore.deleteCalls)
+			var ec *errcodes.Error
+			require.ErrorAs(t, err, &ec)
+			assert.Equal(t, http.StatusUnprocessableEntity, ec.HTTPCode)
+			assert.Empty(t, identStore.deleteCalls)
+		})
+	}
 }
 
 func TestApplyMetadata_Attribution_AcceptsReservedIdentifierEntryIntent(t *testing.T) {

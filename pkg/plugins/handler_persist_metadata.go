@@ -39,10 +39,10 @@ func equalIntSets(a, b map[int]struct{}) bool {
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
 func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) error {
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
-	// A semantic no-op preserves provenance. Changed scalars and relationship
-	// collections (including Series memberships) use the submitted intent;
-	// identifiers and covers retain their existing attribution until their
-	// respective slices land.
+	// A semantic no-op preserves provenance. Changed scalars, relationship
+	// collections (including Series memberships), and identifiers use the
+	// submitted intent; covers retain their existing attribution until their
+	// slice lands.
 	attr := newApplyAttribution(pluginSource, overrides)
 	var columns []string
 
@@ -232,30 +232,11 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// collection clears all identifiers. Non-empty malformed collections are
 	// not marked selected by convertFieldsToOverrides and remain a no-op.
 	if (len(md.Identifiers) > 0 || applyFieldSelected(overrides, "identifiers")) && targetFile != nil {
-		toInsert := make([]*models.FileIdentifier, 0, len(md.Identifiers))
-		for _, ident := range md.Identifiers {
-			if ident.Type == "" || ident.Value == "" {
-				continue
-			}
-			toInsert = append(toInsert, &models.FileIdentifier{
-				FileID: targetFile.ID,
-				Type:   ident.Type,
-				Value:  ident.Value,
-				Source: pluginSource,
-			})
+		changed, err := h.applyIdentifiers(ctx, targetFile, md.Identifiers, attr, overrides)
+		if err != nil {
+			return err
 		}
-		if len(toInsert) > 0 || applyFieldSelected(overrides, "identifiers") {
-			if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {
-				return errors.Wrap(err, "failed to delete identifiers")
-			}
-			if len(toInsert) > 0 {
-				if err := h.enrich.identStore.BulkCreateFileIdentifiers(ctx, toInsert); err != nil {
-					return errors.Wrap(err, "failed to bulk-create identifiers")
-				}
-				targetFile.IdentifierSource = &pluginSource
-			} else {
-				targetFile.IdentifierSource = nil
-			}
+		if changed {
 			fileColumns = append(fileColumns, "identifier_source")
 		}
 	}

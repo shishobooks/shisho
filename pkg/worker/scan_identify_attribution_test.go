@@ -59,9 +59,9 @@ const identifyTestEnricherManifest = `{
   "version": "1.0.0",
   "capabilities": {
     "metadataEnricher": {
-      "description": "Proposes a description and publisher",
+      "description": "Proposes a description, publisher, and identifiers",
       "fileTypes": ["idtest"],
-      "fields": ["description", "publisher"]
+      "fields": ["description", "publisher", "identifiers"]
     }
   }
 }`
@@ -72,7 +72,11 @@ const identifyTestEnricherJS = `var plugin = (function() {
   return {
     metadataEnricher: {
       search: function(ctx) {
-        return { results: [{ description: "Plugin description", publisher: "Plugin Publisher" }] };
+        return { results: [{
+          description: "Plugin description",
+          publisher: "Plugin Publisher",
+          identifiers: [{ type: "isbn_13", value: "9780316769488" }, { type: "asin", value: "B01ABC1234" }]
+        }] };
       }
     }
   };
