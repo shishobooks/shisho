@@ -171,3 +171,13 @@ jobs:
       - name: Publish to npm
         working-directory: ./packages/plugin-sdk
         run: npm publish --access public
+
+  demo:
+    name: Deploy Demo
+    needs: [release, docker-manifest]
+    # Prereleases (tags containing "-") never reach the Public Demo.
+    if: ${{ !contains(github.ref_name, '-') }}
+    uses: ./.github/workflows/demo.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets: inherit

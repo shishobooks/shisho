@@ -171,6 +171,10 @@ This allows the Dockerfile to use `pnpm install --prod` to skip installing test/
 - **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
 - **Development**: mise for tool/version management and task running, Air for Go hot reload
 
+### Public Demo
+
+`demo/` holds the derived Public Demo image (`Dockerfile`), the Fly.io config (`fly.toml`), the corpus authoring Compose file, and `demo/README.md` with the authoring loop and operator setup. `.github/workflows/demo.yml` deploys when the Release workflow calls it after publishing the image, on manual dispatch, and on `repository_dispatch` from `shishobooks/demo-corpus`; it refuses tags older than the first Demo Mode release. Media and the prepared database live only in that corpus repository; `demo/corpus/` is a gitignored CI checkout. Demo Mode behavior itself is documented in `pkg/CLAUDE.md`.
+
 ### Production serving
 
 The Alpine image runs a single Go process through `su-exec` after resolving `PUID`/`PGID` and preparing `/config` ownership. It has no Caddy layer, startup health polling, or signal-forwarding shell. The image sets `SERVER_PORT=5173`; the application default stays `3689`. The listener honors `server_host`.
