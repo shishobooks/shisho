@@ -9,7 +9,7 @@
 services:
   shisho:
     # Bump this to the release the demo deploys. Tags on ghcr.io carry no "v".
-    image: ghcr.io/shishobooks/shisho:${SHISHO_VERSION:-0.0.50}
+    image: ghcr.io/shishobooks/shisho:${SHISHO_VERSION:-0.0.51}
     container_name: shisho-demo-authoring
     ports:
       - "5173:5173"
