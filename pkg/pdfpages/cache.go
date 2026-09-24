@@ -92,7 +92,7 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 
 	// Encode to JPEG
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, render.Result.Image, &jpeg.Options{Quality: c.quality}); err != nil {
+	if err := jpeg.Encode(&buf, render.Result.RenderedImage, &jpeg.Options{Quality: c.quality}); err != nil {
 		return "", "", errors.Wrap(err, "failed to encode JPEG")
 	}
 
