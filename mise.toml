@@ -1,6 +1,6 @@
 [tools]
 go = "1.25.5"
-node = "24.13.0"
+node = "24.21.0"
 "npm:pnpm" = "10.33.0"
 "github:air-verse/air" = "1.64.2"
 "github:gzuidhof/tygo" = "0.2.20"
