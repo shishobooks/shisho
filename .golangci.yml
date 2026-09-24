@@ -58,6 +58,11 @@ linters:
       # setting it to true intentionally if the host is localhost.
       - path: pkg/database/database.go
         text: G402 # Checking for InsecureSkipVerify
+      # pkg/httputil and pkg/version intentionally share names with standard
+      # library packages; they're always imported by their full module path.
+      - linters:
+          - revive
+        text: avoid package names that conflict with Go standard library package names
       # Ignore a bunch of linters for test files.
       - linters:
           - err113

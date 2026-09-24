@@ -1,10 +1,10 @@
 [tools]
-go = "1.25.5"
+go = "1.26.8"
 node = "24.21.0"
 "npm:pnpm" = "10.33.0"
 "github:air-verse/air" = "1.64.2"
 "github:gzuidhof/tygo" = "0.2.20"
-"github:golangci/golangci-lint" = "2.7.2"
+"github:golangci/golangci-lint" = "2.9.0"
 
 # === Build ===
 
