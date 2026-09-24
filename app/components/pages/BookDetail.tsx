@@ -1081,7 +1081,11 @@ const BookDetail = () => {
               <div className="relative shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
+                    <Button
+                      aria-label="Book actions"
+                      size="sm"
+                      variant="outline"
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
