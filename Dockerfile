@@ -22,7 +22,7 @@ RUN tygo generate
 # =============================================================================
 # Stage 2: Build Frontend
 # =============================================================================
-FROM node:24.13.0-alpine AS frontend-builder
+FROM node:24.21.0-alpine AS frontend-builder
 
 WORKDIR /app
 
