@@ -185,7 +185,7 @@ func RenderPageJPEG(path string, pageIdx int, dpi int, quality int) ([]byte, str
 	defer render.Cleanup()
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, render.Result.Image, &jpeg.Options{Quality: quality}); err != nil {
+	if err := jpeg.Encode(&buf, render.Result.RenderedImage, &jpeg.Options{Quality: quality}); err != nil {
 		return nil, "", err
 	}
 
