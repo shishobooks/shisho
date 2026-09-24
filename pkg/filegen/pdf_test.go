@@ -304,6 +304,36 @@ func TestPDFGenerator_Generate_Tags(t *testing.T) {
 	assert.Equal(t, "sci-fi", meta.Tags[1])
 }
 
+func TestPDFGenerator_Generate_TagsReplaceSourceKeywords(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "source.pdf")
+	writeTestPDF(t, srcPath, map[string]string{
+		"Title":    "My Book",
+		"Keywords": "stale, outdated",
+	})
+
+	destPath := filepath.Join(tmpDir, "dest.pdf")
+
+	book := &models.Book{
+		Title: "My Book",
+		BookTags: []*models.BookTag{
+			{Tag: &models.Tag{Name: "fiction"}},
+			{Tag: &models.Tag{Name: "sci-fi"}},
+		},
+	}
+	file := &models.File{FileType: models.FileTypePDF}
+
+	gen := &PDFGenerator{}
+	err := gen.Generate(context.Background(), srcPath, destPath, book, file)
+	require.NoError(t, err)
+
+	meta, err := pdf.Parse(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"fiction", "sci-fi"}, meta.Tags)
+}
+
 func TestPDFGenerator_Generate_ReleaseDate(t *testing.T) {
 	t.Parallel()
 
@@ -328,10 +358,12 @@ func TestPDFGenerator_Generate_ReleaseDate(t *testing.T) {
 	err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 	require.NoError(t, err)
 
-	// Note: pdfcpu always overwrites CreationDate with the current time when writing,
-	// so we cannot verify the round-tripped value. We just verify generation succeeds.
+	// pdfcpu always overwrites CreationDate with the current time when writing,
+	// so the release date is deliberately not written. Generation must still
+	// succeed.
 	_, err = os.Stat(destPath)
 	require.NoError(t, err)
+	assert.NotContains(t, gen.buildProperties(book, file), "CreationDate")
 }
 
 func TestPDFGenerator_Generate_SourceUnmodified(t *testing.T) {
