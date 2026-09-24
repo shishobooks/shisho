@@ -2,7 +2,6 @@ package worker
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -3023,14 +3022,8 @@ func (w *Worker) extractAndSaveCover(
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 	logInfo("saving cover", logger.Data{"path": coverFilepath, "mime": normalizedMime})
 
-	coverFile, err := os.Create(coverFilepath)
-	if err != nil {
-		return "", "", false, errors.Wrap(err, "failed to create cover file")
-	}
-	defer coverFile.Close()
-
-	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
-		return "", "", false, errors.Wrap(err, "failed to write cover data")
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
+		return "", "", false, errors.Wrap(err, "failed to write cover file")
 	}
 
 	return coverFilename, normalizedMime, false, nil
@@ -3121,8 +3114,18 @@ func (w *Worker) upgradeEnricherCover(
 		return
 	}
 
-	// 6. Save enricher cover — normalize and write to disk
-	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+	// 6. Save enricher cover. The full decode in NormalizeImage is the real
+	// validation: the header-only resolution gate above accepts a truncated
+	// body whose header claims a larger image.
+	normalizedData, normalizedMime, err := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+	if err != nil {
+		logWarn("enricher cover could not be decoded, skipping", logger.Data{
+			"file_id": file.ID,
+			"source":  coverSource,
+			"error":   err.Error(),
+		})
+		return
+	}
 	coverExt := ".png"
 	if normalizedMime == metadata.CoverMimeType {
 		coverExt = metadata.CoverExtension()
@@ -3131,27 +3134,19 @@ func (w *Worker) upgradeEnricherCover(
 	coverFilename := coverBaseName + coverExt
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 
-	// Remove any existing cover file with a different extension
-	if existingCoverPath != "" && existingCoverPath != coverFilepath {
-		os.Remove(existingCoverPath)
-	}
-
-	coverFile, err := os.Create(coverFilepath)
-	if err != nil {
+	// Install the replacement atomically before removing a previous cover at
+	// another extension, so a failed write leaves the working cover on disk.
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
 		logWarn("failed to save enricher cover", logger.Data{
 			"error": err.Error(),
 			"path":  coverFilepath,
 		})
 		return
 	}
-	defer coverFile.Close()
-
-	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
-		logWarn("failed to write enricher cover data", logger.Data{
-			"error": err.Error(),
-			"path":  coverFilepath,
-		})
-		return
+	if existingCoverPath != "" && existingCoverPath != coverFilepath {
+		if err := os.Remove(existingCoverPath); err != nil {
+			logWarn("failed to remove previous cover", logger.Data{"error": err.Error(), "path": existingCoverPath})
+		}
 	}
 
 	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
@@ -3912,13 +3907,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 
 	// Save the cover
 	coverFilepath := filepath.Join(coverDir, coverBaseName+coverExt)
-	coverFile, err := os.Create(coverFilepath)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer coverFile.Close()
-
-	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -4024,14 +4013,6 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 		mimeType = "image/webp"
 	}
 
-	// Delete any existing cover with this base name (regardless of extension)
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, statErr := os.Stat(existingPath); statErr == nil {
-			_ = os.Remove(existingPath)
-		}
-	}
-
 	// Extract the page
 	coverFilePath := filepath.Join(coverDir, coverBaseName+ext)
 
@@ -4059,18 +4040,29 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 		mimeType = normalizedMime
 	}
 
-	// Write the cover file
-	outFile, err := os.Create(coverFilePath)
-	if err != nil {
+	// Install the replacement atomically, then remove previous covers at
+	// other extensions, so a failed write leaves the working cover on disk.
+	if err := fileutils.WriteFileAtomic(coverFilePath, normalizedData, 0644); err != nil {
 		return "", "", errors.WithStack(err)
 	}
-	defer outFile.Close()
-
-	if _, err := io.Copy(outFile, bytes.NewReader(normalizedData)); err != nil {
-		return "", "", errors.WithStack(err)
-	}
+	removeOtherCoverExtensions(coverDir, coverBaseName, ext)
 
 	return coverBaseName + ext, mimeType, nil
+}
+
+// removeOtherCoverExtensions deletes covers with the given base name at every
+// extension except keepExt. Call it only after the replacement at keepExt is
+// installed.
+func removeOtherCoverExtensions(coverDir, coverBaseName, keepExt string) {
+	for _, existingExt := range fileutils.CoverImageExtensions {
+		if existingExt == keepExt {
+			continue
+		}
+		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
+		if _, statErr := os.Stat(existingPath); statErr == nil {
+			_ = os.Remove(existingPath)
+		}
+	}
 }
 
 // extractPDFPageCover renders a specific page from a PDF file via pdfium and
@@ -4082,19 +4074,14 @@ func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, 
 		return "", "", errors.Wrap(err, "failed to render pdf page")
 	}
 
-	// Delete any existing cover with this base name (regardless of extension).
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, statErr := os.Stat(existingPath); statErr == nil {
-			_ = os.Remove(existingPath)
-		}
-	}
-
+	// Install the replacement atomically, then remove previous covers at
+	// other extensions, so a failed write leaves the working cover on disk.
 	coverFilename := coverBaseName + ".jpg"
 	coverFilePath := filepath.Join(coverDir, coverFilename)
-	if err := os.WriteFile(coverFilePath, data, 0644); err != nil { //nolint:gosec // Cover files need to be readable by the HTTP server
+	if err := fileutils.WriteFileAtomic(coverFilePath, data, 0644); err != nil {
 		return "", "", errors.WithStack(err)
 	}
+	removeOtherCoverExtensions(coverDir, coverBaseName, ".jpg")
 
 	return coverFilename, mimeType, nil
 }

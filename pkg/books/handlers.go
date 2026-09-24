@@ -1541,16 +1541,6 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	filename := filepath.Base(file.Filepath)
 	coverBaseName := filename + ".cover"
 
-	// Delete any existing cover with this base name (regardless of extension)
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, err := os.Stat(existingPath); err == nil {
-			if err := os.Remove(existingPath); err != nil {
-				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
-			}
-		}
-	}
-
 	// Read the uploaded file data
 	src, err := fileHeader.Open()
 	if err != nil {
@@ -1563,8 +1553,15 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Normalize the image to strip problematic metadata
-	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(uploadedData, contentType)
+	// Normalize the image to strip problematic metadata. The full decode is
+	// also the validation: a truncated upload keeps a valid header, so this
+	// is the only check that catches it, and it runs before the previous
+	// cover is touched.
+	normalizedData, normalizedMime, err := fileutils.NormalizeImage(uploadedData, contentType)
+	if err != nil {
+		log.Warn("uploaded cover is not a decodable image", logger.Data{"file_id": file.ID, "content_type": contentType, "error": err.Error()})
+		return errcodes.ValidationError("The uploaded file is not a decodable image")
+	}
 
 	// Determine final extension based on normalized MIME type
 	finalExt := getExtensionFromMimeType(normalizedMime)
@@ -1572,16 +1569,22 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		finalExt = ext // fallback to original extension
 	}
 
-	// Save the normalized cover
+	// Install the replacement atomically, then remove previous covers at
+	// other extensions, so a failed write leaves the working cover on disk.
 	coverFilePath := filepath.Join(coverDir, coverBaseName+finalExt)
-	dst, err := os.Create(coverFilePath)
-	if err != nil {
+	if err := fileutils.WriteFileAtomic(coverFilePath, normalizedData, 0644); err != nil {
 		return errors.WithStack(err)
 	}
-	defer dst.Close()
-
-	if _, err := dst.Write(normalizedData); err != nil {
-		return errors.WithStack(err)
+	for _, existingExt := range fileutils.CoverImageExtensions {
+		if existingExt == finalExt {
+			continue
+		}
+		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
+		if _, err := os.Stat(existingPath); err == nil {
+			if err := os.Remove(existingPath); err != nil {
+				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
+			}
+		}
 	}
 
 	log.Info("uploaded file cover", logger.Data{

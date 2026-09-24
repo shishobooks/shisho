@@ -628,11 +628,11 @@ func NormalizeImage(data []byte, mimeType string) ([]byte, string, error) {
 // WriteFileAtomic writes data to path so that a reader never observes a
 // partial file: the bytes go to a temporary file in the same directory, which
 // then replaces path with a rename. On failure the temporary file is removed
-// and whatever was at path before is left untouched. The Identify cover
-// writes use it so a failed replacement never destroys a working cover; the
-// scanner's cover writes do not yet. Because the replacement is a rename, a
-// symlink or hard link at path is replaced by a new regular file rather than
-// written through.
+// and whatever was at path before is left untouched. Every cover write
+// (scanner, Identify, page selection, upload) goes through it so a failed
+// replacement never destroys a working cover. Because the replacement is a
+// rename, a symlink or hard link at path is replaced by a new regular file
+// rather than written through.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
