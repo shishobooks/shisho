@@ -1,0 +1,10 @@
+# Keep the remote build context to the corpus media and database.
+corpus/.git
+corpus/.github
+corpus/.downloads
+corpus/config/cache
+corpus/*.md
+corpus/*.sh
+README.md
+docker-compose.yml
+fly.toml

@@ -177,6 +177,10 @@ The Alpine image runs a single Go process through `su-exec` after resolving `PUI
 
 The Go server owns `/api` directly. Vite forwards `/api` unchanged, without injecting `X-Forwarded-Prefix`. Keep `/health`, `/opds`, `/kobo`, `/ereader`, and `/e` at the root. Forwarded-header trust, compression exclusions, security headers, and frontend cache behavior belong to the Go server, not a bundled proxy. See ADR 0007 (`docs/adr/0007-single-binary-image.md`) for the trade-offs.
 
+### Public Demo
+
+`demo/` holds the derived Public Demo image (`Dockerfile`), the Fly.io config (`fly.toml`), the corpus authoring Compose file, and `demo/README.md` with the authoring loop and operator setup. `.github/workflows/demo.yml` deploys on every published release, on manual dispatch, and on `repository_dispatch` from `shishobooks/demo-corpus`. Media and the prepared database live only in that corpus repository; `demo/corpus/` is a gitignored CI checkout. Demo Mode behavior itself is documented in `pkg/CLAUDE.md`.
+
 For detailed architecture information, see:
 - **Backend details**: `pkg/CLAUDE.md`
 - **Frontend details**: `app/CLAUDE.md`

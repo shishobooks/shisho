@@ -385,3 +385,6 @@ test-results/
 !pkg/frontend/dist/
 pkg/frontend/dist/*
 !pkg/frontend/dist/placeholder.html
+
+# Public Demo corpus checkout used by .github/workflows/demo.yml
+demo/corpus/

@@ -1,0 +1,95 @@
+name: Demo
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to deploy (for example v0.0.51). Defaults to the latest release."
+        required: false
+        type: string
+  repository_dispatch:
+    types:
+      - demo-corpus-updated
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Demo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout the Demo Corpus
+        uses: actions/checkout@v7
+        with:
+          repository: shishobooks/demo-corpus
+          ref: master
+          path: demo/corpus
+
+      - name: Resolve the release to deploy
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            tag="$RELEASE_TAG"
+          elif [ -n "$INPUT_VERSION" ]; then
+            tag="$INPUT_VERSION"
+          else
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          tag="v${tag#v}"
+          # The multi-arch manifest on ghcr.io is tagged without the "v" prefix.
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Deploying Shisho $tag (ghcr.io/shishobooks/shisho:${tag#v})"
+
+      - name: Wait for the release image
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+        run: |
+          # On "release: published" the Docker jobs of the Release workflow may
+          # still be running, so poll ghcr.io until the manifest exists.
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:shishobooks/shisho:pull" | jq -r .token)
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null \
+                -H "Authorization: Bearer $token" \
+                -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+                "https://ghcr.io/v2/shishobooks/shisho/manifests/$IMAGE_TAG"; then
+              echo "ghcr.io/shishobooks/shisho:$IMAGE_TAG is available"
+              exit 0
+            fi
+            echo "Waiting for ghcr.io/shishobooks/shisho:$IMAGE_TAG ($attempt/60)"
+            sleep 30
+          done
+          echo "ghcr.io/shishobooks/shisho:$IMAGE_TAG did not appear within 30 minutes"
+          exit 1
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy
+        working-directory: demo
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
+        run: |
+          flyctl deploy \
+            --config fly.toml \
+            --dockerfile Dockerfile \
+            --build-arg "SHISHO_VERSION=$IMAGE_TAG" \
+            --remote-only \
+            --ha=false
