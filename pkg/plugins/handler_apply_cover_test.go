@@ -2,6 +2,8 @@ package plugins
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -509,4 +512,96 @@ func TestApplyMetadata_Cover_ImageBased_RejectsUndecodableBytes(t *testing.T) {
 	entries, err := filepath.Glob(filepath.Join(book.Filepath, "main.epub.cover.*"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{prevPath}, entries, "no new cover file may be written")
+}
+
+// decodeApplyResponse reads the JSON body applyMetadata wrote.
+func decodeApplyResponse(t *testing.T, c echo.Context) PluginApplyResponse {
+	t.Helper()
+	rec, ok := c.Response().Writer.(*httptest.ResponseRecorder)
+	require.True(t, ok)
+	var resp PluginApplyResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+func TestApplyMetadata_Cover_RejectedCoverReportsWarning(t *testing.T) {
+	t.Parallel()
+
+	// The apply succeeds for every other field, so the response stays 200,
+	// but the user must learn that the chosen cover was not applied.
+	tests := []struct {
+		name     string
+		fileType string
+		status   int
+		mime     string
+		body     []byte
+		fields   func(srv *httptest.Server) map[string]any
+		want     string
+	}{
+		{
+			name: "undecodable image", fileType: models.FileTypeEPUB,
+			status: http.StatusOK, mime: "image/svg+xml", body: []byte("<svg xmlns='http://www.w3.org/2000/svg'/>"),
+			fields: func(srv *httptest.Server) map[string]any { return map[string]any{"cover_url": srv.URL + "/cover"} },
+			want:   "not a decodable image",
+		},
+		{
+			name: "failed download", fileType: models.FileTypeEPUB,
+			status: http.StatusNotFound, mime: "text/plain", body: []byte("missing"),
+			fields: func(srv *httptest.Server) map[string]any { return map[string]any{"cover_url": srv.URL + "/cover"} },
+			want:   "could not be downloaded",
+		},
+		{
+			name: "out of range page", fileType: models.FileTypeCBZ,
+			fields: func(_ *httptest.Server) map[string]any { return map[string]any{"cover_page": 999} },
+			want:   "out of range",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			book, file := newApplyTestBookWithFile(t, "Book", tc.fileType)
+			pageCount := 10
+			file.PageCount = &pageCount
+			prevSource := models.DataSourceManual
+			file.CoverSource = &prevSource
+			var srv *httptest.Server
+			if tc.mime != "" {
+				srv = newCoverImageServer(t, tc.status, tc.mime, tc.body)
+			}
+			store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+			h := newCoverApplyTestHandler(store, srv, &stubPageExtractor{filename: "x.jpg", mimeType: "image/jpeg"})
+
+			c := newApplyEchoContext(t, tc.fields(srv))
+			require.NoError(t, h.applyMetadata(c))
+
+			resp := decodeApplyResponse(t, c)
+			require.Len(t, resp.Warnings, 1)
+			assert.Contains(t, resp.Warnings[0], "Cover was not applied")
+			assert.Contains(t, resp.Warnings[0], tc.want)
+			assert.Equal(t, models.DataSourceManual, *file.CoverSource)
+		})
+	}
+}
+
+func TestApplyMetadata_Cover_AppliedCoverHasNoWarningAndCacheKey(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	book.Library = &models.Library{ID: book.LibraryID, CoverAspectRatio: "book"}
+	require.NoError(t, os.WriteFile(file.Filepath, []byte("fake epub"), 0600))
+	srv := newCoverImageServer(t, http.StatusOK, "image/jpeg", makePersistTestJPEG(400, 600))
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+	h := newCoverApplyTestHandler(store, srv, nil)
+
+	c := newApplyEchoContext(t, map[string]any{"cover_url": srv.URL + "/cover"})
+	require.NoError(t, h.applyMetadata(c))
+
+	resp := decodeApplyResponse(t, c)
+	assert.Empty(t, resp.Warnings)
+	// The reloaded book must carry a usable cover cache key, the same way
+	// GET /books/:id does, so a consumer of this response never builds a
+	// stale cover URL.
+	assert.Equal(t, fmt.Sprintf("%d-%d", file.ID, file.UpdatedAt.Unix()), resp.CoverCacheKey)
+	assert.NotEmpty(t, resp.CoverCacheKey)
 }

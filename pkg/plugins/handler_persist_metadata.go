@@ -37,7 +37,11 @@ func equalIntSets(a, b map[int]struct{}) bool {
 // Non-empty parsed values are persisted, and selected zero values in overrides clear metadata.
 // pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
-func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) error {
+// The returned warnings describe selected values that were skipped rather
+// than applied (currently only covers); they are user-facing and the caller
+// surfaces them alongside the successful apply.
+func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) ([]string, error) {
+	var warnings []string
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
 	// A semantic no-op preserves provenance. Changed scalars, relationship
 	// collections (including Series memberships), and identifiers use the
@@ -100,7 +104,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if len(columns) > 0 {
 		bookIndexChanged = true
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, columns); err != nil {
-			return errors.Wrap(err, "failed to update book")
+			return nil, errors.Wrap(err, "failed to update book")
 		}
 	}
 
@@ -108,7 +112,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if (len(md.Authors) > 0 || applyFieldSelected(overrides, "authors")) && h.enrich.relStore != nil && (len(md.Authors) == 0 || h.enrich.personFinder != nil) {
 		changed, err := h.applyAuthors(ctx, book, md.Authors, attr, log)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		seriesAggregateMayBeStale = seriesAggregateMayBeStale || changed
 		bookIndexChanged = bookIndexChanged || changed
@@ -130,7 +134,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if seriesTouched && h.enrich.relStore != nil {
 		changed, err := h.applySeries(ctx, book, seriesEntries, attr, seriesAggregateMayBeStale, log)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		bookIndexChanged = bookIndexChanged || changed
 	} else if seriesAggregateMayBeStale {
@@ -141,7 +145,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if (len(md.Genres) > 0 || applyFieldSelected(overrides, "genres")) && h.enrich.relStore != nil && (len(md.Genres) == 0 || h.enrich.genreFinder != nil) {
 		changed, err := h.applyGenres(ctx, book, md.Genres, attr, log)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		bookIndexChanged = bookIndexChanged || changed
 	}
@@ -150,7 +154,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if (len(md.Tags) > 0 || applyFieldSelected(overrides, "tags")) && h.enrich.relStore != nil && (len(md.Tags) == 0 || h.enrich.tagFinder != nil) {
 		changed, err := h.applyTags(ctx, book, md.Tags, attr, log)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		bookIndexChanged = bookIndexChanged || changed
 	}
@@ -159,7 +163,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if (len(md.Narrators) > 0 || applyFieldSelected(overrides, "narrators")) && targetFile != nil && targetFile.FileType == models.FileTypeM4B && (len(md.Narrators) == 0 || h.enrich.personFinder != nil) {
 		changed, err := h.applyNarrators(ctx, book.LibraryID, targetFile, md.Narrators, attr, log)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if changed {
 			fileColumns = append(fileColumns, "narrator_source")
@@ -239,7 +243,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	if (len(md.Identifiers) > 0 || applyFieldSelected(overrides, "identifiers")) && targetFile != nil {
 		changed, err := h.applyIdentifiers(ctx, targetFile, md.Identifiers, attr, overrides)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if changed {
 			fileColumns = append(fileColumns, "identifier_source")
@@ -258,13 +262,23 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		if models.IsPageBasedFileType(targetFile.FileType) {
 			// Page-based: apply coverPage, silently ignore coverData/coverUrl.
 			if md.CoverPage != nil {
-				if h.applyCoverPage(targetFile, book.Filepath, *md.CoverPage, pluginSource, log) {
+				switch err := h.applyCoverPage(targetFile, book.Filepath, *md.CoverPage, pluginSource, log); {
+				case err == nil:
 					fileColumns = append(fileColumns, "cover_page", "cover_image_filename", "cover_mime_type", "cover_source")
+				case errors.Is(err, errCoverUnchanged):
+					// Same page, cover present: nothing to do and nothing to report.
+				default:
+					log.Warn("plugin-provided coverPage skipped", logger.Data{"file_id": targetFile.ID, "cover_page": *md.CoverPage, "error": err.Error()})
+					warnings = append(warnings, coverWarning(err))
 				}
 			}
 		} else if len(md.CoverData) > 0 {
 			// Image-based: write the downloaded or plugin-supplied bytes.
-			if stale, ok := applyCoverImage(targetFile, book.Filepath, md, pluginSource, log); ok {
+			stale, err := applyCoverImage(targetFile, book.Filepath, md, pluginSource)
+			if err != nil {
+				log.Warn("plugin-provided cover skipped", logger.Data{"file_id": targetFile.ID, "error": err.Error()})
+				warnings = append(warnings, coverWarning(err))
+			} else {
 				fileColumns = append(fileColumns, "cover_image_filename", "cover_mime_type", "cover_source")
 				staleCovers = stale
 			}
@@ -275,7 +289,7 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	bookIndexChanged = bookIndexChanged || len(fileColumns) > 0
 	if len(fileColumns) > 0 && targetFile != nil {
 		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, fileColumns); err != nil {
-			return errors.Wrap(err, "failed to update file metadata")
+			return nil, errors.Wrap(err, "failed to update file metadata")
 		}
 		for _, stalePath := range staleCovers {
 			if err := os.Remove(stalePath); err != nil && !os.IsNotExist(err) {
@@ -304,43 +318,50 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		}
 	}
 
-	return nil
+	return warnings, nil
+}
+
+// errCoverUnchanged reports that the proposed cover is already the stored
+// cover, so nothing was written and existing provenance is preserved.
+var errCoverUnchanged = errors.New("cover unchanged")
+
+// coverWarning turns a cover skip reason into the user-facing warning that
+// rides along with an otherwise successful apply.
+func coverWarning(err error) string {
+	return "Cover was not applied: " + err.Error() + "."
 }
 
 // applyCoverPage extracts the given page as the file's cover and sets the
-// complete Cover state on targetFile. It returns true when the cover columns
-// changed. Cover identity for page-based files is the page number: when the
-// proposed page equals the stored cover_page and its cover image exists on
-// disk, nothing is extracted and the existing provenance is preserved.
-func (h *handler) applyCoverPage(targetFile *models.File, bookFilepath string, page int, pluginSource string, log logger.Logger) bool {
+// complete Cover state on targetFile. It returns nil when the cover columns
+// changed, errCoverUnchanged for the identity no-op, and any other error when
+// the page was skipped. Cover identity for page-based files is the page
+// number: when the proposed page equals the stored cover_page and its cover
+// image exists on disk, nothing is extracted and the existing provenance is
+// preserved.
+func (h *handler) applyCoverPage(targetFile *models.File, bookFilepath string, page int, pluginSource string, log logger.Logger) error {
 	switch {
 	case page < 0:
-		log.Warn("plugin-provided coverPage is negative, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page})
-		return false
+		return errors.Errorf("cover page %d is negative", page)
 	case targetFile.CoverPage != nil && *targetFile.CoverPage == page && coverImageExists(targetFile):
-		return false
+		return errCoverUnchanged
 	case targetFile.PageCount == nil:
-		log.Warn("plugin-provided coverPage skipped: page count unknown", logger.Data{"file_id": targetFile.ID, "cover_page": page})
-		return false
+		return errors.New("the file's page count is unknown")
 	case page >= *targetFile.PageCount:
-		log.Warn("plugin-provided coverPage is out of range, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page, "page_count": *targetFile.PageCount})
-		return false
+		return errors.Errorf("cover page %d is out of range for a file with %d pages", page, *targetFile.PageCount)
 	case h.enrich.pageExtractor == nil:
-		log.Warn("plugin-provided coverPage skipped: no page extractor configured", logger.Data{"file_id": targetFile.ID})
-		return false
+		return errors.New("no page extractor is configured")
 	}
 
 	coverFilename, mimeType, err := h.enrich.pageExtractor.ExtractCoverPage(targetFile, bookFilepath, page, log)
 	if err != nil {
-		log.Warn("failed to extract plugin-provided cover page", logger.Data{"file_id": targetFile.ID, "cover_page": page, "error": err.Error()})
-		return false
+		return errors.Wrapf(err, "cover page %d could not be extracted", page)
 	}
 	coverFilename = filepath.Base(coverFilename)
 	targetFile.CoverPage = &page
 	targetFile.CoverImageFilename = &coverFilename
 	targetFile.CoverMimeType = &mimeType
 	targetFile.CoverSource = &pluginSource
-	return true
+	return nil
 }
 
 // coverImageExists reports whether the file's stored cover image is present
@@ -355,17 +376,16 @@ func coverImageExists(file *models.File) bool {
 
 // applyCoverImage writes md.CoverData next to the file and sets the complete
 // Cover state on targetFile. It returns the previous cover files that now
-// need removing and true when the cover columns changed. Bytes that do not
+// need removing, or an error when the cover was skipped. Bytes that do not
 // decode as a raster image (SVG, AVIF, an error body served as image/*) are
 // rejected so they never replace a working cover. The stored extension and
 // MIME type describe the normalized bytes on disk, not the download's
 // Content-Type. Stale covers are found on disk by base name, matching how
 // the scanner discovers covers, and the caller removes them only after the
 // column write succeeds.
-func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string, log logger.Logger) ([]string, bool) {
+func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string) ([]string, error) {
 	if fileutils.ImageResolution(md.CoverData) == 0 {
-		log.Warn("plugin-provided cover is not a decodable image, skipping", logger.Data{"file_id": targetFile.ID, "mime_type": md.CoverMimeType})
-		return nil, false
+		return nil, errors.Errorf("the downloaded file is not a decodable image (%s)", md.CoverMimeType)
 	}
 
 	coverDir := fileutils.ResolveCoverDirForWrite(bookFilepath, targetFile.Filepath)
@@ -382,8 +402,7 @@ func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 
 	if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
-		log.Warn("failed to write cover file", logger.Data{"file_id": targetFile.ID, "path": coverFilepath, "error": err.Error()})
-		return nil, false
+		return nil, errors.Wrap(err, "the cover file could not be written")
 	}
 
 	var stale []string
@@ -401,5 +420,5 @@ func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile
 	targetFile.CoverImageFilename = &coverFilename
 	targetFile.CoverMimeType = &normalizedMime
 	targetFile.CoverSource = &pluginSource
-	return stale, true
+	return stale, nil
 }

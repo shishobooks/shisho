@@ -281,3 +281,13 @@ type ApplyOverrides struct {
 	// "don't touch series" (the identify form's series checkbox was off).
 	SeriesEntries *[]SeriesEntry
 }
+
+// PluginApplyResponse is the reloaded book after POST /plugins/apply, plus
+// any warnings for selected fields that were accepted but not applied (for
+// example a proposed cover that could not be downloaded or decoded). The
+// apply itself succeeded, so the status is 200 and the warnings are the only
+// signal the client has to surface.
+type PluginApplyResponse struct {
+	models.Book `tstype:",extends"`
+	Warnings    []string `json:"warnings"`
+}

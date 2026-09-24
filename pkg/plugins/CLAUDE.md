@@ -72,6 +72,16 @@ Conventions and gotchas specific to this surface:
   payload structs (e.g. `InstallPluginPayload.Name`) carry `,omitempty` solely so
   tygo emits `?`; payloads are only unmarshaled server-side, so this never
   affects the wire.
+- **`POST /plugins/apply` returns `PluginApplyResponse`** (the reloaded
+  `models.Book` embedded with `tstype:",extends"`, plus `warnings: string[]`).
+  The book carries the same `cover_cache_key` that `GET /books/:id` computes.
+  `warnings` lists selected values that were accepted but skipped, currently
+  only covers (download failed, not a decodable image, page out of range,
+  extraction or write failed); the apply itself still returns 200 and the
+  form shows each warning as a toast after the success toast. Cover helpers
+  return an error for a skip and `errCoverUnchanged` for the identity no-op;
+  `persistMetadata` converts skip errors to warnings with `coverWarning`.
+  It is always a JSON array, never `null`.
 - **`SeriesEntry` / `ApplyOverrides` are not wire types**: `SeriesEntry` and
   selected-field presence are parsed from `PluginApplyPayload.Fields`, while
   other apply-only signals are assembled from the payload. Their generated TS

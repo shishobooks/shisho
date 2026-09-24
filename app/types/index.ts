@@ -99,6 +99,7 @@ export {
   type LibraryPluginOrderPlugin,
   type LibraryPluginOrderResponse,
   type PluginApplyPayload,
+  type PluginApplyResponse,
   type PluginConfigResponse,
   type PluginSearchError,
   type PluginSearchPayload,

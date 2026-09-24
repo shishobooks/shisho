@@ -120,6 +120,12 @@ beforeAll(() => {
 });
 
 const applyMock = vi.fn();
+const toastMock = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast: toastMock }));
 vi.mock("@/hooks/queries/plugins", async () => {
   const actual = await vi.importActual<
     typeof import("@/hooks/queries/plugins")
@@ -288,7 +294,40 @@ function getApplyButton() {
 describe("IdentifyReviewForm component", () => {
   beforeEach(() => {
     applyMock.mockReset();
-    applyMock.mockResolvedValue(undefined);
+    applyMock.mockResolvedValue({ warnings: [] });
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    toastMock.warning.mockReset();
+  });
+
+  it("surfaces apply warnings so a skipped cover is not reported as success", async () => {
+    const user = createUser();
+    applyMock.mockResolvedValue({
+      warnings: [
+        "Cover was not applied: the downloaded file is not a decodable image (image/svg+xml).",
+      ],
+    });
+    renderForm({ result: makeResult({ title: "A Different Title" }) });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        "Cover was not applied: the downloaded file is not a decodable image (image/svg+xml).",
+      ),
+    );
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it("shows only the success toast when the apply returns no warnings", async () => {
+    const user = createUser();
+    renderForm({ result: makeResult({ title: "A Different Title" }) });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1));
+    expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
   it("hides the Narrators field for non-M4B files", () => {
