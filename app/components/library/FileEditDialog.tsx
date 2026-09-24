@@ -498,8 +498,8 @@ export function FileEditDialog({
 
       // Apply pending review override change. Only fire if the user toggled
       // to an explicit value that differs from the file's saved override.
-      // draftReviewOverride === null means "auto" — never set by the user
-      // gesture, only by initial load when no override exists.
+      // draftReviewOverride === null means "auto". It is never set by the
+      // user gesture, only by initial load when no override exists.
       if (
         draftReviewOverride !== null &&
         draftReviewOverride !== (initialValues?.reviewOverride ?? null)

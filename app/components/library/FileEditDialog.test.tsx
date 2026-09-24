@@ -279,6 +279,7 @@ describe("FileEditDialog", () => {
     mockSetFileCoverPage.mockClear();
     mockUpdateFile.mockResolvedValue({});
     mockSetFileCoverPage.mockResolvedValue({});
+    mockUploadFileCover.mockResolvedValue({});
   });
 
   describe("cover page change race condition", () => {
