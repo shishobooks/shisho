@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 // createTestCBZWithPages creates a test CBZ file with the specified number of pages.
@@ -700,4 +702,119 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 	err = h.uploadFileCover(c)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Cover upload is not supported")
+}
+
+// newUploadCoverFixture creates an EPUB file row with a valid PNG cover on
+// disk and in the database, so an upload test can prove that cover survives
+// a rejected or failed replacement.
+func newUploadCoverFixture(t *testing.T) (db *bun.DB, e *echo.Echo, user *models.User, file *models.File, prevPath string, prevBytes []byte) {
+	t.Helper()
+	db = setupTestDB(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	library := &models.Library{Name: "Test Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	book := &models.Book{LibraryID: library.ID, Title: "Book", TitleSource: models.DataSourceFilepath, SortTitle: "Book", SortTitleSource: models.DataSourceFilepath, AuthorSource: models.DataSourceFilepath, Filepath: libraryDir}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	epubPath := filepath.Join(libraryDir, "book.epub")
+	require.NoError(t, os.WriteFile(epubPath, []byte("epub content"), 0644))
+	file = setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	prevPath = filepath.Join(libraryDir, "book.epub.cover.png")
+	prevBytes = makeTestPNGBytes(t, 4, 4)
+	require.NoError(t, os.WriteFile(prevPath, prevBytes, 0644))
+	prevFilename, prevMime, prevSource := "book.epub.cover.png", "image/png", models.DataSourceEPUBMetadata
+	file.CoverImageFilename = &prevFilename
+	file.CoverMimeType = &prevMime
+	file.CoverSource = &prevSource
+	_, err = db.NewUpdate().Model(file).Column("cover_image_filename", "cover_mime_type", "cover_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	user = loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e = setupTestServer(t, db)
+	return db, e, user, file, prevPath, prevBytes
+}
+
+func makeTestPNGBytes(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: 0, G: 0, B: 255, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return buf.Bytes()
+}
+
+func uploadCoverRequest(t *testing.T, fileID int, contentType, filename string, data []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="cover"; filename="`+filename+`"`)
+	partHeader.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+	_, err = part.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(fileID)+"/cover", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+func assertUploadCoverUntouched(t *testing.T, db *bun.DB, fileID int, prevPath string, prevBytes []byte) {
+	t.Helper()
+	got, err := os.ReadFile(prevPath)
+	require.NoError(t, err, "the previous cover must still exist")
+	assert.Equal(t, prevBytes, got, "the previous cover bytes must be untouched")
+
+	stored, err := NewService(db).RetrieveFile(context.Background(), RetrieveFileOptions{ID: &fileID})
+	require.NoError(t, err)
+	require.NotNil(t, stored.CoverImageFilename)
+	assert.Equal(t, "book.epub.cover.png", *stored.CoverImageFilename)
+	assert.Equal(t, "image/png", *stored.CoverMimeType)
+	assert.Equal(t, models.DataSourceEPUBMetadata, *stored.CoverSource)
+}
+
+// A truncated upload keeps a valid PNG header but no pixel data. It must be
+// rejected before the previous cover is touched.
+func TestUploadFileCover_RejectsTruncatedImage(t *testing.T) {
+	t.Parallel()
+	db, e, user, file, prevPath, prevBytes := newUploadCoverFixture(t)
+
+	truncated := makeTestPNGBytes(t, 8, 8)[:33]
+	rr := executeRequestWithUser(t, e, uploadCoverRequest(t, file.ID, "image/png", "cover.png", truncated), user)
+	require.Equal(t, http.StatusUnprocessableEntity, rr.Code, rr.Body.String())
+
+	assertUploadCoverUntouched(t, db, file.ID, prevPath, prevBytes)
+}
+
+// A failed write of the replacement must leave the previous cover readable
+// and its metadata unchanged.
+func TestUploadFileCover_FailedWriteKeepsPreviousCover(t *testing.T) {
+	t.Parallel()
+	db, e, user, file, prevPath, prevBytes := newUploadCoverFixture(t)
+	// A nonempty directory at the destination can be neither created over
+	// nor removed.
+	obstruction := filepath.Join(filepath.Dir(prevPath), "book.epub.cover.jpg")
+	require.NoError(t, os.Mkdir(obstruction, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(obstruction, "keep"), []byte("x"), 0600))
+
+	jpegData := func() []byte {
+		img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+		var buf bytes.Buffer
+		require.NoError(t, jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}))
+		return buf.Bytes()
+	}()
+	rr := executeRequestWithUser(t, e, uploadCoverRequest(t, file.ID, "image/jpeg", "cover.jpg", jpegData), user)
+	require.NotEqual(t, http.StatusOK, rr.Code, "the upload must not report success")
+
+	assertUploadCoverUntouched(t, db, file.ID, prevPath, prevBytes)
 }

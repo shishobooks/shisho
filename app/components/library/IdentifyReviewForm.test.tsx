@@ -827,9 +827,8 @@ describe("IdentifyReviewForm component", () => {
     await user.click(screen.getByRole("button", { name: /remove isbn-13/i }));
 
     await user.click(screen.getByRole("checkbox", { name: /apply abridged/i }));
-    await user.click(
-      screen.getByRole("checkbox", { name: /mark as abridged/i }),
-    );
+    await user.click(screen.getByRole("combobox", { name: /abridged value/i }));
+    await user.click(screen.getByRole("option", { name: "Not set" }));
 
     await user.click(getApplyButton());
 
@@ -1909,6 +1908,98 @@ describe("IdentifyReviewForm component", () => {
       expect(payload.fields).not.toHaveProperty("series");
       expect(payload.sources).not.toHaveProperty("series");
       expect(payload.sources.title).toBe("plugin");
+    });
+  });
+  // Abridged is a nullable boolean, so the form needs three distinct final
+  // values: true, false, and cleared. A plugin can propose `false`, and
+  // restoring that proposal must send `false` with plugin intent, not a clear.
+  describe("abridged control", () => {
+    const getAbridgedSelect = () =>
+      screen.getByRole("combobox", { name: /abridged value/i });
+
+    const choose = async (
+      user: ReturnType<typeof createUser>,
+      option: string,
+    ) => {
+      await user.click(getAbridgedSelect());
+      await user.click(screen.getByRole("option", { name: option }));
+    };
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    it("restores a false proposal as a Proposal Acceptance", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: false }),
+      });
+
+      // The proposal is applied by default. Show all rows first: choosing
+      // the saved value makes the row unchanged, which the Changed filter
+      // would hide before the value is restored.
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await choose(user, "Abridged");
+      await choose(user, "Unabridged");
+
+      const payload = await submit(user);
+      expect(payload.fields.abridged).toBe(false);
+      expect(payload.sources.abridged).toBe("plugin");
+    });
+
+    it("sends a manually chosen false with user intent", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: true }),
+      });
+
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply abridged/i }),
+      );
+      await choose(user, "Unabridged");
+
+      const payload = await submit(user);
+      expect(payload.fields.abridged).toBe(false);
+      expect(payload.sources.abridged).toBe("user");
+    });
+
+    it("sends an Explicit Clear as null with user intent", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: true }),
+      });
+
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply abridged/i }),
+      );
+      await choose(user, "Not set");
+
+      const payload = await submit(user);
+      expect(payload.fields.abridged).toBeNull();
+      expect(payload.sources.abridged).toBe("user");
+    });
+
+    it("omits the field entirely when Abridged is unchecked", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: false }),
+      });
+
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply abridged/i }),
+      );
+
+      const payload = await submit(user);
+      expect(payload.fields).not.toHaveProperty("abridged");
+      expect(payload.sources).not.toHaveProperty("abridged");
     });
   });
 });

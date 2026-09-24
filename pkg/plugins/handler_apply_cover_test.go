@@ -624,3 +624,46 @@ func TestApplyMetadata_Cover_AppliedCoverHasNoWarningAndCacheKey(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("%d-%d", m4b.ID, m4b.UpdatedAt.Unix()), resp.CoverCacheKey)
 	assert.NotEqual(t, staleKey, resp.CoverCacheKey)
 }
+
+// A truncated download passes header-only detection (the PNG signature and
+// IHDR chunk are intact) but cannot be fully decoded. It must be treated like
+// any other undecodable body: warn, and leave the previous cover, its
+// metadata, and its provenance untouched.
+func TestApplyMetadata_Cover_ImageBased_RejectsTruncatedImage(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	require.NoError(t, os.WriteFile(file.Filepath, []byte("fake epub"), 0600))
+	prevPath := filepath.Join(book.Filepath, "main.epub.cover.png")
+	prevBytes := makeApplyTestPNG(10, 10)
+	require.NoError(t, os.WriteFile(prevPath, prevBytes, 0600))
+	prevFilename, prevMime, prevSource := "main.epub.cover.png", "image/png", models.DataSourceManual
+	file.CoverImageFilename = &prevFilename
+	file.CoverMimeType = &prevMime
+	file.CoverSource = &prevSource
+
+	// Signature (8 bytes) plus the IHDR chunk (25 bytes): enough for
+	// image.DecodeConfig to report dimensions, not enough to decode pixels.
+	truncated := makeApplyTestPNG(2, 2)[:33]
+	srv := newCoverImageServer(t, http.StatusOK, "image/png", truncated)
+	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+	h := newCoverApplyTestHandler(store, srv, nil)
+
+	c := newApplyEchoContext(t, map[string]any{"cover_url": srv.URL + "/cover"})
+	require.NoError(t, h.applyMetadata(c))
+
+	resp := decodeApplyResponse(t, c)
+	require.Len(t, resp.Warnings, 1)
+	assert.Contains(t, resp.Warnings[0], "Cover was not applied")
+	assert.Contains(t, resp.Warnings[0], "not a decodable image")
+	assert.Empty(t, store.updatedFileColumns, "truncated bytes must not be applied")
+	assert.Equal(t, prevFilename, *file.CoverImageFilename)
+	assert.Equal(t, prevMime, *file.CoverMimeType)
+	assert.Equal(t, prevSource, *file.CoverSource)
+	got, err := os.ReadFile(prevPath)
+	require.NoError(t, err)
+	assert.Equal(t, prevBytes, got, "previous cover bytes must be untouched")
+	entries, err := filepath.Glob(filepath.Join(book.Filepath, "main.epub.cover.*"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{prevPath}, entries, "no new cover file may be written")
+}

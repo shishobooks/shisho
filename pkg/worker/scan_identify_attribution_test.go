@@ -13,9 +13,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
@@ -109,11 +111,21 @@ func newIdentifyApplyServer(t *testing.T, tc *testContext) *echo.Echo {
 		TagFinder:       tags.NewService(tc.db),
 		PublisherFinder: publishers.NewService(tc.db),
 		SearchIndexer:   tc.worker.searchService,
+		// The production extractor, so page-based cover applies exercise the
+		// real on-disk install rather than a stub.
+		PageExtractor: books.NewPluginPageExtractor(cbzpages.NewCache(t.TempDir()), pdfpages.NewCache(t.TempDir(), 150, 85)),
 	})
 	return e
 }
 
 func postIdentifyApply(t *testing.T, e *echo.Echo, payload plugins.PluginApplyPayload) {
+	t.Helper()
+	postIdentifyApplyResponse(t, e, payload)
+}
+
+// postIdentifyApplyResponse is postIdentifyApply for tests that assert on the
+// response body, such as the warnings a skipped cover produces.
+func postIdentifyApplyResponse(t *testing.T, e *echo.Echo, payload plugins.PluginApplyPayload) plugins.PluginApplyResponse {
 	t.Helper()
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -122,6 +134,9 @@ func postIdentifyApply(t *testing.T, e *echo.Echo, payload plugins.PluginApplyPa
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp plugins.PluginApplyResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
 }
 
 // identifyScanFixture is a scanned one-file library whose embedded metadata

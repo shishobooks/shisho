@@ -202,6 +202,12 @@ func isBool(v any) bool {
 // nil when the key is absent or is a string (handled by convertFieldsToMetadata).
 // Returns a non-nil pointer to an empty slice when the key is an empty array
 // (meaning "clear all series").
+//
+// Both shapes validate their Series Number group strictly. The scalar shape
+// carries its group in the top-level series_number, series_number_end, and
+// series_number_unit keys; convertFieldsToMetadata parses that group
+// leniently, so without this check a malformed group would be dropped and an
+// unnumbered membership persisted alongside the other selected fields.
 func extractSeriesEntries(fields map[string]any) (*[]SeriesEntry, error) {
 	v, ok := fields["series"]
 	if !ok {
@@ -209,6 +215,11 @@ func extractSeriesEntries(fields map[string]any) (*[]SeriesEntry, error) {
 	}
 	arr, ok := v.([]any)
 	if !ok {
+		if name, isString := v.(string); isString {
+			if _, _, _, valid := strictSeriesNumberGroupFromFields(fields); !valid {
+				return nil, errcodes.ValidationError(fmt.Sprintf("series %q has an invalid series number group", strings.TrimSpace(name)))
+			}
+		}
 		return nil, nil // scalar string, handled by convertFieldsToMetadata
 	}
 	entries := make([]SeriesEntry, 0, len(arr))

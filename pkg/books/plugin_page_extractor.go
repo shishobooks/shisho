@@ -26,6 +26,6 @@ func NewPluginPageExtractor(cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) 
 
 // ExtractCoverPage satisfies the plugins.pageExtractor interface by
 // delegating to ExtractCoverPageToFile.
-func (p *PluginPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, log logger.Logger) (string, string, error) {
-	return ExtractCoverPageToFile(file, bookFilepath, page, p.cbzCache, p.pdfCache, log)
+func (p *PluginPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, []string, error) {
+	return ExtractCoverPageToFile(file, bookFilepath, page, p.cbzCache, p.pdfCache)
 }

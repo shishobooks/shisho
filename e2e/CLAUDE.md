@@ -106,6 +106,8 @@ Test endpoints are only registered when `ENVIRONMENT=test`.
 | `/api/test/plugins/fixture.zip` | GET | Fixture plugin zipped for install flows |
 | `/api/test/plugins/fixture-info` | GET | `{scope, id, version, download_url, sha256}` for the fixture |
 
+The fixture plugin (`pkg/testutils/plugin_fixture.go`) is an EPUB metadata enricher that always proposes one result, `Fixture Title` with `abridged: false`, so a seeded plugin plus a seeded EPUB book is enough to drive the Identify dialog end to end (see `identify.spec.ts`). The Identify dialog searches on open; results are buttons named by their title, and the book page's actions menu trigger is labeled `Book actions`. Seed a fresh book per test: once a proposal is applied, its rows are unchanged and hidden by the Changed filter.
+
 ### Backend Pattern
 
 ```go

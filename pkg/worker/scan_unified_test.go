@@ -2969,7 +2969,7 @@ func TestRecoverMissingCover_RespectsCoverPage(t *testing.T) {
 	existingCoverPath := fileutils.CoverExistsWithBaseName(bookDir, "comic.cbz.cover")
 	require.NotEmpty(t, existingCoverPath)
 	require.NoError(t, os.Remove(existingCoverPath))
-	newCover, newMime, err := extractCBZPageCover(cbzPath, bookDir, "comic.cbz.cover", 2)
+	newCover, newMime, _, err := extractCBZPageCover(cbzPath, bookDir, "comic.cbz.cover", 2)
 	require.NoError(t, err)
 	file.CoverImageFilename = &newCover
 	file.CoverMimeType = &newMime

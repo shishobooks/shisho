@@ -1541,16 +1541,6 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	filename := filepath.Base(file.Filepath)
 	coverBaseName := filename + ".cover"
 
-	// Delete any existing cover with this base name (regardless of extension)
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, err := os.Stat(existingPath); err == nil {
-			if err := os.Remove(existingPath); err != nil {
-				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
-			}
-		}
-	}
-
 	// Read the uploaded file data
 	src, err := fileHeader.Open()
 	if err != nil {
@@ -1563,8 +1553,15 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Normalize the image to strip problematic metadata
-	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(uploadedData, contentType)
+	// Normalize the image to strip problematic metadata. The full decode is
+	// also the validation: a truncated upload keeps a valid header, so this
+	// is the only check that catches it, and it runs before the previous
+	// cover is touched.
+	normalizedData, normalizedMime, err := fileutils.NormalizeImage(uploadedData, contentType)
+	if err != nil {
+		log.Warn("uploaded cover is not a decodable image", logger.Data{"file_id": file.ID, "content_type": contentType, "error": err.Error()})
+		return errcodes.ValidationError("The uploaded file is not a decodable image")
+	}
 
 	// Determine final extension based on normalized MIME type
 	finalExt := getExtensionFromMimeType(normalizedMime)
@@ -1572,17 +1569,14 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		finalExt = ext // fallback to original extension
 	}
 
-	// Save the normalized cover
+	// Install the replacement atomically. Previous covers at other
+	// extensions are removed only after the database names the replacement,
+	// so neither a failed write nor a failed update destroys a working cover.
 	coverFilePath := filepath.Join(coverDir, coverBaseName+finalExt)
-	dst, err := os.Create(coverFilePath)
-	if err != nil {
+	if err := fileutils.WriteFileAtomic(coverFilePath, normalizedData, 0644); err != nil {
 		return errors.WithStack(err)
 	}
-	defer dst.Close()
-
-	if _, err := dst.Write(normalizedData); err != nil {
-		return errors.WithStack(err)
-	}
+	staleCovers := fileutils.OtherCoverExtensions(coverDir, coverBaseName, finalExt)
 
 	log.Info("uploaded file cover", logger.Data{
 		"file_id":       file.ID,
@@ -1590,24 +1584,18 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		"normalized_to": normalizedMime,
 	})
 
-	// Update file's cover metadata with normalized MIME type
-	file.CoverMimeType = &normalizedMime
-	file.CoverSource = strPtr(models.DataSourceManual)
-
-	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
-		Columns: []string{"cover_mime_type", "cover_source"},
-	}); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Update the file's cover_image_filename
+	// Write the complete cover state in one column set, so a failed update
+	// can never leave the row naming the old file with the new provenance.
 	coverFilename := coverBaseName + finalExt
 	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &normalizedMime
+	file.CoverSource = strPtr(models.DataSourceManual)
 	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
-		Columns: []string{"cover_image_filename"},
+		Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source"},
 	}); err != nil {
 		return errors.WithStack(err)
 	}
+	RemoveStaleCovers(staleCovers, log)
 
 	// Reload the file
 	file, err = h.bookService.RetrieveFileWithRelations(ctx, file.ID)

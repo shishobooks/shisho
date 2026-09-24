@@ -161,10 +161,15 @@ Conventions and gotchas specific to this surface:
     `FindOrCreateSeries` still describes the Series NAME and is untouched by
     attribution; never read `Series.NameSource` as membership provenance. The
     scalar `md.Series` path (plugin results) is routed through the same
-    function as the Identify array path. A malformed Series Number group in
-    `fields.series` is a validation error from `extractSeriesEntries` before
-    any field is persisted (`strictSeriesNumberGroupFromFields`); the plugin
-    SDK path (`seriesNumberGroupFromFields`) keeps dropping malformed groups.
+    function as the Identify array path. A malformed Series Number group is a
+    validation error from `extractSeriesEntries` before any field is
+    persisted (`strictSeriesNumberGroupFromFields`), in both shapes: entries
+    of an array `fields.series`, and the top-level `series_number`,
+    `series_number_end`, and `series_number_unit` keys next to a string
+    `fields.series`. `convertFieldsToMetadata` still parses the top-level
+    group leniently, so never persist its Series fields without that check.
+    The plugin SDK path (`parsePluginSeriesNumberGroup`) keeps dropping
+    malformed groups from hook results.
   - Covers have no edit state, so the form sends no cover field to keep the
     current Cover and `cover_url` / `cover_page` to choose the proposal, which
     is always a Proposal Acceptance stamped `plugin:<scope>/<id>`. Both paths
@@ -177,18 +182,36 @@ Conventions and gotchas specific to this surface:
     Image-based Covers have no identity check (no content hashing), and only
     page-based `cover_source` is consulted by the scanner. A failed download,
     extraction, or write leaves the previous Cover columns untouched, and
-    bytes that do not decode as a raster image are rejected. The image path
-    finds previous covers on disk by base name (every `CoverImageExtensions`
-    entry, the same way the scanner discovers covers) and removes them only
-    after the `UpdateFile` flush succeeds.
+    bytes that do not fully decode as a raster image are rejected. The
+    validation is `fileutils.NormalizeImage`'s error, which decodes every
+    pixel; `fileutils.ImageResolution` only reads the header and accepts a
+    truncated body, so never use it as the gate. Both paths install the new
+    image with `fileutils.WriteFileAtomic` (temp file plus rename in the
+    cover directory) before any previous cover is removed, so a failed write
+    never destroys the working cover on disk. Both paths report previous
+    covers by base name (`fileutils.OtherCoverExtensions`, every
+    `CoverImageExtensions` entry, the same way the scanner discovers covers)
+    instead of deleting them: `applyCoverImage` returns the list and
+    `applyCoverPage` passes through the list from
+    `pageExtractor.ExtractCoverPage`, and `persistMetadata` removes them
+    only after the `UpdateFile` flush succeeds, so a failed flush never
+    leaves the row naming a deleted file. The extractor interface therefore
+    returns `(filename, mimeType, stale, err)`; a stub must return the stale
+    paths it wants removed. The whole-apply DB transaction remains out of
+    scope.
     End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
     `pkg/worker/scan_identify_relationships_test.go`,
     `pkg/worker/identify_relationship_apply_test.go`,
-    `pkg/worker/identify_series_apply_test.go`, and
-    `pkg/worker/identify_identifier_apply_test.go`. The shared
-    `auto-enricher` fixture there proposes a description, a publisher, and
-    two identifiers on every ordinary Scan.
+    `pkg/worker/identify_series_apply_test.go`,
+    `pkg/worker/identify_identifier_apply_test.go`,
+    `pkg/worker/identify_scalar_clear_test.go` (native EPUB and M4B
+    fixtures, so a cleared scalar is provably restored from embedded metadata
+    rather than a plugin parser), and `pkg/worker/identify_cover_apply_test.go`
+    (the production page extractor and the same-file cover cache key). The
+    shared `auto-enricher` fixture there proposes a description, a publisher,
+    and two identifiers on every ordinary Scan; `newIdentifyApplyServer`
+    wires `books.NewPluginPageExtractor` like `pkg/server` does.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.
