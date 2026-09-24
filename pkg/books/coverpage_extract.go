@@ -15,8 +15,9 @@ import (
 // ExtractCoverPageToFile renders `page` from the given page-based file (CBZ or
 // PDF) via the appropriate page cache and writes the rendered image as the
 // cover file alongside the book. Returns the cover filename (not path) and
-// MIME type. Any existing cover image with the same base name is removed first
-// regardless of extension.
+// MIME type. The new cover is installed atomically before any existing cover
+// image with the same base name and a different extension is removed, so a
+// failed write leaves the previous cover readable on disk.
 //
 // Callers are responsible for updating the file's CoverPage, CoverImageFilename,
 // CoverMimeType, and CoverSource fields on the model and persisting them.
@@ -52,20 +53,28 @@ func ExtractCoverPageToFile(
 		ext = filepath.Ext(cachedPath)
 	}
 
-	// Delete any existing cover with this base name (regardless of extension).
+	coverFilename := coverBaseName + ext
+	coverFilepath := filepath.Join(coverDir, coverFilename)
+	pageData, err := os.ReadFile(cachedPath)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to read extracted cover page")
+	}
+	if err := fileutils.WriteFileAtomic(coverFilepath, pageData, 0644); err != nil {
+		return "", "", errors.Wrap(err, "failed to save cover image")
+	}
+
+	// Only now that the replacement is in place, remove previous covers with
+	// this base name at other extensions.
 	for _, existingExt := range fileutils.CoverImageExtensions {
+		if existingExt == ext {
+			continue
+		}
 		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
 		if _, err := os.Stat(existingPath); err == nil {
 			if err := os.Remove(existingPath); err != nil {
 				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
 			}
 		}
-	}
-
-	coverFilename := coverBaseName + ext
-	coverFilepath := filepath.Join(coverDir, coverFilename)
-	if err := copyFile(cachedPath, coverFilepath); err != nil {
-		return "", "", errors.Wrap(err, "failed to save cover image")
 	}
 
 	return coverFilename, mimeType, nil

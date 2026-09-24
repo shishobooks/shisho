@@ -379,14 +379,19 @@ func coverImageExists(file *models.File) bool {
 // applyCoverImage writes md.CoverData next to the file and sets the complete
 // Cover state on targetFile. It returns the previous cover files that now
 // need removing, or an error when the cover was skipped. Bytes that do not
-// decode as a raster image (SVG, AVIF, an error body served as image/*) are
-// rejected so they never replace a working cover. The stored extension and
-// MIME type describe the normalized bytes on disk, not the download's
-// Content-Type. Stale covers are found on disk by base name, matching how
-// the scanner discovers covers, and the caller removes them only after the
-// column write succeeds.
+// fully decode as a raster image (SVG, AVIF, an error body served as image/*,
+// a download truncated after its header) are rejected so they never replace
+// a working cover. The stored extension and MIME type describe the
+// normalized bytes on disk, not the download's Content-Type. Stale covers
+// are found on disk by base name, matching how the scanner discovers covers,
+// and the caller removes them only after the column write succeeds.
 func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string, log logger.Logger) ([]string, error) {
-	if fileutils.ImageResolution(md.CoverData) == 0 {
+	// NormalizeImage decodes every pixel, so its error is the validation. A
+	// header-only check would accept a truncated body whose signature and
+	// header are intact.
+	normalizedData, normalizedMime, err := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
+	if err != nil {
+		log.Warn("downloaded cover is not a decodable image", logger.Data{"file_id": targetFile.ID, "mime_type": md.CoverMimeType, "error": err.Error()})
 		return nil, errors.Errorf("the downloaded file is not a decodable image (%s)", md.CoverMimeType)
 	}
 
@@ -394,7 +399,6 @@ func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile
 	coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
 
 	// A decodable image normalizes to exactly one of JPEG or PNG.
-	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
 	coverExt := ".png"
 	if normalizedMime == "image/jpeg" {
 		coverExt = ".jpg"
@@ -403,7 +407,10 @@ func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile
 	coverFilename := coverBaseName + coverExt
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 
-	if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
+	// Atomic, so a failed write over a same-extension cover leaves the
+	// previous bytes intact. 0644 matches the scanner's and the page path's
+	// cover files.
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
 		log.Warn("failed to write cover file", logger.Data{"file_id": targetFile.ID, "path": coverFilepath, "error": err.Error()})
 		return nil, errors.New("the cover file could not be written")
 	}

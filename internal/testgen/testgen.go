@@ -14,6 +14,10 @@ type EPUBOptions struct {
 	Authors       []string
 	Series        string
 	SeriesNumber  *float64
+	Description   string // dc:description
+	Publisher     string // dc:publisher
+	Language      string // dc:language, defaults to "en"
+	Date          string // dc:date, e.g. "2020-01-02"
 	HasCover      bool
 	CoverMimeType string // "image/jpeg" or "image/png", defaults to "image/png"
 	// Identifiers are extra dc:identifier elements written after the default

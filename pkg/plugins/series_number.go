@@ -43,8 +43,10 @@ func optionalJSString(value goja.Value) (*string, bool) {
 	return &exported, true
 }
 
-// seriesNumberGroupFromFields is the lenient variant for plugin results: a
-// malformed group is dropped as a whole rather than rejected.
+// seriesNumberGroupFromFields is the lenient variant used by
+// convertFieldsToMetadata: a malformed group is dropped as a whole rather
+// than rejected. The apply handler rejects the same group first through
+// extractSeriesEntries, so a dropped group never reaches persistence.
 func seriesNumberGroupFromFields(fields map[string]any) (*float64, *float64, *string) {
 	start, end, unit, _ := strictSeriesNumberGroupFromFields(fields)
 	return start, end, unit

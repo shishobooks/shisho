@@ -931,3 +931,43 @@ func TestApplyMetadata_ScalarSeries_WritesSeriesNumberRange(t *testing.T) {
 	require.NotNil(t, bs.SeriesNumberUnit, "scalar series path must write SeriesNumberUnit")
 	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
 }
+
+// A malformed Series Number group must be rejected at the apply boundary in
+// the scalar shape too, not just in the array shape. Silently dropping the
+// group would persist an unnumbered membership and still apply the other
+// selected fields, so nothing may be written.
+func TestApplyMetadata_ScalarSeries_RejectsMalformedNumberGroup(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]map[string]any{
+		"reversed range":     {"series_number": 3.0, "series_number_end": 1.0},
+		"end without start":  {"series_number_end": 3.0},
+		"unit without start": {"series_number_unit": "volume"},
+		"non-numeric end":    {"series_number": 1.0, "series_number_end": "3"},
+		"unknown unit":       {"series_number": 1.0, "series_number_unit": "issue"},
+	}
+	for name, group := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			book := newApplyTestBook(t, "Original")
+			store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+			h, rel := newApplyTestHandlerWithRelStore(store)
+			fields := map[string]any{"title": "Changed", "series": "Saga"}
+			for k, v := range group {
+				fields[k] = v
+			}
+
+			err := h.applyMetadata(newApplyEchoContext(t, fields))
+
+			var applyErr *errcodes.Error
+			require.ErrorAs(t, err, &applyErr)
+			assert.Equal(t, http.StatusUnprocessableEntity, applyErr.HTTPCode)
+			assert.Empty(t, store.updatedBookColumns, "no field may be persisted after a rejected apply")
+			assert.Equal(t, "Original", book.Title)
+			assert.Empty(t, rel.capturedBookSeries)
+			assert.False(t, rel.deleteBookSeriesCalled)
+			assert.False(t, store.organizeCalled)
+		})
+	}
+}

@@ -2171,41 +2171,71 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("abridged", v)}
                   status={fieldStatus.abridged}
                 >
-                  <div
-                    className={cn(
-                      "flex items-center gap-2",
-                      !decisions.abridged && "pointer-events-none",
+                  {/* Abridged is a nullable boolean. Unlike the Edit form's
+                      opt-in checkbox, Identify must distinguish an
+                      explicit `false` (a plugin can propose one, and
+                      restoring that proposal is a Proposal Acceptance)
+                      from an Explicit Clear, which nulls the value and its
+                      source so a later Scan may repopulate it. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="w-40">
+                        <Select
+                          disabled={
+                            isDisabled("abridged") || !decisions.abridged
+                          }
+                          onValueChange={(value) =>
+                            setAbridged(
+                              value === "abridged"
+                                ? true
+                                : value === "unabridged"
+                                  ? false
+                                  : null,
+                            )
+                          }
+                          value={
+                            abridged === true
+                              ? "abridged"
+                              : abridged === false
+                                ? "unabridged"
+                                : "unset"
+                          }
+                        >
+                          <SelectTrigger
+                            aria-label="Abridged value"
+                            className="cursor-pointer"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem
+                              className="cursor-pointer"
+                              value="abridged"
+                            >
+                              Abridged
+                            </SelectItem>
+                            <SelectItem
+                              className="cursor-pointer"
+                              value="unabridged"
+                            >
+                              Unabridged
+                            </SelectItem>
+                            <SelectItem
+                              className="cursor-pointer"
+                              value="unset"
+                            >
+                              Not set
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </TooltipTrigger>
+                    {!decisions.abridged && (
+                      <TooltipContent>
+                        Apply this field first to edit
+                      </TooltipContent>
                     )}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div>
-                          <Checkbox
-                            aria-label="Mark as abridged"
-                            checked={abridged === true}
-                            disabled={
-                              isDisabled("abridged") || !decisions.abridged
-                            }
-                            id="identify-abridged"
-                            onCheckedChange={(checked) =>
-                              setAbridged(checked === true ? true : null)
-                            }
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      {!decisions.abridged && (
-                        <TooltipContent>
-                          Apply this field first to edit
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                    <Label
-                      className="cursor-pointer text-sm font-normal text-muted-foreground"
-                      htmlFor="identify-abridged"
-                    >
-                      This is an abridged edition
-                    </Label>
-                  </div>
+                  </Tooltip>
                 </FieldRow>
               </div>
             )}
