@@ -269,15 +269,15 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 					// Same page, cover present: nothing to do and nothing to report.
 				default:
 					log.Warn("plugin-provided coverPage skipped", logger.Data{"file_id": targetFile.ID, "cover_page": *md.CoverPage, "error": err.Error()})
-					warnings = append(warnings, coverWarning(err))
+					warnings = append(warnings, coverWarning(err.Error()))
 				}
 			}
 		} else if len(md.CoverData) > 0 {
 			// Image-based: write the downloaded or plugin-supplied bytes.
-			stale, err := applyCoverImage(targetFile, book.Filepath, md, pluginSource)
+			stale, err := applyCoverImage(targetFile, book.Filepath, md, pluginSource, log)
 			if err != nil {
 				log.Warn("plugin-provided cover skipped", logger.Data{"file_id": targetFile.ID, "error": err.Error()})
-				warnings = append(warnings, coverWarning(err))
+				warnings = append(warnings, coverWarning(err.Error()))
 			} else {
 				fileColumns = append(fileColumns, "cover_image_filename", "cover_mime_type", "cover_source")
 				staleCovers = stale
@@ -326,9 +326,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 var errCoverUnchanged = errors.New("cover unchanged")
 
 // coverWarning turns a cover skip reason into the user-facing warning that
-// rides along with an otherwise successful apply.
-func coverWarning(err error) string {
-	return "Cover was not applied: " + err.Error() + "."
+// rides along with an otherwise successful apply. Reasons are short, fixed
+// sentences: filesystem paths and wrapped OS errors belong in the log only.
+func coverWarning(reason string) string {
+	return "Cover was not applied: " + reason + "."
 }
 
 // applyCoverPage extracts the given page as the file's cover and sets the
@@ -354,7 +355,8 @@ func (h *handler) applyCoverPage(targetFile *models.File, bookFilepath string, p
 
 	coverFilename, mimeType, err := h.enrich.pageExtractor.ExtractCoverPage(targetFile, bookFilepath, page, log)
 	if err != nil {
-		return errors.Wrapf(err, "cover page %d could not be extracted", page)
+		log.Warn("failed to extract plugin-provided cover page", logger.Data{"file_id": targetFile.ID, "cover_page": page, "error": err.Error()})
+		return errors.Errorf("cover page %d could not be extracted", page)
 	}
 	coverFilename = filepath.Base(coverFilename)
 	targetFile.CoverPage = &page
@@ -383,7 +385,7 @@ func coverImageExists(file *models.File) bool {
 // Content-Type. Stale covers are found on disk by base name, matching how
 // the scanner discovers covers, and the caller removes them only after the
 // column write succeeds.
-func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string) ([]string, error) {
+func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string, log logger.Logger) ([]string, error) {
 	if fileutils.ImageResolution(md.CoverData) == 0 {
 		return nil, errors.Errorf("the downloaded file is not a decodable image (%s)", md.CoverMimeType)
 	}
@@ -402,7 +404,8 @@ func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 
 	if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
-		return nil, errors.Wrap(err, "the cover file could not be written")
+		log.Warn("failed to write cover file", logger.Data{"file_id": targetFile.ID, "path": coverFilepath, "error": err.Error()})
+		return nil, errors.New("the cover file could not be written")
 	}
 
 	var stale []string

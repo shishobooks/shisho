@@ -113,7 +113,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
 		}
 		if !DownloadCoverFromURL(ctx, md, allowedDomains, log) {
-			warnings = append(warnings, coverWarning(errors.New("the cover could not be downloaded")))
+			warnings = append(warnings, coverWarning("the cover could not be downloaded"))
 		}
 	}
 

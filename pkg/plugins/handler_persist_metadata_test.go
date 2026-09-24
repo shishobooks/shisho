@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -50,10 +51,12 @@ func (s *stubBookStoreForPersist) RetrieveBook(_ context.Context, _ int) (*model
 	return s.book, nil
 }
 
-func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, _ *models.File, columns []string) error {
+func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, file *models.File, columns []string) error {
 	if s.updateFileErr != nil {
 		return s.updateFileErr
 	}
+	// Mirror books.Service.UpdateFile, which bumps updated_at on every write.
+	file.UpdatedAt = time.Now()
 	s.updatedFileColumns = append(s.updatedFileColumns, append([]string(nil), columns...))
 	return nil
 }
@@ -277,8 +280,10 @@ func TestPersistMetadata_CoverPage_OutOfBounds(t *testing.T) {
 
 			md := &mediafile.ParsedMetadata{CoverPage: &tc.page}
 
-			_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+			warnings, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 			require.NoError(t, err)
+			require.Len(t, warnings, 1, "an invalid page is reported as a warning")
+			assert.Contains(t, warnings[0], "Cover was not applied")
 
 			assert.Empty(t, extractor.calls, "extractor should not be called for invalid page")
 			assert.Nil(t, file.CoverPage, "file.CoverPage should remain unchanged")
@@ -306,8 +311,11 @@ func TestPersistMetadata_CoverPage_ExtractorError(t *testing.T) {
 	page := 3
 	md := &mediafile.ParsedMetadata{CoverPage: &page}
 
-	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err, "extractor errors should be logged, not returned")
+	warnings, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	require.NoError(t, err, "extractor errors are reported as warnings, not returned")
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "Cover was not applied: cover page 3 could not be extracted.", warnings[0])
+	assert.NotContains(t, warnings[0], "extraction failed", "the extractor's internal error must stay in the log")
 
 	require.Len(t, extractor.calls, 1, "extractor should still be called once")
 	assert.Nil(t, file.CoverPage, "file.CoverPage should remain unchanged")

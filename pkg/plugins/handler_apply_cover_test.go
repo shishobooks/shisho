@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -215,6 +216,10 @@ func TestApplyMetadata_Cover_ImageBased_FailedWriteLeavesPreviousIntact(t *testi
 	require.NoError(t, h.applyMetadata(c))
 
 	assert.Empty(t, store.updatedFileColumns, "no file columns should be written after a failed cover write")
+	resp := decodeApplyResponse(t, c)
+	require.Len(t, resp.Warnings, 1)
+	assert.Equal(t, "Cover was not applied: the cover file could not be written.", resp.Warnings[0])
+	assert.NotContains(t, resp.Warnings[0], book.Filepath, "filesystem paths must not reach the user")
 	assert.Equal(t, prevFilename, *file.CoverImageFilename)
 	assert.Equal(t, prevMime, *file.CoverMimeType)
 	assert.Equal(t, prevSource, *file.CoverSource)
@@ -283,6 +288,7 @@ func TestApplyMetadata_Cover_PageBased_SamePageIsNoOp(t *testing.T) {
 
 	assert.Empty(t, extractor.calls, "choosing the current page must not re-extract")
 	assert.Empty(t, store.updatedFileColumns, "choosing the current page must not write file columns")
+	assert.Empty(t, decodeApplyResponse(t, c).Warnings, "the identity no-op is not a skipped cover")
 	assert.Equal(t, 3, *file.CoverPage)
 	assert.Equal(t, prevFilename, *file.CoverImageFilename)
 	assert.Equal(t, prevMime, *file.CoverMimeType)
@@ -353,6 +359,10 @@ func TestApplyMetadata_Cover_PageBased_FailedExtractionLeavesPreviousIntact(t *t
 	require.NoError(t, h.applyMetadata(c))
 
 	assert.Empty(t, store.updatedFileColumns, "no file columns should be written after a failed extraction")
+	resp := decodeApplyResponse(t, c)
+	require.Len(t, resp.Warnings, 1)
+	assert.Equal(t, "Cover was not applied: cover page 5 could not be extracted.", resp.Warnings[0])
+	assert.NotContains(t, resp.Warnings[0], "boom", "the extractor's internal error must stay in the log")
 	assert.Equal(t, 0, *file.CoverPage)
 	assert.Equal(t, prevFilename, *file.CoverImageFilename)
 	assert.Equal(t, prevMime, *file.CoverMimeType)
@@ -588,8 +598,17 @@ func TestApplyMetadata_Cover_AppliedCoverHasNoWarningAndCacheKey(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
-	book.Library = &models.Library{ID: book.LibraryID, CoverAspectRatio: "book"}
 	require.NoError(t, os.WriteFile(file.Filepath, []byte("fake epub"), 0600))
+	// The library prefers audiobook covers, so the selector must consult the
+	// aspect ratio: with only an EPUB present it falls back to that file. A
+	// handler that skipped the library lookup would still compute the same
+	// key here, so also pin the selection against a second, preferred file.
+	book.Library = &models.Library{ID: book.LibraryID, CoverAspectRatio: models.CoverAspectRatioAudiobook}
+	m4bCover := "audio.m4b.cover.jpg"
+	m4b := &models.File{ID: 2, BookID: book.ID, LibraryID: book.LibraryID, Filepath: filepath.Join(book.Filepath, "audio.m4b"), FileType: models.FileTypeM4B, FileRole: models.FileRoleMain, CoverImageFilename: &m4bCover, UpdatedAt: time.Unix(1_700_000_000, 0)}
+	book.Files = append(book.Files, m4b)
+	staleKey := fmt.Sprintf("%d-%d", file.ID, file.UpdatedAt.Unix())
+
 	srv := newCoverImageServer(t, http.StatusOK, "image/jpeg", makePersistTestJPEG(400, 600))
 	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
 	h := newCoverApplyTestHandler(store, srv, nil)
@@ -599,9 +618,9 @@ func TestApplyMetadata_Cover_AppliedCoverHasNoWarningAndCacheKey(t *testing.T) {
 
 	resp := decodeApplyResponse(t, c)
 	assert.Empty(t, resp.Warnings)
-	// The reloaded book must carry a usable cover cache key, the same way
-	// GET /books/:id does, so a consumer of this response never builds a
-	// stale cover URL.
-	assert.Equal(t, fmt.Sprintf("%d-%d", file.ID, file.UpdatedAt.Unix()), resp.CoverCacheKey)
-	assert.NotEmpty(t, resp.CoverCacheKey)
+	// The reloaded book must carry the cover cache key GET /books/:id would
+	// compute for this library, so a consumer of this response never builds
+	// a stale cover URL. The audiobook preference selects the M4B's cover.
+	assert.Equal(t, fmt.Sprintf("%d-%d", m4b.ID, m4b.UpdatedAt.Unix()), resp.CoverCacheKey)
+	assert.NotEqual(t, staleKey, resp.CoverCacheKey)
 }
