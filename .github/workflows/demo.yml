@@ -1,9 +1,15 @@
 name: Demo
 
+# Deploys the Public Demo. The Release workflow calls this after the Docker
+# manifest is published, because releases are created with GITHUB_TOKEN and
+# GitHub does not start workflows from events that token causes.
 on:
-  release:
-    types:
-      - published
+  workflow_call:
+    inputs:
+      version:
+        description: "Release tag to deploy"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -20,6 +26,11 @@ permissions:
 concurrency:
   group: demo-deploy
   cancel-in-progress: false
+
+env:
+  # First release that includes Demo Mode. Anything older ignores DEMO_MODE and
+  # would come up fully writable with the corpus's published admin password.
+  DEMO_MIN_VERSION: v0.0.51
 
 jobs:
   deploy:
@@ -40,46 +51,26 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "$EVENT_NAME" = "release" ]; then
-            tag="$RELEASE_TAG"
-          elif [ -n "$INPUT_VERSION" ]; then
+          if [ -n "$INPUT_VERSION" ]; then
             tag="$INPUT_VERSION"
           else
             tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
           fi
           tag="v${tag#v}"
+          lowest=$(printf '%s\n%s\n' "$DEMO_MIN_VERSION" "$tag" | sort -V | head -n1)
+          if [ "$lowest" != "$DEMO_MIN_VERSION" ]; then
+            echo "::error::$tag predates $DEMO_MIN_VERSION, the first release with Demo Mode. Refusing to deploy a writable instance."
+            exit 1
+          fi
           # The multi-arch manifest on ghcr.io is tagged without the "v" prefix.
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "image_tag=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "Deploying Shisho $tag (ghcr.io/shishobooks/shisho:${tag#v})"
 
-      - name: Wait for the release image
-        env:
-          IMAGE_TAG: ${{ steps.version.outputs.image_tag }}
-        run: |
-          # On "release: published" the Docker jobs of the Release workflow may
-          # still be running, so poll ghcr.io until the manifest exists.
-          token=$(curl -fsS "https://ghcr.io/token?scope=repository:shishobooks/shisho:pull" | jq -r .token)
-          for attempt in $(seq 1 60); do
-            if curl -fsS -o /dev/null \
-                -H "Authorization: Bearer $token" \
-                -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-                "https://ghcr.io/v2/shishobooks/shisho/manifests/$IMAGE_TAG"; then
-              echo "ghcr.io/shishobooks/shisho:$IMAGE_TAG is available"
-              exit 0
-            fi
-            echo "Waiting for ghcr.io/shishobooks/shisho:$IMAGE_TAG ($attempt/60)"
-            sleep 30
-          done
-          echo "ghcr.io/shishobooks/shisho:$IMAGE_TAG did not appear within 30 minutes"
-          exit 1
-
       - name: Set up flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@1.6
 
       - name: Deploy
         working-directory: demo
