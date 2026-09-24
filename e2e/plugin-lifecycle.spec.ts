@@ -12,9 +12,9 @@ test.describe("Plugin lifecycle flows", () => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const api = await request.newContext({ baseURL: apiBaseURL });
     await clearPlugins(api);
-    await api.delete("/test/ereader");
-    await api.delete("/test/users");
-    await api.post("/test/users", {
+    await api.delete("/api/test/ereader");
+    await api.delete("/api/test/users");
+    await api.post("/api/test/users", {
       data: {
         username: PLUGIN_TEST_USERNAME,
         password: PLUGIN_TEST_PASSWORD,

@@ -47,9 +47,8 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, cfg *config.Config, authMiddleware
 	v1.GET("/:types/libraries/:libraryID/search", h.librarySearch)
 	v1.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
 
-	// Book cover (lives under /opds so it accepts Basic Auth and so the
-	// production /opds/* Caddy handler proxies it to the backend instead
-	// of returning the SPA shell).
+	// Book covers stay under /opds for Basic Auth. The /api/books routes
+	// require session authentication, while bare /books paths serve the SPA.
 	v1.GET("/books/:id/cover", h.bookCover)
 
 	// KePub routes - same structure but downloads as KePub format

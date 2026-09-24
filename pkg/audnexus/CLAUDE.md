@@ -1,6 +1,6 @@
 # Audnexus API Integration
 
-This package fetches chapter data for audiobooks from [Audnexus](https://audnex.us), a community-run proxy over Audible's chapter catalog. It's consumed by the M4B chapter edit UI via `GET /audnexus/books/:asin/chapters`.
+This package fetches chapter data for audiobooks from [Audnexus](https://audnex.us), a community-run proxy over Audible's chapter catalog. It's consumed by the M4B chapter edit UI via `GET /api/audnexus/books/:asin/chapters`.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ This package fetches chapter data for audiobooks from [Audnexus](https://audnex.
 
 | Method | Path | Permission |
 |--------|------|------------|
-| GET | `/audnexus/books/:asin/chapters` | `books:write` |
+| GET | `/api/audnexus/books/:asin/chapters` | `books:write` |
 
 ### Error codes
 

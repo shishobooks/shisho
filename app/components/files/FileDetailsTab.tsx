@@ -1,5 +1,7 @@
+import { AlertTriangle } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { getLanguageName } from "@/constants/languages";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
@@ -41,6 +43,23 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
 
   return (
     <div className="py-4 space-y-6">
+      {/* Unreadable file warning */}
+      {file.scan_error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>This file could not be read</AlertTitle>
+          <AlertDescription>
+            <p>
+              The last scan failed to parse the file, so its metadata has not
+              been refreshed. Replace or repair the file and rescan it.
+            </p>
+            <p className="mt-2 font-mono text-xs break-all">
+              {file.scan_error}
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Basic file information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         {/* File type */}

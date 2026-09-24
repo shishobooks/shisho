@@ -28,6 +28,7 @@ import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmatio
 import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
+import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
@@ -71,6 +72,7 @@ import {
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import {
@@ -159,6 +161,7 @@ const FileRow = ({
   isDeletingFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
+  const { demoMode } = useAuth();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
@@ -223,6 +226,9 @@ const FileRow = ({
             {file.file_type}
           </Badge>
 
+          {/* Unreadable file warning */}
+          <FileScanErrorBadge className="text-xs shrink-0" file={file} />
+
           {/* Name */}
           <Link
             className={`truncate hover:underline min-w-0 flex-1 ${isSupplement ? "text-sm" : "text-sm font-medium"}`}
@@ -266,57 +272,60 @@ const FileRow = ({
             <span>{formatFileSize(file.filesize_bytes)}</span>
 
             {/* Download button/popover */}
-            {isSupplement ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={onDownloadOriginal}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <Download className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Download</TooltipContent>
-              </Tooltip>
-            ) : libraryDownloadPreference === DownloadFormatAsk &&
-              supportsKepub(file.file_type) ? (
-              <DownloadFormatPopover
-                disabled={isDownloading}
-                isLoading={isDownloading}
-                onCancel={onCancelDownload}
-                onDownloadKepub={onDownloadKepub}
-                onDownloadOriginal={() =>
-                  onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
-                }
-              />
-            ) : isDownloading ? (
-              <div className="flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
+            {!demoMode &&
+              (isSupplement ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      className="h-6 w-6 p-0"
-                      onClick={onCancelDownload}
+                      onClick={onDownloadOriginal}
                       size="sm"
                       variant="ghost"
                     >
-                      <X className="h-3 w-3" />
+                      <Download className="h-3 w-3" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Cancel download</TooltipContent>
+                  <TooltipContent>Download</TooltipContent>
                 </Tooltip>
-              </div>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button onClick={onDownload} size="sm" variant="ghost">
-                    <Download className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Download</TooltipContent>
-              </Tooltip>
-            )}
+              ) : libraryDownloadPreference === DownloadFormatAsk &&
+                supportsKepub(file.file_type) ? (
+                <DownloadFormatPopover
+                  disabled={isDownloading}
+                  isLoading={isDownloading}
+                  onCancel={onCancelDownload}
+                  onDownloadKepub={onDownloadKepub}
+                  onDownloadOriginal={() =>
+                    onDownloadWithEndpoint(
+                      `/api/books/files/${file.id}/download`,
+                    )
+                  }
+                />
+              ) : isDownloading ? (
+                <div className="flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        className="h-6 w-6 p-0"
+                        onClick={onCancelDownload}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Cancel download</TooltipContent>
+                  </Tooltip>
+                </div>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button onClick={onDownload} size="sm" variant="ghost">
+                      <Download className="h-3 w-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Download</TooltipContent>
+                </Tooltip>
+              ))}
 
             {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
             {(() => {
@@ -428,53 +437,58 @@ const FileRow = ({
           <span>{formatFileSize(file.filesize_bytes)}</span>
 
           {/* Download button/popover */}
-          {isSupplement ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
-                  <Download className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Download</TooltipContent>
-            </Tooltip>
-          ) : libraryDownloadPreference === DownloadFormatAsk &&
-            supportsKepub(file.file_type) ? (
-            <DownloadFormatPopover
-              disabled={isDownloading}
-              isLoading={isDownloading}
-              onCancel={onCancelDownload}
-              onDownloadKepub={onDownloadKepub}
-              onDownloadOriginal={() =>
-                onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
-              }
-            />
-          ) : isDownloading ? (
-            <div className="flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
+          {!demoMode &&
+            (isSupplement ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    className="h-6 w-6 p-0"
-                    onClick={onCancelDownload}
+                    onClick={onDownloadOriginal}
                     size="sm"
                     variant="ghost"
                   >
-                    <X className="h-3 w-3" />
+                    <Download className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Cancel download</TooltipContent>
+                <TooltipContent>Download</TooltipContent>
               </Tooltip>
-            </div>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={onDownload} size="sm" variant="ghost">
-                  <Download className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Download</TooltipContent>
-            </Tooltip>
-          )}
+            ) : libraryDownloadPreference === DownloadFormatAsk &&
+              supportsKepub(file.file_type) ? (
+              <DownloadFormatPopover
+                disabled={isDownloading}
+                isLoading={isDownloading}
+                onCancel={onCancelDownload}
+                onDownloadKepub={onDownloadKepub}
+                onDownloadOriginal={() =>
+                  onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
+                }
+              />
+            ) : isDownloading ? (
+              <div className="flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      className="h-6 w-6 p-0"
+                      onClick={onCancelDownload}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Cancel download</TooltipContent>
+                </Tooltip>
+              </div>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={onDownload} size="sm" variant="ghost">
+                    <Download className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Download</TooltipContent>
+              </Tooltip>
+            ))}
 
           {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
           {(() => {
@@ -1067,7 +1081,11 @@ const BookDetail = () => {
               <div className="relative shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
+                    <Button
+                      aria-label="Book actions"
+                      size="sm"
+                      variant="outline"
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>

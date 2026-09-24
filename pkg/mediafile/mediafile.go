@@ -18,6 +18,10 @@ type ParsedAuthor struct {
 type ParsedIdentifier struct {
 	Type  string `json:"type"`  // One of the IdentifierType constants (isbn_10, isbn_13, asin, uuid, goodreads, google, other)
 	Value string `json:"value"` // The identifier value
+	// Source is the data source that contributed this entry when the Scan
+	// merges identifiers from several origins. Empty means the collection's
+	// field source applies. Never on the wire.
+	Source string `json:"-"`
 }
 
 // ParsedChapter represents a chapter parsed from file metadata.

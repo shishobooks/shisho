@@ -11,17 +11,20 @@ interface ProtectedRouteProps {
     operation: string;
   };
   checkLibraryAccess?: boolean; // If true, checks libraryId param against user's library access
+  unavailableInDemo?: boolean;
 }
 
 const ProtectedRoute = ({
   checkLibraryAccess,
   children,
   requiredPermission,
+  unavailableInDemo,
 }: ProtectedRouteProps) => {
   const {
     isAuthenticated,
     isLoading,
     needsSetup,
+    demoMode,
     hasPermission,
     hasLibraryAccess,
     user,
@@ -31,7 +34,7 @@ const ProtectedRoute = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -53,8 +56,16 @@ const ProtectedRoute = ({
     );
   }
 
+  if (unavailableInDemo && demoMode) {
+    return <Navigate replace to="/" />;
+  }
+
   // Force users with temporary passwords to go to security settings
-  if (user?.must_change_password && location.pathname !== "/user/security") {
+  if (
+    !demoMode &&
+    user?.must_change_password &&
+    location.pathname !== "/user/security"
+  ) {
     const redirectTo = location.pathname + location.search;
     return (
       <Navigate
@@ -70,7 +81,7 @@ const ProtectedRoute = ({
     !hasPermission(requiredPermission.resource, requiredPermission.operation)
   ) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
         <div className="text-center">
           <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
           <p className="text-muted-foreground">
@@ -86,7 +97,7 @@ const ProtectedRoute = ({
     const libraryId = parseInt(params.libraryId, 10);
     if (!isNaN(libraryId) && !hasLibraryAccess(libraryId)) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
           <div className="text-center">
             <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
             <p className="text-muted-foreground">

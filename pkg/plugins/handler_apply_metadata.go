@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -21,8 +22,19 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		return errcodes.ValidationError(err.Error())
 	}
 
+	if err := validateSourceIntents(&payload); err != nil {
+		return err
+	}
+	if err := validateIdentifierTypes(payload.Fields); err != nil {
+		return err
+	}
+
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
+
+	if title, ok := payload.Fields["title"].(string); ok && strings.TrimSpace(title) == "" {
+		return errcodes.ValidationError("Title cannot be blank")
+	}
 
 	// Look up plugin runtime (for httpAccess domain validation on cover download)
 	rt := h.manager.GetRuntime(payload.PluginScope, payload.PluginID)
@@ -57,55 +69,68 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Convert fields map to ParsedMetadata
 	md := convertFieldsToMetadata(payload.Fields)
 
-	// Build apply-path overrides from explicit top-level payload fields.
-	// Empty strings count as absent so callers don't accidentally write
-	// blank values into file.Name / file.NameSource. The gate is on
-	// FileName specifically — file_name_source on its own is a no-op
-	// (there's nothing to source) and would be wasted state if it
-	// triggered the persist-side write block.
-	var overrides *ApplyOverrides
-	if payload.FileName != nil && *payload.FileName != "" {
-		fileNameSource, err := canonicalFileNameSource(payload.FileNameSource, payload.PluginScope, payload.PluginID)
-		if err != nil {
-			return err
+	// Build apply-path overrides from valid selected fields and explicit
+	// top-level file-name fields. A pointer to an empty or whitespace-only
+	// file name is an intentional clear; an omitted pointer leaves it untouched.
+	overrides := convertFieldsToOverrides(payload.Fields, md)
+	if payload.FileName != nil {
+		fileName := strings.TrimSpace(*payload.FileName)
+		if overrides == nil {
+			overrides = &ApplyOverrides{}
 		}
-		overrides = &ApplyOverrides{
-			FileName:       payload.FileName,
-			FileNameSource: fileNameSource,
-		}
+		overrides.FileName = &fileName
 	}
 
-	// Extract multi-series entries from fields (array format from identify form).
-	if seriesEntries := extractSeriesEntries(payload.Fields); seriesEntries != nil {
+	if len(payload.Sources) > 0 {
+		if overrides == nil {
+			overrides = &ApplyOverrides{}
+		}
+		overrides.Intents = payload.Sources
+	}
+
+	// Extract multi-series entries from fields (array format from identify
+	// form). A malformed Series Number group rejects the whole apply before
+	// any field is persisted.
+	seriesEntries, err := extractSeriesEntries(payload.Fields)
+	if err != nil {
+		return err
+	}
+	if seriesEntries != nil {
 		if overrides == nil {
 			overrides = &ApplyOverrides{}
 		}
 		overrides.SeriesEntries = seriesEntries
 	}
 
-	// Download cover if cover_url set
+	// Download cover if cover_url set. A failed download is not fatal to the
+	// apply, but the user chose that cover, so the response must say it was
+	// not applied.
+	warnings := []string{}
 	if md.CoverURL != "" {
 		manifest := rt.Manifest()
 		var allowedDomains []string
 		if manifest.Capabilities.HTTPAccess != nil {
 			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
 		}
-		DownloadCoverFromURL(ctx, md, allowedDomains, log)
+		if !DownloadCoverFromURL(ctx, md, allowedDomains, log) {
+			warnings = append(warnings, coverWarning("the cover could not be downloaded"))
+		}
 	}
 
 	// Persist metadata (no field filtering — user already selected fields)
-	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log); err != nil {
+	persistWarnings, err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log)
+	if err != nil {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
+	warnings = append(warnings, persistWarnings...)
 
-	// Organize files if title, authors, narrators, series, or an explicit file Name changed
-	// because these fields affect directory or file names. Trim title/series first so
-	// whitespace-only values don't trigger a no-op organize pass; persistMetadata already
-	// trims before persisting, so untrimmed values would never change the book.
-	// organizeBookFiles checks the library's OrganizeFileStructure setting internally.
+	// Organize files after path-affecting updates and clears. Presence matters
+	// for authors, file Name, and series because empty selected values remove
+	// metadata that may already be represented in an organized path.
 	hasFileName := overrides != nil && overrides.FileName != nil
 	hasSeriesEntries := overrides != nil && overrides.SeriesEntries != nil
-	if strings.TrimSpace(md.Title) != "" || len(md.Authors) > 0 || len(md.Narrators) > 0 || strings.TrimSpace(md.Series) != "" || hasFileName || hasSeriesEntries {
+	hasM4BNarrators := targetFile != nil && targetFile.FileType == models.FileTypeM4B && applyFieldSelected(overrides, "narrators")
+	if strings.TrimSpace(md.Title) != "" || applyFieldSelected(overrides, "authors") || hasM4BNarrators || strings.TrimSpace(md.Series) != "" || hasFileName || hasSeriesEntries {
 		freshBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 		if err != nil {
 			log.Warn("failed to retrieve book for file organization", logger.Data{"book_id": payload.BookID, "error": err.Error()})
@@ -116,33 +141,18 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		}
 	}
 
-	// Reload and return updated book
+	// Reload and return updated book with the same cover cache key GET
+	// /books/:id computes, so a consumer of this body never builds a stale
+	// cover URL.
 	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 	if err != nil {
 		return errors.Wrap(err, "failed to reload book")
 	}
-
-	return c.JSON(http.StatusOK, updatedBook)
-}
-
-// canonicalFileNameSource maps Identify's semantic source intent to the
-// canonical metadata source stored on files. A nil or empty intent preserves
-// compatibility with older clients by letting persistence default to the
-// specific plugin source.
-func canonicalFileNameSource(intent *string, pluginScope, pluginID string) (*string, error) {
-	if intent == nil || *intent == "" {
-		return nil, nil
+	aspectRatio := ""
+	if updatedBook.Library != nil {
+		aspectRatio = updatedBook.Library.CoverAspectRatio
 	}
+	updatedBook.CoverCacheKey = covers.CacheKey(updatedBook.Files, aspectRatio)
 
-	var source string
-	switch *intent {
-	case FileNameSourceIntentPlugin:
-		source = models.PluginDataSource(pluginScope, pluginID)
-	case FileNameSourceIntentUser:
-		source = models.DataSourceManual
-	default:
-		return nil, errcodes.ValidationError("file_name_source must be one of: plugin, user")
-	}
-
-	return &source, nil
+	return c.JSON(http.StatusOK, PluginApplyResponse{Book: *updatedBook, Warnings: warnings})
 }

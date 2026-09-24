@@ -54,12 +54,11 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
-	h := &handler{} // db not needed for fixture endpoints
-	e.GET("/test/plugins/fixture.zip", h.fixtureZip)
-	e.GET("/test/plugins/fixture-info", h.fixtureInfo)
+	// The fixture endpoints do not need a database or plugin manager.
+	RegisterRoutes(e.Group("/api"), nil, nil, nil)
 
 	// Fetch the zip
-	req := httptest.NewRequest(http.MethodGet, "/test/plugins/fixture.zip", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test/plugins/fixture.zip", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -73,13 +72,13 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 
 	// Fetch it again: bytes must be identical (deterministic build).
 	rec2 := httptest.NewRecorder()
-	e.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/test/plugins/fixture.zip", nil))
+	e.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/api/test/plugins/fixture.zip", nil))
 	h2 := sha256.Sum256(rec2.Body.Bytes())
 	assert.Equal(t, h1, h2, "fixture.zip must be deterministic across requests")
 
 	// Fetch info and check the sha256 matches what we got from fixture.zip.
 	rec3 := httptest.NewRecorder()
-	e.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, "/test/plugins/fixture-info", nil))
+	e.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, "/api/test/plugins/fixture-info", nil))
 	require.Equal(t, http.StatusOK, rec3.Code)
 
 	var info struct {
@@ -95,7 +94,13 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 	assert.Equal(t, "fixture", info.ID)
 	assert.Equal(t, "1.0.0", info.Version)
 	assert.Equal(t, hex.EncodeToString(h1[:]), info.SHA256)
-	assert.Contains(t, info.DownloadURL, "/test/plugins/fixture.zip")
+	assert.Equal(t, "http://example.com/api/test/plugins/fixture.zip", info.DownloadURL)
+
+	// An installer follows this advertised URL, not a hard-coded test path.
+	download := httptest.NewRecorder()
+	e.ServeHTTP(download, httptest.NewRequest(http.MethodGet, info.DownloadURL, nil))
+	require.Equal(t, http.StatusOK, download.Code)
+	assert.Equal(t, zipBytes, download.Body.Bytes())
 }
 
 func TestSeedPluginWritesDBRow(t *testing.T) {
@@ -106,8 +111,7 @@ func TestSeedPluginWritesDBRow(t *testing.T) {
 	tmp := t.TempDir()
 	installer := plugins.NewInstaller(tmp)
 	e := echo.New()
-	h := &handler{db: db, manager: nil, installer: installer}
-	e.POST("/test/plugins", h.seedPlugin)
+	RegisterRoutes(e.Group("/api"), db, nil, installer)
 
 	body := `{
 		"scope": "test",
@@ -117,7 +121,7 @@ func TestSeedPluginWritesDBRow(t *testing.T) {
 		"status": 0,
 		"update_available_version": "2.0.0"
 	}`
-	req := httptest.NewRequest(http.MethodPost, "/test/plugins", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/test/plugins", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -155,11 +159,10 @@ func TestDeleteAllPluginsWipesStateAndDisk(t *testing.T) {
 
 	installer := plugins.NewInstaller(tmp)
 	e := echo.New()
-	h := &handler{db: db, manager: nil, installer: installer}
-	e.DELETE("/test/plugins", h.deleteAllPlugins)
+	RegisterRoutes(e.Group("/api"), db, nil, installer)
 
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/test/plugins", nil))
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/test/plugins", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Row gone.

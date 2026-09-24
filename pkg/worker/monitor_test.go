@@ -1,6 +1,8 @@
 package worker
 
 import (
+	"archive/zip"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -788,4 +791,106 @@ func TestMonitor_ProcessEvent_DirectoryRemoveWithMultipleFilesKeepsBookUntilLast
 
 	assert.Empty(t, tc.listFiles())
 	assert.Empty(t, tc.listBooks())
+}
+
+func TestMonitor_ProcessEvent_SkipsNewFileWithUnexpectedMime(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	// An EPUB without the leading "mimetype" zip entry parses fine but is
+	// detected as a generic zip, which the library scan walker rejects for
+	// the .epub extension. The monitor must apply the same rule so a file
+	// cannot be rejected by one entry point and imported by the other.
+	bookDir := testgen.CreateSubDir(t, libDir, "Not Quite An EPUB")
+	epubPath := writeEPUBWithoutMimetypeEntry(t, bookDir, "book.epub")
+	_, parseErr := epub.Parse(epubPath)
+	require.NoError(t, parseErr, "test needs a file that parses but fails the mime check")
+	_, expected, err := checkExpectedMimeType(epubPath)
+	require.NoError(t, err)
+	require.False(t, expected, "test needs a file that fails the mime check")
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Create,
+		LibraryID: 1,
+	})
+	assert.Nil(t, result)
+	assert.Empty(t, tc.listFiles(), "file with unexpected mime type must not be imported")
+}
+
+// writeEPUBWithoutMimetypeEntry generates a valid EPUB and rewrites it with
+// the "mimetype" entry dropped, so content detection sees a plain zip.
+func writeEPUBWithoutMimetypeEntry(t *testing.T, dir, filename string) string {
+	t.Helper()
+	srcDir := t.TempDir()
+	src := testgen.GenerateEPUB(t, srcDir, filename, testgen.EPUBOptions{
+		Title:   "Missing Mimetype Entry",
+		Authors: []string{"Test Author"},
+	})
+	reader, err := zip.OpenReader(src)
+	require.NoError(t, err)
+	defer reader.Close()
+
+	dst := filepath.Join(dir, filename)
+	out, err := os.Create(dst)
+	require.NoError(t, err)
+	writer := zip.NewWriter(out)
+	for _, entry := range reader.File {
+		if entry.Name == "mimetype" {
+			continue
+		}
+		rc, err := entry.Open()
+		require.NoError(t, err)
+		w, err := writer.Create(entry.Name)
+		require.NoError(t, err)
+		_, err = io.Copy(w, rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+	}
+	require.NoError(t, writer.Close())
+	require.NoError(t, out.Close())
+	return dst
+}
+
+func TestMonitor_ProcessEvent_KnownFileReplacedWithBadContent_RecordsScanError(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	bookDir := testgen.CreateSubDir(t, libDir, "Replaced Book")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "book.epub", testgen.EPUBOptions{
+		Title:   "Replaced Later",
+		Authors: []string{"Test Author"},
+	})
+
+	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	result := m.processEvent(tc.ctx, epubPath, pendingEvent{Op: fsnotify.Create, LibraryID: 1})
+	require.NotNil(t, result)
+	require.True(t, result.FileCreated)
+
+	// Replace the tracked file via atomic rename with content that is not an
+	// EPUB at all. Tools that write temp-then-rename produce a Create event
+	// rather than a Write. The file is already in the library, so the mime
+	// check must not apply (the scan walker skips it for known files too);
+	// the file must be rescanned and flagged unreadable.
+	tmp := filepath.Join(bookDir, "book.epub.tmp")
+	require.NoError(t, os.WriteFile(tmp, []byte("definitely not a zip archive\n"), 0o644))
+	require.NoError(t, os.Rename(tmp, epubPath))
+
+	_ = m.processEvent(tc.ctx, epubPath, pendingEvent{Op: fsnotify.Create, LibraryID: 1})
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	require.NotNil(t, files[0].ScanError, "known file replaced with unreadable content should be flagged")
 }

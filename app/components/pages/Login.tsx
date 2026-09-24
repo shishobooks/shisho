@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -16,13 +16,25 @@ const Login = () => {
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated, needsSetup, isLoading: authLoading } = useAuth();
-  const { login } = useAuth();
+  const {
+    demoMode,
+    isAuthenticated,
+    needsSetup,
+    isLoading: authLoading,
+    login,
+  } = useAuth();
   const redirectTo = searchParams.get("redirect") || "/";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (demoMode) {
+      setUsername("demo");
+      setPassword("shishodemo");
+    }
+  }, [demoMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +87,13 @@ const Login = () => {
             Sign in to access your library
           </p>
         </div>
+
+        {demoMode && (
+          <div className="mb-6 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+            This is a read-only public demo of Shisho. Sign in with the
+            pre-filled credentials. Changes and downloads are disabled.
+          </div>
+        )}
 
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">

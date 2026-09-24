@@ -159,7 +159,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/plugins"
     output_path: "app/types/generated/plugins.ts"
     frontmatter: |
-      import { ParsedIdentifier, ParsedMetadata, PluginMode, PluginRepository } from "@/types";
+      import { Book, ParsedIdentifier, ParsedMetadata, PluginMode, PluginRepository } from "@/types";
     include_files:
       - types.go
       - manifest.go

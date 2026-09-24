@@ -22,7 +22,7 @@ const fixtureManifestJSON = `{
     "metadataEnricher": {
       "description": "E2E fixture enricher",
       "fileTypes": ["epub"],
-      "fields": ["title"]
+      "fields": ["title", "abridged"]
     }
   },
   "configSchema": {
@@ -37,11 +37,14 @@ const fixtureManifestJSON = `{
 }
 `
 
+// The enricher proposes one fixed result so Identify flows can be driven in
+// a browser. Abridged is proposed as false on purpose: Identify must be able
+// to apply an explicit false without turning it into a clear.
 const fixtureMainJS = `var plugin = (function () {
   return {
     metadataEnricher: {
       search: function () {
-        return { results: [] };
+        return { results: [{ title: "Fixture Title", abridged: false }] };
       }
     }
   };

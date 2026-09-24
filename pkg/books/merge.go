@@ -554,6 +554,7 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 		Description:       sourceBook.Description,
 		DescriptionSource: sourceBook.DescriptionSource,
 		AuthorSource:      sourceBook.AuthorSource,
+		SeriesSource:      sourceBook.SeriesSource,
 		GenreSource:       sourceBook.GenreSource,
 		TagSource:         sourceBook.TagSource,
 		CreatedAt:         now,

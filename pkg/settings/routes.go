@@ -8,7 +8,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) {
+func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	svc := NewService(db)
 
 	userH := &handler{settingsService: svc}

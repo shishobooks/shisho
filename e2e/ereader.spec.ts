@@ -30,38 +30,38 @@ test.describe("eReader Browser UI", () => {
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
     // Clean up existing test data first
-    await apiContext.delete("/test/ereader");
+    await apiContext.delete("/api/test/ereader");
 
     // Clean up existing test data
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
 
     // Create test user
-    const userResp = await apiContext.post("/test/users", {
+    const userResp = await apiContext.post("/api/test/users", {
       data: { username: "ereadertest", password: "password123" },
     });
     const user = (await userResp.json()) as { id: number };
 
     // Create library
-    const libraryResp = await apiContext.post("/test/libraries", {
+    const libraryResp = await apiContext.post("/api/test/libraries", {
       data: { name: "Test Library" },
     });
     const library = (await libraryResp.json()) as { id: number };
 
     // Create author (person)
-    const authorResp = await apiContext.post("/test/persons", {
+    const authorResp = await apiContext.post("/api/test/persons", {
       data: { libraryId: library.id, name: "Test Author" },
     });
     const author = (await authorResp.json()) as { id: number };
 
     // Create series
-    const seriesResp = await apiContext.post("/test/series", {
+    const seriesResp = await apiContext.post("/api/test/series", {
       data: { libraryId: library.id, name: "Test Series" },
     });
     const series = (await seriesResp.json()) as { id: number };
 
     // Create books
-    const book1Resp = await apiContext.post("/test/books", {
+    const book1Resp = await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "Test Book 1",
@@ -72,7 +72,7 @@ test.describe("eReader Browser UI", () => {
     });
     const book1 = (await book1Resp.json()) as { id: number };
 
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "Test Book 2",
@@ -81,7 +81,7 @@ test.describe("eReader Browser UI", () => {
       },
     });
 
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "Audiobook Test",
@@ -89,7 +89,7 @@ test.describe("eReader Browser UI", () => {
       },
     });
 
-    const pdfBookResp = await apiContext.post("/test/books", {
+    const pdfBookResp = await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "PDF Document Test",
@@ -101,7 +101,7 @@ test.describe("eReader Browser UI", () => {
     const pdfBook = (await pdfBookResp.json()) as { id: number };
 
     // Create API key with eReader permission
-    const apiKeyResp = await apiContext.post("/test/api-keys", {
+    const apiKeyResp = await apiContext.post("/api/test/api-keys", {
       data: {
         userId: user.id,
         name: "Test eReader Key",
@@ -127,7 +127,7 @@ test.describe("eReader Browser UI", () => {
     // Clean up all eReader test data after tests complete
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
+    await apiContext.delete("/api/test/ereader");
     await apiContext.dispose();
   });
 
@@ -142,7 +142,7 @@ test.describe("eReader Browser UI", () => {
       const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
       // Create API key without eReader permission
-      const apiKeyResp = await apiContext.post("/test/api-keys", {
+      const apiKeyResp = await apiContext.post("/api/test/api-keys", {
         data: {
           userId: testData.userId,
           name: "No Permission Key",

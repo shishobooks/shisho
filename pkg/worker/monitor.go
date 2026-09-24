@@ -824,6 +824,18 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 		})
 	}
 
+	// A scan error recorded against the old path says nothing about the
+	// content now at the new path. Rescan so the flag reflects reality; the
+	// path scan would otherwise skip the file until its size or mtime moved.
+	if best.ScanError != nil {
+		if _, err := m.worker.scanInternal(ctx, ScanOptions{FileID: best.ID}, nil); err != nil {
+			m.log.Err(err).Warn("monitor: failed to rescan moved file flagged unreadable", logger.Data{
+				"file_id": best.ID,
+				"path":    path,
+			})
+		}
+	}
+
 	m.log.Info("monitor: file move detected", logger.Data{
 		"file_id":  best.ID,
 		"old_path": oldPath,
@@ -954,13 +966,13 @@ func (m *Monitor) processEvent(ctx context.Context, path string, event pendingEv
 		return nil
 	}
 
-	// For Write events on files already in the DB, use FileID + ForceRefresh
-	// so metadata is re-read regardless of data source priority.
-	if event.Op.Has(fsnotify.Write) {
-		file, err := m.worker.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
-			Filepath: &path,
-		})
-		if err == nil {
+	file, err := m.worker.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
+		Filepath: &path,
+	})
+	if err == nil {
+		// For Write events on files already in the DB, use FileID + ForceRefresh
+		// so metadata is re-read regardless of data source priority.
+		if event.Op.Has(fsnotify.Write) {
 			log.Info("file modified, rescanning with force refresh")
 			result, err := m.worker.scanInternal(ctx, ScanOptions{
 				FileID:       file.ID,
@@ -971,11 +983,26 @@ func (m *Monitor) processEvent(ctx context.Context, path string, event pendingEv
 			}
 			return result
 		}
-		// File not in DB — fall through to treat as new file.
+		// A Create on a tracked path means the file was replaced (temp file +
+		// rename). The content check below is only for new imports; known
+		// files skip it, as they do in the scan walker, so the path scan can
+		// detect the change and flag the file if it is now unreadable.
+		log.Info("tracked file replaced, rescanning")
+	} else {
+		// New file (Create or Write for a file not yet in DB). Apply the same
+		// content check as the library scan walker so both entry points agree
+		// on what gets imported.
+		mimeType, expected, err := checkExpectedMimeType(path)
+		if err != nil {
+			log.Err(err).Warn("can't detect the mime type of a file with a valid extension")
+			return nil
+		}
+		if !expected {
+			log.Warn("mime type is not expected for extension", logger.Data{"mimetype": mimeType})
+			return nil
+		}
+		log.Info("new file detected, scanning")
 	}
-
-	// New file (Create or Write for a file not yet in DB).
-	log.Info("new file detected, scanning")
 	result, err := m.worker.scanInternal(ctx, ScanOptions{
 		FilePath:  path,
 		LibraryID: event.LibraryID,

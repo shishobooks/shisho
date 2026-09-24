@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -86,7 +85,9 @@ func main() {
 	// Plugin system
 	pluginService := plugins.NewService(db)
 	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir, cfg.PluginDataDir)
-	if err := pluginManager.LoadAll(ctx); err != nil {
+	if cfg.DemoMode {
+		log.Info("demo mode enabled: plugins and background worker disabled")
+	} else if err := pluginManager.LoadAll(ctx); err != nil {
 		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
 	}
 
@@ -104,9 +105,7 @@ func main() {
 	graceful := signals.Setup()
 
 	go func() {
-		addr := fmt.Sprintf(":%d", cfg.ServerPort)
-		lc := net.ListenConfig{}
-		listener, err := lc.Listen(ctx, "tcp", addr)
+		listener, err := listenServer(ctx, srv)
 		if err != nil {
 			log.Err(err).Fatal("failed to bind port")
 		}
@@ -127,8 +126,10 @@ func main() {
 		log.Info("server stopped")
 	}()
 
-	wrkr.Start()
-	log.Info("worker started")
+	if !cfg.DemoMode {
+		wrkr.Start()
+		log.Info("worker started")
+	}
 
 	<-graceful
 	log.Info("starting graceful shutdown")
@@ -168,14 +169,23 @@ func main() {
 	}
 	log.Info("server shutdown")
 
-	wrkr.Shutdown()
-	log.Info("worker shutdown")
+	// Shutdown waits for worker goroutines, so only call it if Start ran.
+	if !cfg.DemoMode {
+		wrkr.Shutdown()
+		log.Info("worker shutdown")
+	}
 
 	err = db.Close()
 	if err != nil {
 		log.Err(err).Error("database close error")
 	}
 	log.Info("database closed")
+}
+
+// listenServer binds the address built from server_host and server_port.
+func listenServer(ctx context.Context, srv *http.Server) (net.Listener, error) {
+	lc := net.ListenConfig{}
+	return lc.Listen(ctx, "tcp", srv.Addr)
 }
 
 // initCacheDir creates the cache directories and verifies write permissions.

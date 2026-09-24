@@ -272,6 +272,38 @@ func parsedIdentifierKeys(ids []mediafile.ParsedIdentifier) []string {
 	return keys
 }
 
+// identifierAttributionStale reports whether an identifier collection whose
+// values are unchanged still needs rewriting to correct its sources. An
+// ordinary Scan repairs it only when the incoming aggregate strictly outranks
+// the stored one, which heals collections mislabeled with a lower-priority
+// origin without touching manual or sidecar collections. A forced refresh
+// also rewrites when any entry's origin differs.
+func identifierAttributionStale(existing []*models.FileIdentifier, existingSource string, incoming []mediafile.ParsedIdentifier, newSource string, forceRefresh bool) bool {
+	if existingSource == "" {
+		existingSource = models.DataSourceFilepath
+	}
+	if !forceRefresh && models.GetDataSourcePriority(newSource) >= models.GetDataSourcePriority(existingSource) {
+		return false
+	}
+	if newSource != existingSource {
+		return true
+	}
+	stored := make(map[string]string, len(existing))
+	for _, id := range existing {
+		stored[identifiers.Key(id.Type, id.Value)] = id.Source
+	}
+	for _, id := range incoming {
+		entrySource := id.Source
+		if entrySource == "" {
+			entrySource = newSource
+		}
+		if stored[identifiers.Key(id.Type, id.Value)] != entrySource {
+			return true
+		}
+	}
+	return false
+}
+
 // sidecarIdentifierKeys returns canonical comparison keys for a set of
 // sidecar-sourced identifiers. Same contract as parsedIdentifierKeys, but
 // for the distinct sidecar.IdentifierMetadata type.

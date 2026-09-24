@@ -11,6 +11,7 @@ export interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   needsSetup: boolean;
+  demoMode: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (resource: string, operation: string) => boolean;

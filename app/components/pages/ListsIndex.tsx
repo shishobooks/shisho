@@ -34,13 +34,13 @@ const ListsIndex = () => {
     try {
       await createListMutation.mutateAsync(payload);
       toast.success(`Created "${payload.name}" list`);
-      setCreateDialogOpen(false);
     } catch (error) {
       let message = "Failed to create list";
       if (error instanceof Error) {
         message = error.message;
       }
       toast.error(message);
+      throw error; // Let CreateListDialog preserve the draft on failure.
     }
   };
 

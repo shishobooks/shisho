@@ -20,6 +20,7 @@ import type {
   LibraryPluginOrderResponse,
   Plugin,
   PluginApplyPayload,
+  PluginApplyResponse,
   PluginConfigResponse,
   PluginHookConfig,
   PluginIdentifierType,
@@ -47,6 +48,7 @@ export type {
   LibraryPluginOrderResponse,
   Plugin,
   PluginApplyPayload,
+  PluginApplyResponse,
   PluginCapabilities,
   PluginConfigResponse,
   PluginHookConfig as PluginOrder,
@@ -647,9 +649,13 @@ export const usePluginSearch = (params: PluginSearchParams | null) => {
 export const usePluginApply = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, ShishoAPIError, PluginApplyPayload>({
+  return useMutation<PluginApplyResponse, ShishoAPIError, PluginApplyPayload>({
     mutationFn: (payload) => {
-      return API.request("POST", "/plugins/apply", payload);
+      return API.request<PluginApplyResponse>(
+        "POST",
+        "/plugins/apply",
+        payload,
+      );
     },
     onSuccess: async () => {
       // Apply accepts entity name strings; the server creates new persons,

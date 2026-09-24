@@ -13,12 +13,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   const checkAuthStatus = useCallback(async () => {
     try {
       // First check if setup is needed
       const status = await API.request<StatusResponse>("GET", "/auth/status");
       setNeedsSetup(status.needs_setup);
+      setDemoMode(status.demo_mode);
 
       if (status.needs_setup) {
         setIsLoading(false);
@@ -102,6 +104,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         isLoading,
         isAuthenticated: !!user,
         needsSetup,
+        demoMode,
         login,
         logout,
         hasPermission,

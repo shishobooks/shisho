@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,9 +33,14 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
     if (isActive || isFailed) {
       navigate(`/settings/jobs/${latestJob?.id}`);
     } else {
-      createJob.mutate({
-        payload: { type: "scan", library_id: libraryId, data: {} },
-      });
+      createJob.mutate(
+        { payload: { type: "scan", library_id: libraryId, data: {} } },
+        {
+          onError: (error) => {
+            toast.error(error.message || "Failed to start scan");
+          },
+        },
+      );
     }
   };
 

@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all user routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware) *Service {
+func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) *Service {
 	userService := NewService(db)
 
 	h := &handler{

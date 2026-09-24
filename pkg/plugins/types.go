@@ -164,11 +164,22 @@ type PluginSearchPayload struct {
 	Identifiers []mediafile.ParsedIdentifier `json:"identifiers,omitempty" tstype:"ParsedIdentifier[]"`
 }
 
+// SourceIntent is Identify's per-field attribution intent (ADR 0006). The
+// browser holds the Plugin Proposal, so it reports whether the final value
+// equals the proposal; the server decides no-op against stored state and maps
+// the intent to a canonical DataSource. Intent values never reach a source
+// column verbatim. SourceIntents is the payload map, emitted here because a
+// tstype tag cannot contain the comma in Record<K, V>.
 const (
-	//tygo:emit export type FileNameSourceIntent = typeof FileNameSourceIntentPlugin | typeof FileNameSourceIntentUser;
-	FileNameSourceIntentPlugin = "plugin"
-	FileNameSourceIntentUser   = "user"
+	//tygo:emit export type SourceIntent = typeof SourceIntentPlugin | typeof SourceIntentUser;
+	//tygo:emit export type SourceIntents = Record<string, SourceIntent>;
+	SourceIntentPlugin = "plugin"
+	SourceIntentUser   = "user"
 )
+
+// SourcesKeyFileName is the PluginApplyPayload.Sources key for the file Name,
+// which travels as the top-level file_name rather than inside Fields.
+const SourcesKeyFileName = "file_name"
 
 // PluginApplyPayload is the body of POST /plugins/apply. Fields carries the
 // user-selected metadata as an untyped map (converted server-side by
@@ -177,16 +188,16 @@ type PluginApplyPayload struct {
 	BookID int            `json:"book_id" validate:"required"`
 	FileID *int           `json:"file_id"`
 	Fields map[string]any `json:"fields" validate:"required"`
-	// FileName is an optional override for file.Name. The backend treats an
-	// empty string as absent; only set when the user explicitly opts the
-	// Name field into the apply payload.
+	// FileName is an optional override for file.Name. Omitted leaves the name
+	// untouched; an explicitly selected blank string clears it.
 	FileName *string `json:"file_name"`
-	// FileNameSource is Identify source intent: "plugin" when the saved value
-	// matches the plugin proposal, or "user" when edited. The apply boundary
-	// maps this intent to a canonical DataSource before persistence.
-	FileNameSource *string `json:"file_name_source" validate:"omitempty,oneof=plugin user" tstype:"FileNameSourceIntent"`
-	PluginScope    string  `json:"plugin_scope" validate:"required"`
-	PluginID       string  `json:"plugin_id" validate:"required"`
+	// Sources is the per-field SourceIntent, keyed by the same keys as Fields
+	// plus SourcesKeyFileName. A selected field with no entry is treated as
+	// "user". Identifier objects inside Fields["identifiers"] additionally
+	// carry an optional per-entry "source" intent with the same values.
+	Sources     map[string]string `json:"sources,omitempty" validate:"omitempty,dive,oneof=plugin user" tstype:"SourceIntents"`
+	PluginScope string            `json:"plugin_scope" validate:"required"`
+	PluginID    string            `json:"plugin_id" validate:"required"`
 }
 
 // AddRepositoryPayload is the body of POST /plugins/repositories.
@@ -250,15 +261,33 @@ type SeriesEntry struct {
 // contract). These come exclusively from the identify apply payload —
 // plugins do not model them.
 type ApplyOverrides struct {
-	// FileName is the value to write to file.Name. Nil = no change.
-	// Empty string is treated as nil (treat absent or "" as no-op so
-	// callers don't need to special-case empty inputs).
+	// SelectedFields records valid fields explicitly included in the Identify
+	// apply payload. It preserves the distinction between omitted zero values
+	// (leave untouched) and selected zero values (clear).
+	SelectedFields map[string]bool
+	// FileName is the normalized value to write to file.Name. Nil = no change.
+	// A pointer to an empty string explicitly clears the name.
 	FileName *string
-	// FileNameSource is the canonical value to write to file.NameSource. Nil
-	// means "default to the plugin source for this apply call".
-	FileNameSource *string
+	// Intents is the validated per-field SourceIntent from the apply payload,
+	// keyed like PluginApplyPayload.Sources. persistMetadata maps it to a
+	// canonical source only for fields whose value actually changed.
+	Intents map[string]string
+	// IdentifierIntents is the validated per-entry SourceIntent from the
+	// identifier objects in Fields["identifiers"], keyed by trimmed type.
+	// Types are unique within a collection (validateIdentifierTypes).
+	IdentifierIntents map[string]string
 	// SeriesEntries, when non-nil, replaces the book's series associations
 	// with the provided list. An empty slice clears all series. Nil means
 	// "don't touch series" (the identify form's series checkbox was off).
 	SeriesEntries *[]SeriesEntry
+}
+
+// PluginApplyResponse is the reloaded book after POST /plugins/apply, plus
+// any warnings for selected fields that were accepted but not applied (for
+// example a proposed cover that could not be downloaded or decoded). The
+// apply itself succeeded, so the status is 200 and the warnings are the only
+// signal the client has to surface.
+type PluginApplyResponse struct {
+	models.Book `tstype:",extends"`
+	Warnings    []string `json:"warnings"`
 }

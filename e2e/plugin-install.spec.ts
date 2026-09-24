@@ -13,9 +13,9 @@ test.describe("Plugin install flow", () => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const api = await request.newContext({ baseURL: apiBaseURL });
     await clearPlugins(api);
-    await api.delete("/test/ereader");
-    await api.delete("/test/users");
-    await api.post("/test/users", {
+    await api.delete("/api/test/ereader");
+    await api.delete("/api/test/users");
+    await api.post("/api/test/users", {
       data: {
         username: PLUGIN_TEST_USERNAME,
         password: PLUGIN_TEST_PASSWORD,
@@ -40,7 +40,7 @@ test.describe("Plugin install flow", () => {
 
     // Call the install API directly (the Discover tab needs a seeded
     // repository to list this plugin; that is covered by the next test).
-    const installResp = await apiContext.post("/plugins/installed", {
+    const installResp = await apiContext.post("/api/plugins/installed", {
       data: {
         scope: info.scope,
         id: info.id,

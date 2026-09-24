@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -1048,8 +1049,10 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				continue
 			}
 
-			// Rename the file to the organized name
-			newPath, err := fileutils.RenameOrganizedFile(currentPath, organizeOpts)
+			// The folder owns the book sidecar, which was handled above.
+			// Renaming a file must not move a leftover basename sidecar over
+			// it, or a narrator clear can restore old book metadata.
+			newPath, err := fileutils.RenameOrganizedFileOnly(currentPath, organizeOpts)
 			if err != nil {
 				log.Error("failed to rename file in folder", logger.Data{
 					"file_id": file.ID,
@@ -1407,24 +1410,21 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 		Where("LOWER(s.name) = LOWER(?) AND s.library_id = ?", name, libraryID).
 		Scan(ctx)
 	if err == nil {
-		// Series exists, check if we should update the source
-		if models.GetDataSourcePriority(nameSource) < models.GetDataSourcePriority(series.NameSource) {
-			series.NameSource = nameSource
-			series.UpdatedAt = time.Now()
-			_, err = svc.db.
-				NewUpdate().
-				Model(series).
-				Column("name_source", "updated_at").
-				WherePK().
-				Exec(ctx)
-			if err != nil {
-				return nil, errors.WithStack(err)
-			}
-		}
-		return series, nil
+		return series, svc.raiseSeriesNameSource(ctx, series, nameSource)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.WithStack(err)
+	}
+
+	// Resolve Aliases so a variant spelling attaches the canonical Series
+	// instead of creating a duplicate. Identify relies on this to treat an
+	// aliased name as the same membership.
+	if resourceID, aliasErr := aliases.FindResourceIDByAlias(ctx, svc.db, aliases.SeriesConfig, name, libraryID); aliasErr == nil {
+		series = &models.Series{}
+		if err := svc.db.NewSelect().Model(series).Where("s.id = ?", resourceID).Scan(ctx); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		return series, svc.raiseSeriesNameSource(ctx, series, nameSource)
 	}
 
 	// Create new series
@@ -1444,9 +1444,29 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 		Returning("*").
 		Exec(ctx)
 	if err != nil {
+		// Another request created the same series between lookup and insert.
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			existing := &models.Series{}
+			if retryErr := svc.db.NewSelect().Model(existing).Where("LOWER(s.name) = LOWER(?) AND s.library_id = ?", name, libraryID).Scan(ctx); retryErr == nil {
+				return existing, nil
+			}
+		}
 		return nil, errors.WithStack(err)
 	}
 	return series, nil
+}
+
+// raiseSeriesNameSource lowers name_source's priority number to nameSource
+// when the caller's source outranks the stored one. It never touches the
+// Book's membership provenance (books.series_source).
+func (svc *Service) raiseSeriesNameSource(ctx context.Context, series *models.Series, nameSource string) error {
+	if models.GetDataSourcePriority(nameSource) >= models.GetDataSourcePriority(series.NameSource) {
+		return nil
+	}
+	series.NameSource = nameSource
+	series.UpdatedAt = time.Now()
+	_, err := svc.db.NewUpdate().Model(series).Column("name_source", "updated_at").WherePK().Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // CleanupOrphanedSeries deletes series with no books and returns the IDs of
@@ -1589,10 +1609,19 @@ func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifie
 		FileID int
 		Type   string
 	}
+	now := time.Now()
 	indexByKey := make(map[key]int, len(fileIdentifiers))
 	deduped := make([]*models.FileIdentifier, 0, len(fileIdentifiers))
 	for _, fi := range fileIdentifiers {
 		clone := *fi
+		// Bun inserts a zero time.Time rather than omitting it, so the
+		// column DEFAULT never applies.
+		if clone.CreatedAt.IsZero() {
+			clone.CreatedAt = now
+		}
+		if clone.UpdatedAt.IsZero() {
+			clone.UpdatedAt = now
+		}
 		clone.Type = strings.TrimSpace(fi.Type)
 		clone.Value = identifiers.NormalizeValue(clone.Type, fi.Value)
 		k := key{FileID: clone.FileID, Type: clone.Type}

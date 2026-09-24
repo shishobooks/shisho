@@ -380,3 +380,11 @@ test-results/
 
 # wktr
 .wktr.local.yaml
+
+# Embedded frontend build; retain the clean-checkout placeholder.
+!pkg/frontend/dist/
+pkg/frontend/dist/*
+!pkg/frontend/dist/placeholder.html
+
+# Public Demo corpus checkout used by .github/workflows/demo.yml
+demo/corpus/

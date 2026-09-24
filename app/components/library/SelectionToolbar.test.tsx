@@ -16,6 +16,10 @@ beforeAll(() => {
 const mockExitSelectionMode = vi.fn();
 const mockClearSelection = vi.fn();
 
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ demoMode: false }),
+}));
+
 vi.mock("@/hooks/useBulkSelection", () => ({
   useBulkSelection: () => ({
     selectedBookIds: [1, 2, 3],

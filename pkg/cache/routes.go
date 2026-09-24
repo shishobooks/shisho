@@ -8,7 +8,7 @@ import (
 
 // RegisterRoutes registers cache management routes on the given echo instance.
 // GET /cache requires config:read; POST /cache/:id/clear requires config:write.
-func RegisterRoutes(e *echo.Echo, h *Handler, authMiddleware *auth.Middleware) {
+func RegisterRoutes(e *echo.Group, h *Handler, authMiddleware *auth.Middleware) {
 	g := e.Group("/cache")
 	g.Use(authMiddleware.Authenticate)
 

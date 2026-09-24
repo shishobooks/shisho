@@ -303,7 +303,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const sliderMax = duration > 0 ? duration : 1;
 
   return (
-    <div className="fixed inset-0 bg-background flex flex-col">
+    <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col">
       {/* Header with a way out of the player */}
       <header className="flex items-center gap-2 px-4 py-2 border-b">
         <Button

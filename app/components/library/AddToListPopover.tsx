@@ -105,6 +105,7 @@ const AddToListPopover = ({
       const message =
         error instanceof Error ? error.message : "Failed to create list";
       toast.error(message);
+      throw error; // Let CreateListDialog preserve the draft if creation failed.
     }
   };
 

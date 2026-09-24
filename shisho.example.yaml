@@ -44,13 +44,14 @@ database_max_retries: 5
 # SERVER SETTINGS
 # =============================================================================
 
-# Reserved for listener configuration. The current server binds all interfaces
-# and does not apply this value.
+# Address to bind the HTTP listener to. Use 127.0.0.1 for local-only access.
+# Keep 0.0.0.0 inside Docker so published ports can reach Shisho.
 # Env: SERVER_HOST
 # Default: 0.0.0.0
 server_host: 0.0.0.0
 
-# Port to listen on
+# Port for both the web interface and API
+# The production image sets SERVER_PORT=5173, overriding this YAML value.
 # Env: SERVER_PORT
 # Default: 3689
 server_port: 3689
@@ -58,6 +59,13 @@ server_port: 3689
 # =============================================================================
 # APPLICATION SETTINGS
 # =============================================================================
+
+# Present a prepared library without allowing API edits, even by admins.
+# Disables background work, plugins, integrations, and explicit downloads.
+# Reading and audio streaming remain available. Set up users and media first.
+# Env: DEMO_MODE
+# Default: false
+demo_mode: false
 
 # How often to scan libraries for new content (in minutes)
 # Set to 0 to disable scheduled scans

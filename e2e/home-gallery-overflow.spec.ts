@@ -27,25 +27,25 @@ test.describe("Home gallery vertical overflow", () => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
 
-    await apiContext.post("/test/users", {
+    await apiContext.post("/api/test/users", {
       data: { username: USERNAME, password: PASSWORD },
     });
 
-    const libraryResp = await apiContext.post("/test/libraries", {
+    const libraryResp = await apiContext.post("/api/test/libraries", {
       data: { name: "Gallery Overflow Test Library" },
     });
     const library = (await libraryResp.json()) as { id: number };
 
-    const authorResp = await apiContext.post("/test/persons", {
+    const authorResp = await apiContext.post("/api/test/persons", {
       data: { libraryId: library.id, name: "Test Author" },
     });
     const author = (await authorResp.json()) as { id: number };
 
     for (const title of ["Alpha Book", "Beta Book", "Gamma Book"]) {
-      await apiContext.post("/test/books", {
+      await apiContext.post("/api/test/books", {
         data: {
           libraryId: library.id,
           title,
@@ -62,8 +62,8 @@ test.describe("Home gallery vertical overflow", () => {
   test.afterAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
     await apiContext.dispose();
   });
 

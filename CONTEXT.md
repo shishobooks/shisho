@@ -64,6 +64,23 @@ The process of discovering and importing files from the filesystem into a librar
 **Identify**:
 An interactive workflow where a user matches a book against an external source (via plugins) to enrich metadata.
 
+The following terms describe how Identify assigns provenance (ADR 0006).
+
+**Plugin Proposal**:
+A metadata value or relationship collection suggested by a plugin during Identify.
+
+**Proposal Acceptance**:
+When the user has not made an Explicit Clear, their final metadata result differs semantically from the current metadata and matches the Plugin Proposal. This remains a Proposal Acceptance if the user temporarily edited the proposal before restoring it, unless the final result is also a no-op against the current metadata.
+
+**Metadata Provenance**:
+The source responsible for establishing the current meaning of a metadata value or relationship. Under the Identify rules, a no-op preserves existing provenance, an Explicit Clear removes provenance, a Proposal Acceptance has plugin provenance, and any other changed nonempty result has manual provenance.
+
+**Relationship Provenance**:
+The provenance of a relationship collection as a whole. The Identify rules use Relationship Provenance for Authors, Genres, Tags, Narrators, and Series memberships. Identifiers additionally retain provenance for each entry.
+
+**Explicit Clear**:
+A user's deliberate removal of a metadata value or all entries in a relationship. Under the Identify rules, the resulting absence has no enduring provenance and may be repopulated by a later Scan.
+
 **Merge**:
 Combining two resources of the same type into one, transferring all associations from the source to the target and deleting the source.
 
@@ -77,10 +94,15 @@ A `.metadata.json` file placed alongside a book or file that provides metadata o
 ### Deployment Modes
 
 **Demo Mode**:
-A planned application mode for presenting an immutable library for evaluation. Visitors will be able to browse and consume its prepared media, but will not be able to cause persistent changes.
+A server configuration that presents a prepared, immutable library for evaluation. Visitors sign in with a shared credential and can browse, search, read, and listen. Any request that would persist a change is rejected up front; nothing is accepted and later reset. Preferences kept only in the visitor's browser are allowed.
+_Avoid_: read-only mode, sandbox, demo instance (that is the Public Demo)
 
 **Public Demo**:
-The planned publicly hosted Shisho instance at `demo.shishobooks.com` that will run in Demo Mode.
+The publicly hosted Shisho instance at `demo.shishobooks.com`. It runs in Demo Mode, serves the Demo Corpus, and is signed into with one shared credential published alongside every link to it.
+
+**Demo Corpus**:
+The prepared set of legally redistributable Books, Files, covers, and the database that the Public Demo serves. It is authored deliberately, replaced only by redeployment, and never changed by visitors. Every work in it carries a recorded source, license basis, credit, and note of any modification.
+_Avoid_: sample library, fixtures (those are test data)
 
 ## Relationships
 

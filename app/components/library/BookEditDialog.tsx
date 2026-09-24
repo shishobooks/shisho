@@ -46,6 +46,7 @@ import {
 } from "@/hooks/queries/entity-search";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { markErrorDisplayed } from "@/libraries/api";
 import {
   AuthorRoleWriter,
   DataSourceManual,
@@ -126,6 +127,7 @@ export function BookEditDialog({
     book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
   );
 
+  const [saveError, setSaveError] = useState<string | null>(null);
   const updateBookMutation = useUpdateBook();
   const setBookReviewMutation = useSetBookReview();
 
@@ -164,6 +166,7 @@ export function BookEditDialog({
     // Only initialize when dialog just opened, not on every prop change
     if (!justOpened) return;
 
+    setSaveError(null);
     const initialTitle = book.title;
     // Semantic value for state: "" when autogenerate is ON, actual value when manual
     const semanticSortTitle =
@@ -323,6 +326,7 @@ export function BookEditDialog({
 
   const handleSubmit = async () => {
     if (hasInvalidSeriesRange) return;
+    setSaveError(null);
 
     const payload: {
       title?: string;
@@ -412,18 +416,26 @@ export function BookEditDialog({
       return;
     }
 
-    if (Object.keys(payload).length > 0) {
-      await updateBookMutation.mutateAsync({
-        id: String(book.id),
-        payload,
-      });
-    }
+    try {
+      if (Object.keys(payload).length > 0) {
+        await updateBookMutation.mutateAsync({
+          id: String(book.id),
+          payload,
+        });
+      }
 
-    if (reviewChanged) {
-      await setBookReviewMutation.mutateAsync({
-        bookId: book.id,
-        override: draftReviewOverride,
-      });
+      if (reviewChanged) {
+        await setBookReviewMutation.mutateAsync({
+          bookId: book.id,
+          override: draftReviewOverride,
+        });
+      }
+    } catch (error) {
+      markErrorDisplayed(error);
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to save book",
+      );
+      return;
     }
 
     // Reset initial values so hasChanges becomes false, then close via effect
@@ -826,6 +838,15 @@ export function BookEditDialog({
           />
         </DialogBody>
 
+        {saveError && (
+          <p
+            className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-3 text-sm text-destructive"
+            role="alert"
+          >
+            {saveError}
+          </p>
+        )}
+
         <DialogFooter>
           <DialogClose asChild>
             <Button size="sm" variant="outline">
@@ -833,11 +854,16 @@ export function BookEditDialog({
             </Button>
           </DialogClose>
           <Button
-            disabled={updateBookMutation.isPending || hasInvalidSeriesRange}
+            disabled={
+              updateBookMutation.isPending ||
+              setBookReviewMutation.isPending ||
+              hasInvalidSeriesRange
+            }
             onClick={handleSubmit}
             size="sm"
           >
-            {updateBookMutation.isPending && (
+            {(updateBookMutation.isPending ||
+              setBookReviewMutation.isPending) && (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
             Save Changes

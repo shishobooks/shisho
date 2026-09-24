@@ -593,12 +593,18 @@ func CleanupEmptyParentDirectories(startPath, stopAt string, ignoredPatterns ...
 // (like gAMA chunks without sRGB in PNG) that cause color rendering issues in browsers.
 // Returns the normalized image data and the new MIME type.
 // If the input is a JPEG, it stays as JPEG to preserve quality. Otherwise, it becomes PNG.
+//
+// The full pixel decode is the only validation that catches a truncated
+// image: a header-only check (ImageResolution) accepts a body that has an
+// intact signature and header but no complete pixel data. When decoding or
+// re-encoding fails, the original bytes and MIME type are returned together
+// with the error, so a caller that only wants best-effort normalization can
+// keep the bytes and a caller that must not store a broken image can reject
+// them.
 func NormalizeImage(data []byte, mimeType string) ([]byte, string, error) {
-	// Decode the image
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		// If we can't decode, return original data
-		return data, mimeType, nil
+		return data, mimeType, errors.Wrap(err, "failed to decode image")
 	}
 
 	var buf bytes.Buffer
@@ -606,18 +612,75 @@ func NormalizeImage(data []byte, mimeType string) ([]byte, string, error) {
 	// Preserve JPEG format to avoid quality loss, otherwise use PNG
 	if mimeType == "image/jpeg" || mimeType == "image/jpg" {
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
-			return data, mimeType, nil
+			return data, mimeType, errors.Wrap(err, "failed to encode image")
 		}
 		return buf.Bytes(), "image/jpeg", nil
 	}
 
 	// Re-encode as PNG (universal, lossless)
 	if err := png.Encode(&buf, img); err != nil {
-		// If we can't encode, return original data
-		return data, mimeType, nil
+		return data, mimeType, errors.Wrap(err, "failed to encode image")
 	}
 
 	return buf.Bytes(), "image/png", nil
+}
+
+// WriteFileAtomic writes data to path so that a reader never observes a
+// partial file: the bytes go to a temporary file in the same directory, which
+// then replaces path with a rename. On failure the temporary file is removed
+// and whatever was at path before is left untouched. Every cover write
+// (scanner, Identify, page selection, upload) goes through it so a failed
+// replacement never destroys a working cover. Because the replacement is a
+// rename, a symlink or hard link at path is replaced by a new regular file
+// rather than written through.
+func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := func(err error) error {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return errors.WithStack(err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return errors.WithStack(err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+// OtherCoverExtensions returns the existing cover files with the given base
+// name at every CoverImageExtensions entry except keepExt. Cover writers
+// install a replacement at keepExt first and pass this list to the caller,
+// which removes the files only after its database write succeeds.
+func OtherCoverExtensions(coverDir, coverBaseName, keepExt string) []string {
+	var stale []string
+	for _, ext := range CoverImageExtensions {
+		if ext == keepExt {
+			continue
+		}
+		candidate := filepath.Join(coverDir, coverBaseName+ext)
+		if _, err := os.Stat(candidate); err == nil {
+			stale = append(stale, candidate)
+		}
+	}
+	return stale
 }
 
 // GenerateUniqueFilepathIfExists returns a unique filepath if the path exists, otherwise returns the original.

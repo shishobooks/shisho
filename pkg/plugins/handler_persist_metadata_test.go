@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -34,10 +35,15 @@ func makePersistTestJPEG(width, height int) []byte {
 // persistMetadata cover-write tests. Only UpdateFile and RetrieveBook
 // need to produce meaningful results for the cover-only persist path.
 type stubBookStoreForPersist struct {
-	book *models.Book
+	book                   *models.Book
+	deletedNarratorFileIDs []int
+	updatedBookColumns     [][]string
+	updatedFileColumns     [][]string
+	updateFileErr          error
 }
 
-func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, _ []string) error {
+func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, columns []string) error {
+	s.updatedBookColumns = append(s.updatedBookColumns, append([]string(nil), columns...))
 	return nil
 }
 
@@ -45,11 +51,18 @@ func (s *stubBookStoreForPersist) RetrieveBook(_ context.Context, _ int) (*model
 	return s.book, nil
 }
 
-func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, _ *models.File, _ []string) error {
+func (s *stubBookStoreForPersist) UpdateFile(_ context.Context, file *models.File, columns []string) error {
+	if s.updateFileErr != nil {
+		return s.updateFileErr
+	}
+	// Mirror books.Service.UpdateFile, which bumps updated_at on every write.
+	file.UpdatedAt = time.Now()
+	s.updatedFileColumns = append(s.updatedFileColumns, append([]string(nil), columns...))
 	return nil
 }
 
-func (s *stubBookStoreForPersist) DeleteNarratorsForFile(_ context.Context, _ int) (int, error) {
+func (s *stubBookStoreForPersist) DeleteNarratorsForFile(_ context.Context, fileID int) (int, error) {
+	s.deletedNarratorFileIDs = append(s.deletedNarratorFileIDs, fileID)
 	return 0, nil
 }
 
@@ -113,7 +126,7 @@ func TestPersistMetadata_CoverWrite_RootLevelFile_SyntheticBookPath(t *testing.T
 	// is expected: the test deliberately uses a nonexistent bookPath, and
 	// sidecar failures are non-fatal. The assertions below only cover the
 	// cover-write path.
-	err = h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err = h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	// Cover must land next to the file in the library dir, not under the
@@ -137,6 +150,7 @@ type stubPageExtractor struct {
 	calls    []stubPageExtractorCall
 	filename string
 	mimeType string
+	stale    []string
 	wantErr  error
 }
 
@@ -146,12 +160,62 @@ type stubPageExtractorCall struct {
 	Page         int
 }
 
-func (s *stubPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, error) {
+func (s *stubPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, []string, error) {
 	s.calls = append(s.calls, stubPageExtractorCall{FileID: file.ID, BookFilepath: bookFilepath, Page: page})
 	if s.wantErr != nil {
-		return "", "", s.wantErr
+		return "", "", nil, s.wantErr
 	}
-	return s.filename, s.mimeType, nil
+	return s.filename, s.mimeType, s.stale, nil
+}
+
+// A previous page cover reported as stale by the extractor is removed only
+// after the column flush succeeds, matching the image-based path, so a failed
+// UpdateFile never leaves the row naming a deleted file.
+func TestPersistMetadata_CoverPage_RemovesStaleCoversOnlyAfterFlush(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		updateFileErr error
+		wantRemoved   bool
+	}{
+		{name: "flush succeeds", wantRemoved: true},
+		{name: "flush fails", updateFileErr: errors.New("db locked"), wantRemoved: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			libraryDir := t.TempDir()
+			filePath := filepath.Join(libraryDir, "comic.cbz")
+			require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+			stalePath := filepath.Join(libraryDir, "comic.cbz.cover.png")
+			require.NoError(t, os.WriteFile(stalePath, []byte("previous cover"), 0600))
+
+			pageCount := 10
+			file := &models.File{ID: 1, BookID: 1, Filepath: filePath, FileType: models.FileTypeCBZ, PageCount: &pageCount}
+			book := &models.Book{ID: 1, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+			extractor := &stubPageExtractor{filename: "comic.cbz.cover.jpg", mimeType: "image/jpeg", stale: []string{stalePath}}
+			h := &handler{enrich: &enrichDeps{
+				bookStore:     &stubBookStoreForPersist{book: book, updateFileErr: tc.updateFileErr},
+				pageExtractor: extractor,
+			}}
+
+			page := 3
+			_, err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{CoverPage: &page}, "test", "plugin-id", nil, testLogger())
+			if tc.updateFileErr != nil {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			_, statErr := os.Stat(stalePath)
+			if tc.wantRemoved {
+				assert.True(t, os.IsNotExist(statErr), "the stale cover must be removed after a successful flush")
+			} else {
+				require.NoError(t, statErr, "the stale cover must survive a failed flush")
+			}
+		})
+	}
 }
 
 func TestPersistMetadata_CoverPage_CBZ_HappyPath(t *testing.T) {
@@ -188,7 +252,7 @@ func TestPersistMetadata_CoverPage_CBZ_HappyPath(t *testing.T) {
 	page := 3
 	md := &mediafile.ParsedMetadata{CoverPage: &page}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	require.Len(t, extractor.calls, 1)
@@ -224,7 +288,7 @@ func TestPersistMetadata_CoverPage_PDF_HappyPath(t *testing.T) {
 	page := 7
 	md := &mediafile.ParsedMetadata{CoverPage: &page}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	require.Len(t, extractor.calls, 1)
@@ -267,8 +331,10 @@ func TestPersistMetadata_CoverPage_OutOfBounds(t *testing.T) {
 
 			md := &mediafile.ParsedMetadata{CoverPage: &tc.page}
 
-			err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+			warnings, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 			require.NoError(t, err)
+			require.Len(t, warnings, 1, "an invalid page is reported as a warning")
+			assert.Contains(t, warnings[0], "Cover was not applied")
 
 			assert.Empty(t, extractor.calls, "extractor should not be called for invalid page")
 			assert.Nil(t, file.CoverPage, "file.CoverPage should remain unchanged")
@@ -296,8 +362,11 @@ func TestPersistMetadata_CoverPage_ExtractorError(t *testing.T) {
 	page := 3
 	md := &mediafile.ParsedMetadata{CoverPage: &page}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err, "extractor errors should be logged, not returned")
+	warnings, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	require.NoError(t, err, "extractor errors are reported as warnings, not returned")
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "Cover was not applied: cover page 3 could not be extracted.", warnings[0])
+	assert.NotContains(t, warnings[0], "extraction failed", "the extractor's internal error must stay in the log")
 
 	require.Len(t, extractor.calls, 1, "extractor should still be called once")
 	assert.Nil(t, file.CoverPage, "file.CoverPage should remain unchanged")
@@ -329,7 +398,7 @@ func TestPersistMetadata_CoverPage_CBZ_BeatsCoverData(t *testing.T) {
 		CoverMimeType: "image/jpeg",
 	}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	// coverPage path taken
@@ -404,7 +473,13 @@ func TestPersistMetadata_BulkInsertsIdentifiers(t *testing.T) {
 		},
 	}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", nil, testLogger())
+	// Proposal Acceptance for the collection and each entry (ADR 0006); a
+	// missing intent would attribute the entries as manual.
+	overrides := &ApplyOverrides{
+		Intents:           map[string]string{"identifiers": SourceIntentPlugin},
+		IdentifierIntents: map[string]string{"asin": SourceIntentPlugin, "isbn_13": SourceIntentPlugin},
+	}
+	_, err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", overrides, testLogger())
 	require.NoError(t, err)
 
 	require.Equal(t, []int{file.ID}, identStore.deleteCalls)
@@ -460,11 +535,31 @@ func TestPersistMetadata_AllBlanksPreservesExistingIdentifiers(t *testing.T) {
 		},
 	}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "shisho", "audnexus", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.Empty(t, identStore.deleteCalls, "delete must NOT fire when no valid identifiers to insert")
 	assert.Empty(t, identStore.bulkCalls, "bulk insert must NOT fire when no valid identifiers")
+}
+
+func TestPersistMetadata_IdentifierClearUpdatesSourceAndReviewState(t *testing.T) {
+	t.Parallel()
+
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	source := models.DataSourceManual
+	file.IdentifierSource = &source
+	store := &stubBookStoreForPersist{book: book}
+	identStore := &stubIdentStoreForPersist{}
+	h := &handler{enrich: &enrichDeps{bookStore: store, identStore: identStore}}
+	overrides := &ApplyOverrides{SelectedFields: map[string]bool{"identifiers": true}}
+
+	_, err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
+	require.NoError(t, err)
+
+	assert.Empty(t, identStore.deleteCalls, "the collection is already empty; only the stale source is healed")
+	assert.Nil(t, file.IdentifierSource)
+	require.Len(t, store.updatedFileColumns, 1)
+	assert.Contains(t, store.updatedFileColumns[0], "identifier_source", "UpdateFile recomputes review state")
 }
 
 // Plugin returns coverPage for a non-page-based format (EPUB) — coverPage is
@@ -490,7 +585,7 @@ func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {
 		CoverMimeType: "image/jpeg",
 	}
 
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	// Extractor must not be called for non-page-based files
@@ -598,7 +693,7 @@ func TestPersistMetadata_IndexesNewSeries(t *testing.T) {
 	}
 
 	md := &mediafile.ParsedMetadata{Series: "My New Series"}
-	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series created via identify-apply must be added to series_fts so it shows up in series search dropdowns")
@@ -612,7 +707,7 @@ func TestPersistMetadata_IndexesNewSeries(t *testing.T) {
 func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
 	t.Parallel()
 
-	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
+	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeM4B)
 	indexer := &stubSearchIndexer{}
 	h := &handler{
 		enrich: &enrichDeps{
@@ -631,12 +726,36 @@ func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
 		Genres:    []string{"New Genre"},
 		Tags:      []string{"New Tag"},
 	}
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.Len(t, indexer.indexedPersonIDs, 2, "both new author and new narrator must be added to persons_fts")
 	assert.Len(t, indexer.indexedGenreIDs, 1, "new genre must be added to genres_fts")
 	assert.Len(t, indexer.indexedTagIDs, 1, "new tag must be added to tags_fts")
+}
+
+func TestPersistMetadata_ReindexesAttachedSeriesWhenAuthorsCleared(t *testing.T) {
+	t.Parallel()
+
+	book := newApplyTestBook(t, "Book")
+	series := &models.Series{ID: 99, LibraryID: book.LibraryID, Name: "Series"}
+	book.BookSeries = []*models.BookSeries{{BookID: book.ID, SeriesID: series.ID, Series: series}}
+	person := &models.Person{ID: 7, LibraryID: book.LibraryID, Name: "Author"}
+	book.Authors = []*models.Author{{BookID: book.ID, PersonID: person.ID, Person: person}}
+	indexer := &stubSearchIndexer{}
+	h := &handler{
+		enrich: &enrichDeps{
+			bookStore:     &stubBookStoreForPersist{book: book},
+			relStore:      &stubRelStoreForApply{},
+			searchIndexer: indexer,
+		},
+	}
+	overrides := &ApplyOverrides{SelectedFields: map[string]bool{"authors": true}}
+
+	_, err := h.persistMetadata(context.Background(), book, nil, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
+	require.NoError(t, err)
+
+	assert.Contains(t, indexer.indexedSeriesIDs, series.ID)
 }
 
 // TestPersistMetadata_ReindexesDetachedOldSeries verifies that when an apply
@@ -669,7 +788,7 @@ func TestPersistMetadata_ReindexesDetachedOldSeries(t *testing.T) {
 	}
 
 	md := &mediafile.ParsedMetadata{Series: "New Series"}
-	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.Contains(t, indexer.indexedSeriesIDs, 1, "newly-attached series (id 1 from stub) must be indexed")
@@ -704,7 +823,7 @@ func TestPersistMetadata_SkipsSeriesIndexWhenAttachmentUnchanged(t *testing.T) {
 	}
 
 	md := &mediafile.ParsedMetadata{Series: "Same Series"}
-	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment to this book did not change must NOT be re-indexed (avoids series_fts churn)")
@@ -740,7 +859,7 @@ func TestPersistMetadata_ReindexesSameSeriesWhenTitleChanges(t *testing.T) {
 		Title:  "New Title",
 		Series: "Same Series",
 	}
-	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series whose membership did not change must still be re-indexed when book.title changed, otherwise series_fts.book_titles goes stale")
@@ -775,7 +894,7 @@ func TestPersistMetadata_SkipsSeriesIndexWhenSameTitleReapplied(t *testing.T) {
 		Title:  "Same Title",
 		Series: "Same Series",
 	}
-	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose aggregate inputs (title) did not actually change must NOT be re-indexed")
@@ -800,7 +919,9 @@ func TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied(t *testing.T) 
 		Series:   existingSeries,
 	}}
 	existingPerson := &models.Person{ID: 1, LibraryID: book.LibraryID, Name: "Same Author"}
+	role := "writer"
 	book.Authors = []*models.Author{{
+		Role:     &role,
 		BookID:   book.ID,
 		PersonID: existingPerson.ID,
 		Person:   existingPerson,
@@ -820,7 +941,7 @@ func TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied(t *testing.T) 
 		Authors: []mediafile.ParsedAuthor{{Name: "Same Author", Role: "writer"}},
 		Series:  "Same Series",
 	}
-	err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose author-set aggregate input did not actually change must NOT be re-indexed")
@@ -856,20 +977,15 @@ func TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor(t *testing.T) {
 	md := &mediafile.ParsedMetadata{
 		Authors: []mediafile.ParsedAuthor{{Name: "Existing Author", Role: "writer"}},
 	}
-	err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, md, "test", "plugin-id", nil, testLogger())
 	require.NoError(t, err)
 
 	assert.NotContains(t, indexer.indexedPersonIDs, 1, "author whose attachment did not change must NOT be re-indexed (avoids persons_fts churn)")
 }
 
-// TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent locks in
-// the boundary invariant that an `ApplyOverrides` with an empty FileName does
-// not write through to file.Name, even when paired with a non-empty
-// FileNameSource. The applyMetadata wire layer already guards on
-// `payload.FileName != ""`, but persistMetadata is also reachable from
-// future internal callers (or hand-built test payloads), so the same shape
-// must be defended at the function boundary.
-func TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent(t *testing.T) {
+// TestPersistMetadata_ExplicitFileName_EmptyStringClears verifies that an
+// explicitly selected empty file name clears both Name and NameSource.
+func TestPersistMetadata_ExplicitFileName_EmptyStringClears(t *testing.T) {
 	t.Parallel()
 
 	libraryDir := t.TempDir()
@@ -900,17 +1016,14 @@ func TestPersistMetadata_ExplicitFileName_EmptyStringIsTreatedAsAbsent(t *testin
 	}
 
 	emptyName := ""
-	manualSource := "manual"
 	overrides := &ApplyOverrides{
-		FileName:       &emptyName,
-		FileNameSource: &manualSource,
+		FileName: &emptyName,
+		Intents:  map[string]string{SourcesKeyFileName: SourceIntentUser},
 	}
 
-	err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
+	_, err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
 	require.NoError(t, err)
 
-	require.NotNil(t, file.Name)
-	assert.Equal(t, "Original Custom Name", *file.Name, "file.Name must NOT be blanked by an empty-string FileName override")
-	require.NotNil(t, file.NameSource)
-	assert.Equal(t, "manual", *file.NameSource, "file.NameSource must NOT be replaced when FileName is empty (the override is treated as absent)")
+	assert.Nil(t, file.Name)
+	assert.Nil(t, file.NameSource)
 }
