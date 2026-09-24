@@ -3144,14 +3144,6 @@ func (w *Worker) upgradeEnricherCover(
 		return
 	}
 
-	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
-		"file_id":             file.ID,
-		"enricher_resolution": enricherResolution,
-		"current_resolution":  currentResolution,
-		"source":              coverSource,
-		"path":                coverFilepath,
-	})
-
 	// 7. Update file record
 	file.CoverImageFilename = &coverFilename
 	file.CoverMimeType = &normalizedMime
@@ -3165,11 +3157,18 @@ func (w *Worker) upgradeEnricherCover(
 		})
 		return
 	}
-	// The row now names the replacement, so a previous cover at another
-	// extension can go.
-	if existingCoverPath != "" && existingCoverPath != coverFilepath {
-		books.RemoveStaleCovers([]string{existingCoverPath}, log)
-	}
+	// The row now names the replacement, so previous covers at other
+	// extensions can go. Every extension is checked, not just the first one
+	// CoverExistsWithBaseName found for the resolution comparison.
+	books.RemoveStaleCovers(fileutils.OtherCoverExtensions(coverDir, coverBaseName, coverExt), log)
+
+	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
+		"file_id":             file.ID,
+		"enricher_resolution": enricherResolution,
+		"current_resolution":  currentResolution,
+		"source":              coverSource,
+		"path":                coverFilepath,
+	})
 }
 
 // parseFileMetadata extracts metadata from a file based on its type.

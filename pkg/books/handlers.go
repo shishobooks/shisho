@@ -1584,21 +1584,14 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		"normalized_to": normalizedMime,
 	})
 
-	// Update file's cover metadata with normalized MIME type
-	file.CoverMimeType = &normalizedMime
-	file.CoverSource = strPtr(models.DataSourceManual)
-
-	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
-		Columns: []string{"cover_mime_type", "cover_source"},
-	}); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Update the file's cover_image_filename
+	// Write the complete cover state in one column set, so a failed update
+	// can never leave the row naming the old file with the new provenance.
 	coverFilename := coverBaseName + finalExt
 	file.CoverImageFilename = &coverFilename
+	file.CoverMimeType = &normalizedMime
+	file.CoverSource = strPtr(models.DataSourceManual)
 	if err := h.bookService.UpdateFile(ctx, file, UpdateFileOptions{
-		Columns: []string{"cover_image_filename"},
+		Columns: []string{"cover_image_filename", "cover_mime_type", "cover_source"},
 	}); err != nil {
 		return errors.WithStack(err)
 	}
