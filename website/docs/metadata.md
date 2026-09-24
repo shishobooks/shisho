@@ -34,6 +34,8 @@ Publishers belong to files, so different editions can have different publishers.
 
 Identifiers belong to files. A file can have one value for each identifier type, including ISBN-10, ISBN-13, ASIN, UUID, Goodreads, Google, and types added by plugins. Shisho normalizes common formatting, such as ISBN hyphens and ASIN letter case, for reliable matching.
 
+During a scan, identifiers from metadata enrichers and identifiers embedded in the file are combined by type instead of one set replacing the other. When both supply the same type, the enricher's value is kept because plugin metadata outranks embedded file metadata. Each saved identifier records the source that actually supplied it, so an enricher's ISBN is attributed to the plugin while a UUID read from the EPUB is attributed to the EPUB. The collection's overall source is the highest-priority contributor, which is the enricher whenever it supplied at least one identifier. If a file's saved identifiers match what the scan found but are attributed to a lower-priority source than the scan would assign, a normal scan corrects the sources without changing the values. Manual and sidecar identifiers are left alone. See [Metadata Source Priority](#metadata-source-priority) for how sources are ranked.
+
 ## Aliases and Resource Merges
 
 People, series, genres, tags, and publishers can have aliases. Name lookups use aliases to resolve variants to one canonical resource. Renaming a resource can preserve its old name as an alias.

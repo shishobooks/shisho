@@ -844,6 +844,8 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 4. Update `packages/plugin-sdk/hooks.d.ts` when the metadata is also exposed in hook context types.
 5. Prefer adding new optional fields over changing/removing existing ones to avoid breaking plugins
 
+Fields tagged `json:"-"` (`ParsedMetadata.CoverData`, `DataSource`, `FieldDataSources`, `ParsedIdentifier.Source`) are host-internal: they need no SDK change and must never be populated from plugin output. `ParsedIdentifier.Source` is set only by the Scan merge (see `pkg/CLAUDE.md`).
+
 ### Writing a test plugin
 
 ```go
