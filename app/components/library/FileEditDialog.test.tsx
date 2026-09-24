@@ -15,6 +15,7 @@ import {
   DataSourceManual,
   FileRoleMain,
   FileTypeCBZ,
+  FileTypeEPUB,
   type Book,
   type File,
 } from "@/types";
@@ -665,6 +666,50 @@ describe("FileEditDialog", () => {
       await waitFor(() => {
         expect(screen.getByLabelText("Reviewed")).toBeInTheDocument();
       });
+    });
+  });
+  // A rejected save must be visible. The upload path can now be rejected by
+  // the server (an image that does not fully decode), so the dialog has to
+  // show the message and keep the edits instead of failing silently.
+  describe("save failures", () => {
+    it("shows the server message and stays open when the cover upload is rejected", async () => {
+      vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-url");
+      vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+      mockUploadFileCover.mockRejectedValue(
+        new Error("The uploaded file is not a decodable image"),
+      );
+
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        file: {
+          ...mockFile,
+          filepath: "/test/file.epub",
+          file_type: FileTypeEPUB,
+          cover_page: undefined,
+          page_count: undefined,
+        },
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Edit File")).toBeInTheDocument();
+      });
+
+      const input = document.querySelector(
+        'input[type="file"]',
+      ) as HTMLInputElement;
+      expect(input).not.toBeNull();
+      await user.upload(
+        input,
+        new File(["not really a png"], "cover.png", { type: "image/png" }),
+      );
+      await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(mockUploadFileCover).toHaveBeenCalledTimes(1);
+      });
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The uploaded file is not a decodable image",
+      );
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
     });
   });
 });

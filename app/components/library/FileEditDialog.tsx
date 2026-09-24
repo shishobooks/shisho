@@ -44,6 +44,7 @@ import {
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetFileReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { markErrorDisplayed } from "@/libraries/api";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   FileRoleMain,
@@ -102,6 +103,8 @@ export function FileEditDialog({
   const [coverCacheKey, setCoverCacheKey] = useState(() => Date.now());
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
+  // A rejected save stays visible in the dialog so the edits are not lost.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingCoverFile, setPendingCoverFile] =
     useState<globalThis.File | null>(null);
   const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(
@@ -271,6 +274,7 @@ export function FileEditDialog({
       file.review_override ?? null;
     const initialIsPreferredCover = file.is_preferred_cover ?? false;
 
+    setSaveError(null);
     setNarrators(initialNarrators);
     setName(initialName);
     setUrl(initialUrl);
@@ -442,65 +446,75 @@ export function FileEditDialog({
       payload.is_preferred_cover = isPreferredCover;
     }
 
+    setSaveError(null);
+
     // Only submit if something changed
     let updatedFile: File | undefined;
-    if (Object.keys(payload).length > 0) {
-      updatedFile = await updateFileMutation.mutateAsync({
-        id: file.id,
-        payload,
-      });
+    try {
+      if (Object.keys(payload).length > 0) {
+        updatedFile = await updateFileMutation.mutateAsync({
+          id: file.id,
+          payload,
+        });
 
-      // The backend canonicalizes the language tag (e.g. "en-us" → "en-US")
-      // and the abridged value. Sync local state with the server's response
-      // so the dialog reflects the canonical form without needing a reopen.
-      if (updatedFile) {
-        const canonicalLanguage = updatedFile.language || "";
-        if (canonicalLanguage !== language) {
-          setLanguage(canonicalLanguage);
-        }
-        const canonicalAbridged = updatedFile.abridged === true ? "true" : "";
-        if (canonicalAbridged !== abridged) {
-          setAbridged(canonicalAbridged);
+        // The backend canonicalizes the language tag (e.g. "en-us" → "en-US")
+        // and the abridged value. Sync local state with the server's response
+        // so the dialog reflects the canonical form without needing a reopen.
+        if (updatedFile) {
+          const canonicalLanguage = updatedFile.language || "";
+          if (canonicalLanguage !== language) {
+            setLanguage(canonicalLanguage);
+          }
+          const canonicalAbridged = updatedFile.abridged === true ? "true" : "";
+          if (canonicalAbridged !== abridged) {
+            setAbridged(canonicalAbridged);
+          }
         }
       }
-    }
 
-    // Apply pending cover changes
-    if (pendingCoverFile) {
-      await uploadCoverMutation.mutateAsync({
-        id: file.id,
-        file: pendingCoverFile,
-      });
-      setCoverCacheKey(Date.now());
-      setPendingCoverFile(null);
-    }
+      // Apply pending cover changes
+      if (pendingCoverFile) {
+        await uploadCoverMutation.mutateAsync({
+          id: file.id,
+          file: pendingCoverFile,
+        });
+        setCoverCacheKey(Date.now());
+        setPendingCoverFile(null);
+      }
 
-    // Compare to initialValues.coverPage (snapshot) instead of file.cover_page (live prop)
-    // to stay consistent with hasChanges logic and avoid race conditions with refetches
-    if (
-      pendingCoverPage !== null &&
-      pendingCoverPage !== initialValues?.coverPage
-    ) {
-      await setCoverPageMutation.mutateAsync({
-        id: file.id,
-        page: pendingCoverPage,
-      });
-      setCoverCacheKey(Date.now());
-      setPendingCoverPage(null);
-    }
+      // Compare to initialValues.coverPage (snapshot) instead of file.cover_page (live prop)
+      // to stay consistent with hasChanges logic and avoid race conditions with refetches
+      if (
+        pendingCoverPage !== null &&
+        pendingCoverPage !== initialValues?.coverPage
+      ) {
+        await setCoverPageMutation.mutateAsync({
+          id: file.id,
+          page: pendingCoverPage,
+        });
+        setCoverCacheKey(Date.now());
+        setPendingCoverPage(null);
+      }
 
-    // Apply pending review override change. Only fire if the user toggled
-    // to an explicit value that differs from the file's saved override.
-    // draftReviewOverride === null means "auto" — never set by the user
-    // gesture, only by initial load when no override exists.
-    if (
-      draftReviewOverride !== null &&
-      draftReviewOverride !== (initialValues?.reviewOverride ?? null)
-    ) {
-      await setFileReviewMutation.mutateAsync({
-        fileId: file.id,
-        override: draftReviewOverride,
-      });
+      // Apply pending review override change. Only fire if the user toggled
+      // to an explicit value that differs from the file's saved override.
+      // draftReviewOverride === null means "auto" — never set by the user
+      // gesture, only by initial load when no override exists.
+      if (
+        draftReviewOverride !== null &&
+        draftReviewOverride !== (initialValues?.reviewOverride ?? null)
+      ) {
+        await setFileReviewMutation.mutateAsync({
+          fileId: file.id,
+          override: draftReviewOverride,
+        });
+      }
+    } catch (error) {
+      markErrorDisplayed(error);
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to save file",
+      );
+      return;
     }
 
     // Reset initial values so hasChanges becomes false, then close via effect.
@@ -981,6 +995,15 @@ export function FileEditDialog({
             />
           )}
         </DialogBody>
+
+        {saveError && (
+          <p
+            className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-3 text-sm text-destructive"
+            role="alert"
+          >
+            {saveError}
+          </p>
+        )}
 
         <DialogFooter>
           <Button
