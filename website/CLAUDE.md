@@ -37,12 +37,13 @@ GitHub Actions installs dependencies, builds `website/`, uploads `website/build`
 The canonical sidebar is:
 
 1. **Getting Started**: safe first deployment and initial library setup
-2. **Supported Formats**: evaluation of native input, reading, and download capabilities
-3. **Using Shisho**: regular user tasks such as browsing, search, reading, playback, bulk actions, book and file management, metadata, and lists
-4. **Administration**: deployment and maintenance, configuration, libraries, access control, installed plugins, supplements, and sidecars
-5. **Integrations**: OPDS, Kobo Sync, and the eReader Browser
-6. **Troubleshooting**: a prominent cross-cutting router from symptoms to canonical task pages
-7. **Developer**: plugin development, manifest and hook contracts, host API reference, testing, and publishing
+2. **Public Demo**: the hosted read-only instance, its shared credential, and what it can and cannot do
+3. **Supported Formats**: evaluation of native input, reading, and download capabilities
+4. **Using Shisho**: regular user tasks such as browsing, search, reading, playback, bulk actions, book and file management, metadata, and lists
+5. **Administration**: deployment and maintenance, configuration, libraries, access control, installed plugins, supplements, and sidecars
+6. **Integrations**: OPDS, Kobo Sync, and the eReader Browser
+7. **Troubleshooting**: a prominent cross-cutting router from symptoms to canonical task pages
+8. **Developer**: plugin development, manifest and hook contracts, host API reference, testing, and publishing
 
 The exact category behavior is intentional:
 
@@ -233,6 +234,12 @@ The macOS `Icon\r\r` ignore pattern conflicts with swizzled `Icon/` directories.
 ```
 
 Add matching exceptions before creating another swizzled icon directory, or Git may silently ignore it.
+
+## Linking to Unreleased Pages from Site Pages
+
+`/docs/<id>` serves the latest released snapshot, and `onBrokenLinks: "throw"` fails the build when `website/src/pages/` links to a doc that the snapshot does not contain yet. A page added to `website/docs/` since the last release only exists at `/docs/unreleased/<id>` until `scripts/release.sh` snapshots it.
+
+Do not hardcode `/docs/unreleased/<id>` in a site page, and do not add the page to `versioned_docs/` to satisfy the check. Resolve the path with `useDocPath("<id>")` from `website/src/hooks/useDocPath.ts`, which returns the released path when the snapshot has the doc and the unreleased path otherwise, so the link corrects itself at the next release. Links inside `website/docs/` are unaffected because they resolve within the same version.
 
 ## Release and Deployment Gotchas
 

@@ -1,6 +1,6 @@
 # Getting Started
 
-Shisho is a self-hosted book management system for ebooks, audiobooks, and comics. Docker Compose is the recommended way to run it.
+Shisho is a self-hosted book management system for ebooks, audiobooks, and comics. Docker Compose is the recommended way to run it. To see a running instance before you install, try the [Public Demo](./demo.md).
 
 ## Prerequisites
 

@@ -15,6 +15,7 @@ import {
 import type { ReactNode } from "react";
 
 import { Github } from "../components/GithubIcon";
+import { useDocPath } from "../hooks/useDocPath";
 
 const workflowSteps = [
   {
@@ -84,6 +85,7 @@ const features = [
 
 export default function Home(): ReactNode {
   const { siteConfig } = useDocusaurusContext();
+  const demoPath = useDocPath("demo");
 
   return (
     <Layout
@@ -108,6 +110,12 @@ export default function Home(): ReactNode {
                 to="/docs/getting-started"
               >
                 Get Started
+              </Link>
+              <Link
+                className="docs-home__btn docs-home__btn--ghost"
+                to={demoPath}
+              >
+                Try the Demo
               </Link>
               <Link
                 className="docs-home__btn docs-home__btn--ghost"
