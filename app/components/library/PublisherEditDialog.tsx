@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PublisherIdOption } from "@/hooks/queries/entity-search";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { markErrorDisplayed } from "@/libraries/api";
 import { resolveAliases } from "@/utils/aliases";
 
 export interface PublisherEditData {
@@ -210,6 +211,7 @@ export function PublisherEditDialog({
       requestClose();
     } catch (err) {
       if (err instanceof Error) {
+        markErrorDisplayed(err);
         setServerError(err.message);
       }
     }

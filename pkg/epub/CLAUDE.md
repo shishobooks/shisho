@@ -55,6 +55,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 <meta name="calibre:series_index" content="3"/>
 <meta name="calibre:tags" content="Tag1, Tag2"/>  <!-- Tags, comma-separated -->
 <meta name="imprint" content="Imprint Name"/>     <!-- Overrides dc:publisher when present -->
+<meta name="shisho:url" content="https://..."/>   <!-- Written by the generator; overrides dc:relation/dc:source -->
 ```
 
 #### Meta Elements (EPUB3 style)
@@ -82,7 +83,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | Tags | `<meta name="calibre:tags">` | Comma-separated in content attribute |
 | Description | `<dc:description>` | Full text content |
 | Publisher | `<dc:publisher>` | Overridden by `ibooks:imprint` or `<meta name="imprint">` when present (more specific) |
-| URL | `<dc:relation>` or `<dc:source>` | First URL starting with http:// or https:// |
+| URL | `<meta name="shisho:url">`, then `<dc:relation>`, then `<dc:source>` | `shisho:url` is what the generator writes, so it wins. The `dc:` elements are heuristics for files from elsewhere: first value starting with http:// or https:// |
 | Release Date | `<dc:date>` | Tries 4 date formats in order |
 | Language | `<dc:language>` | BCP 47 tag, normalized via `NormalizeLanguage` (handles ISO 639-2/T like "eng" → "en") |
 | Cover Image | Via manifest + meta reference | Found by `<meta name="cover" content="ID"/>` |

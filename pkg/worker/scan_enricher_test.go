@@ -152,14 +152,62 @@ func TestMergeEnrichedMetadata_IdentifiersMergeAdditively(t *testing.T) {
 	}
 	mergeEnrichedMetadata(&enrichedMeta, fileMetadata, fileSource)
 
-	// Both should be present
-	require.Len(t, enrichedMeta.Identifiers, 2)
-	types := map[string]string{}
-	for _, id := range enrichedMeta.Identifiers {
-		types[id.Type] = id.Value
-	}
-	assert.Equal(t, "B01ENRICHED", types["asin"])
-	assert.Equal(t, "9781234567890", types["isbn_13"])
+	// Both should be present, each attributed to its own contributor
+	assert.Equal(t, []mediafile.ParsedIdentifier{
+		{Type: "asin", Value: "B01ENRICHED", Source: enricherSource},
+		{Type: "isbn_13", Value: "9781234567890", Source: fileSource},
+	}, enrichedMeta.Identifiers)
+	// The aggregate names the first (highest-priority) contributor, not the
+	// last one to append an entry.
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["identifiers"])
+}
+
+// TestMergeEnrichedMetadata_IdentifiersFromTwoEnrichers verifies that each
+// enricher's new types keep that enricher's source and the aggregate stays
+// with the first enricher.
+func TestMergeEnrichedMetadata_IdentifiersFromTwoEnrichers(t *testing.T) {
+	t.Parallel()
+
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, &mediafile.ParsedMetadata{
+		Identifiers: []mediafile.ParsedIdentifier{{Type: "asin", Value: "B01FIRST00"}},
+	}, "plugin:test/first")
+	mergeEnrichedMetadata(&enrichedMeta, &mediafile.ParsedMetadata{
+		Identifiers: []mediafile.ParsedIdentifier{
+			{Type: "asin", Value: "B01SECOND0"},
+			{Type: "goodreads", Value: "12345"},
+		},
+	}, "plugin:test/second")
+
+	assert.Equal(t, []mediafile.ParsedIdentifier{
+		{Type: "asin", Value: "B01FIRST00", Source: "plugin:test/first"},
+		{Type: "goodreads", Value: "12345", Source: "plugin:test/second"},
+	}, enrichedMeta.Identifiers)
+	assert.Equal(t, "plugin:test/first", enrichedMeta.FieldDataSources["identifiers"])
+}
+
+// TestMergeEnrichedMetadata_IdentifierTypeConflict verifies that an earlier
+// contributor keeps a type the later one also supplies.
+func TestMergeEnrichedMetadata_IdentifierTypeConflict(t *testing.T) {
+	t.Parallel()
+
+	var enrichedMeta mediafile.ParsedMetadata
+	enricherSource := "plugin:test/enricher"
+	mergeEnrichedMetadata(&enrichedMeta, &mediafile.ParsedMetadata{
+		Identifiers: []mediafile.ParsedIdentifier{{Type: "isbn_13", Value: "9780316769488"}},
+	}, enricherSource)
+	mergeEnrichedMetadata(&enrichedMeta, &mediafile.ParsedMetadata{
+		Identifiers: []mediafile.ParsedIdentifier{
+			{Type: "isbn_13", Value: "9780060853983"},
+			{Type: "uuid", Value: "2d049387-8f5a-4c3e-9b1a-6f2e1d0c9a7b"},
+		},
+	}, "epub_metadata")
+
+	assert.Equal(t, []mediafile.ParsedIdentifier{
+		{Type: "isbn_13", Value: "9780316769488", Source: enricherSource},
+		{Type: "uuid", Value: "2d049387-8f5a-4c3e-9b1a-6f2e1d0c9a7b", Source: "epub_metadata"},
+	}, enrichedMeta.Identifiers)
+	assert.Equal(t, enricherSource, enrichedMeta.FieldDataSources["identifiers"])
 }
 
 // TestMergeEnrichedMetadata_TechnicalFieldsPreserved verifies that technical

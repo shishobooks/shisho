@@ -45,8 +45,8 @@ test.describe("Login Flow", () => {
   test.beforeAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/users");
-    await apiContext.post("/test/users", {
+    await apiContext.delete("/api/test/users");
+    await apiContext.post("/api/test/users", {
       data: { username: "testadmin", password: "password123" },
     });
     await apiContext.dispose();
@@ -81,12 +81,14 @@ For individual tests, use the `apiContext` fixture directly:
 
 ```typescript
 test("creates item via API", async ({ page, apiContext }) => {
-  await apiContext.post("/items", { data: { name: "Test" } });
+  await apiContext.post("/api/items", { data: { name: "Test" } });
   // ...
 });
 ```
 
 For `beforeAll` hooks, use `getApiBaseURL` with `request.newContext()` since fixtures aren't available there.
+
+`getApiBaseURL` and the API fixtures target the backend origin directly. Every API request must include `/api` explicitly, including setup and cleanup requests such as `/api/test/users`. Adding `/api` to `baseURL` does not fix leading-slash request paths: URL resolution replaces the base path. Device routes stay at `/ereader`, `/opds`, `/kobo`, and `/e`; browser navigation to SPA routes such as `/login` and `/libraries` also stays at the root.
 
 ## Test-Only API Endpoints
 
@@ -96,13 +98,15 @@ Test endpoints are only registered when `ENVIRONMENT=test`.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/test/users` | POST | Create a test user with admin role |
-| `/test/users` | DELETE | Delete all users |
-| `/test/ereader` | DELETE | Wipe all eReader test data |
-| `/test/plugins` | POST | Seed a plugin (disk + DB) |
-| `/test/plugins` | DELETE | Wipe all plugin state (add `?include_official=true` to also wipe official repos) |
-| `/test/plugins/fixture.zip` | GET | Fixture plugin zipped for install flows |
-| `/test/plugins/fixture-info` | GET | `{scope, id, version, download_url, sha256}` for the fixture |
+| `/api/test/users` | POST | Create a test user with admin role |
+| `/api/test/users` | DELETE | Delete all users |
+| `/api/test/ereader` | DELETE | Wipe all eReader test data |
+| `/api/test/plugins` | POST | Seed a plugin (disk + DB) |
+| `/api/test/plugins` | DELETE | Wipe all plugin state (add `?include_official=true` to also wipe official repos) |
+| `/api/test/plugins/fixture.zip` | GET | Fixture plugin zipped for install flows |
+| `/api/test/plugins/fixture-info` | GET | `{scope, id, version, download_url, sha256}` for the fixture |
+
+The fixture plugin (`pkg/testutils/plugin_fixture.go`) is an EPUB metadata enricher that always proposes one result, `Fixture Title` with `abridged: false`, so a seeded plugin plus a seeded EPUB book is enough to drive the Identify dialog end to end (see `identify.spec.ts`). The Identify dialog searches on open; results are buttons named by their title, and the book page's actions menu trigger is labeled `Book actions`. Seed a fresh book per test: once a proposal is applied, its rows are unchanged and hidden by the Changed filter.
 
 ### Backend Pattern
 
@@ -113,8 +117,8 @@ func (c *Config) IsTestMode() bool {
 }
 
 // pkg/server/server.go
-if cfg.IsTestMode() {
-    testutils.RegisterRoutes(e, db, pm, plugins.NewInstaller(cfg.PluginDir))
+if cfg.IsTestMode() && !cfg.DemoMode {
+    testutils.RegisterRoutes(e.Group("/api"), db, pm, plugins.NewInstaller(cfg.PluginDir))
 }
 ```
 

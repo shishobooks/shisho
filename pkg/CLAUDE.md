@@ -13,20 +13,28 @@ This file documents backend patterns and conventions specific to Shisho.
 
 ### Entry Point
 
-`cmd/api/main.go` starts both HTTP server and background worker.
+`cmd/api/main.go` starts both HTTP server and background worker. The listener uses `http.Server.Addr`, built with `net.JoinHostPort` from `server_host` and `server_port`.
+
+### HTTP routing
+
+- `pkg/server` registers API routes beneath `e.Group("/api")`. API registration helpers accept `*echo.Group`; device route helpers still accept `*echo.Echo` because `/opds`, `/kobo`, `/ereader`, and `/e` stay at the root, alongside `/health`.
+- The router serves `pkg/frontend.Handler()` for unknown GET/HEAD paths outside the API and device prefixes. Reserved prefixes match whole path segments, so `/apiary` is a frontend route. Missing API/device routes return JSON 404, including omitted device routes in demo mode.
+- Use per-router `RouteNotFound` handlers, never mutate `echo.NotFoundHandler`. Echo adds authenticated group fallbacks when `Group.Use` runs; server construction replaces those fallbacks after all routes are registered so missing paths return JSON 404 rather than authentication errors. Existing endpoint authentication is unchanged.
+- Vite proxies `/api` unchanged, without rewriting paths or adding `X-Forwarded-Prefix`. OPDS is available at `/opds` in development too. Frontend routes and APIs share one origin; the server does not enable CORS.
+- Forwarded-header sanitization runs with `e.Pre` before routing. Request logging, recovery, security headers, compression, and demo enforcement run with `e.Use`. Keep the frontend fallback pattern `/*` recognizable to request logging.
 
 ### Demo Mode
 
 `demo_mode` / `DEMO_MODE` defaults to `false`. When enabled, `pkg/server/demo_mode.go` runs globally via `e.Use` after logger and recovery, before authentication and handlers. Use matched `c.Path()` patterns, not raw URLs; do not move this middleware to `e.Pre`.
 
 - Allow `GET`, `HEAD`, and `OPTIONS`, subject to normal authentication and permissions.
-- Allow only `POST /auth/login` and `POST /auth/logout` among write methods.
-- Deny `GET /books/files/:id/download/original`, `GET /books/files/:id/download/kepub`, and `GET /jobs/:id/download`.
+- Allow only `POST /api/auth/login` and `POST /api/auth/logout` among write methods.
+- Deny `GET /api/books/files/:id/download/original`, `GET /api/books/files/:id/download/kepub`, and `GET /api/jobs/:id/download`.
 - Reject every other method/path with `403`, code `demo_mode`, message `This action is unavailable in the demo.` Admins have no bypass. Unknown write paths are rejected too.
-- Keep generated reader downloads (`/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
-- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), either `/plugins` group, per-library plugin routes (`/libraries/:id/plugins/*`), or test routes (`/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
+- Keep generated reader downloads (`/api/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
+- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), either `/api/plugins` group, per-library plugin routes (`/api/libraries/:id/plugins/*`), or test routes (`/api/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
 - Skip `pluginManager.LoadAll` and `wrkr.Start` in `cmd/api/main.go`. Also skip `wrkr.Shutdown`, which waits for goroutines that only `Start` creates. Reader caches and startup migrations still run.
-- `GET /auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
+- `GET /api/auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
 
 Any new route family or download path must be classified here as allowed, denied, or unregistered in Demo Mode, with corresponding middleware or route-registration tests. New GET/HEAD handlers must not introduce persistent user changes.
 
@@ -65,6 +73,7 @@ Each domain (books, jobs, libraries, chapters) has:
 - **`ProcessScanJob`** handles this by collecting book IDs into `booksToOrganize` and running organization in a batch after all files are scanned.
 - **`Monitor.processPendingEvents`** handles this by collecting book IDs from `FileCreated` results and calling `organizeBooks()` after processing all events.
 - **Any new caller of `scanInternal(FilePath)`** must also handle organization, or files will be left unorganized in the library root.
+- **Resync narrator changes must trigger organization after relationship persistence.** The earlier filename check uses the pre-scan narrators. Include M4B narrator updates in the post-`UpdateBookRelationships` organization condition, even when Title and Authors are unchanged. A hybrid book's EPUB may restore Authors before its M4B restores Narrators, so an author-only trigger leaves the audiobook filename stale.
 
 ### Scan Cache Must Include Supplements
 
@@ -91,7 +100,7 @@ When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if
 ### Cover Image System
 
 - Individual file covers: `{filename}.cover.{ext}`
-- API endpoints: `/books/{id}/cover` and `/files/{id}/cover`
+- API endpoints: `/api/books/{id}/cover` and `/api/books/files/{id}/cover`
 
 **CRITICAL - CoverImageFilename stores FILENAME ONLY:**
 
@@ -115,6 +124,7 @@ file.CoverImageFilename = &newCoverPath
 
 - **Read-side (serving, fingerprinting, file generation):** use `filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)`. Pure-string, no stat, no synthetic-path trap. Book-cover serving across the books, OPDS, and eReader handlers shares `pkg/covers.ServeBookCover`, which encapsulates this resolution and the ETag-based conditional-GET pattern (see "Conditional-GET for cover endpoints" below). The series handler uses `pkg/covers.SelectFile` and resolves the path itself because it picks the file from the series' first book rather than from a fixed file list. Other examples: `fileCover` in `pkg/books/handlers.go`, `pkg/kobo/handlers.go`, `pkg/filegen/*`, `pkg/downloadcache/fingerprint.go`, and `deleteFileFromDisk`.
 - **Write-side (scanner, pre-organize):** use `fileutils.ResolveCoverDirForWrite(bookFilepath, fileFilepath)` when `bookFilepath` may be a synthetic organized-folder path that hasn't been created on disk yet. Falls back to `filepath.Dir(fileFilepath)` when the book path doesn't resolve to a real directory.
+- **Cover writes never destroy a working cover.** Write the replacement with `fileutils.WriteFileAtomic` (temp file plus rename, 0644), collect the previous covers at other extensions with `fileutils.OtherCoverExtensions`, and remove them with `books.RemoveStaleCovers` only after the database write that names the replacement has succeeded. Extractors (`books.ExtractCoverPageToFile`, the scanner's `extractCBZPageCover` and `extractPDFPageCover`) return the stale list rather than deleting; the caller that owns the `UpdateFile` owns the removal. Never delete first and write second, and never delete before the row is updated. When the bytes come from outside the file (an enricher, a download, an upload), the gate is `fileutils.NormalizeImage`'s error, which decodes every pixel; `fileutils.ImageResolution` only reads the header and accepts a truncated body, so it is for resolution comparison, not validation. Embedded covers from the file's own parser are still written best-effort when they do not decode.
 
 **Book sidecars** for root-level books are similarly anchored next to the file — `sidecar.WriteBookSidecarFromModel(book)` falls back via `book.Files[0].Filepath` when `book.Filepath` doesn't resolve to an existing directory. Reads use `sidecar.ReadBookSidecarFromModel(book, fileHint)` and pass the current file as a hint so resolution works before the book's Files relation is loaded.
 
@@ -151,11 +161,19 @@ Metadata sources ranked (lower number = higher precedence):
 
 Used to determine which metadata to keep when conflicts occur. During scans, enricher plugins override file-embedded metadata per-field (enricher-first merge in `runMetadataEnrichers`).
 
+**Series memberships have their own source.** `books.series_source` is aggregate provenance for a Book's ordered membership collection and Series Number groups; `series.name_source` only describes the Series resource's name. The scanner, Identify, and the Edit form gate and stamp `books.series_source`. Never read `Series.NameSource` as a proxy for membership provenance (ADR 0006). A `FindOrCreateSeries` call still carries a name source, which may lower `name_source` on an existing Series, and that is independent of the membership source.
+
+**Identifier per-entry sources are reconciled through one helper.** Both the Book edit handler (`pkg/books`) and Identify (`pkg/plugins`) build the incoming `[]*models.FileIdentifier` with the source a new or replaced entry should get, then call `identifiers.ReconcileSources(existing, incoming)`. It keys both sides on `identifiers.Key` (type plus normalized value), so a stored value that predates normalization still matches. `pkg/books` imports `pkg/plugins`, so shared identifier logic must live in `pkg/identifiers`, never in either handler package. Reject duplicate identifier types before any delete; `BulkCreateFileIdentifiers` dedupes by type and would otherwise hide the problem by dropping a row.
+
+**Scan carries identifier provenance per entry.** `mergeEnrichedMetadata` unions identifiers by type (earlier contributor keeps a shared type) and stamps each appended entry's `mediafile.ParsedIdentifier.Source` (`json:"-"`, never on the wire). `FieldDataSources["identifiers"]` stays with the first contributor, which is the highest priority because enrichers merge before the file-parser fallback. The persistence block writes each `file_identifiers.source` from the entry's `Source`, falling back to the field source when empty. Do not overwrite the field source per appended entry; that mislabels a mixed collection with the lowest-priority origin. `shouldUpdateRelationship` compares only values, so the identifier block also calls `identifierAttributionStale` when values are unchanged: an ordinary Scan rewrites only when the incoming aggregate strictly outranks the stored one (repairing collections mislabeled before #492 while leaving manual and sidecar collections alone), and a forced refresh rewrites when any entry's origin differs. Intended consequence, not a bug: Identify accepting a proposal that omits an embedded identifier saves a plugin-sourced collection without it, and the next ordinary Scan restores the embedded entry because the union's aggregate is the same plugin priority (`TestScan_MixedIdentifierCollection_OrdinaryScanRestoresEmbeddedAfterIdentifyAccept`).
+
+**The scanner canonicalizes incoming series names before its name-based comparison.** `shouldUpdateParsedSeries` and `seriesSidecarMatches` still compare names (unlike Identify, which compares resolved IDs), because `FindOrCreateSeries` has side effects and cannot run before the priority gate. So `canonicalAttachedSeriesName` in `scan_unified.go` first maps an incoming series name (parsed metadata, enricher result, or sidecar) to the attached Series' current name when it matches that Series' name or one of its Aliases. Without it, renaming a Series while keeping the old name as an Alias made every scan delete and reinsert the membership and, without the Alias, create a duplicate Series. Restoring or replacing a membership during a resync also triggers reorganization (`seriesChanged`) when the book has a main CBZ, since the series number is part of the organized folder name for CBZ and hybrid books.
+
 ### OPDS
 
 - OPDS v1.2 server hosted in the application
 - As new functionality is added, keep the OPDS server up-to-date with the new features
-- **Cover URLs in feeds must point at `/opds/v1/books/:id/cover`**, not the books API. Reasons mirror eReader: OPDS uses Basic Auth (the books group requires session auth), and in production the Caddy `/opds/*` handler proxies to the backend while bare `/books/*` falls through to the SPA. The cover endpoint lives in `pkg/opds/handlers.go` (`bookCover`) and is built off `apiBase + "/opds/v1"` in `bookToEntryWithKepub` so an `X-Forwarded-Prefix` (e.g. `/api` in dev) is preserved.
+- **Cover URLs in feeds must point at `/opds/v1/books/:id/cover`**, not the books API. OPDS uses Basic Auth while `/api/books` requires session auth. The Go server serves OPDS directly; bare `/books/*` paths belong to the SPA. The cover endpoint lives in `pkg/opds/handlers.go` (`bookCover`) and is built off `apiBase + "/opds/v1"` in `bookToEntryWithKepub` so an `X-Forwarded-Prefix` from a trusted prefix-stripping proxy is preserved. Vite does not set that header.
 
 ### eReader Browser UI (`pkg/ereader/`)
 
@@ -222,7 +240,8 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 
 **Group-level permission (all routes in group):**
 ```go
-booksGroup := e.Group("/books")
+api := e.Group("/api")
+booksGroup := api.Group("/books")
 booksGroup.Use(authMiddleware.Authenticate)
 booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 ```
@@ -345,7 +364,7 @@ Check existing queries in `pkg/books/service.go` for reference. Common aliases: 
 
 - **Unified `LogLevel` enum (`pkg/models/log_level.go`)**: A single `LogLevel` (`debug`, `info`, `warn`, `error`, `fatal`) is the canonical log-severity enum, shared by `models.JobLog.Level` (job logs) and `logs.LogEntry.Level` (app/server logs). There is no separate `JobLogLevel` — use `models.LogLevel*` consts everywhere, and `tstype:"LogLevel"` on level fields / `tstype:"LogLevel[]"` on level query filters. Both level query validators (`joblogs.ListJobLogsQuery.Level`, `logs.ListLogsQuery.Level`) carry the full `oneof=debug info warn error fatal`. The frontend imports `LogLevel*` from `@/types` (generated into `models.ts`).
 
-- **Jobs / job logs / app logs follow the `{ items, total }` envelope** like every other list endpoint: `jobs.ListJobsResponse` (`items: Job[]`), `joblogs.ListJobLogsResponse` (`items: JobLog[]`), and `logs.ListLogsResponse` (`items: LogEntry[]`). The foreign-model slices use a field-level `tstype:"Job[]"` / `tstype:"JobLog[]"` override plus a frontmatter import (the publishers `ListPublisherFilesResponse` pattern) so tygo emits a clean `Job[]` rather than `(any | undefined)[]`. **The joblogs list response no longer bundles the `job`** — the handler only does an existence check (404 on unknown job); the client fetches the job separately via `GET /jobs/:id` (the `useJob` hook). `POST /auth/logout` returns `204 No Content` (pure acknowledgment), not a JSON message body.
+- **Jobs / job logs / app logs follow the `{ items, total }` envelope** like every other list endpoint: `jobs.ListJobsResponse` (`items: Job[]`), `joblogs.ListJobLogsResponse` (`items: JobLog[]`), and `logs.ListLogsResponse` (`items: LogEntry[]`). The foreign-model slices use a field-level `tstype:"Job[]"` / `tstype:"JobLog[]"` override plus a frontmatter import (the publishers `ListPublisherFilesResponse` pattern) so tygo emits a clean `Job[]` rather than `(any | undefined)[]`. **The joblogs list response no longer bundles the `job`** — the handler only does an existence check (404 on unknown job); the client fetches the job separately via `GET /api/jobs/:id` (the `useJob` hook). `POST /api/auth/logout` returns `204 No Content` (pure acknowledgment), not a JSON message body.
 
 ### Config
 
@@ -358,7 +377,7 @@ Check existing queries in `pkg/books/service.go` for reference. Common aliases: 
 
 ### Sidecars
 
-- **Series number groups are atomic:** `series_number`, `series_number_end`, and `series_number_unit` must always come from one metadata source. Copy, merge, clear, validate, and sidecar-overlay all three together. An end requires a finite start, both endpoints must be finite, and external ranges require end greater than start. Malformed external groups are discarded as a whole.
+- **Series number groups are atomic:** `series_number`, `series_number_end`, and `series_number_unit` must always come from one metadata source. Copy, merge, clear, validate, and sidecar-overlay all three together. An end requires a finite start, both endpoints must be finite, and external ranges require end greater than start. Malformed external groups (hook results, sidecars) are discarded as a whole; the Identify apply endpoint instead rejects them as a validation error in both the array and scalar shapes (see `pkg/plugins/CLAUDE.md`).
 - Sidecar metadata files kept for every file parsed into the system
 - Don't store non-modifiable intrinsic properties (e.g., bitrate, duration)
 - Source fields (e.g., title_source, name_source) shouldn't be saved into the sidecar
@@ -461,6 +480,8 @@ When a metadata field that affects file paths is edited via API, trigger file re
 
 Path-affecting removal operations must also trigger reorganization. For example, Identify represents clearing all series memberships as a present but empty series collection, which must remain distinct from an absent series field.
 
+For directory-backed books, folder organization owns the book sidecar. Rename the files inside that folder with `RenameOrganizedFileOnly`, not `RenameOrganizedFile`. A file previously moved from the library root can carry a leftover basename-based book sidecar. Renaming that sidecar during a narrator change can overwrite the current folder-based sidecar and restore stale metadata on the next Scan.
+
 **Pattern in handlers:**
 ```go
 // After updating the field
@@ -472,7 +493,7 @@ if fieldChanged && library.OrganizeFileStructure {
         Title:         title,  // Use file.Name if available
         FileType:      file.FileType,
     }
-    newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+    newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
     if err != nil {
         // Handle error
     }
@@ -569,8 +590,8 @@ func (svc *Service) DeleteChaptersForFile(ctx, fileID) error
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/books/files/:id/chapters` | List chapters (nested tree) |
-| PUT | `/books/files/:id/chapters` | Replace chapters (requires write permission) |
+| GET | `/api/books/files/:id/chapters` | List chapters (nested tree) |
+| PUT | `/api/books/files/:id/chapters` | Replace chapters (requires write permission) |
 
 ### Worker Integration
 

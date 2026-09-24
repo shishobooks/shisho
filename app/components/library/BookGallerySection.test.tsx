@@ -142,7 +142,10 @@ describe("BookGallerySection", () => {
   it("calls onPageChange with page 1 when size changes from the first page", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onPageChange = vi.fn();
-    const books = Array.from({ length: 24 }, (_, i) => makeBook(i + 1));
+    // The page math only reads `total`, so one card is enough. Rendering a
+    // full page of cards made these clicks slow enough to time out when the
+    // whole check suite runs in parallel.
+    const books = [makeBook(1)];
     render(
       wrap(
         <BookGallerySection
@@ -164,7 +167,7 @@ describe("BookGallerySection", () => {
   it("keeps the first visible item in view when size changes on a later page", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onPageChange = vi.fn();
-    const books = Array.from({ length: 24 }, (_, i) => makeBook(i + 1));
+    const books = [makeBook(1)];
     render(
       wrap(
         <BookGallerySection

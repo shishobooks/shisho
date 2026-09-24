@@ -118,7 +118,27 @@ func generateOPF(opts EPUBOptions, coverFilename, coverMimeType string) string {
 
 	// Identifier
 	buf.WriteString("    <dc:identifier id=\"bookid\">urn:uuid:test-book-id</dc:identifier>\n")
-	buf.WriteString("    <dc:language>en</dc:language>\n")
+	for _, id := range opts.Identifiers {
+		if id.Scheme != "" {
+			buf.WriteString(fmt.Sprintf("    <dc:identifier opf:scheme=\"%s\">%s</dc:identifier>\n", escapeXML(id.Scheme), escapeXML(id.Value)))
+		} else {
+			buf.WriteString(fmt.Sprintf("    <dc:identifier>%s</dc:identifier>\n", escapeXML(id.Value)))
+		}
+	}
+	language := opts.Language
+	if language == "" {
+		language = "en"
+	}
+	buf.WriteString(fmt.Sprintf("    <dc:language>%s</dc:language>\n", escapeXML(language)))
+	if opts.Description != "" {
+		buf.WriteString(fmt.Sprintf("    <dc:description>%s</dc:description>\n", escapeXML(opts.Description)))
+	}
+	if opts.Publisher != "" {
+		buf.WriteString(fmt.Sprintf("    <dc:publisher>%s</dc:publisher>\n", escapeXML(opts.Publisher)))
+	}
+	if opts.Date != "" {
+		buf.WriteString(fmt.Sprintf("    <dc:date>%s</dc:date>\n", escapeXML(opts.Date)))
+	}
 
 	// Series (calibre format)
 	if opts.Series != "" {

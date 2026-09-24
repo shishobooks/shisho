@@ -33,6 +33,7 @@ import {
   useListLists,
 } from "@/hooks/queries/lists";
 import { useBulkSetReview } from "@/hooks/queries/review";
+import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import type {
@@ -52,6 +53,7 @@ interface SelectionToolbarProps {
 }
 
 export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
+  const { demoMode } = useAuth();
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -405,12 +407,14 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             </Button>
           </div>
 
-          <div className="border-t">
-            {downloadContent(() => {
-              setActionsPopoverOpen(false);
-              handleDownload();
-            })}
-          </div>
+          {!demoMode && (
+            <div className="border-t">
+              {downloadContent(() => {
+                setActionsPopoverOpen(false);
+                handleDownload();
+              })}
+            </div>
+          )}
 
           <div className="border-t p-1">
             {selectedBookIds.length >= 2 && library && (
@@ -458,28 +462,30 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           </PopoverContent>
         </Popover>
 
-        <Popover
-          onOpenChange={setDownloadPopoverOpen}
-          open={downloadPopoverOpen}
-        >
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="default">
-              <Download className="h-4 w-4" />
-              Download
-              {downloadInfo && downloadInfo.totalSize > 0 && (
-                <span className="text-xs opacity-75">
-                  ({formatFileSize(downloadInfo.totalSize)})
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="center" className="w-56 p-0" side="top">
-            {downloadContent(() => {
-              setDownloadPopoverOpen(false);
-              handleDownload();
-            })}
-          </PopoverContent>
-        </Popover>
+        {!demoMode && (
+          <Popover
+            onOpenChange={setDownloadPopoverOpen}
+            open={downloadPopoverOpen}
+          >
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="default">
+                <Download className="h-4 w-4" />
+                Download
+                {downloadInfo && downloadInfo.totalSize > 0 && (
+                  <span className="text-xs opacity-75">
+                    ({formatFileSize(downloadInfo.totalSize)})
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="center" className="w-56 p-0" side="top">
+              {downloadContent(() => {
+                setDownloadPopoverOpen(false);
+                handleDownload();
+              })}
+            </PopoverContent>
+          </Popover>
+        )}
 
         {selectedBookIds.length >= 2 && library && (
           <Button

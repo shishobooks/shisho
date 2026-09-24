@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCoverExistsWithBaseName(t *testing.T) {
@@ -921,5 +922,80 @@ func TestResolveCoverDirForWrite(t *testing.T) {
 		// new file in a library with OrganizeFileStructure enabled.
 		syntheticBookPath := filepath.Join(libraryDir, "Author", "Title")
 		assert.Equal(t, libraryDir, ResolveCoverDirForWrite(syntheticBookPath, filePath))
+	})
+}
+
+// A truncated image keeps a valid header, so only a full decode catches it.
+// The original bytes still come back so best-effort callers can keep them.
+func TestNormalizeImage_ReportsUndecodableBytes(t *testing.T) {
+	t.Parallel()
+
+	valid := createTestPNG(2, 2)
+	data, mime, err := NormalizeImage(valid, "image/png")
+	require.NoError(t, err)
+	assert.Equal(t, "image/png", mime)
+	assert.NotEmpty(t, data)
+
+	truncated := valid[:33]
+	assert.NotZero(t, ImageResolution(truncated), "precondition: the header still decodes")
+	data, mime, err = NormalizeImage(truncated, "image/png")
+	require.Error(t, err)
+	assert.Equal(t, truncated, data)
+	assert.Equal(t, "image/png", mime)
+
+	data, mime, err = NormalizeImage([]byte("<svg/>"), "image/svg+xml")
+	require.Error(t, err)
+	assert.Equal(t, []byte("<svg/>"), data)
+	assert.Equal(t, "image/svg+xml", mime)
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	t.Parallel()
+
+	t.Run("replaces an existing file and leaves no temporary file", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		path := filepath.Join(dir, "book.epub.cover.jpg")
+		require.NoError(t, os.WriteFile(path, []byte("old"), 0600))
+
+		require.NoError(t, WriteFileAtomic(path, []byte("new"), 0644))
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("new"), got)
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0644), info.Mode().Perm())
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, "book.epub.cover.jpg", entries[0].Name())
+	})
+
+	t.Run("a failed replacement leaves the destination and no temporary file", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		// A nonempty directory cannot be renamed over.
+		path := filepath.Join(dir, "book.epub.cover.jpg")
+		require.NoError(t, os.Mkdir(path, 0700))
+		require.NoError(t, os.WriteFile(filepath.Join(path, "keep"), []byte("x"), 0600))
+
+		require.Error(t, WriteFileAtomic(path, []byte("new"), 0644))
+
+		got, err := os.ReadFile(filepath.Join(path, "keep"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("x"), got)
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, "book.epub.cover.jpg", entries[0].Name())
+	})
+
+	t.Run("a missing directory fails without side effects", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "missing", "cover.jpg")
+		require.Error(t, WriteFileAtomic(path, []byte("new"), 0644))
+		_, err := os.Stat(filepath.Dir(path))
+		assert.True(t, os.IsNotExist(err))
 	})
 }

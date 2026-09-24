@@ -1,6 +1,6 @@
 {
   "name": "shisho",
-  "version": "0.0.50",
+  "version": "0.0.51",
   "description": "Your all-in-one solution for ebooks, audiobooks, and comics",
   "type": "module",
   "main": "index.js",
@@ -89,7 +89,7 @@
     "prettier": "3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript-eslint": "^8.70.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "pnpm": {
     "overrides": {

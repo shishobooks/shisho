@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
+
 import { PublisherEditDialog } from "./PublisherEditDialog";
 
 const createUser = () =>
@@ -407,6 +409,34 @@ describe("PublisherEditDialog", () => {
       // Should NOT include parent_name when selecting an existing parent
       const callArgs = onSave.mock.calls[0][0];
       expect(callArgs.parent_name).toBeUndefined();
+    });
+  });
+
+  describe("save errors", () => {
+    it("shows a rejected save inline and marks it displayed", async () => {
+      const user = createUser();
+      const error = new ShishoAPIError(
+        "This action is unavailable in the demo.",
+        "demo_mode",
+        403,
+      );
+      const onSave = vi.fn().mockRejectedValue(error);
+
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <PublisherEditDialog {...defaultProps} onSave={onSave} />
+        </QueryClientProvider>,
+      );
+
+      const nameInput = await screen.findByDisplayValue("Foobar");
+      await user.type(nameInput, " Edited");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(
+        await screen.findByText("This action is unavailable in the demo."),
+      ).toBeInTheDocument();
+      // Suppresses the global Demo Mode toast (see markErrorDisplayed).
+      expect(error.displayed).toBe(true);
     });
   });
 });

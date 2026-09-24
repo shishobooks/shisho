@@ -60,10 +60,10 @@ export default defineConfig({
     proxy: {
       "/api": {
         target: `http://localhost:${getApiPort()}`,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-        headers: {
-          "X-Forwarded-Prefix": "/api",
-        },
+      },
+      // OPDS stays at its public root path in development and production.
+      "/opds": {
+        target: `http://localhost:${getApiPort()}`,
       },
       // eReader browser UI routes (API key auth for stock browser support)
       "/ereader": {

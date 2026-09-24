@@ -1,0 +1,24 @@
+# Authoring setup for the Demo Corpus. Runs the pinned release image WITHOUT
+# Demo Mode against a local clone of shishobooks/demo-corpus so the maintainer
+# can scan, curate, and commit the resulting database. See README.md.
+#
+#   docker compose -f demo/docker-compose.yml up
+#
+# DEMO_CORPUS_DIR points at the corpus clone, relative to this directory.
+# The default expects the clone next to this repository.
+services:
+  shisho:
+    # Bump this to the release the demo deploys. Tags on ghcr.io carry no "v".
+    image: ghcr.io/shishobooks/shisho:${SHISHO_VERSION:-0.0.50}
+    container_name: shisho-demo-authoring
+    ports:
+      - "5173:5173"
+    volumes:
+      - ${DEMO_CORPUS_DIR:-../../demo-corpus}/library:/media
+      - ${DEMO_CORPUS_DIR:-../../demo-corpus}/config:/config
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      # The authoring database never leaves this machine with sessions in it,
+      # and the demo sets its own secret, so a fixed value is fine here.
+      JWT_SECRET: "demo-corpus-authoring-secret"

@@ -15,7 +15,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 
 const UserMenu = () => {
-  const { user, logout } = useAuth();
+  const { demoMode, user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = useCallback(async () => {
@@ -51,12 +51,14 @@ const UserMenu = () => {
             Lists
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/user/security">
-            <KeyRound className="h-4 w-4" />
-            Security
-          </Link>
-        </DropdownMenuItem>
+        {!demoMode && (
+          <DropdownMenuItem asChild>
+            <Link to="/user/security">
+              <KeyRound className="h-4 w-4" />
+              Security
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link to="/user/settings">
             <UserCog className="h-4 w-4" />

@@ -122,7 +122,9 @@ The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the re
 - `mise docs` - Start documentation dev server
 
 ### Build
-- `mise build` - Build production API binary
+- `mise build` - Generate API types, build the frontend, copy it into `pkg/frontend/dist`, and compile a self-contained production binary
+
+`pkg/frontend` embeds the SPA. Keep `pkg/frontend/dist/placeholder.html` checked in so plain `go build` and `go test ./...` work without Node or a frontend build. Generated `index.html` and assets are gitignored; the handler serves the placeholder's "frontend not built" page only when `index.html` is absent. Do not overwrite the tracked placeholder with build output. Use `mise build` for a complete local binary; `pnpm build` alone does not refresh the embedded files.
 
 ### Linting
 - `mise lint` - Run Go linting with golangci-lint
@@ -169,6 +171,16 @@ This allows the Dockerfile to use `pnpm install --prod` to skip installing test/
 - **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
 - **Development**: mise for tool/version management and task running, Air for Go hot reload
 
+### Public Demo
+
+`demo/` holds the derived Public Demo image (`Dockerfile`), the Fly.io config (`fly.toml`), the corpus authoring Compose file, and `demo/README.md` with the authoring loop and operator setup. `.github/workflows/demo.yml` deploys when the Release workflow calls it after publishing the image, on manual dispatch, and on `repository_dispatch` from `shishobooks/demo-corpus`; it refuses tags older than the first Demo Mode release. Media and the prepared database live only in that corpus repository; `demo/corpus/` is a gitignored CI checkout. Demo Mode behavior itself is documented in `pkg/CLAUDE.md`.
+
+### Production serving
+
+The Alpine image runs a single Go process through `su-exec` after resolving `PUID`/`PGID` and preparing `/config` ownership. It has no Caddy layer, startup health polling, or signal-forwarding shell. The image sets `SERVER_PORT=5173`; the application default stays `3689`. The listener honors `server_host`.
+
+The Go server owns `/api` directly. Vite forwards `/api` unchanged, without injecting `X-Forwarded-Prefix`. Keep `/health`, `/opds`, `/kobo`, `/ereader`, and `/e` at the root. Forwarded-header trust, compression exclusions, security headers, and frontend cache behavior belong to the Go server, not a bundled proxy. See ADR 0007 (`docs/adr/0007-single-binary-image.md`) for the trade-offs.
+
 For detailed architecture information, see:
 - **Backend details**: `pkg/CLAUDE.md`
 - **Frontend details**: `app/CLAUDE.md`
@@ -180,8 +192,9 @@ For detailed architecture information, see:
 - Sample library files in `tmp/library/` for testing
 - All Go files are formatted with `goimports` so all changes should continue that formatting
 - **While iterating, run only the targeted subset of checks relevant to what you changed.** `mise check:quiet` fans out four heavy parallel pipelines that peg CPU; running it between every iteration is wasteful when you only touched one stack. Subset cheat sheet:
-  - Go-only edits → `mise lint test`
-  - Frontend-only edits → `mise lint:js test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
+  - Go-only edits → `mise run lint ::: test`
+  - Frontend-only edits → `mise run lint:js ::: test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
+  - Separate tasks with `:::`. `mise lint test` passes `test` to the linter as an argument and silently skips the tests.
   - Both → run both
   - Migrations → also `mise db:rollback && mise db:migrate`
   - App E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)

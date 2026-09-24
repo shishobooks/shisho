@@ -22,26 +22,26 @@ test.describe("Gallery sort", () => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
 
-    await apiContext.post("/test/users", {
+    await apiContext.post("/api/test/users", {
       data: { username: "sortadmin", password: "password123" },
     });
 
-    const libraryResp = await apiContext.post("/test/libraries", {
+    const libraryResp = await apiContext.post("/api/test/libraries", {
       data: { name: "Sort Test Library" },
     });
     const library = (await libraryResp.json()) as { id: number };
 
-    const authorResp = await apiContext.post("/test/persons", {
+    const authorResp = await apiContext.post("/api/test/persons", {
       data: { libraryId: library.id, name: "Test Author" },
     });
     const author = (await authorResp.json()) as { id: number };
 
     // Seed at least 3 books with distinct titles so sort differences
     // are observable across renders.
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "Alpha Book",
@@ -49,7 +49,7 @@ test.describe("Gallery sort", () => {
         authorId: author.id,
       },
     });
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "Beta Book",
@@ -57,7 +57,7 @@ test.describe("Gallery sort", () => {
         authorId: author.id,
       },
     });
-    await apiContext.post("/test/books", {
+    await apiContext.post("/api/test/books", {
       data: {
         libraryId: library.id,
         title: "Gamma Book",
@@ -73,8 +73,8 @@ test.describe("Gallery sort", () => {
   test.afterAll(async ({ browser }) => {
     const apiBaseURL = getApiBaseURL(browser.browserType().name());
     const apiContext = await request.newContext({ baseURL: apiBaseURL });
-    await apiContext.delete("/test/ereader");
-    await apiContext.delete("/test/users");
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
     await apiContext.dispose();
   });
 

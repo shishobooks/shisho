@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes registers the log viewer endpoint.
-func RegisterRoutes(e *echo.Echo, buffer *RingBuffer, authMiddleware *auth.Middleware) {
+func RegisterRoutes(e *echo.Group, buffer *RingBuffer, authMiddleware *auth.Middleware) {
 	h := &handler{buffer: buffer}
 	e.GET("/logs", h.listLogs,
 		authMiddleware.Authenticate,

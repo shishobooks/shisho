@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -19,6 +20,13 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	var payload PluginApplyPayload
 	if err := c.Bind(&payload); err != nil {
 		return errcodes.ValidationError(err.Error())
+	}
+
+	if err := validateSourceIntents(&payload); err != nil {
+		return err
+	}
+	if err := validateIdentifierTypes(payload.Fields); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()
@@ -67,39 +75,54 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	overrides := convertFieldsToOverrides(payload.Fields, md)
 	if payload.FileName != nil {
 		fileName := strings.TrimSpace(*payload.FileName)
-		fileNameSource, err := canonicalFileNameSource(payload.FileNameSource, payload.PluginScope, payload.PluginID)
-		if err != nil {
-			return err
-		}
 		if overrides == nil {
 			overrides = &ApplyOverrides{}
 		}
 		overrides.FileName = &fileName
-		overrides.FileNameSource = fileNameSource
 	}
 
-	// Extract multi-series entries from fields (array format from identify form).
-	if seriesEntries := extractSeriesEntries(payload.Fields); seriesEntries != nil {
+	if len(payload.Sources) > 0 {
+		if overrides == nil {
+			overrides = &ApplyOverrides{}
+		}
+		overrides.Intents = payload.Sources
+	}
+
+	// Extract multi-series entries from fields (array format from identify
+	// form). A malformed Series Number group rejects the whole apply before
+	// any field is persisted.
+	seriesEntries, err := extractSeriesEntries(payload.Fields)
+	if err != nil {
+		return err
+	}
+	if seriesEntries != nil {
 		if overrides == nil {
 			overrides = &ApplyOverrides{}
 		}
 		overrides.SeriesEntries = seriesEntries
 	}
 
-	// Download cover if cover_url set
+	// Download cover if cover_url set. A failed download is not fatal to the
+	// apply, but the user chose that cover, so the response must say it was
+	// not applied.
+	warnings := []string{}
 	if md.CoverURL != "" {
 		manifest := rt.Manifest()
 		var allowedDomains []string
 		if manifest.Capabilities.HTTPAccess != nil {
 			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
 		}
-		DownloadCoverFromURL(ctx, md, allowedDomains, log)
+		if !DownloadCoverFromURL(ctx, md, allowedDomains, log) {
+			warnings = append(warnings, coverWarning("the cover could not be downloaded"))
+		}
 	}
 
 	// Persist metadata (no field filtering — user already selected fields)
-	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log); err != nil {
+	persistWarnings, err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log)
+	if err != nil {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
+	warnings = append(warnings, persistWarnings...)
 
 	// Organize files after path-affecting updates and clears. Presence matters
 	// for authors, file Name, and series because empty selected values remove
@@ -118,33 +141,18 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		}
 	}
 
-	// Reload and return updated book
+	// Reload and return updated book with the same cover cache key GET
+	// /books/:id computes, so a consumer of this body never builds a stale
+	// cover URL.
 	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 	if err != nil {
 		return errors.Wrap(err, "failed to reload book")
 	}
-
-	return c.JSON(http.StatusOK, updatedBook)
-}
-
-// canonicalFileNameSource maps Identify's semantic source intent to the
-// canonical metadata source stored on files. A nil or empty intent preserves
-// compatibility with older clients by letting persistence default to the
-// specific plugin source.
-func canonicalFileNameSource(intent *string, pluginScope, pluginID string) (*string, error) {
-	if intent == nil || *intent == "" {
-		return nil, nil
+	aspectRatio := ""
+	if updatedBook.Library != nil {
+		aspectRatio = updatedBook.Library.CoverAspectRatio
 	}
+	updatedBook.CoverCacheKey = covers.CacheKey(updatedBook.Files, aspectRatio)
 
-	var source string
-	switch *intent {
-	case FileNameSourceIntentPlugin:
-		source = models.PluginDataSource(pluginScope, pluginID)
-	case FileNameSourceIntentUser:
-		source = models.DataSourceManual
-	default:
-		return nil, errcodes.ValidationError("file_name_source must be one of: plugin, user")
-	}
-
-	return &source, nil
+	return c.JSON(http.StatusOK, PluginApplyResponse{Book: *updatedBook, Warnings: warnings})
 }

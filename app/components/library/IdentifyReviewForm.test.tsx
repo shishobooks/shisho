@@ -14,16 +14,23 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import type { PluginSearchResult } from "@/hooks/queries/plugins";
 import {
+  DataSourceEPUBMetadata,
   DataSourceFilepath,
   DataSourceManual,
   FileRoleMain,
+  FileTypeCBZ,
   FileTypeEPUB,
   FileTypeM4B,
   type Book,
   type File,
+  type FileIdentifier,
 } from "@/types";
 
-import { resolveIdentifiers } from "./identify-utils";
+import {
+  identifierCollectionIntent,
+  identifierEntryIntent,
+  resolveIdentifiers,
+} from "./identify-utils";
 import { IdentifyReviewForm } from "./IdentifyReviewForm";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +47,69 @@ describe("resolveIdentifiers (incoming wins on type conflict)", () => {
   });
 });
 
+// The browser reports whether each entry, and the collection as a whole,
+// equals the Plugin Proposal (ADR 0006). Comparison is a trimmed raw match.
+describe("identifier source intents", () => {
+  const proposal = [
+    { type: "isbn_13", value: " 9780316769488 " },
+    { type: "asin", value: "B01ABC1234" },
+  ];
+
+  it("marks an entry plugin only when its type and trimmed value match the proposal", () => {
+    expect(
+      identifierEntryIntent(
+        { type: "isbn_13", value: "9780316769488" },
+        proposal,
+      ),
+    ).toBe("plugin");
+    expect(
+      identifierEntryIntent({ type: "asin", value: "B02DEF5678" }, proposal),
+    ).toBe("user");
+    expect(
+      identifierEntryIntent(
+        { type: "goodreads", value: "9780316769488" },
+        proposal,
+      ),
+    ).toBe("user");
+  });
+
+  it("marks the collection plugin only when it equals the proposal as a set", () => {
+    expect(
+      identifierCollectionIntent(
+        [
+          { type: "asin", value: "B01ABC1234" },
+          { type: "isbn_13", value: "9780316769488" },
+        ],
+        proposal,
+      ),
+    ).toBe("plugin");
+    expect(
+      identifierCollectionIntent(
+        [{ type: "isbn_13", value: "9780316769488" }],
+        proposal,
+      ),
+    ).toBe("user");
+    expect(identifierCollectionIntent([], proposal)).toBe("user");
+    expect(identifierCollectionIntent([], [])).toBe("user");
+  });
+
+  it("compares against the proposal with duplicate types collapsed, last wins", () => {
+    const duplicated = [
+      { type: "asin", value: "B01FIRST00" },
+      { type: "asin", value: "B01LAST000" },
+    ];
+    expect(
+      identifierCollectionIntent(
+        [{ type: "asin", value: "B01LAST000" }],
+        duplicated,
+      ),
+    ).toBe("plugin");
+    expect(
+      identifierEntryIntent({ type: "asin", value: "B01FIRST00" }, duplicated),
+    ).toBe("user");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Component-level tests
 // ---------------------------------------------------------------------------
@@ -50,6 +120,12 @@ beforeAll(() => {
 });
 
 const applyMock = vi.fn();
+const toastMock = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast: toastMock }));
 vi.mock("@/hooks/queries/plugins", async () => {
   const actual = await vi.importActual<
     typeof import("@/hooks/queries/plugins")
@@ -218,7 +294,40 @@ function getApplyButton() {
 describe("IdentifyReviewForm component", () => {
   beforeEach(() => {
     applyMock.mockReset();
-    applyMock.mockResolvedValue(undefined);
+    applyMock.mockResolvedValue({ warnings: [] });
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    toastMock.warning.mockReset();
+  });
+
+  it("surfaces apply warnings so a skipped cover is not reported as success", async () => {
+    const user = createUser();
+    applyMock.mockResolvedValue({
+      warnings: [
+        "Cover was not applied: the downloaded file is not a decodable image (image/svg+xml).",
+      ],
+    });
+    renderForm({ result: makeResult({ title: "A Different Title" }) });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        "Cover was not applied: the downloaded file is not a decodable image (image/svg+xml).",
+      ),
+    );
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it("shows only the success toast when the apply returns no warnings", async () => {
+    const user = createUser();
+    renderForm({ result: makeResult({ title: "A Different Title" }) });
+
+    await user.click(getApplyButton());
+
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1));
+    expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
   it("hides the Narrators field for non-M4B files", () => {
@@ -606,7 +715,7 @@ describe("IdentifyReviewForm component", () => {
     ).toHaveAttribute("data-state", "unchecked");
   });
 
-  it("emits file_name and file_name_source when Name is checked", async () => {
+  it("emits file_name with a plugin intent when Name is checked", async () => {
     const user = createUser();
     renderForm({
       result: makeResult({ title: "Plugin Title" }),
@@ -618,10 +727,10 @@ describe("IdentifyReviewForm component", () => {
     await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
     const payload = applyMock.mock.calls[0][0];
     expect(payload.file_name).toBe("Plugin Title");
-    expect(payload.file_name_source).toBe("plugin");
+    expect(payload.sources.file_name).toBe("plugin");
   });
 
-  it("marks file_name_source as user when the Name field is edited", async () => {
+  it("marks the Name intent as user when the Name field is edited", async () => {
     const user = createUser();
     renderForm({
       result: makeResult({ title: "Plugin Title" }),
@@ -644,7 +753,7 @@ describe("IdentifyReviewForm component", () => {
     await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
     const payload = applyMock.mock.calls[0][0];
     expect(payload.file_name).toBe("Edition Suffix");
-    expect(payload.file_name_source).toBe("user");
+    expect(payload.sources.file_name).toBe("user");
   });
 
   it("blocks a selected blank Title with a visible validation error", async () => {
@@ -718,9 +827,8 @@ describe("IdentifyReviewForm component", () => {
     await user.click(screen.getByRole("button", { name: /remove isbn-13/i }));
 
     await user.click(screen.getByRole("checkbox", { name: /apply abridged/i }));
-    await user.click(
-      screen.getByRole("checkbox", { name: /mark as abridged/i }),
-    );
+    await user.click(screen.getByRole("combobox", { name: /abridged value/i }));
+    await user.click(screen.getByRole("option", { name: "Not set" }));
 
     await user.click(getApplyButton());
 
@@ -728,9 +836,805 @@ describe("IdentifyReviewForm component", () => {
     const payload = applyMock.mock.calls[0][0];
     expect(payload.fields.subtitle).toBe("");
     expect(payload.fields.identifiers).toEqual([]);
+    expect(payload.sources.identifiers).toBe("user");
     expect(payload.fields.abridged).toBeNull();
     expect(payload.file_name).toBe("");
-    expect(payload.file_name_source).toBe("user");
+    expect(payload.sources.file_name).toBe("user");
+  });
+
+  // The browser only reports whether the final value equals the Plugin
+  // Proposal. Whether the value is a no-op against stored metadata is the
+  // server's call (ADR 0006), so an unchanged value still carries an intent.
+  describe("source intents for scalars", () => {
+    const scalarBook = () =>
+      makeBook({
+        title: "Saved Title",
+        title_source: DataSourceFilepath,
+        subtitle: "Saved Subtitle",
+        subtitle_source: DataSourceFilepath,
+        description: "Saved description",
+        description_source: DataSourceFilepath,
+        files: [
+          makeFile({
+            url: "https://example.com/saved",
+            language: "en",
+            release_date: "2020-01-02T00:00:00Z",
+            abridged: false,
+          }),
+        ],
+      });
+
+    // Name also defaults to the proposed title, so scope to the Title row.
+    const getTitleInput = () => {
+      const row = screen
+        .getByText("Title", { selector: "label" })
+        .closest("div.grid");
+      expect(row).not.toBeNull();
+      return within(row as HTMLElement).getByDisplayValue("Proposed Title");
+    };
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    it("sends plugin for accepted proposals", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({
+          title: "Proposed Title",
+          subtitle: "Proposed Subtitle",
+          description: "Proposed description",
+          publisher: "Proposed Publisher",
+          url: "https://example.com/proposed",
+          language: "fr",
+          release_date: "2021-03-04T00:00:00Z",
+          abridged: true,
+        }),
+      });
+
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        title: "Proposed Title",
+        release_date: "2021-03-04",
+        abridged: true,
+      });
+      expect(payload.sources).toMatchObject({
+        title: "plugin",
+        subtitle: "plugin",
+        description: "plugin",
+        publisher: "plugin",
+        url: "plugin",
+        language: "plugin",
+        release_date: "plugin",
+        abridged: "plugin",
+      });
+    });
+
+    it("sends user when the final value has no matching proposal", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        // The plugin proposes nothing for URL, so the file-level row submits
+        // the saved value unchanged. The server resolves that as a no-op.
+        result: makeResult({ title: "Saved Title" }),
+      });
+
+      // Unchanged rows are hidden and default OFF, so opt in explicitly.
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(screen.getByRole("checkbox", { name: /apply url/i }));
+      const payload = await submit(user);
+      expect(payload.fields.url).toBe("https://example.com/saved");
+      expect(payload.sources.url).toBe("user");
+    });
+
+    it("sends user for an edited value", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({ title: "Proposed Title" }),
+      });
+
+      const titleInput = getTitleInput();
+      await user.clear(titleInput);
+      await user.type(titleInput, "My Title");
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      expect(applyMock.mock.calls[0][0].fields.title).toBe("My Title");
+      expect(applyMock.mock.calls[0][0].sources.title).toBe("user");
+    });
+
+    it("sends plugin when an edit is restored to the proposal", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({ title: "Proposed Title" }),
+      });
+
+      const titleInput = getTitleInput();
+      await user.clear(titleInput);
+      await user.type(titleInput, "My Title");
+      await user.clear(titleInput);
+      // Surrounding whitespace is not an edit: equality is trimmed.
+      await user.type(titleInput, "Proposed Title ");
+
+      const payload = await submit(user);
+      expect(payload.sources.title).toBe("plugin");
+    });
+
+    it("omits both the value and the intent for unchecked fields", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({
+          title: "Proposed Title",
+          subtitle: "Proposed Subtitle",
+        }),
+      });
+
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply subtitle/i }),
+      );
+      const payload = await submit(user);
+      expect(payload.fields).not.toHaveProperty("subtitle");
+      expect(payload.sources).not.toHaveProperty("subtitle");
+      expect(payload.sources.title).toBe("plugin");
+    });
+
+    it("sends user for an Explicit Clear", async () => {
+      const user = createUser();
+      renderForm({
+        book: scalarBook(),
+        result: makeResult({
+          title: "Saved Title",
+          subtitle: "Proposed Subtitle",
+        }),
+      });
+
+      await user.clear(screen.getByDisplayValue("Proposed Subtitle"));
+      const payload = await submit(user);
+      expect(payload.fields.subtitle).toBe("");
+      expect(payload.sources.subtitle).toBe("user");
+    });
+  });
+
+  describe("source intents for relationships", () => {
+    const proposal = () =>
+      makeResult({
+        authors: [
+          { name: "Proposed Author", role: "" },
+          { name: "Second Author", role: "writer" },
+        ],
+        narrators: ["Proposed Narrator", "Second Narrator"],
+        genres: ["Fantasy", "Adventure"],
+        tags: ["Favorite", "Unread"],
+      });
+
+    const relationshipBook = () =>
+      makeBook({
+        author_source: DataSourceFilepath,
+        genre_source: DataSourceFilepath,
+        tag_source: DataSourceFilepath,
+        files: [makeFile({ file_type: FileTypeM4B })],
+      });
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    const savedRelationshipBook = () => {
+      const resource = (name: string, id: number) =>
+        ({
+          id,
+          name,
+          library_id: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+          sort_name: name,
+          sort_name_source: DataSourceManual,
+          book_count: 1,
+        }) as const;
+      return makeBook({
+        ...relationshipBook(),
+        authors: [
+          {
+            id: 1,
+            book_id: 1,
+            person_id: 1,
+            sort_order: 0,
+            person: resource("Proposed Author", 1),
+          },
+          {
+            id: 2,
+            book_id: 1,
+            person_id: 2,
+            sort_order: 1,
+            role: "writer",
+            person: resource("Second Author", 2),
+          },
+        ],
+        book_genres: [
+          { id: 1, book_id: 1, genre_id: 1, genre: resource("Fantasy", 1) },
+          { id: 2, book_id: 1, genre_id: 2, genre: resource("Adventure", 2) },
+        ],
+        book_tags: [
+          { id: 1, book_id: 1, tag_id: 1, tag: resource("Favorite", 1) },
+          { id: 2, book_id: 1, tag_id: 2, tag: resource("Unread", 2) },
+        ],
+        files: [
+          makeFile({
+            file_type: FileTypeM4B,
+            narrators: [
+              {
+                id: 1,
+                file_id: 1,
+                person_id: 3,
+                sort_order: 0,
+                person: resource("Proposed Narrator", 3),
+              },
+              {
+                id: 2,
+                file_id: 1,
+                person_id: 4,
+                sort_order: 1,
+                person: resource("Second Narrator", 4),
+              },
+            ],
+          }),
+        ],
+      });
+    };
+
+    it("shows and selects reordered author and narrator proposals as changes", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedRelationshipBook(),
+        result: makeResult({
+          ...proposal(),
+          authors: [
+            { name: "Second Author", role: "writer" },
+            { name: "Proposed Author", role: "" },
+          ],
+          narrators: ["Second Narrator", "Proposed Narrator"],
+        }),
+      });
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Authors" }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Narrators" }),
+      ).toBeChecked();
+      const payload = await submit(user);
+      expect(payload.fields.authors).toEqual([
+        { name: "Second Author", role: "writer" },
+        { name: "Proposed Author", role: "" },
+      ]);
+      expect(payload.fields.narrators).toEqual([
+        "Second Narrator",
+        "Proposed Narrator",
+      ]);
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+      });
+    });
+
+    const labels = ["Authors", "Narrators", "Genres", "Tags"];
+
+    const addEntry = async (
+      user: ReturnType<typeof createUser>,
+      label: string,
+      name: string,
+    ) => {
+      await user.click(screen.getByText(new RegExp(`^Add ${label}`, "i")));
+      await user.type(screen.getByPlaceholderText(`Search ${label}...`), name);
+      await user.click(
+        screen.getByRole("option", {
+          name: `Create new ${label} "${name.trim()}"`,
+        }),
+      );
+      if (label === "genre" || label === "tag") await user.keyboard("{Escape}");
+    };
+
+    it.each([
+      { matchingProposal: true, intent: "plugin" },
+      { matchingProposal: false, intent: "user" },
+    ])(
+      "sends $intent for selected unchanged relationships with matchingProposal=$matchingProposal",
+      async ({ matchingProposal, intent }) => {
+        const user = createUser();
+        renderForm({
+          book: savedRelationshipBook(),
+          result: matchingProposal ? proposal() : makeResult(),
+        });
+        for (const label of labels) {
+          expect(
+            screen.queryByRole("checkbox", { name: `Apply ${label}` }),
+          ).not.toBeInTheDocument();
+        }
+        await user.click(screen.getByRole("button", { name: "All" }));
+        await user.click(
+          screen.getByRole("button", { name: "Toggle BOOK section" }),
+        );
+        for (const label of labels) {
+          const checkbox = screen.getByRole("checkbox", {
+            name: `Apply ${label}`,
+          });
+          expect(checkbox).not.toBeChecked();
+          await user.click(checkbox);
+        }
+        const payload = await submit(user);
+        expect(payload.fields).toMatchObject({
+          authors: [
+            { name: "Proposed Author", role: undefined },
+            { name: "Second Author", role: "writer" },
+          ],
+          narrators: ["Proposed Narrator", "Second Narrator"],
+          genres: ["Fantasy", "Adventure"],
+          tags: ["Favorite", "Unread"],
+        });
+        expect(payload.sources).toMatchObject({
+          authors: intent,
+          narrators: intent,
+          genres: intent,
+          tags: intent,
+        });
+      },
+    );
+
+    it("sends user for partial removals from each relationship", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      for (const name of [
+        "Second Author",
+        "Second Narrator",
+        "Adventure",
+        "Unread",
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+      }
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [{ name: "Proposed Author", role: "" }],
+        narrators: ["Proposed Narrator"],
+        genres: ["Fantasy"],
+        tags: ["Favorite"],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "user",
+        narrators: "user",
+        genres: "user",
+        tags: "user",
+      });
+    });
+
+    it("sends user for Explicit Clears of each relationship", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      for (const name of [
+        "Proposed Author",
+        "Second Author",
+        "Proposed Narrator",
+        "Second Narrator",
+        "Fantasy",
+        "Adventure",
+        "Favorite",
+        "Unread",
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+      }
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [],
+        narrators: [],
+        genres: [],
+        tags: [],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "user",
+        narrators: "user",
+        genres: "user",
+        tags: "user",
+      });
+    });
+
+    it("omits unchecked relationship values and intents", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      for (const label of labels)
+        await user.click(
+          screen.getByRole("checkbox", { name: `Apply ${label}` }),
+        );
+      const payload = await submit(user);
+      for (const field of ["authors", "narrators", "genres", "tags"]) {
+        expect(payload.fields).not.toHaveProperty(field);
+        expect(payload.sources).not.toHaveProperty(field);
+      }
+    });
+
+    it("sends plugin after restoring relationship suggestions", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+      for (const name of [
+        "Second Author",
+        "Second Narrator",
+        "Adventure",
+        "Unread",
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+      }
+      await user.click(
+        screen.getByRole("button", { name: "Restore suggestions" }),
+      );
+      const payload = await submit(user);
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it("sends user for author and narrator order edits and keeps their changed status visible", async () => {
+      const user = createUser();
+      renderForm({ book: savedRelationshipBook(), result: proposal() });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      await user.click(
+        screen.getByRole("button", { name: "Toggle BOOK section" }),
+      );
+      for (const label of ["Authors", "Narrators"])
+        await user.click(
+          screen.getByRole("checkbox", { name: `Apply ${label}` }),
+        );
+      await user.click(
+        screen.getByRole("button", { name: "Remove Proposed Author" }),
+      );
+      await addEntry(user, "author", "Proposed Author");
+      await user.click(
+        screen.getByRole("button", { name: "Remove Proposed Narrator" }),
+      );
+      await addEntry(user, "narrator", "Proposed Narrator");
+      await user.click(screen.getByRole("button", { name: "Changed" }));
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Authors" }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Narrators" }),
+      ).toBeChecked();
+      const payload = await submit(user);
+      expect(payload.fields.authors).toEqual([
+        { name: "Second Author", role: "writer" },
+        { name: "Proposed Author", role: undefined },
+      ]);
+      expect(payload.fields.narrators).toEqual([
+        "Second Narrator",
+        "Proposed Narrator",
+      ]);
+      expect(payload.sources).toMatchObject({
+        authors: "user",
+        narrators: "user",
+      });
+    });
+
+    it("ignores genre and tag proposal order for defaults and intent", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedRelationshipBook(),
+        result: makeResult({
+          ...proposal(),
+          genres: ["Adventure", "Fantasy"],
+          tags: ["Unread", "Favorite"],
+        }),
+      });
+      expect(
+        screen.queryByRole("checkbox", { name: "Apply Genres" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("checkbox", { name: "Apply Tags" }),
+      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "All" }));
+      await user.click(
+        screen.getByRole("button", { name: "Toggle BOOK section" }),
+      );
+      for (const label of ["Genres", "Tags"])
+        await user.click(
+          screen.getByRole("checkbox", { name: `Apply ${label}` }),
+        );
+      const payload = await submit(user);
+      expect(payload.fields.genres).toEqual(["Fantasy", "Adventure"]);
+      expect(payload.fields.tags).toEqual(["Favorite", "Unread"]);
+      expect(payload.sources).toMatchObject({
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it.each([
+      { restore: false, intent: "user", status: "Changed", role: "writer" },
+      { restore: true, intent: "plugin", status: "Unchanged", role: undefined },
+    ])(
+      "sends $intent for an author role edit with restore=$restore",
+      async ({ restore, intent, status, role }) => {
+        const user = createUser();
+        const book = savedRelationshipBook();
+        renderForm({
+          book: makeBook({
+            ...book,
+            authors: book.authors?.slice(0, 1),
+            files: [makeFile({ file_type: FileTypeCBZ })],
+          }),
+          result: makeResult({
+            authors: [{ name: "Proposed Author", role: "" }],
+          }),
+        });
+        await user.click(screen.getByRole("button", { name: "All" }));
+        await user.click(
+          screen.getByRole("button", { name: "Toggle BOOK section" }),
+        );
+        await user.click(
+          screen.getByRole("checkbox", { name: "Apply Authors" }),
+        );
+        await user.click(screen.getByText("No role").closest("button")!);
+        await user.click(screen.getByRole("option", { name: "Writer" }));
+        if (restore) {
+          await user.click(screen.getByText("Writer").closest("button")!);
+          await user.click(screen.getByRole("option", { name: "No role" }));
+        }
+        const row = screen
+          .getByText("Authors", { selector: "label" })
+          .closest("div.grid");
+        expect(
+          within(row as HTMLElement).getByText(status),
+        ).toBeInTheDocument();
+        const payload = await submit(user);
+        expect(payload.fields.authors).toEqual([
+          { name: "Proposed Author", role },
+        ]);
+        expect(payload.sources.authors).toBe(intent);
+      },
+    );
+
+    it("sends plugin when removed entries are re-added with trimmed proposal names", async () => {
+      const user = createUser();
+      renderForm({
+        book: relationshipBook(),
+        result: makeResult({
+          authors: [{ name: " Proposed Author ", role: "" }],
+          narrators: [" Proposed Narrator "],
+          genres: [" Fantasy ", "Adventure"],
+          tags: [" Favorite ", "Unread"],
+        }),
+      });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      for (const [label, name] of [
+        ["author", "Proposed Author"],
+        ["narrator", "Proposed Narrator"],
+        ["genre", "Fantasy"],
+        ["tag", "Favorite"],
+      ]) {
+        await user.click(
+          screen.getByRole("button", { name: `Remove ${name}` }),
+        );
+        await addEntry(user, label, name);
+      }
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [{ name: "Proposed Author", role: undefined }],
+        narrators: ["Proposed Narrator"],
+        genres: ["Adventure", "Fantasy"],
+        tags: ["Unread", "Favorite"],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it("compares genre and tag entries as trimmed raw sets", async () => {
+      const user = createUser();
+      renderForm({
+        book: relationshipBook(),
+        result: makeResult({
+          ...proposal(),
+          genres: [" Fantasy ", "Adventure", "Fantasy"],
+          tags: [" Favorite ", "Unread", "Favorite"],
+        }),
+      });
+      // Removing duplicate trimmed names leaves the same set, not an edit.
+      await user.click(
+        screen.getAllByRole("button", {
+          name: "Remove Fantasy",
+        })[1],
+      );
+      await user.click(
+        screen.getAllByRole("button", {
+          name: "Remove Favorite",
+        })[1],
+      );
+      const payload = await submit(user);
+      expect(payload.fields.genres).toEqual([" Fantasy ", "Adventure"]);
+      expect(payload.fields.tags).toEqual([" Favorite ", "Unread"]);
+      expect(payload.sources).toMatchObject({
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+
+    it("sends plugin for accepted relationship proposals", async () => {
+      const user = createUser();
+      renderForm({ book: relationshipBook(), result: proposal() });
+
+      const payload = await submit(user);
+      expect(payload.fields).toMatchObject({
+        authors: [
+          { name: "Proposed Author", role: "" },
+          { name: "Second Author", role: "writer" },
+        ],
+        narrators: ["Proposed Narrator", "Second Narrator"],
+        genres: ["Fantasy", "Adventure"],
+        tags: ["Favorite", "Unread"],
+      });
+      expect(payload.sources).toMatchObject({
+        authors: "plugin",
+        narrators: "plugin",
+        genres: "plugin",
+        tags: "plugin",
+      });
+    });
+  });
+
+  describe("source intents for identifiers", () => {
+    const savedIdentifier = (
+      type: FileIdentifier["type"],
+      value: string,
+    ): FileIdentifier => ({
+      id: 1,
+      file_id: 1,
+      type,
+      value,
+      source: DataSourceManual,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    });
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    const addIdentifier = async (
+      user: ReturnType<typeof createUser>,
+      typeLabel: RegExp,
+      value: string,
+    ) => {
+      await user.click(
+        screen.getByRole("combobox", { name: /Identifier type/i }),
+      );
+      await user.click(screen.getByRole("option", { name: typeLabel }));
+      await user.type(screen.getByPlaceholderText(/value/i), value);
+      await user.click(screen.getByRole("button", { name: /^Add$/i }));
+    };
+
+    it("sends plugin per entry and for the field when the proposal is accepted", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [
+            { type: "isbn_13", value: "9780316769488" },
+            { type: "asin", value: "B01ABC1234" },
+          ],
+        }),
+      });
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "isbn_13", value: "9780316769488", source: "plugin" },
+        { type: "asin", value: "B01ABC1234", source: "plugin" },
+      ]);
+      expect(payload.sources.identifiers).toBe("plugin");
+    });
+
+    it("sends user for a retained entry and an added entry", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          files: [
+            makeFile({ identifiers: [savedIdentifier("asin", "B01ABC1234")] }),
+          ],
+        }),
+        result: makeResult(),
+      });
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply identifiers/i }),
+      );
+      await addIdentifier(user, /Goodreads/i, "12345");
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "asin", value: "B01ABC1234", source: "user" },
+        { type: "goodreads", value: "12345", source: "user" },
+      ]);
+      expect(payload.sources.identifiers).toBe("user");
+    });
+
+    it("keeps plugin on accepted entries inside a mixed collection", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [{ type: "isbn_13", value: "9780316769488" }],
+        }),
+      });
+      await addIdentifier(user, /Goodreads/i, "12345");
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "isbn_13", value: "9780316769488", source: "plugin" },
+        { type: "goodreads", value: "12345", source: "user" },
+      ]);
+      expect(payload.sources.identifiers).toBe("user");
+    });
+
+    it("sends user for an edited entry and plugin once it is restored", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [{ type: "asin", value: "B01ABC1234" }],
+        }),
+      });
+      // Removing the only entry makes the row unchanged, which the default
+      // Changed filter would hide.
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(screen.getByRole("button", { name: /remove asin/i }));
+      await addIdentifier(user, /ASIN/i, "B09EDITED0");
+
+      let payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "asin", value: "B09EDITED0", source: "user" },
+      ]);
+      expect(payload.sources.identifiers).toBe("user");
+
+      applyMock.mockClear();
+      await user.click(screen.getByRole("button", { name: /remove asin/i }));
+      await addIdentifier(user, /ASIN/i, "B01ABC1234");
+
+      payload = await submit(user);
+      expect(payload.fields.identifiers).toEqual([
+        { type: "asin", value: "B01ABC1234", source: "plugin" },
+      ]);
+      expect(payload.sources.identifiers).toBe("plugin");
+    });
+
+    it("omits both the entries and the intent when Identifiers is unchecked", async () => {
+      const user = createUser();
+      renderForm({
+        result: makeResult({
+          identifiers: [{ type: "asin", value: "B01ABC1234" }],
+          title: "New Title",
+        }),
+      });
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply identifiers/i }),
+      );
+
+      const payload = await submit(user);
+      expect(payload.fields.identifiers).toBeUndefined();
+      expect(payload.sources.identifiers).toBeUndefined();
+    });
   });
 
   it("hides unchanged rows in the default Changed filter, shows them in All", async () => {
@@ -809,5 +1713,293 @@ describe("IdentifyReviewForm component", () => {
     );
 
     expect(titleCheckbox).toHaveAttribute("data-state", "checked");
+  });
+
+  // Series memberships carry their own aggregate source (books.series_source),
+  // distinct from a Series resource's name source. It drives the default
+  // checkbox like every other book-level field, and the submitted intent
+  // reports whether the final memberships equal the proposal.
+  describe("series provenance", () => {
+    const savedSeriesBook = (seriesSource: Book["series_source"]) =>
+      makeBook({
+        series_source: seriesSource,
+        book_series: [
+          {
+            book_id: 1,
+            series_id: 10,
+            series_number: 1,
+            sort_order: 1,
+            series: { id: 10, library_id: 1, name: "Some Series" },
+          } as never,
+        ],
+      });
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    it("defaults Series OFF when the membership source is manual", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceManual),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      await user.click(
+        screen.getByRole("button", { name: /toggle book section/i }),
+      );
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Series" }),
+      ).toHaveAttribute("data-state", "unchecked");
+    });
+
+    it("defaults Series ON when the membership source is low-priority", () => {
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Series" }),
+      ).toHaveAttribute("data-state", "checked");
+    });
+
+    it("sends plugin when the proposed memberships are accepted", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({
+          series: "Other Series",
+          series_number: 1,
+          series_number_end: 3,
+          series_number_unit: "volume",
+        }),
+      });
+      const payload = await submit(user);
+      expect(payload.fields.series).toEqual([
+        {
+          name: "Other Series",
+          number: 1,
+          series_number_end: 3,
+          series_number_unit: "volume",
+        },
+      ]);
+      expect(payload.sources.series).toBe("plugin");
+    });
+
+    it("sends user when a series number is edited, and plugin once restored", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      const start = screen.getByRole("spinbutton", { name: "Series start" });
+      await user.clear(start);
+      await user.type(start, "5");
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      expect(applyMock.mock.calls[0][0].sources.series).toBe("user");
+
+      applyMock.mockClear();
+      await user.clear(start);
+      await user.type(start, "2");
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      expect(applyMock.mock.calls[0][0].sources.series).toBe("plugin");
+    });
+
+    it("sends user for an Explicit Clear", async () => {
+      const user = createUser();
+      renderForm({
+        book: savedSeriesBook(DataSourceEPUBMetadata),
+        result: makeResult({ series: "Other Series", series_number: 2 }),
+      });
+      await user.click(
+        await screen.findByRole("button", { name: /remove other series/i }),
+      );
+      const payload = await submit(user);
+      expect(payload.fields.series).toEqual([]);
+      expect(payload.sources.series).toBe("user");
+    });
+
+    it("shows reordered memberships as changed and sends user", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          series_source: DataSourceEPUBMetadata,
+          book_series: [
+            {
+              book_id: 1,
+              series_id: 10,
+              series_number: 1,
+              sort_order: 1,
+              series: { id: 10, library_id: 1, name: "Alpha Ser" },
+            } as never,
+            {
+              book_id: 1,
+              series_id: 11,
+              series_number: 2,
+              sort_order: 2,
+              series: { id: 11, library_id: 1, name: "Beta Ser" },
+            } as never,
+          ],
+        }),
+      });
+      await user.click(screen.getByRole("button", { name: "All" }));
+      await user.click(
+        screen.getByRole("button", { name: "Toggle BOOK section" }),
+      );
+      await user.click(screen.getByRole("checkbox", { name: "Apply Series" }));
+      // Rebuild the same two memberships in the opposite order.
+      await user.click(
+        screen.getByRole("button", { name: "Remove Alpha Ser" }),
+      );
+      await user.click(screen.getByText(/^Add Series/i));
+      await user.type(
+        screen.getByPlaceholderText("Search series..."),
+        "Alpha Ser",
+      );
+      await user.click(
+        screen.getByRole("option", { name: 'Create new series "Alpha Ser"' }),
+      );
+      const starts = screen.getAllByRole("spinbutton", {
+        name: "Series start",
+      });
+      expect(starts).toHaveLength(2);
+      await user.type(starts[1], "1");
+
+      await user.click(screen.getByRole("button", { name: "Changed" }));
+      expect(
+        screen.getByRole("checkbox", { name: "Apply Series" }),
+      ).toBeChecked();
+      const payload = await submit(user);
+      expect(payload.fields.series).toEqual([
+        {
+          name: "Beta Ser",
+          number: 2,
+          series_number_end: undefined,
+          series_number_unit: undefined,
+        },
+        {
+          name: "Alpha Ser",
+          number: 1,
+          series_number_end: undefined,
+          series_number_unit: undefined,
+        },
+      ]);
+      expect(payload.sources.series).toBe("user");
+    });
+
+    it("omits both the memberships and the intent when Series is unchecked", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({
+          title: "Old Title",
+          title_source: DataSourceFilepath,
+        }),
+        result: makeResult({
+          title: "New Title",
+          series: "Other Series",
+          series_number: 2,
+        }),
+      });
+      await user.click(screen.getByRole("checkbox", { name: "Apply Series" }));
+      const payload = await submit(user);
+      expect(payload.fields).not.toHaveProperty("series");
+      expect(payload.sources).not.toHaveProperty("series");
+      expect(payload.sources.title).toBe("plugin");
+    });
+  });
+  // Abridged is a nullable boolean, so the form needs three distinct final
+  // values: true, false, and cleared. A plugin can propose `false`, and
+  // restoring that proposal must send `false` with plugin intent, not a clear.
+  describe("abridged control", () => {
+    const getAbridgedSelect = () =>
+      screen.getByRole("combobox", { name: /abridged value/i });
+
+    const choose = async (
+      user: ReturnType<typeof createUser>,
+      option: string,
+    ) => {
+      await user.click(getAbridgedSelect());
+      await user.click(screen.getByRole("option", { name: option }));
+    };
+
+    const submit = async (user: ReturnType<typeof createUser>) => {
+      await user.click(getApplyButton());
+      await waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+      return applyMock.mock.calls[0][0];
+    };
+
+    it("restores a false proposal as a Proposal Acceptance", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: false }),
+      });
+
+      // The proposal is applied by default. Show all rows first: choosing
+      // the saved value makes the row unchanged, which the Changed filter
+      // would hide before the value is restored.
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await choose(user, "Abridged");
+      await choose(user, "Unabridged");
+
+      const payload = await submit(user);
+      expect(payload.fields.abridged).toBe(false);
+      expect(payload.sources.abridged).toBe("plugin");
+    });
+
+    it("sends a manually chosen false with user intent", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: true }),
+      });
+
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply abridged/i }),
+      );
+      await choose(user, "Unabridged");
+
+      const payload = await submit(user);
+      expect(payload.fields.abridged).toBe(false);
+      expect(payload.sources.abridged).toBe("user");
+    });
+
+    it("sends an Explicit Clear as null with user intent", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: true }),
+      });
+
+      await user.click(screen.getByRole("button", { name: /^all$/i }));
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply abridged/i }),
+      );
+      await choose(user, "Not set");
+
+      const payload = await submit(user);
+      expect(payload.fields.abridged).toBeNull();
+      expect(payload.sources.abridged).toBe("user");
+    });
+
+    it("omits the field entirely when Abridged is unchecked", async () => {
+      const user = createUser();
+      renderForm({
+        book: makeBook({ files: [makeFile({ abridged: true })] }),
+        result: makeResult({ abridged: false }),
+      });
+
+      await user.click(
+        screen.getByRole("checkbox", { name: /apply abridged/i }),
+      );
+
+      const payload = await submit(user);
+      expect(payload.fields).not.toHaveProperty("abridged");
+      expect(payload.sources).not.toHaveProperty("abridged");
+    });
   });
 });

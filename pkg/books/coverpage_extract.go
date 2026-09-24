@@ -14,9 +14,12 @@ import (
 
 // ExtractCoverPageToFile renders `page` from the given page-based file (CBZ or
 // PDF) via the appropriate page cache and writes the rendered image as the
-// cover file alongside the book. Returns the cover filename (not path) and
-// MIME type. Any existing cover image with the same base name is removed first
-// regardless of extension.
+// cover file alongside the book. Returns the cover filename (not path), the
+// MIME type, and the previous cover files with the same base name at other
+// extensions. The new cover is installed atomically and nothing is deleted
+// here: callers remove the stale files only after their database write
+// succeeds, so a failed write never leaves the row naming a deleted file and
+// a failed install leaves the previous cover readable on disk.
 //
 // Callers are responsible for updating the file's CoverPage, CoverImageFilename,
 // CoverMimeType, and CoverSource fields on the model and persisting them.
@@ -26,8 +29,7 @@ func ExtractCoverPageToFile(
 	page int,
 	cbzCache *cbzpages.Cache,
 	pdfCache *pdfpages.Cache,
-	log logger.Logger,
-) (filename string, mimeType string, err error) {
+) (filename string, mimeType string, stale []string, err error) {
 	var cachedPath string
 	switch file.FileType {
 	case models.FileTypeCBZ:
@@ -35,10 +37,10 @@ func ExtractCoverPageToFile(
 	case models.FileTypePDF:
 		cachedPath, mimeType, err = pdfCache.GetPage(file.Filepath, file.ID, page)
 	default:
-		return "", "", errors.Errorf("file type %q does not support page-based covers", file.FileType)
+		return "", "", nil, errors.Errorf("file type %q does not support page-based covers", file.FileType)
 	}
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to extract cover page")
+		return "", "", nil, errors.Wrap(err, "failed to extract cover page")
 	}
 
 	// Use the write-side resolver so root-level files (whose bookFilepath may
@@ -52,21 +54,26 @@ func ExtractCoverPageToFile(
 		ext = filepath.Ext(cachedPath)
 	}
 
-	// Delete any existing cover with this base name (regardless of extension).
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, err := os.Stat(existingPath); err == nil {
-			if err := os.Remove(existingPath); err != nil {
-				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
-			}
-		}
-	}
-
 	coverFilename := coverBaseName + ext
 	coverFilepath := filepath.Join(coverDir, coverFilename)
-	if err := copyFile(cachedPath, coverFilepath); err != nil {
-		return "", "", errors.Wrap(err, "failed to save cover image")
+	pageData, err := os.ReadFile(cachedPath)
+	if err != nil {
+		return "", "", nil, errors.Wrap(err, "failed to read extracted cover page")
+	}
+	if err := fileutils.WriteFileAtomic(coverFilepath, pageData, 0644); err != nil {
+		return "", "", nil, errors.Wrap(err, "failed to save cover image")
 	}
 
-	return coverFilename, mimeType, nil
+	return coverFilename, mimeType, fileutils.OtherCoverExtensions(coverDir, coverBaseName, ext), nil
+}
+
+// RemoveStaleCovers deletes the cover files an extractor reported as
+// superseded. Call it only after the database write that references the
+// replacement has succeeded.
+func RemoveStaleCovers(stale []string, log logger.Logger) {
+	for _, path := range stale {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			log.Warn("failed to remove stale cover", logger.Data{"path": path, "error": err.Error()})
+		}
+	}
 }

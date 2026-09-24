@@ -2,8 +2,8 @@ package worker
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"math"
@@ -16,6 +16,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/chapters"
@@ -1101,15 +1102,19 @@ func (w *Worker) scanFileCore(
 			}
 		}
 
-		// Update series relationship (from metadata)
+		// Update series relationship (from metadata). books.series_source is
+		// the membership collection's own provenance; a Series name's source
+		// says nothing about who attached this Book to it.
 		if metadata.Series != "" {
 			existingSeriesSource := ""
-			for _, bs := range book.BookSeries {
-				if bs.Series != nil && existingSeriesSource == "" {
-					existingSeriesSource = bs.Series.NameSource
-				}
+			if book.SeriesSource != nil {
+				existingSeriesSource = *book.SeriesSource
 			}
 
+			// A renamed Series whose old name is an Alias is the same Series,
+			// so compare by its current name instead of replacing the
+			// membership on every scan.
+			metadata.Series = w.canonicalAttachedSeriesName(ctx, metadata.Series, book)
 			seriesSource := metadata.SourceForField("series")
 			if shouldUpdateParsedSeries(metadata, book.BookSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
@@ -1139,23 +1144,29 @@ func (w *Worker) scanFileCore(
 						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        1,
 					})
+
+					// Update series membership source
+					book.SeriesSource = &seriesSource
+					if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"series_source"}}); err != nil {
+						return nil, errors.Wrap(err, "failed to update series source")
+					}
 				}
 			}
 		}
 		// Update series relationship (from sidecar)
 		if bookSidecarData != nil && len(bookSidecarData.Series) > 0 {
-			sidecarSeriesNames := make([]string, 0, len(bookSidecarData.Series))
-			for _, s := range bookSidecarData.Series {
-				if s.Name != "" {
-					sidecarSeriesNames = append(sidecarSeriesNames, s.Name)
+			hasSidecarSeriesNames := false
+			for i := range bookSidecarData.Series {
+				if bookSidecarData.Series[i].Name == "" {
+					continue
 				}
+				hasSidecarSeriesNames = true
+				bookSidecarData.Series[i].Name = w.canonicalAttachedSeriesName(ctx, bookSidecarData.Series[i].Name, book)
 			}
 			existingSeries := book.BookSeries
 			existingSeriesSource := ""
-			for _, bs := range existingSeries {
-				if bs.Series != nil && existingSeriesSource == "" {
-					existingSeriesSource = bs.Series.NameSource
-				}
+			if book.SeriesSource != nil {
+				existingSeriesSource = *book.SeriesSource
 			}
 			// Compare the sidecar against any metadata replacement staged above,
 			// not only the stale stored relations. This lets the higher-priority
@@ -1165,7 +1176,7 @@ func (w *Worker) scanFileCore(
 				existingSeriesSource = metadata.SourceForField("series")
 			}
 
-			if len(sidecarSeriesNames) > 0 && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
+			if hasSidecarSeriesNames && shouldApplySeriesSidecar(bookSidecarData.Series, existingSeries, existingSeriesSource, forceRefresh) {
 				logInfo("updating series from sidecar", logger.Data{"new_count": len(bookSidecarData.Series), "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces any metadata collection)
@@ -1198,6 +1209,12 @@ func (w *Worker) scanFileCore(
 						SeriesNumberUnit: seriesNumberUnit,
 						SortOrder:        i + 1,
 					})
+				}
+
+				// Update series membership source
+				book.SeriesSource = &sidecarSource
+				if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: []string{"series_source"}}); err != nil {
+					return nil, errors.Wrap(err, "failed to update series source")
 				}
 			}
 		}
@@ -1906,17 +1923,23 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
-	// Reorganize book directory on disk if title or authors changed and library has OrganizeFileStructure enabled.
-	// Only do this during resyncs - during full scans, organization would rename directories while
-	// other files are still being discovered/processed, breaking the scan.
-	// This must run AFTER UpdateBookRelationships so the fresh DB read includes the new authors.
-	if isMainFile && (bookTitleChanged || authorsChanged) && isResync {
+	// Reorganize after path-affecting relationships have been persisted. The
+	// earlier filename check runs before narrator updates, so narrator-only
+	// changes need this pass even when a sibling file already restored authors.
+	// Full scans defer organization until discovery and processing finish.
+	narratorsChanged := file.FileType == models.FileTypeM4B && relUpdates.DeleteNarrators
+	// Series numbers are part of organized folder names whenever the book has
+	// a main CBZ (the organizer's own rule for hybrid books), so a restored or
+	// replaced membership is path-affecting even when the scanned file is
+	// the book's EPUB.
+	seriesChanged := relUpdates.DeleteSeries && bookHasMainCBZ(book, file)
+	if isMainFile && (bookTitleChanged || authorsChanged || narratorsChanged || seriesChanged) && isResync {
 		book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
 		if err != nil {
 			logWarn("failed to reload book for organization", logger.Data{"error": err.Error()})
 		} else {
 			if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{OrganizeFiles: true}); err != nil {
-				logWarn("failed to organize book files after title/author change", logger.Data{
+				logWarn("failed to organize book files after metadata change", logger.Data{
 					"book_id": book.ID,
 					"error":   err.Error(),
 				})
@@ -1943,7 +1966,11 @@ func (w *Worker) scanFileCore(
 		newIdentifierValues := parsedIdentifierKeys(metadata.Identifiers)
 
 		identifierSource := metadata.SourceForField("identifiers")
-		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh) {
+		updateIdentifiers := shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh)
+		if !updateIdentifiers && equalStringSlices(newIdentifierValues, existingIdentifierValues) {
+			updateIdentifiers = identifierAttributionStale(file.Identifiers, existingIdentifierSource, metadata.Identifiers, identifierSource, forceRefresh)
+		}
+		if updateIdentifiers {
 			logInfo("updating identifiers", logger.Data{"new_count": len(metadata.Identifiers), "old_count": len(file.Identifiers)})
 
 			// Delete existing identifiers
@@ -1954,11 +1981,15 @@ func (w *Worker) scanFileCore(
 			// Create new identifiers in bulk
 			fileIdentifiers := make([]*models.FileIdentifier, 0, len(metadata.Identifiers))
 			for _, id := range metadata.Identifiers {
+				entrySource := id.Source
+				if entrySource == "" {
+					entrySource = identifierSource
+				}
 				fileIdentifiers = append(fileIdentifiers, &models.FileIdentifier{
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
-					Source: identifierSource,
+					Source: entrySource,
 				})
 			}
 			if err := w.bookService.BulkCreateFileIdentifiers(ctx, fileIdentifiers); err != nil {
@@ -2991,14 +3022,8 @@ func (w *Worker) extractAndSaveCover(
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 	logInfo("saving cover", logger.Data{"path": coverFilepath, "mime": normalizedMime})
 
-	coverFile, err := os.Create(coverFilepath)
-	if err != nil {
-		return "", "", false, errors.Wrap(err, "failed to create cover file")
-	}
-	defer coverFile.Close()
-
-	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
-		return "", "", false, errors.Wrap(err, "failed to write cover data")
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
+		return "", "", false, errors.Wrap(err, "failed to write cover file")
 	}
 
 	return coverFilename, normalizedMime, false, nil
@@ -3089,8 +3114,18 @@ func (w *Worker) upgradeEnricherCover(
 		return
 	}
 
-	// 6. Save enricher cover — normalize and write to disk
-	normalizedData, normalizedMime, _ := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+	// 6. Save enricher cover. The full decode in NormalizeImage is the real
+	// validation: the header-only resolution gate above accepts a truncated
+	// body whose header claims a larger image.
+	normalizedData, normalizedMime, err := fileutils.NormalizeImage(metadata.CoverData, metadata.CoverMimeType)
+	if err != nil {
+		logWarn("enricher cover could not be decoded, skipping", logger.Data{
+			"file_id": file.ID,
+			"source":  coverSource,
+			"error":   err.Error(),
+		})
+		return
+	}
 	coverExt := ".png"
 	if normalizedMime == metadata.CoverMimeType {
 		coverExt = metadata.CoverExtension()
@@ -3099,36 +3134,15 @@ func (w *Worker) upgradeEnricherCover(
 	coverFilename := coverBaseName + coverExt
 	coverFilepath := filepath.Join(coverDir, coverFilename)
 
-	// Remove any existing cover file with a different extension
-	if existingCoverPath != "" && existingCoverPath != coverFilepath {
-		os.Remove(existingCoverPath)
-	}
-
-	coverFile, err := os.Create(coverFilepath)
-	if err != nil {
+	// Install the replacement atomically before removing a previous cover at
+	// another extension, so a failed write leaves the working cover on disk.
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
 		logWarn("failed to save enricher cover", logger.Data{
 			"error": err.Error(),
 			"path":  coverFilepath,
 		})
 		return
 	}
-	defer coverFile.Close()
-
-	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
-		logWarn("failed to write enricher cover data", logger.Data{
-			"error": err.Error(),
-			"path":  coverFilepath,
-		})
-		return
-	}
-
-	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
-		"file_id":             file.ID,
-		"enricher_resolution": enricherResolution,
-		"current_resolution":  currentResolution,
-		"source":              coverSource,
-		"path":                coverFilepath,
-	})
 
 	// 7. Update file record
 	file.CoverImageFilename = &coverFilename
@@ -3141,7 +3155,20 @@ func (w *Worker) upgradeEnricherCover(
 			"error":   err.Error(),
 			"file_id": file.ID,
 		})
+		return
 	}
+	// The row now names the replacement, so previous covers at other
+	// extensions can go. Every extension is checked, not just the first one
+	// CoverExistsWithBaseName found for the resolution comparison.
+	books.RemoveStaleCovers(fileutils.OtherCoverExtensions(coverDir, coverBaseName, coverExt), log)
+
+	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
+		"file_id":             file.ID,
+		"enricher_resolution": enricherResolution,
+		"current_resolution":  currentResolution,
+		"source":              coverSource,
+		"path":                coverFilepath,
+	})
 }
 
 // parseFileMetadata extracts metadata from a file based on its type.
@@ -3540,7 +3567,10 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.FieldDataSources["chapters"] = source
 	}
 	// Identifiers are multi-valued by type, so we append new types from the enricher
-	// rather than using "first non-empty wins" like other fields.
+	// rather than using "first non-empty wins" like other fields. An earlier
+	// contributor keeps a type a later one also supplies. Each entry records
+	// its own contributor, and the field source stays with the first
+	// contributor because callers merge in descending priority order.
 	if len(enrichment.Identifiers) > 0 {
 		existingTypes := make(map[string]bool, len(target.Identifiers))
 		for _, id := range target.Identifiers {
@@ -3548,8 +3578,11 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		}
 		for _, id := range enrichment.Identifiers {
 			if !existingTypes[id.Type] {
+				id.Source = source
 				target.Identifiers = append(target.Identifiers, id)
-				target.FieldDataSources["identifiers"] = source
+				if _, ok := target.FieldDataSources["identifiers"]; !ok {
+					target.FieldDataSources["identifiers"] = source
+				}
 			}
 		}
 	}
@@ -3824,12 +3857,13 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 	if models.IsPageBasedFileType(file.FileType) && file.CoverPage != nil {
 		pageNum := *file.CoverPage
 		var coverFilename, coverMimeType string
+		var staleCovers []string
 		var err error
 		switch file.FileType {
 		case models.FileTypeCBZ:
-			coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
+			coverFilename, coverMimeType, staleCovers, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
 		case models.FileTypePDF:
-			coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
+			coverFilename, coverMimeType, staleCovers, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
 		}
 		if err != nil {
 			logWarn("failed to extract cover from selected page", logger.Data{"page": pageNum, "error": err.Error()})
@@ -3847,6 +3881,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		}); err != nil {
 			return errors.WithStack(err)
 		}
+		books.RemoveStaleCovers(staleCovers, log)
 		return nil
 	}
 
@@ -3874,13 +3909,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 
 	// Save the cover
 	coverFilepath := filepath.Join(coverDir, coverBaseName+coverExt)
-	coverFile, err := os.Create(coverFilepath)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer coverFile.Close()
-
-	if _, err := io.Copy(coverFile, bytes.NewReader(normalizedData)); err != nil {
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -3911,11 +3940,12 @@ func (w *Worker) applyPageCover(ctx context.Context, file *models.File, book *mo
 	coverBaseName := filepath.Base(file.Filepath) + ".cover"
 
 	var coverFilename, coverMimeType string
+	var staleCovers []string
 	switch file.FileType {
 	case models.FileTypePDF:
-		coverFilename, coverMimeType, extractErr = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
+		coverFilename, coverMimeType, staleCovers, extractErr = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
 	case models.FileTypeCBZ:
-		coverFilename, coverMimeType, extractErr = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
+		coverFilename, coverMimeType, staleCovers, extractErr = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
 	default:
 		extractErr = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
 	}
@@ -3931,27 +3961,33 @@ func (w *Worker) applyPageCover(ctx context.Context, file *models.File, book *mo
 	updateErr = w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
 		Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
 	})
-	return nil, updateErr
+	if updateErr != nil {
+		return nil, updateErr
+	}
+	// The row now names the replacement, so the previous covers can go.
+	books.RemoveStaleCovers(staleCovers, logger.FromContext(ctx))
+	return nil, nil
 }
 
 // extractCBZPageCover extracts a specific page from a CBZ file and saves it as the cover.
-// Returns the cover filename (relative to coverDir), mime type, and any error.
-// pageNum is 0-indexed.
-func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, pageNum int) (string, string, error) {
+// Returns the cover filename (relative to coverDir), mime type, the previous
+// covers at other extensions (for the caller to remove after its database
+// write), and any error. pageNum is 0-indexed.
+func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, pageNum int) (string, string, []string, error) {
 	f, err := os.Open(cbzPath)
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 	defer f.Close()
 
 	stats, err := f.Stat()
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 
 	zipReader, err := zip.NewReader(f, stats.Size())
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 
 	// Get sorted image files
@@ -3967,7 +4003,7 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 	})
 
 	if pageNum < 0 || pageNum >= len(imageFiles) {
-		return "", "", errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)
+		return "", "", nil, errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)
 	}
 
 	targetFile := imageFiles[pageNum]
@@ -3986,27 +4022,19 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 		mimeType = "image/webp"
 	}
 
-	// Delete any existing cover with this base name (regardless of extension)
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, statErr := os.Stat(existingPath); statErr == nil {
-			_ = os.Remove(existingPath)
-		}
-	}
-
 	// Extract the page
 	coverFilePath := filepath.Join(coverDir, coverBaseName+ext)
 
 	r, err := targetFile.Open()
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 	defer r.Close()
 
 	// Read the image data
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 
 	// Normalize the image
@@ -4021,44 +4049,37 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 		mimeType = normalizedMime
 	}
 
-	// Write the cover file
-	outFile, err := os.Create(coverFilePath)
-	if err != nil {
-		return "", "", errors.WithStack(err)
-	}
-	defer outFile.Close()
-
-	if _, err := io.Copy(outFile, bytes.NewReader(normalizedData)); err != nil {
-		return "", "", errors.WithStack(err)
+	// Install the replacement atomically. Previous covers at other
+	// extensions are reported, not removed, so the caller can delete them
+	// after its database write succeeds.
+	if err := fileutils.WriteFileAtomic(coverFilePath, normalizedData, 0644); err != nil {
+		return "", "", nil, errors.WithStack(err)
 	}
 
-	return coverBaseName + ext, mimeType, nil
+	return coverBaseName + ext, mimeType, fileutils.OtherCoverExtensions(coverDir, coverBaseName, ext), nil
 }
 
 // extractPDFPageCover renders a specific page from a PDF file via pdfium and
 // saves it as the cover image. Returns the cover filename (relative to
-// coverDir), mime type, and any error. pageNum is 0-indexed.
-func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, pageNum int) (string, string, error) {
+// coverDir), mime type, the previous covers at other extensions (for the
+// caller to remove after its database write), and any error. pageNum is
+// 0-indexed.
+func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, pageNum int) (string, string, []string, error) {
 	data, mimeType, err := pdf.RenderPageJPEG(pdfPath, pageNum, 150, 85)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to render pdf page")
+		return "", "", nil, errors.Wrap(err, "failed to render pdf page")
 	}
 
-	// Delete any existing cover with this base name (regardless of extension).
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, statErr := os.Stat(existingPath); statErr == nil {
-			_ = os.Remove(existingPath)
-		}
-	}
-
+	// Install the replacement atomically. Previous covers at other
+	// extensions are reported, not removed, so the caller can delete them
+	// after its database write succeeds.
 	coverFilename := coverBaseName + ".jpg"
 	coverFilePath := filepath.Join(coverDir, coverFilename)
-	if err := os.WriteFile(coverFilePath, data, 0644); err != nil { //nolint:gosec // Cover files need to be readable by the HTTP server
-		return "", "", errors.WithStack(err)
+	if err := fileutils.WriteFileAtomic(coverFilePath, data, 0644); err != nil {
+		return "", "", nil, errors.WithStack(err)
 	}
 
-	return coverFilename, mimeType, nil
+	return coverFilename, mimeType, fileutils.OtherCoverExtensions(coverDir, coverBaseName, ".jpg"), nil
 }
 
 // resetBookState wipes book-level scanned metadata and all associated
@@ -4073,6 +4094,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	book.SubtitleSource = nil
 	book.Description = nil
 	book.DescriptionSource = nil
+	book.SeriesSource = nil
 	book.GenreSource = nil
 	book.TagSource = nil
 
@@ -4086,7 +4108,7 @@ func (w *Worker) resetBookState(ctx context.Context, book *models.Book) error {
 	bookColumns := []string{
 		"subtitle", "subtitle_source",
 		"description", "description_source",
-		"genre_source", "tag_source",
+		"series_source", "genre_source", "tag_source",
 		"title_source", "sort_title_source", "author_source",
 	}
 	if err := w.bookService.UpdateBook(ctx, book, books.UpdateBookOptions{Columns: bookColumns}); err != nil {
@@ -4415,4 +4437,47 @@ func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldR
 			}
 		}
 	}
+}
+
+// canonicalAttachedSeriesName returns the current name of an attached Series
+// when name is that Series' name or one of its Aliases (case-insensitive), and
+// name unchanged otherwise. A user who renames a Series and keeps the old name
+// as an Alias must not see every scan move the book to a duplicate Series.
+func (w *Worker) canonicalAttachedSeriesName(ctx context.Context, name string, book *models.Book) string {
+	if len(book.BookSeries) == 0 {
+		return name
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil && strings.EqualFold(bs.Series.Name, name) {
+			return bs.Series.Name
+		}
+	}
+	seriesID, err := aliases.FindResourceIDByAlias(ctx, w.db, aliases.SeriesConfig, name, book.LibraryID)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			logger.FromContext(ctx).Warn("failed to look up series alias", logger.Data{"name": name, "error": err.Error()})
+		}
+		return name
+	}
+	for _, bs := range book.BookSeries {
+		if bs.Series != nil && bs.Series.ID == seriesID {
+			return bs.Series.Name
+		}
+	}
+	return name
+}
+
+// bookHasMainCBZ mirrors the organizer's folder-naming rule: CBZ naming applies
+// whenever any main file is a CBZ, including the file being scanned when the
+// book's files are not loaded.
+func bookHasMainCBZ(book *models.Book, file *models.File) bool {
+	if file != nil && file.FileRole == models.FileRoleMain && file.FileType == models.FileTypeCBZ {
+		return true
+	}
+	for _, f := range book.Files {
+		if f.FileRole == models.FileRoleMain && f.FileType == models.FileTypeCBZ {
+			return true
+		}
+	}
+	return false
 }

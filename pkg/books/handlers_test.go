@@ -243,6 +243,9 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	// mutations — otherwise reviewed flag tests give false greens.
 	g := e.Group("/books")
 	downloadCache := downloadcache.NewCache(cfg.CacheDir, cfg.DownloadCacheMaxSizeBytes())
+	// Registered after cfg.CacheDir's TempDir, so it runs first: drain background
+	// cache cleanups before the directory is removed.
+	t.Cleanup(downloadCache.Wait)
 	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, appsettings.NewService(db))
 
 	return e
@@ -1526,18 +1529,9 @@ func TestUploadFileCover_RootLevelFile_SyntheticBookPath_WritesNextToFile(t *tes
 	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
 	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
 
-	// Build multipart upload body with a tiny valid PNG.
-	pngData := []byte{
-		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-		0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-		0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-		0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
-		0x54, 0x08, 0x99, 0x63, 0xF8, 0x0F, 0x00, 0x00,
-		0x01, 0x01, 0x00, 0x01, 0x1B, 0xB6, 0xEE, 0x56,
-		0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
-		0xAE, 0x42, 0x60, 0x82,
-	}
+	// Build multipart upload body with a tiny valid PNG. Uploads are fully
+	// decoded before they are accepted, so the bytes must be a real image.
+	pngData := makeTestPNGBytes(t, 1, 1)
 
 	var body strings.Builder
 	writer := multipart.NewWriter(&body)
@@ -2508,4 +2502,69 @@ func TestUpdateBook_SeriesNumberUnit_RejectsBogusUnit(t *testing.T) {
 	err := db.NewSelect().Model(&bsRows).Where("book_id = ?", book.ID).Scan(ctx)
 	require.NoError(t, err)
 	require.Empty(t, bsRows)
+}
+
+// Editing memberships through the Edit form stamps books.series_source manual,
+// like genres and tags. Without it, the scanner would treat the collection as
+// replaceable, since it no longer reads the Series name's source as a proxy.
+func TestUpdateBook_Series_StampsManualMembershipSource(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+	e := setupTestServer(t, db)
+
+	for _, body := range []string{
+		`{"series":[{"name":"Saga","number":1}]}`,
+		// An emptied collection stays a protected manual empty slot, matching genres.
+		`{"series":[]}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := executeRequestWithUser(t, e, req, user)
+		require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+		var stored models.Book
+		require.NoError(t, db.NewSelect().Model(&stored).Where("b.id = ?", book.ID).Scan(ctx))
+		require.NotNil(t, stored.SeriesSource, body)
+		assert.Equal(t, models.DataSourceManual, *stored.SeriesSource, body)
+	}
+}
+
+// Defect: existing identifiers were keyed on the raw stored value while
+// incoming entries were keyed on the normalized value, so a stored value that
+// predates normalization never matched and lost its source on every save.
+func TestUpdateFile_PreservesSourceForUnnormalizedStoredIdentifier(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	epubPath := createTestEPUBFile(t)
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
+
+	// Insert directly so the stored value bypasses BulkCreateFileIdentifiers'
+	// normalization, the way legacy rows were written.
+	pluginSource := models.PluginDataSource("shisho", "audnexus")
+	_, err := db.NewInsert().Model(&models.FileIdentifier{
+		FileID: file.ID, Type: "asin", Value: "b01abc1234", Source: pluginSource,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	body := `{"identifiers":[{"type":"asin","value":"B01ABC1234"}]}`
+	e := setupTestServer(t, db)
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var stored []*models.FileIdentifier
+	require.NoError(t, db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx))
+	require.Len(t, stored, 1)
+	assert.Equal(t, "B01ABC1234", stored[0].Value)
+	assert.Equal(t, pluginSource, stored[0].Source, "an unchanged entry keeps its source regardless of stored formatting")
 }

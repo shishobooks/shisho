@@ -20,7 +20,7 @@ export default function FileReader() {
 
   if (isLoading || !file) {
     return (
-      <div className="fixed inset-0 bg-background flex items-center justify-center">
+      <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex items-center justify-center">
         <LoadingSpinner />
       </div>
     );
@@ -41,7 +41,7 @@ export default function FileReader() {
       return <M4BReader book={book} file={file} libraryId={libraryId!} />;
     default:
       return (
-        <div className="fixed inset-0 bg-background flex items-center justify-center">
+        <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex items-center justify-center">
           <p className="text-muted-foreground">
             Reading is not supported for this file type.
           </p>

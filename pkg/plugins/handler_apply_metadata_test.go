@@ -31,6 +31,7 @@ func (s *stubBookStoreForApply) OrganizeBookFiles(_ context.Context, _ *models.B
 // stubRelStoreForApply is a no-op relationStore for applyMetadata tests.
 // When captureBookSeries is non-nil, CreateBookSeries appends to it.
 type stubRelStoreForApply struct {
+	seriesIDs              map[string]int
 	capturedBookSeries     []*models.BookSeries
 	deleteBookSeriesCalled bool
 	deletedAuthors         []int
@@ -55,8 +56,19 @@ func (s *stubRelStoreForApply) CreateBookSeries(_ context.Context, bs *models.Bo
 	s.capturedBookSeries = append(s.capturedBookSeries, bs)
 	return nil
 }
-func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, _ string, _ int, _ string) (*models.Series, error) {
-	return &models.Series{ID: 1}, nil
+
+// FindOrCreateSeries hands out one ID per distinct name, starting at 1, so
+// tests that pre-attach series ID 1 keep matching the first resolved name.
+func (s *stubRelStoreForApply) FindOrCreateSeries(_ context.Context, name string, _ int, _ string) (*models.Series, error) {
+	if s.seriesIDs == nil {
+		s.seriesIDs = map[string]int{}
+	}
+	id, ok := s.seriesIDs[name]
+	if !ok {
+		id = len(s.seriesIDs) + 1
+		s.seriesIDs[name] = id
+	}
+	return &models.Series{ID: id, Name: name}, nil
 }
 func (s *stubRelStoreForApply) DeleteBookGenres(_ context.Context, bookID int) error {
 	s.deletedGenres = append(s.deletedGenres, bookID)
@@ -183,7 +195,7 @@ func TestApplyMetadata_OrganizesFiles_WhenExplicitFileNameChanges(t *testing.T) 
 		stubBookStoreForPersist: stubBookStoreForPersist{book: book},
 	}
 	h := newApplyTestHandler(store)
-	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", FileNameSourceIntentUser)
+	c := newApplyEchoContextWithFileName(t, map[string]any{}, "New Name", SourceIntentUser)
 
 	err := h.applyMetadata(c)
 	require.NoError(t, err)
@@ -205,15 +217,14 @@ func TestApplyMetadata_WhitespaceFileNameClearsAndOrganizes(t *testing.T) {
 	h := newApplyTestHandler(store)
 	fileID := file.ID
 	blankName := "   "
-	intent := FileNameSourceIntentUser
 	payload := PluginApplyPayload{
-		BookID:         book.ID,
-		FileID:         &fileID,
-		Fields:         map[string]any{},
-		FileName:       &blankName,
-		FileNameSource: &intent,
-		PluginScope:    "test",
-		PluginID:       "enricher",
+		BookID:      book.ID,
+		FileID:      &fileID,
+		Fields:      map[string]any{},
+		FileName:    &blankName,
+		Sources:     map[string]string{SourcesKeyFileName: SourceIntentUser},
+		PluginScope: "test",
+		PluginID:    "enricher",
 	}
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -470,18 +481,25 @@ func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, book.Subtitle)
+	assert.Nil(t, book.SubtitleSource)
 	assert.Nil(t, book.Description)
+	assert.Nil(t, book.DescriptionSource)
 	assert.Equal(t, []int{book.ID}, rel.deletedAuthors)
 	assert.Equal(t, []int{book.ID}, rel.deletedGenres)
 	assert.Equal(t, []int{book.ID}, rel.deletedTags)
 	assert.Nil(t, file.Name)
 	assert.Nil(t, file.NameSource)
 	assert.Nil(t, file.URL)
+	assert.Nil(t, file.URLSource)
 	assert.Nil(t, file.Language)
+	assert.Nil(t, file.LanguageSource)
 	assert.Nil(t, file.Abridged)
+	assert.Nil(t, file.AbridgedSource)
 	assert.Nil(t, file.ReleaseDate)
+	assert.Nil(t, file.ReleaseDateSource)
 	assert.Nil(t, file.PublisherID)
 	assert.Nil(t, file.Publisher)
+	assert.Nil(t, file.PublisherSource)
 	assert.Equal(t, []int{file.ID}, store.deletedNarratorFileIDs)
 	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
 }
@@ -609,6 +627,7 @@ func TestApplyMetadata_ExplicitFileName_AppliesToSupplement(t *testing.T) {
 		FileID:      &supplementID,
 		Fields:      map[string]any{},
 		FileName:    func() *string { s := "Cribsheet (Updated)"; return &s }(),
+		Sources:     map[string]string{SourcesKeyFileName: SourceIntentPlugin},
 		PluginScope: "test",
 		PluginID:    "enricher",
 	}
@@ -723,9 +742,9 @@ func TestApplyMetadata_TrimsPublisherURL(t *testing.T) {
 }
 
 // newApplyEchoContextWithFileName builds an Echo context where the apply
-// payload carries an explicit top-level file_name and (optionally) a
-// file_name_source — the new Phase 1 wire signal.
-func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileName string, fileNameSource string) echo.Context {
+// payload carries an explicit top-level file_name and (optionally) its
+// sources.file_name intent.
+func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileName string, fileNameIntent string) echo.Context {
 	t.Helper()
 	payload := PluginApplyPayload{
 		BookID:      1,
@@ -737,9 +756,8 @@ func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileNa
 		fn := fileName
 		payload.FileName = &fn
 	}
-	if fileNameSource != "" {
-		fns := fileNameSource
-		payload.FileNameSource = &fns
+	if fileNameIntent != "" {
+		payload.Sources = map[string]string{SourcesKeyFileName: fileNameIntent}
 	}
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
@@ -756,11 +774,10 @@ func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileNa
 	return c
 }
 
-// TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault verifies
-// that a payload carrying file_name (without file_name_source) writes
-// file.Name and stamps NameSource with the plugin source — the default for
-// a value the user accepted as-is from the plugin's proposal.
-func TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault(t *testing.T) {
+// TestApplyMetadata_ExplicitFileName_MissingIntentDefaultsToManual verifies
+// that a selected file_name with no sources entry is treated as "user". The
+// SPA ships with the server, so there is no older-client default to preserve.
+func TestApplyMetadata_ExplicitFileName_MissingIntentDefaultsToManual(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Old Title", models.FileTypeEPUB)
@@ -779,8 +796,7 @@ func TestApplyMetadata_ExplicitFileName_AppliedWithPluginSourceByDefault(t *test
 	require.NotNil(t, file.Name, "file.Name must be set when file_name is explicit")
 	assert.Equal(t, "New Title", *file.Name)
 	require.NotNil(t, file.NameSource, "file.NameSource must be set when file_name is explicit")
-	assert.Equal(t, "plugin:test/enricher", *file.NameSource,
-		"absent file_name_source defaults to the plugin source for this apply call")
+	assert.Equal(t, models.DataSourceManual, *file.NameSource)
 }
 
 func TestApplyMetadata_ExplicitFileName_UserIntentUsesManualSource(t *testing.T) {
@@ -914,4 +930,44 @@ func TestApplyMetadata_ScalarSeries_WritesSeriesNumberRange(t *testing.T) {
 	assert.InDelta(t, 8.0, *bs.SeriesNumberEnd, 0.001)
 	require.NotNil(t, bs.SeriesNumberUnit, "scalar series path must write SeriesNumberUnit")
 	assert.Equal(t, "volume", *bs.SeriesNumberUnit)
+}
+
+// A malformed Series Number group must be rejected at the apply boundary in
+// the scalar shape too, not just in the array shape. Silently dropping the
+// group would persist an unnumbered membership and still apply the other
+// selected fields, so nothing may be written.
+func TestApplyMetadata_ScalarSeries_RejectsMalformedNumberGroup(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]map[string]any{
+		"reversed range":     {"series_number": 3.0, "series_number_end": 1.0},
+		"end without start":  {"series_number_end": 3.0},
+		"unit without start": {"series_number_unit": "volume"},
+		"non-numeric end":    {"series_number": 1.0, "series_number_end": "3"},
+		"unknown unit":       {"series_number": 1.0, "series_number_unit": "issue"},
+	}
+	for name, group := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			book := newApplyTestBook(t, "Original")
+			store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
+			h, rel := newApplyTestHandlerWithRelStore(store)
+			fields := map[string]any{"title": "Changed", "series": "Saga"}
+			for k, v := range group {
+				fields[k] = v
+			}
+
+			err := h.applyMetadata(newApplyEchoContext(t, fields))
+
+			var applyErr *errcodes.Error
+			require.ErrorAs(t, err, &applyErr)
+			assert.Equal(t, http.StatusUnprocessableEntity, applyErr.HTTPCode)
+			assert.Empty(t, store.updatedBookColumns, "no field may be persisted after a rejected apply")
+			assert.Equal(t, "Original", book.Title)
+			assert.Empty(t, rel.capturedBookSeries)
+			assert.False(t, rel.deleteBookSeriesCalled)
+			assert.False(t, store.organizeCalled)
+		})
+	}
 }

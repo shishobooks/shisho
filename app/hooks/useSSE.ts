@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 export function useSSE() {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { demoMode, isAuthenticated } = useAuth();
   const bulkDownload = useContext(BulkDownloadContext);
 
   // Use ref to avoid the EventSource reconnecting on every progress update.
@@ -25,7 +25,7 @@ export function useSSE() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || demoMode) {
       return;
     }
 
@@ -135,5 +135,5 @@ export function useSSE() {
       es.removeEventListener("log.entry", handleLogEntry);
       es.close();
     };
-  }, [isAuthenticated, queryClient]);
+  }, [demoMode, isAuthenticated, queryClient]);
 }

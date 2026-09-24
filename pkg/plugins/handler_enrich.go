@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -291,7 +292,13 @@ func DownloadCoverFromURL(ctx context.Context, md *mediafile.ParsedMetadata, all
 	}
 	defer resp.Body.Close()
 
+	// Keep only the media type: "image/jpeg; charset=utf-8" must be stored
+	// and normalized as "image/jpeg", otherwise the JPEG would be
+	// re-encoded as PNG.
 	contentType := resp.Header.Get("Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
 	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(contentType, "image/") {
 		log.Warn("cover URL returned non-image response", logger.Data{
 			"url":          md.CoverURL,

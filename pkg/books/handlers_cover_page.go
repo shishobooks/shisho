@@ -1,9 +1,7 @@
 package books
 
 import (
-	"io"
 	"net/http"
-	"os"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -60,13 +58,12 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		return errcodes.ValidationError("Page number is out of bounds")
 	}
 
-	coverFilename, mimeType, err := ExtractCoverPageToFile(
+	coverFilename, mimeType, staleCovers, err := ExtractCoverPageToFile(
 		file,
 		file.Book.Filepath,
 		payload.Page,
 		h.pageCache,
 		h.pdfPageCache,
-		log,
 	)
 	if err != nil {
 		log.Error("failed to extract cover page", logger.Data{"error": err.Error(), "page": payload.Page, "file_type": file.FileType})
@@ -91,6 +88,8 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 	}); err != nil {
 		return errors.WithStack(err)
 	}
+	// The row now names the replacement, so the previous covers can go.
+	RemoveStaleCovers(staleCovers, log)
 
 	// Write sidecar to persist the cover page choice
 	if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
@@ -98,39 +97,4 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, file)
-}
-
-// copyFile copies a file from src to dst, preserving permissions.
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Copy file permissions
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	if err := dstFile.Chmod(srcInfo.Mode()); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Sync to ensure data is written to disk
-	if err := dstFile.Sync(); err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
 }

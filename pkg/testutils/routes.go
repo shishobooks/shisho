@@ -10,7 +10,7 @@ import (
 
 // RegisterRoutes registers test-only routes.
 // These endpoints should ONLY be registered in test environments.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, manager *plugins.Manager, installer *plugins.Installer) {
+func RegisterRoutes(e *echo.Group, db *bun.DB, manager *plugins.Manager, installer *plugins.Installer) {
 	h := &handler{db: db, manager: manager, installer: installer}
 
 	test := e.Group("/test")

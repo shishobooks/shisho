@@ -50,7 +50,7 @@ const MobileDrawer = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, hasPermission } = useAuth();
+  const { demoMode, user, logout, hasPermission } = useAuth();
   const { isOpen, close } = useMobileNav();
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
@@ -144,7 +144,7 @@ const MobileDrawer = () => {
       <div
         aria-hidden="true"
         className={cn(
-          "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 md:hidden",
+          "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 md:hidden",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={close}
@@ -154,7 +154,7 @@ const MobileDrawer = () => {
       <aside
         aria-label="Mobile navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 bg-background shadow-2xl transition-transform duration-300 ease-out md:hidden flex flex-col",
+          "fixed bottom-0 left-0 top-[var(--demo-banner-height,0px)] z-50 w-72 bg-background shadow-2xl transition-transform duration-300 ease-out md:hidden flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -308,7 +308,7 @@ const MobileDrawer = () => {
           )}
 
           {/* Admin Navigation (when on /settings routes) */}
-          {isAdminContext && visibleAdminItems.length > 0 && (
+          {isAdminContext && !demoMode && visibleAdminItems.length > 0 && (
             <nav className="py-2 border-b border-border">
               {visibleAdminItems.map((item) => (
                 <NavItem
@@ -332,7 +332,7 @@ const MobileDrawer = () => {
               onClick={close}
               to="/lists"
             />
-            {canAccessAdmin && (
+            {canAccessAdmin && !demoMode && (
               <NavItem
                 icon={<Settings className="h-5 w-5" />}
                 isActive={location.pathname.startsWith("/settings")}
@@ -353,13 +353,15 @@ const MobileDrawer = () => {
                 {user?.role_name}
               </div>
             </div>
-            <NavItem
-              icon={<KeyRound className="h-5 w-5" />}
-              isActive={location.pathname === "/user/security"}
-              label="Security"
-              onClick={close}
-              to="/user/security"
-            />
+            {!demoMode && (
+              <NavItem
+                icon={<KeyRound className="h-5 w-5" />}
+                isActive={location.pathname === "/user/security"}
+                label="Security"
+                onClick={close}
+                to="/user/security"
+              />
+            )}
             <NavItem
               icon={<UserCog className="h-5 w-5" />}
               isActive={location.pathname === "/user/settings"}

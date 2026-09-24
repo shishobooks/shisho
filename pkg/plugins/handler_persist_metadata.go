@@ -37,13 +37,27 @@ func equalIntSets(a, b map[int]struct{}) bool {
 // Non-empty parsed values are persisted, and selected zero values in overrides clear metadata.
 // pluginScope and pluginID identify the data source.
 // targetFile is the specific file to apply file-level metadata (identifiers, cover) to; may be nil.
-func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) error {
+// The returned warnings describe selected values that were skipped rather
+// than applied (currently only covers); they are user-facing and the caller
+// surfaces them alongside the successful apply.
+func (h *handler) persistMetadata(ctx context.Context, book *models.Book, targetFile *models.File, md *mediafile.ParsedMetadata, pluginScope, pluginID string, overrides *ApplyOverrides, log logger.Logger) ([]string, error) {
+	var warnings []string
 	pluginSource := models.PluginDataSource(pluginScope, pluginID)
+	// A semantic no-op preserves provenance. Changed scalars, relationship
+	// collections (including Series memberships), and identifiers use the
+	// submitted intent. Covers have no edit state, so a chosen proposal is
+	// always stamped with the plugin source (see the cover block below).
+	attr := newApplyAttribution(pluginSource, overrides)
 	var columns []string
 
 	// Accumulate file-level column updates so Title/Narrator/Publisher/etc.
 	// can all contribute, then flush once at the end.
 	var fileColumns []string
+
+	// Previous cover files that either cover path superseded. They are
+	// removed only after the column flush succeeds, so a failed write never
+	// leaves the database pointing at a deleted file.
+	var staleCovers []string
 
 	// Track whether changes ran that would affect series_fts aggregate
 	// columns (book_titles / book_authors). When they did, the series
@@ -51,333 +65,131 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// book didn't change — otherwise the aggregate columns would go stale
 	// until something else triggered IndexSeries.
 	seriesAggregateMayBeStale := false
+	bookIndexChanged := false
 
 	// Title
 	title := strings.TrimSpace(md.Title)
-	if title != "" {
-		titleChanged := book.Title != title
+	if title != "" && title != book.Title {
 		book.Title = title
-		book.TitleSource = pluginSource
-		book.SortTitle = sortname.ForTitle(title)
-		book.SortTitleSource = pluginSource
-		columns = append(columns, "title", "title_source", "sort_title", "sort_title_source")
-		if titleChanged {
-			seriesAggregateMayBeStale = true
+		book.TitleSource = attr.sourceFor("title")
+		columns = append(columns, "title", "title_source")
+		// Same convention as the Edit form: a derived sort title is regenerated
+		// unless the user pinned it, and is never stamped manual or plugin, so
+		// a later Title edit still regenerates it.
+		if book.SortTitleSource != models.DataSourceManual {
+			book.SortTitle = sortname.ForTitle(title)
+			book.SortTitleSource = models.DataSourceFilepath
+			columns = append(columns, "sort_title", "sort_title_source")
 		}
+		seriesAggregateMayBeStale = true
 	}
 
 	// Subtitle
 	subtitle := strings.TrimSpace(md.Subtitle)
 	if subtitle != "" || applyFieldSelected(overrides, "subtitle") {
-		if subtitle == "" {
-			book.Subtitle = nil
-		} else {
-			book.Subtitle = &subtitle
+		if applyOptionalString(subtitle, &book.Subtitle, &book.SubtitleSource, attr.sourceFor("subtitle")) {
+			columns = append(columns, "subtitle", "subtitle_source")
 		}
-		book.SubtitleSource = &pluginSource
-		columns = append(columns, "subtitle", "subtitle_source")
 	}
 
 	// Description
 	desc := htmlutil.StripTags(strings.TrimSpace(md.Description))
 	if desc != "" || applyFieldSelected(overrides, "description") {
-		if desc == "" {
-			book.Description = nil
-		} else {
-			book.Description = &desc
+		if applyOptionalString(desc, &book.Description, &book.DescriptionSource, attr.sourceFor("description")) {
+			columns = append(columns, "description", "description_source")
 		}
-		book.DescriptionSource = &pluginSource
-		columns = append(columns, "description", "description_source")
 	}
 
 	// Apply scalar column updates
 	if len(columns) > 0 {
+		bookIndexChanged = true
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, columns); err != nil {
-			return errors.Wrap(err, "failed to update book")
+			return nil, errors.Wrap(err, "failed to update book")
 		}
 	}
 
 	// Authors
 	if (len(md.Authors) > 0 || applyFieldSelected(overrides, "authors")) && h.enrich.relStore != nil && (len(md.Authors) == 0 || h.enrich.personFinder != nil) {
-		// Capture the personIDs already attached as authors so we can skip
-		// re-indexing them when the apply re-attaches the same person.
-		// persons_fts has no aggregate columns, so re-indexing an unchanged
-		// person is pure DELETE+INSERT churn.
-		oldAuthorPersonIDs := make(map[int]struct{}, len(book.Authors))
-		for _, a := range book.Authors {
-			if a.Person != nil {
-				oldAuthorPersonIDs[a.Person.ID] = struct{}{}
-			}
+		changed, err := h.applyAuthors(ctx, book, md.Authors, attr, log)
+		if err != nil {
+			return nil, err
 		}
-		if err := h.enrich.relStore.DeleteAuthors(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete authors")
-		}
-		newAuthorPersonIDs := make(map[int]struct{}, len(md.Authors))
-		for i, pa := range md.Authors {
-			if pa.Name == "" {
-				continue
-			}
-			person, pErr := h.enrich.personFinder.FindOrCreatePerson(ctx, pa.Name, book.LibraryID)
-			if pErr != nil {
-				log.Warn("failed to find/create person", logger.Data{"name": pa.Name, "error": pErr.Error()})
-				continue
-			}
-			newAuthorPersonIDs[person.ID] = struct{}{}
-			var role *string
-			if pa.Role != "" {
-				role = &pa.Role
-			}
-			if err := h.enrich.relStore.CreateAuthor(ctx, &models.Author{
-				BookID:    book.ID,
-				PersonID:  person.ID,
-				Role:      role,
-				SortOrder: i + 1,
-			}); err != nil {
-				log.Warn("failed to create author", logger.Data{"error": err.Error()})
-			}
-			if h.enrich.searchIndexer != nil {
-				if _, alreadyAttached := oldAuthorPersonIDs[person.ID]; !alreadyAttached {
-					if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
-						log.Warn("failed to update search index for author", logger.Data{"person_id": person.ID, "error": err.Error()})
-					}
-				}
-			}
-		}
-		// Same author set ⇒ no series_fts.book_authors drift, no need to
-		// mark the aggregate stale.
-		if !equalIntSets(oldAuthorPersonIDs, newAuthorPersonIDs) {
-			seriesAggregateMayBeStale = true
-		}
-		book.AuthorSource = pluginSource
-		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"author_source"}); err != nil {
-			return errors.Wrap(err, "failed to update author source")
-		}
+		seriesAggregateMayBeStale = seriesAggregateMayBeStale || changed
+		bookIndexChanged = bookIndexChanged || changed
 	}
 
-	// Series — multi-entry path (identify form) takes precedence over scalar (plugins).
-	multiSeries := overrides != nil && overrides.SeriesEntries != nil
-	if multiSeries || md.Series != "" {
-		oldSeries := make(map[int]*models.Series, len(book.BookSeries))
-		for _, bs := range book.BookSeries {
-			if bs.Series != nil {
-				oldSeries[bs.Series.ID] = bs.Series
-			}
-		}
-		if err := h.enrich.relStore.DeleteBookSeries(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete series")
-		}
-
-		newSeries := make(map[int]*models.Series)
-
-		if multiSeries {
-			for i, entry := range *overrides.SeriesEntries {
-				seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, entry.Name, book.LibraryID, pluginSource)
-				if sErr != nil {
-					log.Warn("failed to find/create series", logger.Data{"name": entry.Name, "error": sErr.Error()})
-					continue
-				}
-				bs := &models.BookSeries{
-					BookID:    book.ID,
-					SeriesID:  seriesRecord.ID,
-					SortOrder: i + 1,
-				}
-				if entry.Number != nil {
-					bs.SeriesNumber = entry.Number
-					bs.SeriesNumberEnd = entry.NumberEnd
-					bs.SeriesNumberUnit = entry.SeriesNumberUnit
-				}
-				if err := h.enrich.relStore.CreateBookSeries(ctx, bs); err != nil {
-					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
-				}
-				newSeries[seriesRecord.ID] = seriesRecord
-			}
-		} else {
-			seriesRecord, sErr := h.enrich.relStore.FindOrCreateSeries(ctx, md.Series, book.LibraryID, pluginSource)
-			if sErr != nil {
-				log.Warn("failed to find/create series", logger.Data{"name": md.Series, "error": sErr.Error()})
-			} else {
-				if err := h.enrich.relStore.CreateBookSeries(ctx, &models.BookSeries{
-					BookID:           book.ID,
-					SeriesID:         seriesRecord.ID,
-					SeriesNumber:     md.SeriesNumber,
-					SeriesNumberEnd:  md.SeriesNumberEnd,
-					SeriesNumberUnit: md.SeriesNumberUnit,
-					SortOrder:        1,
-				}); err != nil {
-					log.Warn("failed to create book series", logger.Data{"error": err.Error()})
-				}
-				newSeries[seriesRecord.ID] = seriesRecord
-			}
-		}
-
-		if h.enrich.searchIndexer != nil {
-			for id, rec := range newSeries {
-				_, stillAttached := oldSeries[id]
-				if !stillAttached || seriesAggregateMayBeStale {
-					if err := h.enrich.searchIndexer.IndexSeries(ctx, rec); err != nil {
-						log.Warn("failed to update search index for series", logger.Data{"series_id": id, "error": err.Error()})
-					}
-				}
-			}
-			for oldID, oldSer := range oldSeries {
-				if _, kept := newSeries[oldID]; kept {
-					continue
-				}
-				if err := h.enrich.searchIndexer.IndexSeries(ctx, oldSer); err != nil {
-					log.Warn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
-				}
-			}
-		}
+	// Series. The multi-entry path (Identify form) takes precedence over the
+	// scalar path (plugin results). Both resolve, compare, and attribute the
+	// membership collection the same way.
+	var seriesEntries []SeriesEntry
+	seriesTouched := false
+	switch {
+	case overrides != nil && overrides.SeriesEntries != nil:
+		seriesEntries = *overrides.SeriesEntries
+		seriesTouched = true
+	case md.Series != "":
+		seriesEntries = []SeriesEntry{{Name: md.Series, Number: md.SeriesNumber, NumberEnd: md.SeriesNumberEnd, SeriesNumberUnit: md.SeriesNumberUnit}}
+		seriesTouched = true
 	}
-
-	if seriesAggregateMayBeStale && !multiSeries && md.Series == "" && h.enrich.searchIndexer != nil {
-		for _, bs := range book.BookSeries {
-			if bs.Series == nil {
-				continue
-			}
-			if err := h.enrich.searchIndexer.IndexSeries(ctx, bs.Series); err != nil {
-				log.Warn("failed to update search index for attached series", logger.Data{"series_id": bs.Series.ID, "error": err.Error()})
-			}
+	if seriesTouched && h.enrich.relStore != nil {
+		changed, err := h.applySeries(ctx, book, seriesEntries, attr, seriesAggregateMayBeStale, log)
+		if err != nil {
+			return nil, err
 		}
+		bookIndexChanged = bookIndexChanged || changed
+	} else if seriesAggregateMayBeStale {
+		h.indexSeries(ctx, attachedSeries(book), log)
 	}
 
 	// Genres
 	if (len(md.Genres) > 0 || applyFieldSelected(overrides, "genres")) && h.enrich.relStore != nil && (len(md.Genres) == 0 || h.enrich.genreFinder != nil) {
-		// Same churn rationale as authors: genres_fts has no aggregate
-		// columns, so re-indexing a genre whose attachment to this book
-		// didn't change is wasted work.
-		oldGenreIDs := make(map[int]struct{}, len(book.BookGenres))
-		for _, bg := range book.BookGenres {
-			if bg.Genre != nil {
-				oldGenreIDs[bg.Genre.ID] = struct{}{}
-			}
+		changed, err := h.applyGenres(ctx, book, md.Genres, attr, log)
+		if err != nil {
+			return nil, err
 		}
-		if err := h.enrich.relStore.DeleteBookGenres(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete genres")
-		}
-		for _, genreName := range md.Genres {
-			if genreName == "" {
-				continue
-			}
-			genre, gErr := h.enrich.genreFinder.FindOrCreateGenre(ctx, genreName, book.LibraryID)
-			if gErr != nil {
-				log.Warn("failed to find/create genre", logger.Data{"genre": genreName, "error": gErr.Error()})
-				continue
-			}
-			if err := h.enrich.relStore.CreateBookGenre(ctx, &models.BookGenre{
-				BookID:  book.ID,
-				GenreID: genre.ID,
-			}); err != nil {
-				log.Warn("failed to create book genre", logger.Data{"error": err.Error()})
-			}
-			if h.enrich.searchIndexer != nil {
-				if _, alreadyAttached := oldGenreIDs[genre.ID]; !alreadyAttached {
-					if err := h.enrich.searchIndexer.IndexGenre(ctx, genre); err != nil {
-						log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
-					}
-				}
-			}
-		}
-		book.GenreSource = &pluginSource
-		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"genre_source"}); err != nil {
-			return errors.Wrap(err, "failed to update genre source")
-		}
+		bookIndexChanged = bookIndexChanged || changed
 	}
 
 	// Tags
 	if (len(md.Tags) > 0 || applyFieldSelected(overrides, "tags")) && h.enrich.relStore != nil && (len(md.Tags) == 0 || h.enrich.tagFinder != nil) {
-		oldTagIDs := make(map[int]struct{}, len(book.BookTags))
-		for _, bt := range book.BookTags {
-			if bt.Tag != nil {
-				oldTagIDs[bt.Tag.ID] = struct{}{}
-			}
+		changed, err := h.applyTags(ctx, book, md.Tags, attr, log)
+		if err != nil {
+			return nil, err
 		}
-		if err := h.enrich.relStore.DeleteBookTags(ctx, book.ID); err != nil {
-			return errors.Wrap(err, "failed to delete tags")
-		}
-		for _, tagName := range md.Tags {
-			if tagName == "" {
-				continue
-			}
-			tag, tErr := h.enrich.tagFinder.FindOrCreateTag(ctx, tagName, book.LibraryID)
-			if tErr != nil {
-				log.Warn("failed to find/create tag", logger.Data{"tag": tagName, "error": tErr.Error()})
-				continue
-			}
-			if err := h.enrich.relStore.CreateBookTag(ctx, &models.BookTag{
-				BookID: book.ID,
-				TagID:  tag.ID,
-			}); err != nil {
-				log.Warn("failed to create book tag", logger.Data{"error": err.Error()})
-			}
-			if h.enrich.searchIndexer != nil {
-				if _, alreadyAttached := oldTagIDs[tag.ID]; !alreadyAttached {
-					if err := h.enrich.searchIndexer.IndexTag(ctx, tag); err != nil {
-						log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
-					}
-				}
-			}
-		}
-		book.TagSource = &pluginSource
-		if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"tag_source"}); err != nil {
-			return errors.Wrap(err, "failed to update tag source")
-		}
+		bookIndexChanged = bookIndexChanged || changed
 	}
 
 	// Narrators (file-level, applied only to M4B target files)
 	if (len(md.Narrators) > 0 || applyFieldSelected(overrides, "narrators")) && targetFile != nil && targetFile.FileType == models.FileTypeM4B && (len(md.Narrators) == 0 || h.enrich.personFinder != nil) {
-		oldNarratorPersonIDs := make(map[int]struct{}, len(targetFile.Narrators))
-		for _, n := range targetFile.Narrators {
-			if n.Person != nil {
-				oldNarratorPersonIDs[n.Person.ID] = struct{}{}
-			}
+		changed, err := h.applyNarrators(ctx, book.LibraryID, targetFile, md.Narrators, attr, log)
+		if err != nil {
+			return nil, err
 		}
-		if _, err := h.enrich.bookStore.DeleteNarratorsForFile(ctx, targetFile.ID); err != nil {
-			return errors.Wrap(err, "failed to delete narrators")
+		if changed {
+			fileColumns = append(fileColumns, "narrator_source")
 		}
-		for i, narratorName := range md.Narrators {
-			if narratorName == "" {
-				continue
-			}
-			person, pErr := h.enrich.personFinder.FindOrCreatePerson(ctx, narratorName, book.LibraryID)
-			if pErr != nil {
-				log.Warn("failed to find/create person for narrator", logger.Data{"name": narratorName, "error": pErr.Error()})
-				continue
-			}
-			if err := h.enrich.bookStore.CreateNarrator(ctx, &models.Narrator{
-				FileID:    targetFile.ID,
-				PersonID:  person.ID,
-				SortOrder: i + 1,
-			}); err != nil {
-				log.Warn("failed to create narrator", logger.Data{"error": err.Error()})
-			}
-			if h.enrich.searchIndexer != nil {
-				if _, alreadyAttached := oldNarratorPersonIDs[person.ID]; !alreadyAttached {
-					if err := h.enrich.searchIndexer.IndexPerson(ctx, person); err != nil {
-						log.Warn("failed to update search index for narrator", logger.Data{"person_id": person.ID, "error": err.Error()})
-					}
-				}
-			}
-		}
-		targetFile.NarratorSource = &pluginSource
-		fileColumns = append(fileColumns, "narrator_source")
 	}
 
 	// Publisher (file-level, applied to target file)
 	publisherName := strings.TrimSpace(md.Publisher)
 	if targetFile != nil && applyFieldSelected(overrides, "publisher") && publisherName == "" {
-		targetFile.PublisherID = nil
-		targetFile.Publisher = nil
-		targetFile.PublisherSource = &pluginSource
-		fileColumns = append(fileColumns, "publisher_id", "publisher_source")
+		if targetFile.PublisherID != nil || targetFile.PublisherSource != nil {
+			targetFile.PublisherID = nil
+			targetFile.Publisher = nil
+			targetFile.PublisherSource = nil
+			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
+		}
 	} else if publisherName != "" && targetFile != nil && h.enrich.publisherFinder != nil {
+		// Resolve first, then compare IDs, so an alias or different spelling of
+		// the stored publisher is a no-op rather than a change.
 		publisher, pErr := h.enrich.publisherFinder.FindOrCreatePublisher(ctx, publisherName, book.LibraryID)
 		if pErr != nil {
 			log.Warn("failed to find/create publisher", logger.Data{"name": publisherName, "error": pErr.Error()})
-		} else {
+		} else if targetFile.PublisherID == nil || *targetFile.PublisherID != publisher.ID {
+			publisherSource := attr.sourceFor("publisher")
 			targetFile.PublisherID = &publisher.ID
 			targetFile.Publisher = publisher
-			targetFile.PublisherSource = &pluginSource
+			targetFile.PublisherSource = &publisherSource
 			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
 			if h.enrich.searchIndexer != nil {
 				if err := h.enrich.searchIndexer.IndexPublisher(ctx, publisher); err != nil {
@@ -390,157 +202,100 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// URL (file-level, applied to target file)
 	url := strings.TrimSpace(md.URL)
 	if (url != "" || applyFieldSelected(overrides, "url")) && targetFile != nil {
-		if url == "" {
-			targetFile.URL = nil
-		} else {
-			targetFile.URL = &url
+		if applyOptionalString(url, &targetFile.URL, &targetFile.URLSource, attr.sourceFor("url")) {
+			fileColumns = append(fileColumns, "url", "url_source")
 		}
-		targetFile.URLSource = &pluginSource
-		fileColumns = append(fileColumns, "url", "url_source")
 	}
 
 	// Name (file-level, applied to target file). Only written when the
 	// caller explicitly opted in via overrides.FileName. An empty selected
 	// value clears the edition name so naming falls back to book.Title.
 	if overrides != nil && overrides.FileName != nil && targetFile != nil {
-		if *overrides.FileName == "" {
-			targetFile.Name = nil
-			targetFile.NameSource = nil
-		} else {
-			nameCopy := *overrides.FileName
-			targetFile.Name = &nameCopy
-
-			nameSource := pluginSource
-			if overrides.FileNameSource != nil && *overrides.FileNameSource != "" {
-				nameSource = *overrides.FileNameSource
-			}
-			nameSourceCopy := nameSource
-			targetFile.NameSource = &nameSourceCopy
+		if applyOptionalString(*overrides.FileName, &targetFile.Name, &targetFile.NameSource, attr.sourceFor(SourcesKeyFileName)) {
+			fileColumns = append(fileColumns, "name", "name_source")
 		}
-
-		fileColumns = append(fileColumns, "name", "name_source")
 	}
 
 	// Release date (file-level, applied to target file)
 	if (md.ReleaseDate != nil || applyFieldSelected(overrides, "release_date")) && targetFile != nil {
-		targetFile.ReleaseDate = md.ReleaseDate
-		targetFile.ReleaseDateSource = &pluginSource
-		fileColumns = append(fileColumns, "release_date", "release_date_source")
+		if applyOptional(md.ReleaseDate, &targetFile.ReleaseDate, &targetFile.ReleaseDateSource, attr.sourceFor("release_date"), sameCalendarDate) {
+			fileColumns = append(fileColumns, "release_date", "release_date_source")
+		}
 	}
 
 	// Language (file-level, applied to target file)
 	if (md.Language != nil || applyFieldSelected(overrides, "language")) && targetFile != nil {
-		targetFile.Language = md.Language
-		if md.Language == nil {
-			targetFile.LanguageSource = nil
-		} else {
-			targetFile.LanguageSource = &pluginSource
+		if applyOptionalValue(md.Language, &targetFile.Language, &targetFile.LanguageSource, attr.sourceFor("language")) {
+			fileColumns = append(fileColumns, "language", "language_source")
 		}
-		fileColumns = append(fileColumns, "language", "language_source")
 	}
 
 	// Abridged (file-level, applied to target file)
 	if (md.Abridged != nil || applyFieldSelected(overrides, "abridged")) && targetFile != nil {
-		targetFile.Abridged = md.Abridged
-		if md.Abridged == nil {
-			targetFile.AbridgedSource = nil
-		} else {
-			targetFile.AbridgedSource = &pluginSource
+		if applyOptionalValue(md.Abridged, &targetFile.Abridged, &targetFile.AbridgedSource, attr.sourceFor("abridged")) {
+			fileColumns = append(fileColumns, "abridged", "abridged_source")
 		}
-		fileColumns = append(fileColumns, "abridged", "abridged_source")
 	}
 
 	// Identifiers (file-level, applied to target file). A valid selected empty
 	// collection clears all identifiers. Non-empty malformed collections are
 	// not marked selected by convertFieldsToOverrides and remain a no-op.
 	if (len(md.Identifiers) > 0 || applyFieldSelected(overrides, "identifiers")) && targetFile != nil {
-		toInsert := make([]*models.FileIdentifier, 0, len(md.Identifiers))
-		for _, ident := range md.Identifiers {
-			if ident.Type == "" || ident.Value == "" {
-				continue
-			}
-			toInsert = append(toInsert, &models.FileIdentifier{
-				FileID: targetFile.ID,
-				Type:   ident.Type,
-				Value:  ident.Value,
-				Source: pluginSource,
-			})
+		changed, err := h.applyIdentifiers(ctx, targetFile, md.Identifiers, attr, overrides)
+		if err != nil {
+			return nil, err
 		}
-		if len(toInsert) > 0 || applyFieldSelected(overrides, "identifiers") {
-			if _, err := h.enrich.identStore.DeleteIdentifiersForFile(ctx, targetFile.ID); err != nil {
-				return errors.Wrap(err, "failed to delete identifiers")
-			}
-			if len(toInsert) > 0 {
-				if err := h.enrich.identStore.BulkCreateFileIdentifiers(ctx, toInsert); err != nil {
-					return errors.Wrap(err, "failed to bulk-create identifiers")
-				}
-				targetFile.IdentifierSource = &pluginSource
-			} else {
-				targetFile.IdentifierSource = nil
-			}
+		if changed {
 			fileColumns = append(fileColumns, "identifier_source")
 		}
 	}
 
 	// Apply cover data. Precedence is strict: page-based files (CBZ, PDF)
 	// only accept coverPage; other formats only accept coverData / coverUrl.
+	// Cover has no edit state: keeping the current Cover sends no cover field,
+	// and choosing the proposed Cover is always a Proposal Acceptance that
+	// stamps the plugin source. Both paths write the complete Cover state
+	// (filename, MIME type, source, and page where applicable) in one column
+	// set, and a failed download, extraction, or write leaves the previous
+	// Cover metadata untouched.
 	if targetFile != nil {
 		if models.IsPageBasedFileType(targetFile.FileType) {
 			// Page-based: apply coverPage, silently ignore coverData/coverUrl.
 			if md.CoverPage != nil {
-				page := *md.CoverPage
-				switch {
-				case page < 0:
-					log.Warn("plugin-provided coverPage is negative, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page})
-				case targetFile.PageCount == nil:
-					log.Warn("plugin-provided coverPage skipped: page count unknown", logger.Data{"file_id": targetFile.ID, "cover_page": page})
-				case page >= *targetFile.PageCount:
-					log.Warn("plugin-provided coverPage is out of range, skipping", logger.Data{"file_id": targetFile.ID, "cover_page": page, "page_count": *targetFile.PageCount})
-				case h.enrich.pageExtractor == nil:
-					log.Warn("plugin-provided coverPage skipped: no page extractor configured", logger.Data{"file_id": targetFile.ID})
+				switch stale, err := h.applyCoverPage(targetFile, book.Filepath, *md.CoverPage, pluginSource, log); {
+				case err == nil:
+					fileColumns = append(fileColumns, "cover_page", "cover_image_filename", "cover_mime_type", "cover_source")
+					staleCovers = stale
+				case errors.Is(err, errCoverUnchanged):
+					// Same page, cover present: nothing to do and nothing to report.
 				default:
-					coverFilename, mimeType, extractErr := h.enrich.pageExtractor.ExtractCoverPage(targetFile, book.Filepath, page, log)
-					if extractErr != nil {
-						log.Warn("failed to extract plugin-provided cover page", logger.Data{"file_id": targetFile.ID, "cover_page": page, "error": extractErr.Error()})
-					} else {
-						targetFile.CoverPage = &page
-						targetFile.CoverImageFilename = &coverFilename
-						targetFile.CoverMimeType = &mimeType
-						source := models.PluginDataSource(pluginScope, pluginID)
-						targetFile.CoverSource = &source
-						fileColumns = append(fileColumns, "cover_page", "cover_image_filename", "cover_mime_type", "cover_source")
-					}
+					log.Warn("plugin-provided coverPage skipped", logger.Data{"file_id": targetFile.ID, "cover_page": *md.CoverPage, "error": err.Error()})
+					warnings = append(warnings, coverWarning(err.Error()))
 				}
 			}
-		} else {
-			// Non-page-based: existing coverData write path.
-			if len(md.CoverData) > 0 {
-				coverDir := fileutils.ResolveCoverDirForWrite(book.Filepath, targetFile.Filepath)
-				coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
-
-				normalizedData, normalizedMime, _ := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
-				coverExt := ".png"
-				if normalizedMime == md.CoverMimeType {
-					coverExt = md.CoverExtension()
-				}
-
-				coverFilename := coverBaseName + coverExt
-				coverFilepath := filepath.Join(coverDir, coverFilename)
-
-				if err := os.WriteFile(coverFilepath, normalizedData, 0600); err != nil {
-					log.Warn("failed to write cover file", logger.Data{"error": err.Error()})
-				} else {
-					targetFile.CoverImageFilename = &coverFilename
-					fileColumns = append(fileColumns, "cover_image_filename")
-				}
+		} else if len(md.CoverData) > 0 {
+			// Image-based: write the downloaded or plugin-supplied bytes.
+			stale, err := applyCoverImage(targetFile, book.Filepath, md, pluginSource, log)
+			if err != nil {
+				log.Warn("plugin-provided cover skipped", logger.Data{"file_id": targetFile.ID, "error": err.Error()})
+				warnings = append(warnings, coverWarning(err.Error()))
+			} else {
+				fileColumns = append(fileColumns, "cover_image_filename", "cover_mime_type", "cover_source")
+				staleCovers = stale
 			}
 		}
 	}
 
 	// Flush all file-level column updates in a single DB call
+	bookIndexChanged = bookIndexChanged || len(fileColumns) > 0
 	if len(fileColumns) > 0 && targetFile != nil {
 		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, fileColumns); err != nil {
-			return errors.Wrap(err, "failed to update file metadata")
+			return nil, errors.Wrap(err, "failed to update file metadata")
+		}
+		for _, stalePath := range staleCovers {
+			if err := os.Remove(stalePath); err != nil && !os.IsNotExist(err) {
+				log.Warn("failed to remove stale cover", logger.Data{"file_id": targetFile.ID, "path": stalePath, "error": err.Error()})
+			}
 		}
 	}
 
@@ -558,11 +313,115 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Update FTS index
-	if h.enrich.searchIndexer != nil && updatedBook != nil {
+	if h.enrich.searchIndexer != nil && updatedBook != nil && bookIndexChanged {
 		if err := h.enrich.searchIndexer.IndexBook(ctx, updatedBook); err != nil {
 			log.Warn("failed to update search index", logger.Data{"error": err.Error()})
 		}
 	}
 
-	return nil
+	return warnings, nil
+}
+
+// errCoverUnchanged reports that the proposed cover is already the stored
+// cover, so nothing was written and existing provenance is preserved.
+var errCoverUnchanged = errors.New("cover unchanged")
+
+// coverWarning turns a cover skip reason into the user-facing warning that
+// rides along with an otherwise successful apply. Reasons are short, fixed
+// sentences: filesystem paths and wrapped OS errors belong in the log only.
+func coverWarning(reason string) string {
+	return "Cover was not applied: " + reason + "."
+}
+
+// applyCoverPage extracts the given page as the file's cover and sets the
+// complete Cover state on targetFile. It returns the previous cover files
+// that now need removing and a nil error when the cover columns changed,
+// errCoverUnchanged for the identity no-op, and any other error when the
+// page was skipped. Cover identity for page-based files is the page number:
+// when the proposed page equals the stored cover_page and its cover image
+// exists on disk, nothing is extracted and the existing provenance is
+// preserved. Like the image path, the caller removes the stale files only
+// after the column write succeeds.
+func (h *handler) applyCoverPage(targetFile *models.File, bookFilepath string, page int, pluginSource string, log logger.Logger) ([]string, error) {
+	switch {
+	case page < 0:
+		return nil, errors.Errorf("cover page %d is negative", page)
+	case targetFile.CoverPage != nil && *targetFile.CoverPage == page && coverImageExists(targetFile):
+		return nil, errCoverUnchanged
+	case targetFile.PageCount == nil:
+		return nil, errors.New("the file's page count is unknown")
+	case page >= *targetFile.PageCount:
+		return nil, errors.Errorf("cover page %d is out of range for a file with %d pages", page, *targetFile.PageCount)
+	case h.enrich.pageExtractor == nil:
+		return nil, errors.New("no page extractor is configured")
+	}
+
+	coverFilename, mimeType, stale, err := h.enrich.pageExtractor.ExtractCoverPage(targetFile, bookFilepath, page, log)
+	if err != nil {
+		log.Warn("failed to extract plugin-provided cover page", logger.Data{"file_id": targetFile.ID, "cover_page": page, "error": err.Error()})
+		return nil, errors.Errorf("cover page %d could not be extracted", page)
+	}
+	coverFilename = filepath.Base(coverFilename)
+	targetFile.CoverPage = &page
+	targetFile.CoverImageFilename = &coverFilename
+	targetFile.CoverMimeType = &mimeType
+	targetFile.CoverSource = &pluginSource
+	return stale, nil
+}
+
+// coverImageExists reports whether the file's stored cover image is present
+// on disk. Read-side resolution is relative to the file, never the book path.
+func coverImageExists(file *models.File) bool {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(filepath.Dir(file.Filepath), filepath.Base(*file.CoverImageFilename)))
+	return err == nil
+}
+
+// applyCoverImage writes md.CoverData next to the file and sets the complete
+// Cover state on targetFile. It returns the previous cover files that now
+// need removing, or an error when the cover was skipped. Bytes that do not
+// fully decode as a raster image (SVG, AVIF, an error body served as image/*,
+// a download truncated after its header) are rejected so they never replace
+// a working cover. The stored extension and MIME type describe the
+// normalized bytes on disk, not the download's Content-Type. Stale covers
+// are found on disk by base name, matching how the scanner discovers covers,
+// and the caller removes them only after the column write succeeds.
+func applyCoverImage(targetFile *models.File, bookFilepath string, md *mediafile.ParsedMetadata, pluginSource string, log logger.Logger) ([]string, error) {
+	// NormalizeImage decodes every pixel, so its error is the validation. A
+	// header-only check would accept a truncated body whose signature and
+	// header are intact.
+	normalizedData, normalizedMime, err := fileutils.NormalizeImage(md.CoverData, md.CoverMimeType)
+	if err != nil {
+		log.Warn("downloaded cover is not a decodable image", logger.Data{"file_id": targetFile.ID, "mime_type": md.CoverMimeType, "error": err.Error()})
+		return nil, errors.Errorf("the downloaded file is not a decodable image (%s)", md.CoverMimeType)
+	}
+
+	coverDir := fileutils.ResolveCoverDirForWrite(bookFilepath, targetFile.Filepath)
+	coverBaseName := filepath.Base(targetFile.Filepath) + ".cover"
+
+	// A decodable image normalizes to exactly one of JPEG or PNG.
+	coverExt := ".png"
+	if normalizedMime == "image/jpeg" {
+		coverExt = ".jpg"
+	}
+
+	coverFilename := coverBaseName + coverExt
+	coverFilepath := filepath.Join(coverDir, coverFilename)
+
+	// Atomic, so a failed write over a same-extension cover leaves the
+	// previous bytes intact. 0644 matches the scanner's and the page path's
+	// cover files.
+	if err := fileutils.WriteFileAtomic(coverFilepath, normalizedData, 0644); err != nil {
+		log.Warn("failed to write cover file", logger.Data{"file_id": targetFile.ID, "path": coverFilepath, "error": err.Error()})
+		return nil, errors.New("the cover file could not be written")
+	}
+
+	stale := fileutils.OtherCoverExtensions(coverDir, coverBaseName, coverExt)
+
+	targetFile.CoverImageFilename = &coverFilename
+	targetFile.CoverMimeType = &normalizedMime
+	targetFile.CoverSource = &pluginSource
+	return stale, nil
 }

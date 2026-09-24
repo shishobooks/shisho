@@ -2,13 +2,15 @@ import { Download, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { formatFileSize } from "@/utils/format";
 
 export const BulkDownloadToast = () => {
+  const { demoMode } = useAuth();
   const { activeDownload, dismissDownload } = useBulkDownload();
 
-  if (!activeDownload || activeDownload.dismissed) {
+  if (demoMode || !activeDownload || activeDownload.dismissed) {
     return null;
   }
 

@@ -73,7 +73,7 @@ const Sidebar = ({ items }: SidebarProps) => {
   return (
     <aside
       className={cn(
-        "sticky top-[calc(3.5rem+1px)] flex h-[calc(100vh-3.5rem-1px)] shrink-0 flex-col border-r border-border bg-muted/30 transition-all duration-200 md:top-[calc(4rem+1px)] md:h-[calc(100vh-4rem-1px)]",
+        "sticky top-[calc(var(--demo-banner-height,0px)+3.5rem+1px)] flex h-[calc(100vh-var(--demo-banner-height,0px)-3.5rem-1px)] shrink-0 flex-col border-r border-border bg-muted/30 transition-all duration-200 md:top-[calc(var(--demo-banner-height,0px)+4rem+1px)] md:h-[calc(100vh-var(--demo-banner-height,0px)-4rem-1px)]",
         collapsed ? "w-14" : "w-48",
       )}
     >

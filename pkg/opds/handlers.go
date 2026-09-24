@@ -834,8 +834,8 @@ func (h *handler) downloadKepub(c echo.Context) error {
 }
 
 // bookCover serves a book's cover image. Mirrors `pkg/books/handlers.go`
-// `bookCover` but lives under the OPDS group so it accepts Basic Auth
-// and is reachable through the production /opds/* Caddy route.
+// `bookCover` but lives under the root OPDS group so it accepts Basic Auth
+// rather than the API's session authentication.
 func (h *handler) bookCover(c echo.Context) error {
 	ctx := c.Request().Context()
 

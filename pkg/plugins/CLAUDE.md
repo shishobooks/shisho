@@ -37,6 +37,9 @@ pkg/plugins/
   handler_enrich.go         - searchMetadata (POST /search), DownloadCoverFromURL
   handler_apply_metadata.go - applyMetadata (POST /apply)
   handler_persist_metadata.go - persistMetadata (shared by apply path)
+  handler_attribution.go    - Identify source attribution: intent validation, no-op helpers (ADR 0006)
+  handler_relationships.go  - Resolve-then-compare for Authors, Series memberships, Genres, Tags, and Narrators
+  handler_identifiers.go    - Duplicate-type validation and two-level Identifier attribution
   handler_convert.go        - convertFieldsToMetadata (apply payload → ParsedMetadata)
   routes.go         - Echo route registration
 ```
@@ -69,6 +72,16 @@ Conventions and gotchas specific to this surface:
   payload structs (e.g. `InstallPluginPayload.Name`) carry `,omitempty` solely so
   tygo emits `?`; payloads are only unmarshaled server-side, so this never
   affects the wire.
+- **`POST /plugins/apply` returns `PluginApplyResponse`** (the reloaded
+  `models.Book` embedded with `tstype:",extends"`, plus `warnings: string[]`).
+  The book carries the same `cover_cache_key` that `GET /books/:id` computes.
+  `warnings` lists selected values that were accepted but skipped, currently
+  only covers (download failed, not a decodable image, page out of range,
+  extraction or write failed); the apply itself still returns 200 and the
+  form shows each warning as a toast after the success toast. Cover helpers
+  return an error for a skip and `errCoverUnchanged` for the identity no-op;
+  `persistMetadata` converts skip errors to warnings with `coverWarning`.
+  It is always a JSON array, never `null`.
 - **`SeriesEntry` / `ApplyOverrides` are not wire types**: `SeriesEntry` and
   selected-field presence are parsed from `PluginApplyPayload.Fields`, while
   other apply-only signals are assembled from the payload. Their generated TS
@@ -78,10 +91,127 @@ Conventions and gotchas specific to this surface:
   optional value means clear. Title is required, so a selected blank Title is
   rejected. Keep this presence state out of the public
   `mediafile.ParsedMetadata` plugin contract.
-- **`file_name_source` is Identify source intent, not canonical attribution**:
-  the request accepts only `plugin` or `user`. `applyMetadata` maps those values
-  to `plugin:<scope>/<id>` or `manual` before constructing `ApplyOverrides`, so
-  raw intent values never reach `files.name_source`.
+- **`sources` is Identify source intent, not canonical attribution (ADR 0006)**:
+  `PluginApplyPayload.Sources` maps a field key (the keys of `fields`, plus
+  `file_name` via `SourcesKeyFileName`) to a finite `SourceIntent`: `plugin`
+  when the final value equals the Plugin Proposal, `user` otherwise. The
+  browser computes that because the proposal is never stored. The server owns
+  the other half in `persistMetadata`: canonicalize, compare against stored
+  state, and treat a semantic no-op as "write nothing, keep the stored source"
+  (so a stored `manual` is never downgraded). Only a changed value has its
+  intent mapped, via `applyAttribution.sourceFor`, to `plugin:<scope>/<id>` or
+  `manual`. A selected field with no entry is `user`; an unknown intent is a
+  validation error (`validateSourceIntents`, plus the `oneof` tag); raw intent
+  strings never reach a source column. Helpers live in
+  `handler_attribution.go`.
+  - An Explicit Clear nulls the value AND its source column in the same column
+    set. A source left on an empty slot outranks embedded metadata and blocks
+    Scan repopulation. `applyOptional` therefore treats "value already absent,
+    source still set" as a change, not a no-op, so a leftover source can always
+    be healed by clearing again. Pre-ADR clears left exactly that state behind;
+    migration `20260919000000` nulls those sources, but only plugin ones. Never
+    widen it to every source: the Edit form stores a cleared value as NULL plus
+    `manual` on purpose, as a protected empty slot.
+  - The `oneof` tag on `Sources` and `validateSourceIntents` overlap on
+    purpose. The tag documents the contract and fires in the binder; the
+    function also covers the identifier entries the tag cannot express and
+    callers that bypass the custom binder (most handler tests).
+  - A Title change regenerates the sort title only when `sort_title_source` is
+    not `manual`, and stamps it `filepath` (Edit form convention). Never write
+    `manual` or a plugin source to `sort_title_source`.
+  - Publisher is resolve-then-compare: `FindOrCreatePublisher` first, then
+    compare IDs, so an alias of the stored publisher is a no-op.
+  - Release dates compare by UTC calendar day because the form edits at day
+    granularity.
+  - Identifiers keep two layers. `file.IdentifierSource` is aggregate
+    provenance that gates Scan replacement of the whole collection and
+    follows the field-level intent (`sources.identifiers`); each entry's
+    `Source` records its origin and follows the optional per-entry `source`
+    intent on the identifier object (`ApplyOverrides.IdentifierIntents`,
+    keyed by trimmed type). `applyIdentifiers` builds the incoming rows with
+    their intent-mapped source, then `identifiers.ReconcileSources` (shared
+    with the Book edit handler in `pkg/books`) overwrites the source of every
+    entry whose `(type, normalized value)` already exists with the stored
+    one and reports whether the sets are equal. Equal sets are a no-op that
+    skips the delete/insert and keeps both layers; a clear nulls the
+    aggregate (including a stale one on an empty collection). Duplicate
+    types are rejected by `validateIdentifierTypes` in `applyMetadata` before
+    any field is persisted, because `BulkCreateFileIdentifiers` dedupes by
+    type and would otherwise silently drop one after the delete had run.
+  - Authors, Genres, Tags, and Narrators use aggregate provenance. Resolve
+    every entry through the existing find-or-create service before comparing
+    IDs. Authors compare ordered Person IDs and roles, treating nil and empty
+    roles equally. Narrators compare ordered Person IDs. Genres and Tags
+    compare unordered sets and deduplicate aliases resolving to the same ID.
+    A no-op preserves the source and skips relationship writes and FTS work.
+    Lookup and insert failures must return errors, not silently drop entries.
+    Complete clears null the aggregate source, including stale sources on
+    already-empty collections; partial edits use the submitted intent.
+    `books.author_source` is nullable after migration `20260919000001`; its
+    Go field remains a `nullzero` string, so clearing assigns `""`.
+  - Series memberships are an ordered collection with aggregate provenance in
+    `books.series_source` (nullable; migration `20260922000000` backfilled it
+    from the first membership's `series.name_source`). `applySeries` resolves
+    each entry through `FindOrCreateSeries` (which resolves Aliases), rejects
+    a Series listed twice (checked on resolved IDs, so an Alias plus its
+    Primary Name count as one; the check runs after resolution, so a rejected
+    apply can leave a freshly created, unattached Series behind), and
+    compares Series ID, order, and the atomic Series Number group (start,
+    end, unit). The source argument passed to
+    `FindOrCreateSeries` still describes the Series NAME and is untouched by
+    attribution; never read `Series.NameSource` as membership provenance. The
+    scalar `md.Series` path (plugin results) is routed through the same
+    function as the Identify array path. A malformed Series Number group is a
+    validation error from `extractSeriesEntries` before any field is
+    persisted (`strictSeriesNumberGroupFromFields`), in both shapes: entries
+    of an array `fields.series`, and the top-level `series_number`,
+    `series_number_end`, and `series_number_unit` keys next to a string
+    `fields.series`. `convertFieldsToMetadata` still parses the top-level
+    group leniently, so never persist its Series fields without that check.
+    The plugin SDK path (`parsePluginSeriesNumberGroup`) keeps dropping
+    malformed groups from hook results.
+  - Covers have no edit state, so the form sends no cover field to keep the
+    current Cover and `cover_url` / `cover_page` to choose the proposal, which
+    is always a Proposal Acceptance stamped `plugin:<scope>/<id>`. Both paths
+    (`applyCoverImage`, `applyCoverPage`) write the complete Cover state
+    (`cover_image_filename` as a bare filename, `cover_mime_type` describing
+    the normalized bytes on disk, `cover_source`, plus `cover_page` for
+    page-based files) in one column set. Page-based Cover identity is the
+    page number: a proposed page equal to the stored `cover_page` with a
+    cover image present skips extraction and keeps the stored source.
+    Image-based Covers have no identity check (no content hashing), and only
+    page-based `cover_source` is consulted by the scanner. A failed download,
+    extraction, or write leaves the previous Cover columns untouched, and
+    bytes that do not fully decode as a raster image are rejected. The
+    validation is `fileutils.NormalizeImage`'s error, which decodes every
+    pixel; `fileutils.ImageResolution` only reads the header and accepts a
+    truncated body, so never use it as the gate. Both paths install the new
+    image with `fileutils.WriteFileAtomic` (temp file plus rename in the
+    cover directory) before any previous cover is removed, so a failed write
+    never destroys the working cover on disk. Both paths report previous
+    covers by base name (`fileutils.OtherCoverExtensions`, every
+    `CoverImageExtensions` entry, the same way the scanner discovers covers)
+    instead of deleting them: `applyCoverImage` returns the list and
+    `applyCoverPage` passes through the list from
+    `pageExtractor.ExtractCoverPage`, and `persistMetadata` removes them
+    only after the `UpdateFile` flush succeeds, so a failed flush never
+    leaves the row naming a deleted file. The extractor interface therefore
+    returns `(filename, mimeType, stale, err)`; a stub must return the stale
+    paths it wants removed. The whole-apply DB transaction remains out of
+    scope.
+    End-to-end regression tests live in
+    `pkg/worker/scan_identify_attribution_test.go`,
+    `pkg/worker/scan_identify_relationships_test.go`,
+    `pkg/worker/identify_relationship_apply_test.go`,
+    `pkg/worker/identify_series_apply_test.go`,
+    `pkg/worker/identify_identifier_apply_test.go`,
+    `pkg/worker/identify_scalar_clear_test.go` (native EPUB and M4B
+    fixtures, so a cleared scalar is provably restored from embedded metadata
+    rather than a plugin parser), and `pkg/worker/identify_cover_apply_test.go`
+    (the production page extractor and the same-file cover cache key). The
+    shared `auto-enricher` fixture there proposes a description, a publisher,
+    and two identifiers on every ordinary Scan; `newIdentifyApplyServer`
+    wires `books.NewPluginPageExtractor` like `pkg/server` does.
 - **Wire-shape safety net**: `handler_shape_test.go` pins the exact JSON keys of
   the search and config responses (exact sorted-key assertions). Extend it when
   adding fields to heavily-consumed responses.
@@ -164,7 +294,7 @@ shisho/goodreads-metadata/
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - `series` → controls `series` (name), `seriesNumber`, `seriesNumberEnd`, AND `seriesNumberUnit`. The three number fields are atomic: a finite start is required, an optional finite end must be greater than the start, and malformed groups are discarded completely.
 
-**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning.
+**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning, and a `coverPage` equal to the file's current `cover_page` is a no-op that keeps the existing cover and its source when that cover image is present on disk.
 
 ## main.js Pattern
 
@@ -736,6 +866,8 @@ When changing `mediafile.ParsedMetadata`, `ParsedAuthor`, `ParsedIdentifier`, or
 3. **Update `packages/plugin-sdk/metadata.d.ts`** to match. `seriesNumberEnd` is the optional camelCase SDK field for omnibus range ends; snake_case `series_number_end` is only for Go JSON and HTTP/apply payloads.
 4. Update `packages/plugin-sdk/hooks.d.ts` when the metadata is also exposed in hook context types.
 5. Prefer adding new optional fields over changing/removing existing ones to avoid breaking plugins
+
+Fields tagged `json:"-"` (`ParsedMetadata.CoverData`, `DataSource`, `FieldDataSources`, `ParsedIdentifier.Source`) are host-internal: they need no SDK change and must never be populated from plugin output. `ParsedIdentifier.Source` is set only by the Scan merge (see `pkg/CLAUDE.md`).
 
 ### Writing a test plugin
 

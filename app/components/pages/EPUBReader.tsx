@@ -291,7 +291,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   if (isError || loadError) {
     const displayError = loadError ?? error;
     return (
-      <div className="fixed inset-0 bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
+      <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
         <div>
           <p className="font-medium">We couldn't load this book.</p>
@@ -313,12 +313,12 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-background flex flex-col">
+    <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col">
       <header
         className={cn(
           "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           hideChrome &&
-            "fixed top-0 inset-x-0 z-20 transition-transform duration-300",
+            "fixed top-[var(--demo-banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "-translate-y-full",
         )}
       >
@@ -416,7 +416,9 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
       <main
         className={cn(
           "relative bg-background",
-          hideChrome ? "fixed inset-0" : "flex-1",
+          hideChrome
+            ? "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)]"
+            : "flex-1",
         )}
       >
         {(isLoading || !blob || !bookReady) && (

@@ -64,11 +64,13 @@ import {
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   AuthorRoleWriter,
-  FileNameSourceIntentPlugin,
-  FileNameSourceIntentUser,
   FileTypeCBZ,
+  SourceIntentPlugin,
+  SourceIntentUser,
+  SourcesKeyFileName,
   type Book,
   type File,
+  type SourceIntents,
 } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { formatDuration, formatMetadataFieldLabel } from "@/utils/format";
@@ -81,7 +83,12 @@ import {
   type FieldScope,
 } from "./identify-decisions";
 import {
+  booleanSourceIntent,
+  identifierCollectionIntent,
+  identifierEntryIntent,
+  identifierSetsEqual,
   resolveIdentifiers,
+  scalarSourceIntent,
   type FieldStatus,
   type IdentifierEntry,
 } from "./identify-utils";
@@ -248,6 +255,68 @@ function resolveAbridged(
   return { value: inc, status: "changed" };
 }
 
+function orderedNamesEqual(current: string[], incoming: string[]): boolean {
+  return (
+    current.length === incoming.length &&
+    current.every((name, i) => name.trim() === incoming[i].trim())
+  );
+}
+
+function authorsEqual(
+  current: AuthorEntry[],
+  incoming: AuthorEntry[],
+): boolean {
+  return (
+    current.length === incoming.length &&
+    current.every(
+      (author, i) =>
+        author.name.trim() === incoming[i].name.trim() &&
+        (author.role?.trim() ?? "") === (incoming[i].role?.trim() ?? ""),
+    )
+  );
+}
+
+/** The plugin proposes at most one membership; the form edits an ordered list. */
+function proposedSeriesEntries(result: PluginSearchResult): SeriesEntry[] {
+  if (!result.series) return [];
+  return [
+    {
+      name: result.series,
+      number: result.series_number?.toString() ?? "",
+      numberEnd: result.series_number_end?.toString() ?? "",
+      unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
+    },
+  ];
+}
+
+/** Memberships are ordered and their Series Number group is atomic, so the
+ *  name, start, end, and unit of each position must all match. Numbers compare
+ *  as values so "1" and "1.0" are the same position. */
+function seriesEntriesEqual(
+  current: SeriesEntry[],
+  incoming: SeriesEntry[],
+): boolean {
+  const numberKey = (value: string) => {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? String(parsed) : "";
+  };
+  const key = (s: SeriesEntry) =>
+    `${s.name.trim()}|${numberKey(s.number)}|${numberKey(s.numberEnd)}|${s.unit}`;
+  return (
+    current.length === incoming.length &&
+    current.every((entry, i) => key(entry) === key(incoming[i]))
+  );
+}
+
+function nameSetsEqual(current: string[], incoming: string[]): boolean {
+  const currentSet = new Set(current.map((name) => name.trim()));
+  const incomingSet = new Set(incoming.map((name) => name.trim()));
+  return (
+    currentSet.size === incomingSet.size &&
+    [...currentSet].every((name) => incomingSet.has(name))
+  );
+}
+
 function resolveArray(
   current: string[],
   incoming: string[],
@@ -267,6 +336,17 @@ function resolveArray(
   return { value: incoming, status: "changed" };
 }
 
+function resolveNarrators(
+  current: string[],
+  incoming: string[],
+): { value: string[]; status: FieldStatus } {
+  if (current.length === 0 && incoming.length > 0)
+    return { value: incoming, status: "new" };
+  if (incoming.length === 0 || orderedNamesEqual(current, incoming))
+    return { value: current, status: "unchanged" };
+  return { value: incoming, status: "changed" };
+}
+
 function resolveAuthors(
   current: AuthorEntry[],
   incoming: AuthorEntry[],
@@ -275,13 +355,7 @@ function resolveAuthors(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
-  const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
-  const curKeys = current.map(key).sort();
-  const incKeys = incoming.map(key).sort();
-  if (
-    curKeys.length === incKeys.length &&
-    curKeys.every((v, i) => v === incKeys[i])
-  ) {
+  if (authorsEqual(current, incoming)) {
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
@@ -313,14 +387,7 @@ function resolveSeries(
     return { value: incoming, status: "new" };
   if (current.length > 0 && incoming.length === 0)
     return { value: current, status: "unchanged" };
-  const key = (s: SeriesEntry) =>
-    `${s.name}|${s.number}|${s.numberEnd}|${s.unit}`;
-  const curKeys = current.map(key).sort();
-  const incKeys = incoming.map(key).sort();
-  if (
-    curKeys.length === incKeys.length &&
-    curKeys.every((v, i) => v === incKeys[i])
-  ) {
+  if (seriesEntriesEqual(current, incoming)) {
     return { value: current, status: "unchanged" };
   }
   return { value: incoming, status: "changed" };
@@ -485,7 +552,7 @@ export function IdentifyReviewForm({
       title: book.title_source || undefined,
       subtitle: book.subtitle_source ?? undefined,
       authors: book.author_source || undefined,
-      series: undefined, // No series_source field on the book model.
+      series: book.series_source ?? undefined,
       genres: book.genre_source ?? undefined,
       tags: book.tag_source ?? undefined,
       description: book.description_source ?? undefined,
@@ -494,6 +561,7 @@ export function IdentifyReviewForm({
       book.title_source,
       book.subtitle_source,
       book.author_source,
+      book.series_source,
       book.genre_source,
       book.tag_source,
       book.description_source,
@@ -555,23 +623,14 @@ export function IdentifyReviewForm({
       result.identifiers ?? []
     ).map((id) => ({ type: id.type, value: id.value }));
 
-    const incomingSeries: SeriesEntry[] = result.series
-      ? [
-          {
-            name: result.series,
-            number: result.series_number?.toString() ?? "",
-            numberEnd: result.series_number_end?.toString() ?? "",
-            unit: (result.series_number_unit ?? "") as SeriesEntry["unit"],
-          },
-        ]
-      : [];
+    const incomingSeries = proposedSeriesEntries(result);
 
     return {
       title: resolveScalar(book.title, result.title),
       subtitle: resolveScalar(book.subtitle, result.subtitle),
       description: resolveScalar(book.description, result.description),
       authors: resolveAuthors(currentAuthors, incomingAuthors),
-      narrators: resolveArray(currentNarrators, result.narrators ?? []),
+      narrators: resolveNarrators(currentNarrators, result.narrators ?? []),
       series: resolveSeries(currentSeriesEntries, incomingSeries),
       genres: resolveArray(currentGenres, result.genres ?? []),
       tags: resolveArray(currentTags, result.tags ?? []),
@@ -771,13 +830,7 @@ export function IdentifyReviewForm({
       return "changed";
     };
 
-    const seriesKey = (s: SeriesEntry) =>
-      `${s.name.trim()}|${s.number.trim()}|${s.numberEnd.trim()}|${s.unit}`;
-    const seriesSavedKeys = currentSeriesEntries.map(seriesKey).sort();
-    const seriesCurrentKeys = seriesEntries.map(seriesKey).sort();
-    const seriesMatch =
-      seriesSavedKeys.length === seriesCurrentKeys.length &&
-      seriesSavedKeys.every((v, i) => v === seriesCurrentKeys[i]);
+    const seriesMatch = seriesEntriesEqual(currentSeriesEntries, seriesEntries);
     const seriesStatus: FieldStatus = seriesMatch
       ? "unchanged"
       : currentSeriesEntries.length === 0 && seriesEntries.length > 0
@@ -795,12 +848,15 @@ export function IdentifyReviewForm({
 
     const authorsStatus = (): FieldStatus => {
       if (currentAuthors.length === 0 && authors.length > 0) return "new";
-      const key = (a: AuthorEntry) => `${a.name}|${a.role ?? ""}`;
-      const s = currentAuthors.map(key).sort();
-      const c = authors.map(key).sort();
-      if (s.length === c.length && s.every((v, i) => v === c[i]))
-        return "unchanged";
+      if (authorsEqual(currentAuthors, authors)) return "unchanged";
       return "changed";
+    };
+
+    const narratorsStatus = (): FieldStatus => {
+      if (currentNarrators.length === 0 && narrators.length > 0) return "new";
+      return orderedNamesEqual(currentNarrators, narrators)
+        ? "unchanged"
+        : "changed";
     };
 
     const abridgedStatus = (): FieldStatus => {
@@ -813,12 +869,9 @@ export function IdentifyReviewForm({
     const identifiersStatus = (): FieldStatus => {
       if (currentIdentifiers.length === 0 && identifiers.length > 0)
         return "new";
-      const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
-      const s = currentIdentifiers.map(key).sort();
-      const c = identifiers.map(key).sort();
-      if (s.length === c.length && s.every((v, i) => v === c[i]))
-        return "unchanged";
-      return "changed";
+      return identifierSetsEqual(currentIdentifiers, identifiers)
+        ? "unchanged"
+        : "changed";
     };
 
     const coverStatus: FieldStatus =
@@ -838,7 +891,7 @@ export function IdentifyReviewForm({
       description: scalarStatus(book.description, description),
       cover: coverStatus,
       name: scalarStatus(file?.name, name),
-      narrators: arrayStatus(currentNarrators, narrators),
+      narrators: narratorsStatus(),
       publisher: scalarStatus(file?.publisher?.name, publisher),
       language: scalarStatus(file?.language, language),
       release_date: scalarStatus(
@@ -1123,36 +1176,95 @@ export function IdentifyReviewForm({
       return;
     }
     const fields: Record<string, unknown> = {};
-    if (decisions.title) fields.title = title;
-    if (decisions.subtitle) fields.subtitle = subtitle;
-    if (decisions.description) fields.description = description;
+    // Intent compares the final value to the raw Plugin Proposal (ADR 0006).
+    // The server decides whether it is a no-op against stored metadata.
+    const sources: SourceIntents = {};
+    if (decisions.title) {
+      fields.title = title;
+      sources.title = scalarSourceIntent(title, result.title);
+    }
+    if (decisions.subtitle) {
+      fields.subtitle = subtitle;
+      sources.subtitle = scalarSourceIntent(subtitle, result.subtitle);
+    }
+    if (decisions.description) {
+      fields.description = description;
+      sources.description = scalarSourceIntent(description, result.description);
+    }
     if (decisions.authors) {
       fields.authors = authors.map((a) => ({ name: a.name, role: a.role }));
+      sources.authors = authorsEqual(authors, result.authors ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
     }
-    if (decisions.narrators) fields.narrators = narrators;
+    if (decisions.narrators) {
+      fields.narrators = narrators;
+      sources.narrators = orderedNamesEqual(narrators, result.narrators ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
+    }
     if (decisions.series) {
-      fields.series = seriesEntries
-        .filter((s) => s.name.trim())
-        .map((s) => ({
-          name: s.name,
-          number: s.number !== "" ? parseFloat(s.number) : undefined,
-          series_number_end:
-            s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
-          series_number_unit: s.unit !== "" ? s.unit : undefined,
-        }));
+      const finalSeries = seriesEntries.filter((s) => s.name.trim());
+      fields.series = finalSeries.map((s) => ({
+        name: s.name,
+        number: s.number !== "" ? parseFloat(s.number) : undefined,
+        series_number_end:
+          s.numberEnd !== "" ? parseFloat(s.numberEnd) : undefined,
+        series_number_unit: s.unit !== "" ? s.unit : undefined,
+      }));
+      sources.series = seriesEntriesEqual(
+        finalSeries,
+        proposedSeriesEntries(result),
+      )
+        ? SourceIntentPlugin
+        : SourceIntentUser;
     }
-    if (decisions.genres) fields.genres = genres;
-    if (decisions.tags) fields.tags = tags;
-    if (decisions.publisher) fields.publisher = publisher;
-    if (decisions.release_date) fields.release_date = releaseDate;
-    if (decisions.url) fields.url = url;
-    if (decisions.language) fields.language = language;
-    if (decisions.abridged) fields.abridged = abridged;
+    if (decisions.genres) {
+      fields.genres = genres;
+      sources.genres = nameSetsEqual(genres, result.genres ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
+    }
+    if (decisions.tags) {
+      fields.tags = tags;
+      sources.tags = nameSetsEqual(tags, result.tags ?? [])
+        ? SourceIntentPlugin
+        : SourceIntentUser;
+    }
+    if (decisions.publisher) {
+      fields.publisher = publisher;
+      sources.publisher = scalarSourceIntent(publisher, result.publisher);
+    }
+    if (decisions.release_date) {
+      fields.release_date = releaseDate;
+      sources.release_date = scalarSourceIntent(
+        releaseDate,
+        result.release_date?.split("T")[0],
+      );
+    }
+    if (decisions.url) {
+      fields.url = url;
+      sources.url = scalarSourceIntent(url, result.url);
+    }
+    if (decisions.language) {
+      fields.language = language;
+      sources.language = scalarSourceIntent(language, result.language);
+    }
+    if (decisions.abridged) {
+      fields.abridged = abridged;
+      sources.abridged = booleanSourceIntent(abridged, result.abridged);
+    }
     if (decisions.identifiers) {
+      const proposedIdentifiers = result.identifiers ?? [];
       fields.identifiers = identifiers.map((id) => ({
         type: id.type,
         value: id.value,
+        source: identifierEntryIntent(id, proposedIdentifiers),
       }));
+      sources.identifiers = identifierCollectionIntent(
+        identifiers,
+        proposedIdentifiers,
+      );
     }
     if (decisions.cover && coverSelection === "new") {
       if (newCoverUrl) {
@@ -1166,23 +1278,27 @@ export function IdentifyReviewForm({
       book_id: book.id,
       file_id: fileId,
       fields,
+      sources,
       plugin_scope: result.plugin_scope,
       plugin_id: result.plugin_id,
     };
 
     if (decisions.name) {
       payload.file_name = name;
-      payload.file_name_source =
-        name === initialName
-          ? FileNameSourceIntentPlugin
-          : FileNameSourceIntentUser;
+      sources[SourcesKeyFileName] = scalarSourceIntent(name, initialName);
     }
 
     try {
-      await applyMutation.mutateAsync(payload);
+      const result = await applyMutation.mutateAsync(payload);
       toast.success(
         `Updated ${totalSelected} field${totalSelected === 1 ? "" : "s"}.`,
       );
+      // The apply succeeded, but a selected value can still be skipped
+      // (a proposed cover that could not be downloaded or decoded). Say so,
+      // or the user takes the success toast at face value.
+      for (const warning of result.warnings) {
+        toast.warning(warning);
+      }
       onClose();
     } catch (err) {
       const message =
@@ -2055,41 +2171,71 @@ export function IdentifyReviewForm({
                   onDecisionChange={(v) => setDecision("abridged", v)}
                   status={fieldStatus.abridged}
                 >
-                  <div
-                    className={cn(
-                      "flex items-center gap-2",
-                      !decisions.abridged && "pointer-events-none",
+                  {/* Abridged is a nullable boolean. Unlike the Edit form's
+                      opt-in checkbox, Identify must distinguish an
+                      explicit `false` (a plugin can propose one, and
+                      restoring that proposal is a Proposal Acceptance)
+                      from an Explicit Clear, which nulls the value and its
+                      source so a later Scan may repopulate it. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="w-40">
+                        <Select
+                          disabled={
+                            isDisabled("abridged") || !decisions.abridged
+                          }
+                          onValueChange={(value) =>
+                            setAbridged(
+                              value === "abridged"
+                                ? true
+                                : value === "unabridged"
+                                  ? false
+                                  : null,
+                            )
+                          }
+                          value={
+                            abridged === true
+                              ? "abridged"
+                              : abridged === false
+                                ? "unabridged"
+                                : "unset"
+                          }
+                        >
+                          <SelectTrigger
+                            aria-label="Abridged value"
+                            className="cursor-pointer"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem
+                              className="cursor-pointer"
+                              value="abridged"
+                            >
+                              Abridged
+                            </SelectItem>
+                            <SelectItem
+                              className="cursor-pointer"
+                              value="unabridged"
+                            >
+                              Unabridged
+                            </SelectItem>
+                            <SelectItem
+                              className="cursor-pointer"
+                              value="unset"
+                            >
+                              Not set
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </TooltipTrigger>
+                    {!decisions.abridged && (
+                      <TooltipContent>
+                        Apply this field first to edit
+                      </TooltipContent>
                     )}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div>
-                          <Checkbox
-                            aria-label="Mark as abridged"
-                            checked={abridged === true}
-                            disabled={
-                              isDisabled("abridged") || !decisions.abridged
-                            }
-                            id="identify-abridged"
-                            onCheckedChange={(checked) =>
-                              setAbridged(checked === true ? true : null)
-                            }
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      {!decisions.abridged && (
-                        <TooltipContent>
-                          Apply this field first to edit
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                    <Label
-                      className="cursor-pointer text-sm font-normal text-muted-foreground"
-                      htmlFor="identify-abridged"
-                    >
-                      This is an abridged edition
-                    </Label>
-                  </div>
+                  </Tooltip>
                 </FieldRow>
               </div>
             )}

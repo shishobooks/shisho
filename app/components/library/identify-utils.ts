@@ -1,4 +1,10 @@
-import type { Book, File } from "@/types";
+import {
+  SourceIntentPlugin,
+  SourceIntentUser,
+  type Book,
+  type File,
+  type SourceIntent,
+} from "@/types";
 
 export type FieldStatus = "unchanged" | "changed" | "new";
 
@@ -89,25 +95,33 @@ export function computeIdentifyEmptyState(
   return { primary: "Try a different search query." };
 }
 
+/** Collapse duplicate types, last wins. The DB invariant is one identifier
+ * per type per file, so a misbehaving plugin's duplicate-type proposal is
+ * read the way the store would persist it. */
+function dedupeIdentifiersByType(
+  entries: IdentifierEntry[],
+): IdentifierEntry[] {
+  const deduped: IdentifierEntry[] = [];
+  const indexByType = new Map<string, number>();
+  for (const entry of entries) {
+    const existingIdx = indexByType.get(entry.type);
+    if (existingIdx === undefined) {
+      indexByType.set(entry.type, deduped.length);
+      deduped.push(entry);
+    } else {
+      deduped[existingIdx] = entry;
+    }
+  }
+  return deduped;
+}
+
+const identifierKey = (id: IdentifierEntry) => `${id.type}|${id.value.trim()}`;
+
 export function resolveIdentifiers(
   current: IdentifierEntry[],
   incoming: IdentifierEntry[],
 ): { value: IdentifierEntry[]; status: FieldStatus } {
-  // Dedupe incoming by type (last-wins) so a misbehaving plugin can't propagate
-  // a duplicate-type set forward. The DB invariant is one identifier per type
-  // per file; "incoming wins on conflict" extends naturally to "the last
-  // incoming entry wins" within the same payload.
-  const dedupedIncoming: IdentifierEntry[] = [];
-  const incomingByType = new Map<string, number>();
-  for (const entry of incoming) {
-    const existingIdx = incomingByType.get(entry.type);
-    if (existingIdx === undefined) {
-      incomingByType.set(entry.type, dedupedIncoming.length);
-      dedupedIncoming.push(entry);
-    } else {
-      dedupedIncoming[existingIdx] = entry;
-    }
-  }
+  const dedupedIncoming = dedupeIdentifiersByType(incoming);
 
   if (current.length === 0 && dedupedIncoming.length === 0) {
     return { value: [], status: "unchanged" };
@@ -120,12 +134,85 @@ export function resolveIdentifiers(
   }
 
   // Overwrite: use incoming identifiers directly (replacing current).
-  const key = (id: IdentifierEntry) => `${id.type}|${id.value}`;
-  const currentSet = new Set(current.map(key));
-  const incomingSet = new Set(dedupedIncoming.map(key));
-  const same =
-    currentSet.size === incomingSet.size &&
-    [...currentSet].every((k) => incomingSet.has(k));
+  return {
+    value: dedupedIncoming,
+    status: identifierSetsEqual(current, dedupedIncoming)
+      ? "unchanged"
+      : "changed",
+  };
+}
 
-  return { value: dedupedIncoming, status: same ? "unchanged" : "changed" };
+/** Set equality on (type, trimmed value), the same comparison Identify uses
+ * for status and intent. */
+export function identifierSetsEqual(
+  a: IdentifierEntry[],
+  b: IdentifierEntry[],
+): boolean {
+  const aSet = new Set(a.map(identifierKey));
+  const bSet = new Set(b.map(identifierKey));
+  return aSet.size === bSet.size && [...aSet].every((k) => bSet.has(k));
+}
+
+/**
+ * Per-entry Identify source intent for one identifier (ADR 0006): "plugin"
+ * when an entry of the same type and trimmed value is in the Plugin
+ * Proposal, "user" otherwise. The server keeps a retained entry's stored
+ * source regardless, so this only decides new or replaced entries.
+ */
+export function identifierEntryIntent(
+  entry: IdentifierEntry,
+  proposal: IdentifierEntry[],
+): SourceIntent {
+  const proposed = new Set(
+    dedupeIdentifiersByType(proposal).map(identifierKey),
+  );
+  return proposed.has(identifierKey(entry))
+    ? SourceIntentPlugin
+    : SourceIntentUser;
+}
+
+/**
+ * Field-level Identify source intent for the identifier collection: "plugin"
+ * only when the final collection equals the Plugin Proposal as a set of
+ * (type, trimmed value). Any other nonempty composition, and a clear, is
+ * "user"; the server nulls the aggregate source on a clear either way.
+ */
+export function identifierCollectionIntent(
+  finalValue: IdentifierEntry[],
+  proposal: IdentifierEntry[],
+): SourceIntent {
+  if (finalValue.length === 0) return SourceIntentUser;
+  return identifierSetsEqual(finalValue, dedupeIdentifiersByType(proposal))
+    ? SourceIntentPlugin
+    : SourceIntentUser;
+}
+
+/**
+ * Identify source intent for a scalar (ADR 0006): "plugin" when the final
+ * value equals the Plugin Proposal, "user" otherwise. Equality is a trimmed
+ * raw comparison, so editing and then restoring the proposal is "plugin".
+ * Whether the value is a no-op against stored metadata is decided by the
+ * server, which holds the canonical stored state.
+ */
+export function scalarSourceIntent(
+  finalValue: string,
+  proposal: string | undefined | null,
+): SourceIntent {
+  return finalValue.trim() === (proposal ?? "").trim()
+    ? SourceIntentPlugin
+    : SourceIntentUser;
+}
+
+/**
+ * scalarSourceIntent for a nullable boolean, where `null` is an Explicit
+ * Clear and `undefined` means the plugin proposed nothing. Neither can match
+ * a proposal, which keeps `false` distinct from absence.
+ */
+export function booleanSourceIntent(
+  finalValue: boolean | null,
+  proposal: boolean | undefined | null,
+): SourceIntent {
+  return finalValue !== null && finalValue === proposal
+    ? SourceIntentPlugin
+    : SourceIntentUser;
 }
