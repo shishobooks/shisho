@@ -206,7 +206,7 @@ importers:
         specifier: ^17.12.0
         version: 17.12.0
       jsdom:
-        specifier: ^30.0.1
+        specifier: ^30.1.1
         version: 30.1.1
       prettier:
         specifier: 3.9.8
