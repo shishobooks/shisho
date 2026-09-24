@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.51] - 2026-09-24
+
+### Features
+- Keep Identifier collection and entry provenance consistent through Identify (#493)
+- Track Series membership provenance through Identify and Scan (#491)
+- Attribute Identify relationship collections by final value (#490)
+- Serve embedded frontend from a single Go binary (#489)
+- Add Demo Mode interface (#486)
+- Attribute scalar Identify metadata by final value (#485)
+- Add read-only Demo Mode and action error feedback (#481)
+
+### Bug Fixes
+- Close the Identify attribution gaps from the #448 review and make cover writes failure-safe (#497)
+- Attribute each Scan identifier to the source that supplied it (#496)
+- Unify Identify Cover provenance across file formats (#494)
+- Flag unreadable files and accept M4B-branded audiobooks during scans (#482)
+- Persist explicitly selected Identify clears (#453)
+- Normalize Identify file Name source attribution (#450)
+- Reorganize files after Identify path changes (#449)
+
+### Documentation
+- Define Demo Mode, Public Demo, and Demo Corpus (#480)
+- Define Identify provenance terminology (#459)
+
+
 ## [0.0.50] - 2026-07-31
 
 ### Features
