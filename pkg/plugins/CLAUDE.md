@@ -188,13 +188,17 @@ Conventions and gotchas specific to this surface:
     truncated body, so never use it as the gate. Both paths install the new
     image with `fileutils.WriteFileAtomic` (temp file plus rename in the
     cover directory) before any previous cover is removed, so a failed write
-    never destroys the working cover on disk. The image path finds previous
-    covers on disk by base name (every `CoverImageExtensions` entry, the same
-    way the scanner discovers covers) and removes them only after the
-    `UpdateFile` flush succeeds; the page path (`books.ExtractCoverPageToFile`)
-    removes other-extension covers itself right after the install, so a
-    later `UpdateFile` failure is the one remaining window (the whole-apply
-    DB transaction is out of scope).
+    never destroys the working cover on disk. Both paths report previous
+    covers by base name (`fileutils.OtherCoverExtensions`, every
+    `CoverImageExtensions` entry, the same way the scanner discovers covers)
+    instead of deleting them: `applyCoverImage` returns the list and
+    `applyCoverPage` passes through the list from
+    `pageExtractor.ExtractCoverPage`, and `persistMetadata` removes them
+    only after the `UpdateFile` flush succeeds, so a failed flush never
+    leaves the row naming a deleted file. The extractor interface therefore
+    returns `(filename, mimeType, stale, err)`; a stub must return the stale
+    paths it wants removed. The whole-apply DB transaction remains out of
+    scope.
     End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
     `pkg/worker/scan_identify_relationships_test.go`,

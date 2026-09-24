@@ -58,13 +58,12 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		return errcodes.ValidationError("Page number is out of bounds")
 	}
 
-	coverFilename, mimeType, err := ExtractCoverPageToFile(
+	coverFilename, mimeType, staleCovers, err := ExtractCoverPageToFile(
 		file,
 		file.Book.Filepath,
 		payload.Page,
 		h.pageCache,
 		h.pdfPageCache,
-		log,
 	)
 	if err != nil {
 		log.Error("failed to extract cover page", logger.Data{"error": err.Error(), "page": payload.Page, "file_type": file.FileType})
@@ -89,6 +88,8 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 	}); err != nil {
 		return errors.WithStack(err)
 	}
+	// The row now names the replacement, so the previous covers can go.
+	RemoveStaleCovers(staleCovers, log)
 
 	// Write sidecar to persist the cover page choice
 	if err := sidecar.WriteFileSidecarFromModel(file); err != nil {

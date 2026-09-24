@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -39,8 +38,11 @@ func TestExtractCoverPageToFile_FailedInstallKeepsPreviousCover(t *testing.T) {
 	require.NoError(t, os.Mkdir(obstruction, 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(obstruction, "keep"), []byte("x"), 0600))
 
-	_, _, err := ExtractCoverPageToFile(file, bookDir, 2, cbzpages.NewCache(t.TempDir()), nil, logger.New())
+	filename, mimeType, stale, err := ExtractCoverPageToFile(file, bookDir, 2, cbzpages.NewCache(t.TempDir()), nil)
 	require.Error(t, err)
+	assert.Empty(t, filename)
+	assert.Empty(t, mimeType)
+	assert.Nil(t, stale, "a failed install must not report anything to remove")
 
 	got, readErr := os.ReadFile(prevPath)
 	require.NoError(t, readErr, "the previous cover must still exist after a failed install")
@@ -50,19 +52,23 @@ func TestExtractCoverPageToFile_FailedInstallKeepsPreviousCover(t *testing.T) {
 	assert.ElementsMatch(t, []string{prevPath, obstruction}, leftovers, "no temporary file may be left behind")
 }
 
-func TestExtractCoverPageToFile_ReplacesPreviousCoverAfterInstall(t *testing.T) {
+// The extractor installs the replacement and reports the previous covers it
+// supersedes. Removing them is the caller's job, after its database write
+// succeeds, so a failed write never leaves the row naming a deleted file.
+func TestExtractCoverPageToFile_ReportsPreviousCoverAsStale(t *testing.T) {
 	t.Parallel()
 
-	file, bookDir, prevPath, _ := newExtractCoverFixture(t)
+	file, bookDir, prevPath, prevBytes := newExtractCoverFixture(t)
 
-	filename, mimeType, err := ExtractCoverPageToFile(file, bookDir, 2, cbzpages.NewCache(t.TempDir()), nil, logger.New())
+	filename, mimeType, stale, err := ExtractCoverPageToFile(file, bookDir, 2, cbzpages.NewCache(t.TempDir()), nil)
 	require.NoError(t, err)
 	assert.Equal(t, "book.cbz.cover.jpg", filename)
 	assert.Equal(t, "image/jpeg", mimeType)
+	assert.Equal(t, []string{prevPath}, stale)
 
-	_, statErr := os.Stat(prevPath)
-	assert.True(t, os.IsNotExist(statErr), "the previous cover must be removed after a successful install")
-	entries, globErr := filepath.Glob(filepath.Join(bookDir, "book.cbz.cover.*"))
-	require.NoError(t, globErr)
-	assert.Equal(t, []string{filepath.Join(bookDir, "book.cbz.cover.jpg")}, entries)
+	got, readErr := os.ReadFile(prevPath)
+	require.NoError(t, readErr, "the previous cover must still exist until the caller removes it")
+	assert.Equal(t, prevBytes, got)
+	_, statErr := os.Stat(filepath.Join(bookDir, "book.cbz.cover.jpg"))
+	require.NoError(t, statErr, "the replacement must be installed")
 }

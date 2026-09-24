@@ -150,6 +150,7 @@ type stubPageExtractor struct {
 	calls    []stubPageExtractorCall
 	filename string
 	mimeType string
+	stale    []string
 	wantErr  error
 }
 
@@ -159,12 +160,62 @@ type stubPageExtractorCall struct {
 	Page         int
 }
 
-func (s *stubPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, error) {
+func (s *stubPageExtractor) ExtractCoverPage(file *models.File, bookFilepath string, page int, _ logger.Logger) (string, string, []string, error) {
 	s.calls = append(s.calls, stubPageExtractorCall{FileID: file.ID, BookFilepath: bookFilepath, Page: page})
 	if s.wantErr != nil {
-		return "", "", s.wantErr
+		return "", "", nil, s.wantErr
 	}
-	return s.filename, s.mimeType, nil
+	return s.filename, s.mimeType, s.stale, nil
+}
+
+// A previous page cover reported as stale by the extractor is removed only
+// after the column flush succeeds, matching the image-based path, so a failed
+// UpdateFile never leaves the row naming a deleted file.
+func TestPersistMetadata_CoverPage_RemovesStaleCoversOnlyAfterFlush(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		updateFileErr error
+		wantRemoved   bool
+	}{
+		{name: "flush succeeds", wantRemoved: true},
+		{name: "flush fails", updateFileErr: errors.New("db locked"), wantRemoved: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			libraryDir := t.TempDir()
+			filePath := filepath.Join(libraryDir, "comic.cbz")
+			require.NoError(t, os.WriteFile(filePath, []byte("fake cbz"), 0600))
+			stalePath := filepath.Join(libraryDir, "comic.cbz.cover.png")
+			require.NoError(t, os.WriteFile(stalePath, []byte("previous cover"), 0600))
+
+			pageCount := 10
+			file := &models.File{ID: 1, BookID: 1, Filepath: filePath, FileType: models.FileTypeCBZ, PageCount: &pageCount}
+			book := &models.Book{ID: 1, LibraryID: 1, Filepath: libraryDir, Files: []*models.File{file}}
+			extractor := &stubPageExtractor{filename: "comic.cbz.cover.jpg", mimeType: "image/jpeg", stale: []string{stalePath}}
+			h := &handler{enrich: &enrichDeps{
+				bookStore:     &stubBookStoreForPersist{book: book, updateFileErr: tc.updateFileErr},
+				pageExtractor: extractor,
+			}}
+
+			page := 3
+			_, err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{CoverPage: &page}, "test", "plugin-id", nil, testLogger())
+			if tc.updateFileErr != nil {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			_, statErr := os.Stat(stalePath)
+			if tc.wantRemoved {
+				assert.True(t, os.IsNotExist(statErr), "the stale cover must be removed after a successful flush")
+			} else {
+				require.NoError(t, statErr, "the stale cover must survive a failed flush")
+			}
+		})
+	}
 }
 
 func TestPersistMetadata_CoverPage_CBZ_HappyPath(t *testing.T) {

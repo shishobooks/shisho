@@ -3143,11 +3143,6 @@ func (w *Worker) upgradeEnricherCover(
 		})
 		return
 	}
-	if existingCoverPath != "" && existingCoverPath != coverFilepath {
-		if err := os.Remove(existingCoverPath); err != nil {
-			logWarn("failed to remove previous cover", logger.Data{"error": err.Error(), "path": existingCoverPath})
-		}
-	}
 
 	logInfo("upgraded cover from enricher (higher resolution)", logger.Data{
 		"file_id":             file.ID,
@@ -3168,6 +3163,12 @@ func (w *Worker) upgradeEnricherCover(
 			"error":   err.Error(),
 			"file_id": file.ID,
 		})
+		return
+	}
+	// The row now names the replacement, so a previous cover at another
+	// extension can go.
+	if existingCoverPath != "" && existingCoverPath != coverFilepath {
+		books.RemoveStaleCovers([]string{existingCoverPath}, log)
 	}
 }
 
@@ -3857,12 +3858,13 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 	if models.IsPageBasedFileType(file.FileType) && file.CoverPage != nil {
 		pageNum := *file.CoverPage
 		var coverFilename, coverMimeType string
+		var staleCovers []string
 		var err error
 		switch file.FileType {
 		case models.FileTypeCBZ:
-			coverFilename, coverMimeType, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
+			coverFilename, coverMimeType, staleCovers, err = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
 		case models.FileTypePDF:
-			coverFilename, coverMimeType, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
+			coverFilename, coverMimeType, staleCovers, err = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, pageNum)
 		}
 		if err != nil {
 			logWarn("failed to extract cover from selected page", logger.Data{"page": pageNum, "error": err.Error()})
@@ -3880,6 +3882,7 @@ func (w *Worker) recoverMissingCover(ctx context.Context, file *models.File, job
 		}); err != nil {
 			return errors.WithStack(err)
 		}
+		books.RemoveStaleCovers(staleCovers, log)
 		return nil
 	}
 
@@ -3938,11 +3941,12 @@ func (w *Worker) applyPageCover(ctx context.Context, file *models.File, book *mo
 	coverBaseName := filepath.Base(file.Filepath) + ".cover"
 
 	var coverFilename, coverMimeType string
+	var staleCovers []string
 	switch file.FileType {
 	case models.FileTypePDF:
-		coverFilename, coverMimeType, extractErr = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
+		coverFilename, coverMimeType, staleCovers, extractErr = extractPDFPageCover(file.Filepath, coverDir, coverBaseName, page)
 	case models.FileTypeCBZ:
-		coverFilename, coverMimeType, extractErr = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
+		coverFilename, coverMimeType, staleCovers, extractErr = extractCBZPageCover(file.Filepath, coverDir, coverBaseName, page)
 	default:
 		extractErr = errors.Errorf("unsupported page-based file type for cover extraction: %s", file.FileType)
 	}
@@ -3958,27 +3962,33 @@ func (w *Worker) applyPageCover(ctx context.Context, file *models.File, book *mo
 	updateErr = w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{
 		Columns: []string{"cover_page", "cover_image_filename", "cover_mime_type", "cover_source"},
 	})
-	return nil, updateErr
+	if updateErr != nil {
+		return nil, updateErr
+	}
+	// The row now names the replacement, so the previous covers can go.
+	books.RemoveStaleCovers(staleCovers, logger.FromContext(ctx))
+	return nil, nil
 }
 
 // extractCBZPageCover extracts a specific page from a CBZ file and saves it as the cover.
-// Returns the cover filename (relative to coverDir), mime type, and any error.
-// pageNum is 0-indexed.
-func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, pageNum int) (string, string, error) {
+// Returns the cover filename (relative to coverDir), mime type, the previous
+// covers at other extensions (for the caller to remove after its database
+// write), and any error. pageNum is 0-indexed.
+func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, pageNum int) (string, string, []string, error) {
 	f, err := os.Open(cbzPath)
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 	defer f.Close()
 
 	stats, err := f.Stat()
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 
 	zipReader, err := zip.NewReader(f, stats.Size())
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 
 	// Get sorted image files
@@ -3994,7 +4004,7 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 	})
 
 	if pageNum < 0 || pageNum >= len(imageFiles) {
-		return "", "", errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)
+		return "", "", nil, errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)
 	}
 
 	targetFile := imageFiles[pageNum]
@@ -4018,14 +4028,14 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 
 	r, err := targetFile.Open()
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 	defer r.Close()
 
 	// Read the image data
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
 
 	// Normalize the image
@@ -4040,50 +4050,37 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 		mimeType = normalizedMime
 	}
 
-	// Install the replacement atomically, then remove previous covers at
-	// other extensions, so a failed write leaves the working cover on disk.
+	// Install the replacement atomically. Previous covers at other
+	// extensions are reported, not removed, so the caller can delete them
+	// after its database write succeeds.
 	if err := fileutils.WriteFileAtomic(coverFilePath, normalizedData, 0644); err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
-	removeOtherCoverExtensions(coverDir, coverBaseName, ext)
 
-	return coverBaseName + ext, mimeType, nil
-}
-
-// removeOtherCoverExtensions deletes covers with the given base name at every
-// extension except keepExt. Call it only after the replacement at keepExt is
-// installed.
-func removeOtherCoverExtensions(coverDir, coverBaseName, keepExt string) {
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		if existingExt == keepExt {
-			continue
-		}
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, statErr := os.Stat(existingPath); statErr == nil {
-			_ = os.Remove(existingPath)
-		}
-	}
+	return coverBaseName + ext, mimeType, fileutils.OtherCoverExtensions(coverDir, coverBaseName, ext), nil
 }
 
 // extractPDFPageCover renders a specific page from a PDF file via pdfium and
 // saves it as the cover image. Returns the cover filename (relative to
-// coverDir), mime type, and any error. pageNum is 0-indexed.
-func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, pageNum int) (string, string, error) {
+// coverDir), mime type, the previous covers at other extensions (for the
+// caller to remove after its database write), and any error. pageNum is
+// 0-indexed.
+func extractPDFPageCover(pdfPath string, coverDir string, coverBaseName string, pageNum int) (string, string, []string, error) {
 	data, mimeType, err := pdf.RenderPageJPEG(pdfPath, pageNum, 150, 85)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to render pdf page")
+		return "", "", nil, errors.Wrap(err, "failed to render pdf page")
 	}
 
-	// Install the replacement atomically, then remove previous covers at
-	// other extensions, so a failed write leaves the working cover on disk.
+	// Install the replacement atomically. Previous covers at other
+	// extensions are reported, not removed, so the caller can delete them
+	// after its database write succeeds.
 	coverFilename := coverBaseName + ".jpg"
 	coverFilePath := filepath.Join(coverDir, coverFilename)
 	if err := fileutils.WriteFileAtomic(coverFilePath, data, 0644); err != nil {
-		return "", "", errors.WithStack(err)
+		return "", "", nil, errors.WithStack(err)
 	}
-	removeOtherCoverExtensions(coverDir, coverBaseName, ".jpg")
 
-	return coverFilename, mimeType, nil
+	return coverFilename, mimeType, fileutils.OtherCoverExtensions(coverDir, coverBaseName, ".jpg"), nil
 }
 
 // resetBookState wipes book-level scanned metadata and all associated

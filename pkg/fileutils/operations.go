@@ -665,6 +665,24 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
+// OtherCoverExtensions returns the existing cover files with the given base
+// name at every CoverImageExtensions entry except keepExt. Cover writers
+// install a replacement at keepExt first and pass this list to the caller,
+// which removes the files only after its database write succeeds.
+func OtherCoverExtensions(coverDir, coverBaseName, keepExt string) []string {
+	var stale []string
+	for _, ext := range CoverImageExtensions {
+		if ext == keepExt {
+			continue
+		}
+		candidate := filepath.Join(coverDir, coverBaseName+ext)
+		if _, err := os.Stat(candidate); err == nil {
+			stale = append(stale, candidate)
+		}
+	}
+	return stale
+}
+
 // GenerateUniqueFilepathIfExists returns a unique filepath if the path exists, otherwise returns the original.
 func GenerateUniqueFilepathIfExists(path string) string {
 	return generateUniqueFilepath(path)

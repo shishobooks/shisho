@@ -1569,23 +1569,14 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		finalExt = ext // fallback to original extension
 	}
 
-	// Install the replacement atomically, then remove previous covers at
-	// other extensions, so a failed write leaves the working cover on disk.
+	// Install the replacement atomically. Previous covers at other
+	// extensions are removed only after the database names the replacement,
+	// so neither a failed write nor a failed update destroys a working cover.
 	coverFilePath := filepath.Join(coverDir, coverBaseName+finalExt)
 	if err := fileutils.WriteFileAtomic(coverFilePath, normalizedData, 0644); err != nil {
 		return errors.WithStack(err)
 	}
-	for _, existingExt := range fileutils.CoverImageExtensions {
-		if existingExt == finalExt {
-			continue
-		}
-		existingPath := filepath.Join(coverDir, coverBaseName+existingExt)
-		if _, err := os.Stat(existingPath); err == nil {
-			if err := os.Remove(existingPath); err != nil {
-				log.Warn("failed to remove existing cover", logger.Data{"path": existingPath, "error": err.Error()})
-			}
-		}
-	}
+	staleCovers := fileutils.OtherCoverExtensions(coverDir, coverBaseName, finalExt)
 
 	log.Info("uploaded file cover", logger.Data{
 		"file_id":       file.ID,
@@ -1611,6 +1602,7 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	}); err != nil {
 		return errors.WithStack(err)
 	}
+	RemoveStaleCovers(staleCovers, log)
 
 	// Reload the file
 	file, err = h.bookService.RetrieveFileWithRelations(ctx, file.ID)
