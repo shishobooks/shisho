@@ -5,6 +5,7 @@ import (
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -156,6 +157,45 @@ func TestScan_MixedIdentifierCollection_ForceRefreshRewritesChangedEntrySource(t
 
 	_, err := f.tc.worker.scanInternal(f.tc.ctx, ScanOptions{FileID: file.ID, ForceRefresh: true}, nil)
 	require.NoError(t, err)
+
+	_, file = f.retrieve(t)
+	assert.Equal(t, map[string]string{
+		"isbn_13|9780316769488":              pluginSource,
+		"asin|B01ABC1234":                    pluginSource,
+		"uuid|" + scanIdentifierEmbeddedUUID: models.DataSourceEPUBMetadata,
+	}, identifierSources(file))
+	require.NotNil(t, file.IdentifierSource)
+	assert.Equal(t, pluginSource, *file.IdentifierSource)
+}
+
+// Accepting the plugin proposal in Identify replaces the whole collection, so
+// an embedded identifier the plugin did not propose is dropped. The result is
+// plugin-sourced and not protected, so the next ordinary Scan restores the
+// embedded entry. This is intended: the collection converges on what a fresh
+// Scan produces. To keep a set exactly as applied, change it in Identify or
+// Edit so it becomes manual.
+func TestScan_MixedIdentifierCollection_OrdinaryScanRestoresEmbeddedAfterIdentifyAccept(t *testing.T) {
+	t.Parallel()
+	f := newScanIdentifierFixture(t)
+	book, file := f.retrieve(t)
+	pluginSource := models.PluginDataSource("test", "id-enricher")
+
+	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
+		BookID: book.ID, FileID: &file.ID,
+		Fields: map[string]any{"identifiers": []any{
+			identifierEntryField("isbn_13", "9780316769488", plugins.SourceIntentPlugin),
+			identifierEntryField("asin", "B01ABC1234", plugins.SourceIntentPlugin),
+		}},
+		Sources:     map[string]string{"identifiers": plugins.SourceIntentPlugin},
+		PluginScope: "test", PluginID: "id-enricher",
+	})
+	_, file = f.retrieve(t)
+	require.Equal(t, map[string]string{
+		"isbn_13|9780316769488": pluginSource,
+		"asin|B01ABC1234":       pluginSource,
+	}, identifierSources(file), "precondition: accepting the proposal drops the embedded UUID")
+
+	f.ordinaryScan(t, file.ID)
 
 	_, file = f.retrieve(t)
 	assert.Equal(t, map[string]string{

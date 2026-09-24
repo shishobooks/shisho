@@ -3,6 +3,7 @@ package books
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -102,4 +103,27 @@ func TestService_BulkCreateFileIdentifiers_TrimsType(t *testing.T) {
 	require.Len(t, stored, 1, "whitespace-only type difference must dedupe to one row")
 	assert.Equal(t, "asin", stored[0].Type)
 	assert.Equal(t, "B02", stored[0].Value, "last-wins after type trim")
+}
+
+func TestService_BulkCreateFileIdentifiers_SetsTimestamps(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	_, book := setupTestLibraryAndBook(t, db)
+	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
+
+	before := time.Now().Add(-time.Second)
+	err := svc.BulkCreateFileIdentifiers(ctx, []*models.FileIdentifier{
+		{FileID: file.ID, Type: "asin", Value: "B01ABC1234", Source: models.DataSourceManual},
+	})
+	require.NoError(t, err)
+
+	var stored []*models.FileIdentifier
+	err = db.NewSelect().Model(&stored).Where("file_id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	assert.True(t, stored[0].CreatedAt.After(before), "created_at must be the insert time, got %s", stored[0].CreatedAt)
+	assert.True(t, stored[0].UpdatedAt.After(before), "updated_at must be the insert time, got %s", stored[0].UpdatedAt)
 }
