@@ -1289,10 +1289,16 @@ export function IdentifyReviewForm({
     }
 
     try {
-      await applyMutation.mutateAsync(payload);
+      const result = await applyMutation.mutateAsync(payload);
       toast.success(
         `Updated ${totalSelected} field${totalSelected === 1 ? "" : "s"}.`,
       );
+      // The apply succeeded, but a selected value can still be skipped
+      // (a proposed cover that could not be downloaded or decoded). Say so,
+      // or the user takes the success toast at face value.
+      for (const warning of result.warnings) {
+        toast.warning(warning);
+      }
       onClose();
     } catch (err) {
       const message =

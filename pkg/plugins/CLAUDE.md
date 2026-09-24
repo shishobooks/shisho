@@ -72,6 +72,16 @@ Conventions and gotchas specific to this surface:
   payload structs (e.g. `InstallPluginPayload.Name`) carry `,omitempty` solely so
   tygo emits `?`; payloads are only unmarshaled server-side, so this never
   affects the wire.
+- **`POST /plugins/apply` returns `PluginApplyResponse`** (the reloaded
+  `models.Book` embedded with `tstype:",extends"`, plus `warnings: string[]`).
+  The book carries the same `cover_cache_key` that `GET /books/:id` computes.
+  `warnings` lists selected values that were accepted but skipped, currently
+  only covers (download failed, not a decodable image, page out of range,
+  extraction or write failed); the apply itself still returns 200 and the
+  form shows each warning as a toast after the success toast. Cover helpers
+  return an error for a skip and `errCoverUnchanged` for the identity no-op;
+  `persistMetadata` converts skip errors to warnings with `coverWarning`.
+  It is always a JSON array, never `null`.
 - **`SeriesEntry` / `ApplyOverrides` are not wire types**: `SeriesEntry` and
   selected-field presence are parsed from `PluginApplyPayload.Fields`, while
   other apply-only signals are assembled from the payload. Their generated TS
@@ -155,7 +165,22 @@ Conventions and gotchas specific to this surface:
     `fields.series` is a validation error from `extractSeriesEntries` before
     any field is persisted (`strictSeriesNumberGroupFromFields`); the plugin
     SDK path (`seriesNumberGroupFromFields`) keeps dropping malformed groups.
-  - Covers still stamp the plugin source until their slice (#458) lands.
+  - Covers have no edit state, so the form sends no cover field to keep the
+    current Cover and `cover_url` / `cover_page` to choose the proposal, which
+    is always a Proposal Acceptance stamped `plugin:<scope>/<id>`. Both paths
+    (`applyCoverImage`, `applyCoverPage`) write the complete Cover state
+    (`cover_image_filename` as a bare filename, `cover_mime_type` describing
+    the normalized bytes on disk, `cover_source`, plus `cover_page` for
+    page-based files) in one column set. Page-based Cover identity is the
+    page number: a proposed page equal to the stored `cover_page` with a
+    cover image present skips extraction and keeps the stored source.
+    Image-based Covers have no identity check (no content hashing), and only
+    page-based `cover_source` is consulted by the scanner. A failed download,
+    extraction, or write leaves the previous Cover columns untouched, and
+    bytes that do not decode as a raster image are rejected. The image path
+    finds previous covers on disk by base name (every `CoverImageExtensions`
+    entry, the same way the scanner discovers covers) and removes them only
+    after the `UpdateFile` flush succeeds.
     End-to-end regression tests live in
     `pkg/worker/scan_identify_attribution_test.go`,
     `pkg/worker/scan_identify_relationships_test.go`,
@@ -246,7 +271,7 @@ shisho/goodreads-metadata/
 - `cover` → controls `coverData`, `coverMimeType`, `coverPage`, and `coverUrl`
 - `series` → controls `series` (name), `seriesNumber`, `seriesNumberEnd`, AND `seriesNumberUnit`. The three number fields are atomic: a finite start is required, an optional finite end must be greater than the start, and malformed groups are discarded completely.
 
-**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning.
+**`coverPage` precedence:** For CBZ/PDF, only `coverPage` is applied (`coverData`/`coverUrl` ignored). For other formats, only `coverData`/`coverUrl` are applied (`coverPage` ignored). Out-of-range pages are skipped with a warning, and a `coverPage` equal to the file's current `cover_page` is a no-op that keeps the existing cover and its source when that cover image is present on disk.
 
 ## main.js Pattern
 

@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -101,20 +102,27 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		overrides.SeriesEntries = seriesEntries
 	}
 
-	// Download cover if cover_url set
+	// Download cover if cover_url set. A failed download is not fatal to the
+	// apply, but the user chose that cover, so the response must say it was
+	// not applied.
+	warnings := []string{}
 	if md.CoverURL != "" {
 		manifest := rt.Manifest()
 		var allowedDomains []string
 		if manifest.Capabilities.HTTPAccess != nil {
 			allowedDomains = manifest.Capabilities.HTTPAccess.Domains
 		}
-		DownloadCoverFromURL(ctx, md, allowedDomains, log)
+		if !DownloadCoverFromURL(ctx, md, allowedDomains, log) {
+			warnings = append(warnings, coverWarning("the cover could not be downloaded"))
+		}
 	}
 
 	// Persist metadata (no field filtering — user already selected fields)
-	if err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log); err != nil {
+	persistWarnings, err := h.persistMetadata(ctx, book, targetFile, md, payload.PluginScope, payload.PluginID, overrides, log)
+	if err != nil {
 		return errors.Wrap(err, "failed to apply metadata")
 	}
+	warnings = append(warnings, persistWarnings...)
 
 	// Organize files after path-affecting updates and clears. Presence matters
 	// for authors, file Name, and series because empty selected values remove
@@ -133,11 +141,18 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		}
 	}
 
-	// Reload and return updated book
+	// Reload and return updated book with the same cover cache key GET
+	// /books/:id computes, so a consumer of this body never builds a stale
+	// cover URL.
 	updatedBook, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 	if err != nil {
 		return errors.Wrap(err, "failed to reload book")
 	}
+	aspectRatio := ""
+	if updatedBook.Library != nil {
+		aspectRatio = updatedBook.Library.CoverAspectRatio
+	}
+	updatedBook.CoverCacheKey = covers.CacheKey(updatedBook.Files, aspectRatio)
 
-	return c.JSON(http.StatusOK, updatedBook)
+	return c.JSON(http.StatusOK, PluginApplyResponse{Book: *updatedBook, Warnings: warnings})
 }
