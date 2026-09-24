@@ -98,6 +98,10 @@ PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` AP
 - **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
 - **No DestInfo = skipped**: bookmarks without a page destination are omitted
 
+### Writing Info Dict Properties
+
+`pkg/filegen/pdf.go` writes Title, Author, Subject, Keywords (tags joined with `", "`) and Language into downloaded PDFs through its own `writeInfoProperties`, which calls `api.ReadValidateAndOptimize` + `pdfcpu.PropertiesAdd` + `api.Write`. Do not switch it back to `api.AddPropertiesFile`: since pdfcpu 0.14 that wrapper rejects `Keywords`, `Producer`, `CreationDate`, `ModDate` and `Trapped` with `property name "Keywords" not allowed`. pdfcpu's keyword API (`api.AddKeywordsFile`) is not a drop-in replacement either: it merges with the source PDF's keywords, joins them with `"; "`, and strips keywords from XMP metadata. The release date is not written, because pdfcpu always overwrites `CreationDate` with the current time on write.
+
 ### Writing Chapters Back
 
 `pkg/filegen/pdf.go` writes `file.Chapters` back to downloaded PDFs as a bookmark outline via `pdfcpu.api.AddBookmarksFile` (with `replace=true`), preserving nested hierarchy. Page numbers are converted from the 0-indexed storage format to the 1-indexed form pdfcpu expects, and the generator writes to a sibling `.bookmarks.tmp` file (pdfcpu requires distinct input/output paths) and renames over the destination. When `file.Chapters` is empty the bookmark write is skipped entirely so existing source bookmarks are left untouched. The entire block is **best-effort**: if `AddBookmarksFile` or the rename fails, the generator logs a warning (with `category=pdf_bookmark_write` for aggregation) and returns the properties-only `destPath` rather than failing the whole download — matching the cover-extraction pattern in `pdf.go` Parse, so a metadata quirk can never block an otherwise-valid file.

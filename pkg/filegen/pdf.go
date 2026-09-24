@@ -8,7 +8,9 @@ import (
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/fault"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdf"
@@ -46,14 +48,13 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 	// This avoids data races when Generate is called concurrently.
 	pdf.EnsurePdfcpuInit()
 
-	// AddPropertiesFile reads srcPath and writes the result with updated info dict
-	// to destPath. When srcPath != destPath, pdfcpu creates destPath directly
-	// without modifying srcPath.
+	// writeInfoProperties reads srcPath and writes the result with updated info
+	// dict to destPath without modifying srcPath.
 	// conf is reused across the two pdfcpu entry points below; both overwrite
 	// conf.Cmd on entry so the reuse is safe.
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
-	if err := api.AddPropertiesFile(srcPath, destPath, properties, conf); err != nil {
+	if err := writeInfoProperties(srcPath, destPath, properties, conf); err != nil {
 		return NewGenerationError(models.FileTypePDF, err, "failed to write PDF metadata")
 	}
 
@@ -106,6 +107,48 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 		}
 	}
 
+	return nil
+}
+
+// writeInfoProperties sets the given info dict entries on srcPath and writes
+// the result to destPath. It runs the same steps as pdfcpu's
+// api.AddPropertiesFile, which since v0.14 refuses to set Keywords (pdfcpu
+// wants them managed through its keyword API, which merges with the source
+// PDF's keywords and joins them with "; "). Going through pdfcpu.PropertiesAdd
+// directly lets tags replace the source keywords as a single ", "-joined
+// entry, the same way pkg/pdf reads them back.
+func writeInfoProperties(srcPath, destPath string, properties map[string]string, conf *model.Configuration) (err error) {
+	defer fault.Catch(&err)
+
+	conf.Cmd = model.ADDPROPERTIES
+
+	in, err := os.Open(srcPath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer in.Close()
+
+	pdfCtx, err := api.ReadValidateAndOptimize(in, conf)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := pdfcpu.PropertiesAdd(pdfCtx, properties); err != nil {
+		return errors.WithStack(err)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := api.Write(pdfCtx, out, conf); err != nil {
+		out.Close()
+		os.Remove(destPath)
+		return errors.WithStack(err)
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(destPath)
+		return errors.WithStack(err)
+	}
 	return nil
 }
 
@@ -248,14 +291,8 @@ func (g *PDFGenerator) buildProperties(book *models.Book, file *models.File) map
 		}
 	}
 
-	// CreationDate ← file.ReleaseDate in PDF date format "D:YYYYMMDDHHmmSSZ".
-	// Note: pdfcpu always overwrites CreationDate (and ModDate) with the current
-	// timestamp during its write phase, so this value will not be visible in the
-	// output file. The field is set here for completeness and in case a future
-	// version of pdfcpu respects it.
-	if file != nil && file.ReleaseDate != nil {
-		props["CreationDate"] = file.ReleaseDate.UTC().Format("D:20060102150405Z")
-	}
+	// Release date is not written: pdfcpu always overwrites CreationDate (and
+	// ModDate) with the current timestamp during its write phase.
 
 	// Language — set in info dict if available.
 	if file != nil && file.Language != nil && *file.Language != "" {
