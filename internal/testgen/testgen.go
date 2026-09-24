@@ -16,6 +16,16 @@ type EPUBOptions struct {
 	SeriesNumber  *float64
 	HasCover      bool
 	CoverMimeType string // "image/jpeg" or "image/png", defaults to "image/png"
+	// Identifiers are extra dc:identifier elements written after the default
+	// urn:uuid:test-book-id, which the parser skips as an unknown type.
+	Identifiers []EPUBIdentifier
+}
+
+// EPUBIdentifier is one dc:identifier element. Scheme becomes opf:scheme
+// when set.
+type EPUBIdentifier struct {
+	Scheme string
+	Value  string
 }
 
 // CBZOptions configures the generated CBZ file.

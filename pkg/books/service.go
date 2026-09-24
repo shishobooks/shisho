@@ -1609,10 +1609,19 @@ func (svc *Service) BulkCreateFileIdentifiers(ctx context.Context, fileIdentifie
 		FileID int
 		Type   string
 	}
+	now := time.Now()
 	indexByKey := make(map[key]int, len(fileIdentifiers))
 	deduped := make([]*models.FileIdentifier, 0, len(fileIdentifiers))
 	for _, fi := range fileIdentifiers {
 		clone := *fi
+		// Bun inserts a zero time.Time rather than omitting it, so the
+		// column DEFAULT never applies.
+		if clone.CreatedAt.IsZero() {
+			clone.CreatedAt = now
+		}
+		if clone.UpdatedAt.IsZero() {
+			clone.UpdatedAt = now
+		}
 		clone.Type = strings.TrimSpace(fi.Type)
 		clone.Value = identifiers.NormalizeValue(clone.Type, fi.Value)
 		k := key{FileID: clone.FileID, Type: clone.Type}

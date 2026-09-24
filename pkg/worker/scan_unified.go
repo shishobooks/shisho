@@ -1967,7 +1967,11 @@ func (w *Worker) scanFileCore(
 		newIdentifierValues := parsedIdentifierKeys(metadata.Identifiers)
 
 		identifierSource := metadata.SourceForField("identifiers")
-		if shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh) {
+		updateIdentifiers := shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh)
+		if !updateIdentifiers && equalStringSlices(newIdentifierValues, existingIdentifierValues) {
+			updateIdentifiers = identifierAttributionStale(file.Identifiers, existingIdentifierSource, metadata.Identifiers, identifierSource, forceRefresh)
+		}
+		if updateIdentifiers {
 			logInfo("updating identifiers", logger.Data{"new_count": len(metadata.Identifiers), "old_count": len(file.Identifiers)})
 
 			// Delete existing identifiers
@@ -1978,11 +1982,15 @@ func (w *Worker) scanFileCore(
 			// Create new identifiers in bulk
 			fileIdentifiers := make([]*models.FileIdentifier, 0, len(metadata.Identifiers))
 			for _, id := range metadata.Identifiers {
+				entrySource := id.Source
+				if entrySource == "" {
+					entrySource = identifierSource
+				}
 				fileIdentifiers = append(fileIdentifiers, &models.FileIdentifier{
 					FileID: file.ID,
 					Type:   id.Type,
 					Value:  id.Value,
-					Source: identifierSource,
+					Source: entrySource,
 				})
 			}
 			if err := w.bookService.BulkCreateFileIdentifiers(ctx, fileIdentifiers); err != nil {
@@ -3564,7 +3572,10 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.FieldDataSources["chapters"] = source
 	}
 	// Identifiers are multi-valued by type, so we append new types from the enricher
-	// rather than using "first non-empty wins" like other fields.
+	// rather than using "first non-empty wins" like other fields. An earlier
+	// contributor keeps a type a later one also supplies. Each entry records
+	// its own contributor, and the field source stays with the first
+	// contributor because callers merge in descending priority order.
 	if len(enrichment.Identifiers) > 0 {
 		existingTypes := make(map[string]bool, len(target.Identifiers))
 		for _, id := range target.Identifiers {
@@ -3572,8 +3583,11 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		}
 		for _, id := range enrichment.Identifiers {
 			if !existingTypes[id.Type] {
+				id.Source = source
 				target.Identifiers = append(target.Identifiers, id)
-				target.FieldDataSources["identifiers"] = source
+				if _, ok := target.FieldDataSources["identifiers"]; !ok {
+					target.FieldDataSources["identifiers"] = source
+				}
 			}
 		}
 	}
