@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -528,31 +529,7 @@ func TestValidateNoCycle_NonExistentParentReturnsError(t *testing.T) {
 
 func createTestFile(t *testing.T, db *bun.DB, lib *models.Library, publisherID int, filepath string) {
 	t.Helper()
-	ctx := context.Background()
-
-	book := &models.Book{
-		LibraryID:       lib.ID,
-		Title:           "Book",
-		TitleSource:     models.DataSourceFilepath,
-		SortTitle:       "Book",
-		SortTitleSource: models.DataSourceFilepath,
-		AuthorSource:    models.DataSourceFilepath,
-		Filepath:        t.TempDir(),
-	}
-	_, err := db.NewInsert().Model(book).Exec(ctx)
-	require.NoError(t, err)
-
-	file := &models.File{
-		LibraryID:     lib.ID,
-		BookID:        book.ID,
-		FileType:      models.FileTypeEPUB,
-		FileRole:      models.FileRoleMain,
-		Filepath:      filepath,
-		FilesizeBytes: 1,
-		PublisherID:   &publisherID,
-	}
-	_, err = db.NewInsert().Model(file).Exec(ctx)
-	require.NoError(t, err)
+	createTestFileWithSource(t, db, lib, publisherID, nil, filepath)
 }
 
 func TestGetFileCount_IncludesDescendantFiles(t *testing.T) {
@@ -893,4 +870,140 @@ func TestGetDescendantPublisherCount_CountsAllDescendantPublishers(t *testing.T)
 	count, err = svc.GetDescendantPublisherCount(ctx, childB.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count) // no children
+}
+
+// createTestFileWithSource inserts a File attached to publisherID with the
+// given publisher_source and returns its ID.
+func createTestFileWithSource(t *testing.T, db *bun.DB, lib *models.Library, publisherID int, source *string, filepath string) int {
+	t.Helper()
+	ctx := context.Background()
+
+	book := &models.Book{
+		LibraryID:       lib.ID,
+		Title:           "Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        t.TempDir(),
+	}
+	_, err := db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	file := &models.File{
+		LibraryID:       lib.ID,
+		BookID:          book.ID,
+		FileType:        models.FileTypeEPUB,
+		FileRole:        models.FileRoleMain,
+		Filepath:        filepath,
+		FilesizeBytes:   1,
+		PublisherID:     &publisherID,
+		PublisherSource: source,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+	return file.ID
+}
+
+func retrieveTestFile(t *testing.T, db *bun.DB, fileID int) *models.File {
+	t.Helper()
+	file := &models.File{}
+	require.NoError(t, db.NewSelect().Model(file).Where("f.id = ?", fileID).Scan(context.Background()))
+	return file
+}
+
+// Deleting a shared Publisher is a deliberate user action, so every File that
+// pointed at it gets a protected manual empty slot, whatever its prior source.
+func TestDeletePublisher_StampsManualEmptySlotOnEveryDirectFile(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	deleted := &models.Publisher{LibraryID: lib.ID, Name: "Deleted"}
+	require.NoError(t, svc.CreatePublisher(ctx, deleted))
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &deleted.ID}
+	require.NoError(t, svc.CreatePublisher(ctx, child))
+	other := &models.Publisher{LibraryID: lib.ID, Name: "Other"}
+	require.NoError(t, svc.CreatePublisher(ctx, other))
+
+	priorSources := []*string{
+		testgen.StringPtr(models.DataSourceManual),
+		testgen.StringPtr(models.DataSourceSidecar),
+		testgen.StringPtr("plugin:test/enricher"),
+		testgen.StringPtr(models.DataSourcePlugin),
+		testgen.StringPtr(models.DataSourceEPUBMetadata),
+		testgen.StringPtr(models.DataSourceFilepath),
+		nil,
+	}
+	var affected []int
+	for i, source := range priorSources {
+		affected = append(affected, createTestFileWithSource(t, db, lib, deleted.ID, source, fmt.Sprintf("/tmp/deleted-%d.epub", i)))
+	}
+	pluginSource := testgen.StringPtr("plugin:test/enricher")
+	childFile := createTestFileWithSource(t, db, lib, child.ID, pluginSource, "/tmp/child.epub")
+	otherFile := createTestFileWithSource(t, db, lib, other.ID, pluginSource, "/tmp/other.epub")
+
+	require.NoError(t, svc.DeletePublisher(ctx, deleted.ID))
+
+	for i, fileID := range affected {
+		file := retrieveTestFile(t, db, fileID)
+		assert.Nil(t, file.PublisherID, "prior source %d: publisher_id is cleared", i)
+		if assert.NotNil(t, file.PublisherSource, "prior source %d: publisher_source is stamped", i) {
+			assert.Equal(t, models.DataSourceManual, *file.PublisherSource, "prior source %d", i)
+		}
+	}
+
+	// Only direct associations are touched. The child Publisher survives
+	// (its parent_id is cleared by the foreign key), and so do its Files.
+	for _, tc := range []struct {
+		fileID      int
+		publisherID int
+	}{{childFile, child.ID}, {otherFile, other.ID}} {
+		file := retrieveTestFile(t, db, tc.fileID)
+		require.NotNil(t, file.PublisherID)
+		assert.Equal(t, tc.publisherID, *file.PublisherID)
+		assert.Equal(t, pluginSource, file.PublisherSource)
+	}
+
+	orphan, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &child.ID})
+	require.NoError(t, err)
+	assert.Nil(t, orphan.ParentID, "the child moves to the top of the hierarchy")
+
+	_, err = svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &deleted.ID})
+	require.Error(t, err, "the Publisher itself is deleted")
+}
+
+// Merging re-points Files at the target. It is not a clear, so the Files
+// keep their populated value and their existing source.
+func TestMergePublishers_KeepsFileSources(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	source := &models.Publisher{LibraryID: lib.ID, Name: "Source"}
+	require.NoError(t, svc.CreatePublisher(ctx, source))
+	target := &models.Publisher{LibraryID: lib.ID, Name: "Target"}
+	require.NoError(t, svc.CreatePublisher(ctx, target))
+
+	pluginSource := testgen.StringPtr("plugin:test/enricher")
+	fromPlugin := createTestFileWithSource(t, db, lib, source.ID, pluginSource, "/tmp/plugin.epub")
+	fromEPUB := createTestFileWithSource(t, db, lib, source.ID, testgen.StringPtr(models.DataSourceEPUBMetadata), "/tmp/epub.epub")
+
+	require.NoError(t, svc.MergePublishers(ctx, target.ID, source.ID))
+
+	file := retrieveTestFile(t, db, fromPlugin)
+	require.NotNil(t, file.PublisherID)
+	assert.Equal(t, target.ID, *file.PublisherID)
+	assert.Equal(t, pluginSource, file.PublisherSource)
+
+	file = retrieveTestFile(t, db, fromEPUB)
+	require.NotNil(t, file.PublisherID)
+	assert.Equal(t, target.ID, *file.PublisherID)
+	assert.Equal(t, testgen.StringPtr(models.DataSourceEPUBMetadata), file.PublisherSource)
 }
