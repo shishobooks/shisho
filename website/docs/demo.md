@@ -29,8 +29,6 @@ The demo rejects every change on the server, so nothing you do can affect the li
 - Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), and the [eReader Browser](./ereader-browser.md) are not available.
 - Account changes such as the password and server-side preferences.
 
-Operators who want the same behavior on their own instance can enable [Demo Mode](./configuration.md#demo-mode).
-
 ## About the Library
 
 The demo library contains only works that may be freely redistributed: openly licensed books and public-domain texts, recordings, and comics. Each book's description ends with its credit and license, and the full credits, sources, and modifications are listed in [`CORPUS.md`](https://github.com/shishobooks/demo-corpus/blob/master/CORPUS.md) in the `shishobooks/demo-corpus` repository.

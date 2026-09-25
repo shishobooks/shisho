@@ -117,12 +117,6 @@ export default function Home(): ReactNode {
               >
                 Try the Demo
               </Link>
-              <Link
-                className="docs-home__btn docs-home__btn--ghost"
-                to="/docs/supported-formats"
-              >
-                Check Formats
-              </Link>
               <a
                 className="docs-home__btn docs-home__btn--ghost"
                 href="https://github.com/shishobooks/shisho"
