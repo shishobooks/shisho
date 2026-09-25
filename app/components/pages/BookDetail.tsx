@@ -4,17 +4,14 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Download,
   Edit,
   GitMerge,
   Headphones,
   List,
-  Loader2,
   MoreVertical,
   RefreshCw,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -25,8 +22,8 @@ import { BookEditDialog } from "@/components/library/BookEditDialog";
 import CoverGalleryTabs from "@/components/library/CoverGalleryTabs";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
-import DownloadFormatPopover from "@/components/library/DownloadFormatPopover";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
+import FileDownloadControl from "@/components/library/FileDownloadControl";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
@@ -72,14 +69,11 @@ import {
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
-import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import {
-  DownloadFormatAsk,
   DownloadFormatKepub,
   FileTypeCBZ,
-  FileTypeEPUB,
   type File,
   type ResyncMode,
 } from "@/types";
@@ -98,16 +92,12 @@ import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { getIdentifierUrl } from "@/utils/identifiers";
 import { getReadingAction } from "@/utils/readingAction";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
+import { supportsKepub } from "@/utils/supportsKepub";
 
 interface DownloadError {
   fileId: number;
   message: string;
 }
-
-// KePub format is only supported for EPUB and CBZ files
-const supportsKepub = (fileType: string): boolean => {
-  return fileType === FileTypeEPUB || fileType === FileTypeCBZ;
-};
 
 interface FileRowProps {
   file: File;
@@ -161,7 +151,6 @@ const FileRow = ({
   isDeletingFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
-  const { demoMode } = useAuth();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
@@ -272,60 +261,17 @@ const FileRow = ({
             <span>{formatFileSize(file.filesize_bytes)}</span>
 
             {/* Download button/popover */}
-            {!demoMode &&
-              (isSupplement ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={onDownloadOriginal}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <Download className="h-3 w-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Download</TooltipContent>
-                </Tooltip>
-              ) : libraryDownloadPreference === DownloadFormatAsk &&
-                supportsKepub(file.file_type) ? (
-                <DownloadFormatPopover
-                  disabled={isDownloading}
-                  isLoading={isDownloading}
-                  onCancel={onCancelDownload}
-                  onDownloadKepub={onDownloadKepub}
-                  onDownloadOriginal={() =>
-                    onDownloadWithEndpoint(
-                      `/api/books/files/${file.id}/download`,
-                    )
-                  }
-                />
-              ) : isDownloading ? (
-                <div className="flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        className="h-6 w-6 p-0"
-                        onClick={onCancelDownload}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Cancel download</TooltipContent>
-                  </Tooltip>
-                </div>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button onClick={onDownload} size="sm" variant="ghost">
-                      <Download className="h-3 w-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Download</TooltipContent>
-                </Tooltip>
-              ))}
+            <FileDownloadControl
+              file={file}
+              isDownloading={isDownloading}
+              isSupplement={isSupplement}
+              libraryDownloadPreference={libraryDownloadPreference}
+              onCancelDownload={onCancelDownload}
+              onDownload={onDownload}
+              onDownloadKepub={onDownloadKepub}
+              onDownloadOriginal={onDownloadOriginal}
+              onDownloadWithEndpoint={onDownloadWithEndpoint}
+            />
 
             {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
             {(() => {
@@ -437,58 +383,17 @@ const FileRow = ({
           <span>{formatFileSize(file.filesize_bytes)}</span>
 
           {/* Download button/popover */}
-          {!demoMode &&
-            (isSupplement ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={onDownloadOriginal}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <Download className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Download</TooltipContent>
-              </Tooltip>
-            ) : libraryDownloadPreference === DownloadFormatAsk &&
-              supportsKepub(file.file_type) ? (
-              <DownloadFormatPopover
-                disabled={isDownloading}
-                isLoading={isDownloading}
-                onCancel={onCancelDownload}
-                onDownloadKepub={onDownloadKepub}
-                onDownloadOriginal={() =>
-                  onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
-                }
-              />
-            ) : isDownloading ? (
-              <div className="flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      className="h-6 w-6 p-0"
-                      onClick={onCancelDownload}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Cancel download</TooltipContent>
-                </Tooltip>
-              </div>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button onClick={onDownload} size="sm" variant="ghost">
-                    <Download className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Download</TooltipContent>
-              </Tooltip>
-            ))}
+          <FileDownloadControl
+            file={file}
+            isDownloading={isDownloading}
+            isSupplement={isSupplement}
+            libraryDownloadPreference={libraryDownloadPreference}
+            onCancelDownload={onCancelDownload}
+            onDownload={onDownload}
+            onDownloadKepub={onDownloadKepub}
+            onDownloadOriginal={onDownloadOriginal}
+            onDownloadWithEndpoint={onDownloadWithEndpoint}
+          />
 
           {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
           {(() => {
