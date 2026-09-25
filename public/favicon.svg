@@ -1,10 +1,44 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="32" fill="#171717"/>
   <g transform="translate(36, 20) scale(9)">
-    <rect x="4" y="40" width="40" height="4" rx="1" fill="#c4b5fd"/>
-    <rect x="8" y="12" width="7" height="28" rx="1" fill="#c4b5fd"/>
-    <rect x="17" y="8" width="6" height="32" rx="1" fill="#c4b5fd" opacity="0.7"/>
-    <rect x="25" y="16" width="8" height="24" rx="1" fill="#c4b5fd"/>
-    <rect x="35" y="10" width="5" height="30" rx="1" fill="#c4b5fd" opacity="0.7"/>
+<defs>
+  <linearGradient id="shelf-contact" x1="0" x2="0" y1="0" y2="1">
+    <stop offset="0" stop-color="#000" stop-opacity="0" />
+    <stop offset="1" stop-color="#000" stop-opacity="0.28" />
+  </linearGradient>
+  <linearGradient id="shelf-shade" x1="0" x2="0" y1="0" y2="1">
+    <stop offset="0" stop-color="#000" stop-opacity="0" />
+    <stop offset="1" stop-color="#000" stop-opacity="0.3" />
+  </linearGradient>
+</defs>
+<!-- shelf -->
+<rect fill="#c4b5fd" height="4" rx="1" width="40" x="4" y="40" />
+<rect fill="#fff" height="1" opacity="0.28" rx="0.5" width="38" x="5" y="40" />
+<rect fill="url(#shelf-shade)" height="4" rx="1" width="40" x="4" y="40" />
+<!-- books: base, spine highlight, title band, contact shadow -->
+<g>
+  <rect fill="#c4b5fd" height="28" rx="1" width="7" x="8" y="12" />
+  <rect fill="#fff" height="26" opacity="0.28" rx="0.5" width="1" x="8" y="13" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="5" x="9" y="16" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="7" x="8" y="33" />
+</g>
+<g opacity="0.7">
+  <rect fill="#c4b5fd" height="32" rx="1" width="6" x="17" y="8" />
+  <rect fill="#fff" height="30" opacity="0.28" rx="0.5" width="1" x="17" y="9" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="4" x="18" y="12" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="6" x="17" y="33" />
+</g>
+<g>
+  <rect fill="#c4b5fd" height="24" rx="1" width="8" x="25" y="16" />
+  <rect fill="#fff" height="22" opacity="0.28" rx="0.5" width="1" x="25" y="17" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="6" x="26" y="20" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="8" x="25" y="33" />
+</g>
+<g opacity="0.7">
+  <rect fill="#c4b5fd" height="30" rx="1" width="5" x="35" y="10" />
+  <rect fill="#fff" height="28" opacity="0.28" rx="0.5" width="1" x="35" y="11" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="3" x="36" y="14" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="5" x="35" y="33" />
+</g>
   </g>
 </svg>
