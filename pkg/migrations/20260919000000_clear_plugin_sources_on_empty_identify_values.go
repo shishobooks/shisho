@@ -17,9 +17,12 @@ import (
 // NULL plus 'manual' on purpose, as a protected empty slot, and the scanner
 // never writes an empty value. A plugin source on a NULL value therefore
 // describes nothing. It comes from one of those Identify clears or, for
-// publisher_id, from deleting the publisher, and either way it only blocks
-// repopulation. Language, Abridged, and Name are not listed because their
-// clears always nulled the source.
+// publisher_id, from deleting the publisher before deletion stamped a source,
+// and either way it only blocks repopulation. Publisher deletions through the
+// service now store NULL plus 'manual' on every affected file, the same
+// protected empty slot the Edit form writes, so this repair does not touch
+// them. Language, Abridged, and Name are not listed because their clears
+// always nulled the source.
 func clearPluginSourcesOnEmptyIdentifyValues(ctx context.Context, db *bun.DB) error {
 	targets := []struct {
 		table, value, source string

@@ -206,13 +206,19 @@ func (svc *Service) UpdatePublisher(ctx context.Context, publisher *models.Publi
 	return nil
 }
 
-// DeletePublisher deletes a publisher and clears publisher_id from all associated files.
+// DeletePublisher deletes a publisher and leaves a protected manual empty
+// slot on every file that pointed at it directly: publisher_id becomes NULL
+// and publisher_source becomes manual, whatever the prior source was. The
+// delete is a deliberate user action, so an ordinary Scan must not bring the
+// publisher back, while Refresh all metadata and Reset to file metadata still
+// may (ADR 0006). Only this service path is supported. The foreign key's
+// ON DELETE SET NULL leaves publisher_source untouched.
 func (svc *Service) DeletePublisher(ctx context.Context, publisherID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		// Clear publisher_id from files
 		_, err := tx.NewUpdate().
 			Model((*models.File)(nil)).
 			Set("publisher_id = NULL").
+			Set("publisher_source = ?", models.DataSourceManual).
 			Where("publisher_id = ?", publisherID).
 			Exec(ctx)
 		if err != nil {

@@ -30,6 +30,8 @@ Genres and tags categorize books. Genres often originate in file metadata, while
 
 Publishers belong to files, so different editions can have different publishers. Publishers can be arranged in a manually curated parent and child hierarchy for imprints and related organizations.
 
+The **Delete** button appears only when no file uses the publisher or any publisher below it in the hierarchy. If files still use a publisher when it is deleted, for example because a scan added one after the page loaded, Shisho removes it from those files and records each emptied **Publisher** field as a manual edit. A normal scan then leaves the field empty, even when a plugin or the file's embedded metadata still names that publisher, so the deleted publisher does not come back. **Refresh all metadata** and **Reset to file metadata** can fill the field again from current sources. See [Normal Scans, Refresh, and Reset](#normal-scans-refresh-and-reset). So can the automatic rescan that [library monitoring](./configuration.md#library-monitor) runs when a file's contents change on disk, because it refreshes that file's metadata. A child of the deleted publisher keeps its files and moves to the top of the hierarchy. To move files to another publisher instead of emptying the field, [merge](#aliases-and-resource-merges) the publishers.
+
 ## Identifiers
 
 Identifiers belong to files. A file can have one value for each identifier type, including ISBN-10, ISBN-13, ASIN, UUID, Goodreads, Google, and types added by plugins. Shisho normalizes common formatting, such as ISBN hyphens and ASIN letter case, for reliable matching.
