@@ -13,6 +13,8 @@ Shisho is a self-hosted manager for ebooks, audiobooks, and comics. It provides 
 
 The [Shisho website documentation](https://www.shishobooks.com/docs/getting-started) is the canonical source for setup and configuration guidance for the latest release.
 
+Want to see it before installing? The [Public Demo](https://demo.shishobooks.com) is a read-only instance with a small library of freely redistributable books. Sign in with username `demo` and password `shishodemo`.
+
 ## Why Shisho?
 
 There is no single self-hosted solution that treats ebooks, audiobooks, and comics as equal parts of one library. Tools such as Audiobookshelf and Komga are excellent for particular media, while Calibre and its web frontends focus primarily on ebooks. Shisho grew from wanting a "Jellyfin for books" that could manage supported formats together instead of treating some of them as secondary.

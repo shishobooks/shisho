@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -401,6 +402,12 @@ func (h *handler) createSeries(c echo.Context) error {
 	_, err := h.db.NewInsert().Model(series).Exec(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to create series")
+	}
+
+	// Index the series so search-driven UI (merge combobox, global search)
+	// can find it, matching what the series update handler and scanner do.
+	if err := search.NewService(h.db).IndexSeries(ctx, series); err != nil {
+		return errors.Wrap(err, "failed to index series")
 	}
 
 	return c.JSON(http.StatusCreated, createSeriesResponse{

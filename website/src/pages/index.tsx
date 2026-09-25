@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Github } from "../components/GithubIcon";
+import { useDocPath } from "../hooks/useDocPath";
 
 const workflowSteps = [
   {
@@ -84,6 +84,7 @@ const features = [
 
 export default function Home(): ReactNode {
   const { siteConfig } = useDocusaurusContext();
+  const demoPath = useDocPath("demo");
 
   return (
     <Layout
@@ -111,19 +112,10 @@ export default function Home(): ReactNode {
               </Link>
               <Link
                 className="docs-home__btn docs-home__btn--ghost"
-                to="/docs/supported-formats"
+                to={demoPath}
               >
-                Check Formats
+                Try the Demo
               </Link>
-              <a
-                className="docs-home__btn docs-home__btn--ghost"
-                href="https://github.com/shishobooks/shisho"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <Github size={16} strokeWidth={2} />
-                View on GitHub
-              </a>
             </div>
           </div>
         </section>

@@ -63,6 +63,8 @@ The sign-in page identifies Demo Mode. After sign-in, a banner stays visible acr
 
 Restart after changing this setting. To curate the library or manage accounts again, disable Demo Mode on a private instance rather than making a public instance writable.
 
+The hosted [Public Demo](./demo.md) runs in this mode.
+
 ### Library Monitor
 
 | Setting | Env Variable | Default | Description |

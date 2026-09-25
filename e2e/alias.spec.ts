@@ -283,15 +283,20 @@ test.describe("Alias workflows", () => {
       page.getByRole("heading", { name: /Merge into/ }),
     ).toBeVisible();
 
-    // Open the source entity combobox and select "Dune Saga".
+    // Open the source entity combobox and search for "Dune Saga". The search
+    // is debounced and re-renders the list when results arrive, so wait for
+    // the search response before clicking or the click can land on an item
+    // that is about to be replaced.
     await page.getByRole("combobox").click();
-    await page.getByPlaceholder("Search series...").fill("Dune Saga");
-
-    // Wait for search results to load and select the source.
-    await expect(
-      page.getByText("Dune Saga", { exact: false }).first(),
-    ).toBeVisible();
-    // Click the command item — use the one inside the command list.
+    await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/series?") &&
+          r.url().includes("search=Dune") &&
+          r.ok(),
+      ),
+      page.getByPlaceholder("Search series...").fill("Dune Saga"),
+    ]);
     await page.locator("[cmdk-item]").filter({ hasText: "Dune Saga" }).click();
 
     // Confirm merge.
