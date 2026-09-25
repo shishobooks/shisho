@@ -33,6 +33,34 @@ func TestExtractOutline_WithBookmarks(t *testing.T) {
 	assert.Equal(t, 4, entries[2].StartPage)
 }
 
+// Some document tooling writes outline items whose destination has no page,
+// such as /Dest [null 0 0 1]. PDFium reports these with a non-nil DestInfo
+// and PageIndex -1. They must be skipped like items with no destination,
+// while their children, which can still point at real pages, are kept.
+func TestExtractOutline_SkipsNullDestinations(t *testing.T) {
+	t.Parallel()
+
+	pdfPath := filepath.Join(t.TempDir(), "null-dest-outline.pdf")
+	require.NoError(t, writeRawPDFWithOutline(pdfPath, 4, []outlineFixture{
+		{title: "Cover", pageIndex: 0},
+		{title: "Dangling", nullDest: true},
+		{title: "Part One", nullDest: true, children: []outlineFixture{
+			{title: "Chapter 1", pageIndex: 1},
+			{title: "Dangling Child", nullDest: true},
+			{title: "Chapter 2", pageIndex: 3},
+		}},
+	}))
+
+	entries, err := ExtractOutline(pdfPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, []OutlineEntry{
+		{Title: "Cover", StartPage: 0},
+		{Title: "Chapter 1", StartPage: 1},
+		{Title: "Chapter 2", StartPage: 3},
+	}, entries)
+}
+
 func TestExtractOutline_NoBookmarks(t *testing.T) {
 	t.Parallel()
 
@@ -75,17 +103,35 @@ func TestParse_IncludesChaptersFromOutline(t *testing.T) {
 // outlineFixture describes a bookmark entry for test PDF generation.
 type outlineFixture struct {
 	title     string
-	pageIndex int // 0-indexed
+	pageIndex int  // 0-indexed; ignored when nullDest is set
+	nullDest  bool // write /Dest [null 0 0 1], a destination with no page
+	children  []outlineFixture
+}
+
+// outlineNode is an outlineFixture with its PDF object number and the object
+// numbers of its outline neighbours (0 when absent).
+type outlineNode struct {
+	fixture            outlineFixture
+	objNum             int
+	parent, prev, next int
+	children           []*outlineNode
+}
+
+// countOutlineNodes returns the total number of nodes in the given subtrees,
+// used for the /Count entry of an open outline item.
+func countOutlineNodes(nodes []*outlineNode) int {
+	count := len(nodes)
+	for _, n := range nodes {
+		count += countOutlineNodes(n.children)
+	}
+	return count
 }
 
 // writeRawPDFWithOutline creates a minimal PDF with an outline (bookmark) tree.
-// Each bookmark uses an explicit /Dest [pageRef /Fit] to point to a page.
+// Each bookmark uses an explicit /Dest [pageRef /Fit] to point to a page, or
+// /Dest [null 0 0 1] when nullDest is set. Children are written as nested
+// outline items.
 func writeRawPDFWithOutline(outPath string, pageCount int, bookmarks []outlineFixture) error {
-	return writeCleanPDFWithOutline(outPath, pageCount, bookmarks)
-}
-
-// writeCleanPDFWithOutline builds a PDF with bookmarks in a single pass.
-func writeCleanPDFWithOutline(outPath string, pageCount int, bookmarks []outlineFixture) error {
 	var b strings.Builder
 	var offsets []int
 	objNum := 1
@@ -108,12 +154,26 @@ func writeCleanPDFWithOutline(outPath string, pageCount int, bookmarks []outline
 	outlinesObj := objNum // after pages
 	objNum++
 
-	// Bookmark objects
-	bookmarkObjNums := make([]int, len(bookmarks))
-	for i := range bookmarks {
-		bookmarkObjNums[i] = objNum
-		objNum++
+	// Bookmark objects, numbered depth-first so they are written in
+	// increasing object order.
+	var ordered []*outlineNode
+	var assign func(parent int, fixtures []outlineFixture) []*outlineNode
+	assign = func(parent int, fixtures []outlineFixture) []*outlineNode {
+		nodes := make([]*outlineNode, len(fixtures))
+		for i, f := range fixtures {
+			n := &outlineNode{fixture: f, objNum: objNum, parent: parent}
+			objNum++
+			if i > 0 {
+				n.prev = nodes[i-1].objNum
+				nodes[i-1].next = n.objNum
+			}
+			ordered = append(ordered, n)
+			n.children = assign(n.objNum, f.children)
+			nodes[i] = n
+		}
+		return nodes
 	}
+	roots := assign(outlinesObj, bookmarks)
 
 	// Write Catalog (obj 1)
 	offsets = append(offsets, b.Len())
@@ -138,31 +198,39 @@ func writeCleanPDFWithOutline(outPath string, pageCount int, bookmarks []outline
 
 	// Write Outlines root
 	offsets = append(offsets, b.Len())
-	if len(bookmarks) > 0 {
+	if len(roots) > 0 {
 		b.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Outlines /First %d 0 R /Last %d 0 R /Count %d >>\nendobj\n",
-			outlinesObj, bookmarkObjNums[0], bookmarkObjNums[len(bookmarkObjNums)-1], len(bookmarks)))
+			outlinesObj, roots[0].objNum, roots[len(roots)-1].objNum, countOutlineNodes(roots)))
 	} else {
 		b.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Outlines /Count 0 >>\nendobj\n", outlinesObj))
 	}
 
 	// Write Bookmark objects
-	for i, bm := range bookmarks {
+	for _, n := range ordered {
 		offsets = append(offsets, b.Len())
-		pageRef := pageObjNums[bm.pageIndex]
 
 		var parts []string
-		parts = append(parts, fmt.Sprintf("/Title (%s)", bm.title))
-		parts = append(parts, fmt.Sprintf("/Parent %d 0 R", outlinesObj))
-		parts = append(parts, fmt.Sprintf("/Dest [%d 0 R /Fit]", pageRef))
-
-		if i > 0 {
-			parts = append(parts, fmt.Sprintf("/Prev %d 0 R", bookmarkObjNums[i-1]))
-		}
-		if i < len(bookmarks)-1 {
-			parts = append(parts, fmt.Sprintf("/Next %d 0 R", bookmarkObjNums[i+1]))
+		parts = append(parts, fmt.Sprintf("/Title (%s)", n.fixture.title))
+		parts = append(parts, fmt.Sprintf("/Parent %d 0 R", n.parent))
+		if n.fixture.nullDest {
+			parts = append(parts, "/Dest [null 0 0 1]")
+		} else {
+			parts = append(parts, fmt.Sprintf("/Dest [%d 0 R /Fit]", pageObjNums[n.fixture.pageIndex]))
 		}
 
-		b.WriteString(fmt.Sprintf("%d 0 obj\n<< %s >>\nendobj\n", bookmarkObjNums[i], strings.Join(parts, " ")))
+		if n.prev != 0 {
+			parts = append(parts, fmt.Sprintf("/Prev %d 0 R", n.prev))
+		}
+		if n.next != 0 {
+			parts = append(parts, fmt.Sprintf("/Next %d 0 R", n.next))
+		}
+
+		if len(n.children) > 0 {
+			parts = append(parts, fmt.Sprintf("/First %d 0 R /Last %d 0 R /Count %d",
+				n.children[0].objNum, n.children[len(n.children)-1].objNum, countOutlineNodes(n.children)))
+		}
+
+		b.WriteString(fmt.Sprintf("%d 0 obj\n<< %s >>\nendobj\n", n.objNum, strings.Join(parts, " ")))
 	}
 
 	// Xref table

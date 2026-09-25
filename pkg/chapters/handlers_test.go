@@ -148,3 +148,73 @@ func TestReplaceChapters_TriggersReviewRecompute(t *testing.T) {
 	require.NotNil(t, after.Reviewed, "reviewed should not be nil after recompute")
 	assert.True(t, *after.Reviewed, "file should be reviewed=true after chapters added with chapters-only criteria")
 }
+
+// TestValidateChapters_StartPage verifies that start_page must fall within
+// [0, page_count) for top-level and child chapters. A negative start_page is
+// rejected even when the file's page count is unknown.
+func TestValidateChapters_StartPage(t *testing.T) {
+	t.Parallel()
+
+	intPtr := func(v int) *int { return &v }
+	pdf := &models.File{FileType: models.FileTypePDF, PageCount: intPtr(10)}
+	unknownPageCount := &models.File{FileType: models.FileTypePDF}
+
+	tests := []struct {
+		name     string
+		file     *models.File
+		chapters []ChapterInput
+		wantErr  string
+	}{
+		{
+			name:     "first page is valid",
+			file:     pdf,
+			chapters: []ChapterInput{{Title: "One", StartPage: intPtr(0)}},
+		},
+		{
+			name:     "last page is valid",
+			file:     pdf,
+			chapters: []ChapterInput{{Title: "One", StartPage: intPtr(9)}},
+		},
+		{
+			name:     "negative top-level start_page is rejected",
+			file:     pdf,
+			chapters: []ChapterInput{{Title: "One", StartPage: intPtr(-1)}},
+			wantErr:  "start_page must not be negative",
+		},
+		{
+			name: "negative child start_page is rejected",
+			file: pdf,
+			chapters: []ChapterInput{{
+				Title:     "Part",
+				StartPage: intPtr(0),
+				Children:  []ChapterInput{{Title: "Child", StartPage: intPtr(-1)}},
+			}},
+			wantErr: "start_page must not be negative",
+		},
+		{
+			name:     "negative start_page is rejected without a page count",
+			file:     unknownPageCount,
+			chapters: []ChapterInput{{Title: "One", StartPage: intPtr(-1)}},
+			wantErr:  "start_page must not be negative",
+		},
+		{
+			name:     "start_page at page_count is rejected",
+			file:     pdf,
+			chapters: []ChapterInput{{Title: "One", StartPage: intPtr(10)}},
+			wantErr:  "start_page must be less than page_count",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateChapters(tt.file, tt.chapters)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}

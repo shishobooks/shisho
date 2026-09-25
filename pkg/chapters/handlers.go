@@ -107,6 +107,9 @@ func (h *handler) replace(c echo.Context) error {
 // validateChapters validates chapter data against file constraints.
 func validateChapters(file *models.File, chapters []ChapterInput) error {
 	for _, ch := range chapters {
+		if ch.StartPage != nil && *ch.StartPage < 0 {
+			return errcodes.ValidationError("start_page must not be negative")
+		}
 		if ch.StartPage != nil && file.PageCount != nil {
 			if *ch.StartPage >= *file.PageCount {
 				return errcodes.ValidationError("start_page must be less than page_count")
