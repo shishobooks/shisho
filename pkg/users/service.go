@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
@@ -78,7 +79,10 @@ func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.U
 	}
 
 	// Create user
+	now := time.Now()
 	user := &models.User{
+		CreatedAt:          now,
+		UpdatedAt:          now,
 		Username:           opts.Username,
 		Email:              opts.Email,
 		PasswordHash:       hashedPassword,
@@ -177,11 +181,14 @@ type UpdateOptions struct {
 
 // Update updates a user.
 func (s *Service) Update(ctx context.Context, user *models.User, opts UpdateOptions) error {
-	if len(opts.Columns) > 0 {
-		opts.Columns = append(opts.Columns, "updated_at")
+	// Library access is part of the user, so changing it alone still bumps
+	// updated_at.
+	if len(opts.Columns) > 0 || opts.UpdateLibraryAccess {
+		user.UpdatedAt = time.Now()
+		columns := append(opts.Columns, "updated_at")
 		_, err := s.db.NewUpdate().
 			Model(user).
-			Column(opts.Columns...).
+			Column(columns...).
 			WherePK().
 			Exec(ctx)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -16,6 +17,7 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	reviewCriteriaH := &reviewCriteriaHandler{
 		db:                 db,
 		appSettingsService: appsettings.NewService(db),
+		jobService:         jobs.NewService(db),
 	}
 
 	g := e.Group("/settings")
