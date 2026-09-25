@@ -322,3 +322,54 @@ func TestDeleteLibrary_Atomicity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, ftsCount, "FTS entry should survive a failed transaction")
 }
+
+// Bun writes a zero time.Time instead of omitting the column, so the
+// library_paths DEFAULT CURRENT_TIMESTAMP never applies. Both the create and
+// update paths must set every path's timestamps themselves.
+func TestCreateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		LibraryPaths:             []*models.LibraryPath{{Filepath: "/tmp/create-path"}},
+	}
+	require.NoError(t, svc.CreateLibrary(ctx, library))
+
+	var paths []*models.LibraryPath
+	require.NoError(t, db.NewSelect().Model(&paths).Where("library_id = ?", library.ID).Scan(ctx))
+	require.Len(t, paths, 1)
+	assert.WithinDuration(t, time.Now(), paths[0].CreatedAt, time.Minute)
+	assert.WithinDuration(t, time.Now(), paths[0].UpdatedAt, time.Minute)
+}
+
+func TestUpdateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		LibraryPaths:             []*models.LibraryPath{{Filepath: "/tmp/original-path"}},
+	}
+	require.NoError(t, svc.CreateLibrary(ctx, library))
+
+	library.LibraryPaths = []*models.LibraryPath{{Filepath: "/tmp/replacement-path"}}
+	require.NoError(t, svc.UpdateLibrary(ctx, library, UpdateLibraryOptions{UpdateLibraryPaths: true}))
+
+	var paths []*models.LibraryPath
+	require.NoError(t, db.NewSelect().Model(&paths).Where("library_id = ?", library.ID).Scan(ctx))
+	require.Len(t, paths, 1)
+	assert.Equal(t, "/tmp/replacement-path", paths[0].Filepath)
+	assert.WithinDuration(t, time.Now(), paths[0].CreatedAt, time.Minute)
+	assert.WithinDuration(t, time.Now(), paths[0].UpdatedAt, time.Minute)
+}

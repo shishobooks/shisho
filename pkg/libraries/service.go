@@ -56,6 +56,7 @@ func (svc *Service) CreateLibrary(ctx context.Context, library *models.Library) 
 		for _, path := range library.LibraryPaths {
 			path.LibraryID = library.ID
 			path.CreatedAt = library.CreatedAt
+			path.UpdatedAt = library.CreatedAt
 		}
 
 		if len(library.LibraryPaths) > 0 {
@@ -190,6 +191,7 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, 
 			for _, path := range library.LibraryPaths {
 				path.LibraryID = library.ID
 				path.CreatedAt = now
+				path.UpdatedAt = now
 			}
 
 			// Insert new library paths.

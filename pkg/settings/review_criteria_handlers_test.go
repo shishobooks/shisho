@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
+	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +41,7 @@ func newReviewCriteriaHandler(t *testing.T, db *bun.DB) *reviewCriteriaHandler {
 	return &reviewCriteriaHandler{
 		db:                 db,
 		appSettingsService: appsettings.NewService(db),
+		jobService:         jobs.NewService(db),
 	}
 }
 
@@ -106,6 +109,11 @@ func TestPutReviewCriteria_PersistsAndEnqueuesJob(t *testing.T) {
 	data, ok := job.DataParsed.(*models.JobRecomputeReviewData)
 	require.True(t, ok)
 	assert.True(t, data.ClearOverrides)
+
+	// Bun writes a zero time.Time instead of omitting the column, so the
+	// jobs DEFAULT CURRENT_TIMESTAMP never applies.
+	assert.WithinDuration(t, time.Now(), job.CreatedAt, time.Minute)
+	assert.WithinDuration(t, time.Now(), job.UpdatedAt, time.Minute)
 }
 
 func TestPutReviewCriteria_RejectsInvalidField(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -17,6 +18,7 @@ import (
 type reviewCriteriaHandler struct {
 	db                 *bun.DB
 	appSettingsService *appsettings.Service
+	jobService         *jobs.Service
 }
 
 func (h *reviewCriteriaHandler) getReviewCriteria(c echo.Context) error {
@@ -80,7 +82,7 @@ func (h *reviewCriteriaHandler) putReviewCriteria(c echo.Context) error {
 		Status: models.JobStatusPending,
 		Data:   string(jobData),
 	}
-	if _, err := h.db.NewInsert().Model(job).Exec(ctx); err != nil {
+	if err := h.jobService.CreateJob(ctx, job); err != nil {
 		return errors.WithStack(err)
 	}
 

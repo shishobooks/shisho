@@ -159,7 +159,10 @@ func (s *Service) CreateFirstAdmin(ctx context.Context, username string, email *
 	}
 
 	// Create user
+	now := time.Now()
 	user := &models.User{
+		CreatedAt:          now,
+		UpdatedAt:          now,
 		Username:           username,
 		Email:              email,
 		PasswordHash:       string(hashedPassword),

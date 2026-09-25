@@ -2,6 +2,7 @@ package roles
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -85,9 +86,12 @@ func (s *Service) Create(ctx context.Context, name string, permissions []Permiss
 	}
 
 	// Create role
+	now := time.Now()
 	role := &models.Role{
-		Name:     name,
-		IsSystem: false,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Name:      name,
+		IsSystem:  false,
 	}
 
 	_, err = s.db.NewInsert().Model(role).Exec(ctx)
@@ -167,6 +171,7 @@ func (s *Service) Update(ctx context.Context, id int, name *string, permissions 
 		return nil, errcodes.Forbidden("Cannot rename system roles")
 	}
 
+	var columns []string
 	if name != nil && *name != role.Name {
 		// Check if new name already exists
 		exists, err := s.db.NewSelect().
@@ -182,45 +187,57 @@ func (s *Service) Update(ctx context.Context, id int, name *string, permissions 
 		}
 
 		role.Name = *name
-		_, err = s.db.NewUpdate().
-			Model(role).
-			Column("name", "updated_at").
-			WherePK().
-			Exec(ctx)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
+		columns = append(columns, "name")
 	}
 
 	if permissions != nil {
-		// Validate permissions
 		for _, p := range *permissions {
 			if err := validatePermission(p.Resource, p.Operation); err != nil {
 				return nil, err
 			}
 		}
+	}
 
-		// Delete existing permissions
-		_, err = s.db.NewDelete().
-			Model((*models.Permission)(nil)).
-			Where("role_id = ?", id).
-			Exec(ctx)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
+	if len(columns) == 0 && permissions == nil {
+		return role, nil
+	}
 
-		// Create new permissions
-		for _, p := range *permissions {
-			perm := &models.Permission{
-				RoleID:    id,
-				Resource:  p.Resource,
-				Operation: p.Operation,
-			}
-			_, err = s.db.NewInsert().Model(perm).Exec(ctx)
+	// Replace permissions and write the role in one transaction so a failed
+	// write cannot leave new permissions under the old name (or vice versa).
+	// A permissions change is a change to the role, so it bumps updated_at
+	// even when the name is unchanged.
+	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if permissions != nil {
+			_, err := tx.NewDelete().
+				Model((*models.Permission)(nil)).
+				Where("role_id = ?", id).
+				Exec(ctx)
 			if err != nil {
-				return nil, errors.WithStack(err)
+				return errors.WithStack(err)
+			}
+
+			for _, p := range *permissions {
+				perm := &models.Permission{
+					RoleID:    id,
+					Resource:  p.Resource,
+					Operation: p.Operation,
+				}
+				if _, err := tx.NewInsert().Model(perm).Exec(ctx); err != nil {
+					return errors.WithStack(err)
+				}
 			}
 		}
+
+		role.UpdatedAt = time.Now()
+		_, err := tx.NewUpdate().
+			Model(role).
+			Column(append(columns, "updated_at")...).
+			WherePK().
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return s.Retrieve(ctx, id)

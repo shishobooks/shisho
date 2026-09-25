@@ -65,7 +65,10 @@ func (h *handler) createUser(c echo.Context) error {
 	}
 
 	// Create user
+	now := time.Now()
 	user := &models.User{
+		CreatedAt:    now,
+		UpdatedAt:    now,
 		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: hashedPassword,
