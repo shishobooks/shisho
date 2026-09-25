@@ -473,4 +473,44 @@ describe("ReviewPanel", () => {
       expect(screen.getByText(/Missing:.*description/)).toBeInTheDocument();
     });
   });
+
+  describe("readOnly", () => {
+    it("shows the reviewed state without a toggle", () => {
+      const files: File[] = [{ ...baseFile, reviewed: true }];
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={files}
+          onChange={vi.fn()}
+          readOnly
+        />,
+        { wrapper },
+      );
+
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      expect(screen.getByText("Reviewed")).toBeInTheDocument();
+      expect(screen.getByLabelText("Reviewed status")).toBeInTheDocument();
+    });
+
+    it("shows the needs-review state and the missing hint without a toggle", () => {
+      const files: File[] = [
+        { ...baseFile, reviewed: false, cover_image_filename: undefined },
+      ];
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={files}
+          onChange={vi.fn()}
+          readOnly
+        />,
+        { wrapper },
+      );
+
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      expect(screen.getByText("Needs review")).toBeInTheDocument();
+      expect(screen.getByText(/Missing: cover/)).toBeInTheDocument();
+    });
+  });
 });

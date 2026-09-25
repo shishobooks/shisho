@@ -32,6 +32,29 @@ Permissions are available as Read and Write operations for these resources:
 
 Write permissions permit the create, edit, or delete operations associated with that resource. Read access does not imply Write access.
 
+Some library data is edited under a broader resource than its name suggests:
+
+- Genres, tags, and publishers are edited with Books Write, along with book and file metadata, covers, chapters, review state, Identify, rescans, merges, file moves, and deletion.
+- Series are edited with Series Write.
+- People (authors and narrators) are edited with People Write.
+- Library rescans and bulk downloads create jobs, so they require Jobs Write.
+
+## What a Read-Only Role Sees
+
+A user whose role has Read but not Write for a resource does not see the controls that would change it. The server still rejects any unauthorized request; hiding the controls only keeps the interface honest about what the user can do.
+
+With the built-in **viewer** role, or any role without Books Write, Series Write, or People Write:
+
+- Book tiles in the gallery show no actions menu (rescan, identify, delete). **Add to list** stays available.
+- The book page shows no edit, rescan, identify, merge, or delete actions, no per-file actions menu, and no file selection for moving files. The review panel shows the current state without a toggle. Reading, listening, downloading, and **Add to list** remain.
+- The file page shows no **Edit** or **Delete** buttons, and the chapters tab offers no chapter editing.
+- Series, person, genre, tag, and publisher pages show no **Edit**, **Merge**, or **Delete** buttons.
+- Selection mode still works for adding books to lists, and for downloads when the role has the [bulk download permissions](./browsing-search-bulk-actions.md#bulk-download-permissions). **Merge**, **Delete**, and the review actions are hidden.
+
+Each control follows the resource its request needs, not the page it appears on. A role with Books Write but not Series Write sees the edit controls on book, genre, tag, and publisher pages and not on series pages.
+
+Lists are independent of these role permissions. Any signed-in user can create a personal list and add books to a list they own or that has been shared with them with editor or manager access, even without Books Write. See [Lists](./lists.md).
+
 ## Custom Roles
 
 On **Settings > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role in the **Roles** section to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.

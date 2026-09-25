@@ -2,13 +2,27 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ResourceDetail } from "./ResourceDetail";
 
 vi.mock("@/hooks/queries/libraries", () => ({
   useLibrary: () => ({ data: { name: "My Library" } }),
 }));
+
+// Resources the signed-in user may write. Defaults to everything; the
+// read-only tests narrow it.
+let writableResources: string[] = ["books", "series", "people"];
+
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    canWrite: (resource: string) => writableResources.includes(resource),
+  }),
+}));
+
+beforeEach(() => {
+  writableResources = ["books", "series", "people"];
+});
 
 // LibraryLayout pulls in TopNav which requires AuthProvider — mock it to
 // render children directly so ResourceDetail tests focus on header/dialog logic.
@@ -238,5 +252,62 @@ describe("ResourceDetail", () => {
 
     expect(onMerge).toHaveBeenCalledWith(10);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  describe("read-only user", () => {
+    it("hides Edit, Merge, and Delete but keeps the heading and content", () => {
+      writableResources = [];
+      render(
+        wrap(
+          <ResourceDetail {...defaultProps}>
+            <div data-testid="child-section">Custom Content</div>
+          </ResourceDetail>,
+        ),
+      );
+      expect(
+        screen.getByRole("heading", { level: 1, name: "Science Fiction" }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("child-section")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Edit/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Merge/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Delete/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    // Genres, tags, and publishers are mutated under the books routes, so
+    // Books Write is what unlocks them, not a resource of their own.
+    it.each([
+      ["genre", "books"],
+      ["tag", "books"],
+      ["publisher", "books"],
+      ["person", "people"],
+    ] as const)(
+      "shows %s controls only with %s write permission",
+      (entityType, resource) => {
+        writableResources = ["books", "series", "people"].filter(
+          (r) => r !== resource,
+        );
+        const { unmount } = render(
+          wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
+        );
+        expect(
+          screen.queryByRole("button", { name: /Edit/ }),
+        ).not.toBeInTheDocument();
+        unmount();
+
+        writableResources = [resource];
+        render(
+          wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
+        );
+        expect(
+          screen.getByRole("button", { name: /Edit/ }),
+        ).toBeInTheDocument();
+      },
+    );
   });
 });

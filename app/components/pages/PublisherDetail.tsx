@@ -26,9 +26,11 @@ import {
   useSetChildPublisher,
   useUpdatePublisher,
 } from "@/hooks/queries/publishers";
+import { useAuth } from "@/hooks/useAuth";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parsePageParam } from "@/libraries/pagination";
+import { ResourceBooks } from "@/types";
 
 const PublisherDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -52,6 +54,11 @@ const PublisherDetail = () => {
 
   const updatePublisherMutation = useUpdatePublisher();
   const mergePublisherMutation = useMergePublisher();
+  const { canWrite } = useAuth();
+  // Publisher edits go through the books route group and need Books Write.
+  // ResourceDetail hides the buttons; the dialog this page owns is gated here
+  // so it is not mounted for read-only users either.
+  const canWriteBooks = canWrite(ResourceBooks);
   const setChildPublisherMutation = useSetChildPublisher();
   const deletePublisherMutation = useDeletePublisher();
 
@@ -258,17 +265,19 @@ const PublisherDetail = () => {
         />
       </ResourceDetail>
 
-      <PublisherEditDialog
-        aliases={aliases}
-        entityName={publisher?.name ?? ""}
-        isPending={updatePublisherMutation.isPending}
-        onOpenChange={setEditOpen}
-        onSave={handleEdit}
-        open={editOpen}
-        parentId={publisher?.parent_id ?? null}
-        parentName={parentName}
-        useParentSearch={useParentSearchHook}
-      />
+      {canWriteBooks && (
+        <PublisherEditDialog
+          aliases={aliases}
+          entityName={publisher?.name ?? ""}
+          isPending={updatePublisherMutation.isPending}
+          onOpenChange={setEditOpen}
+          onSave={handleEdit}
+          open={editOpen}
+          parentId={publisher?.parent_id ?? null}
+          parentName={parentName}
+          useParentSearch={useParentSearchHook}
+        />
+      )}
     </>
   );
 };

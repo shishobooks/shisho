@@ -16,8 +16,13 @@ beforeAll(() => {
 const mockExitSelectionMode = vi.fn();
 const mockClearSelection = vi.fn();
 
+let canWriteBooks = true;
+
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ demoMode: false }),
+  useAuth: () => ({
+    demoMode: false,
+    canWrite: (resource: string) => resource === "books" && canWriteBooks,
+  }),
 }));
 
 vi.mock("@/hooks/useBulkSelection", () => ({
@@ -103,7 +108,15 @@ vi.mock("@/hooks/queries/jobs", () => ({
 }));
 
 vi.mock("@/hooks/queries/lists", () => ({
-  useListLists: () => ({ data: { items: [] }, isLoading: false }),
+  useListLists: () => ({
+    data: {
+      items: [
+        { id: 9, name: "My queue", permission: "owner" },
+        { id: 10, name: "Shared read-only", permission: "viewer" },
+      ],
+    },
+    isLoading: false,
+  }),
   useAddBooksToList: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateList: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -300,5 +313,61 @@ describe("SelectionToolbar — Download file-type selection", () => {
         },
       },
     });
+  });
+});
+
+describe("SelectionToolbar read-only user", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    canWriteBooks = true;
+  });
+
+  it("keeps Add and Download but hides Merge, Delete, and review actions", async () => {
+    canWriteBooks = false;
+    const user = createUser();
+    render(wrap(<SelectionToolbar library={{ id: 1 } as never} />));
+
+    expect(screen.getByRole("button", { name: /^add$/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /download/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /merge/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /delete/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^more$/i }),
+    ).not.toBeInTheDocument();
+
+    // The mobile Actions popover follows the same rule.
+    await user.click(screen.getByRole("button", { name: /^actions$/i }));
+    expect(
+      screen.queryByRole("button", { name: /mark reviewed/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /mark needs review/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /delete/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still offers the lists the user can edit", async () => {
+    canWriteBooks = false;
+    const user = createUser();
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    expect(
+      screen.getByRole("button", { name: "My queue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Shared read-only" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /create new list/i }),
+    ).toBeInTheDocument();
   });
 });

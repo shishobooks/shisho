@@ -50,6 +50,11 @@ interface FileChaptersTabProps {
   isEditing: boolean;
   onEditingChange: (editing: boolean) => void;
   onActionStateChange?: (state: ChaptersActionState) => void;
+  /**
+   * Whether the signed-in user may save chapters (Books Write). When false the
+   * empty state offers no Add Chapter or Fetch from Audible actions.
+   */
+  canEdit: boolean;
 }
 
 /**
@@ -116,7 +121,8 @@ const createNewChapter = (fileType: string): EditedChapter => {
 
 const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
   (props, ref) => {
-    const { file, isEditing, onEditingChange, onActionStateChange } = props;
+    const { file, isEditing, onEditingChange, onActionStateChange, canEdit } =
+      props;
     const chaptersQuery = useFileChapters(file.id);
     const updateChaptersMutation = useUpdateFileChapters(file.id);
 
@@ -817,9 +823,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // Empty state (or edit mode with new chapters from empty state)
     if (chapters.length === 0) {
       const canAddChapters =
-        file.file_type === FileTypeCBZ ||
-        file.file_type === FileTypePDF ||
-        file.file_type === FileTypeM4B;
+        canEdit &&
+        (file.file_type === FileTypeCBZ ||
+          file.file_type === FileTypePDF ||
+          file.file_type === FileTypeM4B);
 
       // When editing with chapters (entered via Add Chapter button), show edit UI
       if (isEditing && editedChapters.length > 0) {
@@ -885,28 +892,44 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
           <audio ref={audioRef} src={`/api/books/files/${file.id}/stream`} />
         )}
 
-        {/* Uncovered pages warning (display uses 1-indexed page numbers) */}
-        {hasUncoveredPages && (
-          <button
-            className="w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left hover:bg-amber-500/20 transition-colors cursor-pointer"
-            onClick={handleAddChapterAtPageZero}
-            type="button"
-          >
-            <img
-              alt="Page 1"
-              className="h-[60px] w-auto rounded border border-border object-contain bg-muted"
-              src={`/api/books/files/${file.id}/page/0`}
-            />
-            <div className="flex-1 min-w-0">
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
-                Pages 1-{firstChapterStartPage} not in any chapter
-              </span>
-              <p className="text-muted-foreground text-sm mt-0.5">
-                Click to add chapter
-              </p>
-            </div>
-          </button>
-        )}
+        {/* Uncovered pages warning (display uses 1-indexed page numbers).
+            Clicking it enters edit mode, so read-only users get a plain
+            notice instead of a button. */}
+        {hasUncoveredPages &&
+          (() => {
+            const content = (
+              <>
+                <img
+                  alt="Page 1"
+                  className="h-[60px] w-auto rounded border border-border object-contain bg-muted"
+                  src={`/api/books/files/${file.id}/page/0`}
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                    Pages 1-{firstChapterStartPage} not in any chapter
+                  </span>
+                  {canEdit && (
+                    <p className="text-muted-foreground text-sm mt-0.5">
+                      Click to add chapter
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+            const baseClass =
+              "w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left";
+            return canEdit ? (
+              <button
+                className={`${baseClass} hover:bg-amber-500/20 transition-colors cursor-pointer`}
+                onClick={handleAddChapterAtPageZero}
+                type="button"
+              >
+                {content}
+              </button>
+            ) : (
+              <div className={baseClass}>{content}</div>
+            );
+          })()}
 
         {chapters.map((chapter, index) => (
           <ChapterRow

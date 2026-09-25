@@ -34,6 +34,11 @@ interface ReviewPanelProps {
    * unaffected.
    */
   toggleValue?: boolean;
+  /**
+   * Render the reviewed state as a label with no toggle. Use for users
+   * without Books Write, who can see review status but cannot change it.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -181,6 +186,7 @@ export function ReviewPanel({
   onChange,
   isPending = false,
   toggleValue,
+  readOnly = false,
 }: ReviewPanelProps) {
   const { data: criteria } = useReviewCriteria();
 
@@ -251,22 +257,30 @@ export function ReviewPanel({
   return (
     <div className="border rounded-md p-4 space-y-2 bg-muted/30">
       <div className="flex items-center gap-3">
-        <Switch
-          checked={allReviewed}
-          className="cursor-pointer"
-          disabled={isPending}
-          id="review-toggle"
-          onCheckedChange={handleToggle}
-        />
-        <Label
-          className={cn(
-            "cursor-pointer font-medium",
-            isPending && "opacity-50",
-          )}
-          htmlFor="review-toggle"
-        >
-          Reviewed
-        </Label>
+        {readOnly ? (
+          <span className="font-medium">
+            {allReviewed ? "Reviewed" : "Needs review"}
+          </span>
+        ) : (
+          <>
+            <Switch
+              checked={allReviewed}
+              className="cursor-pointer"
+              disabled={isPending}
+              id="review-toggle"
+              onCheckedChange={handleToggle}
+            />
+            <Label
+              className={cn(
+                "cursor-pointer font-medium",
+                isPending && "opacity-50",
+              )}
+              htmlFor="review-toggle"
+            >
+              Reviewed
+            </Label>
+          </>
+        )}
         <TooltipProvider delayDuration={0}>
           <Tooltip>
             <TooltipTrigger asChild>

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
@@ -20,6 +20,18 @@ vi.mock("@/hooks/queries/libraries", async () => {
     typeof import("@/hooks/queries/libraries")
   >("@/hooks/queries/libraries");
   return { ...actual, useLibrary: vi.fn() };
+});
+
+let canWriteBooks = true;
+
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    canWrite: (resource: string) => resource === "books" && canWriteBooks,
+  }),
+}));
+
+beforeEach(() => {
+  canWriteBooks = true;
 });
 
 // useUnsavedChanges calls react-router's useBlocker, which requires a data
@@ -116,6 +128,26 @@ describe("FileDetail reading action", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /read/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("FileDetail write controls", () => {
+  it("shows Edit and Delete for a user with Books Write", () => {
+    renderForFileType("epub");
+    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+  });
+
+  it("hides Edit and Delete but keeps the reading action for a read-only user", () => {
+    canWriteBooks = false;
+    renderForFileType("epub");
+    expect(screen.getByRole("link", { name: /read/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /edit/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /delete/i }),
     ).not.toBeInTheDocument();
   });
 });

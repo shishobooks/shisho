@@ -25,11 +25,12 @@ import {
   useUpdateSeries,
 } from "@/hooks/queries/series";
 import { useUserSettings } from "@/hooks/queries/settings";
+import { useAuth } from "@/hooks/useAuth";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
-import type { GallerySize } from "@/types";
+import { ResourceSeries, type GallerySize } from "@/types";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -52,6 +53,9 @@ const SeriesDetail = () => {
 
   const libraryQuery = useLibrary(libraryId);
   const seriesQuery = useSeries(seriesId);
+  const { canWrite } = useAuth();
+  // Series edit, merge, and delete require Series Write on the backend.
+  const canWriteSeries = canWrite(ResourceSeries);
 
   usePageTitle(seriesQuery.data?.name ?? "Series");
   const seriesBooksQuery = useSeriesBooks(
@@ -85,7 +89,7 @@ const SeriesDetail = () => {
       limit: 50,
       search: debouncedMergeSearch || undefined,
     },
-    { enabled: !!seriesQuery.data?.library_id },
+    { enabled: canWriteSeries && !!seriesQuery.data?.library_id },
   );
 
   const handleEdit = async (data: {
@@ -164,34 +168,36 @@ const SeriesDetail = () => {
           <h1 className="text-2xl font-semibold min-w-0 break-words">
             {series.name}
           </h1>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              onClick={() => setEditOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              onClick={() => setMergeOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <GitMerge className="h-4 w-4 mr-2" />
-              Merge
-            </Button>
-            {canDelete && (
+          {canWriteSeries && (
+            <div className="flex gap-2 shrink-0">
               <Button
-                onClick={() => setDeleteOpen(true)}
+                onClick={() => setEditOpen(true)}
                 size="sm"
                 variant="outline"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
               </Button>
-            )}
-          </div>
+              <Button
+                onClick={() => setMergeOpen(true)}
+                size="sm"
+                variant="outline"
+              >
+                <GitMerge className="h-4 w-4 mr-2" />
+                Merge
+              </Button>
+              {canDelete && (
+                <Button
+                  onClick={() => setDeleteOpen(true)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         {series.sort_name !== series.name && (
           <p className="text-muted-foreground mb-2">
@@ -220,45 +226,49 @@ const SeriesDetail = () => {
         title="Books in Series"
       />
 
-      <MetadataEditDialog
-        aliases={aliases}
-        entityName={series.name}
-        entityType="series"
-        isPending={updateSeriesMutation.isPending}
-        onOpenChange={setEditOpen}
-        onSave={handleEdit}
-        open={editOpen}
-        sortName={series.sort_name}
-        sortNameSource={series.sort_name_source}
-      />
+      {canWriteSeries && (
+        <>
+          <MetadataEditDialog
+            aliases={aliases}
+            entityName={series.name}
+            entityType="series"
+            isPending={updateSeriesMutation.isPending}
+            onOpenChange={setEditOpen}
+            onSave={handleEdit}
+            open={editOpen}
+            sortName={series.sort_name}
+            sortNameSource={series.sort_name_source}
+          />
 
-      <MetadataMergeDialog
-        entities={
-          seriesListQuery.data?.items.map((s) => ({
-            id: s.id,
-            name: s.name,
-            count: s.book_count ?? 0,
-          })) ?? []
-        }
-        entityType="series"
-        isLoadingEntities={seriesListQuery.isLoading}
-        isPending={mergeSeriesMutation.isPending}
-        onMerge={handleMerge}
-        onOpenChange={setMergeOpen}
-        onSearch={setMergeSearch}
-        open={mergeOpen}
-        targetId={seriesId!}
-        targetName={series.name}
-      />
+          <MetadataMergeDialog
+            entities={
+              seriesListQuery.data?.items.map((s) => ({
+                id: s.id,
+                name: s.name,
+                count: s.book_count ?? 0,
+              })) ?? []
+            }
+            entityType="series"
+            isLoadingEntities={seriesListQuery.isLoading}
+            isPending={mergeSeriesMutation.isPending}
+            onMerge={handleMerge}
+            onOpenChange={setMergeOpen}
+            onSearch={setMergeSearch}
+            open={mergeOpen}
+            targetId={seriesId!}
+            targetName={series.name}
+          />
 
-      <MetadataDeleteDialog
-        entityName={series.name}
-        entityType="series"
-        isPending={deleteSeriesMutation.isPending}
-        onDelete={handleDelete}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
-      />
+          <MetadataDeleteDialog
+            entityName={series.name}
+            entityType="series"
+            isPending={deleteSeriesMutation.isPending}
+            onDelete={handleDelete}
+            onOpenChange={setDeleteOpen}
+            open={deleteOpen}
+          />
+        </>
+      )}
     </LibraryLayout>
   );
 };

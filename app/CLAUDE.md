@@ -75,6 +75,30 @@ The toast is a fallback for callers with no error UI of their own. A caller that
 
 Preferences stay browser-local in Demo Mode. User settings use the `shisho-demo-user-settings` local storage key. Per-library settings use `shisho-demo-library-settings-{libraryId}`. The query hooks fetch server defaults first, merge stored values over those defaults, and write Demo Mode mutations to local storage and the TanStack Query cache without sending a write request.
 
+### Permission-gated controls
+
+`useAuth()` exposes `canWrite(resource)`, shorthand for `hasPermission(resource, "write")`. Every control that fires a mutating request must be hidden when the user lacks the permission the backend route requires. Gate on the route's resource, not the page's display type:
+
+| Control | Resource |
+|---------|----------|
+| Book and file metadata, covers, chapters, review state, Identify, rescan, merge, move, delete | `books` |
+| Genre, tag, and publisher edit/merge/delete/set-child | `books` |
+| Series edit/merge/delete | `series` |
+| Person edit/merge/delete | `people` |
+| Library settings and scans | `libraries` / `jobs` (already gated) |
+
+Use `writeResourceForEntity(entityType)` from `@/utils/permissions` for the metadata entity mapping; `ResourceDetail` applies it itself, so the genre, tag, and person pages need no extra gating. `PublisherDetail` owns its own edit dialog (via `onEditClick`) and gates that dialog on `ResourceBooks`; `SeriesDetail` has its own header and gates on `ResourceSeries` directly.
+
+Do not gate on `canWrite`:
+
+- **List membership.** Add to list, create list, and the per-list actions follow the list's own `permission` field (owner/manager/editor/viewer), never Books Write.
+- **Selection mode and downloads.** Selection stays available for lists and downloads; only merge, delete, and review actions inside `SelectionToolbar` are hidden.
+- **Demo Mode.** `canWrite` reflects role permissions only. Demo Mode keeps controls visible and relies on the backend rejection plus toast (see above).
+
+Hide the whole control rather than disabling it, and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
+
+Components that call `useAuth()` throw outside `AuthProvider`. Tests for those components mock `@/hooks/useAuth` with a `canWrite` stub (see `BookItem.test.tsx`, `ResourceDetail.test.tsx`, `SelectionToolbar.test.tsx`); a `let` flag toggled per test is the pattern for read-only renders. Typed `AuthContextValue` stubs (`useSSE.test.ts`, `Login.test.tsx`) must include `canWrite`.
+
 ### React Query Cache Invalidation
 
 When a mutation modifies a resource (update/delete/merge), invalidate related queries so the UI refreshes.

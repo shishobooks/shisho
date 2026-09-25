@@ -16,7 +16,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLibrary } from "@/hooks/queries/libraries";
+import { useAuth } from "@/hooks/useAuth";
 import type { DataSource } from "@/types";
+import { writeResourceForEntity } from "@/utils/permissions";
 
 interface BreadcrumbItem {
   label: string;
@@ -108,6 +110,8 @@ export function ResourceDetail({
   children,
 }: ResourceDetailProps) {
   const libraryQuery = useLibrary(libraryId);
+  const { canWrite } = useAuth();
+  const canMutate = canWrite(writeResourceForEntity(entityType));
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -158,34 +162,38 @@ export function ResourceDetail({
               )}
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              onClick={() => (onEditClick ? onEditClick() : setEditOpen(true))}
-              size="sm"
-              variant="outline"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              onClick={() => setMergeOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <GitMerge className="h-4 w-4 mr-2" />
-              Merge
-            </Button>
-            {!deleteConfig.disabled && (
+          {canMutate && (
+            <div className="flex gap-2 shrink-0">
               <Button
-                onClick={() => setDeleteOpen(true)}
+                onClick={() =>
+                  onEditClick ? onEditClick() : setEditOpen(true)
+                }
                 size="sm"
                 variant="outline"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
               </Button>
-            )}
-          </div>
+              <Button
+                onClick={() => setMergeOpen(true)}
+                size="sm"
+                variant="outline"
+              >
+                <GitMerge className="h-4 w-4 mr-2" />
+                Merge
+              </Button>
+              {!deleteConfig.disabled && (
+                <Button
+                  onClick={() => setDeleteOpen(true)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         {aliases.length > 0 && (
           <p className="text-sm text-muted-foreground mb-2">
@@ -203,7 +211,7 @@ export function ResourceDetail({
 
       {children}
 
-      {!onEditClick && (
+      {canMutate && !onEditClick && (
         <MetadataEditDialog
           aliases={aliases}
           entityName={name}
@@ -217,45 +225,49 @@ export function ResourceDetail({
         />
       )}
 
-      <MetadataMergeDialog
-        entities={mergeConfig.entities}
-        entityType={entityType}
-        isLoadingEntities={mergeConfig.isLoadingEntities}
-        isPending={mergeConfig.isPending}
-        onMerge={async (sourceId) => {
-          await mergeConfig.onMerge(sourceId);
-          setMergeOpen(false);
-        }}
-        onOpenChange={setMergeOpen}
-        onSearch={mergeConfig.onSearch}
-        open={mergeOpen}
-        setChildConfig={
-          mergeConfig.setChildConfig
-            ? {
-                onSetChild: async (childId) => {
-                  await mergeConfig.setChildConfig!.onSetChild(childId);
-                  setMergeOpen(false);
-                },
-                isPending: mergeConfig.setChildConfig.isPending,
-                disabledIds: mergeConfig.setChildConfig.disabledIds,
-              }
-            : undefined
-        }
-        targetId={entityId}
-        targetName={name}
-      />
+      {canMutate && (
+        <MetadataMergeDialog
+          entities={mergeConfig.entities}
+          entityType={entityType}
+          isLoadingEntities={mergeConfig.isLoadingEntities}
+          isPending={mergeConfig.isPending}
+          onMerge={async (sourceId) => {
+            await mergeConfig.onMerge(sourceId);
+            setMergeOpen(false);
+          }}
+          onOpenChange={setMergeOpen}
+          onSearch={mergeConfig.onSearch}
+          open={mergeOpen}
+          setChildConfig={
+            mergeConfig.setChildConfig
+              ? {
+                  onSetChild: async (childId) => {
+                    await mergeConfig.setChildConfig!.onSetChild(childId);
+                    setMergeOpen(false);
+                  },
+                  isPending: mergeConfig.setChildConfig.isPending,
+                  disabledIds: mergeConfig.setChildConfig.disabledIds,
+                }
+              : undefined
+          }
+          targetId={entityId}
+          targetName={name}
+        />
+      )}
 
-      <MetadataDeleteDialog
-        entityName={name}
-        entityType={entityType}
-        isPending={deleteConfig.isPending}
-        onDelete={async () => {
-          await deleteConfig.onDelete();
-          setDeleteOpen(false);
-        }}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
-      />
+      {canMutate && (
+        <MetadataDeleteDialog
+          entityName={name}
+          entityType={entityType}
+          isPending={deleteConfig.isPending}
+          onDelete={async () => {
+            await deleteConfig.onDelete();
+            setDeleteOpen(false);
+          }}
+          onOpenChange={setDeleteOpen}
+          open={deleteOpen}
+        />
+      )}
     </LibraryLayout>
   );
 }

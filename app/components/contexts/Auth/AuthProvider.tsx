@@ -69,6 +69,11 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     [user],
   );
 
+  const canWrite = useCallback(
+    (resource: string) => hasPermission(resource, "write"),
+    [hasPermission],
+  );
+
   const hasLibraryAccess = useCallback(
     (libraryId: number) => {
       if (!user) return false;
@@ -108,6 +113,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         login,
         logout,
         hasPermission,
+        canWrite,
         hasLibraryAccess,
         refetch,
         setAuthUser,

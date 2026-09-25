@@ -15,6 +15,13 @@ export interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (resource: string, operation: string) => boolean;
+  /**
+   * Shorthand for `hasPermission(resource, "write")`. Use it to gate mutating
+   * controls on the permission the backend route requires (see
+   * `writeResourceForEntity` in `@/utils/permissions` for metadata entities).
+   * Reflects role permissions only; Demo Mode never affects it.
+   */
+  canWrite: (resource: string) => boolean;
   hasLibraryAccess: (libraryId: number) => boolean;
   refetch: () => Promise<void>;
   setAuthUser: (user: AuthUser) => void;

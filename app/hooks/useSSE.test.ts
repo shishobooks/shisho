@@ -67,6 +67,7 @@ function createWrapper(
     login: vi.fn(),
     logout: vi.fn(),
     hasPermission: () => true,
+    canWrite: () => true,
     hasLibraryAccess: () => true,
     refetch: vi.fn(),
     setAuthUser: vi.fn(),

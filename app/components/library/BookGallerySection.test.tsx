@@ -28,6 +28,10 @@ beforeAll(() => {
 });
 
 // Mock mutation hooks — they require a running API
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ canWrite: () => true }),
+}));
+
 vi.mock("@/hooks/queries/books", () => ({
   useDeleteBook: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResyncBook: () => ({ mutateAsync: vi.fn(), isPending: false }),
