@@ -14,8 +14,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { useDocPath } from "../hooks/useDocPath";
-
 const workflowSteps = [
   {
     icon: FolderOpen,
@@ -84,7 +82,6 @@ const features = [
 
 export default function Home(): ReactNode {
   const { siteConfig } = useDocusaurusContext();
-  const demoPath = useDocPath("demo");
 
   return (
     <Layout
@@ -112,7 +109,7 @@ export default function Home(): ReactNode {
               </Link>
               <Link
                 className="docs-home__btn docs-home__btn--ghost"
-                to={demoPath}
+                to="/docs/demo"
               >
                 Try the Demo
               </Link>
