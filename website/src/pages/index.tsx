@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Github } from "../components/GithubIcon";
 import { useDocPath } from "../hooks/useDocPath";
 
 const workflowSteps = [
@@ -117,15 +116,6 @@ export default function Home(): ReactNode {
               >
                 Try the Demo
               </Link>
-              <a
-                className="docs-home__btn docs-home__btn--ghost"
-                href="https://github.com/shishobooks/shisho"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <Github size={16} strokeWidth={2} />
-                View on GitHub
-              </a>
             </div>
           </div>
         </section>
