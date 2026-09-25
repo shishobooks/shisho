@@ -105,6 +105,9 @@ Test endpoints are only registered when `ENVIRONMENT=test`.
 | `/api/test/plugins` | DELETE | Wipe all plugin state (add `?include_official=true` to also wipe official repos) |
 | `/api/test/plugins/fixture.zip` | GET | Fixture plugin zipped for install flows |
 | `/api/test/plugins/fixture-info` | GET | `{scope, id, version, download_url, sha256}` for the fixture |
+| `/api/test/libraries`, `/api/test/books`, `/api/test/persons`, `/api/test/series` | POST | Seed library data directly in the database |
+
+Seeded books and series are added to their FTS tables so search-driven UI (global search, the merge combobox) can find them. Seeded persons are not indexed. A test that searches for a seeded row must wait for the search response before acting on results: the merge combobox debounces input and replaces its list when results arrive, so a click that races the debounce can land on an item that is about to be removed (see the series merge test in `alias.spec.ts`).
 
 The fixture plugin (`pkg/testutils/plugin_fixture.go`) is an EPUB metadata enricher that always proposes one result, `Fixture Title` with `abridged: false`, so a seeded plugin plus a seeded EPUB book is enough to drive the Identify dialog end to end (see `identify.spec.ts`). The Identify dialog searches on open; results are buttons named by their title, and the book page's actions menu trigger is labeled `Book actions`. Seed a fresh book per test: once a proposal is applied, its rows are unchanged and hidden by the Changed filter.
 
