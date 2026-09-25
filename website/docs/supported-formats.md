@@ -24,6 +24,10 @@ Native CBZ parsing recognizes these page image formats:
 - WebP
 - GIF
 
+## PDF Bookmarks
+
+Scanning a PDF turns its bookmarks into chapters, flattened into a single list. A bookmark that does not point at a page is skipped. Its nested bookmarks are still imported when they point at pages.
+
 ## KePub Generation
 
 Shisho can generate Kobo-optimized KePub downloads from **EPUB and CBZ only**. M4B and PDF remain in their native formats. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for device delivery options.

@@ -599,6 +599,7 @@ Chapters are synced during file scan in `pkg/worker/scan.go`:
 - After file metadata is saved, chapters from `ParsedMetadata.Chapters` are synced
 - Uses `chapterService.ReplaceChapters()` for atomic replacement
 - Errors are logged as warnings (non-fatal to scan)
+- Sidecar chapters go through `convertSidecarChapters`, which drops any chapter with a negative `start_page` along with its children. Older Scans wrote PDF bookmarks with no page into sidecars as `start_page` -1, and sidecar chapters outrank embedded metadata.
 
 ### Position Fields by File Type
 
@@ -612,7 +613,7 @@ Chapters are synced during file scan in `pkg/worker/scan.go`:
 ### Validation
 
 PUT endpoint validates chapters against file constraints:
-- CBZ/PDF: `start_page` must be < `file.PageCount`
+- CBZ/PDF: `start_page` must be >= 0 (always) and < `file.PageCount` (when known)
 - M4B: `start_timestamp_ms` must be <= `file.AudiobookDurationSeconds * 1000`
 
 ## Key Directories

@@ -3742,20 +3742,24 @@ func filterMetadataFields(
 }
 
 // convertSidecarChapters converts sidecar ChapterMetadata to mediafile ParsedChapter.
+//
+// Chapters with a negative StartPage are dropped along with their subtree,
+// matching the PDF download. Older Scans stored PDF outline items with no
+// destination page as start_page -1 and wrote them to sidecars, and sidecar
+// chapters outrank embedded metadata, so they would otherwise come back.
 func convertSidecarChapters(chapters []sidecar.ChapterMetadata) []mediafile.ParsedChapter {
-	if len(chapters) == 0 {
-		return nil
-	}
-
-	result := make([]mediafile.ParsedChapter, len(chapters))
-	for i, ch := range chapters {
-		result[i] = mediafile.ParsedChapter{
+	var result []mediafile.ParsedChapter
+	for _, ch := range chapters {
+		if ch.StartPage != nil && *ch.StartPage < 0 {
+			continue
+		}
+		result = append(result, mediafile.ParsedChapter{
 			Title:            ch.Title,
 			StartPage:        ch.StartPage,
 			StartTimestampMs: ch.StartTimestampMs,
 			Href:             ch.Href,
 			Children:         convertSidecarChapters(ch.Children),
-		}
+		})
 	}
 	return result
 }

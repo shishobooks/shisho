@@ -53,10 +53,13 @@ func ExtractOutline(path string) ([]OutlineEntry, error) {
 }
 
 // flattenBookmarks recursively walks the bookmark tree and appends entries
-// with valid page destinations to the result slice.
+// with valid page destinations to the result slice. PDFium reports a
+// destination with no page (e.g. /Dest [null 0 0 1]) as a non-nil DestInfo
+// with PageIndex -1, so those are skipped too. Children of a skipped entry
+// are still walked, since they can point at real pages.
 func flattenBookmarks(bookmarks []responses.GetBookmarksBookmark, result *[]OutlineEntry) {
 	for _, bm := range bookmarks {
-		if bm.DestInfo != nil {
+		if bm.DestInfo != nil && bm.DestInfo.PageIndex >= 0 {
 			*result = append(*result, OutlineEntry{
 				Title:     bm.Title,
 				StartPage: bm.DestInfo.PageIndex,

@@ -123,7 +123,7 @@ Each chapter uses the position field for its media format:
 | PDF | `start_page` | Zero-indexed page number |
 | M4B | `start_timestamp_ms` | Milliseconds from the start |
 
-Do not mix position fields within a chapter. Chapters may include nested `children` where the format supports a hierarchy.
+Do not mix position fields within a chapter. Chapters may include nested `children` where the format supports a hierarchy. A scan ignores a chapter with a negative `start_page`, along with its `children`.
 
 ## Priority and Aliases
 

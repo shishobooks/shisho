@@ -97,6 +97,8 @@ PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` AP
 - **Flat output**: nested bookmark trees are recursively flattened into a linear list
 - **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
 - **No DestInfo = skipped**: bookmarks without a page destination are omitted
+- **Negative PageIndex = skipped**: a destination with no page, such as `/Dest [null 0 0 1]`, comes back from PDFium with a non-nil `DestInfo` and `PageIndex` -1. `flattenBookmarks` skips it like a missing `DestInfo` but still walks its children, which can point at real pages. Some document tooling writes these on most of its bookmarks. pdfcpu refuses to read such an outline at all (`unable to extract page number from [null ...]`), so keep outline extraction on PDFium.
+- **Guards elsewhere**: the chapter edit API (`validateChapters` in `pkg/chapters`) rejects a negative `start_page`, and the scanner's sidecar chapter conversion drops negative-page chapters with their subtree, because sidecars written by older Scans still contain them. Migration `20260925000000` deleted the -1 chapters older Scans stored on PDF files.
 
 ### Writing Info Dict Properties
 

@@ -1022,3 +1022,37 @@ func TestPartitionSupplementPDFsLast_DoesNotMutateInput(t *testing.T) {
 
 	assert.Equal(t, original, input, "input slice must not be mutated by partition")
 }
+
+// Sidecars written before PDF outline items with a null destination were
+// skipped still hold those items as chapters with start_page -1. Sidecar
+// chapters outrank embedded metadata, so the conversion drops them (with
+// their subtree, as the PDF download does) instead of reinstating them.
+func TestConvertSidecarChapters_DropsNegativeStartPage(t *testing.T) {
+	t.Parallel()
+
+	int64Ptr := func(v int64) *int64 { return &v }
+	href := "ch1.xhtml"
+
+	got := convertSidecarChapters([]sidecar.ChapterMetadata{
+		{Title: "Cover", StartPage: intPtr(0)},
+		{Title: "Dangling", StartPage: intPtr(-1)},
+		{Title: "Dangling Parent", StartPage: intPtr(-1), Children: []sidecar.ChapterMetadata{
+			{Title: "Orphaned Child", StartPage: intPtr(2)},
+		}},
+		{Title: "Part", StartPage: intPtr(1), Children: []sidecar.ChapterMetadata{
+			{Title: "Dangling Child", StartPage: intPtr(-1)},
+			{Title: "Chapter 1", StartPage: intPtr(3)},
+		}},
+		{Title: "Audio", StartTimestampMs: int64Ptr(1000)},
+		{Title: "EPUB", Href: &href},
+	})
+
+	assert.Equal(t, []mediafile.ParsedChapter{
+		{Title: "Cover", StartPage: intPtr(0)},
+		{Title: "Part", StartPage: intPtr(1), Children: []mediafile.ParsedChapter{
+			{Title: "Chapter 1", StartPage: intPtr(3)},
+		}},
+		{Title: "Audio", StartTimestampMs: int64Ptr(1000)},
+		{Title: "EPUB", Href: &href},
+	}, got)
+}
