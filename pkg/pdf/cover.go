@@ -25,7 +25,24 @@ var (
 	pdfiumErr  error
 )
 
+// InteractivePdfiumTimeout is how long user-facing requests (the reader and
+// the cover-page picker in pkg/pdfpages) wait for the shared pdfium instance.
+// They should fail fast rather than hang. The pool holds a single instance
+// (see initPdfiumPool), so every caller queues behind whoever has it.
+const InteractivePdfiumTimeout = 30 * time.Second
+
+// scanPdfiumTimeout is how long Scan-time work in this package (Parse and
+// RenderPageJPEG) waits for the pdfium instance. Scans parse files in
+// parallel, so a few large PDFs can hold the instance well past the
+// interactive wait. Giving up there would store a File with no cover or
+// chapters, and later Scans skip unchanged Files, so the loss would stick.
+// It is a variable so tests can shorten it.
+var scanPdfiumTimeout = 5 * time.Minute
+
 // initPdfiumPool initializes the go-pdfium WASM pool. Called via sync.Once.
+// The pool stays at one instance on purpose: each WASM instance holds its own
+// PDFium memory, which grows with large documents, and many installs run on
+// small NAS hardware.
 func initPdfiumPool() {
 	pdfiumPool, pdfiumErr = webassembly.Init(webassembly.Config{
 		MinIdle:  0,
@@ -34,7 +51,8 @@ func initPdfiumPool() {
 	})
 }
 
-// extractCover attempts to extract a cover image from a PDF.
+// extractCover attempts to extract a cover image from a PDF. It is part of the
+// Scan path, so Tier 2 waits scanPdfiumTimeout for the pdfium instance.
 // Tier 1: Extract embedded images from page 1 via pdfcpu.
 // Tier 2: Render page 1 to JPEG via go-pdfium WASM.
 func extractCover(path string) ([]byte, string, error) {
@@ -136,13 +154,16 @@ func renderPageCover(path string) ([]byte, string, error) {
 }
 
 // RenderPageJPEG renders a single page of a PDF to JPEG using the shared
-// pdfium WASM pool. pageIdx is 0-indexed.
+// pdfium WASM pool. pageIdx is 0-indexed. Its callers all run during Scans
+// (Parse's cover fallback, and the worker's cover recovery and sidecar or
+// plugin cover pages), so it waits scanPdfiumTimeout for the instance.
+// Interactive page rendering goes through pkg/pdfpages instead.
 func RenderPageJPEG(path string, pageIdx int, dpi int, quality int) ([]byte, string, error) {
 	if pageIdx < 0 {
 		return nil, "", errors.Errorf("page %d out of range", pageIdx)
 	}
 
-	instance, err := PdfiumInstance(30 * time.Second)
+	instance, err := PdfiumInstance(scanPdfiumTimeout)
 	if err != nil {
 		return nil, "", err
 	}

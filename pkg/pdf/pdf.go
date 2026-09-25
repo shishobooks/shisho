@@ -10,6 +10,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -68,6 +69,10 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 
 	xrt := ctx.XRefTable
 
+	// Parse has no context to take a logger from, so it builds its own for
+	// the best-effort warnings below.
+	log := logger.New()
+
 	// Extract title
 	title := strings.TrimSpace(xrt.Title)
 
@@ -111,7 +116,12 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	coverPage := &page0
 	var coverData []byte
 	var coverMime string
-	if cd, cm, err := extractCover(path); err == nil {
+	if cd, cm, err := extractCover(path); err != nil {
+		log.Warn("failed to extract PDF cover, continuing without it", logger.Data{
+			"path":  path,
+			"error": err.Error(),
+		})
+	} else {
 		coverData = cd
 		coverMime = cm
 	}
@@ -131,10 +141,15 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	// Extract outline (bookmarks) as chapters. Best-effort — don't fail Parse.
+	// Extract outline (bookmarks) as chapters. Best-effort: don't fail Parse.
 	var chapters []mediafile.ParsedChapter
 	outlineEntries, outlineErr := ExtractOutline(path)
-	if outlineErr == nil {
+	if outlineErr != nil {
+		log.Warn("failed to extract PDF outline, continuing without chapters", logger.Data{
+			"path":  path,
+			"error": outlineErr.Error(),
+		})
+	} else {
 		for _, entry := range outlineEntries {
 			startPage := entry.StartPage
 			chapters = append(chapters, mediafile.ParsedChapter{

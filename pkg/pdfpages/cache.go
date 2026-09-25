@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/klippa-app/go-pdfium/requests"
 	"github.com/pkg/errors"
@@ -46,7 +45,7 @@ func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath str
 // renderPage renders a single PDF page and caches the result as JPEG.
 // Thread safety: concurrent calls are serialized by the pdfium pool (MaxTotal: 1).
 func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error) {
-	instance, err := pdf.PdfiumInstance(30 * time.Second)
+	instance, err := pdf.PdfiumInstance(pdf.InteractivePdfiumTimeout)
 	if err != nil {
 		return "", "", errors.Wrap(err, "failed to get pdfium instance")
 	}
