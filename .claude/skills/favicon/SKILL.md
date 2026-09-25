@@ -23,15 +23,51 @@ There are no 192/512 PNGs: nothing references them (no PWA manifest). If a manif
 
 ## SVG Source
 
+`public/favicon.svg` is the source. The shelf mark is a 48x48 drawing placed on the 512x512 canvas:
+
 ```svg
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="32" fill="#171717"/>
   <g transform="translate(36, 20) scale(9)">
-    <rect x="4" y="40" width="40" height="4" rx="1" fill="#c4b5fd"/>
-    <rect x="8" y="12" width="7" height="28" rx="1" fill="#c4b5fd"/>
-    <rect x="17" y="8" width="6" height="32" rx="1" fill="#c4b5fd" opacity="0.7"/>
-    <rect x="25" y="16" width="8" height="24" rx="1" fill="#c4b5fd"/>
-    <rect x="35" y="10" width="5" height="30" rx="1" fill="#c4b5fd" opacity="0.7"/>
+<defs>
+  <linearGradient id="shelf-contact" x1="0" x2="0" y1="0" y2="1">
+    <stop offset="0" stop-color="#000" stop-opacity="0" />
+    <stop offset="1" stop-color="#000" stop-opacity="0.28" />
+  </linearGradient>
+  <linearGradient id="shelf-shade" x1="0" x2="0" y1="0" y2="1">
+    <stop offset="0" stop-color="#000" stop-opacity="0" />
+    <stop offset="1" stop-color="#000" stop-opacity="0.3" />
+  </linearGradient>
+</defs>
+<!-- shelf -->
+<rect fill="#c4b5fd" height="4" rx="1" width="40" x="4" y="40" />
+<rect fill="#fff" height="1" opacity="0.28" rx="0.5" width="38" x="5" y="40" />
+<rect fill="url(#shelf-shade)" height="4" rx="1" width="40" x="4" y="40" />
+<!-- books: base, spine highlight, title band, contact shadow -->
+<g>
+  <rect fill="#c4b5fd" height="28" rx="1" width="7" x="8" y="12" />
+  <rect fill="#fff" height="26" opacity="0.28" rx="0.5" width="1" x="8" y="13" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="5" x="9" y="16" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="7" x="8" y="33" />
+</g>
+<g opacity="0.7">
+  <rect fill="#c4b5fd" height="32" rx="1" width="6" x="17" y="8" />
+  <rect fill="#fff" height="30" opacity="0.28" rx="0.5" width="1" x="17" y="9" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="4" x="18" y="12" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="6" x="17" y="33" />
+</g>
+<g>
+  <rect fill="#c4b5fd" height="24" rx="1" width="8" x="25" y="16" />
+  <rect fill="#fff" height="22" opacity="0.28" rx="0.5" width="1" x="25" y="17" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="6" x="26" y="20" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="8" x="25" y="33" />
+</g>
+<g opacity="0.7">
+  <rect fill="#c4b5fd" height="30" rx="1" width="5" x="35" y="10" />
+  <rect fill="#fff" height="28" opacity="0.28" rx="0.5" width="1" x="35" y="11" />
+  <rect fill="#fff" height="1" opacity="0.35" rx="0.5" width="3" x="36" y="14" />
+  <rect fill="url(#shelf-contact)" height="7" rx="1" width="5" x="35" y="33" />
+</g>
   </g>
 </svg>
 ```
@@ -41,6 +77,29 @@ There are no 192/512 PNGs: nothing references them (no PWA manifest). If a manif
 - Icon color: `#c4b5fd` (violet-300)
 - Border radius: `rx="32"` (subtle, not app-icon style)
 - Transform: `translate(36, 20) scale(9)` centers the 48x48 icon
+
+**Mark construction.** Every book is a flat base rect plus three subtle overlays, and the shelf gets a highlight and a shade. The overlays are theme-neutral (white and black at low opacity) so the same construction works wherever the mark is drawn with `currentColor`:
+
+| Layer | Spec |
+|-------|------|
+| Spine highlight | `#fff` at 0.28, 1 unit wide along the left edge, inset 1 unit top and bottom so it stays inside the rounded corners |
+| Title band | `#fff` at 0.35, 1 unit tall, 4 units below the top of the book, inset 1 unit each side |
+| Contact shadow | `url(#shelf-contact)`, a vertical black gradient 0 to 0.28 over the bottom 7 units (y 33 to 40) |
+| Shelf highlight | `#fff` at 0.28, 1 unit tall along the top of the shelf |
+| Shelf shade | `url(#shelf-shade)`, vertical black gradient 0 to 0.3 over the shelf |
+| Dim books | The second and fourth books are wrapped in `<g opacity="0.7">` |
+
+At 16px and 24px the overlays collapse into the silhouette, so the favicon still reads as the plain shelf.
+
+**Keep every copy of the mark in sync.** The same drawing lives in:
+- `public/favicon.svg` (this file, fixed colors)
+- `app/components/library/Logo.tsx` (`currentColor`, gradient ids from `useId` because the logo renders more than once per page)
+- `website/src/components/ShishoLogo.tsx` (same as the app component)
+- `website/static/img/logo-mark.svg` (`currentColor`, fixed ids)
+- `assets/splash.html` and `assets/patreon/cover.html` (fixed colors)
+- `assets/favicon-gen.html` (preview page)
+
+`website/static/img/favicon.ico` is a copy of `public/favicon.ico`; copy it over after regenerating.
 
 ## Generation Process
 
@@ -77,6 +136,7 @@ Process:
 2. **Bundle the ICO with ImageMagick** (preserves alpha; still cwd = repo root):
    ```bash
    magick public/favicon-16.png public/favicon-32.png public/favicon.ico
+   cp public/favicon.ico website/static/img/favicon.ico
    ```
 3. **Verify transparency** before committing:
    ```bash

@@ -220,6 +220,7 @@ website/
 - Geist, Noto Sans, and Noto Sans JP are the configured fonts.
 - Swizzled Docusaurus icons use `lucide-react`, including custom admonition icons.
 - The navbar logo combines the shelf mark, Shisho name, and 司書 superscript.
+- `ShishoLogo.tsx` draws the same shelf mark as the app's `Logo.tsx`; keep both in sync. `static/img/favicon.ico` and `static/img/shisho-social-card.png` are copies produced by the `favicon` and `splash` skills, not hand-edited files.
 - `website/e2e/theme.spec.ts` checks control contrast, mobile drawer background, and the dark-only invariant.
 
 ## Icon and `.gitignore` Gotcha
