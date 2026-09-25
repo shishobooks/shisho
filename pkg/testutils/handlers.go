@@ -405,7 +405,7 @@ func (h *handler) createSeries(c echo.Context) error {
 	}
 
 	// Index the series so search-driven UI (merge combobox, global search)
-	// can find it, matching what the real create handler does.
+	// can find it, matching what the series update handler and scanner do.
 	if err := search.NewService(h.db).IndexSeries(ctx, series); err != nil {
 		return errors.Wrap(err, "failed to index series")
 	}
