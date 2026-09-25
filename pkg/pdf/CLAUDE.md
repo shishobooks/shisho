@@ -87,13 +87,13 @@ Do NOT conditionally set `CoverPage` based on extraction success. The file type 
 
 ### Error Handling
 
-Cover extraction is best-effort. If either tier fails, `Parse()` logs a warning and returns metadata without a cover (does not fail the parse).
+Cover extraction is best-effort. If it fails, `Parse()` logs `failed to extract PDF cover, continuing without it` at warn level with `path` and `error`, and returns metadata without a cover (does not fail the parse).
 
 ## Outline (Bookmark) Extraction
 
 PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` API and converted to `ParsedChapter` entries during `Parse()`.
 
-- **Best-effort**: outline extraction failures are silently ignored (don't fail the parse)
+- **Best-effort**: outline extraction failures don't fail the parse. `Parse()` logs `failed to extract PDF outline, continuing without chapters` at warn level with `path` and `error`, and returns metadata without chapters
 - **Flat output**: nested bookmark trees are recursively flattened into a linear list
 - **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
 - **No DestInfo = skipped**: bookmarks without a page destination are omitted
@@ -133,11 +133,35 @@ type OutlineEntry struct {
 The pdfium WASM pool (`MaxTotal: 1`) is lazily initialized in `cover.go` and shared across:
 - Cover extraction (`renderPageCover`)
 - Outline extraction (`ExtractOutline`)
-- PDF page rendering (`pkg/pdfpages`)
+- Page-cover rendering during Scans (`RenderPageJPEG`, called by `extractPDFPageCover` in `pkg/worker/scan_unified.go`)
+- PDF page rendering for the reader and cover-page picker (`pkg/pdfpages`)
 
 Access via exported functions:
-- `EnsurePdfiumPoolInit()` — idempotent pool initialization
-- `PdfiumInstance(timeout)` — get an instance; caller must `defer instance.Close()`
+- `EnsurePdfiumPoolInit()`: idempotent pool initialization
+- `PdfiumInstance(timeout)`: get an instance; caller must `defer instance.Close()`
+
+### Two Timeouts
+
+Every caller queues for the one instance, and gives up after its timeout. There are two:
+
+| Timeout | Value | Used by |
+|---------|-------|---------|
+| `InteractivePdfiumTimeout` (exported const) | 30s | `pkg/pdfpages`: reader pages, the cover-page picker via `books.ExtractCoverPageToFile`, and plugin identify-apply `cover_page` via `books.PluginPageExtractor` (`applyCoverPage` in `pkg/plugins/handler_persist_metadata.go`) |
+| `scanPdfiumTimeout` (unexported var) | 5m | `Parse` via `extractCover`/`renderPageCover` and `ExtractOutline`; `RenderPageJPEG` (worker cover recovery from a selected page, sidecar and plugin cover pages) |
+
+Scans parse files in parallel, so a few large PDFs can hold the instance past 30 seconds. With the short wait, `Parse` used to store a File with no cover or no chapters, and ordinary Scans skip Files whose size and mtime are unchanged, so the loss stuck until a forced refresh. Scans mostly run in the background, so waiting minutes costs nothing a user notices. Interactive requests keep the short wait so the reader fails fast instead of hanging.
+
+Things to know about the Scan wait:
+- Some HTTP handlers in `pkg/books/handlers.go` run a Scan inside the request: `resyncFile`, `resyncBook`, and `deleteFile` when deleting a file promotes a supplement. Under heavy contention those requests can take minutes. The wait does not follow the request context, so it keeps going after a client disconnect and the work still completes.
+- `Parse` waits separately for the cover render and the outline, so one PDF can wait up to twice the Scan wait. A book resync scans its files one at a time, so its ceiling is the number of PDFs times twice the Scan wait.
+
+New callers must pick the timeout that matches where they run. Do not change one shared default. Everything in `pkg/pdf` that touches the pool uses the Scan wait, so an interactive caller would need a variant that takes a timeout.
+
+Tests shorten the Scan wait through `scanPdfiumTimeout` (see `pool_test.go`). Tests that hold the instance or change package-level state must not call `t.Parallel()`, because the pool, the variable, and the logger output are process-global.
+
+### Why One Instance
+
+The pool stays at `MaxTotal: 1` on purpose. Each WASM instance holds its own PDFium memory, which grows with large documents, and many installs run on small NAS hardware. Only revisit this if the warn logs above show real contention in Scans and the per-instance memory has been measured.
 
 ## Key Functions
 
@@ -145,8 +169,11 @@ Access via exported functions:
 // Parse metadata, cover, and outline from PDF file
 func Parse(path string) (*mediafile.ParsedMetadata, error)
 
-// ExtractOutline extracts bookmarks as a flat list of OutlineEntry
+// ExtractOutline extracts bookmarks as a flat list of OutlineEntry (Scan wait)
 func ExtractOutline(path string) ([]OutlineEntry, error)
+
+// RenderPageJPEG renders one page to JPEG (Scan wait)
+func RenderPageJPEG(path string, pageIdx int, dpi int, quality int) ([]byte, string, error)
 
 // EnsurePdfiumPoolInit initializes the shared pdfium WASM pool
 func EnsurePdfiumPoolInit() error
@@ -160,7 +187,7 @@ func extractCover(path string) ([]byte, string, error)
 // extractEmbeddedCover extracts the largest embedded image from page 1
 func extractEmbeddedCover(path string) ([]byte, string, error)
 
-// renderPageCover renders page 1 to JPEG via go-pdfium WASM
+// renderPageCover renders page 1 to JPEG via go-pdfium WASM (Scan wait)
 func renderPageCover(path string) ([]byte, string, error)
 ```
 
@@ -177,6 +204,7 @@ The `with-image.pdf` fixture embeds a small JPEG image as a DCTDecode XObject on
 - `pkg/pdf/outline.go` - Outline (bookmark) extraction
 - `pkg/pdf/pdf_test.go` - PDF parsing tests with fixture generation
 - `pkg/pdf/outline_test.go` - Outline extraction tests
+- `pkg/pdf/pool_test.go` - Shared pool timeout and warn-log tests (not parallel)
 - `pkg/pdfpages/` - PDF page rendering cache (uses shared pdfium pool)
 - `pkg/mediafile/mediafile.go` - ParsedMetadata type definition
 - `pkg/models/data-source.go` - DataSourcePDFMetadata constant

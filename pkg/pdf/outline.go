@@ -1,8 +1,6 @@
 package pdf
 
 import (
-	"time"
-
 	"github.com/klippa-app/go-pdfium/requests"
 	"github.com/klippa-app/go-pdfium/responses"
 	"github.com/pkg/errors"
@@ -17,8 +15,10 @@ type OutlineEntry struct {
 // ExtractOutline extracts the bookmark/outline tree from a PDF and returns
 // a flat list of entries with their target page numbers.
 // Returns nil (not an error) if the PDF has no bookmarks.
+// It is part of the Scan path, so it waits scanPdfiumTimeout for the pdfium
+// instance.
 func ExtractOutline(path string) ([]OutlineEntry, error) {
-	instance, err := PdfiumInstance(30 * time.Second)
+	instance, err := PdfiumInstance(scanPdfiumTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get pdfium instance")
 	}
