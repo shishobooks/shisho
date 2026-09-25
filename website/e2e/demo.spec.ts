@@ -7,10 +7,7 @@ test("routes evaluators from the homepage to the Public Demo page", async ({
 
   const hero = page.locator(".docs-home__hero");
   const demoButton = hero.getByRole("link", { name: "Try the Demo" });
-  await expect(demoButton).toHaveAttribute(
-    "href",
-    /^\/docs\/(unreleased\/)?demo$/,
-  );
+  await expect(demoButton).toHaveAttribute("href", "/docs/demo");
   await expect(hero.getByRole("link", { name: "Get Started" })).toHaveAttribute(
     "href",
     "/docs/getting-started",

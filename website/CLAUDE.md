@@ -240,7 +240,10 @@ Add matching exceptions before creating another swizzled icon directory, or Git 
 
 `/docs/<id>` serves the latest released snapshot, and `onBrokenLinks: "throw"` fails the build when `website/src/pages/` links to a doc that the snapshot does not contain yet. A page added to `website/docs/` since the last release only exists at `/docs/unreleased/<id>` until `scripts/release.sh` snapshots it.
 
-Do not hardcode `/docs/unreleased/<id>` in a site page, and do not add the page to `versioned_docs/` to satisfy the check. Resolve the path with `useDocPath("<id>")` from `website/src/hooks/useDocPath.ts`, which returns the released path when the snapshot has the doc and the unreleased path otherwise, so the link corrects itself at the next release. Links inside `website/docs/` are unaffected because they resolve within the same version.
+Do not hardcode `/docs/unreleased/<id>` in a site page, and do not add the page to `versioned_docs/` to satisfy the check. Links inside `website/docs/` are unaffected because they resolve within the same version. For a site page link to a new doc, pick one:
+
+- Wait for the next release to snapshot the doc, then hardcode `/docs/<id>`. Prefer this when the link can ship later.
+- Resolve the path at runtime with a small hook built on `useVersions()` and `useLatestVersion()` from `@docusaurus/plugin-content-docs/client`: return `/docs/<id>` when the latest version's docs contain the id and `/docs/unreleased/<id>` otherwise. The link then corrects itself at the release. Add `@docusaurus/plugin-content-docs` to `website/package.json` for the import, and open a follow-up issue to delete the hook after the release. The Public Demo page used this approach; recover that hook with `git show 8510887:website/src/hooks/useDocPath.ts`.
 
 ## Release and Deployment Gotchas
 
