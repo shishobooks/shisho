@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.52] - 2026-09-25
+
+### Features
+- Refine the shelf icon and splash, add Patreon assets (#510)
+
+### Bug Fixes
+- Keep writing PDF keywords with pdfcpu 0.15 (#502)
+
+### Documentation
+- Add the Public Demo page, docs homepage button, and README link (#509)
+- Pin the demo authoring image to 0.0.51 and explain CBZ covers (#505)
+
+### CI/CD
+- Add the Public Demo image, Fly.io config, and deploy workflow (#498)
+
+### Other
+- Bump the minor-and-patch group with 14 updates (#504)
+- Upgrade Go to 1.26.8 everywhere (#501)
+- Bump jsdom from 29.1.1 to 30.1.1 (#452)
+- Bump Node to 24.21.0 everywhere (#499)
+- Bump the minor-and-patch group with 27 updates (#500)
+- Bump vitest from 4.1.10 to 4.1.11 (#470)
+
+
 ## [0.0.51] - 2026-09-24
 
 ### Features
