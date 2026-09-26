@@ -770,6 +770,12 @@ Repositories provide a `repository.json` manifest:
 
 ## API Endpoints
 
+Everything under `/plugins` requires `config:write` except the identify routes (`POST /plugins/search`, `POST /plugins/apply`: `books:write`, via `RegisterIdentifyRoutes`) and the read-only lookups (`GET /plugins/identifier-types`, `GET /plugins/order/:hookType`: `books:read`, via `RegisterLookupRoutes`). Book and file pages call the identifier types lookup for every role and the identify dialog calls the order lookup, so never move them back into `RegisterRoutesWithGroup`.
+
+**Lookups (`books:read`):**
+- `GET /plugins/identifier-types` - Identifier types registered by installed plugins (not filtered by enabled status; rows go away on uninstall)
+- `GET /plugins/order/:hookType` - Get the global order for a hook type
+
 **Installation:**
 - `GET /plugins/installed` - List installed
 - `POST /plugins/installed` - Install
@@ -797,12 +803,11 @@ Repositories provide a `repository.json` manifest:
 - `GET /plugins/available/:scope/:id` - Details
 
 **Ordering:**
-- `GET /plugins/order/:hookType` - Get order
-- `PUT /plugins/order/:hookType` - Set order
+- `PUT /plugins/order/:hookType` - Set order (read it through the lookup above)
 
 ## Frontend Hooks (app/hooks/queries/plugins.ts)
 
-**Queries:** `usePluginsInstalled()`, `usePluginsAvailable()`, `usePluginOrder(hookType)`, `usePluginConfig(scope, id)`, `usePluginRepositories()`
+**Queries:** `usePluginsInstalled()`, `usePluginsAvailable()`, `usePluginOrder(hookType)`, `usePluginIdentifierTypes()`, `usePluginConfig(scope, id)`, `usePluginRepositories()`
 
 **Mutations:** `useInstallPlugin()`, `useUninstallPlugin()`, `useUpdatePlugin()`, `useUpdatePluginVersion()`, `useSetPluginOrder()`, `useSavePluginConfig()`, `useSavePluginFieldSettings()`, `useScanPlugins()`, `useSyncRepository()`, `useAddRepository()`, `useRemoveRepository()`
 

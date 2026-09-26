@@ -265,6 +265,15 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	pluginIdentifyGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	plugins.RegisterIdentifyRoutes(pluginIdentifyGroup, pluginService, pm, enrichDeps)
 
+	// Read-only plugin lookups (identifier types and hook order). Book and file
+	// pages read identifier types for every role and the identify dialog reads
+	// hook order, so they need only books:read. Keep them out of the
+	// config:write management group below.
+	pluginLookupGroup := e.Group("/plugins")
+	pluginLookupGroup.Use(authMiddleware.Authenticate)
+	pluginLookupGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	plugins.RegisterLookupRoutes(pluginLookupGroup, pluginService)
+
 	// Plugins management routes (admin only)
 	pluginsGroup := e.Group("/plugins")
 	pluginsGroup.Use(authMiddleware.Authenticate)

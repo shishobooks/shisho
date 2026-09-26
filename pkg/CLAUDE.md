@@ -32,7 +32,7 @@ This file documents backend patterns and conventions specific to Shisho.
 - Deny `GET /api/books/files/:id/download/original`, `GET /api/books/files/:id/download/kepub`, and `GET /api/jobs/:id/download`.
 - Reject every other method/path with `403`, code `demo_mode`, message `This action is unavailable in the demo.` Admins have no bypass. Unknown write paths are rejected too.
 - Keep generated reader downloads (`/api/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
-- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), either `/api/plugins` group, per-library plugin routes (`/api/libraries/:id/plugins/*`), or test routes (`/api/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
+- Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), any `/api/plugins` group, per-library plugin routes (`/api/libraries/:id/plugins/*`), or test routes (`/api/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
 - Skip `pluginManager.LoadAll` and `wrkr.Start` in `cmd/api/main.go`. Also skip `wrkr.Shutdown`, which waits for goroutines that only `Start` creates. Reader caches and startup migrations still run.
 - `GET /api/auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
 
@@ -293,6 +293,7 @@ if user, ok := c.Get("user").(*models.User); ok {
 4. **User-scoped resources don't need global permissions** - Lists, API keys, settings are user-scoped
 5. **Sharing features require `users:read`** - To share, users must see the user list
 6. **Both frontend and backend checks required** - Backend for security, frontend for UX
+7. **Read-only lookups used on shared pages must not inherit an admin group's permission** - A GET called by pages that every role can open (for example `GET /api/plugins/identifier-types`, rendered on book and file pages, and `GET /api/plugins/order/:hookType`, read by the identify dialog) belongs in its own group with the read permission its consumers hold (`books:read` here). Registering it inside the `config:write` plugin management group returns 403 to editors and viewers, and the frontend fails silently.
 
 #### Permission Check Flow
 
