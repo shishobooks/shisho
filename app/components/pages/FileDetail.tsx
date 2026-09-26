@@ -18,9 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { type File } from "@/types";
+import { ResourceBooks, type File } from "@/types";
 import { getFilename } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
 
@@ -35,6 +36,9 @@ const FileDetail = () => {
     tab?: string;
   }>();
   const navigate = useNavigate();
+  const { canWrite } = useAuth();
+  // File metadata, cover, chapters, and deletion all require Books Write.
+  const canWriteBooks = canWrite(ResourceBooks);
 
   // Derive active tab from URL param, defaulting to "details"
   const activeTab: TabValue = validTabs.includes(tab as TabValue)
@@ -234,7 +238,7 @@ const FileDetail = () => {
                 Cancel
               </Button>
             </>
-          ) : (
+          ) : canWriteBooks ? (
             <>
               <Button
                 onClick={() => {
@@ -260,7 +264,7 @@ const FileDetail = () => {
                 <span className="hidden sm:inline">Delete</span>
               </Button>
             </>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -277,6 +281,7 @@ const FileDetail = () => {
 
         <TabsContent value="chapters">
           <FileChaptersTab
+            canEdit={canWriteBooks}
             file={file}
             isEditing={isEditingChapters}
             onActionStateChange={setChaptersActionState}
@@ -287,7 +292,7 @@ const FileDetail = () => {
       </Tabs>
 
       {/* FileEditDialog for editing file details */}
-      {editingFile && (
+      {canWriteBooks && editingFile && (
         <FileEditDialog
           file={editingFile}
           onOpenChange={(open) => {
@@ -314,14 +319,16 @@ const FileDetail = () => {
       />
 
       {/* Delete file confirmation dialog */}
-      <DeleteConfirmationDialog
-        isPending={deleteFileMutation.isPending}
-        onConfirm={handleDeleteFile}
-        onOpenChange={setShowDeleteDialog}
-        open={showDeleteDialog}
-        title={filename}
-        variant="file"
-      />
+      {canWriteBooks && (
+        <DeleteConfirmationDialog
+          isPending={deleteFileMutation.isPending}
+          onConfirm={handleDeleteFile}
+          onOpenChange={setShowDeleteDialog}
+          open={showDeleteDialog}
+          title={filename}
+          variant="file"
+        />
+      )}
     </LibraryLayout>
   );
 };

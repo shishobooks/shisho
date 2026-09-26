@@ -23,6 +23,7 @@ describe("Login Demo Mode", () => {
       demoMode: true,
       hasLibraryAccess: vi.fn(),
       hasPermission: vi.fn(),
+      canWrite: vi.fn(),
       isAuthenticated: false,
       isLoading: false,
       login: vi.fn(),

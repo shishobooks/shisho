@@ -35,12 +35,14 @@ import {
   DEFAULT_GALLERY_SIZE,
 } from "@/constants/gallerySize";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
+import { useAuth } from "@/hooks/useAuth";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
   AuthorRoleWriter,
   FileTypeCBZ,
+  ResourceBooks,
   type Book,
   type File,
   type GallerySize,
@@ -100,6 +102,10 @@ const BookItem = ({
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
+  const { canWrite } = useAuth();
+  // Rescan, identify, and delete all require Books Write on the backend.
+  // Adding to a list is governed by the list's own permission, so it stays.
+  const canWriteBooks = canWrite(ResourceBooks);
 
   // Find the series number and unit for the specific series context (if provided)
   const seriesEntry = seriesId
@@ -206,41 +212,44 @@ const BookItem = ({
               </Button>
             }
           />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                className="h-7 w-7 bg-black/50 hover:bg-black/70"
-                size="icon"
-                variant="ghost"
+          {canWriteBooks && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label="Book actions"
+                  className="h-7 w-7 bg-black/50 hover:bg-black/70"
+                  size="icon"
+                  variant="ghost"
+                >
+                  <MoreVertical className="h-4 w-4 text-white" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(e) => e.preventDefault()}
               >
-                <MoreVertical className="h-4 w-4 text-white" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <DropdownMenuItem
-                disabled={resyncBookMutation.isPending}
-                onClick={() => setShowRescanDialog(true)}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Rescan book
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowIdentifyDialog(true)}>
-                <Search className="h-4 w-4 mr-2" />
-                Identify book
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setShowDeleteDialog(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem
+                  disabled={resyncBookMutation.isPending}
+                  onClick={() => setShowRescanDialog(true)}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Rescan book
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowIdentifyDialog(true)}>
+                  <Search className="h-4 w-4 mr-2" />
+                  Identify book
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       )}
       <Link
@@ -392,28 +401,32 @@ const BookItem = ({
           Added by {addedByUsername}
         </div>
       )}
-      <RescanDialog
-        entityName={book.title}
-        entityType="book"
-        isPending={resyncBookMutation.isPending}
-        onConfirm={handleRescan}
-        onOpenChange={setShowRescanDialog}
-        open={showRescanDialog}
-      />
-      <DeleteConfirmationDialog
-        files={book.files}
-        isPending={deleteBookMutation.isPending}
-        onConfirm={handleDeleteBook}
-        onOpenChange={setShowDeleteDialog}
-        open={showDeleteDialog}
-        title={book.title}
-        variant="book"
-      />
-      <IdentifyBookDialog
-        book={book}
-        onOpenChange={setShowIdentifyDialog}
-        open={showIdentifyDialog}
-      />
+      {canWriteBooks && (
+        <>
+          <RescanDialog
+            entityName={book.title}
+            entityType="book"
+            isPending={resyncBookMutation.isPending}
+            onConfirm={handleRescan}
+            onOpenChange={setShowRescanDialog}
+            open={showRescanDialog}
+          />
+          <DeleteConfirmationDialog
+            files={book.files}
+            isPending={deleteBookMutation.isPending}
+            onConfirm={handleDeleteBook}
+            onOpenChange={setShowDeleteDialog}
+            open={showDeleteDialog}
+            title={book.title}
+            variant="book"
+          />
+          <IdentifyBookDialog
+            book={book}
+            onOpenChange={setShowIdentifyDialog}
+            open={showIdentifyDialog}
+          />
+        </>
+      )}
     </div>
   );
 };

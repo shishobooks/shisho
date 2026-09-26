@@ -119,6 +119,7 @@ describe("FileChaptersTab - Play Promise handling", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockM4bFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -228,6 +229,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     it("renders all chapters with play buttons", () => {
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -248,6 +250,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -265,6 +268,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -288,6 +292,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -313,6 +318,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       const { rerender } = renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={onEditingChange}
@@ -330,6 +336,7 @@ describe("FileChaptersTab - M4B Playback", () => {
         <QueryClientProvider client={createQueryClient()}>
           <MemoryRouter>
             <FileChaptersTab
+              canEdit
               file={mockM4bFile}
               isEditing={true}
               onEditingChange={onEditingChange}
@@ -347,6 +354,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     it("renders chapters with play buttons in edit mode", async () => {
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={true}
           onEditingChange={vi.fn()}
@@ -366,6 +374,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -399,6 +408,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -407,6 +417,28 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       expect(screen.getByText("No chapters")).toBeInTheDocument();
       expect(screen.getByText("Add Chapter")).toBeInTheDocument();
+    });
+
+    it("hides the add and fetch actions when the user cannot edit", () => {
+      mockUseFileChapters.mockReturnValue({
+        data: [],
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as unknown as ReturnType<typeof useFileChapters>);
+
+      renderWithProviders(
+        <FileChaptersTab
+          canEdit={false}
+          file={mockM4bFile}
+          isEditing={false}
+          onEditingChange={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText("No chapters")).toBeInTheDocument();
+      expect(screen.queryByText("Add Chapter")).not.toBeInTheDocument();
+      expect(screen.queryByText("Fetch from Audible")).not.toBeInTheDocument();
     });
   });
 
@@ -421,6 +453,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -443,6 +476,7 @@ describe("FileChaptersTab - M4B Playback", () => {
 
       renderWithProviders(
         <FileChaptersTab
+          canEdit
           file={mockM4bFile}
           isEditing={false}
           onEditingChange={vi.fn()}
@@ -496,6 +530,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockM4bFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -524,6 +559,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockM4bFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -562,6 +598,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockM4bFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -591,6 +628,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockM4bFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -684,6 +722,7 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockPdfFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -724,6 +763,7 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
 
     renderWithProviders(
       <FileChaptersTab
+        canEdit
         file={mockPdfFile}
         isEditing={true}
         onEditingChange={vi.fn()}
@@ -754,5 +794,76 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
     ) as HTMLInputElement[];
     expect(pageInputsAfter[0].value).toBe("6");
     expect(pageInputsAfter[1].value).toBe("10");
+  });
+});
+
+describe("FileChaptersTab - uncovered pages banner", () => {
+  const mockPdfFile: File = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    book_id: 1,
+    library_id: 1,
+    file_type: FileTypePDF,
+    file_role: "main",
+    filepath: "/test/book.pdf",
+    filesize_bytes: 1000000,
+    page_count: 100,
+    is_preferred_cover: false,
+  };
+
+  beforeEach(() => {
+    mockUseFileChapters.mockReturnValue({
+      data: [
+        {
+          id: 1,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+          file_id: 1,
+          title: "Alpha",
+          sort_order: 0,
+          start_page: 3,
+          children: [],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useFileChapters>);
+  });
+
+  it("offers to add a chapter when the user can edit", async () => {
+    const user = createUser();
+    const onEditingChange = vi.fn();
+    renderWithProviders(
+      <FileChaptersTab
+        canEdit
+        file={mockPdfFile}
+        isEditing={false}
+        onEditingChange={onEditingChange}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /not in any chapter/ }),
+    );
+    expect(onEditingChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows the warning without an action when the user cannot edit", () => {
+    renderWithProviders(
+      <FileChaptersTab
+        canEdit={false}
+        file={mockPdfFile}
+        isEditing={false}
+        onEditingChange={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(/Pages 1-3 not in any chapter/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /not in any chapter/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Click to add chapter")).not.toBeInTheDocument();
   });
 });

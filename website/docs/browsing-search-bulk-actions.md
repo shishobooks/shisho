@@ -52,6 +52,8 @@ The selection toolbar provides these actions:
 
 Merge and delete can have destructive filesystem effects. Read [Managing Books and Files](./managing-books-and-files.md) first.
 
+Merge, delete, and the review actions require Books Write. Users without it still see the selection toolbar for list actions and downloads, but those three actions are hidden. See [Users and Permissions](./users-and-permissions.md#what-a-read-only-role-sees).
+
 ## Bulk Downloads
 
 Select books, click **Download**, and choose from the available **EPUB**, **CBZ**, **M4B**, and **PDF** types. Shisho includes every matching main file, so a book with multiple editions of the same type contributes each edition. Supplements and sidecar files are not included.

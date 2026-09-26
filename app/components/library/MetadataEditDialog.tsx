@@ -17,11 +17,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { markErrorDisplayed } from "@/libraries/api";
+import type { EntityType } from "@/libraries/metadataEntity";
 import { DataSourceManual, type DataSource } from "@/types";
 import { resolveAliases } from "@/utils/aliases";
 import { forPerson, forTitle } from "@/utils/sortname";
 
-export type EntityType = "person" | "series" | "genre" | "tag" | "publisher";
+export type { EntityType };
 
 interface MetadataEditDialogProps {
   open: boolean;

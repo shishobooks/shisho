@@ -36,11 +36,12 @@ import { useBulkSetReview } from "@/hooks/queries/review";
 import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
-import type {
-  CreateListPayload,
-  FileType,
-  Library,
-  ReviewOverride,
+import {
+  ResourceBooks,
+  type CreateListPayload,
+  type FileType,
+  type Library,
+  type ReviewOverride,
 } from "@/types";
 import {
   collectDownloadFiles,
@@ -53,7 +54,10 @@ interface SelectionToolbarProps {
 }
 
 export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
-  const { demoMode } = useAuth();
+  const { demoMode, canWrite } = useAuth();
+  // Merge, delete, and review changes require Books Write. Downloads and
+  // list membership are governed separately and stay available.
+  const canWriteBooks = canWrite(ResourceBooks);
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -380,32 +384,34 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         >
           {addToListContent}
 
-          <div className="border-t p-1">
-            <Button
-              className="w-full justify-start gap-2 font-normal"
-              onClick={() => {
-                setActionsPopoverOpen(false);
-                handleBulkReview("reviewed");
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">Mark reviewed</span>
-            </Button>
-            <Button
-              className="w-full justify-start gap-2 font-normal"
-              onClick={() => {
-                setActionsPopoverOpen(false);
-                handleBulkReview("unreviewed");
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">Mark needs review</span>
-            </Button>
-          </div>
+          {canWriteBooks && (
+            <div className="border-t p-1">
+              <Button
+                className="w-full justify-start gap-2 font-normal"
+                onClick={() => {
+                  setActionsPopoverOpen(false);
+                  handleBulkReview("reviewed");
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">Mark reviewed</span>
+              </Button>
+              <Button
+                className="w-full justify-start gap-2 font-normal"
+                onClick={() => {
+                  setActionsPopoverOpen(false);
+                  handleBulkReview("unreviewed");
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">Mark needs review</span>
+              </Button>
+            </div>
+          )}
 
           {!demoMode && (
             <div className="border-t">
@@ -416,35 +422,37 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             </div>
           )}
 
-          <div className="border-t p-1">
-            {selectedBookIds.length >= 2 && library && (
+          {canWriteBooks && (
+            <div className="border-t p-1">
+              {selectedBookIds.length >= 2 && library && (
+                <Button
+                  className="w-full justify-start gap-2 font-normal"
+                  onClick={() => {
+                    setActionsPopoverOpen(false);
+                    setShowMergeDialog(true);
+                  }}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">Merge</span>
+                </Button>
+              )}
+
               <Button
-                className="w-full justify-start gap-2 font-normal"
+                className="w-full justify-start gap-2 font-normal text-destructive hover:text-destructive"
                 onClick={() => {
                   setActionsPopoverOpen(false);
-                  setShowMergeDialog(true);
+                  setShowDeleteDialog(true);
                 }}
                 size="sm"
                 variant="ghost"
               >
-                <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">Merge</span>
+                <Trash2 className="h-4 w-4 shrink-0" />
+                <span className="truncate">Delete</span>
               </Button>
-            )}
-
-            <Button
-              className="w-full justify-start gap-2 font-normal text-destructive hover:text-destructive"
-              onClick={() => {
-                setActionsPopoverOpen(false);
-                setShowDeleteDialog(true);
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <Trash2 className="h-4 w-4 shrink-0" />
-              <span className="truncate">Delete</span>
-            </Button>
-          </div>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
 
@@ -487,7 +495,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           </Popover>
         )}
 
-        {selectedBookIds.length >= 2 && library && (
+        {canWriteBooks && selectedBookIds.length >= 2 && library && (
           <Button
             onClick={() => setShowMergeDialog(true)}
             size="sm"
@@ -498,49 +506,53 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           </Button>
         )}
 
-        <Button
-          onClick={() => setShowDeleteDialog(true)}
-          size="sm"
-          variant="destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </Button>
+        {canWriteBooks && (
+          <Button
+            onClick={() => setShowDeleteDialog(true)}
+            size="sm"
+            variant="destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </Button>
+        )}
 
-        <Popover onOpenChange={setMorePopoverOpen} open={morePopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="default">
-              <MoreHorizontal className="h-4 w-4" />
-              More
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="center" className="w-56 p-1" side="top">
-            <Button
-              className="w-full justify-start gap-2 font-normal"
-              onClick={() => {
-                setMorePopoverOpen(false);
-                handleBulkReview("reviewed");
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">Mark reviewed</span>
-            </Button>
-            <Button
-              className="w-full justify-start gap-2 font-normal"
-              onClick={() => {
-                setMorePopoverOpen(false);
-                handleBulkReview("unreviewed");
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">Mark needs review</span>
-            </Button>
-          </PopoverContent>
-        </Popover>
+        {canWriteBooks && (
+          <Popover onOpenChange={setMorePopoverOpen} open={morePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="default">
+                <MoreHorizontal className="h-4 w-4" />
+                More
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="center" className="w-56 p-1" side="top">
+              <Button
+                className="w-full justify-start gap-2 font-normal"
+                onClick={() => {
+                  setMorePopoverOpen(false);
+                  handleBulkReview("reviewed");
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <CheckCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">Mark reviewed</span>
+              </Button>
+              <Button
+                className="w-full justify-start gap-2 font-normal"
+                onClick={() => {
+                  setMorePopoverOpen(false);
+                  handleBulkReview("unreviewed");
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">Mark needs review</span>
+              </Button>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
 
       <Button onClick={clearSelection} size="sm" variant="ghost">
@@ -556,7 +568,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         <X className="h-4 w-4" />
       </Button>
 
-      {showMergeDialog && library && (
+      {canWriteBooks && showMergeDialog && library && (
         <MergeBooksDialog
           bookIds={selectedBookIds}
           library={library}
@@ -576,18 +588,20 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         open={createDialogOpen}
       />
 
-      <DeleteConfirmationDialog
-        books={allSelectedBooksQuery.data?.items?.map((b) => ({
-          id: b.id,
-          title: b.title,
-          files: b.files,
-        }))}
-        isPending={deleteBooksMutation.isPending}
-        onConfirm={handleDeleteBooks}
-        onOpenChange={setShowDeleteDialog}
-        open={showDeleteDialog}
-        variant="books"
-      />
+      {canWriteBooks && (
+        <DeleteConfirmationDialog
+          books={allSelectedBooksQuery.data?.items?.map((b) => ({
+            id: b.id,
+            title: b.title,
+            files: b.files,
+          }))}
+          isPending={deleteBooksMutation.isPending}
+          onConfirm={handleDeleteBooks}
+          onOpenChange={setShowDeleteDialog}
+          open={showDeleteDialog}
+          variant="books"
+        />
+      )}
     </div>
   );
 };

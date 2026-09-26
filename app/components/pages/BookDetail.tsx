@@ -69,11 +69,13 @@ import {
 import { useLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import {
   DownloadFormatKepub,
   FileTypeCBZ,
+  ResourceBooks,
   type File,
   type ResyncMode,
 } from "@/types";
@@ -151,6 +153,9 @@ const FileRow = ({
   isDeletingFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
+  const { canWrite } = useAuth();
+  // Edit, rescan, move, and delete all require Books Write on the backend.
+  const canWriteBooks = canWrite(ResourceBooks);
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
 
   return (
@@ -301,49 +306,56 @@ const FileRow = ({
             })()}
 
             {/* Actions dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button disabled={isResyncing} size="sm" variant="ghost">
-                      <MoreVertical className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>More actions</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent
-                align="end"
-                onCloseAutoFocus={(e) => e.preventDefault()}
-              >
-                <DropdownMenuItem onClick={onEdit}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled={isResyncing} onClick={onRescan}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Rescan file
-                </DropdownMenuItem>
-                {onMoveFile && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onMoveFile}>
-                      <ArrowRightLeft className="h-4 w-4 mr-2" />
-                      Move to another book
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  disabled={isDeletingFile}
-                  onClick={onDeleteFile}
+            {canWriteBooks && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        aria-label="File actions"
+                        disabled={isResyncing}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <MoreVertical className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>More actions</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent
+                  align="end"
+                  onCloseAutoFocus={(e) => e.preventDefault()}
                 >
-                  <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                  Delete file
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem onClick={onEdit}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={isResyncing} onClick={onRescan}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Rescan file
+                  </DropdownMenuItem>
+                  {onMoveFile && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={onMoveFile}>
+                        <ArrowRightLeft className="h-4 w-4 mr-2" />
+                        Move to another book
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    disabled={isDeletingFile}
+                    onClick={onDeleteFile}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                    Delete file
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -421,40 +433,47 @@ const FileRow = ({
           })()}
 
           {/* Actions dropdown */}
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button disabled={isResyncing} size="sm" variant="ghost">
-                    <MoreVertical className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>More actions</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <DropdownMenuItem onClick={onEdit}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={isResyncing} onClick={onRescan}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Rescan file
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                disabled={isDeletingFile}
-                onClick={onDeleteFile}
+          {canWriteBooks && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      aria-label="File actions"
+                      disabled={isResyncing}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>More actions</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(e) => e.preventDefault()}
               >
-                <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                Delete file
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={isResyncing} onClick={onRescan}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Rescan file
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  disabled={isDeletingFile}
+                  onClick={onDeleteFile}
+                >
+                  <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                  Delete file
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Filename row - only show when name differs from filename */}
@@ -600,6 +619,11 @@ const BookDetail = () => {
   const navigate = useNavigate();
   const bookQuery = useBook(id);
   const libraryQuery = useLibrary(libraryId);
+  const { canWrite } = useAuth();
+  // Metadata, covers, chapters, review state, identify, rescan, merge, move,
+  // and delete all require Books Write. List membership is governed by the
+  // list's own permission and stays available to everyone.
+  const canWriteBooks = canWrite(ResourceBooks);
 
   usePageTitle(bookQuery.data?.title ?? "Book Details");
   const resyncFileMutation = useResyncFile();
@@ -966,6 +990,7 @@ const BookDetail = () => {
               onChange={(override) =>
                 setBookReviewMutation.mutate({ bookId: book.id, override })
               }
+              readOnly={!canWriteBooks}
             />
           )}
         </div>
@@ -983,76 +1008,88 @@ const BookDetail = () => {
                 invisible absolute span that anchors the popover to the same
                 rectangle as the dropdown's "..." button.
               */}
-              <div className="relative shrink-0">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      aria-label="Book actions"
-                      size="sm"
-                      variant="outline"
+              {canWriteBooks ? (
+                <div className="relative shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        aria-label="Book actions"
+                        size="sm"
+                        variant="outline"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
                     >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                  >
-                    <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        setTimeout(() => setAddToListOpen(true), 0);
-                      }}
-                    >
-                      <List className="h-4 w-4 mr-2" />
-                      Add to list
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      disabled={resyncBookMutation.isPending}
-                      onClick={() => setShowBookRescanDialog(true)}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Rescan book
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setShowIdentifyDialog(true)}
-                    >
-                      <Search className="h-4 w-4 mr-2" />
-                      Identify book
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setShowMergeIntoDialog(true)}
-                    >
-                      <GitMerge className="h-4 w-4 mr-2" />
-                      Merge into another book
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => setShowDeleteDialog(true)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                      Delete book
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setTimeout(() => setAddToListOpen(true), 0);
+                        }}
+                      >
+                        <List className="h-4 w-4 mr-2" />
+                        Add to list
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={resyncBookMutation.isPending}
+                        onClick={() => setShowBookRescanDialog(true)}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Rescan book
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setShowIdentifyDialog(true)}
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        Identify book
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setShowMergeIntoDialog(true)}
+                      >
+                        <GitMerge className="h-4 w-4 mr-2" />
+                        Merge into another book
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setShowDeleteDialog(true)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                        Delete book
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <AddToListPopover
+                    bookId={book.id}
+                    onOpenChange={setAddToListOpen}
+                    open={addToListOpen}
+                    trigger={
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 pointer-events-none"
+                      />
+                    }
+                  />
+                </div>
+              ) : (
                 <AddToListPopover
                   bookId={book.id}
-                  onOpenChange={setAddToListOpen}
-                  open={addToListOpen}
                   trigger={
-                    <span
-                      aria-hidden
-                      className="absolute inset-0 pointer-events-none"
-                    />
+                    <Button className="shrink-0" size="sm" variant="outline">
+                      <List className="h-4 w-4 mr-2" />
+                      Add to list
+                    </Button>
                   }
                 />
-              </div>
+              )}
             </div>
             {book.sort_title && book.sort_title !== book.title && (
               <p className="text-sm text-muted-foreground italic break-words">
@@ -1236,7 +1273,7 @@ const BookDetail = () => {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold">Files ({mainFiles.length})</h3>
-                {mainFiles.length > 1 && (
+                {canWriteBooks && mainFiles.length > 1 && (
                   <Button
                     onClick={() => {
                       if (isFileSelectMode) {
@@ -1263,7 +1300,7 @@ const BookDetail = () => {
                     isExpanded={expandedFileIds.has(file.id)}
                     isFileSelected={selectedFileIds.has(file.id)}
                     isResyncing={resyncingFileId === file.id}
-                    isSelectMode={isFileSelectMode}
+                    isSelectMode={canWriteBooks && isFileSelectMode}
                     key={file.id}
                     libraryDownloadPreference={
                       libraryQuery.data?.download_format_preference
@@ -1336,60 +1373,64 @@ const BookDetail = () => {
         </div>
       </div>
 
-      <BookEditDialog
-        book={book}
-        onOpenChange={setEditDialogOpen}
-        open={editDialogOpen}
-      />
-
-      <IdentifyBookDialog
-        book={book}
-        onOpenChange={setShowIdentifyDialog}
-        open={showIdentifyDialog}
-      />
-
-      <RescanDialog
-        entityName={book.title}
-        entityType="book"
-        isPending={resyncBookMutation.isPending}
-        onConfirm={handleRescanBook}
-        onOpenChange={setShowBookRescanDialog}
-        open={showBookRescanDialog}
-      />
-
-      {(() => {
-        const rescanFile = rescanFileId
-          ? book.files.find((f) => f.id === rescanFileId)
-          : null;
-        return (
-          <RescanDialog
-            entityName={
-              rescanFile
-                ? rescanFile.name || getFilename(rescanFile.filepath)
-                : ""
-            }
-            entityType="file"
-            isPending={resyncFileMutation.isPending}
-            onConfirm={(mode) => {
-              if (rescanFileId) handleRescanFile(rescanFileId, mode);
-            }}
-            onOpenChange={(open) => {
-              if (!open) setRescanFileId(null);
-            }}
-            open={rescanFileId !== null}
+      {canWriteBooks && (
+        <>
+          <BookEditDialog
+            book={book}
+            onOpenChange={setEditDialogOpen}
+            open={editDialogOpen}
           />
-        );
-      })()}
 
-      {editingFile && (
-        <FileEditDialog
-          book={book}
-          file={editingFile}
-          onOpenChange={(open) => {
-            if (!open) setEditingFile(null);
-          }}
-          open={!!editingFile}
-        />
+          <IdentifyBookDialog
+            book={book}
+            onOpenChange={setShowIdentifyDialog}
+            open={showIdentifyDialog}
+          />
+
+          <RescanDialog
+            entityName={book.title}
+            entityType="book"
+            isPending={resyncBookMutation.isPending}
+            onConfirm={handleRescanBook}
+            onOpenChange={setShowBookRescanDialog}
+            open={showBookRescanDialog}
+          />
+
+          {(() => {
+            const rescanFile = rescanFileId
+              ? book.files.find((f) => f.id === rescanFileId)
+              : null;
+            return (
+              <RescanDialog
+                entityName={
+                  rescanFile
+                    ? rescanFile.name || getFilename(rescanFile.filepath)
+                    : ""
+                }
+                entityType="file"
+                isPending={resyncFileMutation.isPending}
+                onConfirm={(mode) => {
+                  if (rescanFileId) handleRescanFile(rescanFileId, mode);
+                }}
+                onOpenChange={(open) => {
+                  if (!open) setRescanFileId(null);
+                }}
+                open={rescanFileId !== null}
+              />
+            );
+          })()}
+
+          {editingFile && (
+            <FileEditDialog
+              book={book}
+              file={editingFile}
+              onOpenChange={(open) => {
+                if (!open) setEditingFile(null);
+              }}
+              open={!!editingFile}
+            />
+          )}
+        </>
       )}
 
       {/* Download Error Dialog */}
@@ -1426,7 +1467,7 @@ const BookDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {libraryQuery.data && (
+      {canWriteBooks && libraryQuery.data && (
         <MergeIntoDialog
           library={libraryQuery.data}
           onOpenChange={setShowMergeIntoDialog}
@@ -1442,7 +1483,7 @@ const BookDetail = () => {
       )}
 
       {/* File selection action bar */}
-      {selectedFileIds.size > 0 && (
+      {canWriteBooks && selectedFileIds.size > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-md shadow-lg p-3 flex items-center gap-3 z-50">
           <span className="text-sm text-muted-foreground">
             {selectedFileIds.size} file
@@ -1470,7 +1511,7 @@ const BookDetail = () => {
       )}
 
       {/* Move files dialog - handles both selection mode and single file move */}
-      {libraryQuery.data && (
+      {canWriteBooks && libraryQuery.data && (
         <MoveFilesDialog
           library={libraryQuery.data}
           onOpenChange={(open) => {
@@ -1502,17 +1543,19 @@ const BookDetail = () => {
         />
       )}
 
-      <DeleteConfirmationDialog
-        files={book.files}
-        isPending={deleteBookMutation.isPending}
-        onConfirm={handleDeleteBook}
-        onOpenChange={setShowDeleteDialog}
-        open={showDeleteDialog}
-        title={book.title}
-        variant="book"
-      />
+      {canWriteBooks && (
+        <DeleteConfirmationDialog
+          files={book.files}
+          isPending={deleteBookMutation.isPending}
+          onConfirm={handleDeleteBook}
+          onOpenChange={setShowDeleteDialog}
+          open={showDeleteDialog}
+          title={book.title}
+          variant="book"
+        />
+      )}
 
-      {fileToDelete && (
+      {canWriteBooks && fileToDelete && (
         <DeleteConfirmationDialog
           isPending={deleteFileMutation.isPending}
           onConfirm={handleDeleteFile}

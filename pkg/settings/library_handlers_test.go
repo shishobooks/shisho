@@ -106,8 +106,8 @@ func TestGetLibrarySettings_Forbidden(t *testing.T) {
 	require.Error(t, err)
 
 	// errcodes.Forbidden produces an *errcodes.Error with Code "forbidden"
-	// and Message "<action> is not allowed." — the literal string "Forbidden"
-	// does not appear in err.Error(), so we assert against the Code field.
+	// and the caller's message. The literal string "Forbidden" does not
+	// appear in err.Error(), so we assert against the Code field.
 	var codeErr *errcodes.Error
 	require.ErrorAs(t, err, &codeErr)
 	assert.Equal(t, "forbidden", codeErr.Code)

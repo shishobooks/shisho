@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileRoleMain, FileRoleSupplement, type Book } from "@/types";
 
@@ -17,6 +17,18 @@ vi.mock("@/hooks/queries/books", () => ({
   useDeleteBook: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResyncBook: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
+
+let canWriteBooks = true;
+
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    canWrite: (resource: string) => resource === "books" && canWriteBooks,
+  }),
+}));
+
+beforeEach(() => {
+  canWriteBooks = true;
+});
 
 function wrap(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -242,5 +254,24 @@ describe("BookItem — Needs review badge", () => {
     const book = makeBook({ files: [] });
     render(wrap(<BookItem book={book} libraryId="1" />));
     expect(screen.queryByText("Needs review")).not.toBeInTheDocument();
+  });
+});
+
+describe("BookItem write controls", () => {
+  it("shows the actions menu and Add to list for a user with Books Write", () => {
+    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+    expect(screen.getByTitle("Add to list")).toBeInTheDocument();
+    expect(screen.getByLabelText("Book actions")).toBeInTheDocument();
+  });
+
+  it("hides the actions menu but keeps Add to list for a read-only user", () => {
+    canWriteBooks = false;
+    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+    expect(screen.getByTitle("Add to list")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Test Book/ })).toHaveAttribute(
+      "href",
+      "/libraries/1/books/1",
+    );
   });
 });

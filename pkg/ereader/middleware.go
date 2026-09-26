@@ -44,7 +44,7 @@ func (m *Middleware) APIKeyAuth(requiredPermission string) echo.MiddlewareFunc {
 			}
 
 			if !apiKey.HasPermission(requiredPermission) {
-				return errcodes.Forbidden("API key lacks required permission")
+				return errcodes.Forbidden("This API key lacks the required permission.")
 			}
 
 			// Touch last accessed (fire and forget)

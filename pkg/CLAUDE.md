@@ -271,6 +271,8 @@ if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
 }
 ```
 
+`errcodes.Forbidden` (like every other `errcodes` constructor) uses its argument verbatim as the user-facing message, so pass a full sentence. It used to append " is not allowed.", which produced toasts like "You don't have permission to read jobs is not allowed."
+
 #### Handler-Level Library Access Checks
 
 When library ID comes from fetched data (not URL param):

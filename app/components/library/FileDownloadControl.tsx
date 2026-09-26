@@ -46,7 +46,12 @@ const FileDownloadControl = ({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button onClick={onDownloadOriginal} size="sm" variant="ghost">
+          <Button
+            aria-label="Download"
+            onClick={onDownloadOriginal}
+            size="sm"
+            variant="ghost"
+          >
             <Download className="h-3 w-3" />
           </Button>
         </TooltipTrigger>
@@ -96,7 +101,12 @@ const FileDownloadControl = ({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button onClick={onDownload} size="sm" variant="ghost">
+        <Button
+          aria-label="Download"
+          onClick={onDownload}
+          size="sm"
+          variant="ghost"
+        >
           <Download className="h-3 w-3" />
         </Button>
       </TooltipTrigger>
