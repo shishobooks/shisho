@@ -202,11 +202,30 @@ func (svc *Service) UpdateTag(ctx context.Context, tag *models.Tag, opts UpdateT
 	return nil
 }
 
-// DeleteTag deletes a tag and all book associations.
+// DeleteTag deletes a tag and all book associations. Every book that carried
+// the tag gets tag_source = manual first, whatever the prior source was and
+// even when other tags remain, the same state the Edit form leaves after
+// removing it. The delete is a deliberate user action, so an ordinary Scan
+// must not bring the tag back from a sidecar or the file, while Refresh all
+// metadata and Reset to file metadata still may (ADR 0006). Only this
+// service path is supported.
 func (svc *Service) DeleteTag(ctx context.Context, tagID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Stamp the owners before the join rows that identify them are gone.
+		_, err := tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("tag_source = ?", models.DataSourceManual).
+			Where("b.id IN (?)", tx.NewSelect().
+				Model((*models.BookTag)(nil)).
+				Column("bt.book_id").
+				Where("bt.tag_id = ?", tagID)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete book_tags associations (cascade should handle this, but be explicit)
-		_, err := tx.NewDelete().
+		_, err = tx.NewDelete().
 			Model((*models.BookTag)(nil)).
 			Where("tag_id = ?", tagID).
 			Exec(ctx)

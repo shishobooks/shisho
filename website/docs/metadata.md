@@ -30,8 +30,6 @@ Genres and tags categorize books. Genres often originate in file metadata, while
 
 Publishers belong to files, so different editions can have different publishers. Publishers can be arranged in a manually curated parent and child hierarchy for imprints and related organizations.
 
-The **Delete** button appears only when no file uses the publisher or any publisher below it in the hierarchy. If files still use a publisher when it is deleted, for example because a scan added one after the page loaded, Shisho removes it from those files and records each emptied **Publisher** field as a manual edit. A normal scan then leaves the field empty, even when a plugin or the file's embedded metadata still names that publisher, so the deleted publisher does not come back. **Refresh all metadata** and **Reset to file metadata** can fill the field again from current sources. See [Normal Scans, Refresh, and Reset](#normal-scans-refresh-and-reset). So can the automatic rescan that [library monitoring](./configuration.md#library-monitor) runs when a file's contents change on disk, because it refreshes that file's metadata. A child of the deleted publisher keeps its files and moves to the top of the hierarchy. To move files to another publisher instead of emptying the field, [merge](#aliases-and-resource-merges) the publishers.
-
 ## Identifiers
 
 Identifiers belong to files. A file can have one value for each identifier type, including ISBN-10, ISBN-13, ASIN, UUID, Goodreads, Google, and types added by plugins. Shisho normalizes common formatting, such as ISBN hyphens and ASIN letter case, for reliable matching.
@@ -43,6 +41,12 @@ During a scan, identifiers from metadata enrichers and identifiers embedded in t
 People, series, genres, tags, and publishers can have aliases. Name lookups use aliases to resolve variants to one canonical resource. Renaming a resource can preserve its old name as an alias.
 
 Merging these resources moves their relationships to the target, adds the source name and aliases to the target, and removes the source resource. This is different from [merging books](./managing-books-and-files.md#merging-books), which keeps the target book metadata and moves source files without combining source book metadata.
+
+## Deleting Resources
+
+The **Delete** button on a person, series, genre, tag, or publisher page appears only when nothing uses that resource. A person must have no authored books and no narrated files. A series, genre, or tag must have no books. A publisher must have no files, including files of any publisher below it in the hierarchy. To take a resource that is still in use out of your library, [merge](#aliases-and-resource-merges) it into another one instead.
+
+If books or files still use a resource when it is deleted, for example because a scan added it after the page loaded, Shisho removes it from them and records each affected field as a manual edit. The affected fields are **Authors**, **Series**, **Genres**, and **Tags** on books, and **Narrators** and **Publisher** on files. This applies even when other entries remain in the field, and those entries are kept. A normal scan then leaves the field alone, even when a sidecar, a plugin, or the file's embedded metadata still names the deleted resource, so it does not come back. **Refresh all metadata** and **Reset to file metadata** can fill the field again from current sources. See [Normal Scans, Refresh, and Reset](#normal-scans-refresh-and-reset). So can the automatic rescan that [library monitoring](./configuration.md#library-monitor) runs when a file's contents change on disk, because it refreshes that file's metadata. A child of a deleted publisher keeps its files and moves to the top of the hierarchy.
 
 ## Editing and Identify
 

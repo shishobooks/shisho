@@ -202,11 +202,30 @@ func (svc *Service) UpdateGenre(ctx context.Context, genre *models.Genre, opts U
 	return nil
 }
 
-// DeleteGenre deletes a genre and all book associations.
+// DeleteGenre deletes a genre and all book associations. Every book that
+// carried the genre gets genre_source = manual first, whatever the prior
+// source was and even when other genres remain, the same state the Edit form
+// leaves after removing it. The delete is a deliberate user action, so an
+// ordinary Scan must not bring the genre back from a sidecar or the file,
+// while Refresh all metadata and Reset to file metadata still may (ADR 0006).
+// Only this service path is supported.
 func (svc *Service) DeleteGenre(ctx context.Context, genreID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Stamp the owners before the join rows that identify them are gone.
+		_, err := tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("genre_source = ?", models.DataSourceManual).
+			Where("b.id IN (?)", tx.NewSelect().
+				Model((*models.BookGenre)(nil)).
+				Column("bg.book_id").
+				Where("bg.genre_id = ?", genreID)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete book_genres associations (cascade should handle this, but be explicit)
-		_, err := tx.NewDelete().
+		_, err = tx.NewDelete().
 			Model((*models.BookGenre)(nil)).
 			Where("genre_id = ?", genreID).
 			Exec(ctx)

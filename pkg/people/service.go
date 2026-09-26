@@ -218,11 +218,43 @@ func (svc *Service) UpdatePerson(ctx context.Context, person *models.Person, opt
 	return nil
 }
 
-// DeletePerson deletes a person and all their associations.
+// DeletePerson deletes a person and all their associations. Every book the
+// person authored gets author_source = manual and every file the person
+// narrated gets narrator_source = manual first, whatever the prior source was
+// and even when other people remain, the same state the Edit form leaves
+// after removing them. The delete is a deliberate user action, so an
+// ordinary Scan must not bring the person back from a sidecar or the file,
+// while Refresh all metadata and Reset to file metadata still may
+// (ADR 0006). Only this service path is supported.
 func (svc *Service) DeletePerson(ctx context.Context, personID int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// Stamp the owners before the join rows that identify them are gone.
+		_, err := tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("author_source = ?", models.DataSourceManual).
+			Where("b.id IN (?)", tx.NewSelect().
+				Model((*models.Author)(nil)).
+				Column("a.book_id").
+				Where("a.person_id = ?", personID)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = tx.NewUpdate().
+			Model((*models.File)(nil)).
+			Set("narrator_source = ?", models.DataSourceManual).
+			Where("f.id IN (?)", tx.NewSelect().
+				Model((*models.Narrator)(nil)).
+				Column("n.file_id").
+				Where("n.person_id = ?", personID)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Delete authors associations
-		_, err := tx.NewDelete().
+		_, err = tx.NewDelete().
 			Model((*models.Author)(nil)).
 			Where("person_id = ?", personID).
 			Exec(ctx)
