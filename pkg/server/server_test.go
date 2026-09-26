@@ -166,6 +166,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /e/:shortCode",
 				"GET /kobo/:apiKey/all/v1/library/sync",
 				"GET /api/plugins/installed",
+				"GET /api/plugins/identifier-types",
+				"GET /api/plugins/order/:hookType",
 				"POST /api/plugins/search",
 				"POST /api/plugins/apply",
 				"GET /api/libraries/:id/plugins/order/:hookType",

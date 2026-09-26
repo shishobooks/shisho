@@ -38,7 +38,6 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 		}
 	}
 
-	g.GET("/identifier-types", h.listIdentifierTypes)
 	g.GET("/installed", h.listInstalled)
 	g.POST("/installed", h.install)
 	g.POST("/scan", h.scan)
@@ -51,7 +50,6 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 	g.GET("/installed/:scope/:id/manifest", h.getManifest)
 	g.POST("/installed/:scope/:id/reload", h.reload)
 	g.POST("/installed/:scope/:id/update", h.updateVersion)
-	g.GET("/order/:hookType", h.getOrder)
 	g.PUT("/order/:hookType", h.setOrder)
 
 	g.GET("/repositories", h.listRepositories)
@@ -61,6 +59,18 @@ func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, 
 
 	g.GET("/available", h.listAvailable)
 	g.GET("/available/:scope/:id", h.retrieveAvailable)
+}
+
+// RegisterLookupRoutes registers read-only plugin lookups: identifier types,
+// which book and file pages render for every role, and hook order, which the
+// identify dialog reads. The server mounts them on a group that requires
+// books:read; the management routes that change the same data stay on
+// config:write.
+func RegisterLookupRoutes(g *echo.Group, service *Service) {
+	h := &handler{service: service}
+
+	g.GET("/identifier-types", h.listIdentifierTypes)
+	g.GET("/order/:hookType", h.getOrder)
 }
 
 // RegisterIdentifyRoutes registers plugin search/apply routes that require books:write permission.
