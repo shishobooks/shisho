@@ -225,7 +225,8 @@ export function ReviewPanel({
   let tooltipText: string;
   if (isAuto) {
     tooltipText =
-      "Reviewed state is determined automatically from the required fields configured on the Review Criteria settings page. Fill in all required fields and this will flip to reviewed; remove one and it flips back. Toggle manually to override.";
+      "Reviewed state is determined automatically from the required fields configured on the Review Criteria settings page. Fill in all required fields and this will flip to reviewed; remove one and it flips back.";
+    if (!readOnly) tooltipText += " Toggle manually to override.";
   } else if (allOverrideReviewed && mostRecentDate) {
     tooltipText = `Manually marked reviewed on ${formatDate(mostRecentDate)}`;
   } else if (allOverrideUnreviewed && mostRecentDate) {
