@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -33,23 +34,15 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check if a scan job is already running or pending.
-	if params.Type == models.JobTypeScan {
-		hasActive, err := h.jobService.HasActiveJob(ctx, models.JobTypeScan, params.LibraryID)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		if hasActive {
-			return errcodes.Conflict("A scan job is already running or pending.")
-		}
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
 	}
 
-	// Validate bulk download jobs: require books:read permission and non-empty file_ids.
+	// A bulk download packages files the user could already download one at a
+	// time, so it needs Books Read and library access instead of Jobs
+	// permissions. Every other job type needs Jobs Read and Jobs Write.
 	if params.Type == models.JobTypeBulkDownload {
-		user, ok := c.Get("user").(*models.User)
-		if !ok {
-			return errcodes.Unauthorized("User not found in context")
-		}
 		if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
 			return errcodes.Forbidden("Bulk download requires the books:read permission.")
 		}
@@ -66,13 +59,40 @@ func (h *handler) create(c echo.Context) error {
 		if len(bulkData.FileIDs) == 0 {
 			return errcodes.BadRequest("No file IDs provided for bulk download")
 		}
+		if err := h.checkFileLibraryAccess(ctx, user, bulkData.FileIDs); err != nil {
+			return err
+		}
+		// Store only the validated input. Result fields are the worker's to
+		// set, and a bulk download never belongs to one library.
+		params.Data = &models.JobBulkDownloadData{
+			FileIDs:            bulkData.FileIDs,
+			EstimatedSizeBytes: bulkData.EstimatedSizeBytes,
+		}
+		params.LibraryID = nil
+	} else if !user.HasPermission(models.ResourceJobs, models.OperationRead) ||
+		!user.HasPermission(models.ResourceJobs, models.OperationWrite) {
+		// Other job types keep the jobs:read plus jobs:write requirement the
+		// jobs group and route used to enforce together.
+		return errcodes.Forbidden("Creating this job requires the jobs:read and jobs:write permissions.")
+	}
+
+	// Check if a scan job is already running or pending.
+	if params.Type == models.JobTypeScan {
+		hasActive, err := h.jobService.HasActiveJob(ctx, models.JobTypeScan, params.LibraryID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if hasActive {
+			return errcodes.Conflict("A scan job is already running or pending.")
+		}
 	}
 
 	job := &models.Job{
-		Type:       params.Type,
-		Status:     models.JobStatusPending,
-		DataParsed: params.Data,
-		LibraryID:  params.LibraryID,
+		Type:            params.Type,
+		Status:          models.JobStatusPending,
+		DataParsed:      params.Data,
+		LibraryID:       params.LibraryID,
+		CreatedByUserID: &user.ID,
 	}
 
 	err := h.jobService.CreateJob(ctx, job)
@@ -96,6 +116,11 @@ func (h *handler) create(c echo.Context) error {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("User not found in context")
+	}
+
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return errcodes.NotFound("Job")
@@ -106,6 +131,11 @@ func (h *handler) retrieve(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Answer like a missing job so IDs of other users' jobs cannot be probed.
+	if !canReadJob(user, job) {
+		return errcodes.NotFound("Job")
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, job))
@@ -160,6 +190,11 @@ func (h *handler) download(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Answer like a missing job so IDs of other users' jobs cannot be probed.
+	if !canReadJob(user, job) {
+		return errcodes.NotFound("Job")
+	}
+
 	if job.Type != models.JobTypeBulkDownload {
 		return errcodes.BadRequest("Job is not a bulk download")
 	}
@@ -177,17 +212,9 @@ func (h *handler) download(c echo.Context) error {
 		return errcodes.BadRequest("Job has no download data")
 	}
 
-	// Verify the user has library access for the files in this download.
-	// Query the DB directly to avoid an import cycle (jobs cannot import books).
-	for _, fileID := range data.FileIDs {
-		var file models.File
-		err := h.db.NewSelect().Model(&file).Column("library_id").Where("id = ?", fileID).Scan(ctx)
-		if err != nil {
-			continue // File may have been deleted since job was created
-		}
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("This download includes libraries you don't have access to.")
-		}
+	// Library access may have been revoked since the job was created.
+	if err := h.checkFileLibraryAccess(ctx, user, data.FileIDs); err != nil {
+		return err
 	}
 
 	zipPath := h.downloadCache.BulkZipPath(data.FingerprintHash)
@@ -200,4 +227,47 @@ func (h *handler) download(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 
 	return c.File(zipPath)
+}
+
+// canReadJob reports whether the user may read a job. Jobs Read grants every
+// job. Without it, a user may read only a bulk download they created.
+func canReadJob(user *models.User, job *models.Job) bool {
+	if user.HasPermission(models.ResourceJobs, models.OperationRead) {
+		return true
+	}
+	return job.Type == models.JobTypeBulkDownload &&
+		job.CreatedByUserID != nil &&
+		*job.CreatedByUserID == user.ID
+}
+
+// fileLibraryAccessChunkSize keeps each IN clause well below SQLite's bound
+// parameter limit.
+const fileLibraryAccessChunkSize = 500
+
+// checkFileLibraryAccess rejects the request when any of the files belongs to
+// a library the user cannot access. Missing files are skipped because the
+// worker skips them too and a file may be deleted after the job is created.
+// It queries files directly to avoid an import cycle (jobs cannot import books).
+func (h *handler) checkFileLibraryAccess(ctx context.Context, user *models.User, fileIDs []int) error {
+	if user.HasAllLibraryAccess() {
+		return nil
+	}
+	for start := 0; start < len(fileIDs); start += fileLibraryAccessChunkSize {
+		end := min(start+fileLibraryAccessChunkSize, len(fileIDs))
+		var libraryIDs []int
+		err := h.db.NewSelect().
+			Table("files").
+			ColumnExpr("DISTINCT library_id").
+			Where("id IN (?)", bun.List(fileIDs[start:end])).
+			Scan(ctx, &libraryIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		for _, libraryID := range libraryIDs {
+			if !user.HasLibraryAccess(libraryID) {
+				return errcodes.Forbidden("This download includes libraries you don't have access to.")
+			}
+		}
+	}
+	return nil
 }

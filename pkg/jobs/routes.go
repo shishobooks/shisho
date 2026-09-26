@@ -20,8 +20,11 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Mid
 		downloadCache: dlCache,
 	}
 
-	g.GET("", h.list)
+	// The group only authenticates. Retrieve, download, and create check Jobs
+	// Read or Jobs Write in the handler so a user with Books Read can create,
+	// poll, and download their own bulk download (see canReadJob).
+	g.GET("", h.list, authMiddleware.RequirePermission(models.ResourceJobs, models.OperationRead))
 	g.GET("/:id", h.retrieve)
 	g.GET("/:id/download", h.download)
-	g.POST("", h.create, authMiddleware.RequirePermission(models.ResourceJobs, models.OperationWrite))
+	g.POST("", h.create)
 }

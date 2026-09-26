@@ -192,10 +192,10 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 
 	// Jobs routes
 	jobsGroup := e.Group("/jobs")
+	// Jobs permissions are per route: bulk download creators need only Books Read.
 	jobsGroup.Use(authMiddleware.Authenticate)
-	jobsGroup.Use(authMiddleware.RequirePermission(models.ResourceJobs, models.OperationRead))
 	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker, dlCache)
-	joblogs.RegisterRoutes(jobsGroup, db)
+	joblogs.RegisterRoutes(jobsGroup, db, authMiddleware)
 
 	// People routes
 	peopleGroup := e.Group("/people")

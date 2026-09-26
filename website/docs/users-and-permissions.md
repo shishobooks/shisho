@@ -37,7 +37,8 @@ Some library data is edited under a broader resource than its name suggests:
 - Genres, tags, and publishers are edited with Books Write, along with book and file metadata, covers, chapters, review state, Identify, rescans, merges, file moves, and deletion.
 - Series are edited with Series Write.
 - People (authors and narrators) are edited with People Write.
-- Library rescans and bulk downloads create jobs, so they require Jobs Write.
+- Library rescans create jobs, so they require Jobs Read and Jobs Write. Viewing jobs and their logs requires Jobs Read.
+- Bulk downloads also create jobs, but they need Books Read and access to the files' libraries instead of Jobs permissions. See [Bulk Download Permissions](./browsing-search-bulk-actions.md#bulk-download-permissions).
 
 ## What a Read-Only Role Sees
 
