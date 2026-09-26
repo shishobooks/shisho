@@ -1056,3 +1056,54 @@ func TestConvertSidecarChapters_DropsNegativeStartPage(t *testing.T) {
 		{Title: "EPUB", Href: &href},
 	}, got)
 }
+
+// Plugin file parsers can return chapters with a negative startPage.
+// The scan drops them, with their subtree, before storing chapters, using the
+// same filter as sidecar chapters. The count covers every removed chapter,
+// descendants included, and the input tree is left untouched.
+func TestDropNegativeStartPageChapters(t *testing.T) {
+	t.Parallel()
+
+	int64Ptr := func(v int64) *int64 { return &v }
+	href := "ch1.xhtml"
+
+	input := []mediafile.ParsedChapter{
+		{Title: "Cover", StartPage: intPtr(0)},
+		{Title: "Dangling", StartPage: intPtr(-1)},
+		{Title: "Dangling Parent", StartPage: intPtr(-5), Children: []mediafile.ParsedChapter{
+			{Title: "Orphaned Child", StartPage: intPtr(2)},
+		}},
+		{Title: "Part", StartPage: intPtr(1), Children: []mediafile.ParsedChapter{
+			{Title: "Dangling Child", StartPage: intPtr(-1)},
+			{Title: "Chapter 1", StartPage: intPtr(3)},
+		}},
+		{Title: "Audio", StartTimestampMs: int64Ptr(1000)},
+		{Title: "EPUB", Href: &href},
+	}
+
+	got, dropped := dropNegativeStartPageChapters(input)
+
+	assert.Equal(t, []mediafile.ParsedChapter{
+		{Title: "Cover", StartPage: intPtr(0)},
+		{Title: "Part", StartPage: intPtr(1), Children: []mediafile.ParsedChapter{
+			{Title: "Chapter 1", StartPage: intPtr(3)},
+		}},
+		{Title: "Audio", StartTimestampMs: int64Ptr(1000)},
+		{Title: "EPUB", Href: &href},
+	}, got)
+	assert.Equal(t, 4, dropped, "Dangling, Dangling Parent, Orphaned Child, and Dangling Child")
+
+	require.Len(t, input, 6, "input must not be mutated")
+	require.Len(t, input[3].Children, 2, "input children must not be mutated")
+}
+
+func TestDropNegativeStartPageChapters_AllDropped(t *testing.T) {
+	t.Parallel()
+
+	got, dropped := dropNegativeStartPageChapters([]mediafile.ParsedChapter{
+		{Title: "Dangling", StartPage: intPtr(-1)},
+	})
+
+	assert.Empty(t, got)
+	assert.Equal(t, 1, dropped)
+}

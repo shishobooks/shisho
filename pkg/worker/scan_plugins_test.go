@@ -1179,6 +1179,95 @@ func TestScanWithPluginFileParser_AllSourcesSet(t *testing.T) {
 	assert.Nil(t, file.CoverSource, "CoverSource should be nil when no cover data provided")
 }
 
+// TestScanWithPluginFileParser_DropsNegativeStartPageChapters verifies that
+// chapters a plugin returns with a negative startPage are dropped on scan,
+// together with their children, while valid siblings are stored. A negative
+// page renders as "Page 0", is skipped by downloads, and makes the chapter
+// editor reject every save on the file.
+func TestScanWithPluginFileParser_DropsNegativeStartPageChapters(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "negative-chapters",
+  "name": "Negative Chapters",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Returns chapters with negative start pages",
+      "types": ["negchap"]
+    }
+  }
+}`
+
+	mainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return {
+          title: "Negative Chapters",
+          chapters: [
+            {title: "Cover", startPage: 0},
+            {title: "Dangling", startPage: -1},
+            {title: "Dangling Parent", startPage: -5, children: [
+              {title: "Orphaned Child", startPage: 2}
+            ]},
+            {title: "Part", startPage: 1, children: [
+              {title: "Dangling Child", startPage: -1},
+              {title: "Chapter 1", startPage: 3}
+            ]}
+          ]
+        };
+      }
+    }
+  };
+})();`
+
+	installTestPlugin(t, tc, pluginDir, "negative-chapters", manifest, mainJS)
+
+	err := tc.worker.pluginManager.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Negative Chapters")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(bookDir, "test.negchap"), []byte("negchap content"), 0644)
+	require.NoError(t, err)
+
+	err = tc.runScan()
+	require.NoError(t, err)
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	chapterList := tc.listChapters(files[0].ID)
+	require.Len(t, chapterList, 2, "only the non-negative top-level chapters should be stored")
+
+	assert.Equal(t, "Cover", chapterList[0].Title)
+	require.NotNil(t, chapterList[0].StartPage)
+	assert.Equal(t, 0, *chapterList[0].StartPage)
+	assert.Empty(t, chapterList[0].Children)
+
+	assert.Equal(t, "Part", chapterList[1].Title)
+	require.NotNil(t, chapterList[1].StartPage)
+	assert.Equal(t, 1, *chapterList[1].StartPage)
+	require.Len(t, chapterList[1].Children, 1, "the negative child should be dropped")
+	assert.Equal(t, "Chapter 1", chapterList[1].Children[0].Title)
+	require.NotNil(t, chapterList[1].Children[0].StartPage)
+	assert.Equal(t, 3, *chapterList[1].Children[0].StartPage)
+
+	file, err := tc.bookService.RetrieveFileWithRelations(tc.ctx, files[0].ID)
+	require.NoError(t, err)
+	require.NotNil(t, file.ChapterSource)
+	assert.Equal(t, "plugin:test/negative-chapters", *file.ChapterSource)
+}
+
 // TestScanWithPluginMetadataEnricher_AllSourcesSet verifies that when a metadata
 // enricher provides all possible fields, every corresponding source field is set
 // to the enricher's plugin identity.

@@ -379,6 +379,8 @@ fileParser: {
 
 **Go invocation:** `Manager.RunFileParser(ctx, rt, filePath, fileType) → *mediafile.ParsedMetadata`
 
+**Chapter `startPage` sign is not checked here.** `parseChapter` in `hooks.go` converts whatever number the plugin returns, so file parser chapters can carry a negative `startPage`. (Enricher search results never read `chapters`.) Chapter policy stays out of `pkg/plugins`: the scan (`dropNegativeStartPageChapters` in `pkg/worker/scan_unified.go`) drops negative-page chapters and their children from every source before storing them. Do not add a sign check to the SDK types; this is a host-side guard.
+
 ### metadataEnricher (1 min timeout)
 
 Searches external sources for metadata. No file access beyond plugin dir. Search results carry all metadata directly -- there is no separate `enrich()` hook.

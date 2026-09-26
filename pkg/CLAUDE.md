@@ -595,11 +595,10 @@ func (svc *Service) DeleteChaptersForFile(ctx, fileID) error
 
 ### Worker Integration
 
-Chapters are synced during file scan in `pkg/worker/scan.go`:
+Chapters are synced during file scan in `pkg/worker/scan_unified.go` (`scanFileCore`):
 - After file metadata is saved, chapters from `ParsedMetadata.Chapters` are synced
-- Uses `chapterService.ReplaceChapters()` for atomic replacement
-- Errors are logged as warnings (non-fatal to scan)
-- Sidecar chapters go through `convertSidecarChapters`, which drops any chapter with a negative `start_page` along with its children. Older Scans wrote PDF bookmarks with no page into sidecars as `start_page` -1, and sidecar chapters outrank embedded metadata.
+- Uses `chapterService.ReplaceChapters()` for atomic replacement; a failure fails the file's scan
+- **Negative start pages are dropped on scan, whatever the source.** Parsed chapters (built-in parsers and plugin file parsers) and sidecar chapters both go through `dropNegativeStartPageChapters` before `ReplaceChapters`. It drops any chapter with a negative `start_page` along with its children, and the parsed-metadata path warn-logs the file path, chapter source, dropped count, and `stored` (whether the remaining chapters were applied or lost on priority). Sidecar chapters reach it through `convertSidecarChapters`. Older Scans wrote PDF bookmarks with no page into sidecars as `start_page` -1, and plugin file parsers can return any negative `startPage`. Enricher search results do not carry chapters (`parseSearchResponse` never reads them). A stored negative page shows as "Page 0", is skipped by downloads, and makes `validateChapters` reject every chapter save on the file. If every chapter is dropped, the file's existing chapters are left alone (`ShouldUpdateChapters` never applies an empty list).
 
 ### Position Fields by File Type
 

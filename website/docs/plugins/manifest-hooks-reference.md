@@ -435,7 +435,7 @@ All properties are optional unless stated by a nested type.
 | `bitrateBps` | `number` | Audio bitrate in bits per second. |
 | `pageCount` | `number` | Page count. |
 | `identifiers` | `ParsedIdentifier[]` | Each entry requires string `type` and `value`. Standard identifier values are canonicalized when stored. |
-| `chapters` | `ParsedChapter[]` | Each chapter requires `title`; positions use `startPage`, `startTimestampMs`, or `href`, with optional nested `children`. |
+| `chapters` | `ParsedChapter[]` | Each chapter requires `title`; positions use `startPage`, `startTimestampMs`, or `href`, with optional nested `children`. `startPage` is zero-based. Shisho drops a chapter with a negative `startPage`, along with its children, when it stores chapters during a scan. |
 | `confidence` | `number` | Enricher match score from `0` to `1`. |
 
 Known author roles include `writer`, `penciller`, `inker`, `colorist`, `letterer`, `cover_artist`, `editor`, and `translator`. Omitting a role creates a generic author association.
