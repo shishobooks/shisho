@@ -753,10 +753,11 @@ const BookDetail = () => {
         });
         const contentType = errorResponse.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
+          // The API nests the message: { error: { code, message } }.
           const error = await errorResponse.json();
           setDownloadError({
             fileId,
-            message: error.message || "Failed to generate file",
+            message: error.error?.message || "Failed to generate file",
           });
         } else {
           setDownloadError({

@@ -145,19 +145,17 @@ interface UploadFileCoverVariables {
 export const useUploadFileCover = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<File, Error, UploadFileCoverVariables>({
+  return useMutation<File, ShishoAPIError, UploadFileCoverVariables>({
     mutationFn: async ({ id, file }) => {
       const formData = new FormData();
       formData.append("cover", file);
+      // Raw fetch because API.request JSON-encodes the body; checkStatus still
+      // maps error responses (including a proxy's HTML 413) to ShishoAPIError.
       const response = await fetch(`/api/books/files/${id}/cover`, {
         method: "POST",
         body: formData,
       });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || "Failed to upload cover");
-      }
-      return response.json();
+      return API.checkStatus<File>(response);
     },
     onSuccess: () => {
       // Invalidate book queries to refresh file/cover data
