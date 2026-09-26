@@ -251,6 +251,13 @@ func (svc *Service) UpdateSeries(ctx context.Context, series *models.Series, opt
 // run in a transaction so a concurrent insert into book_series cannot land
 // between them — that row would be CASCADE-deleted but its book_id would
 // be missing from the returned set.
+//
+// Every member book gets series_source = manual before the delete, whatever
+// the prior source was and even when it stays in other series, the same
+// state the Edit form leaves after removing the membership. The delete is a
+// deliberate user action, so an ordinary Scan must not bring the series back
+// from a sidecar or the file, while Refresh all metadata and Reset to file
+// metadata still may (ADR 0006). Only this service path is supported.
 func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, error) {
 	var affectedBookIDs []int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
@@ -259,6 +266,18 @@ func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, erro
 			ColumnExpr("DISTINCT bs.book_id").
 			Where("bs.series_id = ?", seriesID).
 			Scan(ctx, &affectedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("series_source = ?", models.DataSourceManual).
+			Where("b.id IN (?)", tx.NewSelect().
+				Model((*models.BookSeries)(nil)).
+				Column("bs.book_id").
+				Where("bs.series_id = ?", seriesID)).
+			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
