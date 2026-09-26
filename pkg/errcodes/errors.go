@@ -36,12 +36,13 @@ func (err *Error) Is(target error) bool {
 		te.Code == err.Code
 }
 
-// Forbidden returns a 403 error with a message indicating the action is
-// forbidden.
-func Forbidden(action string) error {
+// Forbidden returns a 403 error with the given message. Like the other
+// constructors it uses the message verbatim, so callers pass a full sentence
+// such as "You don't have permission to write jobs".
+func Forbidden(msg string) error {
 	return &Error{
 		http.StatusForbidden,
-		action + " is not allowed.",
+		msg,
 		"forbidden",
 	}
 }

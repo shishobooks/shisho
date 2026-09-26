@@ -395,3 +395,28 @@ func TestMiddlewareBasicAuth_RejectsWhenMustChangePassword(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Contains(t, rec.Header().Get("WWW-Authenticate"), "Basic")
 }
+
+func TestRequirePermission_Message(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/jobs", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user", &models.User{
+		Role: &models.Role{Name: models.RoleViewer},
+	})
+
+	m := &Middleware{}
+	handler := m.RequirePermission(models.ResourceJobs, models.OperationWrite)(
+		func(echo.Context) error { return nil },
+	)
+
+	err := handler(c)
+	require.Error(t, err)
+
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusForbidden, codeErr.HTTPCode)
+	assert.Equal(t, "You don't have permission to write jobs", codeErr.Message)
+}

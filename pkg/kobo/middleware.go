@@ -47,7 +47,7 @@ func (m *Middleware) APIKeyAuth() echo.MiddlewareFunc {
 			}
 
 			if !apiKey.HasPermission(apikeys.PermissionKoboSync) {
-				return errcodes.Forbidden("Kobo sync access")
+				return errcodes.Forbidden("This API key does not allow Kobo sync access.")
 			}
 
 			// Touch last accessed (fire and forget)
