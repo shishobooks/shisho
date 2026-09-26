@@ -69,7 +69,9 @@ The source files in the library are not replaced by these generated copies. Shis
 
 ### Bulk Download Permissions
 
-Current backend routing requires all three permissions: `jobs:read`, `jobs:write`, and `books:read`. With the default roles, only **Admin** has the required jobs permissions. Bulk download is therefore Admin-only unless you define a custom role with this combination.
+Bulk download requires Books Read and access to the library of every selected file. The built-in **admin**, **editor**, and **viewer** roles all have Books Read, so users with any of them can create bulk downloads. If any selected file is in a library the user cannot access, Shisho rejects the whole request and does not start the job.
+
+Jobs permissions are not needed for a bulk download. The user who started it can follow its progress and download the ZIP. Other users can see that job only with Jobs Read, and downloading it also needs Books Read and access to its libraries. See [Users and Permissions](./users-and-permissions.md) for roles and library access.
 
 ### Bulk Download Cache
 

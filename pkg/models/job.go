@@ -38,6 +38,10 @@ type Job struct {
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
 	LibraryID  *int        `json:"library_id,omitempty"`
+	// CreatedByUserID is the user who requested the job through POST /api/jobs.
+	// It is nil for jobs enqueued any other way, such as by library saves,
+	// review settings, the scheduler, or the worker.
+	CreatedByUserID *int `json:"created_by_user_id,omitempty"`
 }
 
 func (job *Job) UnmarshalData() error {

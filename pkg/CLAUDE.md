@@ -222,7 +222,7 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 | `people` | Author/narrator management | Create/update/delete/merge people |
 | `series` | Series management | Update/delete/merge series |
 | `users` | User administration | Create users, manage roles, reset passwords |
-| `jobs` | Background jobs | Trigger scans, view job status |
+| `jobs` | Background jobs | Trigger scans, view job status. Not needed for `bulk_download` (see below) |
 | `config` | Application config | View app configuration |
 
 #### Permission Operations
@@ -294,6 +294,7 @@ if user, ok := c.Get("user").(*models.User); ok {
 5. **Sharing features require `users:read`** - To share, users must see the user list
 6. **Both frontend and backend checks required** - Backend for security, frontend for UX
 7. **Read-only lookups used on shared pages must not inherit an admin group's permission** - A GET called by pages that every role can open (for example `GET /api/plugins/identifier-types`, rendered on book and file pages, and `GET /api/plugins/order/:hookType`, read by the identify dialog) belongs in its own group with the read permission its consumers hold (`books:read` here). Registering it inside the `config:write` plugin management group returns 403 to editors and viewers, and the frontend fails silently.
+8. **Bulk download does not need Jobs permissions** - The `/api/jobs` group only authenticates. `GET /api/jobs` and `GET /api/jobs/:id/logs` require `jobs:read` per route. `POST /api/jobs` requires `jobs:read` and `jobs:write` in the handler, except `bulk_download`, which requires `books:read` plus library access to every existing requested file and stores only `file_ids` and `estimated_size_bytes` with no `library_id`. `GET /api/jobs/:id` and `/:id/download` allow `jobs:read` or the job's creator (`jobs.created_by_user_id`) for a `bulk_download` job (`canReadJob`), and return 404 otherwise so job IDs cannot be probed. Do not re-add a group-level `jobs:read` middleware; it breaks bulk download for editors and viewers.
 
 #### Permission Check Flow
 
