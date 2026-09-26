@@ -2050,11 +2050,27 @@ func (w *Worker) scanFileCore(
 		existingChapterSource := file.ChapterSource
 		chapterSource := metadata.SourceForField("chapters")
 
-		if chapters.ShouldUpdateChapters(metadata.Chapters, chapterSource, existingChapterSource, forceRefresh) {
-			logInfo("updating chapters", logger.Data{"chapter_count": len(metadata.Chapters)})
+		// Plugin file parsers can return chapters with a negative start
+		// page. Drop them here, as the sidecar path does, so every
+		// source is covered and no invalid chapter reaches the database.
+		parsedChapters, droppedChapters := dropNegativeStartPageChapters(metadata.Chapters)
+		shouldUpdate := chapters.ShouldUpdateChapters(parsedChapters, chapterSource, existingChapterSource, forceRefresh)
+		if droppedChapters > 0 {
+			// "stored" tells whether the remaining chapters replaced the
+			// file's chapters, or lost on priority (or were all dropped).
+			logWarn("dropping chapters with a negative start page", logger.Data{
+				"path":           file.Filepath,
+				"chapter_source": chapterSource,
+				"dropped_count":  droppedChapters,
+				"stored":         shouldUpdate,
+			})
+		}
+
+		if shouldUpdate {
+			logInfo("updating chapters", logger.Data{"chapter_count": len(parsedChapters)})
 
 			// Replace all chapters with new ones from metadata
-			if err := w.chapterService.ReplaceChapters(ctx, file.ID, metadata.Chapters); err != nil {
+			if err := w.chapterService.ReplaceChapters(ctx, file.ID, parsedChapters); err != nil {
 				return nil, errors.Wrap(err, "failed to replace chapters")
 			}
 
@@ -3743,25 +3759,64 @@ func filterMetadataFields(
 
 // convertSidecarChapters converts sidecar ChapterMetadata to mediafile ParsedChapter.
 //
-// Chapters with a negative StartPage are dropped along with their subtree,
-// matching the PDF download. Older Scans stored PDF outline items with no
-// destination page as start_page -1 and wrote them to sidecars, and sidecar
-// chapters outrank embedded metadata, so they would otherwise come back.
+// Chapters with a negative StartPage are dropped along with their subtree by
+// dropNegativeStartPageChapters, the same filter the scan applies to parsed
+// metadata. Older Scans stored PDF outline items with no destination page as
+// start_page -1 and wrote them to sidecars, and sidecar chapters outrank
+// embedded metadata, so they would otherwise come back.
 func convertSidecarChapters(chapters []sidecar.ChapterMetadata) []mediafile.ParsedChapter {
+	kept, _ := dropNegativeStartPageChapters(sidecarChaptersToParsed(chapters))
+	return kept
+}
+
+// sidecarChaptersToParsed converts a sidecar chapter tree field by field,
+// without filtering.
+func sidecarChaptersToParsed(chapters []sidecar.ChapterMetadata) []mediafile.ParsedChapter {
 	var result []mediafile.ParsedChapter
 	for _, ch := range chapters {
-		if ch.StartPage != nil && *ch.StartPage < 0 {
-			continue
-		}
 		result = append(result, mediafile.ParsedChapter{
 			Title:            ch.Title,
 			StartPage:        ch.StartPage,
 			StartTimestampMs: ch.StartTimestampMs,
 			Href:             ch.Href,
-			Children:         convertSidecarChapters(ch.Children),
+			Children:         sidecarChaptersToParsed(ch.Children),
 		})
 	}
 	return result
+}
+
+// dropNegativeStartPageChapters returns a copy of the chapter tree without
+// any chapter whose StartPage is negative. A dropped chapter takes its whole
+// subtree with it, matching the PDF download. The count covers every removed
+// chapter, descendants included. The input is not modified.
+//
+// A negative page is never valid: the UI shows it as "Page 0", downloads skip
+// it, and the chapter editor rejects every save on the file until it is
+// removed. The scan applies this to chapters from every source (built-in
+// parsers, plugin file parsers, and sidecars) before storing them.
+func dropNegativeStartPageChapters(chapters []mediafile.ParsedChapter) ([]mediafile.ParsedChapter, int) {
+	var kept []mediafile.ParsedChapter
+	dropped := 0
+	for _, ch := range chapters {
+		if ch.StartPage != nil && *ch.StartPage < 0 {
+			dropped += 1 + countChapters(ch.Children)
+			continue
+		}
+		children, childDropped := dropNegativeStartPageChapters(ch.Children)
+		dropped += childDropped
+		ch.Children = children
+		kept = append(kept, ch)
+	}
+	return kept, dropped
+}
+
+// countChapters counts every chapter in a tree, descendants included.
+func countChapters(chapters []mediafile.ParsedChapter) int {
+	n := len(chapters)
+	for _, ch := range chapters {
+		n += countChapters(ch.Children)
+	}
+	return n
 }
 
 // Scan implements the books.Scanner interface.

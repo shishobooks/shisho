@@ -18,7 +18,10 @@ export interface ParsedIdentifier {
 export interface ParsedChapter {
   /** Chapter title. */
   title: string;
-  /** CBZ: 0-indexed page number. */
+  /**
+   * CBZ and PDF: 0-indexed page number. A chapter with a negative value is
+   * dropped, along with its children, when Shisho stores chapters on scan.
+   */
   startPage?: number;
   /** M4B: milliseconds from start. */
   startTimestampMs?: number;
