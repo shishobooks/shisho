@@ -268,6 +268,64 @@ describe("BookDetailBody in Share Link context", () => {
     expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
   });
 
+  it("omits the sort title and the created and updated times", () => {
+    renderBody({
+      book: { ...book, sort_title: "Book, Test" },
+      shareLink,
+    });
+
+    expect(screen.queryByText(/Sort title/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Created")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+  });
+
+  it("omits file identifiers and the file URL but keeps reader-facing details", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          {
+            ...epub,
+            language: "en",
+            url: "https://example.com/book",
+            identifiers: [{ id: 1, type: "uuid", value: "urn:uuid:1234" }],
+          } as File,
+        ],
+      },
+      shareLink,
+    });
+
+    await user.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByText("Tor Books")).toBeInTheDocument();
+    expect(screen.getByText("Released")).toBeInTheDocument();
+    expect(screen.getByText("Language")).toBeInTheDocument();
+    expect(screen.queryByText("urn:uuid:1234")).not.toBeInTheDocument();
+    expect(screen.queryByText("URL")).not.toBeInTheDocument();
+  });
+
+  it("offers no expander when a file's only details are hidden ones", () => {
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          {
+            ...epub,
+            publisher: undefined,
+            release_date: undefined,
+            url: "https://example.com/book",
+            identifiers: [{ id: 1, type: "uuid", value: "urn:uuid:1234" }],
+          } as File,
+        ],
+      },
+      shareLink,
+    });
+
+    expect(
+      screen.queryByRole("button", { expanded: false }),
+    ).not.toBeInTheDocument();
+  });
+
   it("falls back to the file type when the payload blanks the path", () => {
     renderBody({ shareLink });
 

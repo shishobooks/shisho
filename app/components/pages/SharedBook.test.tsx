@@ -1,13 +1,13 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { queryClient } from "@/libraries/query-client";
 import type { SharedBookResponse } from "@/types";
 
-import SharedBook from "./SharedBook";
+import { shareRoutes } from "./shareRoutes";
 
 // A recipient has no session, so every permission check fails.
 vi.mock("@/hooks/useAuth", () => ({
@@ -63,14 +63,13 @@ const shared = {
 
 const fetchMock = vi.fn();
 
-const renderPage = () =>
+// Renders the real share routes, as mounted in app/router.tsx.
+const renderPage = (path = `/share/${TOKEN}`) =>
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/share/${TOKEN}`]}>
-        <Routes>
-          <Route element={<SharedBook />} path="/share/:token" />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider
+        router={createMemoryRouter(shareRoutes, { initialEntries: [path] })}
+      />
     </QueryClientProvider>,
   );
 
@@ -101,8 +100,9 @@ describe("SharedBook", () => {
     expect(
       await screen.findByRole("heading", { name: "The Shared Book" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Shared by")).toHaveTextContent("Shared by sharer");
-    expect(screen.getByText(/This link expires/)).toBeInTheDocument();
+    const notice = screen.getByRole("complementary", { name: "Share details" });
+    expect(notice).toHaveTextContent("sharer shared this book with you.");
+    expect(notice).toHaveTextContent(/This link expires .*2026/);
     for (const text of [
       "A Subtitle",
       "What the book is about.",
@@ -144,12 +144,29 @@ describe("SharedBook", () => {
     expect(urls).toEqual([`/api/share/${TOKEN}`]);
   });
 
+  it.each(["/share", "/share/", "/share/a/b"])(
+    "shows the unavailable page for the malformed path %s without a request",
+    async (path) => {
+      renderPage(path);
+
+      expect(
+        await screen.findByRole("heading", {
+          name: "This link is no longer available",
+        }),
+      ).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("omits the expiry line for a link that never expires", async () => {
     respondWith(200, { ...shared, expires_at: undefined });
     renderPage();
 
     await screen.findByRole("heading", { name: "The Shared Book" });
     expect(screen.queryByText(/This link expires/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", { name: "Share details" }),
+    ).toHaveTextContent("sharer shared this book with you.");
   });
 
   it("shows the one unavailable page when the link cannot be used", async () => {

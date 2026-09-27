@@ -1,3 +1,4 @@
+import { Share2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 
 import BookDetailBody, {
@@ -48,6 +49,31 @@ export const ShareUnavailable = () => (
   </div>
 );
 
+// A full-width strip under the header saying who shared the book and when
+// the link expires, styled like the Demo Mode banner.
+const ShareNotice = ({ shared }: { shared: SharedBookResponse }) => (
+  <aside
+    aria-label="Share details"
+    className="border-b border-primary/20 bg-primary/10 text-sm"
+  >
+    <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 md:px-6">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+        <Share2 aria-hidden="true" className="size-3.5" />
+      </span>
+      <p className="min-w-0">
+        <span className="font-semibold break-words">{shared.shared_by}</span>{" "}
+        shared this book with you.
+        {shared.expires_at && (
+          <span className="text-muted-foreground">
+            {" "}
+            This link expires {formatDateTime(shared.expires_at)}.
+          </span>
+        )}
+      </p>
+    </div>
+  </aside>
+);
+
 // The recipient page for a Share Link. It sits outside the protected route
 // tree: no login redirect, no navigation, no sidebar, and no links into the
 // app. The book body renders in Share Link context.
@@ -88,23 +114,10 @@ const SharedBook = () => {
     );
   } else {
     content = (
-      <>
-        <div className="mb-6 text-sm text-muted-foreground space-y-0.5">
-          <p>
-            Shared by{" "}
-            <span className="font-medium text-foreground">
-              {shared.shared_by}
-            </span>
-          </p>
-          {shared.expires_at && (
-            <p>This link expires {formatDateTime(shared.expires_at)}</p>
-          )}
-        </div>
-        <BookDetailBody
-          book={shared}
-          shareLink={shareLinkContext(token, shared)}
-        />
-      </>
+      <BookDetailBody
+        book={shared}
+        shareLink={shareLinkContext(token, shared)}
+      />
     );
   }
 
@@ -115,6 +128,7 @@ const SharedBook = () => {
           <Logo />
         </div>
       </header>
+      {shared && token && <ShareNotice shared={shared} />}
       <main className="max-w-7xl mx-auto px-4 py-4 md:px-6 md:py-8">
         {content}
       </main>

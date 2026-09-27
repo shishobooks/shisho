@@ -134,7 +134,9 @@ test.describe("Share Links", () => {
       await expect(
         recipient.getByRole("heading", { name: TITLE }),
       ).toBeVisible();
-      await expect(recipient.getByText(`Shared by ${USERNAME}`)).toBeVisible();
+      await expect(
+        recipient.getByRole("complementary", { name: "Share details" }),
+      ).toContainText(`${USERNAME} shared this book with you.`);
       expect(recipient.url()).toBe(url);
       await expect(recipient.getByLabel("Book actions")).toHaveCount(0);
       await expect(recipient.getByRole("link")).toHaveCount(0);

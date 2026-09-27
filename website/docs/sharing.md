@@ -41,13 +41,13 @@ Expired links stay in the list, marked as expired.
 
 A recipient opens the link in any browser, on a phone or a computer, without signing in. The page shows:
 
-- The Shisho logo, who shared the book, and when the link expires, if it does.
+- The Shisho logo and a notice saying who shared the book and when the link expires, if it does.
 - The book's cover, title, subtitle, authors, series, description, genres, and tags.
-- Each of the book's files with a download button, including supplements.
+- Each of the book's files with a download button, including supplements. A file's details show its publisher, release date, language, and, for audiobooks, whether it is abridged.
 
 Downloads are in the file's own format (EPUB, CBZ, PDF, or M4B) with the book's metadata written into it, whatever download format the library prefers. Supplements download as they are. If a file cannot have metadata written into it, for example a format only a plugin can read, the recipient gets the original file. Recipients cannot choose the original or KePub versions, read or listen in the browser, or follow links into the rest of your server. Names such as authors and series are plain text.
 
-The page never shows file paths or other details about how your server is laid out.
+The page never shows file paths or other details about how your server is laid out. It also leaves out what only matters inside your library: the sort title, when the book was added and last updated, file identifiers, and file URLs.
 
 If a link has expired, was mistyped, or sharing has been turned off, the recipient sees "This link is no longer available". The page does not say which, so a recipient cannot tell an expired link from one that never existed.
 

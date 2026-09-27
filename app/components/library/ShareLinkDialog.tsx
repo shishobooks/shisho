@@ -205,10 +205,15 @@ export function ShareLinkDialog({
               ) : (
                 <ul className="space-y-2">
                   {links.map((link) => {
+                    // An inactive link keeps its row but recedes: no fill, a
+                    // muted label, and the muted status badge.
                     const active = link.state === ShareLinkStateActive;
                     return (
                       <li
-                        className="flex items-center justify-between gap-2 py-2 px-3 rounded-md border bg-muted/30"
+                        className={cn(
+                          "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
+                          active && "bg-muted/30",
+                        )}
                         key={link.id}
                       >
                         <div className="flex-1 min-w-0">
@@ -216,15 +221,20 @@ export function ShareLinkDialog({
                             <span
                               className={cn(
                                 "font-medium truncate",
-                                !link.label && "text-muted-foreground",
+                                (!link.label || !active) &&
+                                  "text-muted-foreground",
                               )}
                               title={link.label}
                             >
                               {link.label || "No label"}
                             </span>
                             <Badge
-                              className="capitalize"
-                              variant={active ? "secondary" : "outline"}
+                              className={cn(
+                                "capitalize",
+                                !active &&
+                                  "border-transparent bg-muted text-muted-foreground",
+                              )}
+                              variant={active ? "success" : "outline"}
                             >
                               {link.state}
                             </Badge>

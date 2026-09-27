@@ -603,7 +603,7 @@ const FileRow = ({
                   <span>{formatDate(file.release_date)}</span>
                 </>
               )}
-              {file.url && (
+              {file.url && !isShareLink && (
                 <>
                   <span className="text-muted-foreground">URL</span>
                   <a
@@ -647,41 +647,47 @@ const FileRow = ({
               )}
             </div>
 
-            {/* Identifiers */}
-            {file.identifiers && file.identifiers.length > 0 && (
-              <div className="pt-2 border-t border-border/50">
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
-                  {file.identifiers.map((id, idx) => {
-                    const url = getIdentifierUrl(
-                      id.type,
-                      id.value,
-                      pluginIdentifierTypes,
-                    );
-                    return (
-                      <React.Fragment key={idx}>
-                        <span className="text-muted-foreground">
-                          {formatIdentifierType(id.type, pluginIdentifierTypes)}
-                        </span>
-                        {url ? (
-                          <a
-                            className="font-mono select-all text-primary hover:underline break-all"
-                            href={url}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            {id.value}
-                          </a>
-                        ) : (
-                          <span className="font-mono select-all break-all">
-                            {id.value}
+            {/* Identifiers. Share Link context omits them with the URL: they
+                are catalog details, often internal ones such as a UUID. */}
+            {!isShareLink &&
+              file.identifiers &&
+              file.identifiers.length > 0 && (
+                <div className="pt-2 border-t border-border/50">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+                    {file.identifiers.map((id, idx) => {
+                      const url = getIdentifierUrl(
+                        id.type,
+                        id.value,
+                        pluginIdentifierTypes,
+                      );
+                      return (
+                        <React.Fragment key={idx}>
+                          <span className="text-muted-foreground">
+                            {formatIdentifierType(
+                              id.type,
+                              pluginIdentifierTypes,
+                            )}
                           </span>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                          {url ? (
+                            <a
+                              className="font-mono select-all text-primary hover:underline break-all"
+                              href={url}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {id.value}
+                            </a>
+                          ) : (
+                            <span className="font-mono select-all break-all">
+                              {id.value}
+                            </span>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         )}
       </div>
@@ -795,15 +801,17 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     });
   };
 
+  // Share Link context hides the URL and identifiers (see FileRow), so they
+  // alone do not make a file expandable there.
   const hasExpandableMetadata = (file: File): boolean => {
     return !!(
       file.publisher ||
       file.release_date ||
-      file.url ||
       file.language ||
       file.file_type === "m4b" || // M4B always shows abridged status
       file.abridged === true ||
-      (file.identifiers && file.identifiers.length > 0)
+      (!isShareLink &&
+        (file.url || (file.identifiers && file.identifiers.length > 0)))
     );
   };
 
@@ -1278,11 +1286,14 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                   />
                 ))}
             </div>
-            {book.sort_title && book.sort_title !== book.title && (
-              <p className="text-sm text-muted-foreground italic break-words">
-                Sort title: {book.sort_title}
-              </p>
-            )}
+            {/* A recipient has no use for the library's sort order. */}
+            {!isShareLink &&
+              book.sort_title &&
+              book.sort_title !== book.title && (
+                <p className="text-sm text-muted-foreground italic break-words">
+                  Sort title: {book.sort_title}
+                </p>
+              )}
             {book.subtitle && (
               <p className="text-lg text-muted-foreground break-words">
                 {book.subtitle}
@@ -1438,25 +1449,25 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               </div>
             )}
 
-            <Separator />
-
-            {/* Metadata. Share Link context omits the library and file path, which
-                describe the server rather than the book. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-semibold">Created</p>
-                <p className="text-muted-foreground">
-                  {formatDateTime(book.created_at)}
-                </p>
-              </div>
-              <div>
-                <p className="font-semibold">Updated</p>
-                <p className="text-muted-foreground">
-                  {formatDateTime(book.updated_at)}
-                </p>
-              </div>
-              {!isShareLink && (
-                <>
+            {/* Metadata. Share Link context omits the whole block: the
+                created and updated times, library, and file path describe the
+                server's records rather than the book. */}
+            {!isShareLink && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="font-semibold">Created</p>
+                    <p className="text-muted-foreground">
+                      {formatDateTime(book.created_at)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold">Updated</p>
+                    <p className="text-muted-foreground">
+                      {formatDateTime(book.updated_at)}
+                    </p>
+                  </div>
                   <div>
                     <p className="font-semibold">Library</p>
                     <p className="text-muted-foreground break-words">
@@ -1479,9 +1490,9 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                       ))}
                     </p>
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+              </>
+            )}
 
             <Separator />
 
