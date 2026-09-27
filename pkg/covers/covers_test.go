@@ -211,7 +211,7 @@ func TestServeBookCover_NotFoundWhenNoCover(t *testing.T) {
 		{ID: 1, FileType: models.FileTypeEPUB, CoverImageFilename: nil},
 	}
 
-	err := ServeBookCover(c, files, "book", CacheControlNoCache)
+	err := ServeBookCover(c, files, "book", CacheControlNoCache, "Cover")
 	require.Error(t, err)
 	var ecErr *errcodes.Error
 	require.ErrorAs(t, err, &ecErr)
@@ -237,7 +237,7 @@ func TestServeBookCover_ServesCoverFile(t *testing.T) {
 		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
 	}
 
-	require.NoError(t, ServeBookCover(c, files, "book", CacheControlNoCache))
+	require.NoError(t, ServeBookCover(c, files, "book", CacheControlNoCache, "Cover"))
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rec.Header().Get("ETag"))
@@ -272,7 +272,7 @@ func TestServeBookCover_ETagIncludesFileIDAndMtime(t *testing.T) {
 		{ID: 42, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
 	}
 
-	require.NoError(t, ServeBookCover(c, files, "book", CacheControlNoCache))
+	require.NoError(t, ServeBookCover(c, files, "book", CacheControlNoCache, "Cover"))
 	assert.Equal(t, fmt.Sprintf(`"%d-%d"`, 42, pinned.Unix()), rec.Header().Get("ETag"))
 }
 
@@ -295,7 +295,7 @@ func TestServeBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
-	require.NoError(t, ServeBookCover(c1, files, "book", CacheControlNoCache))
+	require.NoError(t, ServeBookCover(c1, files, "book", CacheControlNoCache, "Cover"))
 	etag := rec1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
 
@@ -305,7 +305,7 @@ func TestServeBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
 
-	require.NoError(t, ServeBookCover(c2, files, "book", CacheControlNoCache))
+	require.NoError(t, ServeBookCover(c2, files, "book", CacheControlNoCache, "Cover"))
 	assert.Equal(t, http.StatusNotModified, rec2.Code)
 	assert.Empty(t, rec2.Body.Bytes())
 	assert.Equal(t, etag, rec2.Header().Get("ETag"))
@@ -353,7 +353,7 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
-	require.NoError(t, ServeBookCover(c1, files, "book", CacheControlNoCache))
+	require.NoError(t, ServeBookCover(c1, files, "book", CacheControlNoCache, "Cover"))
 	require.Equal(t, http.StatusOK, rec1.Code)
 	assert.Equal(t, []byte("epub-cover"), rec1.Body.Bytes())
 	etagEPUB := rec1.Header().Get("ETag")
@@ -368,7 +368,7 @@ func TestServeBookCover_AspectRatioChangeInvalidatesEtagEvenWhenNewCoverMtimeIsO
 	req2.Header.Set("If-None-Match", etagEPUB)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
-	require.NoError(t, ServeBookCover(c2, files, "audiobook", CacheControlNoCache))
+	require.NoError(t, ServeBookCover(c2, files, "audiobook", CacheControlNoCache, "Cover"))
 	assert.Equal(t, http.StatusOK, rec2.Code,
 		"expected 200 after aspect-ratio change (ETag must change with file identity, not just mtime)")
 	etagM4B := rec2.Header().Get("ETag")
@@ -445,7 +445,7 @@ func TestServeBookCover_UsesCacheControlParam(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	require.NoError(t, ServeBookCover(c, files, "book", "private, max-age=31536000, immutable"))
+	require.NoError(t, ServeBookCover(c, files, "book", "private, max-age=31536000, immutable", "Cover"))
 	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 }
 
@@ -468,9 +468,42 @@ func TestServeBookCover_NotFoundWhenCoverFileMissingOnDisk(t *testing.T) {
 		{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName},
 	}
 
-	err := ServeBookCover(c, files, "book", CacheControlNoCache)
+	err := ServeBookCover(c, files, "book", CacheControlNoCache, "Cover")
 	require.Error(t, err)
 	var ecErr *errcodes.Error
 	require.ErrorAs(t, err, &ecErr)
 	assert.Equal(t, http.StatusNotFound, ecErr.HTTPCode)
+}
+
+// The 404 names the caller's resource so the series route can keep its
+// "Series cover not found." wording while sharing the helper.
+func TestServeBookCover_NotFoundNamesResource(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bookPath := filepath.Join(dir, "book.epub")
+	require.NoError(t, os.WriteFile(bookPath, []byte("epub-bytes"), 0o644))
+	coverName := "book.epub.cover.jpg"
+
+	tests := []struct {
+		name  string
+		files []*models.File
+	}{
+		{"no cover", []*models.File{{ID: 1, FileType: models.FileTypeEPUB}}},
+		{"cover missing on disk", []*models.File{{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := echo.New()
+			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+
+			err := ServeBookCover(c, tt.files, "book", CacheControlImmutable, "Series cover")
+			var ecErr *errcodes.Error
+			require.ErrorAs(t, err, &ecErr)
+			assert.Equal(t, http.StatusNotFound, ecErr.HTTPCode)
+			assert.Equal(t, "Series cover not found.", ecErr.Message)
+		})
+	}
 }
