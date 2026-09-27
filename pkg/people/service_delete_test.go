@@ -265,7 +265,8 @@ func TestMergePeople_KeepsBookAndFileSources(t *testing.T) {
 	bookID := createAuthoredBook(t, db, lib, personDeletePluginSource, source.ID)
 	fileID := createNarratedFile(t, db, lib, testgen.StringPtr(models.DataSourceM4BMetadata), source.ID)
 
-	require.NoError(t, svc.MergePeople(ctx, target.ID, source.ID))
+	_, err := svc.MergePeople(ctx, target.ID, source.ID)
+	require.NoError(t, err)
 
 	book, personIDs := retrieveAuthoredBook(t, db, bookID)
 	assert.Equal(t, []int{target.ID}, personIDs)
@@ -274,4 +275,37 @@ func TestMergePeople_KeepsBookAndFileSources(t *testing.T) {
 	file, personIDs := retrieveNarratedFile(t, db, fileID)
 	assert.Equal(t, []int{target.ID}, personIDs)
 	assert.Equal(t, testgen.StringPtr(models.DataSourceM4BMetadata), file.NarratorSource)
+}
+
+// MergePeople returns each Book the source authored or owns a File it
+// narrated, once, so the handler can re-index them. Books that only the
+// target touches are not returned.
+func TestMergePeople_ReturnsEachMovedBookOnce(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createPersonDeleteLibrary(t, db)
+	source := createNamedPerson(t, svc, lib, "Source Person")
+	target := createNamedPerson(t, svc, lib, "Target Person")
+	authoredBookID := createAuthoredBook(t, db, lib, personDeletePluginSource, source.ID)
+	narratedFile := &models.File{
+		LibraryID:     lib.ID,
+		BookID:        authoredBookID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      fmt.Sprintf("/tmp/merge-%d.m4b", authoredBookID),
+		FilesizeBytes: 1,
+	}
+	_, err := db.NewInsert().Model(narratedFile).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Narrator{FileID: narratedFile.ID, PersonID: source.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+	narratedOnly, _ := retrieveNarratedFile(t, db, createNarratedFile(t, db, lib, nil, source.ID))
+	createAuthoredBook(t, db, lib, personDeletePluginSource, target.ID)
+
+	movedBookIDs, err := svc.MergePeople(ctx, target.ID, source.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int{authoredBookID, narratedOnly.BookID}, movedBookIDs)
 }

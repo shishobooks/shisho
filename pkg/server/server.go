@@ -171,9 +171,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
 func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) {
-	// The chapter replace handler and the genre, tag, people, and series
-	// delete handlers recompute Reviewed, which needs app settings to load
-	// the review criteria. Build one books service for them and inject it.
+	// The chapter replace handler and the genre, tag, people, series, and
+	// publisher delete handlers recompute Reviewed, which needs app settings
+	// to load the review criteria. Build one books service for them and
+	// inject it.
 	bookService := books.NewService(db).WithAppSettings(appsettings.NewService(db))
 
 	// Books routes
@@ -236,7 +237,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	publishersGroup := e.Group("/publishers")
 	publishersGroup.Use(authMiddleware.Authenticate)
 	publishersGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	publishers.RegisterRoutesWithGroup(publishersGroup, db, authMiddleware)
+	publishers.RegisterRoutesWithGroup(publishersGroup, db, authMiddleware, bookService)
 
 	// Search routes (requires read access to books since search returns book data)
 	searchGroup := e.Group("/search")

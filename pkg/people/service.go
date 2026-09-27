@@ -233,18 +233,10 @@ func (svc *Service) UpdatePerson(ctx context.Context, person *models.Person, opt
 func (svc *Service) DeletePerson(ctx context.Context, personID int) ([]int, error) {
 	var affectedBookIDs []int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		// UNION removes duplicates, so a book the person both authored and
-		// narrated appears once. Raw SQL because bun parenthesizes each side
-		// of a Union, which SQLite rejects.
-		err := tx.NewRaw(`
-			SELECT a.book_id FROM authors AS a WHERE a.person_id = ?
-			UNION
-			SELECT f.book_id FROM narrators AS n
-			INNER JOIN files AS f ON f.id = n.file_id
-			WHERE n.person_id = ?`, personID, personID).
-			Scan(ctx, &affectedBookIDs)
+		var err error
+		affectedBookIDs, err = personBookIDs(ctx, tx, personID)
 		if err != nil {
-			return errors.WithStack(err)
+			return err
 		}
 
 		// Stamp the owners before the join rows that identify them are gone.
@@ -401,11 +393,38 @@ func (svc *Service) GetNarratedFileCount(ctx context.Context, personID int) (int
 	return count, errors.WithStack(err)
 }
 
-// MergePeople merges sourcePerson into targetPerson (moves all associations, deletes source).
-func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) error {
-	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+// personBookIDs returns the IDs of the books the person authored plus the
+// books that own a file the person narrated, each once.
+func personBookIDs(ctx context.Context, db bun.IDB, personID int) ([]int, error) {
+	var bookIDs []int
+	// UNION removes duplicates, so a book the person both authored and
+	// narrated appears once. Raw SQL because bun parenthesizes each side of a
+	// Union, which SQLite rejects.
+	err := db.NewRaw(`
+		SELECT a.book_id FROM authors AS a WHERE a.person_id = ?
+		UNION
+		SELECT f.book_id FROM narrators AS n
+		INNER JOIN files AS f ON f.id = n.file_id
+		WHERE n.person_id = ?`, personID, personID).
+		Scan(ctx, &bookIDs)
+	return bookIDs, errors.WithStack(err)
+}
+
+// MergePeople merges sourcePerson into targetPerson (moves all associations,
+// transfers aliases, deletes source). It returns the IDs of the books the
+// source authored plus the books that own a file the source narrated, each
+// once, so the caller can re-index them after the transaction commits.
+func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) ([]int, error) {
+	var movedBookIDs []int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		movedBookIDs, err = personBookIDs(ctx, tx, sourceID)
+		if err != nil {
+			return err
+		}
+
 		// Update all authors from source to target
-		_, err := tx.NewUpdate().
+		_, err = tx.NewUpdate().
 			Model((*models.Author)(nil)).
 			Set("person_id = ?", targetID).
 			Where("person_id = ?", sourceID).
@@ -435,6 +454,10 @@ func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) err
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return movedBookIDs, nil
 }
 
 // CleanupOrphanedPeople deletes people with no authors or narrators and

@@ -213,9 +213,22 @@ func (svc *Service) UpdatePublisher(ctx context.Context, publisher *models.Publi
 // publisher back, while Refresh all metadata and Reset to file metadata still
 // may (ADR 0006). Only this service path is supported. The foreign key's
 // ON DELETE SET NULL leaves publisher_source untouched.
-func (svc *Service) DeletePublisher(ctx context.Context, publisherID int) error {
-	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		_, err := tx.NewUpdate().
+//
+// It returns the IDs of the Books that own an affected file, each once, so
+// the caller can recompute their review state after commit.
+func (svc *Service) DeletePublisher(ctx context.Context, publisherID int) ([]int, error) {
+	var affectedBookIDs []int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().
+			Model((*models.File)(nil)).
+			ColumnExpr("DISTINCT f.book_id").
+			Where("f.publisher_id = ?", publisherID).
+			Scan(ctx, &affectedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = tx.NewUpdate().
 			Model((*models.File)(nil)).
 			Set("publisher_id = NULL").
 			Set("publisher_source = ?", models.DataSourceManual).
@@ -232,6 +245,10 @@ func (svc *Service) DeletePublisher(ctx context.Context, publisherID int) error 
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return affectedBookIDs, nil
 }
 
 // GetFileCount returns the count of files with this publisher and all its descendants.

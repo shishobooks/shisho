@@ -419,15 +419,36 @@ func (h *handler) merge(c echo.Context) error {
 	}
 
 	// Merge source person into target (this) person
-	err = h.personService.MergePeople(ctx, id, params.SourceID)
+	movedBookIDs, err := h.personService.MergePeople(ctx, id, params.SourceID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Remove the merged (source) person from FTS index
 	log := logger.FromContext(ctx)
+
+	// Remove the merged (source) person from FTS index
 	if err := h.searchService.DeleteFromPersonIndex(ctx, params.SourceID); err != nil {
 		log.Warn("failed to remove merged person from search index", logger.Data{"person_id": params.SourceID, "error": err.Error()})
+	}
+
+	// Books the source authored or narrated need their books_fts row
+	// refreshed to list the target name and the source name (now an alias of
+	// the target) in place of the source.
+	for _, bookID := range movedBookIDs {
+		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
+			log.Warn("failed to update book search index after person merge", logger.Data{"book_id": bookID, "error": err.Error()})
+		}
+	}
+
+	// Re-index the target person, whose aliases now include the source name
+	// and the source's aliases.
+	person, err = h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+		ID: &id,
+	})
+	if err != nil {
+		log.Warn("failed to load target person for search index after merge", logger.Data{"person_id": id, "error": err.Error()})
+	} else if err := h.searchService.IndexPerson(ctx, person); err != nil {
+		log.Warn("failed to update search index for target person", logger.Data{"person_id": id, "error": err.Error()})
 	}
 
 	return c.NoContent(http.StatusNoContent)

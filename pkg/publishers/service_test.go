@@ -946,7 +946,8 @@ func TestDeletePublisher_StampsManualEmptySlotOnEveryDirectFile(t *testing.T) {
 	childFile := createTestFileWithSource(t, db, lib, child.ID, pluginSource, "/tmp/child.epub")
 	otherFile := createTestFileWithSource(t, db, lib, other.ID, pluginSource, "/tmp/other.epub")
 
-	require.NoError(t, svc.DeletePublisher(ctx, deleted.ID))
+	_, err := svc.DeletePublisher(ctx, deleted.ID)
+	require.NoError(t, err)
 
 	for i, fileID := range affected {
 		file := retrieveTestFile(t, db, fileID)
@@ -974,6 +975,44 @@ func TestDeletePublisher_StampsManualEmptySlotOnEveryDirectFile(t *testing.T) {
 
 	_, err = svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &deleted.ID})
 	require.Error(t, err, "the Publisher itself is deleted")
+}
+
+// DeletePublisher returns each Book that owns a File with the Publisher once,
+// so the handler can recompute their review state. Books whose Files use a
+// child or unrelated Publisher are not affected.
+func TestDeletePublisher_ReturnsAffectedBookIDs(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+
+	deleted := &models.Publisher{LibraryID: lib.ID, Name: "Deleted"}
+	require.NoError(t, svc.CreatePublisher(ctx, deleted))
+	child := &models.Publisher{LibraryID: lib.ID, Name: "Child", ParentID: &deleted.ID}
+	require.NoError(t, svc.CreatePublisher(ctx, child))
+
+	firstFileID := createTestFileWithSource(t, db, lib, deleted.ID, nil, "/tmp/first.epub")
+	first := retrieveTestFile(t, db, firstFileID)
+	secondFile := &models.File{
+		LibraryID:     lib.ID,
+		BookID:        first.BookID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/tmp/first-2.epub",
+		FilesizeBytes: 1,
+		PublisherID:   &deleted.ID,
+	}
+	_, err := db.NewInsert().Model(secondFile).Exec(ctx)
+	require.NoError(t, err)
+	other := retrieveTestFile(t, db, createTestFileWithSource(t, db, lib, deleted.ID, nil, "/tmp/other.epub"))
+	createTestFileWithSource(t, db, lib, child.ID, nil, "/tmp/child.epub")
+
+	bookIDs, err := svc.DeletePublisher(ctx, deleted.ID)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []int{first.BookID, other.BookID}, bookIDs)
 }
 
 // Merging re-points Files at the target. It is not a clear, so the Files

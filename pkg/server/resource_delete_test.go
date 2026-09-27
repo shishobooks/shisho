@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books/review"
@@ -59,13 +61,24 @@ func newResourceDeleteFixture(t *testing.T) *resourceDeleteFixture {
 
 func (f *resourceDeleteFixture) delete(path string) {
 	f.t.Helper()
+	f.request(http.MethodDelete, path, "", http.StatusNoContent)
+}
+
+// request sends an authenticated admin request with an optional JSON body,
+// requires wantStatus, and returns the response body.
+func (f *resourceDeleteFixture) request(method, path, body string, wantStatus int) string {
+	f.t.Helper()
 	token, err := f.authSvc.GenerateToken(f.admin)
 	require.NoError(f.t, err)
-	req := httptest.NewRequest(http.MethodDelete, path, nil)
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	}
 	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
 	rec := httptest.NewRecorder()
 	f.handler.ServeHTTP(rec, req)
-	require.Equal(f.t, http.StatusNoContent, rec.Code, "response body: %s", rec.Body.String())
+	require.Equal(f.t, wantStatus, rec.Code, "response body: %s", rec.Body.String())
+	return rec.Body.String()
 }
 
 func (f *resourceDeleteFixture) insert(model any) {
@@ -162,6 +175,19 @@ func (f *resourceDeleteFixture) reviewed(fileID int) bool {
 	require.NoError(f.t, f.db.NewSelect().Model(&file).Where("f.id = ?", fileID).Scan(f.ctx))
 	require.NotNil(f.t, file.Reviewed)
 	return *file.Reviewed
+}
+
+// searchPersonIDs returns the IDs of the People that a people search for
+// query matches.
+func (f *resourceDeleteFixture) searchPersonIDs(query string) []int {
+	f.t.Helper()
+	results, _, err := f.searchSvc.SearchPeople(f.ctx, f.lib.ID, query, 10, 0)
+	require.NoError(f.t, err)
+	ids := []int{}
+	for _, r := range results {
+		ids = append(ids, r.ID)
+	}
+	return ids
 }
 
 // searchBookIDs returns the IDs of the Books that a book search for query
@@ -268,4 +294,92 @@ func TestDeleteSeries_RecomputesReviewedForAffectedBooks(t *testing.T) {
 
 	assert.False(t, f.reviewed(seeded.fileID), "the File leaves reviewed once its only series is gone")
 	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Harbor"), "the Book stays in the search index")
+}
+
+// Deleting a Publisher recomputes review state for the Books whose Files
+// carried it when the review criteria require a publisher.
+func TestDeletePublisher_RecomputesReviewedForAffectedBooks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	first := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	second := f.seedReviewedBook(models.FileTypeEPUB, &first)
+	criteria := review.Default()
+	criteria.BookFields = append(criteria.BookFields, review.FieldPublisher)
+	require.NoError(t, review.Save(f.ctx, appsettings.NewService(f.db), criteria))
+	publisher := &models.Publisher{LibraryID: f.lib.ID, Name: "Driftwood Press"}
+	f.insert(publisher)
+	f.setPublisher(first, publisher, criteria)
+	f.setPublisher(second, publisher, criteria)
+
+	f.delete(fmt.Sprintf("/api/publishers/%d", publisher.ID))
+
+	assert.False(t, f.reviewed(first.fileID), "the first File leaves reviewed once its publisher is gone")
+	assert.False(t, f.reviewed(second.fileID), "the second File leaves reviewed once its publisher is gone")
+}
+
+// setPublisher gives the seeded Book's File the publisher and asserts the
+// File is reviewed under criteria.
+func (f *resourceDeleteFixture) setPublisher(seeded reviewedBook, publisher *models.Publisher, criteria review.Criteria) {
+	f.t.Helper()
+	_, err := f.db.NewUpdate().
+		Model((*models.File)(nil)).
+		Set("publisher_id = ?", publisher.ID).
+		Where("id = ?", seeded.fileID).
+		Exec(f.ctx)
+	require.NoError(f.t, err)
+	require.NoError(f.t, review.RecomputeForBook(f.ctx, f.db, seeded.bookID, criteria))
+	require.True(f.t, f.reviewed(seeded.fileID), "precondition: the File is reviewed while it has a publisher")
+}
+
+// Merging a Person into another re-indexes the target in persons_fts, so the
+// transferred names find it in people search, and re-indexes every Book the
+// source authored or narrated, so book search finds them by the target name.
+func TestMergePeople_ReindexesTargetAndAffectedBooks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	authored := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	narrated := f.seedReviewedBook(models.FileTypeEPUB, &authored)
+	source := f.person("Ottoline Brackenridge")
+	f.insert(&models.PersonAlias{PersonID: source.ID, Name: "Otto Bracken", LibraryID: f.lib.ID})
+	f.insert(&models.Author{BookID: authored.bookID, PersonID: source.ID, SortOrder: 2})
+	f.insert(&models.Narrator{FileID: narrated.fileID, PersonID: source.ID, SortOrder: 1})
+	require.NoError(t, f.searchSvc.ReindexBookByID(f.ctx, authored.bookID))
+	require.NoError(t, f.searchSvc.ReindexBookByID(f.ctx, narrated.bookID))
+
+	target := f.person("Marigold Ashcombe")
+	require.NoError(t, f.searchSvc.IndexPerson(f.ctx, source))
+	require.NoError(t, f.searchSvc.IndexPerson(f.ctx, target))
+	require.Empty(t, f.searchBookIDs("Ashcombe"), "precondition: no Book matches the target name")
+
+	f.request(http.MethodPost, fmt.Sprintf("/api/people/%d/merge", target.ID), fmt.Sprintf(`{"source_id":%d}`, source.ID), http.StatusNoContent)
+
+	assert.Equal(t, []int{target.ID}, f.searchPersonIDs("Otto Bracken"), "the source's alias now finds the target")
+	assert.Equal(t, []int{target.ID}, f.searchPersonIDs("Brackenridge"), "the source name, now an alias, finds the target")
+	assert.ElementsMatch(t, []int{authored.bookID, narrated.bookID}, f.searchBookIDs("Ashcombe"), "the target name matches the authored and narrated Books")
+}
+
+// Deleting one File of a multi-file Book re-indexes the surviving Book, so
+// book search no longer matches it by the deleted File's narrator.
+func TestDeleteFile_ReindexesSurvivingBook(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeM4B, nil)
+	var book models.Book
+	require.NoError(t, f.db.NewSelect().Model(&book).Where("b.id = ?", seeded.bookID).Scan(f.ctx))
+	f.insert(&models.File{
+		LibraryID:     f.lib.ID,
+		BookID:        seeded.bookID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      book.Filepath + "/book.epub",
+		FilesizeBytes: 1,
+	})
+	require.NoError(t, f.searchSvc.ReindexBookByID(f.ctx, seeded.bookID))
+	require.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Brackenridge"), "precondition: the narrator name matches the Book")
+
+	body := f.request(http.MethodDelete, fmt.Sprintf("/api/books/files/%d", seeded.fileID), "", http.StatusOK)
+
+	assert.JSONEq(t, `{"book_deleted":false}`, body, "the Book survives with its EPUB File")
+	assert.Empty(t, f.searchBookIDs("Brackenridge"), "the deleted File's narrator no longer matches the Book")
+	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Harbor"), "the surviving Book stays in the search index")
 }

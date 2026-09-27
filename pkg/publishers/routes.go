@@ -10,7 +10,9 @@ import (
 )
 
 // RegisterRoutesWithGroup registers publisher routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
+// reviewRecomputer is required; pass a books service with app settings
+// attached, or the delete handler's review recompute does nothing.
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer BookReviewRecomputer) {
 	publisherService := NewService(db)
 	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)
@@ -19,6 +21,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Mid
 		publisherService: publisherService,
 		aliasService:     aliasService,
 		searchService:    searchService,
+		reviewRecomputer: reviewRecomputer,
 	}
 
 	g.GET("", h.list)
