@@ -1,12 +1,8 @@
 package series
 
 import (
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -320,48 +316,10 @@ func (h *handler) seriesCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Select the appropriate file based on the library's cover aspect ratio setting
-	coverFile := covers.SelectFile(book.Files, library.CoverAspectRatio)
-	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
-		return errcodes.NotFound("Series cover")
-	}
-
-	// Resolve via the file's parent dir — book.Filepath may be a synthetic
-	// organized-folder path that doesn't exist on disk for root-level files.
-	coverImagePath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
-
-	coverStat, err := os.Stat(coverImagePath)
-	if err != nil {
-		return errcodes.NotFound("Series cover")
-	}
-	modTime := coverStat.ModTime().UTC().Truncate(time.Second)
-
-	// ETag bakes in the selected file's identity, not just mtime, so it changes
-	// when the series' first book switches to a different file — even if the new
-	// cover happens to have an older mtime than the previous first book's cover.
-	etag := fmt.Sprintf(`"%d-%d"`, coverFile.ID, modTime.Unix())
-
-	c.Response().Header().Set("Cache-Control", covers.CacheControlImmutable)
-	c.Response().Header().Set("ETag", etag)
-
-	// Conditional GET uses ETag only. If-Modified-Since is intentionally not
-	// honored: file mtime doesn't capture changes in which file is selected,
-	// so IMS-based revalidation would serve stale bytes when the first book
-	// switches to one whose cover file has an older mtime.
-	if inm := c.Request().Header.Get("If-None-Match"); inm != "" && inm == etag {
-		c.Response().WriteHeader(http.StatusNotModified)
-		return nil
-	}
-
-	fh, err := os.Open(coverImagePath)
-	if err != nil {
-		return errcodes.NotFound("Series cover")
-	}
-	defer fh.Close()
-
-	// Zero modtime suppresses Last-Modified and IMS handling inside ServeContent.
-	http.ServeContent(c.Response(), c.Request(), filepath.Base(coverImagePath), time.Time{}, fh)
-	return nil
+	// The shared helper's ETag bakes in the selected file's ID, so it changes
+	// when the series' first book switches to a different file even if the
+	// new cover has an older mtime.
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Series cover")
 }
 
 func (h *handler) merge(c echo.Context) error {

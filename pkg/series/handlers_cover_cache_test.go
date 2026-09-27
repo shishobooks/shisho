@@ -526,3 +526,62 @@ func TestSeriesCover_FirstBookChangeInvalidatesEtagEvenWhenNewCoverMtimeIsOlder(
 	// Sanity check the ETag format encodes the book B file ID.
 	assert.Contains(t, etagB, fmt.Sprintf("%d-", bookBFile.ID))
 }
+
+// A series cover that is missing on disk, or a first book with no cover at
+// all, returns the errcodes "Series cover not found." 404.
+func TestSeriesCover_MissingCover_ReturnsSeriesCoverNotFound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		clearFilename bool
+	}{
+		{"cover missing on disk", false},
+		{"first book has no cover", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := setupSeriesTestDB(t)
+			ctx := context.Background()
+			e := newTestEchoSeries(t)
+			h := &handler{
+				seriesService:  NewService(db),
+				bookService:    books.NewService(db),
+				libraryService: libraries.NewService(db),
+			}
+
+			seriesID := seedSeriesWithCover(ctx, t, db)
+			var file models.File
+			require.NoError(t, db.NewSelect().Model(&file).Limit(1).Scan(ctx))
+			require.NoError(t, os.Remove(filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)))
+			if tt.clearFilename {
+				_, err := db.NewUpdate().Model((*models.File)(nil)).
+					Set("cover_image_filename = NULL").
+					Where("id = ?", file.ID).
+					Exec(ctx)
+				require.NoError(t, err)
+			}
+
+			rec := httptest.NewRecorder()
+			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+			c.SetParamNames("id")
+			c.SetParamValues(strconv.Itoa(seriesID))
+			if err := h.seriesCover(c); err != nil {
+				e.HTTPErrorHandler(err, c)
+			}
+
+			require.Equal(t, http.StatusNotFound, rec.Code, rec.Body.String())
+			var body struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			assert.Equal(t, "not_found", body.Error.Code)
+			assert.Equal(t, "Series cover not found.", body.Error.Message)
+		})
+	}
+}

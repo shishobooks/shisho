@@ -673,7 +673,7 @@ func (h *handler) Cover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlNoCache)
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlNoCache, "Cover")
 }
 
 // DownloadFile handles file downloads with API key authentication.

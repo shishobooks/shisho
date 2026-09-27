@@ -1480,6 +1480,15 @@ func (h *handler) fileCover(c echo.Context) error {
 	// root-level files. The cover always lives alongside the file.
 	coverPath := filepath.Join(filepath.Dir(file.Filepath), coverFilename)
 
+	// Stat first so a missing cover returns the errcodes 404 that the book and
+	// series cover routes return, not echo.HTTPError's generic "Not Found".
+	if _, err := os.Stat(coverPath); err != nil {
+		if os.IsNotExist(err) {
+			return errcodes.NotFound("Cover")
+		}
+		return errors.WithStack(err)
+	}
+
 	c.Response().Header().Set("Cache-Control", covers.CacheControlImmutable)
 	return errors.WithStack(c.File(coverPath))
 }
@@ -1660,7 +1669,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable)
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Cover")
 }
 
 // downloadFile handles downloading a file with generated metadata embedded.
@@ -1992,6 +2001,13 @@ func (h *handler) getPage(c echo.Context) error {
 		return errcodes.NotFound("Page")
 	}
 
+	// Check the source before the page cache so a missing file returns the same
+	// 404 as the download routes instead of a 500 on a cache miss or a stale
+	// page on a cache hit.
+	if err := RequireFileOnDisk(c, file, "File"); err != nil {
+		return err
+	}
+
 	// Get or render the page from the appropriate cache
 	var cachedPath, mimeType string
 	switch file.FileType {
@@ -2004,8 +2020,9 @@ func (h *handler) getPage(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Set cache headers (cache for 1 year since page content doesn't change)
-	c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	// Cache for 1 year since page content doesn't change. The route is
+	// authenticated, so private keeps shared caches from storing it.
+	c.Response().Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	c.Response().Header().Set("Content-Type", mimeType)
 
 	return c.File(cachedPath)

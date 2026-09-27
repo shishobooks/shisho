@@ -86,8 +86,9 @@ func CacheKey(files []*models.File, coverAspectRatio string) string {
 
 // ServeBookCover selects the cover file from `files` using the library's
 // preferred aspect ratio and serves it. Callers must perform any auth and
-// library-access checks before calling. Returns errcodes.NotFound when no
-// suitable cover exists or the cover image is missing on disk.
+// library-access checks before calling. Returns errcodes.NotFound(resource)
+// when no suitable cover exists or the cover image is missing on disk. Book
+// covers pass "Cover"; the series route passes "Series cover".
 //
 // The cover is resolved via the file's parent directory rather than the book's
 // filepath because book.Filepath can be a synthetic organized-folder path that
@@ -105,10 +106,10 @@ func CacheKey(files []*models.File, coverAspectRatio string) string {
 // served, and the new cover may have an older mtime than the previously-served
 // one. Mtime-only revalidation would return stale 304s in that case; baking
 // the file ID into the validator ensures it bumps whenever selection changes.
-func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio string, cacheControl string) error {
+func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cacheControl, resource string) error {
 	coverFile := SelectFile(files, coverAspectRatio)
 	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
-		return errcodes.NotFound("Cover")
+		return errcodes.NotFound(resource)
 	}
 
 	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
@@ -118,7 +119,7 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio strin
 	stat, err := os.Stat(coverPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errcodes.NotFound("Cover")
+			return errcodes.NotFound(resource)
 		}
 		return errors.WithStack(err)
 	}
@@ -137,7 +138,7 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio strin
 	fh, err := os.Open(coverPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errcodes.NotFound("Cover")
+			return errcodes.NotFound(resource)
 		}
 		return errors.WithStack(err)
 	}
