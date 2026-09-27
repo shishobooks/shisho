@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
@@ -25,6 +26,6 @@ func (h *handler) getImage(c echo.Context) error {
 
 	// The icon URL has no cache-busting version and the icon changes when the
 	// plugin is updated, so clients revalidate through Last-Modified.
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
+	c.Response().Header().Set("Cache-Control", covers.CacheControlNoCache)
 	return c.File(iconPath)
 }
