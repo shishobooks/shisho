@@ -250,6 +250,10 @@ func (h *handler) handleDownload(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	if err := books.RequireFileOnDisk(c, file, "File"); err != nil {
+		return err
+	}
+
 	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
 	if err != nil {
 		return errors.WithStack(err)

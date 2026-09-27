@@ -242,3 +242,30 @@ func TestDeleteTag_RecomputesReviewedForAffectedBooks(t *testing.T) {
 	assert.False(t, f.reviewed(seeded.fileID), "the File leaves reviewed once its only tag is gone")
 	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Harbor"), "the Book stays in the search index")
 }
+
+// Deleting a Series recomputes review state for the Books in it when the
+// review criteria require a series.
+func TestDeleteSeries_RecomputesReviewedForAffectedBooks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	series := &models.Series{
+		LibraryID:      f.lib.ID,
+		Name:           "Lanternfall Cycle",
+		NameSource:     models.DataSourceManual,
+		SortName:       "Lanternfall Cycle",
+		SortNameSource: models.DataSourceFilepath,
+	}
+	f.insert(series)
+	f.insert(&models.BookSeries{BookID: seeded.bookID, SeriesID: series.ID, SortOrder: 1})
+	criteria := review.Default()
+	criteria.BookFields = append(criteria.BookFields, review.FieldSeries)
+	require.NoError(t, review.Save(f.ctx, appsettings.NewService(f.db), criteria))
+	require.NoError(t, review.RecomputeForBook(f.ctx, f.db, seeded.bookID, criteria))
+	require.True(t, f.reviewed(seeded.fileID), "precondition: the File is reviewed while it has a series")
+
+	f.delete(fmt.Sprintf("/api/series/%d", series.ID))
+
+	assert.False(t, f.reviewed(seeded.fileID), "the File leaves reviewed once its only series is gone")
+	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Harbor"), "the Book stays in the search index")
+}
