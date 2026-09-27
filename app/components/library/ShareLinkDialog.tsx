@@ -212,7 +212,7 @@ export function ShareLinkDialog({
                       <li
                         className={cn(
                           "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
-                          active && "bg-muted/30",
+                          active && "bg-muted/50",
                         )}
                         key={link.id}
                       >
@@ -223,6 +223,7 @@ export function ShareLinkDialog({
                                 "font-medium truncate",
                                 (!link.label || !active) &&
                                   "text-muted-foreground",
+                                !link.label && "italic",
                               )}
                               title={link.label}
                             >

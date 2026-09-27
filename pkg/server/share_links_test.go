@@ -75,7 +75,11 @@ func newShareLinksFixture(t *testing.T) *shareLinksFixture {
 	f.suppA = f.insertSupplement(ctx, f.bookA, "notes.pdf")
 	f.insertSeries(ctx, f.bookA, "Saga")
 	scanError := "open " + f.epubA.Filepath + ": zip: not a valid zip file"
-	_, err = db.NewUpdate().Model(f.epubA).Set("scan_error = ?", scanError).WherePK().Exec(ctx)
+	_, err = db.NewUpdate().Model(f.epubA).Set("scan_error = ?", scanError).Set("url = ?", "https://example.com/internal-catalog").WherePK().Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.FileIdentifier{FileID: f.epubA.ID, Type: "uuid", Value: "urn:uuid:internal-1234", Source: models.DataSourceFileMetadata}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewUpdate().Model(f.bookA).Set("sort_title = ?", "Alpha, The").WherePK().Exec(ctx)
 	require.NoError(t, err)
 	f.bookB, f.epubB = f.insertBook(ctx, f.libB, "Bravo")
 
@@ -398,6 +402,9 @@ func TestShareLinks_RecipientFetchesBookWithoutPaths(t *testing.T) {
 	assert.NotContains(t, body, f.rootDir, "no filesystem path may reach a recipient")
 	assert.NotContains(t, body, ".cover.png", "no cover filename may reach a recipient")
 	assert.NotContains(t, body, "not a valid zip file", "scan errors can quote paths")
+	assert.NotContains(t, body, "Alpha, The", "the sort title is the library's, not the reader's")
+	assert.NotContains(t, body, "internal-catalog", "file URLs are not shown to recipients")
+	assert.NotContains(t, body, "internal-1234", "file identifiers are not shown to recipients")
 	assert.Contains(t, body, `"name":"Saga"`, "the series still shows")
 	assert.NotContains(t, body, "Library A", "the library is not part of the payload")
 

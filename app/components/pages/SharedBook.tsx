@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useSharedBook } from "@/hooks/queries/sharing";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { ShishoAPIError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 import type { SharedBookResponse } from "@/types";
 import { formatDateTime } from "@/utils/format";
 
@@ -54,7 +55,7 @@ export const ShareUnavailable = () => (
 const ShareNotice = ({ shared }: { shared: SharedBookResponse }) => (
   <aside
     aria-label="Share details"
-    className="border-b border-primary/20 bg-primary/10 text-sm"
+    className="border-y border-primary/20 bg-primary/10 text-sm"
   >
     <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 md:px-6">
       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
@@ -64,7 +65,9 @@ const ShareNotice = ({ shared }: { shared: SharedBookResponse }) => (
         <span className="font-semibold break-words">{shared.shared_by}</span>{" "}
         shared this book with you.
         {shared.expires_at && (
-          <span className="text-muted-foreground">
+          // Muted foreground falls below AA contrast on the tint, so the
+          // secondary sentence uses softened foreground instead.
+          <span className="text-foreground/80">
             {" "}
             This link expires {formatDateTime(shared.expires_at)}.
           </span>
@@ -81,6 +84,8 @@ const SharedBook = () => {
   const { token } = useParams<{ token: string }>();
   const sharedQuery = useSharedBook(token);
   const shared = sharedQuery.data;
+
+  const showNotice = Boolean(shared && token);
 
   usePageTitle(shared?.title ?? "Shared Book");
 
@@ -123,7 +128,9 @@ const SharedBook = () => {
 
   return (
     <div className="min-h-screen bg-background font-sans">
-      <header className="border-b border-border">
+      {/* The notice strip draws its own top border in the same tint as its
+          bottom one, so the header drops its neutral border above it. */}
+      <header className={cn(!showNotice && "border-b border-border")}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 flex items-center">
           <Logo />
         </div>
