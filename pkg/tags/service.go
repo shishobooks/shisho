@@ -68,7 +68,7 @@ func (svc *Service) RetrieveTag(ctx context.Context, opts RetrieveTagOptions) (*
 	}
 	if opts.Name != nil && opts.LibraryID != nil {
 		// Case-insensitive match
-		q = q.Where("LOWER(t.name) = LOWER(?) AND t.library_id = ?", *opts.Name, *opts.LibraryID)
+		q = q.Where("t.name = ? COLLATE NOCASE AND t.library_id = ?", *opts.Name, *opts.LibraryID)
 	}
 
 	err := q.Scan(ctx)

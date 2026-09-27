@@ -80,7 +80,7 @@ func (svc *Service) RetrieveSeries(ctx context.Context, opts RetrieveSeriesOptio
 	}
 	if opts.Name != nil && opts.LibraryID != nil {
 		// Case-insensitive match
-		q = q.Where("LOWER(s.name) = LOWER(?) AND s.library_id = ?", *opts.Name, *opts.LibraryID)
+		q = q.Where("s.name = ? COLLATE NOCASE AND s.library_id = ?", *opts.Name, *opts.LibraryID)
 	}
 
 	err := q.Scan(ctx)

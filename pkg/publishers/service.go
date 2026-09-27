@@ -70,7 +70,7 @@ func (svc *Service) RetrievePublisher(ctx context.Context, opts RetrievePublishe
 	}
 	if opts.Name != nil && opts.LibraryID != nil {
 		// Case-insensitive match
-		q = q.Where("LOWER(pub.name) = LOWER(?) AND pub.library_id = ?", *opts.Name, *opts.LibraryID)
+		q = q.Where("pub.name = ? COLLATE NOCASE AND pub.library_id = ?", *opts.Name, *opts.LibraryID)
 	}
 
 	err := q.Scan(ctx)

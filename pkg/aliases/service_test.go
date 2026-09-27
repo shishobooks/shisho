@@ -158,6 +158,25 @@ func TestRemoveAlias(t *testing.T) {
 	assert.Empty(t, aliases)
 }
 
+func TestRemoveAlias_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createTestLibrary(t, db)
+	genre := createTestGenre(t, db, "Science Fiction", lib.ID)
+
+	require.NoError(t, svc.AddAlias(ctx, GenreConfig, genre.ID, "Sci-Fi", lib.ID))
+	require.NoError(t, svc.AddAlias(ctx, GenreConfig, genre.ID, "SF", lib.ID))
+
+	require.NoError(t, svc.RemoveAlias(ctx, GenreConfig, genre.ID, "sci-FI"))
+
+	aliases, err := svc.ListAliases(ctx, GenreConfig, genre.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"SF"}, aliases)
+}
+
 func TestListAliases_Empty(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
