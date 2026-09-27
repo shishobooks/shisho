@@ -74,20 +74,17 @@ func writeMinimalEPUB(path, title string) (err error) {
 	return errors.WithStack(zw.Close())
 }
 
-// e2eEPUBRoot holds every EPUB written by withEpubOnDisk, so the E2E wipe
-// (DELETE /test/ereader) can remove them all.
-func e2eEPUBRoot() string {
-	return filepath.Join(os.TempDir(), "shisho-e2e-epubs")
-}
-
 // tempEPUBPath returns the path, without extension, for a new EPUB in a fresh
-// directory under e2eEPUBRoot. Path separators in the title are replaced so
-// the file lands in that directory.
-func tempEPUBPath(title string) (string, error) {
-	if err := os.MkdirAll(e2eEPUBRoot(), 0o755); err != nil {
+// directory under root. Path separators in the title are replaced so the file
+// lands in that directory.
+func tempEPUBPath(root, title string) (string, error) {
+	if root == "" {
+		return "", errors.New("no EPUB directory configured for withEpubOnDisk")
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", errors.WithStack(err)
 	}
-	dir, err := os.MkdirTemp(e2eEPUBRoot(), "book-")
+	dir, err := os.MkdirTemp(root, "book-")
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

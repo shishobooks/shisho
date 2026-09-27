@@ -10,8 +10,10 @@ import (
 
 // RegisterRoutes registers test-only routes.
 // These endpoints should ONLY be registered in test environments.
-func RegisterRoutes(e *echo.Group, db *bun.DB, manager *plugins.Manager, installer *plugins.Installer) {
-	h := &handler{db: db, manager: manager, installer: installer}
+// epubRoot is where POST /test/books writes EPUBs for withEpubOnDisk. It must
+// belong to this server alone, because DELETE /test/ereader removes it.
+func RegisterRoutes(e *echo.Group, db *bun.DB, manager *plugins.Manager, installer *plugins.Installer, epubRoot string) {
+	h := &handler{db: db, manager: manager, installer: installer, epubRoot: epubRoot}
 
 	test := e.Group("/test")
 	test.POST("/users", h.createUser)

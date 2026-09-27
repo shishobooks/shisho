@@ -85,7 +85,8 @@ const SharedBook = () => {
   const sharedQuery = useSharedBook(token);
   const shared = sharedQuery.data;
 
-  const showNotice = Boolean(shared && token);
+  // The book to announce in the notice strip, once it has loaded.
+  const notice = shared && token ? shared : null;
 
   usePageTitle(shared?.title ?? "Shared Book");
 
@@ -130,12 +131,12 @@ const SharedBook = () => {
     <div className="min-h-screen bg-background font-sans">
       {/* The notice strip draws its own top border in the same tint as its
           bottom one, so the header drops its neutral border above it. */}
-      <header className={cn(!showNotice && "border-b border-border")}>
+      <header className={cn(!notice && "border-b border-border")}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 flex items-center">
           <Logo />
         </div>
       </header>
-      {shared && token && <ShareNotice shared={shared} />}
+      {notice && <ShareNotice shared={notice} />}
       <main className="max-w-7xl mx-auto px-4 py-4 md:px-6 md:py-8">
         {content}
       </main>

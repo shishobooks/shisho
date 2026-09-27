@@ -55,7 +55,7 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 
 	e := echo.New()
 	// The fixture endpoints do not need a database or plugin manager.
-	RegisterRoutes(e.Group("/api"), nil, nil, nil)
+	RegisterRoutes(e.Group("/api"), nil, nil, nil, "")
 
 	// Fetch the zip
 	req := httptest.NewRequest(http.MethodGet, "/api/test/plugins/fixture.zip", nil)
@@ -111,7 +111,7 @@ func TestSeedPluginWritesDBRow(t *testing.T) {
 	tmp := t.TempDir()
 	installer := plugins.NewInstaller(tmp)
 	e := echo.New()
-	RegisterRoutes(e.Group("/api"), db, nil, installer)
+	RegisterRoutes(e.Group("/api"), db, nil, installer, "")
 
 	body := `{
 		"scope": "test",
@@ -159,7 +159,7 @@ func TestDeleteAllPluginsWipesStateAndDisk(t *testing.T) {
 
 	installer := plugins.NewInstaller(tmp)
 	e := echo.New()
-	RegisterRoutes(e.Group("/api"), db, nil, installer)
+	RegisterRoutes(e.Group("/api"), db, nil, installer, "")
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/test/plugins", nil))

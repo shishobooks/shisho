@@ -28,11 +28,9 @@ export function useSSE() {
     // A Share Link page is for recipients, so it never opens the stream,
     // even for a signed-in user previewing their own link. The page is only
     // reached by a full page load, so the pathname at mount is enough.
-    if (
-      !isAuthenticated ||
-      demoMode ||
-      window.location.pathname.startsWith("/share/")
-    ) {
+    const { pathname } = window.location;
+    const onSharePage = pathname === "/share" || pathname.startsWith("/share/");
+    if (!isAuthenticated || demoMode || onSharePage) {
       return;
     }
 

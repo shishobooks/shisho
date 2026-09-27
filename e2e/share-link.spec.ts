@@ -127,9 +127,11 @@ test.describe("Share Links", () => {
       url = await page.evaluate(() => navigator.clipboard.readText());
     } else {
       const list = await page.request.get(`/api/books/${bookId}/share-links`);
+      expect(list.ok()).toBe(true);
       const links = (await list.json()) as { label?: string; token: string }[];
       const created = links.find((l) => l.label === "for the e2e test");
-      url = `${origin}/share/${created?.token}`;
+      expect(created).toBeDefined();
+      url = `${origin}/share/${created!.token}`;
     }
     expect(url).toMatch(new RegExp(`^${origin}/share/[A-Za-z0-9_-]{43}$`));
 

@@ -21,6 +21,7 @@ type handler struct {
 	db        *bun.DB
 	manager   *plugins.Manager
 	installer *plugins.Installer
+	epubRoot  string
 }
 
 // createUserRequest is the request body for creating a test user.
@@ -237,7 +238,7 @@ func (h *handler) createBook(c echo.Context) error {
 		if fileType != models.FileTypeEPUB {
 			return errcodes.BadRequest("withEpubOnDisk requires fileType epub")
 		}
-		base, err := tempEPUBPath(req.Title)
+		base, err := tempEPUBPath(h.epubRoot, req.Title)
 		if err != nil {
 			return err
 		}
@@ -533,7 +534,9 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 	defer h.db.Exec("PRAGMA foreign_keys = ON") //nolint:errcheck
 
 	// Remove EPUBs written by POST /test/books with withEpubOnDisk.
-	_ = os.RemoveAll(e2eEPUBRoot())
+	if h.epubRoot != "" {
+		_ = os.RemoveAll(h.epubRoot)
+	}
 
 	// Delete API key permissions
 	_, _ = h.db.NewDelete().

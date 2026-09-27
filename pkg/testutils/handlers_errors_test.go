@@ -25,7 +25,7 @@ func TestSeedingRoutes_ReturnErrcodesBodies(t *testing.T) {
 	require.NoError(t, err)
 	e.Binder = b
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	RegisterRoutes(e.Group("/api"), db, nil, nil)
+	RegisterRoutes(e.Group("/api"), db, nil, nil, "")
 
 	paths := []string{
 		"/api/test/users",
@@ -68,7 +68,7 @@ func TestSeedingRoutes_MalformedBodyReturnsBinderError(t *testing.T) {
 	require.NoError(t, err)
 	e.Binder = b
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	RegisterRoutes(e.Group("/api"), db, nil, nil)
+	RegisterRoutes(e.Group("/api"), db, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/test/users", strings.NewReader(`{"username":`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
