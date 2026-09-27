@@ -15,6 +15,7 @@ const (
 	ResourceUsers     = "users"
 	ResourceJobs      = "jobs"
 	ResourceConfig    = "config"
+	ResourceShares    = "shares"
 )
 
 // Permission operations.

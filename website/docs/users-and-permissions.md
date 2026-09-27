@@ -10,7 +10,7 @@ Shisho creates three system roles with these default permissions:
 
 | Role | Default Permissions |
 |------|---------------------|
-| **admin** | Read and Write for Libraries, Books, Series, People, Users, Jobs, and Config |
+| **admin** | Read and Write for Libraries, Books, Series, People, Users, Jobs, Config, and Shares |
 | **editor** | Read and Write for Libraries, Books, Series, and People |
 | **viewer** | Read for Libraries, Books, Series, and People |
 
@@ -29,6 +29,7 @@ Permissions are available as Read and Write operations for these resources:
 - Users
 - Jobs
 - Config
+- Shares
 
 Write permissions permit the create, edit, or delete operations associated with that resource. Read access does not imply Write access.
 
@@ -39,6 +40,8 @@ Some library data is edited under a broader resource than its name suggests:
 - People (authors and narrators) are edited with People Write.
 - Library rescans create jobs, so they require Jobs Read and Jobs Write. Viewing jobs and their logs requires Jobs Read.
 - Bulk downloads also create jobs, but they need Books Read and access to the files' libraries instead of Jobs permissions. See [Bulk Download Permissions](./browsing-search-bulk-actions.md#bulk-download-permissions).
+
+Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role.
 
 The server log under **Settings > Logs** requires Config Read. Live log updates follow the same rule, so users without Config Read never receive server log lines.
 

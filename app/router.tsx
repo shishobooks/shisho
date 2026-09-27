@@ -9,6 +9,7 @@ import AdminLogs from "@/components/pages/AdminLogs";
 import AdminPlugins from "@/components/pages/AdminPlugins";
 import AdminReviewCriteria from "@/components/pages/AdminReviewCriteria";
 import AdminSettings from "@/components/pages/AdminSettings";
+import AdminSharing from "@/components/pages/AdminSharing";
 import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
 import CreateLibrary from "@/components/pages/CreateLibrary";
@@ -227,6 +228,16 @@ export const router = createBrowserRouter([
                 requiredPermission={{ resource: "config", operation: "read" }}
               >
                 <AdminReviewCriteria />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "sharing",
+            element: (
+              <ProtectedRoute
+                requiredPermission={{ resource: "config", operation: "read" }}
+              >
+                <AdminSharing />
               </ProtectedRoute>
             ),
           },

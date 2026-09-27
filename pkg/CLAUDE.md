@@ -38,6 +38,12 @@ This file documents backend patterns and conventions specific to Shisho.
 
 Any new route family or download path must be classified here as allowed, denied, or unregistered in Demo Mode, with corresponding middleware or route-registration tests. New GET/HEAD handlers must not introduce persistent user changes.
 
+### Admin Settings Store
+
+`app_settings` (`pkg/appsettings`) holds admin-editable feature settings as one JSON document per key, with a domain package owning the key, the struct, and load and save helpers (`review.Load`/`review.Save`, `sharelinks.LoadSettings`/`sharelinks.SaveSettings`) that fall back to defaults when no row exists. The review criteria (`pkg/books/review`, key `review_criteria`) set the precedent. Sharing (`pkg/sharelinks`, key `sharing`) follows it and is the first feature switch stored there instead of in `config.Config`: a switch that carries companion policy and a warning the admin must read belongs in the admin UI, with no config field or env var (ADR 0008). Prefer this store for new policy an admin decides at runtime; keep deployment facts in config.
+
+The endpoints live under `/api/settings/*`. `PUT /api/settings/sharing` takes pointer fields so each switch saves on its own, and the handler loads, merges, and saves the document outside a transaction. Two admins changing different switches at the same instant can lose one change; that is accepted for rarely edited admin settings, but wrap the load and save in a transaction if a document ever gets frequent concurrent writers. Writes require `config:write` and are rejected in Demo Mode by the global middleware; reads are GETs and stay allowed.
+
 ### Core Services Pattern
 
 Each domain (books, jobs, libraries, chapters) has:
@@ -228,6 +234,7 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 | `users` | User administration | Create users, manage roles, reset passwords |
 | `jobs` | Background jobs | Trigger scans, view job status. Not needed for `bulk_download` (see below) |
 | `config` | Application config | View app configuration |
+| `shares` | Share Links | View (`read`) and create, revoke, delete (`write`) a book's Share Links. `read` also allows reading the sharing settings |
 
 #### Permission Operations
 
@@ -238,7 +245,7 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 
 | Role | Permissions |
 |------|-------------|
-| `admin` | All 14 permissions (full access) |
+| `admin` | All 16 permissions (full access) |
 | `editor` | Read+write: libraries, books, series, people (8 permissions) |
 | `viewer` | Read-only: libraries, books, series, people (4 permissions) |
 
@@ -255,6 +262,11 @@ booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.Ope
 **Individual route permission:**
 ```go
 g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
+```
+
+**Either of several resources (same operation):**
+```go
+g.GET("/sharing", h.get, authMiddleware.RequireAnyPermission(models.OperationRead, models.ResourceShares, models.ResourceConfig))
 ```
 
 **Library access check (for routes with library ID param):**
@@ -295,7 +307,7 @@ if user, ok := c.Get("user").(*models.User); ok {
 2. **Routes returning book/file data need library access checks** - Either via middleware or inline
 3. **Search endpoints need explicit `books:read`** - Search returns book data, so require the permission
 4. **User-scoped resources don't need global permissions** - Lists, API keys, settings are user-scoped
-5. **Sharing features require `users:read`** - To share, users must see the user list
+5. **List sharing requires `users:read`** - To share a list, users must see the user list. Share Links use the separate `shares` resource instead
 6. **Both frontend and backend checks required** - Backend for security, frontend for UX
 7. **Read-only lookups used on shared pages must not inherit an admin group's permission** - A GET called by pages that every role can open (for example `GET /api/plugins/identifier-types`, rendered on book and file pages, and `GET /api/plugins/order/:hookType`, read by the identify dialog) belongs in its own group with the read permission its consumers hold (`books:read` here). Registering it inside the `config:write` plugin management group returns 403 to editors and viewers, and the frontend fails silently.
 8. **Bulk download does not need Jobs permissions** - The `/api/jobs` group only authenticates. `GET /api/jobs` and `GET /api/jobs/:id/logs` require `jobs:read` per route. `POST /api/jobs` requires `jobs:read` and `jobs:write` in the handler, except `bulk_download`, which requires `books:read` plus library access to every existing requested file and stores only `file_ids` and `estimated_size_bytes` with no `library_id`. `GET /api/jobs/:id` and `/:id/download` allow `jobs:read` or the job's creator (`jobs.created_by_user_id`) for a `bulk_download` job (`canReadJob`), and return 404 otherwise so job IDs cannot be probed. Do not re-add a group-level `jobs:read` middleware; it breaks bulk download for editors and viewers.
@@ -314,9 +326,11 @@ Request → Authenticate → RequirePermission → RequireLibraryAccess → Hand
    ```go
    const ResourceNewFeature = "newfeature"
    ```
-2. Add to admin role in migration or update existing admin roles
-3. Update `app/components/library/PermissionMatrix.tsx` to display in UI
-4. Add permission checks to relevant routes/handlers
+2. Add it to `roles.ValidResources` in `pkg/roles/service.go`, or creating or updating a role with it fails validation
+3. Seed it onto the admin role in a migration (`20260927000000_add_shares_permission.go` is the reference)
+4. Update `app/components/library/PermissionMatrix.tsx` to display in UI
+5. Add permission checks to relevant routes/handlers
+6. List it in `website/docs/users-and-permissions.md` and the resource table above
 
 ### API Conventions
 

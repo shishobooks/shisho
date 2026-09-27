@@ -14,11 +14,13 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 
 	userH := &handler{settingsService: svc}
 	libraryH := &libraryHandler{settingsService: svc}
+	appSettingsSvc := appsettings.NewService(db)
 	reviewCriteriaH := &reviewCriteriaHandler{
 		db:                 db,
-		appSettingsService: appsettings.NewService(db),
+		appSettingsService: appSettingsSvc,
 		jobService:         jobs.NewService(db),
 	}
+	sharingH := &sharingHandler{appSettingsService: appSettingsSvc}
 
 	g := e.Group("/settings")
 	g.Use(authMiddleware.Authenticate)
@@ -34,4 +36,9 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	// PUT remains admin-only via config:write.
 	g.GET("/review-criteria", reviewCriteriaH.getReviewCriteria, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	g.PUT("/review-criteria", reviewCriteriaH.putReviewCriteria, authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
+
+	// GET allows shares:read so sharers can read the policy that shapes the
+	// Share Link form, and config:read so admins can render the Sharing page.
+	g.GET("/sharing", sharingH.getSharingSettings, authMiddleware.RequireAnyPermission(models.OperationRead, models.ResourceShares, models.ResourceConfig))
+	g.PUT("/sharing", sharingH.updateSharingSettings, authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
 }

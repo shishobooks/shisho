@@ -123,6 +123,8 @@ export {
   type UpdateLibrarySettingsPayload,
   type ReviewCriteriaResponse,
   type PutReviewCriteriaPayload,
+  type SharingSettingsResponse,
+  type UpdateSharingSettingsPayload,
 } from "./generated/settings";
 export {
   type CreateListPayload,

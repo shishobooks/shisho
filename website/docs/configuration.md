@@ -16,6 +16,8 @@ Every setting below can also be provided as an unprefixed environment variable u
 
 Environment variables override values from the YAML file. Keep secrets such as `JWT_SECRET` out of source control.
 
+Share Links are not a configuration option. An admin turns them on under **Settings > Sharing** without a restart. See [Sharing](./sharing.md).
+
 ## Settings
 
 ### Database

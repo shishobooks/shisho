@@ -19,6 +19,7 @@ var ValidResources = []string{
 	models.ResourceUsers,
 	models.ResourceJobs,
 	models.ResourceConfig,
+	models.ResourceShares,
 }
 
 // ValidOperations contains all valid operation names.

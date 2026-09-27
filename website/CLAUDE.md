@@ -39,7 +39,7 @@ The canonical sidebar is:
 1. **Getting Started**: safe first deployment and initial library setup
 2. **Public Demo**: the hosted read-only instance, its shared credential, and what it can and cannot do
 3. **Supported Formats**: evaluation of native input, reading, and download capabilities
-4. **Using Shisho**: regular user tasks such as browsing, search, reading, playback, bulk actions, book and file management, metadata, and lists
+4. **Using Shisho**: regular user tasks such as browsing, search, reading, playback, bulk actions, book and file management, metadata, lists, and sharing
 5. **Administration**: deployment and maintenance, configuration, libraries, access control, installed plugins, supplements, and sidecars
 6. **Integrations**: OPDS, Kobo Sync, and the eReader Browser
 7. **Troubleshooting**: a prominent cross-cutting router from symptoms to canonical task pages
