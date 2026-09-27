@@ -458,9 +458,8 @@ func (h *handler) deleteSeries(c echo.Context) error {
 	// (e.g. when `series` is a required field) and stales their books_fts
 	// rows, which still reference the deleted series name. Recompute review
 	// state and re-index each affected book.
+	h.bookService.RecomputeReviewedForBooks(ctx, affectedBookIDs)
 	for _, bookID := range affectedBookIDs {
-		h.bookService.RecomputeReviewedForBook(ctx, bookID)
-
 		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
 			log.Warn("failed to update book search index after series delete", logger.Data{"book_id": bookID, "error": err.Error()})
 		}

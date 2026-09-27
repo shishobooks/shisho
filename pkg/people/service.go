@@ -226,10 +226,29 @@ func (svc *Service) UpdatePerson(ctx context.Context, person *models.Person, opt
 // ordinary Scan must not bring the person back from a sidecar or the file,
 // while Refresh all metadata and Reset to file metadata still may
 // (ADR 0006). Only this service path is supported.
-func (svc *Service) DeletePerson(ctx context.Context, personID int) error {
-	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+//
+// Returns the IDs of the books the person authored plus the books that own
+// a file the person narrated, each once, so the caller can recompute their
+// review state and re-index them after the transaction commits.
+func (svc *Service) DeletePerson(ctx context.Context, personID int) ([]int, error) {
+	var affectedBookIDs []int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// UNION removes duplicates, so a book the person both authored and
+		// narrated appears once. Raw SQL because bun parenthesizes each side
+		// of a Union, which SQLite rejects.
+		err := tx.NewRaw(`
+			SELECT a.book_id FROM authors AS a WHERE a.person_id = ?
+			UNION
+			SELECT f.book_id FROM narrators AS n
+			INNER JOIN files AS f ON f.id = n.file_id
+			WHERE n.person_id = ?`, personID, personID).
+			Scan(ctx, &affectedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Stamp the owners before the join rows that identify them are gone.
-		_, err := tx.NewUpdate().
+		_, err = tx.NewUpdate().
 			Model((*models.Book)(nil)).
 			Set("author_source = ?", models.DataSourceManual).
 			Where("b.id IN (?)", tx.NewSelect().
@@ -278,6 +297,10 @@ func (svc *Service) DeletePerson(ctx context.Context, personID int) error {
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return affectedBookIDs, nil
 }
 
 // GetAuthoredBooks returns all books authored by this person.

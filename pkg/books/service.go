@@ -128,18 +128,27 @@ func (svc *Service) RecomputeReviewedForFile(ctx context.Context, fileID int) {
 // RecomputeReviewedForBook refreshes files.reviewed for every file of the book.
 // Errors are logged but do not propagate to the caller.
 func (svc *Service) RecomputeReviewedForBook(ctx context.Context, bookID int) {
-	if svc.appSettingsService == nil {
+	svc.RecomputeReviewedForBooks(ctx, []int{bookID})
+}
+
+// RecomputeReviewedForBooks refreshes files.reviewed for every file of each
+// book, loading the review criteria once. Use it when one change affects many
+// books, such as deleting a shared resource. Errors are logged, and a failure
+// on one book does not stop the rest.
+func (svc *Service) RecomputeReviewedForBooks(ctx context.Context, bookIDs []int) {
+	if svc.appSettingsService == nil || len(bookIDs) == 0 {
 		return
 	}
+	log := logger.FromContext(ctx)
 	criteria, err := review.Load(ctx, svc.appSettingsService)
 	if err != nil {
-		log := logger.FromContext(ctx)
 		log.Warn("review: load criteria failed", logger.Data{"err": err.Error()})
 		return
 	}
-	if err := review.RecomputeForBook(ctx, svc.db, bookID, criteria); err != nil {
-		log := logger.FromContext(ctx)
-		log.Warn("review: recompute for book failed", logger.Data{"err": err.Error(), "book_id": bookID})
+	for _, bookID := range bookIDs {
+		if err := review.RecomputeForBook(ctx, svc.db, bookID, criteria); err != nil {
+			log.Warn("review: recompute for book failed", logger.Data{"err": err.Error(), "book_id": bookID})
+		}
 	}
 }
 

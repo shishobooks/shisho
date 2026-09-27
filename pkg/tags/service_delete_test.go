@@ -82,7 +82,9 @@ func TestDeleteTag_StampsManualTagSourceOnEveryAffectedBook(t *testing.T) {
 	partial := createTagBook(t, db, lib, pluginSource, deleted.ID, kept.ID)
 	untouched := createTagBook(t, db, lib, pluginSource, kept.ID)
 
-	require.NoError(t, svc.DeleteTag(ctx, deleted.ID))
+	affectedBookIDs, err := svc.DeleteTag(ctx, deleted.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, append(emptied, partial), affectedBookIDs, "every Book that carried the Tag is returned once")
 
 	for i, bookID := range emptied {
 		book, tagIDs := retrieveTagBook(t, db, bookID)
@@ -102,7 +104,7 @@ func TestDeleteTag_StampsManualTagSourceOnEveryAffectedBook(t *testing.T) {
 	assert.Equal(t, []int{kept.ID}, tagIDs)
 	assert.Equal(t, pluginSource, book.TagSource, "Books without the deleted Tag keep their source")
 
-	_, err := svc.RetrieveTag(ctx, RetrieveTagOptions{ID: &deleted.ID})
+	_, err = svc.RetrieveTag(ctx, RetrieveTagOptions{ID: &deleted.ID})
 	require.Error(t, err, "the Tag itself is deleted")
 }
 
@@ -121,7 +123,9 @@ func TestDeleteTag_Unused_TouchesNoBooks(t *testing.T) {
 	pluginSource := testgen.StringPtr("plugin:test/enricher")
 	bookID := createTagBook(t, db, lib, pluginSource, other.ID)
 
-	require.NoError(t, svc.DeleteTag(ctx, unused.ID))
+	affectedBookIDs, err := svc.DeleteTag(ctx, unused.ID)
+	require.NoError(t, err)
+	assert.Empty(t, affectedBookIDs)
 
 	book, tagIDs := retrieveTagBook(t, db, bookID)
 	assert.Equal(t, []int{other.ID}, tagIDs)

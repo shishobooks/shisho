@@ -145,7 +145,14 @@ func TestDeletePerson_StampsManualSourceOnEveryAffectedBookAndFile(t *testing.T)
 	untouchedBook := createAuthoredBook(t, db, lib, personDeletePluginSource, kept.ID)
 	untouchedFile := createNarratedFile(t, db, lib, testgen.StringPtr(personDeletePluginSource), kept.ID)
 
-	require.NoError(t, svc.DeletePerson(ctx, deleted.ID))
+	affectedBookIDs, err := svc.DeletePerson(ctx, deleted.ID)
+	require.NoError(t, err)
+	wantBookIDs := append([]int{partialBook}, emptiedBooks...)
+	for _, fileID := range append([]int{partialFile}, emptiedFiles...) {
+		file, _ := retrieveNarratedFile(t, db, fileID)
+		wantBookIDs = append(wantBookIDs, file.BookID)
+	}
+	assert.ElementsMatch(t, wantBookIDs, affectedBookIDs, "every authored Book and every narrated File's Book is returned")
 
 	for i, bookID := range emptiedBooks {
 		book, personIDs := retrieveAuthoredBook(t, db, bookID)
@@ -182,7 +189,7 @@ func TestDeletePerson_StampsManualSourceOnEveryAffectedBookAndFile(t *testing.T)
 	assert.Equal(t, []int{kept.ID}, personIDs)
 	assert.Equal(t, testgen.StringPtr(personDeletePluginSource), file.NarratorSource, "Files the Person did not narrate keep their source")
 
-	_, err := svc.RetrievePerson(ctx, RetrievePersonOptions{ID: &deleted.ID})
+	_, err = svc.RetrievePerson(ctx, RetrievePersonOptions{ID: &deleted.ID})
 	require.Error(t, err, "the Person itself is deleted")
 }
 
@@ -200,7 +207,9 @@ func TestDeletePerson_Unused_TouchesNothing(t *testing.T) {
 	bookID := createAuthoredBook(t, db, lib, personDeletePluginSource, other.ID)
 	fileID := createNarratedFile(t, db, lib, testgen.StringPtr(personDeletePluginSource), other.ID)
 
-	require.NoError(t, svc.DeletePerson(ctx, unused.ID))
+	affectedBookIDs, err := svc.DeletePerson(ctx, unused.ID)
+	require.NoError(t, err)
+	assert.Empty(t, affectedBookIDs)
 
 	book, personIDs := retrieveAuthoredBook(t, db, bookID)
 	assert.Equal(t, []int{other.ID}, personIDs)
@@ -209,6 +218,37 @@ func TestDeletePerson_Unused_TouchesNothing(t *testing.T) {
 	file, personIDs := retrieveNarratedFile(t, db, fileID)
 	assert.Equal(t, []int{other.ID}, personIDs)
 	assert.Equal(t, testgen.StringPtr(personDeletePluginSource), file.NarratorSource)
+}
+
+// A Book the Person both authored and narrated is returned once, so the
+// caller recomputes and re-indexes it once.
+func TestDeletePerson_ReturnsEachAffectedBookOnce(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	lib := createPersonDeleteLibrary(t, db)
+	deleted := createNamedPerson(t, svc, lib, "Deleted Person")
+	bookID := createAuthoredBook(t, db, lib, personDeletePluginSource, deleted.ID)
+	for i := range 2 {
+		file := &models.File{
+			LibraryID:     lib.ID,
+			BookID:        bookID,
+			FileType:      models.FileTypeM4B,
+			FileRole:      models.FileRoleMain,
+			Filepath:      fmt.Sprintf("/tmp/both-%d-%d.m4b", bookID, i),
+			FilesizeBytes: 1,
+		}
+		_, err := db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+		_, err = db.NewInsert().Model(&models.Narrator{FileID: file.ID, PersonID: deleted.ID, SortOrder: 1}).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	affectedBookIDs, err := svc.DeletePerson(ctx, deleted.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []int{bookID}, affectedBookIDs)
 }
 
 // Merging re-points Authors and Narrators at the target. It is not a clear,

@@ -82,7 +82,9 @@ func TestDeleteGenre_StampsManualGenreSourceOnEveryAffectedBook(t *testing.T) {
 	partial := createGenreBook(t, db, lib, pluginSource, deleted.ID, kept.ID)
 	untouched := createGenreBook(t, db, lib, pluginSource, kept.ID)
 
-	require.NoError(t, svc.DeleteGenre(ctx, deleted.ID))
+	affectedBookIDs, err := svc.DeleteGenre(ctx, deleted.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, append(emptied, partial), affectedBookIDs, "every Book that carried the Genre is returned once")
 
 	for i, bookID := range emptied {
 		book, genreIDs := retrieveGenreBook(t, db, bookID)
@@ -102,7 +104,7 @@ func TestDeleteGenre_StampsManualGenreSourceOnEveryAffectedBook(t *testing.T) {
 	assert.Equal(t, []int{kept.ID}, genreIDs)
 	assert.Equal(t, pluginSource, book.GenreSource, "Books without the deleted Genre keep their source")
 
-	_, err := svc.RetrieveGenre(ctx, RetrieveGenreOptions{ID: &deleted.ID})
+	_, err = svc.RetrieveGenre(ctx, RetrieveGenreOptions{ID: &deleted.ID})
 	require.Error(t, err, "the Genre itself is deleted")
 }
 
@@ -121,7 +123,9 @@ func TestDeleteGenre_Unused_TouchesNoBooks(t *testing.T) {
 	pluginSource := testgen.StringPtr("plugin:test/enricher")
 	bookID := createGenreBook(t, db, lib, pluginSource, other.ID)
 
-	require.NoError(t, svc.DeleteGenre(ctx, unused.ID))
+	affectedBookIDs, err := svc.DeleteGenre(ctx, unused.ID)
+	require.NoError(t, err)
+	assert.Empty(t, affectedBookIDs)
 
 	book, genreIDs := retrieveGenreBook(t, db, bookID)
 	assert.Equal(t, []int{other.ID}, genreIDs)

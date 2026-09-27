@@ -1,6 +1,7 @@
 package tags
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,10 +15,19 @@ import (
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
+// BookReviewRecomputer refreshes files.reviewed for every file of each book,
+// loading the review criteria once. *books.Service satisfies it. pkg/books
+// imports pkg/tags, so the handler takes this interface to avoid an import
+// cycle.
+type BookReviewRecomputer interface {
+	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
-	tagService    *Service
-	aliasService  *aliases.Service
-	searchService *search.Service
+	tagService       *Service
+	aliasService     *aliases.Service
+	searchService    *search.Service
+	reviewRecomputer BookReviewRecomputer
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -278,12 +288,20 @@ func (h *handler) deleteTag(c echo.Context) error {
 		}
 	}
 
-	err = h.tagService.DeleteTag(ctx, id)
+	affectedBookIDs, err := h.tagService.DeleteTag(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	log := logger.FromContext(ctx)
+
+	// Removing the join rows can flip the books' Reviewed completeness state
+	// (e.g. when `tags` is a required field), so recompute it for every
+	// affected book. Unlike deleteSeries there is no books_fts re-index:
+	// books_fts has no tag column. Add ReindexBookByID here if it gains one.
+	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
+
+	// Remove the deleted tag itself from the tag FTS index.
 	if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
 		log.Warn("failed to remove tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
 	}

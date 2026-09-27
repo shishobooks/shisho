@@ -76,7 +76,8 @@ var collectionKinds = []collectionKind{
 			svc := genres.NewService(tc.db)
 			g, err := svc.RetrieveGenre(tc.ctx, genres.RetrieveGenreOptions{Name: &name, LibraryID: &libraryID})
 			require.NoError(t, err)
-			require.NoError(t, svc.DeleteGenre(tc.ctx, g.ID))
+			_, err = svc.DeleteGenre(tc.ctx, g.ID)
+			require.NoError(t, err)
 		},
 		exists: func(tc *testContext, libraryID int, name string) bool {
 			_, err := genres.NewService(tc.db).RetrieveGenre(tc.ctx, genres.RetrieveGenreOptions{Name: &name, LibraryID: &libraryID})
@@ -99,7 +100,8 @@ var collectionKinds = []collectionKind{
 			svc := tags.NewService(tc.db)
 			tag, err := svc.RetrieveTag(tc.ctx, tags.RetrieveTagOptions{Name: &name, LibraryID: &libraryID})
 			require.NoError(t, err)
-			require.NoError(t, svc.DeleteTag(tc.ctx, tag.ID))
+			_, err = svc.DeleteTag(tc.ctx, tag.ID)
+			require.NoError(t, err)
 		},
 		exists: func(tc *testContext, libraryID int, name string) bool {
 			_, err := tags.NewService(tc.db).RetrieveTag(tc.ctx, tags.RetrieveTagOptions{Name: &name, LibraryID: &libraryID})
@@ -177,7 +179,8 @@ func deletePersonByName(t *testing.T, tc *testContext, libraryID int, name strin
 	svc := people.NewService(tc.db)
 	p, err := svc.RetrievePerson(tc.ctx, people.RetrievePersonOptions{Name: &name, LibraryID: &libraryID})
 	require.NoError(t, err)
-	require.NoError(t, svc.DeletePerson(tc.ctx, p.ID))
+	_, err = svc.DeletePerson(tc.ctx, p.ID)
+	require.NoError(t, err)
 }
 
 func personExists(tc *testContext, libraryID int, name string) bool {
