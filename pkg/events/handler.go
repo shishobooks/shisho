@@ -6,12 +6,23 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 const heartbeatInterval = 30 * time.Second
 
 type handler struct {
 	broker *Broker
+}
+
+// eventFilterFor returns which events a connected user may receive. Log
+// lines follow the permission of GET /api/logs (Config Read). Every other
+// event, including job events, goes to every authenticated user.
+func eventFilterFor(user *models.User) EventFilter {
+	canReadLogs := user != nil && user.HasPermission(models.ResourceConfig, models.OperationRead)
+	return func(evt Event) bool {
+		return evt.Type != EventTypeLogEntry || canReadLogs
+	}
 }
 
 func (h *handler) stream(c echo.Context) error {
@@ -26,7 +37,11 @@ func (h *handler) stream(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "streaming not supported")
 	}
 
-	ch := h.broker.Subscribe()
+	// Authenticate stores the user with its role and permissions loaded. The
+	// filter is fixed for the life of the connection, so a permission change
+	// applies when the client reconnects.
+	user, _ := c.Get("user").(*models.User)
+	ch := h.broker.SubscribeFiltered(eventFilterFor(user))
 	defer h.broker.Unsubscribe(ch)
 
 	// Flush headers so client receives them immediately.

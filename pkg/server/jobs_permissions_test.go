@@ -48,22 +48,8 @@ func newJobsPermissionFixture(t *testing.T) *jobsPermissionFixture {
 	t.Helper()
 	ctx := context.Background()
 
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	// Every pooled connection to a bare :memory: DSN is its own database, so
-	// pin the pool before migrating.
-	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	t.Cleanup(func() { db.Close() })
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-	_, err = migrations.BringUpToDate(ctx, db)
-	require.NoError(t, err)
-
-	cfg := config.NewForTest()
-	// Test-mode routes mutate shared plugin globals; this test runs in parallel.
-	cfg.Environment = ""
-	cfg.CacheDir = t.TempDir()
+	db := newPermissionTestDB(t)
+	cfg := newPermissionTestConfig(t)
 	dlCache := downloadcache.NewCache(t.TempDir(), 1<<30)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil, dlCache, nil, nil, nil)
 	require.NoError(t, err)
@@ -136,13 +122,49 @@ func (f *jobsPermissionFixture) insertFile(ctx context.Context, lib *models.Libr
 // grants access to all libraries.
 func (f *jobsPermissionFixture) insertUser(ctx context.Context, username, roleName string, libraryID *int) *models.User {
 	f.t.Helper()
+	return insertPermissionTestUser(ctx, f.t, f.db, username, roleName, libraryID)
+}
+
+// newPermissionTestDB returns a migrated in-memory database for tests that
+// serve the real route table.
+func newPermissionTestDB(t *testing.T) *bun.DB {
+	t.Helper()
+	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
+	require.NoError(t, err)
+	// Every pooled connection to a bare :memory: DSN is its own database, so
+	// pin the pool before migrating.
+	sqldb.SetMaxOpenConns(1)
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	t.Cleanup(func() { db.Close() })
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+	_, err = migrations.BringUpToDate(context.Background(), db)
+	require.NoError(t, err)
+	return db
+}
+
+// newPermissionTestConfig returns a config for serving the real route table
+// from a parallel test.
+func newPermissionTestConfig(t *testing.T) *config.Config {
+	t.Helper()
+	cfg := config.NewForTest()
+	// Test-mode routes mutate shared plugin globals; these tests run in parallel.
+	cfg.Environment = ""
+	cfg.CacheDir = t.TempDir()
+	return cfg
+}
+
+// insertPermissionTestUser creates an active user with the named role. A nil
+// libraryID grants access to all libraries.
+func insertPermissionTestUser(ctx context.Context, t *testing.T, db *bun.DB, username, roleName string, libraryID *int) *models.User {
+	t.Helper()
 	var roleID int
-	require.NoError(f.t, f.db.NewRaw("SELECT id FROM roles WHERE name = ?", roleName).Scan(ctx, &roleID))
+	require.NoError(t, db.NewRaw("SELECT id FROM roles WHERE name = ?", roleName).Scan(ctx, &roleID))
 	user := &models.User{Username: username, PasswordHash: "unused", RoleID: roleID, IsActive: true}
-	_, err := f.db.NewInsert().Model(user).Exec(ctx)
-	require.NoError(f.t, err)
-	_, err = f.db.NewInsert().Model(&models.UserLibraryAccess{UserID: user.ID, LibraryID: libraryID}).Exec(ctx)
-	require.NoError(f.t, err)
+	_, err := db.NewInsert().Model(user).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.UserLibraryAccess{UserID: user.ID, LibraryID: libraryID}).Exec(ctx)
+	require.NoError(t, err)
 	return user
 }
 

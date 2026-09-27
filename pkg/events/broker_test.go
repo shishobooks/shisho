@@ -108,3 +108,28 @@ func TestNewJobEvent_WithLibraryID(t *testing.T) {
 	assert.Equal(t, "job.status_changed", evt.Type)
 	assert.JSONEq(t, `{"job_id":3,"status":"in_progress","type":"scan","library_id":5}`, evt.Data)
 }
+
+// TestBroker_SubscribeFilteredSkipsRejectedEvents verifies that a filtered
+// subscriber never receives rejected events, and that rejected events do not
+// take up buffer space: a burst larger than the buffer must not crowd out an
+// accepted event that follows it.
+func TestBroker_SubscribeFilteredSkipsRejectedEvents(t *testing.T) {
+	t.Parallel()
+
+	b := NewBroker()
+	ch := b.SubscribeFiltered(func(evt Event) bool { return evt.Type != EventTypeLogEntry })
+	defer b.Unsubscribe(ch)
+
+	for i := 0; i < 200; i++ {
+		b.Publish(Event{Type: EventTypeLogEntry, Data: `{"message":"secret"}`})
+	}
+	b.Publish(Event{Type: "job.created", Data: `{"job_id":3}`})
+
+	select {
+	case received := <-ch:
+		assert.Equal(t, "job.created", received.Type)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+	assert.Empty(t, ch, "rejected events must not be queued")
+}

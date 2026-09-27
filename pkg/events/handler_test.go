@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,5 +104,35 @@ func TestSSEHandler_ReturnsOnBrokerClose(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(time.Second):
 		t.Fatal("SSE handler did not return after broker.Close()")
+	}
+}
+
+func TestEventFilterFor(t *testing.T) {
+	t.Parallel()
+
+	withPermissions := func(perms ...*models.Permission) *models.User {
+		return &models.User{Role: &models.Role{Permissions: perms}}
+	}
+	logEntry := Event{Type: EventTypeLogEntry, Data: `{"message":"secret"}`}
+	jobEvent := NewJobEvent("job.status_changed", 1, "completed", "bulk_download", nil)
+
+	tests := []struct {
+		name     string
+		user     *models.User
+		wantLogs bool
+	}{
+		{"no user", nil, false},
+		{"no role", &models.User{}, false},
+		{"books read only", withPermissions(&models.Permission{Resource: models.ResourceBooks, Operation: models.OperationRead}), false},
+		{"config write only", withPermissions(&models.Permission{Resource: models.ResourceConfig, Operation: models.OperationWrite}), false},
+		{"config read", withPermissions(&models.Permission{Resource: models.ResourceConfig, Operation: models.OperationRead}), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			allow := eventFilterFor(tt.user)
+			assert.Equal(t, tt.wantLogs, allow(logEntry))
+			assert.True(t, allow(jobEvent), "job events stay broadcast")
+		})
 	}
 }
