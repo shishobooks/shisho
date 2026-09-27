@@ -86,6 +86,18 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 		testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir))
 	}
 
+	// Services and caches that more than one route family uses are built once
+	// and injected. The books service carries app settings so every mutation
+	// through it recomputes Reviewed. See "Shared services" in pkg/CLAUDE.md.
+	svcs := sharedServices{
+		appSettings: appsettings.NewService(db),
+		plugins:     plugins.NewService(db),
+		dlCache:     dlCache,
+		cbzCache:    cbzCache,
+		pdfCache:    pdfCache,
+	}
+	svcs.books = books.NewService(db).WithAppSettings(svcs.appSettings)
+
 	// Register auth routes and get the auth service
 	authService := auth.RegisterRoutes(api, db, cfg.JWTSecret, cfg.SessionDuration(), cfg.DemoMode)
 	authMiddleware := auth.NewMiddleware(authService)
@@ -99,17 +111,17 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
-	registerProtectedRoutes(api, db, cfg, authMiddleware, w, pm, broker, dlCache, cbzCache, pdfCache)
+	registerProtectedRoutes(api, db, cfg, authMiddleware, w, pm, broker, svcs)
 
 	if !cfg.DemoMode {
 		// Register OPDS routes with Basic Auth
-		opds.RegisterRoutes(e, db, authMiddleware, dlCache)
+		opds.RegisterRoutes(e, db, authMiddleware, dlCache, svcs.books)
 
 		// Register eReader routes (API key auth for stock browser support)
-		ereader.RegisterRoutes(e, db, dlCache)
+		ereader.RegisterRoutes(e, db, dlCache, svcs.books)
 
 		// Register Kobo sync routes (API key auth for Kobo device sync)
-		kobo.RegisterRoutes(e, db, dlCache)
+		kobo.RegisterRoutes(e, db, dlCache, svcs.books)
 	}
 
 	// Config routes (require authentication)
@@ -119,7 +131,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	filesystem.RegisterRoutesWithAuth(api, authMiddleware)
 
 	// Settings routes (require authentication)
-	settings.RegisterRoutes(api, db, authMiddleware)
+	settings.RegisterRoutes(api, db, authMiddleware, svcs.appSettings)
 
 	// SSE event stream
 	events.RegisterRoutes(api, broker, authMiddleware)
@@ -169,19 +181,33 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	return srv, nil
 }
 
+// sharedServices holds the services and caches that pkg/server builds once
+// and injects into every route family that needs them. Services that hold
+// only the database handle (search, aliases, libraries, jobs, settings, API
+// keys, and the entity services) are cheap and stateless, so route packages
+// may still build those locally.
+type sharedServices struct {
+	// books carries app settings, so the chapter replace handler, the genre,
+	// tag, people, series, and publisher delete handlers, and every books
+	// mutation recompute Reviewed. Without app settings the recompute
+	// silently does nothing.
+	books       *books.Service
+	appSettings *appsettings.Service
+	plugins     *plugins.Service
+	dlCache     *downloadcache.Cache
+	cbzCache    *cbzpages.Cache
+	pdfCache    *pdfpages.Cache
+}
+
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
-func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) {
-	// The chapter replace handler and the genre, tag, people, series, and
-	// publisher delete handlers recompute Reviewed, which needs app settings
-	// to load the review criteria. Build one books service for them and
-	// inject it.
-	bookService := books.NewService(db).WithAppSettings(appsettings.NewService(db))
+func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, svcs sharedServices) {
+	bookService := svcs.books
 
 	// Books routes
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w, pm, dlCache, appsettings.NewService(db))
+	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, svcs.appSettings, bookService, svcs.cbzCache, svcs.pdfCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
 
 	// Libraries routes
@@ -192,22 +218,22 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 		OnLibraryChanged: w.RefreshMonitorWatches,
 	})
 	if !cfg.DemoMode {
-		plugins.RegisterLibraryRoutes(librariesGroup, plugins.NewService(db), pm, authMiddleware)
+		plugins.RegisterLibraryRoutes(librariesGroup, svcs.plugins, pm, authMiddleware)
 	}
-	books.RegisterLibraryRoutes(librariesGroup, db, authMiddleware)
+	books.RegisterLibraryRoutes(librariesGroup, db, authMiddleware, bookService)
 
 	// Jobs routes
 	jobsGroup := e.Group("/jobs")
 	// Jobs permissions are per route: bulk download creators need only Books Read.
 	jobsGroup.Use(authMiddleware.Authenticate)
-	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker, dlCache)
+	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker, svcs.dlCache)
 	joblogs.RegisterRoutes(jobsGroup, db, authMiddleware)
 
 	// People routes
 	peopleGroup := e.Group("/people")
 	peopleGroup.Use(authMiddleware.Authenticate)
 	peopleGroup.Use(authMiddleware.RequirePermission(models.ResourcePeople, models.OperationRead))
-	fileOrganizer := NewFileOrganizer(db)
+	fileOrganizer := NewFileOrganizer(db, bookService)
 	people.RegisterRoutesWithGroup(peopleGroup, db, authMiddleware, bookService, fileOrganizer)
 
 	// Series routes
@@ -250,11 +276,9 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	}
 
 	// Plugin identify routes (editors can search/apply metadata)
-	pluginService := plugins.NewService(db)
-	appSettingsSvc := appsettings.NewService(db)
-	bookSvc := books.NewService(db).WithAppSettings(appSettingsSvc)
-	bookAdapter := books.NewPluginMetadataStore(bookSvc)
-	pageExtractor := books.NewPluginPageExtractor(cbzCache, pdfCache)
+	pluginService := svcs.plugins
+	bookAdapter := books.NewPluginMetadataStore(bookService)
+	pageExtractor := books.NewPluginPageExtractor(svcs.cbzCache, svcs.pdfCache)
 	enrichDeps := &plugins.EnrichDeps{
 		BookStore:       bookAdapter,
 		RelStore:        bookAdapter,

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/stretchr/testify/assert"
@@ -120,7 +121,7 @@ func TestListBooksByAuthor_HonorsSort(t *testing.T) {
 	db := setupOPDSDB(t)
 	seeds := seedAuthorTestData(t, db)
 
-	svc := NewService(db)
+	svc := NewService(db, books.NewService(db))
 	got, total, err := svc.ListBooksByAuthor(
 		context.Background(),
 		seeds.library.ID,
@@ -147,7 +148,7 @@ func TestListBooksByAuthor_RespectsLimitOffset(t *testing.T) {
 	db := setupOPDSDB(t)
 	seeds := seedAuthorTestData(t, db)
 
-	svc := NewService(db)
+	svc := NewService(db, books.NewService(db))
 
 	// limit=1, offset=0 with date_added DESC → just cheese.
 	page1, total, err := svc.ListBooksByAuthor(
@@ -189,7 +190,7 @@ func TestListBooksByAuthor_UnknownAuthor(t *testing.T) {
 	db := setupOPDSDB(t)
 	seeds := seedAuthorTestData(t, db)
 
-	svc := NewService(db)
+	svc := NewService(db, books.NewService(db))
 	got, total, err := svc.ListBooksByAuthor(
 		context.Background(),
 		seeds.library.ID,

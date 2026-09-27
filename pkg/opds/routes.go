@@ -11,9 +11,8 @@ import (
 )
 
 // RegisterRoutes registers all OPDS routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache) {
-	opdsService := NewService(db)
-	bookService := books.NewService(db)
+func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache, bookService *books.Service) {
+	opdsService := NewService(db, bookService)
 
 	h := &handler{
 		opdsService:     opdsService,

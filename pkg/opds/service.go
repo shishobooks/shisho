@@ -29,11 +29,11 @@ type Service struct {
 	peopleService  *people.Service
 }
 
-// NewService creates a new OPDS service.
-func NewService(db *bun.DB) *Service {
+// NewService creates a new OPDS service around the shared books service.
+func NewService(db *bun.DB, bookService *books.Service) *Service {
 	return &Service{
 		db:             db,
-		bookService:    books.NewService(db),
+		bookService:    bookService,
 		libraryService: libraries.NewService(db),
 		seriesService:  series.NewService(db),
 		peopleService:  people.NewService(db),

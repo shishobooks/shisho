@@ -13,10 +13,9 @@ import (
 )
 
 // RegisterRoutes registers all eReader routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache) {
+func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service) {
 	apiKeyService := apikeys.NewService(db)
 	libraryService := libraries.NewService(db)
-	bookService := books.NewService(db)
 	seriesService := series.NewService(db)
 	peopleService := people.NewService(db)
 

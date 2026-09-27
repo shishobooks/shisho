@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +19,7 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	db := setupEReaderDB(t)
 
 	e := echo.New()
-	RegisterRoutes(e, db, nil)
+	RegisterRoutes(e, db, nil, books.NewService(db))
 
 	methods := map[string]map[string]bool{}
 	for _, r := range e.Routes() {
