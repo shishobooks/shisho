@@ -1,6 +1,7 @@
 package genres
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,10 +15,19 @@ import (
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
+// BookReviewRecomputer refreshes files.reviewed for every file of each book,
+// loading the review criteria once. *books.Service satisfies it. pkg/books
+// imports pkg/genres, so the handler takes this interface to avoid an import
+// cycle.
+type BookReviewRecomputer interface {
+	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
-	genreService  *Service
-	aliasService  *aliases.Service
-	searchService *search.Service
+	genreService     *Service
+	aliasService     *aliases.Service
+	searchService    *search.Service
+	reviewRecomputer BookReviewRecomputer
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -297,13 +307,20 @@ func (h *handler) deleteGenre(c echo.Context) error {
 		}
 	}
 
-	err = h.genreService.DeleteGenre(ctx, id)
+	affectedBookIDs, err := h.genreService.DeleteGenre(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Remove from FTS index
 	log := logger.FromContext(ctx)
+
+	// Removing the join rows can flip the books' Reviewed completeness state
+	// (e.g. when `genres` is a required field), so recompute it for every
+	// affected book. Unlike deleteSeries there is no books_fts re-index:
+	// books_fts has no genre column. Add ReindexBookByID here if it gains one.
+	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
+
+	// Remove the deleted genre itself from the genre FTS index.
 	if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
 		log.Warn("failed to remove genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
 	}

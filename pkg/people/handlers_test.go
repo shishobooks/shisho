@@ -71,11 +71,18 @@ func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 	return lib
 }
 
+// noopReviewRecomputer stands in for *books.Service, which this package
+// cannot import. pkg/server/resource_delete_test.go covers the real recompute.
+type noopReviewRecomputer struct{}
+
+func (noopReviewRecomputer) RecomputeReviewedForBooks(context.Context, []int) {}
+
 func newTestHandler(db *bun.DB) *handler {
 	return &handler{
-		personService: NewService(db),
-		aliasService:  aliases.NewService(db),
-		searchService: search.NewService(db),
+		personService:    NewService(db),
+		aliasService:     aliases.NewService(db),
+		searchService:    search.NewService(db),
+		reviewRecomputer: noopReviewRecomputer{},
 	}
 }
 

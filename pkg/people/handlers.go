@@ -31,11 +31,20 @@ type FileOrganizer interface {
 	GetLibraryOrganizeSetting(ctx context.Context, libraryID int) (bool, error)
 }
 
+// BookReviewRecomputer refreshes files.reviewed for every file of each book,
+// loading the review criteria once. *books.Service satisfies it. pkg/books
+// imports pkg/people, so the handler takes this interface to avoid an import
+// cycle.
+type BookReviewRecomputer interface {
+	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
-	personService *Service
-	aliasService  *aliases.Service
-	searchService *search.Service
-	fileOrganizer FileOrganizer // optional, can be nil if not configured
+	personService    *Service
+	aliasService     *aliases.Service
+	searchService    *search.Service
+	reviewRecomputer BookReviewRecomputer
+	fileOrganizer    FileOrganizer // optional, can be nil if not configured
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -446,13 +455,26 @@ func (h *handler) deletePerson(c echo.Context) error {
 		}
 	}
 
-	err = h.personService.DeletePerson(ctx, id)
+	affectedBookIDs, err := h.personService.DeletePerson(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Remove from FTS index
 	log := logger.FromContext(ctx)
+
+	// Removing the join rows can flip the books' Reviewed completeness state
+	// (e.g. when `authors` or `narrators` is a required field) and stales
+	// their books_fts rows, which still list the deleted person as an author
+	// or narrator. Recompute review state and re-index each affected book,
+	// as deleteSeries does.
+	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
+	for _, bookID := range affectedBookIDs {
+		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
+			log.Warn("failed to update book search index after person delete", logger.Data{"book_id": bookID, "error": err.Error()})
+		}
+	}
+
+	// Remove the deleted person itself from the person FTS index.
 	if err := h.searchService.DeleteFromPersonIndex(ctx, id); err != nil {
 		log.Warn("failed to remove person from search index", logger.Data{"person_id": id, "error": err.Error()})
 	}

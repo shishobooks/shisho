@@ -209,10 +209,23 @@ func (svc *Service) UpdateTag(ctx context.Context, tag *models.Tag, opts UpdateT
 // must not bring the tag back from a sidecar or the file, while Refresh all
 // metadata and Reset to file metadata still may (ADR 0006). Only this
 // service path is supported.
-func (svc *Service) DeleteTag(ctx context.Context, tagID int) error {
-	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+//
+// Returns the IDs of the books that carried the tag, so the caller can
+// recompute their review state after the transaction commits.
+func (svc *Service) DeleteTag(ctx context.Context, tagID int) ([]int, error) {
+	var affectedBookIDs []int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().
+			Model((*models.BookTag)(nil)).
+			ColumnExpr("DISTINCT bt.book_id").
+			Where("bt.tag_id = ?", tagID).
+			Scan(ctx, &affectedBookIDs)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
 		// Stamp the owners before the join rows that identify them are gone.
-		_, err := tx.NewUpdate().
+		_, err = tx.NewUpdate().
 			Model((*models.Book)(nil)).
 			Set("tag_source = ?", models.DataSourceManual).
 			Where("b.id IN (?)", tx.NewSelect().
@@ -240,6 +253,10 @@ func (svc *Service) DeleteTag(ctx context.Context, tagID int) error {
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return affectedBookIDs, nil
 }
 
 // GetBookCount returns the count of books with this tag.

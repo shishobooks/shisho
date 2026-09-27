@@ -197,12 +197,16 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker, dlCache)
 	joblogs.RegisterRoutes(jobsGroup, db, authMiddleware)
 
+	// The genre, tag, and people delete handlers recompute Reviewed for the
+	// affected books, which needs app settings to load the review criteria.
+	reviewRecomputer := books.NewService(db).WithAppSettings(appsettings.NewService(db))
+
 	// People routes
 	peopleGroup := e.Group("/people")
 	peopleGroup.Use(authMiddleware.Authenticate)
 	peopleGroup.Use(authMiddleware.RequirePermission(models.ResourcePeople, models.OperationRead))
 	fileOrganizer := NewFileOrganizer(db)
-	people.RegisterRoutesWithGroup(peopleGroup, db, authMiddleware, fileOrganizer)
+	people.RegisterRoutesWithGroup(peopleGroup, db, authMiddleware, reviewRecomputer, fileOrganizer)
 
 	// Series routes
 	seriesGroup := e.Group("/series")
@@ -219,13 +223,13 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	genresGroup := e.Group("/genres")
 	genresGroup.Use(authMiddleware.Authenticate)
 	genresGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	genres.RegisterRoutesWithGroup(genresGroup, db, authMiddleware)
+	genres.RegisterRoutesWithGroup(genresGroup, db, authMiddleware, reviewRecomputer)
 
 	// Tags routes
 	tagsGroup := e.Group("/tags")
 	tagsGroup.Use(authMiddleware.Authenticate)
 	tagsGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	tags.RegisterRoutesWithGroup(tagsGroup, db, authMiddleware)
+	tags.RegisterRoutesWithGroup(tagsGroup, db, authMiddleware, reviewRecomputer)
 
 	// Publishers routes
 	publishersGroup := e.Group("/publishers")
