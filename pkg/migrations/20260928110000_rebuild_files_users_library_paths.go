@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/uptrace/bun"
 )
 
@@ -143,27 +144,44 @@ const orphanFileIDs = `SELECT f.id FROM files f
 // role is left for that check to report, since no action says which role
 // the user should get.
 func repairOrphans(ctx context.Context, tx bun.Tx) error {
-	for _, query := range []string{
+	repairs := []struct {
+		label string
+		query string
+	}{
 		// Enforcement is off, so delete the children CASCADE would remove.
 		// These are every table with a foreign key to files at this point.
-		"DELETE FROM chapters WHERE file_id IN (" + orphanFileIDs + ")",
-		"DELETE FROM file_identifiers WHERE file_id IN (" + orphanFileIDs + ")",
-		"DELETE FROM file_fingerprints WHERE file_id IN (" + orphanFileIDs + ")",
-		"DELETE FROM narrators WHERE file_id IN (" + orphanFileIDs + ")",
-		"DELETE FROM files WHERE id IN (" + orphanFileIDs + ")",
+		{"chapters_deleted", "DELETE FROM chapters WHERE file_id IN (" + orphanFileIDs + ")"},
+		{"file_identifiers_deleted", "DELETE FROM file_identifiers WHERE file_id IN (" + orphanFileIDs + ")"},
+		{"file_fingerprints_deleted", "DELETE FROM file_fingerprints WHERE file_id IN (" + orphanFileIDs + ")"},
+		{"narrators_deleted", "DELETE FROM narrators WHERE file_id IN (" + orphanFileIDs + ")"},
+		{"files_deleted", "DELETE FROM files WHERE id IN (" + orphanFileIDs + ")"},
 		// Every remaining file has a Book in a live library, which is the
 		// library the file belongs to.
-		`UPDATE files SET library_id = (SELECT b.library_id FROM books b WHERE b.id = files.book_id)
-			WHERE NOT EXISTS (SELECT 1 FROM libraries l WHERE l.id = files.library_id)`,
-		`UPDATE files SET publisher_id = NULL
+		{"files_library_id_reset", `UPDATE files SET library_id = (SELECT b.library_id FROM books b WHERE b.id = files.book_id)
+			WHERE NOT EXISTS (SELECT 1 FROM libraries l WHERE l.id = files.library_id)`},
+		{"files_publisher_id_cleared", `UPDATE files SET publisher_id = NULL
 			WHERE publisher_id IS NOT NULL
-			AND NOT EXISTS (SELECT 1 FROM publishers p WHERE p.id = files.publisher_id)`,
-		`DELETE FROM library_paths
-			WHERE NOT EXISTS (SELECT 1 FROM libraries l WHERE l.id = library_paths.library_id)`,
-	} {
-		if _, err := tx.ExecContext(ctx, query); err != nil {
-			return errors.Wrap(err, "repair rows with a missing parent")
+			AND NOT EXISTS (SELECT 1 FROM publishers p WHERE p.id = files.publisher_id)`},
+		{"library_paths_deleted", `DELETE FROM library_paths
+			WHERE NOT EXISTS (SELECT 1 FROM libraries l WHERE l.id = library_paths.library_id)`},
+	}
+
+	counts := logger.Data{}
+	for _, repair := range repairs {
+		result, err := tx.ExecContext(ctx, repair.query)
+		if err != nil {
+			return errors.Wrapf(err, "repair rows with a missing parent (%s)", repair.label)
 		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if affected > 0 {
+			counts[repair.label] = affected
+		}
+	}
+	if len(counts) > 0 {
+		logger.New().Warn("repaired rows that referenced a missing parent before rebuilding files, users, and library_paths", counts)
 	}
 	return nil
 }

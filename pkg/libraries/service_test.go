@@ -212,6 +212,30 @@ func TestDeleteLibrary_RemovesRowAndCascades(t *testing.T) {
 	}
 }
 
+// files.library_id cascades on its own, so deleting a library removes a file
+// that sits in it even when the file's Book lives in another library.
+func TestDeleteLibrary_CascadesFilesThroughLibraryID(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	doomed := seedLibraryWithContent(ctx, t, db, "Doomed")
+	kept := seedLibraryWithContent(ctx, t, db, "Kept")
+	var strayID int
+	require.NoError(t, db.NewRaw(
+		`INSERT INTO files (library_id, book_id, filepath, file_type) VALUES (?, ?, '/doomed/stray.epub', 'epub') RETURNING id`,
+		doomed.LibraryID, kept.BookID,
+	).Scan(ctx, &strayID))
+
+	require.NoError(t, svc.DeleteLibrary(ctx, doomed.LibraryID))
+
+	var remaining []int
+	require.NoError(t, db.NewRaw("SELECT id FROM files WHERE book_id = ? ORDER BY id", kept.BookID).Scan(ctx, &remaining))
+	assert.Equal(t, []int{kept.FileID}, remaining, "the stray file goes with its library; the Kept file stays")
+}
+
 func TestDeleteLibrary_PurgesFTS(t *testing.T) {
 	t.Parallel()
 
