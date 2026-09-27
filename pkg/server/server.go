@@ -116,13 +116,13 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	if !cfg.DemoMode {
 		// Register OPDS routes with Basic Auth
-		opds.RegisterRoutes(e, db, authMiddleware, dlCache, svcs.books)
+		opds.RegisterRoutes(e, db, authMiddleware, svcs.dlCache, svcs.books)
 
 		// Register eReader routes (API key auth for stock browser support)
-		ereader.RegisterRoutes(e, db, dlCache, svcs.books)
+		ereader.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 
 		// Register Kobo sync routes (API key auth for Kobo device sync)
-		kobo.RegisterRoutes(e, db, dlCache, svcs.books)
+		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 	}
 
 	// Config routes (require authentication)
@@ -147,7 +147,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	audnexus.RegisterRoutes(api, audnexusService, authMiddleware)
 
 	// Cache management routes (admin only; requires config:read to list, config:write to clear)
-	cacheHandler := cache.NewHandler(dlCache, cbzCache, pdfCache)
+	cacheHandler := cache.NewHandler(svcs.dlCache, svcs.cbzCache, svcs.pdfCache)
 	cache.RegisterRoutes(api, cacheHandler, authMiddleware)
 
 	// Echo's Group.Use adds authenticated not-found handlers. Unknown paths
@@ -183,10 +183,11 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 }
 
 // sharedServices holds the services and caches that pkg/server builds once
-// and injects into every route family that needs them. Services that hold
-// only the database handle (search, aliases, libraries, jobs, settings, API
-// keys, and the entity services) are cheap and stateless, so route packages
-// may still build those locally.
+// and injects into every route family that needs them. The app settings and
+// plugin services hold only the database handle but are shared so each has
+// one construction site. Other database-only services (search, aliases,
+// libraries, jobs, settings, API keys, and the entity services) are cheap
+// and stateless, so route packages may still build those locally.
 type sharedServices struct {
 	// books carries app settings, so the chapter replace handler, the genre,
 	// tag, people, series, and publisher delete handlers, and every books
@@ -208,7 +209,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, svcs.appSettings, bookService, svcs.cbzCache, svcs.pdfCache)
+	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, bookService, svcs.cbzCache, svcs.pdfCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
 
 	// Libraries routes

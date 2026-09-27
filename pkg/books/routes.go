@@ -2,7 +2,6 @@ package books
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -31,10 +30,11 @@ func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middl
 
 // RegisterRoutes registers book routes on a group the server has already
 // configured with authentication and the resource's read permission.
-// bookService must carry appSettingsSvc (see WithAppSettings), and the page
+// bookService must carry app settings (see WithAppSettings); the handlers
+// read the review criteria through the same app settings service. The page
 // caches must be the ones the server shares with the cache admin routes and
 // the plugin page extractor.
-func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, appSettingsSvc *appsettings.Service, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache) {
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
@@ -55,7 +55,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddlewar
 		publisherService:   publisherService,
 		listsService:       listsService,
 		settingsService:    settingsService,
-		appSettingsService: appSettingsSvc,
+		appSettingsService: bookService.AppSettings(),
 		downloadCache:      dlCache,
 		pageCache:          pageCache,
 		pdfPageCache:       pdfPageCache,

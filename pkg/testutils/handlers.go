@@ -42,7 +42,7 @@ func (h *handler) createUser(c echo.Context) error {
 
 	var req createUserRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 
 	if req.Username == "" || req.Password == "" {
@@ -151,7 +151,7 @@ func (h *handler) createLibrary(c echo.Context) error {
 
 	var req createLibraryRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 
 	if req.Name == "" {
@@ -210,7 +210,7 @@ func (h *handler) createBook(c echo.Context) error {
 
 	var req createBookRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 
 	if req.LibraryID == 0 || req.Title == "" {
@@ -339,7 +339,7 @@ func (h *handler) createPerson(c echo.Context) error {
 
 	var req createPersonRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 
 	if req.LibraryID == 0 || req.Name == "" {
@@ -386,7 +386,7 @@ func (h *handler) createSeries(c echo.Context) error {
 
 	var req createSeriesRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 
 	if req.LibraryID == 0 || req.Name == "" {
@@ -442,7 +442,7 @@ func (h *handler) createAPIKey(c echo.Context) error {
 
 	var req createAPIKeyRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 
 	if req.UserID == 0 || req.Name == "" {

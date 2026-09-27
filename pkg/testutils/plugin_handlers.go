@@ -113,7 +113,7 @@ func (h *handler) seedPlugin(c echo.Context) error {
 
 	var req seedPluginRequest
 	if err := c.Bind(&req); err != nil {
-		return errcodes.MalformedPayload()
+		return errors.WithStack(err)
 	}
 	if req.Scope == "" || req.ID == "" {
 		return errcodes.BadRequest("scope and id are required.")

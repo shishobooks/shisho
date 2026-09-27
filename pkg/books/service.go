@@ -106,6 +106,12 @@ func (svc *Service) WithAppSettings(s *appsettings.Service) *Service {
 	return svc
 }
 
+// AppSettings returns the app settings service attached by WithAppSettings,
+// or nil when none is attached.
+func (svc *Service) AppSettings() *appsettings.Service {
+	return svc.appSettingsService
+}
+
 // RecomputeReviewedForFile loads the active criteria and refreshes
 // files.reviewed for the given file. Errors are logged but do not propagate
 // to the caller — review state is non-critical metadata.
