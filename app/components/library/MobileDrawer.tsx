@@ -155,8 +155,11 @@ const MobileDrawer = () => {
       <aside
         aria-label="Mobile navigation"
         className={cn(
-          "fixed bottom-0 left-0 top-[var(--demo-banner-height,0px)] z-50 w-72 bg-background shadow-2xl transition-transform duration-300 ease-out md:hidden flex flex-col",
-          isOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed bottom-0 left-0 top-[var(--demo-banner-height,0px)] z-50 w-72 bg-background transition-[translate,box-shadow] duration-300 ease-out md:hidden flex flex-col",
+          // The shadow only applies while open: translating the closed
+          // drawer off screen leaves its shadow along the left edge. It
+          // transitions with the slide so closing does not snap it off.
+          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
         )}
       >
         {/* Header */}
@@ -336,7 +339,12 @@ const MobileDrawer = () => {
             {canAccessAdmin && !demoMode && (
               <NavItem
                 icon={<Settings className="h-5 w-5" />}
-                isActive={location.pathname.startsWith("/settings")}
+                // Only highlight when no admin item above matches the page,
+                // so settings pages highlight exactly one item.
+                isActive={
+                  isAdminContext &&
+                  !visibleAdminItems.some((item) => item.isActive)
+                }
                 label="Global Settings"
                 onClick={close}
                 to="/settings"
