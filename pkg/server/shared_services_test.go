@@ -67,7 +67,9 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 
 // Updating a Book through the real routes recomputes its review state. This
 // covers the wiring in server.go that hands the books routes the shared
-// books service with app settings attached.
+// books service with app settings attached. The books routes attached app
+// settings before the injection too, so this is a regression guard: it fails
+// if the server ever passes a books service without app settings.
 func TestUpdateBook_RecomputesReviewedThroughSharedBookService(t *testing.T) {
 	t.Parallel()
 	f := newResourceDeleteFixture(t)

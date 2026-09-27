@@ -43,12 +43,12 @@ func CleanupOrphanedEntities(ctx context.Context, log logger.Logger, svcs Orphan
 	for _, kind := range kinds {
 		deletedIDs, err := kind.cleanup(ctx)
 		if err != nil {
-			log.Err(err).Warn("failed to cleanup orphaned " + kind.plural)
+			log.Warn("failed to cleanup orphaned "+kind.plural, logger.Data{"error": err.Error()})
 			continue
 		}
 		for _, id := range deletedIDs {
 			if err := kind.unindex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned "+kind.singular+" from search index", logger.Data{kind.idKey: id})
+				log.Warn("failed to remove orphaned "+kind.singular+" from search index", logger.Data{kind.idKey: id, "error": err.Error()})
 			}
 		}
 		if len(deletedIDs) > 0 {

@@ -57,3 +57,32 @@ func TestSeedingRoutes_ReturnErrcodesBodies(t *testing.T) {
 		})
 	}
 }
+
+// A body that is not JSON reaches the seeding handler as the binder's own
+// errcodes error, which the handler returns unchanged.
+func TestSeedingRoutes_MalformedBodyReturnsBinderError(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	e := echo.New()
+	b, err := binder.New()
+	require.NoError(t, err)
+	e.Binder = b
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	RegisterRoutes(e.Group("/api"), db, nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test/users", strings.NewReader(`{"username":`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), "response body: %s", rec.Body.String())
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "response body: %s", rec.Body.String())
+	assert.Equal(t, "malformed_payload", body.Error.Code)
+	assert.Equal(t, "Malformed Payload", body.Error.Message)
+}
