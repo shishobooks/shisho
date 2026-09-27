@@ -61,7 +61,7 @@ describe("AdminSharing", () => {
     mockIsPending = false;
     mockSettings.enabled = false;
     mockSettings.require_expiration = false;
-    mockAuth(["config:read", "config:write"]);
+    mockAuth(["config:read", "config:write", "users:read"]);
   });
 
   it("shows both switches with their saved state and the reachability disclaimer", () => {
@@ -87,6 +87,16 @@ describe("AdminSharing", () => {
       "href",
       "/settings/users",
     );
+  });
+
+  it("names Users as plain text when the user cannot open it", () => {
+    mockAuth(["config:read", "config:write"]);
+    renderPage();
+
+    expect(
+      screen.queryByRole("link", { name: "Users" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/grant it to them in Users\./)).toBeVisible();
   });
 
   it("saves the enable switch as soon as it changes", async () => {

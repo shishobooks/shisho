@@ -66,6 +66,7 @@ const AdminSharing = () => {
 
   const { hasPermission } = useAuth();
   const canEdit = hasPermission("config", "write");
+  const canViewUsers = hasPermission("users", "read");
   const settingsQuery = useSharingSettings();
   const updateMutation = useUpdateSharingSettings();
 
@@ -152,9 +153,16 @@ const AdminSharing = () => {
             <strong className="font-medium text-foreground">Shares</strong>{" "}
             permission, which only the Admin role has by default. To let other
             roles share books, grant it to them in{" "}
-            <Link className="text-primary hover:underline" to="/settings/users">
-              Users
-            </Link>
+            {canViewUsers ? (
+              <Link
+                className="text-primary hover:underline"
+                to="/settings/users"
+              >
+                Users
+              </Link>
+            ) : (
+              "Users"
+            )}
             .
           </p>
         </div>
