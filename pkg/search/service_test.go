@@ -19,6 +19,10 @@ func setupTestDB(t *testing.T) *bun.DB {
 
 	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
 	require.NoError(t, err)
+	// Each connection to ":memory:" is its own database. Match production's
+	// single connection so every query, including ones issued from query
+	// hooks, sees the same data.
+	sqldb.SetMaxOpenConns(1)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 

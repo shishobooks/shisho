@@ -301,8 +301,9 @@ func (h *handler) createBook(c echo.Context) error {
 
 	// Index book in FTS for search functionality
 	_, err = h.db.ExecContext(ctx,
-		`INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
-		 VALUES (?, ?, ?, ?, '', '', '', '', '')`,
+		`INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
+		 VALUES (?, ?, ?, ?, ?, '', '', '', '', '')`,
+		book.ID,
 		book.ID,
 		book.LibraryID,
 		book.Title,

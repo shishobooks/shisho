@@ -536,6 +536,8 @@ The app uses SQLite Full-Text Search (FTS5) for fast searching.
 - `pkg/search/service.go` - Search service with index methods
 - FTS tables: `books_fts`, `series_fts`, `persons_fts`, `genres_fts`, `tags_fts`, `publishers_fts`
 
+**FTS rows are keyed by rowid = entity id.** Every insert into an FTS table sets `rowid` explicitly to the entity id (`INSERT OR REPLACE INTO books_fts (rowid, book_id, ...) VALUES (?, ?, ...)`, or `SELECT b.id AS rowid, b.id, ...` in bulk), and every per-entity delete filters on `WHERE rowid = ?` through `deleteFTSRow`. The stored id columns (`book_id`, `series_id`, and so on) are `UNINDEXED`, so `WHERE book_id = ?` scans the whole table and made per-Book re-indexing superlinear on large libraries (#534). Keep the id columns because search queries read them, but never filter a per-entity delete on them. A new insert path that leaves `rowid` unset breaks later deletes of that row. Use `OR REPLACE` so two writers indexing the same entity at once converge on one row instead of failing on the rowid conflict. Migration `20260927153000` rebuilt existing rows into this shape.
+
 **IMPORTANT - Search Index Updates:**
 
 When creating or modifying entities that are searchable, ensure the FTS index is updated:
