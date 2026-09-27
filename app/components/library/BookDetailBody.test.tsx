@@ -3,7 +3,15 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import type { Book, File } from "@/types";
 
@@ -18,11 +26,61 @@ afterEach(() => {
   vi.stubGlobal("__APP_VERSION__", "test");
 });
 
-// Full permissions, so every control the Share Link context hides would otherwise
-// be visible.
+// Full permissions by default, so every control the Share Link context hides
+// would otherwise be visible. Tests narrow the set to exercise one role.
+const ALL_PERMISSIONS = [
+  "books:read",
+  "books:write",
+  "config:read",
+  "shares:read",
+  "shares:write",
+];
+const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
+
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ demoMode: false, canWrite: () => true }),
+  useAuth: () => ({
+    demoMode: false,
+    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
+    hasPermission: (resource: string, operation: string) =>
+      auth.permissions.has(`${resource}:${operation}`),
+  }),
 }));
+
+const sharing = vi.hoisted(() => ({
+  settings: { enabled: false, require_expiration: false },
+  options: [] as Array<{ enabled?: boolean } | undefined>,
+}));
+
+vi.mock("@/hooks/queries/sharing", () => ({
+  useSharingSettings: (options?: { enabled?: boolean }) => {
+    sharing.options.push(options);
+    return { data: options?.enabled === false ? undefined : sharing.settings };
+  },
+}));
+
+vi.mock("@/components/library/ShareLinkDialog", () => ({
+  ShareLinkDialog: (props: {
+    open: boolean;
+    canCreate: boolean;
+    canList: boolean;
+    requireExpiration: boolean;
+  }) =>
+    props.open ? (
+      <div data-testid="share-dialog">
+        {JSON.stringify({
+          canCreate: props.canCreate,
+          canList: props.canList,
+          requireExpiration: props.requireExpiration,
+        })}
+      </div>
+    ) : null,
+}));
+
+beforeEach(() => {
+  auth.permissions = new Set(ALL_PERMISSIONS);
+  sharing.settings = { enabled: false, require_expiration: false };
+  sharing.options.length = 0;
+});
 
 const { idle } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
@@ -199,6 +257,75 @@ describe("BookDetailBody in Share Link context", () => {
     }
   });
 
+  it("makes no sharing settings request and offers no Share entry", () => {
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody({ shareLink });
+
+    expect(sharing.options.length).toBeGreaterThan(0);
+    for (const options of sharing.options) {
+      expect(options?.enabled).toBe(false);
+    }
+    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+  });
+
+  it("omits the sort title and the created and updated times", () => {
+    renderBody({
+      book: { ...book, sort_title: "Book, Test" },
+      shareLink,
+    });
+
+    expect(screen.queryByText(/Sort title/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Created")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+  });
+
+  it("omits file identifiers and the file URL but keeps reader-facing details", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          {
+            ...epub,
+            language: "en",
+            url: "https://example.com/book",
+            identifiers: [{ id: 1, type: "uuid", value: "urn:uuid:1234" }],
+          } as File,
+        ],
+      },
+      shareLink,
+    });
+
+    await user.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByText("Tor Books")).toBeInTheDocument();
+    expect(screen.getByText("Released")).toBeInTheDocument();
+    expect(screen.getByText("Language")).toBeInTheDocument();
+    expect(screen.queryByText("urn:uuid:1234")).not.toBeInTheDocument();
+    expect(screen.queryByText("URL")).not.toBeInTheDocument();
+  });
+
+  it("offers no expander when a file's only details are hidden ones", () => {
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          {
+            ...epub,
+            publisher: undefined,
+            release_date: undefined,
+            url: "https://example.com/book",
+            identifiers: [{ id: 1, type: "uuid", value: "urn:uuid:1234" }],
+          } as File,
+        ],
+      },
+      shareLink,
+    });
+
+    expect(
+      screen.queryByRole("button", { expanded: false }),
+    ).not.toBeInTheDocument();
+  });
+
   it("falls back to the file type when the payload blanks the path", () => {
     renderBody({ shareLink });
 
@@ -307,5 +434,101 @@ describe("BookDetailBody without Share Link context", () => {
       "Delete book",
     ]);
     expect(within(menu).getAllByRole("separator")).toHaveLength(3);
+  });
+});
+
+describe("BookDetailBody Share entry", () => {
+  const menuItems = async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByLabelText("Book actions"));
+    return within(screen.getByRole("menu"))
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent);
+  };
+
+  it("adds Share after Add to list when sharing is enabled", async () => {
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody();
+
+    expect(await menuItems()).toEqual([
+      "Edit",
+      "Add to list",
+      "Share",
+      "Rescan book",
+      "Identify book",
+      "Merge into another book",
+      "Delete book",
+    ]);
+  });
+
+  it("shows the menu with Share and Add to list for Shares Write without Books Write", async () => {
+    auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody();
+
+    expect(await menuItems()).toEqual(["Add to list", "Share"]);
+  });
+
+  it("hides Share when sharing is disabled", () => {
+    auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    renderBody();
+
+    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("add-to-list")).toHaveTextContent("Add to list");
+  });
+
+  it("hides Share and skips the settings request without the shares permission", () => {
+    auth.permissions = new Set(["books:read", "books:write"]);
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody();
+
+    for (const options of sharing.options) {
+      expect(options?.enabled).toBe(false);
+    }
+    expect(screen.queryByText("Share")).not.toBeInTheDocument();
+  });
+
+  it("opens the dialog with the form for Shares Write and the policy", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    sharing.settings = { enabled: true, require_expiration: true };
+    renderBody();
+
+    await user.click(screen.getByLabelText("Book actions"));
+    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
+    ).toEqual({ canCreate: true, canList: true, requireExpiration: true });
+  });
+
+  it("offers Share with the form and the list for Shares Write without Shares Read", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    auth.permissions = new Set(["books:read", "shares:write"]);
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody();
+
+    for (const options of sharing.options) {
+      expect(options?.enabled).toBe(true);
+    }
+    await user.click(screen.getByLabelText("Book actions"));
+    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
+    ).toEqual({ canCreate: true, canList: true, requireExpiration: false });
+  });
+
+  it("opens the dialog without the form for Shares Read only", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    auth.permissions = new Set(["books:read", "shares:read"]);
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody();
+
+    await user.click(screen.getByLabelText("Book actions"));
+    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
+    ).toEqual({ canCreate: false, canList: true, requireExpiration: false });
   });
 });

@@ -122,6 +122,35 @@ describe("useSSE", () => {
     expect(MockEventSource.instances).toHaveLength(0);
   });
 
+  it.each(["/share/some-token", "/share", "/share/"])(
+    "does not open EventSource on the Share Link path %s, even when signed in",
+    (path) => {
+      window.history.pushState({}, "", path);
+      try {
+        renderHook(() => useSSE(), {
+          wrapper: createWrapper(true, queryClient),
+        });
+      } finally {
+        window.history.pushState({}, "", "/");
+      }
+
+      expect(MockEventSource.instances).toHaveLength(0);
+    },
+  );
+
+  it("still opens EventSource on a path that only starts with share", () => {
+    window.history.pushState({}, "", "/shared-things");
+    try {
+      renderHook(() => useSSE(), {
+        wrapper: createWrapper(true, queryClient),
+      });
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+
+    expect(MockEventSource.instances).toHaveLength(1);
+  });
+
   it("closes EventSource on unmount", () => {
     const { unmount } = renderHook(() => useSSE(), {
       wrapper: createWrapper(true, queryClient),

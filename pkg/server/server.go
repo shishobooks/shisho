@@ -3,6 +3,7 @@ package server
 import (
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/settings"
+	"github.com/shishobooks/shisho/pkg/sharelinks"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/testutils"
 	"github.com/shishobooks/shisho/pkg/users"
@@ -83,7 +85,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 			"http://127.0.0.1:",
 			"http://localhost:",
 		)
-		testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir))
+		// Each E2E browser runs its own server with its own cache dir, so its
+		// seeded EPUBs never collide with another browser's.
+		testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir), filepath.Join(cfg.CacheDir, "e2e-epubs"))
 	}
 
 	// Services and caches that more than one route family uses are built once
@@ -131,6 +135,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 		// Register Kobo sync routes (API key auth for Kobo device sync)
 		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
+
+		// Register the anonymous Share Link recipient routes
+		sharelinks.RegisterPublicRoutes(api, db, svcs.books, svcs.dlCache)
 	}
 
 	// Config routes (require authentication)
@@ -141,6 +148,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// Settings routes (require authentication)
 	settings.RegisterRoutes(api, db, authMiddleware, svcs.appSettings)
+	sharelinks.RegisterRoutes(api, authMiddleware, svcs.appSettings)
 
 	// SSE event stream
 	events.RegisterRoutes(api, broker, authMiddleware)
@@ -219,6 +227,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, bookService, svcs.cbzCache, svcs.pdfCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
+	sharelinks.RegisterBookRoutes(booksGroup, db, authMiddleware, svcs.appSettings)
 
 	// Libraries routes
 	librariesGroup := e.Group("/libraries")

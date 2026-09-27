@@ -1468,17 +1468,7 @@ func (h *handler) fileCover(c echo.Context) error {
 		}
 	}
 
-	// Cover filename is stored in CoverImageFilename, or fallback to {filename}.cover.{ext}.
-	coverFilename := ""
-	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverFilename = *file.CoverImageFilename
-	} else {
-		coverFilename = filepath.Base(file.Filepath) + ".cover" + file.CoverExtension()
-	}
-	// Resolve the cover via the file's parent dir — book.Filepath may be a
-	// synthetic organized-folder path that never exists on disk for
-	// root-level files. The cover always lives alongside the file.
-	coverPath := filepath.Join(filepath.Dir(file.Filepath), coverFilename)
+	coverPath := covers.FileCoverPath(file)
 
 	// Stat first so a missing cover returns the errcodes 404 that the book and
 	// series cover routes return, not echo.HTTPError's generic "Not Found".

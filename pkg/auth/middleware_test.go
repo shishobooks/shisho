@@ -429,9 +429,10 @@ func TestRequireAnyPermission(t *testing.T) {
 		permissions []*models.Permission
 		allowed     bool
 	}{
-		{"first resource", []*models.Permission{{Resource: models.ResourceShares, Operation: models.OperationRead}}, true},
-		{"second resource", []*models.Permission{{Resource: models.ResourceConfig, Operation: models.OperationRead}}, true},
-		{"wrong operation", []*models.Permission{{Resource: models.ResourceShares, Operation: models.OperationWrite}}, false},
+		{"first permission", []*models.Permission{{Resource: models.ResourceShares, Operation: models.OperationRead}}, true},
+		{"second permission, same resource", []*models.Permission{{Resource: models.ResourceShares, Operation: models.OperationWrite}}, true},
+		{"third permission", []*models.Permission{{Resource: models.ResourceConfig, Operation: models.OperationRead}}, true},
+		{"unlisted operation", []*models.Permission{{Resource: models.ResourceConfig, Operation: models.OperationWrite}}, false},
 		{"neither", nil, false},
 	}
 	for _, tt := range tests {
@@ -443,7 +444,11 @@ func TestRequireAnyPermission(t *testing.T) {
 
 			m := &Middleware{}
 			called := false
-			err := m.RequireAnyPermission(models.OperationRead, models.ResourceShares, models.ResourceConfig)(
+			err := m.RequireAnyPermission(
+				Permission{models.ResourceShares, models.OperationRead},
+				Permission{models.ResourceShares, models.OperationWrite},
+				Permission{models.ResourceConfig, models.OperationRead},
+			)(
 				func(echo.Context) error { called = true; return nil },
 			)(c)
 
@@ -455,7 +460,7 @@ func TestRequireAnyPermission(t *testing.T) {
 			var codeErr *errcodes.Error
 			require.ErrorAs(t, err, &codeErr)
 			assert.Equal(t, http.StatusForbidden, codeErr.HTTPCode)
-			assert.Equal(t, "You don't have permission to read shares or config", codeErr.Message)
+			assert.Equal(t, "You don't have permission to read shares, write shares, or read config", codeErr.Message)
 		})
 	}
 }

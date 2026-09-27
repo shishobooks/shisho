@@ -113,10 +113,29 @@ func (m *Middleware) RequirePermission(resource, operation string) echo.Middlewa
 	}
 }
 
+// Permission names one resource and operation for RequireAnyPermission.
+type Permission struct {
+	Resource  string
+	Operation string
+}
+
 // RequireAnyPermission returns middleware that allows the request when the
-// user holds the operation on at least one of the resources.
+// user holds at least one of the permissions.
 // Must be used after Authenticate middleware.
-func (m *Middleware) RequireAnyPermission(operation string, resources ...string) echo.MiddlewareFunc {
+func (m *Middleware) RequireAnyPermission(permissions ...Permission) echo.MiddlewareFunc {
+	names := make([]string, len(permissions))
+	for i, p := range permissions {
+		names[i] = p.Operation + " " + p.Resource
+	}
+	var listed string
+	switch len(names) {
+	case 0:
+	case 1, 2:
+		listed = strings.Join(names, " or ")
+	default:
+		listed = strings.Join(names[:len(names)-1], ", ") + ", or " + names[len(names)-1]
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			user, ok := c.Get("user").(*models.User)
@@ -124,13 +143,13 @@ func (m *Middleware) RequireAnyPermission(operation string, resources ...string)
 				return errcodes.Unauthorized("Authentication required")
 			}
 
-			for _, resource := range resources {
-				if user.HasPermission(resource, operation) {
+			for _, p := range permissions {
+				if user.HasPermission(p.Resource, p.Operation) {
 					return next(c)
 				}
 			}
 
-			return errcodes.Forbidden("You don't have permission to " + operation + " " + strings.Join(resources, " or "))
+			return errcodes.Forbidden("You don't have permission to " + listed)
 		}
 	}
 }

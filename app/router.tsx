@@ -35,6 +35,7 @@ import SecuritySettings from "@/components/pages/SecuritySettings";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
 import Setup from "@/components/pages/Setup";
+import { shareRoutes } from "@/components/pages/shareRoutes";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
     path: "/setup",
     Component: Setup,
   },
+  ...shareRoutes,
   // Protected routes (require authentication)
   {
     path: "/",

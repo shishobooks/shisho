@@ -26,7 +26,7 @@ The demo rejects every change on the server, so nothing you do can affect the li
 - Editing books, files, metadata, series, and lists, including cover uploads, rescans, and deletion.
 - Downloading files: the download buttons are hidden, and the original, KePub, and bulk download routes are blocked.
 - Administration: libraries, users, roles, plugins, and security settings.
-- Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), and the [eReader Browser](./ereader-browser.md) are not available.
+- Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and [Share Links](./sharing.md) are not available.
 - Account changes such as the password and server-side preferences.
 
 ## About the Library

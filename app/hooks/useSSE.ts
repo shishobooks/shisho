@@ -25,7 +25,12 @@ export function useSSE() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated || demoMode) {
+    // A Share Link page is for recipients, so it never opens the stream,
+    // even for a signed-in user previewing their own link. The page is only
+    // reached by a full page load, so the pathname at mount is enough.
+    const { pathname } = window.location;
+    const onSharePage = pathname === "/share" || pathname.startsWith("/share/");
+    if (!isAuthenticated || demoMode || onSharePage) {
       return;
     }
 

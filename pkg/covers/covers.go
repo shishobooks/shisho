@@ -72,6 +72,18 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 	return nil
 }
 
+// FileCoverPath returns where a file's own cover lives on disk: the stored
+// CoverImageFilename, or {filename}.cover.{ext} when none is stored, in the
+// file's directory. It resolves via the file rather than book.Filepath, which
+// can be a synthetic organized-folder path that never exists on disk.
+func FileCoverPath(file *models.File) string {
+	coverFilename := filepath.Base(file.Filepath) + ".cover" + file.CoverExtension()
+	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		coverFilename = *file.CoverImageFilename
+	}
+	return filepath.Join(filepath.Dir(file.Filepath), coverFilename)
+}
+
 // CacheKey returns a stable cache key for the cover that would be served for
 // the given files and aspect ratio. The key only changes when the selected
 // cover file changes (different file selected, or the file's UpdatedAt bumps

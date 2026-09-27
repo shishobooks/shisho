@@ -11,6 +11,7 @@ import {
   MoreVertical,
   RefreshCw,
   Search,
+  Share2,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -38,6 +39,7 @@ import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
 import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import { ReviewPanel } from "@/components/library/ReviewPanel";
+import { ShareLinkDialog } from "@/components/library/ShareLinkDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +73,7 @@ import {
 } from "@/hooks/queries/books";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
+import { useSharingSettings } from "@/hooks/queries/sharing";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
@@ -78,7 +81,10 @@ import {
   DownloadFormatKepub,
   FileTypeCBZ,
   ResourceBooks,
+  ResourceConfig,
+  ResourceShares,
   type Book,
+  type CoverAspectRatio,
   type File,
   type LibraryResponse,
   type PluginIdentifierType,
@@ -116,6 +122,11 @@ export interface ShareLinkContext {
   bookCoverUrl: (book: Book) => string | null;
   /** A file's cover URL, or null when the file has no cover. */
   fileCoverUrl: (file: File) => string | null;
+  /**
+   * The library's cover aspect ratio preference, which sizes the cover box.
+   * Defaults to "book" (2:3).
+   */
+  coverAspectRatio?: CoverAspectRatio;
 }
 
 interface DownloadError {
@@ -592,7 +603,7 @@ const FileRow = ({
                   <span>{formatDate(file.release_date)}</span>
                 </>
               )}
-              {file.url && (
+              {file.url && !isShareLink && (
                 <>
                   <span className="text-muted-foreground">URL</span>
                   <a
@@ -636,41 +647,47 @@ const FileRow = ({
               )}
             </div>
 
-            {/* Identifiers */}
-            {file.identifiers && file.identifiers.length > 0 && (
-              <div className="pt-2 border-t border-border/50">
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
-                  {file.identifiers.map((id, idx) => {
-                    const url = getIdentifierUrl(
-                      id.type,
-                      id.value,
-                      pluginIdentifierTypes,
-                    );
-                    return (
-                      <React.Fragment key={idx}>
-                        <span className="text-muted-foreground">
-                          {formatIdentifierType(id.type, pluginIdentifierTypes)}
-                        </span>
-                        {url ? (
-                          <a
-                            className="font-mono select-all text-primary hover:underline break-all"
-                            href={url}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            {id.value}
-                          </a>
-                        ) : (
-                          <span className="font-mono select-all break-all">
-                            {id.value}
+            {/* Identifiers. Share Link context omits them with the URL: they
+                are catalog details, often internal ones such as a UUID. */}
+            {!isShareLink &&
+              file.identifiers &&
+              file.identifiers.length > 0 && (
+                <div className="pt-2 border-t border-border/50">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+                    {file.identifiers.map((id, idx) => {
+                      const url = getIdentifierUrl(
+                        id.type,
+                        id.value,
+                        pluginIdentifierTypes,
+                      );
+                      return (
+                        <React.Fragment key={idx}>
+                          <span className="text-muted-foreground">
+                            {formatIdentifierType(
+                              id.type,
+                              pluginIdentifierTypes,
+                            )}
                           </span>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                          {url ? (
+                            <a
+                              className="font-mono select-all text-primary hover:underline break-all"
+                              href={url}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {id.value}
+                            </a>
+                          ) : (
+                            <span className="font-mono select-all break-all">
+                              {id.value}
+                            </span>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         )}
       </div>
@@ -697,11 +714,22 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;
   const navigate = useNavigate();
-  const { canWrite } = useAuth();
+  const { canWrite, hasPermission } = useAuth();
   // Metadata, covers, chapters, review state, identify, rescan, merge, move,
   // and delete all require Books Write. List membership is governed by the
   // list's own permission and stays available to everyone.
   const canWriteBooks = !isShareLink && canWrite(ResourceBooks);
+  // Shares Write creates links, and either shares operation lists them. The
+  // sharing settings endpoint needs a shares operation or Config Read, so
+  // only fetch it then.
+  const canWriteShares = !isShareLink && canWrite(ResourceShares);
+  const canListShares =
+    canWriteShares || (!isShareLink && hasPermission(ResourceShares, "read"));
+  const { data: sharingSettings } = useSharingSettings({
+    enabled:
+      !isShareLink && (canListShares || hasPermission(ResourceConfig, "read")),
+  });
+  const canShare = canListShares && sharingSettings?.enabled === true;
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes({
     enabled: !isShareLink,
   });
@@ -713,6 +741,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const setBookReviewMutation = useSetBookReview();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addToListOpen, setAddToListOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [showBookRescanDialog, setShowBookRescanDialog] = useState(false);
   const [rescanFileId, setRescanFileId] = useState<number | null>(null);
   const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
@@ -772,15 +801,17 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     });
   };
 
+  // Share Link context hides the URL and identifiers (see FileRow), so they
+  // alone do not make a file expandable there.
   const hasExpandableMetadata = (file: File): boolean => {
     return !!(
       file.publisher ||
       file.release_date ||
-      file.url ||
       file.language ||
       file.file_type === "m4b" || // M4B always shows abridged status
       file.abridged === true ||
-      (file.identifiers && file.identifiers.length > 0)
+      (!isShareLink &&
+        (file.url || (file.identifiers && file.identifiers.length > 0)))
     );
   };
 
@@ -999,7 +1030,8 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
 
   // Determine which file type would provide the cover based on library's cover_aspect_ratio setting
   // This is used to determine the native aspect ratio (audiobook = square, book = 2:3)
-  const libraryCoverAspectRatio = library?.cover_aspect_ratio ?? "book";
+  const libraryCoverAspectRatio =
+    shareLink?.coverAspectRatio ?? library?.cover_aspect_ratio ?? "book";
   const coverFileType = getCoverFileType(book.files, libraryCoverAspectRatio);
   const isAudiobook = coverFileType === "audiobook";
   const coverAspectRatio = isAudiobook ? "aspect-square" : "aspect-[2/3]";
@@ -1022,6 +1054,14 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     },
   ];
   const otherGroups: BookMenuEntry[][] = [
+    [
+      {
+        label: "Share",
+        icon: Share2,
+        visible: canShare,
+        onClick: () => setShareDialogOpen(true),
+      },
+    ],
     [
       {
         label: "Rescan book",
@@ -1246,11 +1286,14 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                   />
                 ))}
             </div>
-            {book.sort_title && book.sort_title !== book.title && (
-              <p className="text-sm text-muted-foreground italic break-words">
-                Sort title: {book.sort_title}
-              </p>
-            )}
+            {/* A recipient has no use for the library's sort order. */}
+            {!isShareLink &&
+              book.sort_title &&
+              book.sort_title !== book.title && (
+                <p className="text-sm text-muted-foreground italic break-words">
+                  Sort title: {book.sort_title}
+                </p>
+              )}
             {book.subtitle && (
               <p className="text-lg text-muted-foreground break-words">
                 {book.subtitle}
@@ -1406,25 +1449,25 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               </div>
             )}
 
-            <Separator />
-
-            {/* Metadata. Share Link context omits the library and file path, which
-                describe the server rather than the book. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-semibold">Created</p>
-                <p className="text-muted-foreground">
-                  {formatDateTime(book.created_at)}
-                </p>
-              </div>
-              <div>
-                <p className="font-semibold">Updated</p>
-                <p className="text-muted-foreground">
-                  {formatDateTime(book.updated_at)}
-                </p>
-              </div>
-              {!isShareLink && (
-                <>
+            {/* Metadata. Share Link context omits the whole block: the
+                created and updated times, library, and file path describe the
+                server's records rather than the book. */}
+            {!isShareLink && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="font-semibold">Created</p>
+                    <p className="text-muted-foreground">
+                      {formatDateTime(book.created_at)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold">Updated</p>
+                    <p className="text-muted-foreground">
+                      {formatDateTime(book.updated_at)}
+                    </p>
+                  </div>
                   <div>
                     <p className="font-semibold">Library</p>
                     <p className="text-muted-foreground break-words">
@@ -1447,9 +1490,9 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                       ))}
                     </p>
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+              </>
+            )}
 
             <Separator />
 
@@ -1676,6 +1719,18 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
           open={showDeleteDialog}
           title={book.title}
           variant="book"
+        />
+      )}
+
+      {canShare && (
+        <ShareLinkDialog
+          bookId={book.id}
+          bookTitle={book.title}
+          canCreate={canWriteShares}
+          canList={canListShares}
+          onOpenChange={setShareDialogOpen}
+          open={shareDialogOpen}
+          requireExpiration={sharingSettings?.require_expiration ?? false}
         />
       )}
 
