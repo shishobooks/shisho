@@ -96,4 +96,5 @@ func TestGetImage_NotFound(t *testing.T) {
 	var ecErr *errcodes.Error
 	require.ErrorAs(t, err, &ecErr)
 	assert.Equal(t, http.StatusNotFound, ecErr.HTTPCode)
+	assert.Equal(t, "Plugin icon not found.", ecErr.Message)
 }

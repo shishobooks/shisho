@@ -94,7 +94,8 @@ test.describe("Book detail download errors", () => {
       exact: true,
     });
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("Source file not found on disk");
+    await expect(dialog).toContainText("Source file not found.");
+    await expect(dialog).not.toContainText(/not found.*not found/);
     await expect(dialog).not.toContainText("Failed to generate file");
   });
 });

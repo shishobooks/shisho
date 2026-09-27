@@ -20,7 +20,7 @@ func (h *handler) getImage(c echo.Context) error {
 
 	iconPath := filepath.Join(h.installer.PluginDir(), scope, id, "icon.png")
 	if _, err := os.Stat(iconPath); err != nil {
-		return errcodes.NotFound("Plugin icon not found")
+		return errcodes.NotFound("Plugin icon")
 	}
 
 	return c.File(iconPath)
