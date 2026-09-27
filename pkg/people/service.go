@@ -79,7 +79,7 @@ func (svc *Service) RetrievePerson(ctx context.Context, opts RetrievePersonOptio
 	}
 	if opts.Name != nil {
 		// Case-insensitive match
-		q = q.Where("LOWER(p.name) = LOWER(?)", *opts.Name)
+		q = q.Where("p.name = ? COLLATE NOCASE", *opts.Name)
 	}
 	if opts.LibraryID != nil {
 		q = q.Where("p.library_id = ?", *opts.LibraryID)

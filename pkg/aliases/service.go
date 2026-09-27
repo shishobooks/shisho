@@ -31,7 +31,7 @@ func FindResourceIDByAlias(ctx context.Context, db bun.IDB, cfg ResourceConfig, 
 	err := db.NewSelect().
 		TableExpr(cfg.AliasTable).
 		Column(cfg.ResourceFK).
-		Where("LOWER(name) = LOWER(?) AND library_id = ?", name, libraryID).
+		Where("name = ? COLLATE NOCASE AND library_id = ?", name, libraryID).
 		Limit(1).
 		Scan(ctx, &resourceID)
 	if err != nil {
@@ -79,7 +79,7 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 	var conflictCount int
 	conflictCount, err = svc.db.NewSelect().
 		TableExpr(cfg.ResourceTable).
-		Where("LOWER(name) = LOWER(?) AND library_id = ?", name, libraryID).
+		Where("name = ? COLLATE NOCASE AND library_id = ?", name, libraryID).
 		Count(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -91,7 +91,7 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 	var aliasCount int
 	aliasCount, err = svc.db.NewSelect().
 		TableExpr(cfg.AliasTable).
-		Where("LOWER(name) = LOWER(?) AND library_id = ?", name, libraryID).
+		Where("name = ? COLLATE NOCASE AND library_id = ?", name, libraryID).
 		Count(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -117,7 +117,7 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 func (svc *Service) RemoveAlias(ctx context.Context, cfg ResourceConfig, resourceID int, name string) error {
 	_, err := svc.db.NewDelete().
 		TableExpr(cfg.AliasTable).
-		Where(cfg.ResourceFK+" = ? AND LOWER(name) = LOWER(?)", resourceID, name).
+		Where(cfg.ResourceFK+" = ? AND name = ? COLLATE NOCASE", resourceID, name).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -178,7 +178,7 @@ func TransferAliasesOnMerge(ctx context.Context, db bun.IDB, cfg ResourceConfig,
 		}
 		existing[strings.ToLower(name)] = true
 		_, err = db.NewRaw(
-			"UPDATE "+cfg.AliasTable+" SET "+cfg.ResourceFK+" = ? WHERE "+cfg.ResourceFK+" = ? AND LOWER(name) = LOWER(?)",
+			"UPDATE "+cfg.AliasTable+" SET "+cfg.ResourceFK+" = ? WHERE "+cfg.ResourceFK+" = ? AND name = ? COLLATE NOCASE",
 			targetID, sourceID, name,
 		).Exec(ctx)
 		if err != nil {

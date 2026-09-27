@@ -1416,7 +1416,7 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 	err := svc.db.
 		NewSelect().
 		Model(series).
-		Where("LOWER(s.name) = LOWER(?) AND s.library_id = ?", name, libraryID).
+		Where("s.name = ? COLLATE NOCASE AND s.library_id = ?", name, libraryID).
 		Scan(ctx)
 	if err == nil {
 		return series, svc.raiseSeriesNameSource(ctx, series, nameSource)
@@ -1456,7 +1456,7 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 		// Another request created the same series between lookup and insert.
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			existing := &models.Series{}
-			if retryErr := svc.db.NewSelect().Model(existing).Where("LOWER(s.name) = LOWER(?) AND s.library_id = ?", name, libraryID).Scan(ctx); retryErr == nil {
+			if retryErr := svc.db.NewSelect().Model(existing).Where("s.name = ? COLLATE NOCASE AND s.library_id = ?", name, libraryID).Scan(ctx); retryErr == nil {
 				return existing, nil
 			}
 		}

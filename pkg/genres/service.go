@@ -68,7 +68,7 @@ func (svc *Service) RetrieveGenre(ctx context.Context, opts RetrieveGenreOptions
 	}
 	if opts.Name != nil && opts.LibraryID != nil {
 		// Case-insensitive match
-		q = q.Where("LOWER(g.name) = LOWER(?) AND g.library_id = ?", *opts.Name, *opts.LibraryID)
+		q = q.Where("g.name = ? COLLATE NOCASE AND g.library_id = ?", *opts.Name, *opts.LibraryID)
 	}
 
 	err := q.Scan(ctx)

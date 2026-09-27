@@ -469,7 +469,7 @@ func (svc *Service) BuildLibraryAuthorsListFeed(ctx context.Context, baseURL, fi
 //
 // Name-match semantics change: the old implementation used `p.name = ?`
 // (case-sensitive under SQLite's default BINARY collation), whereas
-// peopleService.RetrievePerson uses `LOWER(p.name) = LOWER(?)`. This
+// peopleService.RetrievePerson uses `p.name = ? COLLATE NOCASE`. This
 // aligns with the creation-side invariant — `persons` has a UNIQUE
 // index on (name COLLATE NOCASE, library_id), so there's at most one
 // person per (library, name) regardless of case, and the canonical

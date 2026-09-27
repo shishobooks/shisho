@@ -228,15 +228,9 @@ func TestDeleteFromIndex_UsesRowidLookup(t *testing.T) {
 	require.Len(t, queries, 7, "expected one FTS delete per call")
 
 	for _, q := range queries {
-		var plan []struct {
-			ID      int    `bun:"id"`
-			Parent  int    `bun:"parent"`
-			NotUsed int    `bun:"notused"`
-			Detail  string `bun:"detail"`
-		}
-		require.NoError(t, db.NewRaw("EXPLAIN QUERY PLAN "+q).Scan(ctx, &plan), q)
+		plan := queryPlan(ctx, t, db, q)
 		require.Len(t, plan, 1, q)
-		detail := plan[0].Detail
+		detail := plan[0]
 		idx := strings.LastIndex(detail, ":")
 		require.NotEqual(t, -1, idx, "unexpected plan %q for %q", detail, q)
 		assert.Contains(t, detail[idx+1:], "=", "delete should be a rowid lookup, got plan %q for %q", detail, q)
