@@ -98,8 +98,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	}
 	svcs.books = books.NewService(db).WithAppSettings(svcs.appSettings)
 
-	// Register auth routes and get the auth service
-	authService := auth.RegisterRoutes(api, db, cfg.JWTSecret, cfg.SessionDuration(), cfg.DemoMode)
+	// Register auth routes. The auth middleware wraps the same service.
+	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
+	auth.RegisterRoutes(api, authService, cfg.DemoMode)
 	authMiddleware := auth.NewMiddleware(authService)
 
 	// Register user and role management routes
@@ -125,10 +126,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	}
 
 	// Config routes (require authentication)
-	config.RegisterRoutesWithAuth(api, cfg, authMiddleware)
+	config.RegisterRoutes(api, cfg, authMiddleware)
 
 	// Filesystem routes (require authentication)
-	filesystem.RegisterRoutesWithAuth(api, authMiddleware)
+	filesystem.RegisterRoutes(api, authMiddleware)
 
 	// Settings routes (require authentication)
 	settings.RegisterRoutes(api, db, authMiddleware, svcs.appSettings)
@@ -207,14 +208,14 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutesWithGroup(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, svcs.appSettings, bookService, svcs.cbzCache, svcs.pdfCache)
+	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, svcs.appSettings, bookService, svcs.cbzCache, svcs.pdfCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
 
 	// Libraries routes
 	librariesGroup := e.Group("/libraries")
 	librariesGroup.Use(authMiddleware.Authenticate)
 	librariesGroup.Use(authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationRead))
-	libraries.RegisterRoutesWithGroup(librariesGroup, db, authMiddleware, libraries.RegisterRoutesOptions{
+	libraries.RegisterRoutes(librariesGroup, db, authMiddleware, libraries.RegisterRoutesOptions{
 		OnLibraryChanged: w.RefreshMonitorWatches,
 	})
 	if !cfg.DemoMode {
@@ -226,7 +227,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	jobsGroup := e.Group("/jobs")
 	// Jobs permissions are per route: bulk download creators need only Books Read.
 	jobsGroup.Use(authMiddleware.Authenticate)
-	jobs.RegisterRoutesWithGroup(jobsGroup, db, authMiddleware, broker, svcs.dlCache)
+	jobs.RegisterRoutes(jobsGroup, db, authMiddleware, broker, svcs.dlCache)
 	joblogs.RegisterRoutes(jobsGroup, db, authMiddleware)
 
 	// People routes
@@ -234,42 +235,42 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	peopleGroup.Use(authMiddleware.Authenticate)
 	peopleGroup.Use(authMiddleware.RequirePermission(models.ResourcePeople, models.OperationRead))
 	fileOrganizer := NewFileOrganizer(db, bookService)
-	people.RegisterRoutesWithGroup(peopleGroup, db, authMiddleware, bookService, fileOrganizer)
+	people.RegisterRoutes(peopleGroup, db, authMiddleware, bookService, fileOrganizer)
 
 	// Series routes
 	seriesGroup := e.Group("/series")
 	seriesGroup.Use(authMiddleware.Authenticate)
 	seriesGroup.Use(authMiddleware.RequirePermission(models.ResourceSeries, models.OperationRead))
-	series.RegisterRoutesWithGroup(seriesGroup, db, authMiddleware, bookService)
+	series.RegisterRoutes(seriesGroup, db, authMiddleware, bookService)
 
 	// Lists routes
 	listsGroup := e.Group("/lists")
 	listsGroup.Use(authMiddleware.Authenticate)
-	lists.RegisterRoutesWithGroup(listsGroup, db, authMiddleware)
+	lists.RegisterRoutes(listsGroup, db)
 
 	// Genres routes
 	genresGroup := e.Group("/genres")
 	genresGroup.Use(authMiddleware.Authenticate)
 	genresGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	genres.RegisterRoutesWithGroup(genresGroup, db, authMiddleware, bookService)
+	genres.RegisterRoutes(genresGroup, db, authMiddleware, bookService)
 
 	// Tags routes
 	tagsGroup := e.Group("/tags")
 	tagsGroup.Use(authMiddleware.Authenticate)
 	tagsGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	tags.RegisterRoutesWithGroup(tagsGroup, db, authMiddleware, bookService)
+	tags.RegisterRoutes(tagsGroup, db, authMiddleware, bookService)
 
 	// Publishers routes
 	publishersGroup := e.Group("/publishers")
 	publishersGroup.Use(authMiddleware.Authenticate)
 	publishersGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	publishers.RegisterRoutesWithGroup(publishersGroup, db, authMiddleware, bookService)
+	publishers.RegisterRoutes(publishersGroup, db, authMiddleware, bookService)
 
 	// Search routes (requires read access to books since search returns book data)
 	searchGroup := e.Group("/search")
 	searchGroup.Use(authMiddleware.Authenticate)
 	searchGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	search.RegisterRoutesWithGroup(searchGroup, db)
+	search.RegisterRoutes(searchGroup, db)
 
 	if cfg.DemoMode {
 		return
@@ -309,7 +310,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	pluginsGroup.Use(authMiddleware.Authenticate)
 	pluginsGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
 	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
-	plugins.RegisterRoutesWithGroup(pluginsGroup, pluginService, pm, pluginInstaller, db, enrichDeps)
+	plugins.RegisterRoutes(pluginsGroup, pluginService, pm, pluginInstaller, db, enrichDeps)
 }
 
 func notFoundHandler(_ echo.Context) error {

@@ -9,11 +9,12 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// RegisterRoutesWithGroup registers people routes on a pre-configured group.
+// RegisterRoutes registers people routes on a group the server has already
+// configured with authentication and the resource's read permission.
 // reviewRecomputer is required; pass a books service with app settings
 // attached, or the delete handler's review recompute does nothing.
 // fileOrganizer is optional and can be nil if file organization on person name change is not needed.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer BookReviewRecomputer, fileOrganizer FileOrganizer) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer BookReviewRecomputer, fileOrganizer FileOrganizer) {
 	personService := NewService(db)
 	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)

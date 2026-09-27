@@ -93,7 +93,7 @@ func newDeleteTestServer(t *testing.T, db *bun.DB, user *models.User) (*echo.Ech
 	callbacks := 0
 	g := e.Group("/libraries")
 	g.Use(stubAuth)
-	RegisterRoutesWithGroup(g, db, authMiddleware, RegisterRoutesOptions{
+	RegisterRoutes(g, db, authMiddleware, RegisterRoutesOptions{
 		OnLibraryChanged: func() { callbacks++ },
 	})
 	return e, &callbacks

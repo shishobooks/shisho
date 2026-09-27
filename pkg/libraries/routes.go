@@ -15,8 +15,9 @@ type RegisterRoutesOptions struct {
 	OnLibraryChanged func()
 }
 
-// RegisterRoutesWithGroup registers library routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, opts ...RegisterRoutesOptions) {
+// RegisterRoutes registers library routes on a group the server has already
+// configured with authentication and the resource's read permission.
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, opts ...RegisterRoutesOptions) {
 	libraryService := NewService(db)
 	jobService := jobs.NewService(db)
 

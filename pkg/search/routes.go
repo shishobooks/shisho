@@ -5,8 +5,9 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// RegisterRoutesWithGroup registers search routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB) {
+// RegisterRoutes registers search routes on a group the server has already
+// configured with authentication.
+func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	searchService := NewService(db)
 
 	h := &handler{

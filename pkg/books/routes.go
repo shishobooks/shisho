@@ -29,11 +29,12 @@ func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middl
 	g.GET("/:id/languages", h.listLibraryLanguages, authMiddleware.RequireLibraryAccess("id"))
 }
 
-// RegisterRoutesWithGroup registers book routes on a pre-configured group.
+// RegisterRoutes registers book routes on a group the server has already
+// configured with authentication and the resource's read permission.
 // bookService must carry appSettingsSvc (see WithAppSettings), and the page
 // caches must be the ones the server shares with the cache admin routes and
 // the plugin page extractor.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, appSettingsSvc *appsettings.Service, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, appSettingsSvc *appsettings.Service, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache) {
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)

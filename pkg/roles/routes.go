@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all role routes.
-func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) *Service {
+func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	roleService := NewService(db)
 
 	h := &handler{
@@ -28,6 +28,4 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	roles.POST("", h.create, authMiddleware.RequirePermission(models.ResourceUsers, models.OperationWrite))
 	roles.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceUsers, models.OperationWrite))
 	roles.DELETE("/:id", h.delete, authMiddleware.RequirePermission(models.ResourceUsers, models.OperationWrite))
-
-	return roleService
 }

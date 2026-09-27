@@ -8,7 +8,7 @@ import (
 )
 
 // RegisterRoutes registers all user routes.
-func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) *Service {
+func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	userService := NewService(db)
 
 	h := &handler{
@@ -32,6 +32,4 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	// Password reset is special - authenticated users can reset their own password
 	// and users:write is required for resetting another user's password.
 	users.POST("/:id/reset-password", h.resetPassword)
-
-	return userService
 }

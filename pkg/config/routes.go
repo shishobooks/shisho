@@ -6,8 +6,8 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// RegisterRoutesWithAuth registers config routes with authentication.
-func RegisterRoutesWithAuth(e *echo.Group, cfg *Config, authMiddleware *auth.Middleware) {
+// RegisterRoutes registers config routes with authentication.
+func RegisterRoutes(e *echo.Group, cfg *Config, authMiddleware *auth.Middleware) {
 	configService := NewService(cfg)
 	h := &handler{configService: configService}
 
