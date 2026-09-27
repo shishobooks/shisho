@@ -104,7 +104,24 @@ Do not gate on `canWrite`:
 
 Hide the whole control rather than disabling it, and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
 
+**Action menus gate each entry, not the menu.** The Book Detail action menu is built from entry groups where every entry carries its own `visible` flag, computed from the permission its backend route requires. The menu renders when at least one entry is visible, and separators appear only between non-empty groups. Do not wrap the whole menu in a single `canWrite` check: a user can hold one entry's permission without another's (the upcoming Share entry needs `shares:write`, not `books:write`). Add to list has no permission of its own, so it joins the menu whenever another entry puts the menu on screen and is otherwise a standalone button.
+
 Components that call `useAuth()` throw outside `AuthProvider`. Tests for those components mock `@/hooks/useAuth` with a `canWrite` stub (see `BookItem.test.tsx`, `ResourceDetail.test.tsx`, `SelectionToolbar.test.tsx`); a `let` flag toggled per test is the pattern for read-only renders. Typed `AuthContextValue` stubs (`useSSE.test.ts`, `Login.test.tsx`) must include `canWrite`.
+
+### Book Detail body and Share Link context
+
+`BookDetail.tsx` (the page) only fetches: it calls `useBook` and `useLibrary`, handles loading and not-found, renders `LibraryLayout` and breadcrumbs, and passes the book and library to `BookDetailBody` (`app/components/library/BookDetailBody.tsx`). The body owns everything else: cover, metadata, resource lists, the file list with download and read controls, the action menus, and the dialogs behind them. It takes a `Book` payload rather than calling `useBook` itself, so a parent can hand it data from any source.
+
+Passing `shareLink` (a `ShareLinkContext`) switches the body into Share Link context, for a recipient who has no access to the library:
+
+- Author, series, genre, tag, narrator, publisher, and file names render as plain text through `ResourceLink` (a `Link` when given a path, a `span` when given `null`).
+- The book action menu, Add to list, review toggle, per-file menus, Select, and Read and Listen are hidden regardless of the viewer's permissions (`canWriteBooks` is forced false).
+- The Library and File Path rows, and the per-file filename row, are omitted.
+- Downloads go to `shareLink.downloadUrl(file)` with the same HEAD-then-navigate flow; there is no format popover and no Download Original fallback.
+- Covers use `shareLink.bookCoverUrl(book)` and `shareLink.fileCoverUrl(file)`. `FileCoverThumbnail` and `CoverGalleryTabs` accept the same `getCoverUrl` builder; returning `null` shows the placeholder.
+- The plugin identifier types query is disabled, so the body makes no authenticated requests in Share Link context.
+
+New controls added to the body must decide how they behave in Share Link context. Anything that links into the app or mutates data must be hidden or rendered as plain text when `isShareLink` is true, and `BookDetailBody.test.tsx` should cover it.
 
 ### React Query Cache Invalidation
 

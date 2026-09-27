@@ -1,0 +1,311 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+import type { Book, File } from "@/types";
+
+import BookDetailBody, { type ShareLinkContext } from "./BookDetailBody";
+
+beforeAll(() => {
+  vi.stubGlobal("__APP_VERSION__", "test");
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.stubGlobal("__APP_VERSION__", "test");
+});
+
+// Full permissions, so every control the Share Link context hides would otherwise
+// be visible.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ demoMode: false, canWrite: () => true }),
+}));
+
+const { idle } = vi.hoisted(() => ({
+  idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/hooks/queries/books", () => ({
+  useDeleteBook: idle,
+  useDeleteFile: idle,
+  useResyncBook: idle,
+  useResyncFile: idle,
+}));
+const { identifierTypesOptions } = vi.hoisted(() => ({
+  identifierTypesOptions: [] as Array<{ enabled?: boolean } | undefined>,
+}));
+
+vi.mock("@/hooks/queries/plugins", () => ({
+  usePluginIdentifierTypes: (options?: { enabled?: boolean }) => {
+    identifierTypesOptions.push(options);
+    return { data: [] };
+  },
+}));
+vi.mock("@/hooks/queries/review", () => ({
+  useSetBookReview: idle,
+  useReviewCriteria: () => ({
+    data: { book_fields: [], audio_fields: [] },
+  }),
+}));
+vi.mock("@/components/library/AddToListPopover", () => ({
+  default: ({ trigger }: { trigger: ReactNode }) => (
+    <div data-testid="add-to-list">{trigger}</div>
+  ),
+}));
+vi.mock("@/components/library/BookEditDialog", () => ({
+  BookEditDialog: () => null,
+}));
+vi.mock("@/components/library/IdentifyBookDialog", () => ({
+  IdentifyBookDialog: () => null,
+}));
+vi.mock("@/components/library/MergeIntoDialog", () => ({
+  MergeIntoDialog: () => null,
+}));
+vi.mock("@/components/library/MoveFilesDialog", () => ({
+  MoveFilesDialog: () => null,
+}));
+vi.mock("@/components/library/FileEditDialog", () => ({
+  FileEditDialog: () => null,
+}));
+
+const timestamps = {
+  created_at: "2024-01-01T00:00:00Z",
+  updated_at: "2024-01-01T00:00:00Z",
+};
+
+const epub = {
+  ...timestamps,
+  id: 42,
+  book_id: 7,
+  library_id: 1,
+  file_type: "epub",
+  file_role: "main",
+  filepath: "",
+  filesize_bytes: 1000,
+  reviewed: true,
+  is_preferred_cover: false,
+  cover_image_filename: "",
+  publisher: { id: 5, name: "Tor Books" },
+  release_date: "2020-01-01T00:00:00Z",
+} as unknown as File;
+
+const m4b = {
+  ...timestamps,
+  id: 43,
+  book_id: 7,
+  library_id: 1,
+  file_type: "m4b",
+  file_role: "main",
+  filepath: "",
+  filesize_bytes: 2000,
+  reviewed: true,
+  is_preferred_cover: false,
+  narrators: [
+    { id: 1, person_id: 11, person: { id: 11, name: "Nora Reader" } },
+  ],
+} as unknown as File;
+
+const book = {
+  ...timestamps,
+  id: 7,
+  library_id: 1,
+  title: "Test Book",
+  filepath: "",
+  cover_cache_key: "42-1",
+  authors: [{ id: 1, person_id: 10, person: { id: 10, name: "Ada Author" } }],
+  book_series: [
+    {
+      id: 1,
+      series_id: 3,
+      series_number: 2,
+      series: { id: 3, name: "Great Series" },
+    },
+  ],
+  book_genres: [{ id: 1, genre_id: 4, genre: { id: 4, name: "Fantasy" } }],
+  book_tags: [{ id: 1, tag_id: 6, tag: { id: 6, name: "Favorite" } }],
+  files: [epub],
+} as unknown as Book;
+
+const shareLink: ShareLinkContext = {
+  downloadUrl: (file) => `/api/share/tok/files/${file.id}/download`,
+  bookCoverUrl: (b) => `/api/share/tok/cover?v=${b.cover_cache_key}`,
+  fileCoverUrl: (file) => `/api/share/tok/files/${file.id}/cover`,
+};
+
+const renderBody = (
+  props: Partial<React.ComponentProps<typeof BookDetailBody>> = {},
+) =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <BookDetailBody book={book} {...props} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+describe("BookDetailBody in Share Link context", () => {
+  it("renders resource names as plain text with no links into the app", () => {
+    renderBody({
+      book: { ...book, files: [{ ...epub, publisher: undefined }, m4b] },
+      shareLink,
+    });
+
+    for (const name of [
+      "Ada Author",
+      "Great Series",
+      "Fantasy",
+      "Favorite",
+      "Nora Reader",
+    ]) {
+      const el = screen.getByText(name);
+      expect(el.closest("a")).toBeNull();
+    }
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("renders the file publisher as plain text", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({ shareLink });
+
+    await user.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByText("Tor Books").closest("a")).toBeNull();
+  });
+
+  it("hides every action control even with full permissions", () => {
+    renderBody({ book: { ...book, files: [epub, m4b] }, shareLink });
+
+    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("add-to-list")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("File actions")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Select" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(screen.queryByText("Library")).not.toBeInTheDocument();
+    expect(screen.queryByText("File Path")).not.toBeInTheDocument();
+  });
+
+  it("makes no authenticated identifier types request", () => {
+    identifierTypesOptions.length = 0;
+    renderBody({ shareLink });
+
+    expect(identifierTypesOptions.length).toBeGreaterThan(0);
+    for (const options of identifierTypesOptions) {
+      expect(options?.enabled).toBe(false);
+    }
+  });
+
+  it("falls back to the file type when the payload blanks the path", () => {
+    renderBody({ shareLink });
+
+    expect(screen.getByTitle("EPUB")).toHaveTextContent("EPUB");
+  });
+
+  it("uses the supplied cover URL builders", () => {
+    const { container } = renderBody({ shareLink });
+
+    expect(screen.getByAltText("Test Book Cover")).toHaveAttribute(
+      "src",
+      "/api/share/tok/cover?v=42-1",
+    );
+    const thumbnails = Array.from(container.querySelectorAll("img")).map(
+      (img) => img.getAttribute("src"),
+    );
+    expect(thumbnails).toContain("/api/share/tok/files/42/cover");
+  });
+
+  it("downloads through the supplied download URL builder", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+
+    renderBody({ shareLink });
+
+    const downloads = screen.getAllByRole("button", { name: "Download" });
+    await user.click(downloads[0]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/share/tok/files/42/download",
+      expect.objectContaining({ method: "HEAD" }),
+    );
+    expect(assign).toHaveBeenCalledWith("/api/share/tok/files/42/download");
+  });
+
+  it("downloads supplements through the supplied download URL builder", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+
+    const supplement = {
+      ...epub,
+      id: 44,
+      file_type: "pdf",
+      file_role: "supplement",
+      name: "Map",
+    } as File;
+    renderBody({ book: { ...book, files: [supplement] }, shareLink });
+
+    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/share/tok/files/44/download",
+      expect.objectContaining({ method: "HEAD" }),
+    );
+    expect(assign).toHaveBeenCalledWith("/api/share/tok/files/44/download");
+    expect(assign).not.toHaveBeenCalledWith(
+      expect.stringContaining("/download/original"),
+    );
+  });
+});
+
+describe("BookDetailBody without Share Link context", () => {
+  it("links resource names into the library", () => {
+    renderBody();
+
+    expect(screen.getByText("Ada Author").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1/people/10",
+    );
+    expect(screen.getByText("Great Series").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1/series/3",
+    );
+    expect(screen.getByText("Fantasy").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1?genre_ids=4",
+    );
+    expect(screen.getByText("Favorite").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1?tag_ids=6",
+    );
+  });
+
+  it("keeps the same book menu entries for Books Write", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody();
+
+    await user.click(screen.getByLabelText("Book actions"));
+    const menu = screen.getByRole("menu");
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "Edit",
+      "Add to list",
+      "Rescan book",
+      "Identify book",
+      "Merge into another book",
+      "Delete book",
+    ]);
+    expect(within(menu).getAllByRole("separator")).toHaveLength(3);
+  });
+});

@@ -4,6 +4,7 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  type UseQueryOptions,
 } from "@tanstack/react-query";
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
@@ -173,8 +174,14 @@ export const usePluginRepositories = () => {
   });
 };
 
-export const usePluginIdentifierTypes = () => {
+export const usePluginIdentifierTypes = (
+  options: Omit<
+    UseQueryOptions<PluginIdentifierType[], ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
   return useQuery<PluginIdentifierType[], ShishoAPIError>({
+    ...options,
     queryKey: [QueryKey.PluginIdentifierTypes],
     queryFn: ({ signal }) => {
       return API.request(
