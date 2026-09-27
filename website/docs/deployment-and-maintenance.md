@@ -108,7 +108,7 @@ Follow container output with:
 docker compose logs -f shisho
 ```
 
-The image emits JSON logs by default. Set `LOG_FORMAT=console` for human-readable output. Successful frontend asset requests are omitted from request logs; application API, integration, and error responses are logged. The **Settings > Logs** page shows recent application logs to users with Config Read permission, but container logs remain important for startup failures and reverse proxy issues.
+The image emits JSON logs by default. Set `LOG_FORMAT=console` for human-readable output. Successful frontend asset requests are omitted from request logs; application API, integration, and error responses are logged. The **Settings > Logs** page shows recent application logs and streams new ones live to users with Config Read permission. Container logs remain important for startup failures and reverse proxy issues.
 
 ## HTTPS and Reverse Proxies
 

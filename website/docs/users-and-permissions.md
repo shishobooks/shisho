@@ -40,6 +40,8 @@ Some library data is edited under a broader resource than its name suggests:
 - Library rescans create jobs, so they require Jobs Read and Jobs Write. Viewing jobs and their logs requires Jobs Read.
 - Bulk downloads also create jobs, but they need Books Read and access to the files' libraries instead of Jobs permissions. See [Bulk Download Permissions](./browsing-search-bulk-actions.md#bulk-download-permissions).
 
+The server log under **Settings > Logs** requires Config Read. Live log updates follow the same rule, so users without Config Read never receive server log lines.
+
 ## What a Read-Only Role Sees
 
 A user whose role has Read but not Write for a resource does not see the controls that would change it. The server still rejects any unauthorized request; hiding the controls only keeps the interface honest about what the user can do.

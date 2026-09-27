@@ -5,16 +5,25 @@ import (
 	"sync"
 )
 
+// EventTypeLogEntry is the type of events carrying server log lines. The
+// stream handler delivers them only to users with Config Read, the same
+// permission GET /api/logs requires.
+const EventTypeLogEntry = "log.entry"
+
 // Event represents a server-sent event with a named type and JSON data.
 type Event struct {
 	Type string
 	Data string
 }
 
+// EventFilter reports whether a subscriber receives an event. A nil filter
+// accepts every event.
+type EventFilter func(evt Event) bool
+
 // Broker fans out events to all subscribed SSE connections.
 type Broker struct {
 	mu          sync.RWMutex
-	subscribers map[chan Event]struct{}
+	subscribers map[chan Event]EventFilter
 	// done is closed by Close() to broadcast "server is shutting down" to
 	// every SSE handler. Without this signal, streaming handlers would wait
 	// for the client to disconnect before returning, stalling srv.Shutdown
@@ -24,7 +33,7 @@ type Broker struct {
 
 func NewBroker() *Broker {
 	return &Broker{
-		subscribers: make(map[chan Event]struct{}),
+		subscribers: make(map[chan Event]EventFilter),
 		done:        make(chan struct{}),
 	}
 }
@@ -52,9 +61,17 @@ func (b *Broker) Close() {
 // Subscribe returns a channel that receives all future published events.
 // The caller must call Unsubscribe when done.
 func (b *Broker) Subscribe() chan Event {
+	return b.SubscribeFiltered(nil)
+}
+
+// SubscribeFiltered returns a channel that receives the future published
+// events accepted by filter. Rejected events are never queued, so they
+// cannot fill the subscriber's buffer. The caller must call Unsubscribe when
+// done.
+func (b *Broker) SubscribeFiltered(filter EventFilter) chan Event {
 	ch := make(chan Event, 64)
 	b.mu.Lock()
-	b.subscribers[ch] = struct{}{}
+	b.subscribers[ch] = filter
 	b.mu.Unlock()
 	return ch
 }
@@ -72,7 +89,10 @@ func (b *Broker) Unsubscribe(ch chan Event) {
 func (b *Broker) Publish(evt Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	for ch := range b.subscribers {
+	for ch, filter := range b.subscribers {
+		if filter != nil && !filter(evt) {
+			continue
+		}
 		select {
 		case ch <- evt:
 		default:

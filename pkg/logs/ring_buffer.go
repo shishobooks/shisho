@@ -35,7 +35,8 @@ type RingBuffer struct {
 }
 
 // NewRingBuffer creates a ring buffer that stores up to capacity log entries.
-// If broker is non-nil, each new entry is published as a "log.entry" SSE event.
+// If broker is non-nil, each new entry is published as an events.EventTypeLogEntry
+// SSE event, which the stream delivers only to users with Config Read.
 func NewRingBuffer(capacity int, broker *events.Broker) *RingBuffer {
 	return &RingBuffer{
 		entries:  make([]LogEntry, capacity),
@@ -72,7 +73,7 @@ func (rb *RingBuffer) Write(p []byte) (int, error) {
 		if rb.broker != nil {
 			data, err := json.Marshal(entry)
 			if err == nil {
-				rb.broker.Publish(events.Event{Type: "log.entry", Data: string(data)})
+				rb.broker.Publish(events.Event{Type: events.EventTypeLogEntry, Data: string(data)})
 			}
 		}
 	}
