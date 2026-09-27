@@ -4,12 +4,14 @@
  * sees the book, and downloads a file. Turning sharing off then shows the
  * unavailable page.
  *
- * This is the only test of the anonymous browser path end to end. It runs in
- * Chromium only because it reads the copied URL back from the clipboard, and
- * Playwright grants clipboard permissions only in Chromium.
+ * This is the only test of the anonymous browser path end to end, and it runs
+ * in every browser. Only the clipboard check is Chromium-only, because
+ * Playwright grants clipboard permissions only there; other browsers read the
+ * link's URL from the list endpoint instead.
  *
  * Running:
  *   pnpm e2e:chromium e2e/share-link.spec.ts
+ *   pnpm e2e:firefox e2e/share-link.spec.ts
  */
 
 import type { APIRequestContext, Page } from "@playwright/test";
@@ -88,11 +90,10 @@ test.describe("Share Links", () => {
     context,
     page,
   }) => {
-    test.skip(
-      browserName !== "chromium",
-      "Clipboard permissions are Chromium-only in Playwright.",
-    );
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const canReadClipboard = browserName === "chromium";
+    if (canReadClipboard) {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
 
     await login(page);
 
@@ -117,12 +118,19 @@ test.describe("Share Links", () => {
     });
     await expect(row).toContainText("active");
     await expect(row).toContainText(`Created by ${USERNAME}`);
-    await row
-      .getByRole("button", { name: "Copy link for the e2e test" })
-      .click();
-
-    const url = await page.evaluate(() => navigator.clipboard.readText());
     const origin = new URL(page.url()).origin;
+    let url: string;
+    if (canReadClipboard) {
+      await row
+        .getByRole("button", { name: "Copy link for the e2e test" })
+        .click();
+      url = await page.evaluate(() => navigator.clipboard.readText());
+    } else {
+      const list = await page.request.get(`/api/books/${bookId}/share-links`);
+      const links = (await list.json()) as { label?: string; token: string }[];
+      const created = links.find((l) => l.label === "for the e2e test");
+      url = `${origin}/share/${created?.token}`;
+    }
     expect(url).toMatch(new RegExp(`^${origin}/share/[A-Za-z0-9_-]{43}$`));
 
     // A fresh context has no session cookie.
@@ -169,7 +177,6 @@ test.describe("Share Links", () => {
     browserName,
     page,
   }) => {
-    test.skip(browserName !== "chromium", "Covered by the Chromium run.");
     await login(page);
     await setSharing(getApiBaseURL(browserName), true);
     const create = await page.request.post(`/api/books/${bookId}/share-links`, {
