@@ -91,6 +91,20 @@ _Avoid_: rescan (in new code; some existing identifiers, comments, and docs/UI c
 **Sidecar**:
 A `.metadata.json` file placed alongside a book or file that provides metadata overrides.
 
+### Sharing
+
+**List**:
+A user-owned virtual collection of **Books** that may span libraries, either ordered (manual sequence) or unordered (automatic sort). A list never changes the filesystem and never grants library access; a viewer sees only the books in libraries they can already access.
+_Avoid_: collection, shelf, playlist
+
+**Share Link**:
+An anonymous link that grants whoever holds it access to one **Book** and its **Files** without a Shisho account or library access. A share link is active, expired, or revoked; only an active link resolves. It may expire at a set time, and a book may have many share links at once. It is distinct from a **List Share**, which is a grant to a named user and requires login.
+_Avoid_: public link, guest link, share (alone, which is ambiguous with list share)
+
+**List Share**:
+A grant of a **List** to a named user at a permission level (viewer, editor, manager). It never grants library access and requires the recipient to log in.
+_Avoid_: share (alone)
+
 ### Deployment Modes
 
 **Demo Mode**:
@@ -112,6 +126,7 @@ _Avoid_: sample library, fixtures (those are test data)
 - A **Book** belongs to a given **Series** at most once, at a **series number** that is a single position or a contiguous range (an **omnibus**)
 - A **File** has at most one **Publisher** and many **Narrators** (persons)
 - A **Publisher** has at most one parent **Publisher** and many child **Publishers** (self-referential hierarchy)
+- A **Book** has many **Share Links**; a **Share Link** belongs to exactly one **Book** and is created by one user
 - A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
 
