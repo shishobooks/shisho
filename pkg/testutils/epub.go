@@ -1,0 +1,96 @@
+package testutils
+
+import (
+	"archive/zip"
+	"html"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/pkg/errors"
+)
+
+// writeMinimalEPUB writes a small valid EPUB at path so E2E tests can download
+// a generated file. It carries only a title, an identifier, and one chapter.
+func writeMinimalEPUB(path, title string) (err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = errors.WithStack(cerr)
+		}
+	}()
+
+	zw := zip.NewWriter(f)
+	// The mimetype entry must come first and be stored uncompressed.
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err := w.Write([]byte("application/epub+zip")); err != nil {
+		return errors.WithStack(err)
+	}
+
+	escaped := html.EscapeString(title)
+	entries := []struct{ name, body string }{
+		{"META-INF/container.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`},
+		{"OEBPS/content.opf", `<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>` + escaped + `</dc:title>
+    <dc:identifier id="bookid">urn:uuid:e2e-test-book</dc:identifier>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter1"/>
+  </spine>
+</package>`},
+		{"OEBPS/chapter1.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>` + escaped + `</title></head>
+<body><p>Test chapter.</p></body>
+</html>`},
+	}
+	for _, e := range entries {
+		w, err := zw.Create(e.name)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if _, err := w.Write([]byte(e.body)); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return errors.WithStack(zw.Close())
+}
+
+// e2eEPUBRoot holds every EPUB written by withEpubOnDisk, so the E2E wipe
+// (DELETE /test/ereader) can remove them all.
+func e2eEPUBRoot() string {
+	return filepath.Join(os.TempDir(), "shisho-e2e-epubs")
+}
+
+// tempEPUBPath returns the path, without extension, for a new EPUB in a fresh
+// directory under e2eEPUBRoot. Path separators in the title are replaced so
+// the file lands in that directory.
+func tempEPUBPath(title string) (string, error) {
+	if err := os.MkdirAll(e2eEPUBRoot(), 0o755); err != nil {
+		return "", errors.WithStack(err)
+	}
+	dir, err := os.MkdirTemp(e2eEPUBRoot(), "book-")
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	name := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(title)
+	return filepath.Join(dir, name), nil
+}

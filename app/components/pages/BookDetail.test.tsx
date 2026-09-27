@@ -16,7 +16,13 @@ vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     demoMode: false,
     canWrite: (resource: string) => resource === "books" && canWriteBooks,
+    hasPermission: (resource: string, operation: string) =>
+      resource === "books" && (operation === "read" || canWriteBooks),
   }),
+}));
+
+vi.mock("@/hooks/queries/sharing", () => ({
+  useSharingSettings: () => ({ data: undefined }),
 }));
 
 beforeEach(() => {

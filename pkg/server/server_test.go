@@ -153,7 +153,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			for _, route := range e.Routes() {
 				routes[route.Method+" "+route.Path] = true
 				if demo {
-					for _, prefix := range []string{"/opds", "/ereader", "/e/", "/kobo", "/api/plugins", "/api/test"} {
+					for _, prefix := range []string{"/opds", "/ereader", "/e/", "/kobo", "/api/plugins", "/api/test", "/api/share/"} {
 						assert.False(t, strings.HasPrefix(route.Path, prefix), "unexpected route: %s %s", route.Method, route.Path)
 					}
 					assert.NotContains(t, route.Path, "/plugins/")
@@ -172,6 +172,11 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"POST /api/plugins/apply",
 				"GET /api/libraries/:id/plugins/order/:hookType",
 				"GET /api/test/plugins/fixture-info",
+				"GET /api/share/:token",
+				"GET /api/share/:token/cover",
+				"GET /api/share/:token/files/:fileId/cover",
+				"GET /api/share/:token/files/:fileId/download",
+				"HEAD /api/share/:token/files/:fileId/download",
 			} {
 				assert.Equal(t, !demo, routes[route], route)
 			}
@@ -179,6 +184,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/auth/status", "POST /api/auth/login", "POST /api/auth/logout",
 				"GET /api/books", "GET /api/books/files/:id/download",
 				"GET /api/books/files/:id/page/:pageNum", "GET /api/books/files/:id/stream",
+				"GET /api/books/:id/share-links", "POST /api/books/:id/share-links",
 			} {
 				assert.True(t, routes[route], route)
 			}
@@ -187,7 +193,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				for _, path := range []string{
 					"/opds", "/opds/v1/epub/catalog", "/ereader", "/ereader/key/example/", "/e", "/e/example",
 					"/kobo", "/kobo/example/all/v1/library/sync", "/api/plugins/installed",
-					"/api/test/plugins/fixture-info",
+					"/api/test/plugins/fixture-info", "/api/share/example", "/api/share/example/files/1/download",
 				} {
 					rec := httptest.NewRecorder()
 					e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -205,6 +211,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodGet, "/api/books/files/42/download/kepub"},
 				{http.MethodHead, "/api/books/files/42/download/kepub"},
 				{http.MethodGet, "/api/jobs/42/download"},
+				{http.MethodPost, "/api/books/42/share-links"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

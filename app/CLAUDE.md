@@ -104,7 +104,7 @@ Do not gate on `canWrite`:
 
 Hide the whole control rather than disabling it, and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
 
-**Action menus gate each entry, not the menu.** The Book Detail action menu is built from entry groups where every entry carries its own `visible` flag, computed from the permission its backend route requires. The menu renders when at least one entry is visible, and separators appear only between non-empty groups. Do not wrap the whole menu in a single `canWrite` check: a user can hold one entry's permission without another's (the upcoming Share entry needs `shares:write`, not `books:write`). Add to list has no permission of its own, so it joins the menu whenever another entry puts the menu on screen and is otherwise a standalone button.
+**Action menus gate each entry, not the menu.** The Book Detail action menu is built from entry groups where every entry carries its own `visible` flag, computed from the permission its backend route requires. The menu renders when at least one entry is visible, and separators appear only between non-empty groups. Do not wrap the whole menu in a single `canWrite` check: a user can hold one entry's permission without another's (the Share entry needs a `shares` permission and sharing turned on, not `books:write`). Add to list has no permission of its own, so it joins the menu whenever another entry puts the menu on screen and is otherwise a standalone button.
 
 Components that call `useAuth()` throw outside `AuthProvider`. Tests for those components mock `@/hooks/useAuth` with a `canWrite` stub (see `BookItem.test.tsx`, `ResourceDetail.test.tsx`, `SelectionToolbar.test.tsx`); a `let` flag toggled per test is the pattern for read-only renders. Typed `AuthContextValue` stubs (`useSSE.test.ts`, `Login.test.tsx`) must include `canWrite`.
 
@@ -119,9 +119,16 @@ Passing `shareLink` (a `ShareLinkContext`) switches the body into Share Link con
 - The Library and File Path rows, and the per-file filename row, are omitted.
 - Downloads go to `shareLink.downloadUrl(file)` with the same HEAD-then-navigate flow; there is no format popover and no Download Original fallback.
 - Covers use `shareLink.bookCoverUrl(book)` and `shareLink.fileCoverUrl(file)`. `FileCoverThumbnail` and `CoverGalleryTabs` accept the same `getCoverUrl` builder; returning `null` shows the placeholder.
-- The plugin identifier types query is disabled, so the body makes no authenticated requests in Share Link context.
+- The plugin identifier types and sharing settings queries are disabled, so the body makes no authenticated requests in Share Link context.
+- `shareLink.coverAspectRatio` stands in for the library's cover aspect ratio, which sizes the cover box.
 
 New controls added to the body must decide how they behave in Share Link context. Anything that links into the app or mutates data must be hidden or rendered as plain text when `isShareLink` is true, and `BookDetailBody.test.tsx` should cover it.
+
+### Share Links (sharer and recipient)
+
+- **Share entry.** `BookDetailBody` fetches the sharing settings only when the user holds a `shares` operation or `config:read` (the endpoint's permissions), and shows **Share** when sharing is enabled and the user holds either `shares` operation. Either one puts the action menu on screen, with Add to list beside Share. `ShareLinkDialog` shows the new-link form for `shares:write` and the list for either operation (the list endpoint accepts both, so a sharer can always copy what they create). The expiration presets are client-side; the dialog sends an absolute `expires_at`. The copy button builds `${window.location.origin}/share/<token>` and copies through `copyText` (`app/utils/clipboard.ts`), which falls back to `execCommand` because `navigator.clipboard` does not exist over plain HTTP on a LAN.
+- **Recipient route.** `/share/:token` (`SharedBook.tsx`) is a top-level public route beside `/login` and `/setup`, outside `Root` and `ProtectedRoute`: no login redirect, no nav, no demo banner. It renders its own `<Toaster />` for download toasts. It still sits inside `AuthProvider` (the body calls `useAuth`), which makes an anonymous `/auth/status` and `/auth/me` call. `useSSE` skips any `/share/` path, so the event stream never opens there, even for a signed-in user. A 404 renders the single `ShareUnavailable` page; any other failure is retried once and then shows a Try again page, since the link may still be fine.
+- The share payload blanks cover filenames, so `SharedBook` keys the book cover off `cover_cache_key` and requests a cover for every main file; a missing file cover 404s and falls back to the placeholder.
 
 ### React Query Cache Invalidation
 

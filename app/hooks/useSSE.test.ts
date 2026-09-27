@@ -122,6 +122,19 @@ describe("useSSE", () => {
     expect(MockEventSource.instances).toHaveLength(0);
   });
 
+  it("does not open EventSource on a Share Link page, even when signed in", () => {
+    window.history.pushState({}, "", "/share/some-token");
+    try {
+      renderHook(() => useSSE(), {
+        wrapper: createWrapper(true, queryClient),
+      });
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+
+    expect(MockEventSource.instances).toHaveLength(0);
+  });
+
   it("closes EventSource on unmount", () => {
     const { unmount } = renderHook(() => useSSE(), {
       wrapper: createWrapper(true, queryClient),

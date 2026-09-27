@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -195,6 +196,10 @@ type createBookRequest struct {
 	AudiobookDurationSeconds *float64 `json:"audiobookDurationSeconds"`
 	AudiobookBitrateBps      *int     `json:"audiobookBitrateBps"`
 	AudiobookCodec           *string  `json:"audiobookCodec"`
+	// WithEpubOnDisk writes a minimal valid EPUB to a temporary directory and
+	// points the file at it, so downloads can generate a real file. Only for
+	// the default "epub" file type; filepath is ignored.
+	WithEpubOnDisk bool `json:"withEpubOnDisk"`
 }
 
 // createBookResponse is the response body for creating a test book.
@@ -227,6 +232,19 @@ func (h *handler) createBook(c echo.Context) error {
 	fileType := req.FileType
 	if fileType == "" {
 		fileType = models.FileTypeEPUB
+	}
+	if req.WithEpubOnDisk {
+		if fileType != models.FileTypeEPUB {
+			return errcodes.BadRequest("withEpubOnDisk requires fileType epub")
+		}
+		base, err := tempEPUBPath(req.Title)
+		if err != nil {
+			return err
+		}
+		if err := writeMinimalEPUB(base+".epub", req.Title); err != nil {
+			return err
+		}
+		filepath = base
 	}
 
 	// Create book
@@ -513,6 +531,9 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 	// deletion fragile. Safe in tests (workers=1).
 	_, _ = h.db.Exec("PRAGMA foreign_keys = OFF")
 	defer h.db.Exec("PRAGMA foreign_keys = ON") //nolint:errcheck
+
+	// Remove EPUBs written by POST /test/books with withEpubOnDisk.
+	_ = os.RemoveAll(e2eEPUBRoot())
 
 	// Delete API key permissions
 	_, _ = h.db.NewDelete().

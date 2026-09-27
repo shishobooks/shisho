@@ -35,6 +35,7 @@ import SecuritySettings from "@/components/pages/SecuritySettings";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
 import Setup from "@/components/pages/Setup";
+import SharedBook from "@/components/pages/SharedBook";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
@@ -49,6 +50,11 @@ export const router = createBrowserRouter([
   {
     path: "/setup",
     Component: Setup,
+  },
+  // A Share Link recipient has no account: never redirect to login.
+  {
+    path: "/share/:token",
+    Component: SharedBook,
   },
   // Protected routes (require authentication)
   {
