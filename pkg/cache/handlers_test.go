@@ -142,6 +142,8 @@ func TestClear_UnknownIDReturns404(t *testing.T) {
 	var ce *errcodes.Error
 	require.ErrorAs(t, err, &ce)
 	assert.Equal(t, http.StatusNotFound, ce.HTTPCode)
+	assert.Equal(t, "not_found", ce.Code)
+	assert.Equal(t, "Cache not found.", ce.Message)
 }
 
 func TestClear_ReportsPreClearSize(t *testing.T) {

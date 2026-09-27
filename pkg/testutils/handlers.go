@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -41,11 +42,11 @@ func (h *handler) createUser(c echo.Context) error {
 
 	var req createUserRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 
 	if req.Username == "" || req.Password == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Username and password are required")
+		return errcodes.BadRequest("Username and password are required.")
 	}
 
 	// Get admin role
@@ -150,11 +151,11 @@ func (h *handler) createLibrary(c echo.Context) error {
 
 	var req createLibraryRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Name is required")
+		return errcodes.BadRequest("Name is required.")
 	}
 
 	now := time.Now()
@@ -209,11 +210,11 @@ func (h *handler) createBook(c echo.Context) error {
 
 	var req createBookRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 
 	if req.LibraryID == 0 || req.Title == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "libraryId and title are required")
+		return errcodes.BadRequest("libraryId and title are required.")
 	}
 
 	now := time.Now()
@@ -338,11 +339,11 @@ func (h *handler) createPerson(c echo.Context) error {
 
 	var req createPersonRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 
 	if req.LibraryID == 0 || req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "libraryId and name are required")
+		return errcodes.BadRequest("libraryId and name are required.")
 	}
 
 	now := time.Now()
@@ -385,11 +386,11 @@ func (h *handler) createSeries(c echo.Context) error {
 
 	var req createSeriesRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 
 	if req.LibraryID == 0 || req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "libraryId and name are required")
+		return errcodes.BadRequest("libraryId and name are required.")
 	}
 
 	now := time.Now()
@@ -441,11 +442,11 @@ func (h *handler) createAPIKey(c echo.Context) error {
 
 	var req createAPIKeyRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 
 	if req.UserID == 0 || req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "userId and name are required")
+		return errcodes.BadRequest("userId and name are required.")
 	}
 
 	now := time.Now()

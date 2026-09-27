@@ -172,7 +172,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	// Check library access
@@ -227,7 +227,7 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	// Check library access
@@ -278,12 +278,12 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	seriesIDInt, err := strconv.Atoi(seriesID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid series ID")
+		return errcodes.NotFound("Series")
 	}
 
 	// Check library access
@@ -349,7 +349,7 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	// Check library access
@@ -400,12 +400,12 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	authorIDInt, err := strconv.Atoi(authorID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid author ID")
+		return errcodes.NotFound("Author")
 	}
 
 	// Check library access
@@ -486,7 +486,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	// Check library access
@@ -552,7 +552,7 @@ func (h *handler) Download(c echo.Context) error {
 
 	bookIDInt, err := strconv.Atoi(bookID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid book ID")
+		return errcodes.NotFound("Book")
 	}
 
 	// Get book details
@@ -583,7 +583,7 @@ func (h *handler) Download(c echo.Context) error {
 		}
 	}
 	if len(mainFiles) == 0 {
-		return errcodes.NotFound("No files available for this book")
+		return errcodes.NotFound("File")
 	}
 
 	// Detect Kobo device from User-Agent
@@ -642,7 +642,7 @@ func (h *handler) Cover(c echo.Context) error {
 
 	bookIDInt, err := strconv.Atoi(bookID)
 	if err != nil {
-		return errcodes.ValidationError("Invalid book ID")
+		return errcodes.NotFound("Book")
 	}
 
 	// Get book details
@@ -1067,7 +1067,7 @@ func ResolveShortURL(c echo.Context, apiKeyService *apikeys.Service) error {
 		return errors.WithStack(err)
 	}
 	if apiKey == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Short URL not found or expired")
+		return errcodes.NotFound("Short URL")
 	}
 
 	redirectURL := fmt.Sprintf("/ereader/key/%s/", apiKey.Key)

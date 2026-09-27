@@ -804,7 +804,7 @@ func (h *handler) updateFile(c echo.Context) error {
 				models.FileTypePDF:  true,
 			}
 			if !supportedTypes[file.FileType] {
-				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("cannot upgrade to main file: file type '%s' is not supported as a main file", file.FileType))
+				return errcodes.BadRequest(fmt.Sprintf("Cannot upgrade to main file: file type '%s' is not supported as a main file.", file.FileType))
 			}
 		}
 
@@ -1055,7 +1055,7 @@ func (h *handler) updateFile(c echo.Context) error {
 			} else {
 				normalized := mediafile.NormalizeLanguage(*params.Language)
 				if normalized == nil {
-					return echo.NewHTTPError(http.StatusBadRequest, "invalid language tag: "+*params.Language)
+					return errcodes.BadRequest("Invalid language tag: " + *params.Language)
 				}
 				file.Language = normalized
 				file.LanguageSource = strPtr(models.DataSourceManual)
@@ -1139,7 +1139,7 @@ func (h *handler) updateFile(c echo.Context) error {
 		if *params.IsPreferredCover {
 			// Validate file has a cover
 			if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
-				return echo.NewHTTPError(http.StatusBadRequest, "cannot set preferred cover: file has no cover image")
+				return errcodes.BadRequest("Cannot set preferred cover: file has no cover image.")
 			}
 			// Clear is_preferred_cover on other files of the same type category
 			// in the same book. EPUB/CBZ/PDF = ebook, M4B = audiobook.
@@ -2407,7 +2407,7 @@ func (h *handler) deleteBook(c echo.Context) error {
 	// Parse book ID
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return errcodes.ValidationError("Invalid book ID")
+		return errcodes.NotFound("Book")
 	}
 
 	// Load book to get library ID
@@ -2499,7 +2499,7 @@ func (h *handler) deleteFile(c echo.Context) error {
 	// Parse file ID
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return errcodes.ValidationError("Invalid file ID")
+		return errcodes.NotFound("File")
 	}
 
 	// Load file to get library ID and book ID
@@ -2723,7 +2723,7 @@ func (h *handler) deleteBooks(c echo.Context) error {
 func (h *handler) listLibraryLanguages(c echo.Context) error {
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	languages, err := h.bookService.DistinctFileLanguages(c.Request().Context(), libraryID)

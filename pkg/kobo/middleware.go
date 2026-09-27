@@ -78,13 +78,13 @@ func (m *Middleware) ScopeParser(scopeType string) echo.MiddlewareFunc {
 			case "library":
 				id, err := strconv.Atoi(c.Param("scopeId"))
 				if err != nil {
-					return errcodes.ValidationError("Invalid library ID in scope")
+					return errcodes.NotFound("Library")
 				}
 				scope.LibraryID = &id
 			case "list":
 				id, err := strconv.Atoi(c.Param("scopeId"))
 				if err != nil {
-					return errcodes.ValidationError("Invalid list ID in scope")
+					return errcodes.NotFound("List")
 				}
 				scope.ListID = &id
 			}

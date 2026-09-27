@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -112,13 +113,13 @@ func (h *handler) seedPlugin(c echo.Context) error {
 
 	var req seedPluginRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return errcodes.MalformedPayload()
 	}
 	if req.Scope == "" || req.ID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "scope and id are required")
+		return errcodes.BadRequest("scope and id are required.")
 	}
 	if h.installer == nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "plugin installer not configured")
+		return errors.New("plugin installer not configured")
 	}
 
 	name := req.Name

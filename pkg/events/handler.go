@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -34,7 +35,7 @@ func (h *handler) stream(c echo.Context) error {
 
 	flusher, ok := w.Writer.(http.Flusher)
 	if !ok {
-		return echo.NewHTTPError(http.StatusInternalServerError, "streaming not supported")
+		return errors.New("streaming not supported")
 	}
 
 	// Authenticate stores the user with its role and permissions loaded. The

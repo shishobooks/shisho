@@ -14,7 +14,7 @@ import (
 func (h *handler) setFileReview(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return errcodes.BadRequest("Invalid file id")
+		return errcodes.NotFound("File")
 	}
 
 	var payload SetReviewPayload
@@ -57,7 +57,7 @@ func (h *handler) setFileReview(c echo.Context) error {
 func (h *handler) setBookReview(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return errcodes.BadRequest("Invalid book id")
+		return errcodes.NotFound("Book")
 	}
 
 	var payload SetReviewPayload

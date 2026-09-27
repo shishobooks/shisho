@@ -655,7 +655,7 @@ func (svc *Service) MoveBookToPosition(ctx context.Context, listID, bookID, posi
 			}
 		}
 		if currentIndex == -1 {
-			return errcodes.NotFound("Book not in list")
+			return errcodes.NotFound("Book in list")
 		}
 
 		// Validate position

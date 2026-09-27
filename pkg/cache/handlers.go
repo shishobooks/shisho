@@ -112,7 +112,7 @@ func (h *Handler) clear(c echo.Context) error {
 		}
 	}
 	if entry == nil {
-		return errcodes.NotFound("cache")
+		return errcodes.NotFound("Cache")
 	}
 
 	bytes, count, err := entry.provider.SizeBytes()

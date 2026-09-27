@@ -48,7 +48,7 @@ func (h *handler) setFieldSettings(c echo.Context) error {
 	// Validate plugin is a metadata enricher
 	enricherCap := rt.Manifest().Capabilities.MetadataEnricher
 	if enricherCap == nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "plugin is not a metadata enricher")
+		return errcodes.BadRequest("Plugin is not a metadata enricher.")
 	}
 
 	var payload SetFieldSettingsPayload
@@ -67,7 +67,7 @@ func (h *handler) setFieldSettings(c echo.Context) error {
 	}
 	for field := range payload.Fields {
 		if !declared[field] {
-			return echo.NewHTTPError(http.StatusBadRequest, "unknown field: "+field)
+			return errcodes.BadRequest("Unknown field: " + field)
 		}
 	}
 
@@ -85,7 +85,7 @@ func (h *handler) getLibraryFieldSettings(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")
@@ -118,7 +118,7 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")
@@ -132,7 +132,7 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 	// Validate plugin is a metadata enricher
 	enricherCap := rt.Manifest().Capabilities.MetadataEnricher
 	if enricherCap == nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "plugin is not a metadata enricher")
+		return errcodes.BadRequest("Plugin is not a metadata enricher.")
 	}
 
 	var payload SetFieldSettingsPayload
@@ -151,7 +151,7 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 	}
 	for field := range payload.Fields {
 		if !declared[field] {
-			return echo.NewHTTPError(http.StatusBadRequest, "unknown field: "+field)
+			return errcodes.BadRequest("Unknown field: " + field)
 		}
 	}
 
@@ -169,7 +169,7 @@ func (h *handler) resetLibraryFieldSettings(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")
