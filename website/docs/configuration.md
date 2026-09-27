@@ -2,6 +2,8 @@
 
 Shisho loads configuration at startup. Restart the container or server after changing any option.
 
+Share Links are not a configuration option. An admin turns them on under **Settings > Sharing** without a restart. See [Sharing](./sharing.md).
+
 ## Configuration Sources
 
 Values are applied in this order, with later sources taking precedence:

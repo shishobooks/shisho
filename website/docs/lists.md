@@ -62,6 +62,8 @@ The backend also requires the global `users:read` permission to view or change s
 
 Shared lists record who added each book.
 
+List sharing only reaches users who sign in to Shisho, and it never grants library access. To send one book to someone without an account or without access to its library, use a [Share Link](./sharing.md) instead.
+
 ## Library Access Filtering
 
 Each viewer sees only list books from libraries they can access. Hidden books remain members of the list and reappear if the viewer later gains access. List sharing never grants access to a library.

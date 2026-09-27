@@ -113,6 +113,28 @@ func (m *Middleware) RequirePermission(resource, operation string) echo.Middlewa
 	}
 }
 
+// RequireAnyPermission returns middleware that allows the request when the
+// user holds the operation on at least one of the resources.
+// Must be used after Authenticate middleware.
+func (m *Middleware) RequireAnyPermission(operation string, resources ...string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			user, ok := c.Get("user").(*models.User)
+			if !ok {
+				return errcodes.Unauthorized("Authentication required")
+			}
+
+			for _, resource := range resources {
+				if user.HasPermission(resource, operation) {
+					return next(c)
+				}
+			}
+
+			return errcodes.Forbidden("You don't have permission to " + operation + " " + strings.Join(resources, " or "))
+		}
+	}
+}
+
 // RequireLibraryAccess returns middleware that checks if the user can access the library
 // specified by the :libraryId or :id route parameter.
 // Must be used after Authenticate middleware.

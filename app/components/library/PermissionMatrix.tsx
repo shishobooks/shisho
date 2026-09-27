@@ -8,6 +8,7 @@ import {
   ResourceLibraries,
   ResourcePeople,
   ResourceSeries,
+  ResourceShares,
   ResourceUsers,
   type PermissionInput,
 } from "@/types";
@@ -21,6 +22,7 @@ const RESOURCES = [
   { key: ResourceUsers, label: "Users" },
   { key: ResourceJobs, label: "Jobs" },
   { key: ResourceConfig, label: "Config" },
+  { key: ResourceShares, label: "Shares" },
 ] as const;
 
 // Define available operations with display names

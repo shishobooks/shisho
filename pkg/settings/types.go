@@ -127,3 +127,18 @@ type PutReviewCriteriaPayload struct {
 	AudioFields    []string `json:"audio_fields" validate:"required"`
 	ClearOverrides bool     `json:"clear_overrides"`
 }
+
+// SharingSettingsResponse is the response for GET/PUT /settings/sharing.
+type SharingSettingsResponse struct {
+	Enabled           bool `json:"enabled"`
+	RequireExpiration bool `json:"require_expiration"`
+}
+
+// UpdateSharingSettingsPayload is the request body for PUT /settings/sharing.
+//
+// Fields are pointers so each switch can save on its own: an omitted field
+// keeps its saved value.
+type UpdateSharingSettingsPayload struct {
+	Enabled           *bool `json:"enabled,omitempty"`
+	RequireExpiration *bool `json:"require_expiration,omitempty"`
+}

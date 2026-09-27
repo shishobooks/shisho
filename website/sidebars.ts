@@ -15,6 +15,7 @@ const sidebars: SidebarsConfig = {
         "managing-books-and-files",
         "metadata",
         "lists",
+        "sharing",
       ],
     },
     {

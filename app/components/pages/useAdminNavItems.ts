@@ -6,6 +6,7 @@ import {
   Library,
   Puzzle,
   ScrollText,
+  Share2,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -52,6 +53,13 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       Icon: BookCheck,
       label: "Review Criteria",
       isActive: location.pathname.startsWith("/settings/review-criteria"),
+      show: canViewConfig,
+    },
+    {
+      to: "/settings/sharing",
+      Icon: Share2,
+      label: "Sharing",
+      isActive: location.pathname.startsWith("/settings/sharing"),
       show: canViewConfig,
     },
     {
