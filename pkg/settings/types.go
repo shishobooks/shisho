@@ -129,6 +129,10 @@ type PutReviewCriteriaPayload struct {
 }
 
 // SharingSettingsResponse is the response for GET/PUT /settings/sharing.
+//
+// Field shape must stay identical to sharelinks.Settings (same field names,
+// same types, same order) because the handler converts between them with
+// `SharingSettingsResponse(settings)`.
 type SharingSettingsResponse struct {
 	Enabled           bool `json:"enabled"`
 	RequireExpiration bool `json:"require_expiration"`

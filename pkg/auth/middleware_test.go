@@ -420,3 +420,42 @@ func TestRequirePermission_Message(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, codeErr.HTTPCode)
 	assert.Equal(t, "You don't have permission to write jobs", codeErr.Message)
 }
+
+func TestRequireAnyPermission(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		permissions []*models.Permission
+		allowed     bool
+	}{
+		{"first resource", []*models.Permission{{Resource: models.ResourceShares, Operation: models.OperationRead}}, true},
+		{"second resource", []*models.Permission{{Resource: models.ResourceConfig, Operation: models.OperationRead}}, true},
+		{"wrong operation", []*models.Permission{{Resource: models.ResourceShares, Operation: models.OperationWrite}}, false},
+		{"neither", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := echo.New()
+			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/settings/sharing", nil), httptest.NewRecorder())
+			c.Set("user", &models.User{Role: &models.Role{Permissions: tt.permissions}})
+
+			m := &Middleware{}
+			called := false
+			err := m.RequireAnyPermission(models.OperationRead, models.ResourceShares, models.ResourceConfig)(
+				func(echo.Context) error { called = true; return nil },
+			)(c)
+
+			assert.Equal(t, tt.allowed, called)
+			if tt.allowed {
+				require.NoError(t, err)
+				return
+			}
+			var codeErr *errcodes.Error
+			require.ErrorAs(t, err, &codeErr)
+			assert.Equal(t, http.StatusForbidden, codeErr.HTTPCode)
+			assert.Equal(t, "You don't have permission to read shares or config", codeErr.Message)
+		})
+	}
+}

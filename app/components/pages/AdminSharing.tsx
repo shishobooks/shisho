@@ -1,6 +1,5 @@
 import { Info } from "lucide-react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Switch } from "@/components/ui/switch";
@@ -10,6 +9,7 @@ import {
 } from "@/hooks/queries/sharing";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import type { UpdateSharingSettingsPayload } from "@/types";
 
 interface SettingRowProps {
@@ -33,7 +33,11 @@ const SettingRow = ({
 }: SettingRowProps) => (
   <div className="flex items-start justify-between gap-4">
     <div>
-      <label className="text-sm font-medium" htmlFor={id} id={`${id}-label`}>
+      <label
+        className="text-sm font-medium"
+        htmlFor={canEdit ? id : undefined}
+        id={`${id}-label`}
+      >
         {label}
       </label>
       <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
@@ -67,7 +71,7 @@ const AdminSharing = () => {
 
   const save = (payload: UpdateSharingSettingsPayload) => {
     updateMutation.mutate(payload, {
-      onError: (error) => toast.error(error.message),
+      onError: (error) => toastRequestError(error, error.message),
     });
   };
 

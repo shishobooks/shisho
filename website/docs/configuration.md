@@ -2,8 +2,6 @@
 
 Shisho loads configuration at startup. Restart the container or server after changing any option.
 
-Share Links are not a configuration option. An admin turns them on under **Settings > Sharing** without a restart. See [Sharing](./sharing.md).
-
 ## Configuration Sources
 
 Values are applied in this order, with later sources taking precedence:
@@ -17,6 +15,8 @@ Shisho looks for `/config/shisho.yaml` by default. Set the bootstrap environment
 Every setting below can also be provided as an unprefixed environment variable using its uppercase, underscored name. For example, `database_file_path` becomes `DATABASE_FILE_PATH`. Do not add a `SHISHO_` prefix.
 
 Environment variables override values from the YAML file. Keep secrets such as `JWT_SECRET` out of source control.
+
+Share Links are not a configuration option. An admin turns them on under **Settings > Sharing** without a restart. See [Sharing](./sharing.md).
 
 ## Settings
 

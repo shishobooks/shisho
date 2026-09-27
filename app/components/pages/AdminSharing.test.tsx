@@ -13,6 +13,7 @@ vi.mock("@/hooks/useAuth", () => ({
 
 const mockSettings = { enabled: false, require_expiration: false };
 const mockMutate = vi.fn();
+let mockIsPending = false;
 
 vi.mock("@/hooks/queries/sharing", () => ({
   useSharingSettings: () => ({
@@ -22,7 +23,7 @@ vi.mock("@/hooks/queries/sharing", () => ({
   }),
   useUpdateSharingSettings: () => ({
     mutate: mockMutate,
-    isPending: false,
+    isPending: mockIsPending,
   }),
 }));
 
@@ -44,6 +45,9 @@ const mockAuth = (permissions: string[]) => {
   });
 };
 
+const createUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
 const renderPage = () =>
   render(
     <MemoryRouter>
@@ -54,6 +58,7 @@ const renderPage = () =>
 describe("AdminSharing", () => {
   beforeEach(() => {
     mockMutate.mockReset();
+    mockIsPending = false;
     mockSettings.enabled = false;
     mockSettings.require_expiration = false;
     mockAuth(["config:read", "config:write"]);
@@ -85,9 +90,10 @@ describe("AdminSharing", () => {
   });
 
   it("saves the enable switch as soon as it changes", async () => {
+    const user = createUser();
     renderPage();
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole("switch", { name: "Enable Share Links" }),
     );
 
@@ -98,9 +104,10 @@ describe("AdminSharing", () => {
   });
 
   it("saves the require expiration switch as soon as it changes", async () => {
+    const user = createUser();
     renderPage();
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole("switch", { name: "Require expiration" }),
     );
 
@@ -108,6 +115,15 @@ describe("AdminSharing", () => {
       { require_expiration: true },
       expect.anything(),
     );
+  });
+
+  it("disables both switches while a save is in flight", () => {
+    mockIsPending = true;
+    renderPage();
+
+    for (const switchEl of screen.getAllByRole("switch")) {
+      expect(switchEl).toBeDisabled();
+    }
   });
 
   it("shows the saved state as text without config write", () => {

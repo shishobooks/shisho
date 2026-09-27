@@ -22,7 +22,6 @@ import (
 // middleware and the permission checks on the sharing endpoint are exercised
 // together.
 type sharingSettingsFixture struct {
-	t            *testing.T
 	db           *bun.DB
 	handler      http.Handler
 	authSvc      *auth.Service
@@ -45,7 +44,6 @@ func newSharingSettingsFixture(t *testing.T, demoMode bool) *sharingSettingsFixt
 	require.NoError(t, err)
 
 	f := &sharingSettingsFixture{
-		t:       t,
 		db:      db,
 		handler: srv.Handler,
 		authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration()),
@@ -53,14 +51,14 @@ func newSharingSettingsFixture(t *testing.T, demoMode bool) *sharingSettingsFixt
 	f.admin = insertPermissionTestUser(ctx, t, db, "admin", models.RoleAdmin, nil)
 	f.editor = insertPermissionTestUser(ctx, t, db, "editor", models.RoleEditor, nil)
 	f.viewer = insertPermissionTestUser(ctx, t, db, "viewer", models.RoleViewer, nil)
-	f.sharesReader = f.insertCustomUser(ctx, "shares-reader", []*models.Permission{
+	f.sharesReader = f.insertCustomUser(ctx, t, "shares-reader", []*models.Permission{
 		{Resource: models.ResourceShares, Operation: models.OperationRead},
 	})
-	f.sharesWriter = f.insertCustomUser(ctx, "shares-writer", []*models.Permission{
+	f.sharesWriter = f.insertCustomUser(ctx, t, "shares-writer", []*models.Permission{
 		{Resource: models.ResourceShares, Operation: models.OperationRead},
 		{Resource: models.ResourceShares, Operation: models.OperationWrite},
 	})
-	f.configReader = f.insertCustomUser(ctx, "config-reader", []*models.Permission{
+	f.configReader = f.insertCustomUser(ctx, t, "config-reader", []*models.Permission{
 		{Resource: models.ResourceConfig, Operation: models.OperationRead},
 	})
 	return f
@@ -68,23 +66,23 @@ func newSharingSettingsFixture(t *testing.T, demoMode bool) *sharingSettingsFixt
 
 // insertCustomUser creates a role with exactly the given permissions and a
 // user holding it.
-func (f *sharingSettingsFixture) insertCustomUser(ctx context.Context, name string, perms []*models.Permission) *models.User {
-	f.t.Helper()
+func (f *sharingSettingsFixture) insertCustomUser(ctx context.Context, t *testing.T, name string, perms []*models.Permission) *models.User {
+	t.Helper()
 	role := &models.Role{Name: name}
 	_, err := f.db.NewInsert().Model(role).Exec(ctx)
-	require.NoError(f.t, err)
+	require.NoError(t, err)
 	for _, p := range perms {
 		p.RoleID = role.ID
 		_, err = f.db.NewInsert().Model(p).Exec(ctx)
-		require.NoError(f.t, err)
+		require.NoError(t, err)
 	}
-	return insertPermissionTestUser(ctx, f.t, f.db, name, role.Name, nil)
+	return insertPermissionTestUser(ctx, t, f.db, name, role.Name, nil)
 }
 
-func (f *sharingSettingsFixture) do(user *models.User, method, path, body string) *httptest.ResponseRecorder {
-	f.t.Helper()
+func (f *sharingSettingsFixture) do(t *testing.T, user *models.User, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	token, err := f.authSvc.GenerateToken(user)
-	require.NoError(f.t, err)
+	require.NoError(t, err)
 	var req *http.Request
 	if body == "" {
 		req = httptest.NewRequest(method, path, nil)
@@ -102,7 +100,7 @@ func TestSharingSettings_FreshDatabaseDefaults(t *testing.T) {
 	t.Parallel()
 	f := newSharingSettingsFixture(t, false)
 
-	rec := f.do(f.admin, http.MethodGet, "/api/settings/sharing", "")
+	rec := f.do(t, f.admin, http.MethodGet, "/api/settings/sharing", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"enabled":false,"require_expiration":false}`, rec.Body.String())
 }
@@ -124,7 +122,8 @@ func TestSharingSettings_ReadPermissions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := f.do(tt.user, http.MethodGet, "/api/settings/sharing", "")
+			t.Parallel()
+			rec := f.do(t, tt.user, http.MethodGet, "/api/settings/sharing", "")
 			assert.Equal(t, tt.status, rec.Code, rec.Body.String())
 		})
 	}
@@ -135,11 +134,11 @@ func TestSharingSettings_WriteRequiresConfigWrite(t *testing.T) {
 	f := newSharingSettingsFixture(t, false)
 
 	for _, user := range []*models.User{f.configReader, f.sharesWriter, f.editor, f.viewer} {
-		rec := f.do(user, http.MethodPut, "/api/settings/sharing", `{"enabled":true}`)
+		rec := f.do(t, user, http.MethodPut, "/api/settings/sharing", `{"enabled":true}`)
 		assert.Equal(t, http.StatusForbidden, rec.Code, "%s: %s", user.Username, rec.Body.String())
 	}
 
-	rec := f.do(f.admin, http.MethodGet, "/api/settings/sharing", "")
+	rec := f.do(t, f.admin, http.MethodGet, "/api/settings/sharing", "")
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"enabled":false,"require_expiration":false}`, rec.Body.String(), "rejected writes must not persist")
 }
@@ -148,19 +147,19 @@ func TestSharingSettings_WritePersistsPartialUpdates(t *testing.T) {
 	t.Parallel()
 	f := newSharingSettingsFixture(t, false)
 
-	rec := f.do(f.admin, http.MethodPut, "/api/settings/sharing", `{"enabled":true}`)
+	rec := f.do(t, f.admin, http.MethodPut, "/api/settings/sharing", `{"enabled":true}`)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"enabled":true,"require_expiration":false}`, rec.Body.String())
 
-	rec = f.do(f.admin, http.MethodPut, "/api/settings/sharing", `{"require_expiration":true}`)
+	rec = f.do(t, f.admin, http.MethodPut, "/api/settings/sharing", `{"require_expiration":true}`)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"enabled":true,"require_expiration":true}`, rec.Body.String(), "omitted fields keep their saved value")
 
-	rec = f.do(f.sharesReader, http.MethodGet, "/api/settings/sharing", "")
+	rec = f.do(t, f.sharesReader, http.MethodGet, "/api/settings/sharing", "")
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"enabled":true,"require_expiration":true}`, rec.Body.String())
 
-	rec = f.do(f.admin, http.MethodPut, "/api/settings/sharing", `{"enabled":false}`)
+	rec = f.do(t, f.admin, http.MethodPut, "/api/settings/sharing", `{"enabled":false}`)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"enabled":false,"require_expiration":true}`, rec.Body.String())
 }
@@ -169,11 +168,11 @@ func TestSharingSettings_WriteRejectedInDemoMode(t *testing.T) {
 	t.Parallel()
 	f := newSharingSettingsFixture(t, true)
 
-	rec := f.do(f.admin, http.MethodPut, "/api/settings/sharing", `{"enabled":true}`)
+	rec := f.do(t, f.admin, http.MethodPut, "/api/settings/sharing", `{"enabled":true}`)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"code":"demo_mode"`)
 
-	rec = f.do(f.admin, http.MethodGet, "/api/settings/sharing", "")
+	rec = f.do(t, f.admin, http.MethodGet, "/api/settings/sharing", "")
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"enabled":false,"require_expiration":false}`, rec.Body.String())
 }
@@ -184,7 +183,7 @@ func TestSharesPermission_SeededOnAdminOnly(t *testing.T) {
 
 	permissions := func(user *models.User) []string {
 		t.Helper()
-		rec := f.do(user, http.MethodGet, "/api/auth/me", "")
+		rec := f.do(t, user, http.MethodGet, "/api/auth/me", "")
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		var me auth.MeResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &me))
@@ -205,7 +204,7 @@ func TestSharesPermission_GrantableToCustomRole(t *testing.T) {
 	t.Parallel()
 	f := newSharingSettingsFixture(t, false)
 
-	rec := f.do(f.admin, http.MethodPost, "/api/roles", `{"name":"sharer","permissions":[{"resource":"shares","operation":"read"},{"resource":"shares","operation":"write"}]}`)
+	rec := f.do(t, f.admin, http.MethodPost, "/api/roles", `{"name":"sharer","permissions":[{"resource":"shares","operation":"read"},{"resource":"shares","operation":"write"}]}`)
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var role models.Role
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &role))
