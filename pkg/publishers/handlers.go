@@ -15,10 +15,19 @@ import (
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
+// BookReviewRecomputer refreshes files.reviewed for every file of each book,
+// loading the review criteria once. *books.Service satisfies it. pkg/books
+// imports pkg/publishers, so the handler takes this interface to avoid an
+// import cycle.
+type BookReviewRecomputer interface {
+	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
 	publisherService *Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
+	reviewRecomputer BookReviewRecomputer
 }
 
 // buildPublisherResponse assembles the full single-publisher API response
@@ -446,12 +455,21 @@ func (h *handler) deletePublisher(c echo.Context) error {
 		}
 	}
 
-	err = h.publisherService.DeletePublisher(ctx, id)
+	affectedBookIDs, err := h.publisherService.DeletePublisher(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	log := logger.FromContext(ctx)
+
+	// Clearing publisher_id can flip the books' Reviewed completeness state
+	// (when `publisher` is a required field), so recompute it for every
+	// affected book. Unlike deleteSeries there is no books_fts re-index:
+	// books_fts has no publisher column. Add ReindexBookByID here if it gains
+	// one.
+	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
+
+	// Remove the deleted publisher itself from the publisher FTS index.
 	if err := h.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
 		log.Warn("failed to remove publisher from search index", logger.Data{"publisher_id": id, "error": err.Error()})
 	}

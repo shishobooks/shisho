@@ -19,7 +19,8 @@ func deleteFilePublisher(t *testing.T, tc *testContext, file *models.File) strin
 	t.Helper()
 	require.NotNil(t, file.Publisher, "precondition: the File has a Publisher")
 	name := file.Publisher.Name
-	require.NoError(t, publishers.NewService(tc.db).DeletePublisher(tc.ctx, file.Publisher.ID))
+	_, err := publishers.NewService(tc.db).DeletePublisher(tc.ctx, file.Publisher.ID)
+	require.NoError(t, err)
 	return name
 }
 

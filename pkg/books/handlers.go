@@ -2573,6 +2573,10 @@ func (h *handler) deleteFile(c echo.Context) error {
 				log.Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": pubID, "error": err})
 			}
 		}
+	} else if err := h.searchService.ReindexBookByID(ctx, result.BookID); err != nil {
+		// The surviving book's books_fts row still lists the deleted file's
+		// path and narrators until it is re-indexed.
+		log.Warn("failed to update book search index after file delete", logger.Data{"book_id": result.BookID, "error": err.Error()})
 	}
 
 	// If a supplement was promoted, scan it to extract cover and update metadata
