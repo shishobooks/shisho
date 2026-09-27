@@ -552,6 +552,7 @@ When adding a new entity type (like Publisher, Genre, Tag) that files or books r
    - Include `FindOrCreate{Entity}()` method for scanner to use
    - Include `Retrieve{Entity}()` and `List{Entity}s()` methods
 3. Add service to worker (`pkg/worker/worker.go`) and initialize in `New()`
+   - If the entity can be orphaned, add its cleanup and FTS removal to `books.CleanupOrphanedEntities` (`pkg/books/orphans.go`)
 4. Update scanner to use the new service for entity creation
 
 ## Search Index (FTS)
@@ -570,7 +571,7 @@ When creating or modifying entities that are searchable, ensure the FTS index is
 
 1. **New entities created via `FindOrCreate*()` methods MUST be indexed** - When `FindOrCreateGenre()`, `FindOrCreateTag()`, etc. create a new entity, call `IndexGenre()`, `IndexTag()`, etc. afterward
 2. **Entity updates must re-index** - Call `Index*()` after updating an entity's searchable fields
-3. **Entity deletions must remove from index** - Call `DeleteFrom*Index()` when deleting entities. Deleting a Series or Person, merging Series or People, and deleting one File of a surviving Book must also re-index every affected Book (see "Deleting a shared resource recomputes Reviewed" and "Merges and single-file deletes re-index" above)
+3. **Entity deletions must remove from index** - Call `DeleteFrom*Index()` when deleting entities. Orphan cleanup after a Book or File delete, a Scan, or a monitor batch goes through `books.CleanupOrphanedEntities`, which deletes every unreferenced Series, Person, Genre, Tag, and Publisher and removes each from its FTS table; call it rather than pasting the per-kind loop. `CleanupOrphanedSeries` lives on `books.Service` only, because `pkg/series` imports `pkg/books`. Deleting a Series or Person, merging Series or People, and deleting one File of a surviving Book must also re-index every affected Book (see "Deleting a shared resource recomputes Reviewed" and "Merges and single-file deletes re-index" above)
 4. **Book metadata changes affecting search** - When book authors, series, genres, or tags change, call `IndexBook()` to update the book's search index
 
 **Example pattern:**

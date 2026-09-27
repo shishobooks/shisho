@@ -1480,8 +1480,9 @@ func (svc *Service) raiseSeriesNameSource(ctx context.Context, series *models.Se
 
 // CleanupOrphanedSeries deletes series with no books and returns the IDs of
 // deleted series. Callers must pass the returned IDs to
-// searchService.DeleteFromSeriesIndex to keep series_fts in sync.
-// This is duplicated from series service to avoid import cycles.
+// searchService.DeleteFromSeriesIndex to keep series_fts in sync, which
+// CleanupOrphanedEntities does. It lives here rather than in pkg/series
+// because pkg/series imports pkg/books.
 func (svc *Service) CleanupOrphanedSeries(ctx context.Context) ([]int, error) {
 	deletedIDs := []int{}
 	err := svc.db.NewDelete().
