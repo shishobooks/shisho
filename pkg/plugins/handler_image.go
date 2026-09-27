@@ -23,5 +23,8 @@ func (h *handler) getImage(c echo.Context) error {
 		return errcodes.NotFound("Plugin icon")
 	}
 
+	// The icon URL has no cache-busting version and the icon changes when the
+	// plugin is updated, so clients revalidate through Last-Modified.
+	c.Response().Header().Set("Cache-Control", "private, no-cache")
 	return c.File(iconPath)
 }

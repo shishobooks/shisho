@@ -152,6 +152,7 @@ All file-serving endpoints must include a `Cache-Control` header to prevent reve
 | **External cover endpoints** (OPDS, eReader, Kobo) | `Cache-Control: private, no-cache` | External clients don't use `?v=` cache-busting; revalidation via `Last-Modified`/`ETag` |
 | **Download/stream endpoints** (`/download`, `/stream`) | `Cache-Control: private, no-store` | No proxy caching at all — generated files can change without the URL changing |
 | **Page endpoint** (`getPage`) | `Cache-Control: private, max-age=31536000, immutable` | Rendered pages are immutable per fileID+pageNum. `private` because the route is authenticated; the browser still caches it |
+| **Plugin icon** (`/api/plugins/installed/:scope/:id/image`) | `Cache-Control: private, no-cache` | The URL has no cache-busting version and the icon changes when the plugin is updated; revalidation via `Last-Modified` |
 
 Before serving a file's bytes, check that it still exists with `books.RequireFileOnDisk(c, file, resource)` rather than an inline `os.Stat`. It returns `errcodes.NotFound(resource)` and warn-logs the file ID and path (skipped on HEAD). The books download, stream, and page handlers and the OPDS, eReader, and Kobo download handlers use it. The page handler checks before the page cache lookup, so a cached page is not served for a missing source. The books generated-download and KePub handlers pass `"Source file"`; every other site passes `"File"`.
 

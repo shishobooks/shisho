@@ -98,3 +98,23 @@ func TestGetImage_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, ecErr.HTTPCode)
 	assert.Equal(t, "Plugin icon not found.", ecErr.Message)
 }
+
+// The icon URL carries no cache-busting version and changes when a plugin
+// is updated, so the response revalidates instead of letting a proxy cache
+// it heuristically.
+func TestGetImage_SetsCacheControlNoCache(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	h := NewHandler(nil, nil, NewInstaller(pluginDir))
+	iconDir := filepath.Join(pluginDir, "shisho", "test-plugin")
+	require.NoError(t, os.MkdirAll(iconDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(iconDir, "icon.png"), []byte("fake-png"), 0o644))
+
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+	c.SetParamNames("scope", "id")
+	c.SetParamValues("shisho", "test-plugin")
+
+	require.NoError(t, h.GetImage(c))
+	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
+}

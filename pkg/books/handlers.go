@@ -2512,7 +2512,7 @@ func (h *handler) deleteFile(c echo.Context) error {
 	// Clean up search indexes if book was deleted
 	if result.BookDeleted {
 		if err := h.searchService.DeleteFromBookIndex(ctx, result.BookID); err != nil {
-			log.Warn("failed to remove book from search index", logger.Data{"error": err, "bookID": result.BookID})
+			log.Warn("failed to remove book from search index", logger.Data{"book_id": result.BookID, "error": err.Error()})
 		}
 		CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
 	} else if err := h.searchService.ReindexBookByID(ctx, result.BookID); err != nil {
@@ -2524,7 +2524,7 @@ func (h *handler) deleteFile(c echo.Context) error {
 	// If a supplement was promoted, scan it to extract cover and update metadata
 	if result.PromotedFileID != nil {
 		if _, err := h.scanner.Scan(ctx, ScanOptions{FileID: *result.PromotedFileID}); err != nil {
-			log.Warn("failed to scan promoted file", logger.Data{"error": err, "fileID": *result.PromotedFileID})
+			log.Warn("failed to scan promoted file", logger.Data{"file_id": *result.PromotedFileID, "error": err.Error()})
 		}
 	}
 
