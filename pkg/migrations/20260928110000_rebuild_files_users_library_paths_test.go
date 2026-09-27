@@ -292,19 +292,22 @@ func TestRebuildFilesUsersLibraryPathsKeepsForeignKeySetting(t *testing.T) {
 func TestRebuildFilesUsersLibraryPathsRollsBackOnFailure(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
-		breakDB string
+		breakDB []string
 		wantErr string
 	}{
-		// No ON DELETE action says what a user whose role is gone should
-		// become, so the migration refuses rather than guess a permission.
-		"orphaned user role": {
-			breakDB: `INSERT INTO users (id, username, password_hash, role_id) VALUES (9, 'orphan', 'hash', 99)`,
-			wantErr: "1 foreign key violations in users (first: rowid 9 references a missing roles row)",
+		// A user whose role is gone moves to viewer, so with no viewer role
+		// there is nowhere safe to put them.
+		"orphaned user role without viewer": {
+			breakDB: []string{
+				`INSERT INTO users (id, username, password_hash, role_id) VALUES (9, 'orphan', 'hash', 99)`,
+				`UPDATE roles SET name = 'renamed' WHERE name = 'viewer'`,
+			},
+			wantErr: "1 users reference a missing role (first: user 9, role 99) and the built-in viewer role to move them to is missing",
 		},
 		// A column the rebuild does not know about must stop the copy rather
 		// than be dropped.
 		"unexpected column": {
-			breakDB: `ALTER TABLE users ADD COLUMN nickname TEXT`,
+			breakDB: []string{`ALTER TABLE users ADD COLUMN nickname TEXT`},
 			wantErr: "do not match users_new columns",
 		},
 	} {
@@ -316,8 +319,10 @@ func TestRebuildFilesUsersLibraryPathsRollsBackOnFailure(t *testing.T) {
 			seedRebuildRows(ctx, t, db)
 			_, err := db.ExecContext(ctx, "PRAGMA foreign_keys = OFF")
 			require.NoError(t, err)
-			_, err = db.ExecContext(ctx, tc.breakDB)
-			require.NoError(t, err)
+			for _, query := range tc.breakDB {
+				_, err = db.ExecContext(ctx, query)
+				require.NoError(t, err, query)
+			}
 			_, err = db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
 			require.NoError(t, err)
 			before := takeRebuildSnapshot(ctx, t, db)
@@ -373,6 +378,7 @@ func TestRebuildFilesUsersLibraryPathsRepairsOrphans(t *testing.T) {
 		`INSERT INTO file_fingerprints (file_id, algorithm, value) VALUES (12, 'sha256', 'def')`,
 		`INSERT INTO narrators (file_id, person_id, sort_order) VALUES (13, 1, 0)`,
 		`INSERT INTO library_paths (id, library_id, filepath) VALUES (10, 99, '/gone')`,
+		`INSERT INTO users (id, username, password_hash, role_id) VALUES (9, 'orphan', 'hash', 99)`,
 		"PRAGMA foreign_keys = ON",
 	} {
 		_, err := db.ExecContext(ctx, query)
@@ -409,6 +415,11 @@ func TestRebuildFilesUsersLibraryPathsRepairsOrphans(t *testing.T) {
 	var pathIDs []int
 	require.NoError(t, db.NewRaw("SELECT id FROM library_paths ORDER BY id").Scan(ctx, &pathIDs))
 	assert.Equal(t, []int{1, 2}, pathIDs)
+
+	// A user whose role is gone moves to viewer; other users keep theirs.
+	var roles []string
+	require.NoError(t, db.NewRaw("SELECT r.name FROM users u JOIN roles r ON r.id = u.role_id ORDER BY u.id").Scan(ctx, &roles))
+	assert.Equal(t, []string{"admin", "custom", "viewer"}, roles)
 
 	for _, table := range rebuiltTables {
 		var violations int

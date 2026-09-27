@@ -95,9 +95,16 @@ var foreignKeyRebuilds = []struct {
 }
 
 func init() {
+	// Tables that reference files or users by name, including ones added by
+	// migrations that sort earlier (such as share_links.created_by_user_id,
+	// users ON DELETE CASCADE, from 20260928000000), come through untouched:
+	// foreign keys are off during the rebuild, so dropping the old parent
+	// fires no cascade, and the renamed table takes the name they point at.
 	up := func(ctx context.Context, db *bun.DB) error {
-		return withForeignKeysOff(ctx, db, func(ctx context.Context, tx bun.Tx) error {
-			if err := repairOrphans(ctx, tx); err != nil {
+		var repaired logger.Data
+		err := withForeignKeysOff(ctx, db, func(ctx context.Context, tx bun.Tx) error {
+			var err error
+			if repaired, err = repairOrphans(ctx, tx); err != nil {
 				return err
 			}
 			tables := make([]string, 0, len(foreignKeyRebuilds))
@@ -109,6 +116,15 @@ func init() {
 			}
 			return checkForeignKeys(ctx, tx, tables)
 		})
+		if err != nil {
+			return err
+		}
+		// Logged only after commit, so a failed attempt that rolls back
+		// never reports repairs that did not stick.
+		if len(repaired) > 0 {
+			logger.New().Warn("repaired rows that referenced a missing parent while rebuilding files, users, and library_paths", repaired)
+		}
+		return nil
 	}
 
 	// Down is a no-op. Reversing would take three more rebuilds to restore a
@@ -140,10 +156,12 @@ const orphanFileIDs = `SELECT f.id FROM files f
 // this migration, applying each column's ON DELETE action by hand. Foreign
 // keys were not enforced before 20260406, and files.library_id had no
 // foreign key at all, so such rows can exist. Without this, the check after
-// the rebuild would fail startup on every boot. A users row with a missing
-// role is left for that check to report, since no action says which role
-// the user should get.
-func repairOrphans(ctx context.Context, tx bun.Tx) error {
+// the rebuild would fail startup on every boot. A user whose role is gone
+// moves to the built-in viewer role, the least privilege, because failing
+// would stop the server on every boot and the image has no sqlite3 to fix
+// the row by hand. The migration fails only if the viewer role is missing
+// too. It returns what it changed, for the caller to log after commit.
+func repairOrphans(ctx context.Context, tx bun.Tx) (logger.Data, error) {
 	repairs := []struct {
 		label string
 		query string
@@ -166,22 +184,67 @@ func repairOrphans(ctx context.Context, tx bun.Tx) error {
 			WHERE NOT EXISTS (SELECT 1 FROM libraries l WHERE l.id = library_paths.library_id)`},
 	}
 
-	counts := logger.Data{}
+	repaired := logger.Data{}
 	for _, repair := range repairs {
 		result, err := tx.ExecContext(ctx, repair.query)
 		if err != nil {
-			return errors.Wrapf(err, "repair rows with a missing parent (%s)", repair.label)
+			return nil, errors.Wrapf(err, "repair rows with a missing parent (%s)", repair.label)
 		}
 		affected, err := result.RowsAffected()
 		if err != nil {
-			return errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 		if affected > 0 {
-			counts[repair.label] = affected
+			repaired[repair.label] = affected
 		}
 	}
-	if len(counts) > 0 {
-		logger.New().Warn("repaired rows that referenced a missing parent before rebuilding files, users, and library_paths", counts)
+
+	reassigned, err := reassignOrphanedUsersToViewer(ctx, tx)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if len(reassigned) > 0 {
+		repaired["users_reassigned_to_viewer"] = reassigned
+	}
+	return repaired, nil
+}
+
+type orphanedUser struct {
+	UserID    int `bun:"id" json:"user_id"`
+	OldRoleID int `bun:"role_id" json:"old_role_id"`
+}
+
+// reassignOrphanedUsersToViewer moves every user whose role no longer exists
+// to the built-in viewer role and returns who moved and from which role.
+func reassignOrphanedUsersToViewer(ctx context.Context, tx bun.Tx) ([]orphanedUser, error) {
+	var orphans []orphanedUser
+	if err := tx.NewRaw(
+		`SELECT u.id, u.role_id FROM users u
+		WHERE NOT EXISTS (SELECT 1 FROM roles r WHERE r.id = u.role_id)
+		ORDER BY u.id`,
+	).Scan(ctx, &orphans); err != nil {
+		return nil, errors.Wrap(err, "find users with a missing role")
+	}
+	if len(orphans) == 0 {
+		return nil, nil
+	}
+
+	var viewerIDs []int
+	if err := tx.NewRaw("SELECT id FROM roles WHERE name = ? AND is_system = TRUE", "viewer").Scan(ctx, &viewerIDs); err != nil {
+		return nil, errors.Wrap(err, "find the built-in viewer role")
+	}
+	if len(viewerIDs) != 1 {
+		return nil, errors.Errorf(
+			"%d users reference a missing role (first: user %d, role %d) and the built-in viewer role to move them to is missing",
+			len(orphans), orphans[0].UserID, orphans[0].OldRoleID,
+		)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET role_id = ? WHERE NOT EXISTS (SELECT 1 FROM roles r WHERE r.id = users.role_id)`,
+		viewerIDs[0],
+	); err != nil {
+		return nil, errors.Wrap(err, "move users with a missing role to viewer")
+	}
+	return orphans, nil
 }
