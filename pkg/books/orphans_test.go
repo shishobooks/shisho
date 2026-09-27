@@ -34,7 +34,7 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
 
-	// Series with a book — must NOT be cleaned up.
+	// Series with a book must NOT be cleaned up.
 	keep := &models.Series{
 		LibraryID:      library.ID,
 		Name:           "Kept Series",
@@ -61,7 +61,7 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 	_, err = db.NewInsert().Model(bs).Exec(ctx)
 	require.NoError(t, err)
 
-	// Orphan series with no book — must be cleaned up.
+	// Orphan series with no book must be cleaned up.
 	orphan := &models.Series{
 		LibraryID:      library.ID,
 		Name:           "Orphan Series",
