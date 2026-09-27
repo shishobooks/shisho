@@ -14,6 +14,11 @@ interface FileCoverThumbnailProps {
    * Defaults to true. Pass false for non-interactive contexts like file list rows.
    */
   interactive?: boolean;
+  /**
+   * Builds the cover URL, or returns null when there is no cover. Defaults to
+   * the authenticated file cover endpoint when the file has a cover.
+   */
+  getCoverUrl?: (file: File) => string | null;
 }
 
 /**
@@ -27,9 +32,18 @@ function FileCoverThumbnail({
   onClick,
   cacheKey,
   interactive = true,
+  getCoverUrl,
 }: FileCoverThumbnailProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+
+  const coverUrl = getCoverUrl
+    ? getCoverUrl(file)
+    : file.cover_image_filename
+      ? cacheKey
+        ? `/api/books/files/${file.id}/cover?v=${cacheKey}`
+        : `/api/books/files/${file.id}/cover`
+      : null;
 
   // Reset both flags when the URL would change — either the cover filename
   // was replaced or the cacheKey bumped from a data refetch. Without resetting
@@ -40,16 +54,13 @@ function FileCoverThumbnail({
   useEffect(() => {
     setImageError(false);
     setImageLoaded(false);
-  }, [cacheKey, file.cover_image_filename]);
+  }, [cacheKey, file.cover_image_filename, coverUrl]);
 
   const isAudiobook = file.file_type === "m4b";
   const aspectClass = isAudiobook ? "aspect-square" : "aspect-[2/3]";
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
-  const hasCover = file.cover_image_filename && !imageError;
-  const coverUrl = cacheKey
-    ? `/api/books/files/${file.id}/cover?v=${cacheKey}`
-    : `/api/books/files/${file.id}/cover`;
+  const hasCover = coverUrl && !imageError;
 
   return (
     <div

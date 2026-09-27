@@ -108,4 +108,23 @@ describe("FileCoverThumbnail", () => {
     expect(wrapper.className).not.toContain("hover:scale-105");
     expect(wrapper.className).not.toContain("hover:shadow-md");
   });
+
+  it("uses a supplied cover URL builder", () => {
+    const { container } = render(
+      <FileCoverThumbnail
+        file={makeFile({ cover_image_filename: "" })}
+        getCoverUrl={(file) => `/api/share/tok/files/${file.id}/cover`}
+      />,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/share/tok/files/1/cover",
+    );
+  });
+
+  it("shows the placeholder when the builder returns null", () => {
+    const { container } = render(
+      <FileCoverThumbnail file={makeFile()} getCoverUrl={() => null} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
 });

@@ -112,4 +112,30 @@ describe("CoverGalleryTabs", () => {
       "/api/books/files/1/cover?v=2024-06-01T00:00:00Z",
     );
   });
+
+  it("uses a supplied cover URL builder", () => {
+    const files = [
+      makeFile({ id: 1, cover_image_filename: "" }),
+      makeFile({ id: 2, file_type: "m4b", cover_image_filename: "" }),
+    ];
+
+    const { container } = render(
+      <CoverGalleryTabs
+        files={files}
+        getCoverUrl={(file) => `/api/share/tok/files/${file.id}/cover`}
+      />,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/share/tok/files/1/cover",
+    );
+  });
+
+  it("shows the placeholder when the builder returns null", () => {
+    const files = [makeFile({ id: 1 }), makeFile({ id: 2, file_type: "m4b" })];
+
+    const { container } = render(
+      <CoverGalleryTabs files={files} getCoverUrl={() => null} />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
 });

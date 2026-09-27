@@ -14,6 +14,12 @@ import { getFilename } from "@/utils/format";
 interface CoverGalleryTabsProps {
   files: File[];
   className?: string;
+  /**
+   * Builds the selected file's cover URL, or returns null when there is no
+   * cover. Defaults to the authenticated file cover endpoint when the file has
+   * a cover.
+   */
+  getCoverUrl?: (file: File) => string | null;
 }
 
 interface FileWithLabel extends File {
@@ -55,7 +61,11 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
  * Allows switching between different file covers when a book has multiple files.
  * Only renders when there are 2+ files.
  */
-function CoverGalleryTabs({ files, className }: CoverGalleryTabsProps) {
+function CoverGalleryTabs({
+  files,
+  className,
+  getCoverUrl,
+}: CoverGalleryTabsProps) {
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
@@ -74,13 +84,17 @@ function CoverGalleryTabs({ files, className }: CoverGalleryTabsProps) {
   const aspectClass = isAudiobook ? "aspect-square" : "aspect-[2/3]";
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
-  const hasCover = selectedFile?.cover_image_filename && !coverError;
   const fileCacheKey = selectedFile?.updated_at;
-  const coverUrl = selectedFile
-    ? fileCacheKey
-      ? `/api/books/files/${selectedFile.id}/cover?v=${fileCacheKey}`
-      : `/api/books/files/${selectedFile.id}/cover`
-    : null;
+  const coverUrl = !selectedFile
+    ? null
+    : getCoverUrl
+      ? getCoverUrl(selectedFile)
+      : selectedFile.cover_image_filename
+        ? fileCacheKey
+          ? `/api/books/files/${selectedFile.id}/cover?v=${fileCacheKey}`
+          : `/api/books/files/${selectedFile.id}/cover`
+        : null;
+  const hasCover = coverUrl && !coverError;
 
   // Check cache synchronously before paint
   useLayoutEffect(() => {
@@ -135,7 +149,7 @@ function CoverGalleryTabs({ files, className }: CoverGalleryTabsProps) {
         )}
 
         {/* Image hidden until loaded */}
-        {hasCover && coverUrl && (
+        {hasCover && (
           <img
             alt={`${selectedFile?.name || "File"} Cover`}
             className={cn(
