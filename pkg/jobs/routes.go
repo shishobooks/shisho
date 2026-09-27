@@ -9,8 +9,9 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// RegisterRoutesWithGroup registers job routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, broker *events.Broker, dlCache *downloadcache.Cache) {
+// RegisterRoutes registers job routes on a group the server has already
+// configured with authentication.
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, broker *events.Broker, dlCache *downloadcache.Cache) {
 	jobService := NewService(db)
 
 	h := &handler{

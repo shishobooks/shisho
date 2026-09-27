@@ -22,11 +22,12 @@ type fileOrganizer struct {
 	libraryService *libraries.Service
 }
 
-// NewFileOrganizer creates a new FileOrganizer implementation.
-func NewFileOrganizer(db *bun.DB) people.FileOrganizer {
+// NewFileOrganizer creates a new FileOrganizer implementation around the
+// shared books service.
+func NewFileOrganizer(db *bun.DB, bookService *books.Service) people.FileOrganizer {
 	return &fileOrganizer{
 		db:             db,
-		bookService:    books.NewService(db),
+		bookService:    bookService,
 		libraryService: libraries.NewService(db),
 	}
 }

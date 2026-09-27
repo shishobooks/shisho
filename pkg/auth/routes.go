@@ -1,16 +1,12 @@
 package auth
 
 import (
-	"time"
-
 	"github.com/labstack/echo/v4"
-	"github.com/uptrace/bun"
 )
 
-// RegisterRoutes registers all auth routes.
-func RegisterRoutes(e *echo.Group, db *bun.DB, jwtSecret string, sessionDuration time.Duration, demoMode bool) *Service {
-	authService := NewService(db, jwtSecret, sessionDuration)
-
+// RegisterRoutes registers all auth routes. The server builds authService,
+// because the auth middleware every other route family uses wraps it too.
+func RegisterRoutes(e *echo.Group, authService *Service, demoMode bool) {
 	h := &handler{
 		authService: authService,
 		demoMode:    demoMode,
@@ -24,6 +20,4 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, jwtSecret string, sessionDuration
 
 	// /auth/me requires authentication - will be added via middleware
 	auth.GET("/me", h.me)
-
-	return authService
 }

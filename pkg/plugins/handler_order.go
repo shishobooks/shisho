@@ -68,7 +68,7 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 	hookType := c.Param("hookType")
 
@@ -126,7 +126,7 @@ func (h *handler) setLibraryOrder(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 	hookType := c.Param("hookType")
 
@@ -163,7 +163,7 @@ func (h *handler) resetLibraryOrder(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 	hookType := c.Param("hookType")
 
@@ -179,7 +179,7 @@ func (h *handler) resetAllLibraryOrders(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid library ID")
+		return errcodes.NotFound("Library")
 	}
 
 	if err := h.service.ResetAllLibraryOrders(ctx, libraryID); err != nil {

@@ -9,9 +9,8 @@ import (
 )
 
 // RegisterRoutes registers all Kobo sync routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache) {
+func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service) {
 	apiKeyService := apikeys.NewService(db)
-	bookService := books.NewService(db)
 	syncService := NewService(db)
 
 	mw := NewMiddleware(apiKeyService)

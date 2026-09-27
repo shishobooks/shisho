@@ -21,8 +21,8 @@ type EnrichDeps struct {
 	PageExtractor   pageExtractor
 }
 
-// RegisterRoutesWithGroup registers plugin management API routes.
-func RegisterRoutesWithGroup(g *echo.Group, service *Service, manager *Manager, installer *Installer, db *bun.DB, ed *EnrichDeps) {
+// RegisterRoutes registers plugin management API routes.
+func RegisterRoutes(g *echo.Group, service *Service, manager *Manager, installer *Installer, db *bun.DB, ed *EnrichDeps) {
 	h := &handler{service: service, manager: manager, installer: installer, db: db}
 	if ed != nil {
 		h.enrich = &enrichDeps{

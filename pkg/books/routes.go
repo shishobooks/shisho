@@ -2,7 +2,6 @@ package books
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -23,16 +22,19 @@ import (
 
 // RegisterLibraryRoutes registers per-library book routes on a libraries group.
 // These routes are mounted under /libraries/:id/... alongside library management routes.
-func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
-	bookService := NewService(db)
+func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, bookService *Service) {
 	settingsService := settings.NewService(db)
 	h := &handler{bookService: bookService, settingsService: settingsService}
 	g.GET("/:id/languages", h.listLibraryLanguages, authMiddleware.RequireLibraryAccess("id"))
 }
 
-// RegisterRoutesWithGroup registers book routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, appSettingsSvc *appsettings.Service) {
-	bookService := NewService(db).WithAppSettings(appSettingsSvc)
+// RegisterRoutes registers book routes on a group the server has already
+// configured with authentication and the resource's read permission.
+// bookService must carry app settings (see WithAppSettings); the handlers
+// read the review criteria through the same app settings service. The page
+// caches must be the ones the server shares with the cache admin routes and
+// the plugin page extractor.
+func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache) {
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
@@ -41,8 +43,6 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 	publisherService := publishers.NewService(db)
 	listsService := lists.NewService(db)
 	settingsService := settings.NewService(db)
-	pageCache := cbzpages.NewCache(cfg.CacheDir)
-	pdfPageCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
 	h := &handler{
 		config:             cfg,
@@ -55,7 +55,7 @@ func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, cfg *config.Config, auth
 		publisherService:   publisherService,
 		listsService:       listsService,
 		settingsService:    settingsService,
-		appSettingsService: appSettingsSvc,
+		appSettingsService: bookService.AppSettings(),
 		downloadCache:      dlCache,
 		pageCache:          pageCache,
 		pdfPageCache:       pdfPageCache,

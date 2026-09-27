@@ -9,10 +9,11 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// RegisterRoutesWithGroup registers publisher routes on a pre-configured group.
+// RegisterRoutes registers publisher routes on a group the server has already
+// configured with authentication and the resource's read permission.
 // reviewRecomputer is required; pass a books service with app settings
 // attached, or the delete handler's review recompute does nothing.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer BookReviewRecomputer) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer BookReviewRecomputer) {
 	publisherService := NewService(db)
 	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)

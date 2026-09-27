@@ -444,62 +444,17 @@ func (w *Worker) checkPluginUpdates() {
 }
 
 // cleanupOrphanedEntities removes series, people, genres, tags, and publishers
-// that are no longer referenced by any books or files.
+// that are no longer referenced by any books or files, through the helper the
+// book and file delete handlers share.
 func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger) {
-	if deletedIDs, err := w.seriesService.CleanupOrphanedSeries(ctx); err != nil {
-		log.Err(err).Warn("failed to cleanup orphaned series")
-	} else if len(deletedIDs) > 0 {
-		for _, id := range deletedIDs {
-			if err := w.searchService.DeleteFromSeriesIndex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned series from search index", logger.Data{"series_id": id})
-			}
-		}
-		log.Info("cleaned up orphaned series", logger.Data{"count": len(deletedIDs)})
-	}
-
-	if deletedIDs, err := w.personService.CleanupOrphanedPeople(ctx); err != nil {
-		log.Err(err).Warn("failed to cleanup orphaned people")
-	} else if len(deletedIDs) > 0 {
-		for _, id := range deletedIDs {
-			if err := w.searchService.DeleteFromPersonIndex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned person from search index", logger.Data{"person_id": id})
-			}
-		}
-		log.Info("cleaned up orphaned people", logger.Data{"count": len(deletedIDs)})
-	}
-
-	if deletedIDs, err := w.genreService.CleanupOrphanedGenres(ctx); err != nil {
-		log.Err(err).Warn("failed to cleanup orphaned genres")
-	} else if len(deletedIDs) > 0 {
-		for _, id := range deletedIDs {
-			if err := w.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned genre from search index", logger.Data{"genre_id": id})
-			}
-		}
-		log.Info("cleaned up orphaned genres", logger.Data{"count": len(deletedIDs)})
-	}
-
-	if deletedIDs, err := w.tagService.CleanupOrphanedTags(ctx); err != nil {
-		log.Err(err).Warn("failed to cleanup orphaned tags")
-	} else if len(deletedIDs) > 0 {
-		for _, id := range deletedIDs {
-			if err := w.searchService.DeleteFromTagIndex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned tag from search index", logger.Data{"tag_id": id})
-			}
-		}
-		log.Info("cleaned up orphaned tags", logger.Data{"count": len(deletedIDs)})
-	}
-
-	if deletedIDs, err := w.publisherService.CleanupOrphanedPublishers(ctx); err != nil {
-		log.Err(err).Warn("failed to cleanup orphaned publishers")
-	} else if len(deletedIDs) > 0 {
-		for _, id := range deletedIDs {
-			if err := w.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
-				log.Err(err).Warn("failed to remove orphaned publisher from search index", logger.Data{"publisher_id": id})
-			}
-		}
-		log.Info("cleaned up orphaned publishers", logger.Data{"count": len(deletedIDs)})
-	}
+	books.CleanupOrphanedEntities(ctx, log, books.OrphanCleanupServices{
+		Books:      w.bookService,
+		People:     w.personService,
+		Genres:     w.genreService,
+		Tags:       w.tagService,
+		Publishers: w.publisherService,
+		Search:     w.searchService,
+	})
 }
 
 // RefreshMonitorWatches signals the filesystem monitor to reload library paths.

@@ -26,7 +26,7 @@ func (h *libraryHandler) getLibrarySettings(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("library_id"))
 	if err != nil || libraryID < 1 {
-		return errcodes.ValidationError("invalid library_id")
+		return errcodes.NotFound("Library")
 	}
 
 	if !user.HasLibraryAccess(libraryID) {
@@ -55,7 +55,7 @@ func (h *libraryHandler) updateLibrarySettings(c echo.Context) error {
 
 	libraryID, err := strconv.Atoi(c.Param("library_id"))
 	if err != nil || libraryID < 1 {
-		return errcodes.ValidationError("invalid library_id")
+		return errcodes.NotFound("Library")
 	}
 
 	if !user.HasLibraryAccess(libraryID) {

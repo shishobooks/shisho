@@ -47,7 +47,7 @@ func TestNew_RoutingBoundary(t *testing.T) {
 			assert.Contains(t, rec.Header().Get(echo.HeaderContentType), "application/json")
 			if strings.HasPrefix(path, "/e/") {
 				// Echo's terminal parameter matches the remainder of the path.
-				assert.Contains(t, rec.Body.String(), `"code":"short_url_not_found_or_expired"`)
+				assert.Contains(t, rec.Body.String(), `"message":"Short URL not found."`)
 			} else {
 				assert.Contains(t, rec.Body.String(), `"code":"not_found"`)
 			}

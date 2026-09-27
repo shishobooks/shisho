@@ -2,12 +2,12 @@ package lists
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/uptrace/bun"
 )
 
-// RegisterRoutesWithGroup registers lists routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, _ *auth.Middleware) {
+// RegisterRoutes registers lists routes on a group the server has already
+// configured with authentication.
+func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	listsService := NewService(db)
 
 	h := &handler{

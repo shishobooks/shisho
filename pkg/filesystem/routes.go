@@ -6,8 +6,8 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// RegisterRoutesWithAuth registers filesystem routes with authentication.
-func RegisterRoutesWithAuth(e *echo.Group, authMiddleware *auth.Middleware) {
+// RegisterRoutes registers filesystem routes with authentication.
+func RegisterRoutes(e *echo.Group, authMiddleware *auth.Middleware) {
 	filesystemService := NewService()
 
 	h := &handler{

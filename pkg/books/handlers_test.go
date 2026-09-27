@@ -20,11 +20,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -246,7 +248,8 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	// Registered after cfg.CacheDir's TempDir, so it runs first: drain background
 	// cache cleanups before the directory is removed.
 	t.Cleanup(downloadCache.Wait)
-	RegisterRoutesWithGroup(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, appsettings.NewService(db))
+	appSettingsSvc := appsettings.NewService(db)
+	RegisterRoutes(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, NewService(db).WithAppSettings(appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality))
 
 	return e
 }

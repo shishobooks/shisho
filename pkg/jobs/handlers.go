@@ -219,7 +219,7 @@ func (h *handler) download(c echo.Context) error {
 
 	zipPath := h.downloadCache.BulkZipPath(data.FingerprintHash)
 	if _, err := os.Stat(zipPath); os.IsNotExist(err) {
-		return errcodes.NotFound("Download file has expired from cache")
+		return errcodes.NotFound("Download file")
 	}
 
 	filename := fmt.Sprintf("shisho-download-%d-books.zip", data.FileCount)
