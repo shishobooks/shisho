@@ -74,10 +74,11 @@ type publisherFinder interface {
 
 // searchIndexer updates the search index after metadata changes. Each entity
 // type has its own FTS table (books_fts, series_fts, persons_fts, genres_fts,
-// tags_fts), and rows in those tables are populated only by explicit Index*
-// calls — they are NOT maintained by triggers on the underlying table. Any
-// entity created via the apply path must therefore be re-indexed here, or it
-// will be invisible to the search-driven dropdowns in the UI.
+// tags_fts, publishers_fts), and rows in those tables are populated only by
+// explicit Index* calls. They are NOT maintained by triggers on the
+// underlying table. Any entity created via the apply path must therefore be
+// re-indexed here, or it will be invisible to the search-driven dropdowns in
+// the UI.
 type searchIndexer interface {
 	IndexBook(ctx context.Context, book *models.Book) error
 	IndexSeries(ctx context.Context, series *models.Series) error

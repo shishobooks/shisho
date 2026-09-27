@@ -657,7 +657,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		}
 	}
 
-	// Cleanup orphaned entities (series, people, genres, tags)
+	// Cleanup orphaned entities (series, people, genres, tags, publishers)
 	w.cleanupOrphanedEntities(ctx, logger.FromContext(ctx))
 
 	// Rebuild FTS indexes after scan completes

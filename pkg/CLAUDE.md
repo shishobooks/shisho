@@ -236,12 +236,12 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 | Resource | Description | Used For |
 |----------|-------------|----------|
 | `libraries` | Library management | Create/update libraries, filesystem operations |
-| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers |
+| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers, and search. `read` also covers the review criteria, identifier types, and hook order lookups; `write` covers plugin Identify (search and apply) and the Audnexus chapter lookup |
 | `people` | Author/narrator management | Create/update/delete/merge people |
 | `series` | Series management | Update/delete/merge series |
 | `users` | User administration | Create users, manage roles, reset passwords |
 | `jobs` | Background jobs | Trigger scans, view job status. Not needed for `bulk_download` (see below) |
-| `config` | Application config | View app configuration |
+| `config` | Application config and admin tools | `read`: view app configuration, list caches, view logs and live log events, read the sharing settings. `write`: plugin management, clear caches, edit the review criteria and the sharing settings |
 | `shares` | Share Links | View (`read`) and create, revoke, delete (`write`) a book's Share Links. `read` also allows reading the sharing settings |
 
 #### Permission Operations
