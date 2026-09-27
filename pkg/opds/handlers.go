@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -698,8 +697,8 @@ func (h *handler) download(c echo.Context) error {
 	}
 
 	// Check if source file exists
-	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
-		return errcodes.NotFound("File")
+	if err := books.RequireFileOnDisk(c, file, "File"); err != nil {
+		return err
 	}
 
 	// Get the full book with relations for generation
@@ -772,8 +771,8 @@ func (h *handler) downloadKepub(c echo.Context) error {
 	}
 
 	// Check if source file exists
-	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
-		return errcodes.NotFound("File")
+	if err := books.RequireFileOnDisk(c, file, "File"); err != nil {
+		return err
 	}
 
 	// Get the full book with relations for generation

@@ -3,7 +3,6 @@ package series
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
-	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -13,10 +12,13 @@ import (
 )
 
 // RegisterRoutesWithGroup registers series routes on a pre-configured group.
-func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, appSettingsSvc *appsettings.Service) {
+// bookService is required; pass a books service with app settings attached,
+// or the delete handler's review recompute does nothing. The handler also
+// uses it for series covers and book listings, so it takes the full service
+// rather than the narrow review recompute interface.
+func RegisterRoutesWithGroup(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, bookService *books.Service) {
 	seriesService := NewService(db)
 	aliasService := aliases.NewService(db)
-	bookService := books.NewService(db).WithAppSettings(appSettingsSvc)
 	libraryService := libraries.NewService(db)
 	searchService := search.NewService(db)
 

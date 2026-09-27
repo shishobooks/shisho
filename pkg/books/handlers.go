@@ -1663,20 +1663,6 @@ func (h *handler) bookCover(c echo.Context) error {
 	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable)
 }
 
-// requireFileOnDisk returns a 404 naming resource when the file's path is
-// missing from disk. The message stays generic for the client, and the file ID
-// and path go to the server log. HEAD requests skip the log because the
-// download button sends one before every GET.
-func requireFileOnDisk(c echo.Context, file *models.File, resource string) error {
-	if _, err := os.Stat(file.Filepath); os.IsNotExist(err) {
-		if c.Request().Method != http.MethodHead {
-			logger.FromContext(c.Request().Context()).Warn("file not found on disk", logger.Data{"file_id": file.ID, "path": file.Filepath})
-		}
-		return errcodes.NotFound(resource)
-	}
-	return nil
-}
-
 // downloadFile handles downloading a file with generated metadata embedded.
 func (h *handler) downloadFile(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -1727,7 +1713,7 @@ func (h *handler) downloadFile(c echo.Context) error {
 	}
 
 	// Check if the source file exists
-	if err := requireFileOnDisk(c, fileWithRelations, "Source file"); err != nil {
+	if err := RequireFileOnDisk(c, fileWithRelations, "Source file"); err != nil {
 		return err
 	}
 
@@ -1778,7 +1764,7 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 	}
 
 	// Check if the file exists
-	if err := requireFileOnDisk(c, file, "File"); err != nil {
+	if err := RequireFileOnDisk(c, file, "File"); err != nil {
 		return err
 	}
 
@@ -1835,7 +1821,7 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 	}
 
 	// Check if the source file exists
-	if err := requireFileOnDisk(c, fileWithRelations, "Source file"); err != nil {
+	if err := RequireFileOnDisk(c, fileWithRelations, "Source file"); err != nil {
 		return err
 	}
 
@@ -2054,7 +2040,7 @@ func (h *handler) streamFile(c echo.Context) error {
 	}
 
 	// Check if file exists on disk
-	if err := requireFileOnDisk(c, file, "File"); err != nil {
+	if err := RequireFileOnDisk(c, file, "File"); err != nil {
 		return err
 	}
 
