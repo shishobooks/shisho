@@ -8,6 +8,8 @@ import (
 )
 
 // recreateTable recreates a table with a new CREATE TABLE statement, preserving data and indexes.
+// New migrations should use rebuildTableInTx in rebuild.go instead, which runs
+// in a transaction and keeps triggers and AUTOINCREMENT high-water marks.
 // The newCreateSQL must use a temporary name (table_new), and columns must be compatible with the old table.
 func recreateTable(db *bun.DB, table string, newCreateSQL string, indexSQLs []string) error {
 	tmpTable := table + "_new"
