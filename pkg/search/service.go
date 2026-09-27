@@ -333,6 +333,13 @@ func (svc *Service) countPeopleInternal(ctx context.Context, ftsQuery string, li
 	return count, errors.WithStack(err)
 }
 
+// FTS rows are keyed by rowid equal to the entity id (see deleteFTSRow). Every
+// insert below uses INSERT OR REPLACE because nothing holds a transaction
+// across the delete and the insert, in the Index methods or in
+// RebuildAllIndexes. When another writer indexes the same entity in between,
+// the insert finds that writer's row already holding the rowid and replaces it
+// instead of failing on the conflict.
+
 // IndexBook adds or updates a book in the FTS index.
 func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
 	// First, delete any existing entry
@@ -403,8 +410,9 @@ func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
 	}
 
 	_, err = svc.db.ExecContext(ctx,
-		`INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		book.ID,
 		book.ID,
 		book.LibraryID,
 		book.Title,
@@ -420,11 +428,7 @@ func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
 
 // DeleteFromBookIndex removes a book from the FTS index.
 func (svc *Service) DeleteFromBookIndex(ctx context.Context, bookID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("books_fts").
-		Where("book_id = ?", bookID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.deleteFTSRow(ctx, "books_fts", bookID)
 }
 
 // IndexSeries adds or updates a series in the FTS index.
@@ -474,8 +478,9 @@ func (svc *Service) IndexSeries(ctx context.Context, series *models.Series) erro
 	}
 
 	_, err = svc.db.ExecContext(ctx,
-		`INSERT INTO series_fts (series_id, library_id, name, description, book_titles, book_authors)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO series_fts (rowid, series_id, library_id, name, description, book_titles, book_authors)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		series.ID,
 		series.ID,
 		series.LibraryID,
 		nameWithAliases,
@@ -488,11 +493,7 @@ func (svc *Service) IndexSeries(ctx context.Context, series *models.Series) erro
 
 // DeleteFromSeriesIndex removes a series from the FTS index.
 func (svc *Service) DeleteFromSeriesIndex(ctx context.Context, seriesID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("series_fts").
-		Where("series_id = ?", seriesID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.deleteFTSRow(ctx, "series_fts", seriesID)
 }
 
 // IndexPerson adds or updates a person in the FTS index.
@@ -509,20 +510,16 @@ func (svc *Service) IndexPerson(ctx context.Context, person *models.Person) erro
 	}
 
 	_, err = svc.db.ExecContext(ctx,
-		`INSERT INTO persons_fts (person_id, library_id, name, sort_name)
-		 VALUES (?, ?, ?, ?)`,
-		person.ID, person.LibraryID, nameWithAliases, person.SortName,
+		`INSERT OR REPLACE INTO persons_fts (rowid, person_id, library_id, name, sort_name)
+		 VALUES (?, ?, ?, ?, ?)`,
+		person.ID, person.ID, person.LibraryID, nameWithAliases, person.SortName,
 	)
 	return errors.WithStack(err)
 }
 
 // DeleteFromPersonIndex removes a person from the FTS index.
 func (svc *Service) DeleteFromPersonIndex(ctx context.Context, personID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("persons_fts").
-		Where("person_id = ?", personID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.deleteFTSRow(ctx, "persons_fts", personID)
 }
 
 // IndexGenre adds or updates a genre in the FTS index.
@@ -539,20 +536,16 @@ func (svc *Service) IndexGenre(ctx context.Context, genre *models.Genre) error {
 	}
 
 	_, err = svc.db.ExecContext(ctx,
-		`INSERT INTO genres_fts (genre_id, library_id, name)
-		 VALUES (?, ?, ?)`,
-		genre.ID, genre.LibraryID, nameWithAliases,
+		`INSERT OR REPLACE INTO genres_fts (rowid, genre_id, library_id, name)
+		 VALUES (?, ?, ?, ?)`,
+		genre.ID, genre.ID, genre.LibraryID, nameWithAliases,
 	)
 	return errors.WithStack(err)
 }
 
 // DeleteFromGenreIndex removes a genre from the FTS index.
 func (svc *Service) DeleteFromGenreIndex(ctx context.Context, genreID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("genres_fts").
-		Where("genre_id = ?", genreID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.deleteFTSRow(ctx, "genres_fts", genreID)
 }
 
 // IndexTag adds or updates a tag in the FTS index.
@@ -569,20 +562,16 @@ func (svc *Service) IndexTag(ctx context.Context, tag *models.Tag) error {
 	}
 
 	_, err = svc.db.ExecContext(ctx,
-		`INSERT INTO tags_fts (tag_id, library_id, name)
-		 VALUES (?, ?, ?)`,
-		tag.ID, tag.LibraryID, nameWithAliases,
+		`INSERT OR REPLACE INTO tags_fts (rowid, tag_id, library_id, name)
+		 VALUES (?, ?, ?, ?)`,
+		tag.ID, tag.ID, tag.LibraryID, nameWithAliases,
 	)
 	return errors.WithStack(err)
 }
 
 // DeleteFromTagIndex removes a tag from the FTS index.
 func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("tags_fts").
-		Where("tag_id = ?", tagID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.deleteFTSRow(ctx, "tags_fts", tagID)
 }
 
 // IndexPublisher adds or updates a publisher in the FTS index.
@@ -599,37 +588,30 @@ func (svc *Service) IndexPublisher(ctx context.Context, publisher *models.Publis
 	}
 
 	_, err = svc.db.ExecContext(ctx,
-		`INSERT INTO publishers_fts (publisher_id, library_id, name)
-		 VALUES (?, ?, ?)`,
-		publisher.ID, publisher.LibraryID, nameWithAliases,
+		`INSERT OR REPLACE INTO publishers_fts (rowid, publisher_id, library_id, name)
+		 VALUES (?, ?, ?, ?)`,
+		publisher.ID, publisher.ID, publisher.LibraryID, nameWithAliases,
 	)
 	return errors.WithStack(err)
 }
 
 // DeleteFromPublisherIndex removes a publisher from the FTS index.
 func (svc *Service) DeleteFromPublisherIndex(ctx context.Context, publisherID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("publishers_fts").
-		Where("publisher_id = ?", publisherID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.deleteFTSRow(ctx, "publishers_fts", publisherID)
 }
 
 // ReindexBookByID re-indexes a single book in books_fts using the same SQL
 // pattern as RebuildAllIndexes. Useful when related data changes (e.g., an
 // author's or series' aliases are modified) without a full book model in hand.
 func (svc *Service) ReindexBookByID(ctx context.Context, bookID int) error {
-	_, err := svc.db.NewDelete().
-		TableExpr("books_fts").
-		Where("book_id = ?", bookID).
-		Exec(ctx)
-	if err != nil {
-		return errors.WithStack(err)
+	if err := svc.DeleteFromBookIndex(ctx, bookID); err != nil {
+		return err
 	}
 
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
+	_, err := svc.db.ExecContext(ctx, `
+		INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
 		SELECT
+			b.id AS rowid,
 			b.id,
 			b.library_id,
 			b.title,
@@ -654,6 +636,18 @@ func (svc *Service) ReindexBookByID(ctx context.Context, bookID int) error {
 		FROM books b
 		WHERE b.id = ?
 	`, bookID)
+	return errors.WithStack(err)
+}
+
+// deleteFTSRow removes one entity's row from an FTS table. Every insert sets
+// rowid to the entity id, so this is a rowid lookup. Filtering on the stored
+// id column instead (book_id, series_id, ...) would scan the whole table,
+// because those columns are UNINDEXED.
+func (svc *Service) deleteFTSRow(ctx context.Context, table string, id int) error {
+	_, err := svc.db.NewDelete().
+		TableExpr(table).
+		Where("rowid = ?", id).
+		Exec(ctx)
 	return errors.WithStack(err)
 }
 
@@ -709,8 +703,9 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 
 	// Rebuild books index (includes person and series aliases in authors/narrators/series_names)
 	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
+		INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
 		SELECT
+			b.id AS rowid,
 			b.id,
 			b.library_id,
 			b.title,
@@ -740,8 +735,9 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 
 	// Rebuild series index (includes series aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO series_fts (series_id, library_id, name, description, book_titles, book_authors)
+		INSERT OR REPLACE INTO series_fts (rowid, series_id, library_id, name, description, book_titles, book_authors)
 		SELECT
+			s.id AS rowid,
 			s.id,
 			s.library_id,
 			s.name || COALESCE(' ' || (SELECT GROUP_CONCAT(sa.name, ' ') FROM series_aliases sa WHERE sa.series_id = s.id), ''),
@@ -756,8 +752,8 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 
 	// Rebuild persons index (includes person aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO persons_fts (person_id, library_id, name, sort_name)
-		SELECT id, library_id,
+		INSERT OR REPLACE INTO persons_fts (rowid, person_id, library_id, name, sort_name)
+		SELECT id AS rowid, id, library_id,
 			name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM person_aliases pa WHERE pa.person_id = persons.id), ''),
 			sort_name
 		FROM persons
@@ -768,8 +764,8 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 
 	// Rebuild genres index (includes genre aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO genres_fts (genre_id, library_id, name)
-		SELECT id, library_id,
+		INSERT OR REPLACE INTO genres_fts (rowid, genre_id, library_id, name)
+		SELECT id AS rowid, id, library_id,
 			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ga.name, ' ') FROM genre_aliases ga WHERE ga.genre_id = genres.id), '')
 		FROM genres
 	`)
@@ -779,8 +775,8 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 
 	// Rebuild tags index (includes tag aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO tags_fts (tag_id, library_id, name)
-		SELECT id, library_id,
+		INSERT OR REPLACE INTO tags_fts (rowid, tag_id, library_id, name)
+		SELECT id AS rowid, id, library_id,
 			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ta.name, ' ') FROM tag_aliases ta WHERE ta.tag_id = tags.id), '')
 		FROM tags
 	`)
@@ -790,8 +786,8 @@ func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
 
 	// Rebuild publishers index (includes publisher aliases in name column)
 	_, err = svc.db.ExecContext(ctx, `
-		INSERT INTO publishers_fts (publisher_id, library_id, name)
-		SELECT id, library_id,
+		INSERT OR REPLACE INTO publishers_fts (rowid, publisher_id, library_id, name)
+		SELECT id AS rowid, id, library_id,
 			name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM publisher_aliases pa WHERE pa.publisher_id = publishers.id), '')
 		FROM publishers
 	`)

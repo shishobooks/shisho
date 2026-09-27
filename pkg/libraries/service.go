@@ -220,9 +220,9 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, 
 // Files on disk are not touched. The operation runs in a single transaction:
 //
 //  1. Cancel any pending/in-progress jobs scoped to this library.
-//  2. Purge FTS rows (books_fts, series_fts, persons_fts, genres_fts, tags_fts)
-//     for this library. FTS purge must happen before the CASCADE so rows are
-//     still resolvable.
+//  2. Purge FTS rows (books_fts, series_fts, persons_fts, genres_fts, tags_fts,
+//     publishers_fts) for this library. FTS purge must happen before the
+//     CASCADE so rows are still resolvable.
 //  3. Delete the library row; SQLite cascades the rest.
 //
 // Returns errcodes.NotFound if the library does not exist.
@@ -254,7 +254,7 @@ func (svc *Service) DeleteLibrary(ctx context.Context, id int) error {
 
 		// 2. Purge FTS rows. Each FTS table carries library_id directly, so
 		//    we can delete by that filter without first collecting child IDs.
-		for _, table := range []string{"books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts"} {
+		for _, table := range []string{"books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts", "publishers_fts"} {
 			_, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE library_id = ?", id)
 			if err != nil {
 				return errors.WithStack(err)

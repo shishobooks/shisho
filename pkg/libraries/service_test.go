@@ -42,16 +42,17 @@ func newTestDB(t *testing.T) *bun.DB {
 }
 
 // seedLibraryWithContent creates a library with one book, one file, one series,
-// one person, one genre, one tag, and corresponding FTS entries. Returns the
+// one person, one genre, one tag, one publisher, and corresponding FTS entries. Returns the
 // library ID and the seeded entity IDs for assertions.
 type seededIDs struct {
-	LibraryID int
-	BookID    int
-	FileID    int
-	SeriesID  int
-	PersonID  int
-	GenreID   int
-	TagID     int
+	LibraryID   int
+	BookID      int
+	FileID      int
+	SeriesID    int
+	PersonID    int
+	GenreID     int
+	TagID       int
+	PublisherID int
 }
 
 func seedLibraryWithContent(ctx context.Context, t *testing.T, db *bun.DB, name string) seededIDs {
@@ -119,39 +120,51 @@ func seedLibraryWithContent(ctx context.Context, t *testing.T, db *bun.DB, name 
 	_, err = db.NewInsert().Model(tag).Returning("*").Exec(ctx)
 	require.NoError(t, err)
 
+	publisher := &models.Publisher{
+		LibraryID: library.ID,
+		Name:      "Seeded Publisher",
+	}
+	_, err = db.NewInsert().Model(publisher).Returning("*").Exec(ctx)
+	require.NoError(t, err)
+
 	// Seed minimal FTS rows directly (Index* methods have relation loading
 	// requirements that are overkill for this test's needs).
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO books_fts (book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
-		 VALUES (?, ?, ?, ?, '', '', '', '', '')`,
-		book.ID, library.ID, book.Title, book.Filepath)
+		`INSERT INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
+		 VALUES (?, ?, ?, ?, ?, '', '', '', '', '')`,
+		book.ID, book.ID, library.ID, book.Title, book.Filepath)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO series_fts (series_id, library_id, name, description, book_titles, book_authors)
-		 VALUES (?, ?, ?, '', '', '')`,
-		series.ID, library.ID, series.Name)
+		`INSERT INTO series_fts (rowid, series_id, library_id, name, description, book_titles, book_authors)
+		 VALUES (?, ?, ?, ?, '', '', '')`,
+		series.ID, series.ID, library.ID, series.Name)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO persons_fts (person_id, library_id, name, sort_name) VALUES (?, ?, ?, ?)`,
-		person.ID, library.ID, person.Name, person.SortName)
+		`INSERT INTO persons_fts (rowid, person_id, library_id, name, sort_name) VALUES (?, ?, ?, ?, ?)`,
+		person.ID, person.ID, library.ID, person.Name, person.SortName)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO genres_fts (genre_id, library_id, name) VALUES (?, ?, ?)`,
-		genre.ID, library.ID, genre.Name)
+		`INSERT INTO genres_fts (rowid, genre_id, library_id, name) VALUES (?, ?, ?, ?)`,
+		genre.ID, genre.ID, library.ID, genre.Name)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO tags_fts (tag_id, library_id, name) VALUES (?, ?, ?)`,
-		tag.ID, library.ID, tag.Name)
+		`INSERT INTO tags_fts (rowid, tag_id, library_id, name) VALUES (?, ?, ?, ?)`,
+		tag.ID, tag.ID, library.ID, tag.Name)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO publishers_fts (rowid, publisher_id, library_id, name) VALUES (?, ?, ?, ?)`,
+		publisher.ID, publisher.ID, library.ID, publisher.Name)
 	require.NoError(t, err)
 
 	return seededIDs{
-		LibraryID: library.ID,
-		BookID:    book.ID,
-		FileID:    file.ID,
-		SeriesID:  series.ID,
-		PersonID:  person.ID,
-		GenreID:   genre.ID,
-		TagID:     tag.ID,
+		LibraryID:   library.ID,
+		BookID:      book.ID,
+		FileID:      file.ID,
+		SeriesID:    series.ID,
+		PersonID:    person.ID,
+		GenreID:     genre.ID,
+		TagID:       tag.ID,
+		PublisherID: publisher.ID,
 	}
 }
 
@@ -211,7 +224,7 @@ func TestDeleteLibrary_PurgesFTS(t *testing.T) {
 	err := svc.DeleteLibrary(ctx, seeded.LibraryID)
 	require.NoError(t, err)
 
-	for _, table := range []string{"books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts"} {
+	for _, table := range []string{"books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts", "publishers_fts"} {
 		var count int
 		err := db.NewSelect().TableExpr(table).ColumnExpr("COUNT(*)").Where("library_id = ?", seeded.LibraryID).Scan(ctx, &count)
 		require.NoError(t, err, table)
