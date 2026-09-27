@@ -89,19 +89,23 @@ const DemoBanner = () => {
       {/* The tint sits on an inner layer so the sticky bar stays opaque. */}
       <div className="bg-primary/10">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5 md:px-6">
-          <p className="flex min-w-0 items-center gap-2">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+          {/* flex-1 with a zero basis lets the notice wrap beside the links on
+              phones instead of pushing them to a second row. */}
+          <p className="flex min-w-0 flex-1 basis-0 items-center gap-2 text-xs sm:text-sm">
+            <span className="hidden size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary sm:flex">
               <Eye aria-hidden="true" className="size-3.5" />
             </span>
             <span>
-              <span className="font-semibold">Read-only demo.</span>
-              <span className="hidden text-muted-foreground md:inline">
-                {" "}
+              <span className="font-semibold">Read-only demo.</span>{" "}
+              <span className="text-muted-foreground">
                 Edits and downloads are disabled.
               </span>
             </span>
           </p>
-          <nav aria-label="Demo links" className="flex items-center gap-1">
+          <nav
+            aria-label="Demo links"
+            className="flex shrink-0 items-center gap-1"
+          >
             {links.map((link) => (
               <Button
                 asChild

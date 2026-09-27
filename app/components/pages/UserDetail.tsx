@@ -31,6 +31,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { toastRequestError } from "@/libraries/api";
 import { sortRoles } from "@/utils/roles";
 
 const UserDetail = () => {
@@ -166,7 +167,7 @@ const UserDetail = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     }
   };
 
@@ -208,7 +209,7 @@ const UserDetail = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     }
   };
 
@@ -224,7 +225,7 @@ const UserDetail = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     }
   };
 

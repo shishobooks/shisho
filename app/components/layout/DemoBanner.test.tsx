@@ -35,6 +35,21 @@ describe("DemoBanner", () => {
     ).toHaveAttribute("href", "https://www.shishobooks.com/docs/demo");
   });
 
+  it("does not hide any part of the notice at narrow widths", () => {
+    render(<DemoBanner />);
+
+    // jsdom applies no CSS, so check for the utility that hid the second
+    // sentence below md. Real-width layout is covered by a browser check.
+    let node: HTMLElement | null = screen.getByText(
+      "Edits and downloads are disabled.",
+    );
+    const notice = node.closest("p");
+    while (node && node !== notice?.parentElement) {
+      expect(node.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+      node = node.parentElement;
+    }
+  });
+
   it("makes installing the only filled action", () => {
     render(<DemoBanner />);
 

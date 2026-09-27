@@ -24,6 +24,7 @@ import {
   useUpdateRole,
 } from "@/hooks/queries/users";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { toastRequestError } from "@/libraries/api";
 import type { PermissionInput, Role } from "@/types";
 
 interface RoleDialogProps {
@@ -136,7 +137,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     }
   };
 
@@ -157,7 +158,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     }
   };
 

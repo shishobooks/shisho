@@ -142,7 +142,7 @@ describe("PluginDangerZone", () => {
     );
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("boom");
+      expect(toast.error).toHaveBeenCalledWith("boom", undefined);
     });
   });
 });

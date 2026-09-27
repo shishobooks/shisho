@@ -21,6 +21,7 @@ import { useLibrary } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { toastRequestError } from "@/libraries/api";
 import { ResourceBooks, type File } from "@/types";
 import { getFilename } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
@@ -121,7 +122,8 @@ const FileDetail = () => {
       }
       setShowDeleteDialog(false);
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to delete file",
       );
     }

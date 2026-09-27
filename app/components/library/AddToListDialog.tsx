@@ -28,6 +28,7 @@ import {
   useUpdateBookLists,
 } from "@/hooks/queries/lists";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
+import { toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListDialogProps {
@@ -133,7 +134,7 @@ export const AddToListDialog = ({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update lists";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 
@@ -151,7 +152,7 @@ export const AddToListDialog = ({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to create list";
-      toast.error(message);
+      toastRequestError(error, message);
       throw error; // Re-throw so CreateListDialog knows it failed
     }
   };

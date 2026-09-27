@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 )
 
 // CacheMetadata stores information about a cached file.
@@ -70,7 +71,7 @@ func WriteMetadata(cacheDir string, meta *CacheMetadata) error {
 		return errors.Wrap(err, "failed to marshal cache metadata")
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := fileutils.WriteFileAtomic(path, data, 0600); err != nil {
 		return errors.Wrapf(err, "failed to write cache metadata: %s", path)
 	}
 
@@ -165,7 +166,7 @@ func WriteKepubMetadata(cacheDir string, meta *CacheMetadata) error {
 		return errors.Wrap(err, "failed to marshal kepub cache metadata")
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := fileutils.WriteFileAtomic(path, data, 0600); err != nil {
 		return errors.Wrapf(err, "failed to write kepub cache metadata: %s", path)
 	}
 
@@ -270,7 +271,7 @@ func WritePluginMetadata(cacheDir string, fileID int, formatID string, meta *Cac
 		return errors.Wrap(err, "failed to marshal plugin cache metadata")
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := fileutils.WriteFileAtomic(path, data, 0600); err != nil {
 		return errors.Wrapf(err, "failed to write plugin cache metadata: %s", path)
 	}
 

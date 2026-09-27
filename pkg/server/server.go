@@ -103,7 +103,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	if !cfg.DemoMode {
 		// Register OPDS routes with Basic Auth
-		opds.RegisterRoutes(e, db, cfg, authMiddleware)
+		opds.RegisterRoutes(e, db, authMiddleware, dlCache)
 
 		// Register eReader routes (API key auth for stock browser support)
 		ereader.RegisterRoutes(e, db, dlCache)

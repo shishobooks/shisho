@@ -36,6 +36,7 @@ import { useBulkSetReview } from "@/hooks/queries/review";
 import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { toastRequestError } from "@/libraries/api";
 import {
   ResourceBooks,
   type CreateListPayload,
@@ -146,7 +147,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to start download";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 
@@ -170,7 +171,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to add books to list";
-      toast.error(message);
+      toastRequestError(error, message);
     } finally {
       setAddingToListId(null);
     }
@@ -199,7 +200,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to create list";
-      toast.error(message);
+      toastRequestError(error, message);
       throw error; // Re-throw so CreateListDialog knows it failed
     }
   };
@@ -221,7 +222,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         error instanceof Error
           ? error.message
           : "Failed to update review state";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 
@@ -238,7 +239,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to delete books";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 

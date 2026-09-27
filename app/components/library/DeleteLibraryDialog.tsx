@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDeleteLibrary } from "@/hooks/queries/libraries";
+import { toastRequestError } from "@/libraries/api";
 
 interface DeleteLibraryDialogProps {
   open: boolean;
@@ -47,7 +48,7 @@ export function DeleteLibraryDialog({
       navigate("/settings/libraries");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong.";
-      toast.error(msg);
+      toastRequestError(e, msg);
     }
   };
 

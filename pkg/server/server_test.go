@@ -203,6 +203,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodDelete, "/api/books/42"},
 				{http.MethodGet, "/api/books/files/42/download/original"},
 				{http.MethodGet, "/api/books/files/42/download/kepub"},
+				{http.MethodHead, "/api/books/files/42/download/kepub"},
 				{http.MethodGet, "/api/jobs/42/download"},
 			} {
 				rec := httptest.NewRecorder()

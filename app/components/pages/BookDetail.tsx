@@ -71,6 +71,7 @@ import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   DownloadFormatKepub,
@@ -834,7 +835,8 @@ const BookDetail = () => {
         toast.success("File rescanned");
       }
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to rescan file",
       );
     } finally {
@@ -855,7 +857,8 @@ const BookDetail = () => {
         toast.success("Book rescanned");
       }
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to rescan book",
       );
     }
@@ -868,7 +871,8 @@ const BookDetail = () => {
       toast.success("Book deleted");
       navigate("/");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to delete book",
       );
     }
@@ -887,7 +891,8 @@ const BookDetail = () => {
         toast.success("File deleted");
       }
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to delete file",
       );
     } finally {

@@ -18,6 +18,7 @@ import { useMobileNav } from "@/contexts/MobileNav";
 import { useLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
 import { useLibraryNavItems } from "./useLibraryNavItems";
@@ -109,8 +110,8 @@ const MobileDrawer = () => {
       await logout();
       toast.success("Signed out successfully");
       navigate("/login");
-    } catch {
-      toast.error("Failed to sign out");
+    } catch (error) {
+      toastRequestError(error, "Failed to sign out");
     }
   }, [close, logout, navigate]);
 

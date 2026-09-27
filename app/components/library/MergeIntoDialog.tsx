@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useMergeBooks } from "@/hooks/queries/books";
+import { toastRequestError } from "@/libraries/api";
 import type { Book, Library } from "@/types";
 
 import { BookSelectionList } from "./BookSelectionList";
@@ -64,7 +65,7 @@ export function MergeIntoDialog({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to merge books";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 

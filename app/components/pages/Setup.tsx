@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { API } from "@/libraries/api";
+import { API, toastRequestError } from "@/libraries/api";
 import type { MeResponse } from "@/types";
 
 // Initial values for the setup form - stored once to compare against
@@ -102,7 +102,7 @@ const Setup = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +126,7 @@ const Setup = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     } finally {
       setIsDevLoading(false);
     }

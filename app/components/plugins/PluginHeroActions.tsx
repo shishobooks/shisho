@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useReloadPlugin } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
 
 import { PluginManifestDialog } from "./PluginManifestDialog";
@@ -30,7 +31,10 @@ export const PluginHeroActions = ({
       await reload.mutateAsync({ id: plugin.id, scope: plugin.scope });
       toast.success(`${plugin.name} reloaded from disk`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Reload failed");
+      toastRequestError(
+        err,
+        err instanceof Error ? err.message : "Reload failed",
+      );
     }
   };
 

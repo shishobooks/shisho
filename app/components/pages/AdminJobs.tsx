@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
 
@@ -113,7 +114,7 @@ const AdminJobs = () => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to start scan";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   }, [createJobMutation]);
 

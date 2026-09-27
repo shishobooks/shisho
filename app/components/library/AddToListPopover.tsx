@@ -18,6 +18,7 @@ import {
   useListLists,
   useRemoveBooksFromList,
 } from "@/hooks/queries/lists";
+import { toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListPopoverProps {
@@ -79,7 +80,7 @@ const AddToListPopover = ({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update list";
-      toast.error(message);
+      toastRequestError(error, message);
     } finally {
       setMutatingListId(null);
     }
@@ -104,7 +105,7 @@ const AddToListPopover = ({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to create list";
-      toast.error(message);
+      toastRequestError(error, message);
       throw error; // Let CreateListDialog preserve the draft if creation failed.
     }
   };

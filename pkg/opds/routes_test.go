@@ -7,7 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
-	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,11 +20,10 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	t.Parallel()
 
 	db := setupOPDSDB(t)
-	cfg := &config.Config{CacheDir: t.TempDir(), DownloadCacheMaxSizeGB: 1}
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
 
 	e := echo.New()
-	RegisterRoutes(e, db, cfg, authMw)
+	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30))
 
 	methods := map[string]map[string]bool{}
 	for _, r := range e.Routes() {

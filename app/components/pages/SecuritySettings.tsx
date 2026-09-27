@@ -40,6 +40,7 @@ import { useListLists } from "@/hooks/queries/lists";
 import { useResetPassword } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import {
   PermissionEReaderBrowser,
   PermissionKoboSync,
@@ -95,8 +96,8 @@ const SecuritySettings = () => {
       if (redirectTo) {
         navigate(redirectTo, { replace: true });
       }
-    } catch {
-      toast.error("Failed to change password");
+    } catch (error) {
+      toastRequestError(error, "Failed to change password");
     }
   };
 
@@ -311,8 +312,8 @@ function CreateEReaderKeyDialog({
       toast.success("Device added");
       setName("");
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to add device");
+    } catch (error) {
+      toastRequestError(error, "Failed to add device");
     }
   };
 
@@ -371,8 +372,8 @@ function EReaderKeyRow({ apiKey }: { apiKey: APIKey }) {
       await deleteApiKey.mutateAsync(apiKey.id);
       toast.success("Device removed");
       setDeleteDialogOpen(false);
-    } catch {
-      toast.error("Failed to remove device");
+    } catch (error) {
+      toastRequestError(error, "Failed to remove device");
     }
   };
 
@@ -440,7 +441,9 @@ function EReaderSetupDialog({
       generateShortUrl
         .mutateAsync(apiKey.id)
         .then(setShortUrl)
-        .catch(() => toast.error("Failed to generate setup URL"));
+        .catch((error) =>
+          toastRequestError(error, "Failed to generate setup URL"),
+        );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -567,8 +570,8 @@ function CreateKoboKeyDialog({
       toast.success("Kobo device added");
       setName("");
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to add device");
+    } catch (error) {
+      toastRequestError(error, "Failed to add device");
     }
   };
 
@@ -627,8 +630,8 @@ function KoboKeyRow({ apiKey }: { apiKey: APIKey }) {
       await deleteApiKey.mutateAsync(apiKey.id);
       toast.success("Kobo device removed");
       setDeleteDialogOpen(false);
-    } catch {
-      toast.error("Failed to remove device");
+    } catch (error) {
+      toastRequestError(error, "Failed to remove device");
     }
   };
 
@@ -698,8 +701,8 @@ function KoboSetupDialog({
     try {
       await clearKoboSync.mutateAsync(apiKey.id);
       toast.success("Sync history cleared. Next sync will be a fresh sync.");
-    } catch {
-      toast.error("Failed to clear sync history");
+    } catch (error) {
+      toastRequestError(error, "Failed to clear sync history");
     }
   };
 

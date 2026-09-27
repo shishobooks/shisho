@@ -21,6 +21,7 @@ import {
   useSavePluginFieldSettings,
   type ConfigField,
 } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 import { formatMetadataFieldLabel } from "@/utils/format";
 
 const SECRET_MASK = "***";
@@ -180,7 +181,7 @@ export const PluginConfigForm = ({
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
-      toast.error(`Failed to save configuration: ${msg}`);
+      toastRequestError(err, `Failed to save configuration: ${msg}`);
     }
   };
 

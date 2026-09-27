@@ -1,6 +1,5 @@
 import { Check, KeyRound, Moon, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
 import { SizeSelector } from "@/components/library/SizeSelector";
@@ -14,6 +13,7 @@ import {
 } from "@/hooks/queries/settings";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import type { GallerySize } from "@/types";
 
 interface ThemeOptionProps {
@@ -61,7 +61,8 @@ const UserSettings = () => {
       { gallery_size: next },
       {
         onError: (error) =>
-          toast.error(
+          toastRequestError(
+            error,
             error instanceof Error
               ? error.message
               : "Failed to update gallery size",

@@ -26,6 +26,7 @@ import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { toastRequestError } from "@/libraries/api";
 import type { CoverAspectRatio, DownloadFormat } from "@/types";
 import {
   DownloadFormatAsk,
@@ -220,7 +221,7 @@ const LibrarySettings = () => {
       if (e instanceof Error) {
         msg = e.message;
       }
-      toast.error(msg);
+      toastRequestError(e, msg);
     }
   };
 

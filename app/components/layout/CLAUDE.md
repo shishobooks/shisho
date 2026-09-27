@@ -17,7 +17,7 @@ Area-specific sidebars (`app/components/library/LibrarySidebar.tsx`, `app/compon
 
 ## Top Nav and Sidebar Geometry
 
-`TOP_NAV_ROW` sets a 3.5rem mobile or 4rem desktop content height, while `TOP_NAV_WRAPPER` adds a 1px bottom border. `DemoBanner` measures its rendered height into `--demo-banner-height`; the top nav, sidebar, mobile drawer, full-screen readers, and shared layouts use that variable for their offsets and viewport heights. The sidebar calculations must include both the banner height and top-nav border. If any of this geometry changes, update these consumers together.
+`TOP_NAV_ROW` sets a 3.5rem mobile or 4rem desktop content height, while `TOP_NAV_WRAPPER` adds a 1px bottom border. `DemoBanner` measures its rendered height into `--demo-banner-height`; the top nav, sidebar, mobile drawer, full-screen readers, and shared layouts use that variable for their offsets and viewport heights. The banner has no fixed height: on phones the full notice wraps beside the links and can take two or three lines, so consumers read the variable and never hard-code a banner height. The sidebar calculations must include both the banner height and top-nav border. If any of this geometry changes, update these consumers together.
 
 Modal surfaces (`Sheet`, `Dialog`, `Drawer`) are not offset for the banner. They open from the viewport edge at `z-50` and cover it, overlay included. Do not raise the banner above `z-50`: it then clips sheet headers and close buttons. Non-modal full-height surfaces (mobile drawer, readers) are offset with `--demo-banner-height` instead.
 

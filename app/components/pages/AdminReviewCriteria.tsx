@@ -23,6 +23,7 @@ import {
 } from "@/hooks/queries/review";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { toastRequestError } from "@/libraries/api";
 import { JobTypeRecomputeReview } from "@/types";
 
 import { humanizeField } from "./review-criteria-utils";
@@ -184,7 +185,8 @@ const AdminReviewCriteria = () => {
     try {
       await executeSave(false);
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error
           ? error.message
           : "Failed to save review criteria.",
@@ -197,7 +199,8 @@ const AdminReviewCriteria = () => {
     try {
       await executeSave(clearOverrides);
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error
           ? error.message
           : "Failed to save review criteria.",
@@ -225,7 +228,8 @@ const AdminReviewCriteria = () => {
     try {
       await executeRecompute(false);
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error
           ? error.message
           : "Failed to queue recompute job.",
@@ -238,7 +242,8 @@ const AdminReviewCriteria = () => {
     try {
       await executeRecompute(clearOverrides);
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error
           ? error.message
           : "Failed to queue recompute job.",

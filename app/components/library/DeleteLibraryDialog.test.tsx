@@ -88,7 +88,7 @@ describe("DeleteLibraryDialog", () => {
     await user.click(screen.getByRole("button", { name: /^Delete$/ }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("server exploded");
+      expect(toast.error).toHaveBeenCalledWith("server exploded", undefined);
     });
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });

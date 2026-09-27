@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { toastRequestError } from "@/libraries/api";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
@@ -67,7 +68,8 @@ export const PluginDetail = () => {
         enabled ? `${installed.name} enabled` : `${installed.name} disabled`,
       );
     } catch (err) {
-      toast.error(
+      toastRequestError(
+        err,
         err instanceof Error ? err.message : "Failed to update plugin status",
       );
     }
@@ -86,7 +88,7 @@ export const PluginDetail = () => {
       },
       {
         onError: (err) => {
-          toast.error(`Failed to install plugin: ${err.message}`);
+          toastRequestError(err, `Failed to install plugin: ${err.message}`);
         },
         onSuccess: () => {
           setInstallDialogOpen(false);
@@ -108,7 +110,10 @@ export const PluginDetail = () => {
         targetLabel ? `Updated to v${targetLabel}` : "Plugin updated",
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Update failed");
+      toastRequestError(
+        err,
+        err instanceof Error ? err.message : "Update failed",
+      );
     }
   };
 

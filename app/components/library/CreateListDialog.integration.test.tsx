@@ -148,6 +148,12 @@ describe("list dialog save failures through its callers", () => {
         expect(
           await screen.findByText("This action is unavailable in the demo."),
         ).toBeInTheDocument();
+        // One report only: the caller's own error toast stays silent. Both
+        // toasts would be raised synchronously in the rejection path, so no
+        // timers need to run (running them would fire sonner's auto-dismiss).
+        expect(
+          screen.getAllByText("This action is unavailable in the demo."),
+        ).toHaveLength(1);
 
         await user.keyboard("{Escape}");
         const warning = await screen.findByRole("dialog", {

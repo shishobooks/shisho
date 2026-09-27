@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PublisherIdOption } from "@/hooks/queries/entity-search";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { markErrorDisplayed } from "@/libraries/api";
+import { isDemoModeError } from "@/libraries/api";
 import { resolveAliases } from "@/utils/aliases";
 
 export interface PublisherEditData {
@@ -210,8 +210,9 @@ export function PublisherEditDialog({
       setChangesSaved(true);
       requestClose();
     } catch (err) {
-      if (err instanceof Error) {
-        markErrorDisplayed(err);
+      // checkStatus already toasted a Demo Mode rejection; keep the draft
+      // open without repeating it inline.
+      if (err instanceof Error && !isDemoModeError(err)) {
         setServerError(err.message);
       }
     }

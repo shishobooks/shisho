@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 
 const Login = () => {
   usePageTitle("Sign In");
@@ -53,7 +54,7 @@ const Login = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     } finally {
       setIsLoading(false);
     }

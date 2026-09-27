@@ -13,6 +13,7 @@ import { useCreateUser, useRoles } from "@/hooks/queries/users";
 import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import { toastRequestError } from "@/libraries/api";
 import { sortRoles } from "@/utils/roles";
 
 // Initial values for the create form - stored once to compare against
@@ -140,7 +141,7 @@ const CreateUser = () => {
       if (error instanceof Error) {
         msg = error.message;
       }
-      toast.error(msg);
+      toastRequestError(error, msg);
     }
   };
 

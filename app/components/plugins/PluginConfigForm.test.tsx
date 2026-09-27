@@ -183,6 +183,7 @@ describe("PluginConfigForm", () => {
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
         expect.stringContaining("boom"),
+        undefined,
       );
     });
 
