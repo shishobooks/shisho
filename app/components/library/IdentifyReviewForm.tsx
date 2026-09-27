@@ -61,6 +61,7 @@ import {
   type PluginApplyPayload,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   AuthorRoleWriter,
@@ -1303,7 +1304,7 @@ export function IdentifyReviewForm({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to apply metadata.";
-      toast.error(message);
+      toastRequestError(err, message);
     }
   };
 

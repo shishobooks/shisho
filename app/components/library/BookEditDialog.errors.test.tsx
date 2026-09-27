@@ -41,7 +41,6 @@ const book: Book = {
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
-    getToasts: vi.fn(() => []),
   },
 }));
 
@@ -131,7 +130,7 @@ describe("book save failures", () => {
     },
   );
 
-  it("shows a Demo Mode rejection inline without the fallback toast", async () => {
+  it("reports a Demo Mode rejection with only the global toast", async () => {
     vi.stubGlobal("__APP_VERSION__", "test");
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input).split("?")[0];
@@ -164,11 +163,19 @@ describe("book save failures", () => {
       await user.type(screen.getByLabelText("Title", { exact: true }), "!");
       await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
-      expect(await screen.findByRole("alert")).toHaveTextContent(
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+      expect(toast.error).toHaveBeenCalledWith(
         "This action is unavailable in the demo.",
+        { id: "demo-mode" },
+      );
+      // No second report inline, and the draft survives for another try.
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByLabelText("Title", { exact: true })).toHaveValue(
+        "Test Book!",
       );
       await vi.runOnlyPendingTimersAsync();
-      expect(toast.error).not.toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledTimes(1);
     } finally {
       view.unmount();
       client.clear();

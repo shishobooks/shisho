@@ -10,6 +10,7 @@ import (
 
 	"github.com/klippa-app/go-pdfium/requests"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/pdf"
 )
 
@@ -101,9 +102,11 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 		return "", "", errors.WithStack(err)
 	}
 
+	// Write atomically so GetPage's existence check never serves a partially
+	// written page to a concurrent request.
 	outPath := c.pagePath(fileID, pageNum)
-	if err := os.WriteFile(outPath, buf.Bytes(), 0644); err != nil { //nolint:gosec // Cache files need to be readable by the HTTP server
-		return "", "", errors.WithStack(err)
+	if err := fileutils.WriteFileAtomic(outPath, buf.Bytes(), 0644); err != nil { //nolint:gosec // Cache files need to be readable by the HTTP server
+		return "", "", err
 	}
 
 	return outPath, "image/jpeg", nil

@@ -20,11 +20,18 @@ const maxImageSize = 100 * 1024 * 1024
 // Cache manages extracted CBZ page images.
 type Cache struct {
 	dir string
+
+	// openEntry opens a page inside the archive. Tests replace it to pause an
+	// extraction midway.
+	openEntry func(*zip.File) (io.ReadCloser, error)
 }
 
 // NewCache creates a new Cache with the given directory.
 func NewCache(dir string) *Cache {
-	return &Cache{dir: dir}
+	return &Cache{
+		dir:       dir,
+		openEntry: func(f *zip.File) (io.ReadCloser, error) { return f.Open() },
+	}
 }
 
 // GetPage returns the path to a cached page image, extracting if necessary.
@@ -78,26 +85,45 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 	ext := strings.ToLower(filepath.Ext(targetFile.Name))
 	cachedPath = filepath.Join(cacheDir, fmt.Sprintf("page_%d%s", pageNum, ext))
 
-	r, err := targetFile.Open()
+	r, err := c.openEntry(targetFile)
 	if err != nil {
 		return "", "", errors.WithStack(err)
 	}
 	defer r.Close()
 
-	outFile, err := os.Create(cachedPath)
+	// Write to a temporary name that GetPage's glob cannot match, then rename
+	// it into place. A concurrent request either misses and extracts its own
+	// copy or finds the complete page; it never reads a partial one.
+	outFile, err := os.CreateTemp(cacheDir, tempPagePattern(pageNum))
 	if err != nil {
 		return "", "", errors.WithStack(err)
 	}
-	defer outFile.Close()
+	tmpPath := outFile.Name()
+	defer os.Remove(tmpPath) // no-op once renamed
 
 	// Use LimitReader to prevent decompression bombs
-	_, err = io.Copy(outFile, io.LimitReader(r, maxImageSize))
-	if err != nil {
-		os.Remove(cachedPath)
+	if _, err := io.Copy(outFile, io.LimitReader(r, maxImageSize)); err != nil {
+		outFile.Close()
+		return "", "", errors.WithStack(err)
+	}
+	if err := outFile.Chmod(0644); err != nil { //nolint:gosec // Cache files need to be readable by the HTTP server
+		outFile.Close()
+		return "", "", errors.WithStack(err)
+	}
+	if err := outFile.Close(); err != nil {
+		return "", "", errors.WithStack(err)
+	}
+	if err := os.Rename(tmpPath, cachedPath); err != nil {
 		return "", "", errors.WithStack(err)
 	}
 
 	return cachedPath, mimeTypeFromPath(cachedPath), nil
+}
+
+// tempPagePattern is the os.CreateTemp pattern for a page being extracted. It
+// must never match the page_<n>.* glob that GetPage treats as a cache hit.
+func tempPagePattern(pageNum int) string {
+	return fmt.Sprintf(".extracting-page_%d-*", pageNum)
 }
 
 // pageDir returns the cache directory for a file's pages.
@@ -145,7 +171,7 @@ func (c *Cache) SizeBytes() (int64, int, error) {
 // Clear removes the cache root directory entirely. Safe when missing.
 //
 // A concurrent GetPage call may race the removal and fail with ENOENT as its
-// MkdirAll/WriteFile sequence hits the deleted tree; the next attempt recreates
+// MkdirAll/CreateTemp/Rename sequence hits the deleted tree; the next attempt recreates
 // the directory and succeeds. Acceptable for admin-initiated clears; callers
 // should not assume Clear is transparent to in-flight readers.
 func (c *Cache) Clear() error {

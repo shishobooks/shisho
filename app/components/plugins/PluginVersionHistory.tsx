@@ -6,6 +6,7 @@ import {
   useUpdatePluginVersion,
   type AvailablePlugin,
 } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
 
 import { PluginVersionCard } from "./PluginVersionCard";
@@ -56,7 +57,10 @@ export const PluginVersionHistory = ({
       { id: installed.id, scope: installed.scope },
       {
         onError: (err) => {
-          toast.error(err instanceof Error ? err.message : "Update failed");
+          toastRequestError(
+            err,
+            err instanceof Error ? err.message : "Update failed",
+          );
         },
         onSuccess: () => {
           toast.success(

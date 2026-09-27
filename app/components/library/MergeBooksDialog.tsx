@@ -19,7 +19,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { QueryKey, useMergeBooks } from "@/hooks/queries/books";
-import { API, ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { Book, Library } from "@/types";
 
@@ -102,7 +102,7 @@ export function MergeBooksDialog({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to merge books";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 

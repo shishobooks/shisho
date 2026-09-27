@@ -38,6 +38,7 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
 import {
@@ -134,9 +135,20 @@ const ListDetail = () => {
   const deleteListMutation = useDeleteList();
   const reorderMutation = useReorderListBooks();
 
-  const handleReorder = (bookIds: number[]) => {
+  const handleReorder = async (bookIds: number[]) => {
     if (!listId) return;
-    reorderMutation.mutate({ listId, payload: { book_ids: bookIds } });
+    try {
+      await reorderMutation.mutateAsync({
+        listId,
+        payload: { book_ids: bookIds },
+      });
+    } catch (error) {
+      toastRequestError(
+        error,
+        error instanceof Error ? error.message : "Failed to reorder list",
+      );
+      throw error; // DraggableBookList restores the previous order
+    }
   };
 
   // Permission helpers
@@ -155,7 +167,8 @@ const ListDetail = () => {
       await updateListMutation.mutateAsync({ listId, payload });
       toast.success("List updated");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to update list",
       );
       throw error; // Let CreateListDialog preserve the draft on failure.
@@ -170,7 +183,8 @@ const ListDetail = () => {
       toast.success("List deleted");
       navigate("/lists");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to delete list",
       );
     }

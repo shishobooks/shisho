@@ -105,6 +105,12 @@ func TestGetPage_RendersAndCaches(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, cachedPath, cachedPath2)
 	assert.Equal(t, "image/jpeg", mimeType2)
+
+	// Only the published page remains; the temporary render file is gone.
+	entries, err := os.ReadDir(filepath.Dir(cachedPath))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "page_0.jpg", entries[0].Name())
 }
 
 func TestGetPage_DifferentPages(t *testing.T) {

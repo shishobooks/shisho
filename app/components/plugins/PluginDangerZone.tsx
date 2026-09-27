@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUninstallPlugin } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
 
 export interface PluginDangerZoneProps {
@@ -27,7 +28,10 @@ export const PluginDangerZone = ({
       { id: plugin.id, scope: plugin.scope },
       {
         onError: (err) => {
-          toast.error(err instanceof Error ? err.message : "Uninstall failed");
+          toastRequestError(
+            err,
+            err instanceof Error ? err.message : "Uninstall failed",
+          );
         },
         onSuccess: () => {
           toast.success(`${plugin.name} uninstalled`);

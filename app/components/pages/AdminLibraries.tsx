@@ -9,6 +9,7 @@ import { useConfig } from "@/hooks/queries/config";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import type { Library } from "@/types";
 
 interface LibraryRowProps {
@@ -73,7 +74,7 @@ const AdminLibraries = () => {
       if (e instanceof Error) {
         msg = e.message;
       }
-      toast.error(msg);
+      toastRequestError(e, msg);
     }
   }, [createLibraryMutation, navigate, devLibraryPath]);
 

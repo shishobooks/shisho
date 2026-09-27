@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCaches, useClearCache } from "@/hooks/queries/cache";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import type { Info as CacheInfo } from "@/types/generated/cache";
 
 const formatBytes = (bytes: number): string => {
@@ -56,7 +57,10 @@ const AdminCache = () => {
       );
       setPending(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to clear cache");
+      toastRequestError(
+        err,
+        err instanceof Error ? err.message : "Failed to clear cache",
+      );
       setPending(null);
     }
   };

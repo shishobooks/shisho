@@ -23,6 +23,7 @@ import {
   type PluginOrder,
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
@@ -106,7 +107,7 @@ export const AdvancedOrderSection = () => {
           toast.success("Plugin order saved.");
         },
         onError: (err) => {
-          toast.error(`Failed to save order: ${err.message}`);
+          toastRequestError(err, `Failed to save order: ${err.message}`);
         },
       },
     );

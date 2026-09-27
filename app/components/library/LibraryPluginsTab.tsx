@@ -19,6 +19,7 @@ import {
   type LibraryPluginOrderPlugin,
   type PluginHookType,
 } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
   { label: "Input Converter", value: "inputConverter" },
@@ -106,7 +107,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
           toast.success("Library plugin order saved.");
         },
         onError: (err) => {
-          toast.error(`Failed to save: ${err.message}`);
+          toastRequestError(err, `Failed to save: ${err.message}`);
         },
       },
     );
@@ -121,7 +122,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
           toast.success("Reset to global default.");
         },
         onError: (err) => {
-          toast.error(`Failed to reset: ${err.message}`);
+          toastRequestError(err, `Failed to reset: ${err.message}`);
         },
       },
     );

@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
+import { toastRequestError } from "@/libraries/api";
 
 const UserMenu = () => {
   const { demoMode, user, logout } = useAuth();
@@ -23,8 +24,8 @@ const UserMenu = () => {
       await logout();
       toast.success("Signed out successfully");
       navigate("/login");
-    } catch {
-      toast.error("Failed to sign out");
+    } catch (error) {
+      toastRequestError(error, "Failed to sign out");
     }
   }, [logout, navigate]);
 

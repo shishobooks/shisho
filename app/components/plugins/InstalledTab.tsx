@@ -12,6 +12,7 @@ import {
   useUpdatePluginVersion,
 } from "@/hooks/queries/plugins";
 import { useAuth } from "@/hooks/useAuth";
+import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
 
 import {
@@ -36,7 +37,7 @@ export const InstalledTab = () => {
   const handleScan = () => {
     scanPlugins.mutate(undefined, {
       onError: (err) => {
-        toast.error(`Scan failed: ${err.message}`);
+        toastRequestError(err, `Scan failed: ${err.message}`);
       },
       onSuccess: (discovered) => {
         if (discovered.length === 0) {
@@ -74,7 +75,10 @@ export const InstalledTab = () => {
                   { id: plugin.id, scope: plugin.scope },
                   {
                     onError: (err) =>
-                      toast.error(`Failed to update plugin: ${err.message}`),
+                      toastRequestError(
+                        err,
+                        `Failed to update plugin: ${err.message}`,
+                      ),
                     onSuccess: (updated) =>
                       toast.success(
                         `Updated ${updated.name} to v${updated.version}`,

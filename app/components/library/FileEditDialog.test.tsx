@@ -11,6 +11,7 @@ import {
   vi,
 } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
 import {
   DataSourceManual,
   FileRoleMain,
@@ -566,6 +567,60 @@ describe("FileEditDialog", () => {
       });
       const call = mockUpdateFile.mock.calls[0][0];
       expect(call.payload.release_date).toBe("");
+    });
+  });
+
+  describe("save errors", () => {
+    const fileWithDate: File = {
+      ...mockFile,
+      release_date: "2020-06-15T00:00:00Z",
+    };
+
+    const clearDateAndSave = async () => {
+      const user = createUser();
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <FileEditDialog
+            file={fileWithDate}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+      await user.clear(screen.getByPlaceholderText("YYYY-MM-DD"));
+      await user.click(screen.getByRole("button", { name: /save/i }));
+      await waitFor(() => expect(mockUpdateFile).toHaveBeenCalledTimes(1));
+    };
+
+    it("shows an ordinary rejected save inline", async () => {
+      mockUpdateFile.mockRejectedValue(
+        new ShishoAPIError("Could not save file", "internal", 500),
+      );
+
+      await clearDateAndSave();
+
+      expect(
+        await screen.findByText("Could not save file"),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves a Demo Mode rejection to the global toast", async () => {
+      mockUpdateFile.mockRejectedValue(
+        new ShishoAPIError(
+          "This action is unavailable in the demo.",
+          "demo_mode",
+          403,
+        ),
+      );
+
+      await clearDateAndSave();
+
+      // checkStatus already toasted; the dialog keeps the draft and adds nothing.
+      expect(
+        screen.queryByText("This action is unavailable in the demo."),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("YYYY-MM-DD")).toHaveValue("");
     });
   });
 

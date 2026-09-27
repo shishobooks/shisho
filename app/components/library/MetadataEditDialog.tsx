@@ -16,7 +16,7 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { markErrorDisplayed } from "@/libraries/api";
+import { isDemoModeError } from "@/libraries/api";
 import type { EntityType } from "@/libraries/metadataEntity";
 import { DataSourceManual, type DataSource } from "@/types";
 import { resolveAliases } from "@/utils/aliases";
@@ -231,8 +231,9 @@ export function MetadataEditDialog({
       setChangesSaved(true);
       requestClose();
     } catch (err) {
-      if (err instanceof Error) {
-        markErrorDisplayed(err);
+      // checkStatus already toasted a Demo Mode rejection; keep the draft
+      // open without repeating it inline.
+      if (err instanceof Error && !isDemoModeError(err)) {
         setServerError(err.message);
       }
     }

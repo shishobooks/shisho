@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useMoveFiles } from "@/hooks/queries/books";
+import { toastRequestError } from "@/libraries/api";
 import type { Book, File, Library } from "@/types";
 
 import { BookSelectionList } from "./BookSelectionList";
@@ -68,7 +69,7 @@ export function MoveFilesDialog({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to move files";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 

@@ -1017,14 +1017,13 @@ describe("MetadataEditDialog", () => {
   });
 
   describe("save errors", () => {
-    it("shows a rejected save inline and marks it displayed", async () => {
+    it("shows an ordinary rejected save inline", async () => {
       const user = createUser();
-      const error = new ShishoAPIError(
-        "This action is unavailable in the demo.",
-        "demo_mode",
-        403,
-      );
-      const onSave = vi.fn().mockRejectedValue(error);
+      const onSave = vi
+        .fn()
+        .mockRejectedValue(
+          new ShishoAPIError("Name is taken", "conflict", 409),
+        );
 
       render(
         <QueryClientProvider client={createQueryClient()}>
@@ -1043,11 +1042,46 @@ describe("MetadataEditDialog", () => {
       await user.type(nameInput, " Edited");
       await user.click(screen.getByRole("button", { name: "Save" }));
 
+      expect(await screen.findByText("Name is taken")).toBeInTheDocument();
+    });
+
+    it("leaves a Demo Mode rejection to the global toast", async () => {
+      const user = createUser();
+      const onSave = vi
+        .fn()
+        .mockRejectedValue(
+          new ShishoAPIError(
+            "This action is unavailable in the demo.",
+            "demo_mode",
+            403,
+          ),
+        );
+
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <MetadataEditDialog
+            entityName="Original Name"
+            entityType="person"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={onSave}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const nameInput = await screen.findByDisplayValue("Original Name");
+      await user.type(nameInput, " Edited");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      // checkStatus already toasted; the dialog keeps the draft and adds nothing.
       expect(
-        await screen.findByText("This action is unavailable in the demo."),
+        screen.queryByText("This action is unavailable in the demo."),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByDisplayValue("Original Name Edited"),
       ).toBeInTheDocument();
-      // Suppresses the global Demo Mode toast (see markErrorDisplayed).
-      expect(error.displayed).toBe(true);
     });
   });
 });

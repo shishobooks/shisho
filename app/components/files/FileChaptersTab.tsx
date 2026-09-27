@@ -23,6 +23,7 @@ import {
   useFileChapters,
   useUpdateFileChapters,
 } from "@/hooks/queries/chapters";
+import { toastRequestError } from "@/libraries/api";
 import {
   FileTypeCBZ,
   FileTypeEPUB,
@@ -421,7 +422,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             onEditingChange(false);
           },
           onError: (error) => {
-            toast.error(error.message || "Error saving chapters");
+            toastRequestError(error, error.message || "Error saving chapters");
           },
         },
       );

@@ -24,6 +24,7 @@ import {
   useUpdatePluginVersion,
   type AvailablePlugin,
 } from "@/hooks/queries/plugins";
+import { toastRequestError } from "@/libraries/api";
 
 interface DiscoverTabProps {
   canWrite: boolean;
@@ -94,7 +95,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
       },
       {
         onError: (err) => {
-          toast.error(`Failed to install plugin: ${err.message}`);
+          toastRequestError(err, `Failed to install plugin: ${err.message}`);
         },
         onSuccess: () => setInstallTarget(null),
       },
@@ -212,7 +213,8 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                               { id: p.id, scope: p.scope },
                               {
                                 onError: (err) =>
-                                  toast.error(
+                                  toastRequestError(
+                                    err,
                                     `Failed to update plugin: ${err.message}`,
                                   ),
                                 onSuccess: (updated) =>

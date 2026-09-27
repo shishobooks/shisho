@@ -28,6 +28,7 @@ import {
 } from "@/hooks/queries/lists";
 import { useUsers } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
+import { toastRequestError } from "@/libraries/api";
 import {
   ListPermissionEditor,
   ListPermissionManager,
@@ -105,7 +106,8 @@ export function ShareListDialog({
       setSelectedUserId("");
       setSelectedPermission(ListPermissionViewer);
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to add share",
       );
     }
@@ -123,7 +125,8 @@ export function ShareListDialog({
       });
       toast.success("Permission updated");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to update permission",
       );
     }
@@ -134,7 +137,8 @@ export function ShareListDialog({
       await deleteShareMutation.mutateAsync({ listId, shareId });
       toast.success("Share removed");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to remove share",
       );
     }

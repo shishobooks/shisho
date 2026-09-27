@@ -29,9 +29,9 @@ This file documents backend patterns and conventions specific to Shisho.
 
 - Allow `GET`, `HEAD`, and `OPTIONS`, subject to normal authentication and permissions.
 - Allow only `POST /api/auth/login` and `POST /api/auth/logout` among write methods.
-- Deny `GET /api/books/files/:id/download/original`, `GET /api/books/files/:id/download/kepub`, and `GET /api/jobs/:id/download`.
+- Deny `GET` and `HEAD` for `/api/books/files/:id/download/original`, `/api/books/files/:id/download/kepub`, and `/api/jobs/:id/download` (`deniedDownloads`). A `HEAD` still runs the handler, including KePub generation, so it is denied with the `GET`.
 - Reject every other method/path with `403`, code `demo_mode`, message `This action is unavailable in the demo.` Admins have no bypass. Unknown write paths are rejected too.
-- Keep generated reader downloads (`/api/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. This is not copy protection; supplements can be served through the generated download route, so the Public Demo must not include them.
+- Keep generated reader downloads (`/api/books/files/:id/download`), CBZ/PDF pages, and audio streaming available. These serve complete files for every main format (the generated download for EPUB, CBZ, PDF, and M4B, and the full M4B from `stream` without a `Range` header), so this is not copy protection; supplements can also be served through the generated download route, so the Public Demo must not include them.
 - Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), any `/api/plugins` group, per-library plugin routes (`/api/libraries/:id/plugins/*`), or test routes (`/api/test/*`, even with `ENVIRONMENT=test`). GET requests to omitted families return `404`; write methods still receive the global `403`.
 - Skip `pluginManager.LoadAll` and `wrkr.Start` in `cmd/api/main.go`. Also skip `wrkr.Shutdown`, which waits for goroutines that only `Start` creates. Reader caches and startup migrations still run.
 - `GET /api/auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
@@ -419,6 +419,12 @@ func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
 - Pass context as the first parameter to functions that do significant work
 - Check `ctx.Err()` before expensive operations (file I/O, loops over content)
 - Return early with `ctx.Err()` if cancelled - don't cache partial results
+
+### Publishing Cache Files
+
+Concurrent requests read the reader and download caches, so a cache file must never be visible at its final path until it is complete. For bytes already in memory, use `fileutils.WriteFileAtomic`. For streamed output, write under a unique temporary name in the same directory (`os.CreateTemp`), close it, then `os.Rename` it into place. The temporary name must not match whatever the cache-hit check looks for (`cbzpages` globs `page_<n>.*`, so its temp files start with `.extracting-`). A fixed `dest + ".tmp"` name is not enough: two requests share it and truncate or remove each other's output.
+
+`downloadcache.Cache` goes further because generation is expensive: `getOrGenerate` serializes work per destination path with a context-aware keyed lock, rechecks the cache after acquiring it, has the generator write into a private `.staging-*` directory, renames the result into place, and only then writes metadata (also via temp+rename). Concurrent cold reads of one file generate it once; unrelated files proceed in parallel. The lock lives on the `Cache` instance, so every consumer (books, OPDS, eReader, Kobo, the bulk download worker) must share the one `dlCache` built in `cmd/api/main.go` rather than calling `NewCache` for the same directory. New generated formats should go through `getOrGenerate` rather than calling a generator against the final path. A process killed mid-write leaves its temporary files behind; nothing sweeps them automatically, and the admin cache clear removes them.
 
 ## File Retrieval and Relations
 

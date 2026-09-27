@@ -64,16 +64,21 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 - `ShishoAPI.checkStatus` always rejects with a `ShishoAPIError`, never a JSON `SyntaxError`. It reads the body as text and then tries `JSON.parse`, because a non-JSON body can only come from a reverse proxy or load balancer in front of the server. A 2xx with an empty or whitespace-only body (including `204`) resolves to `undefined`. A 2xx with a non-JSON body rejects, since every endpoint returns JSON or nothing. A non-2xx without the Go `{ error: { code, message } }` body rejects with a status-based message such as `Request failed with status 504 (Gateway Timeout)`. `ShishoAPIError.code` is `undefined` in those cases, so do not assume it is set. `app/libraries/api.test.ts` pins the exact messages.
 - Code that must call `fetch` directly for a JSON endpoint (e.g. a `FormData` upload, which `API.request` would JSON-encode) passes the response to `API.checkStatus` instead of calling `response.json()` itself. `useUploadFileCover` is the example.
 - The shared QueryClient does not retry `ShishoAPIError` responses with status `401`, `403`, `404`, or `422`. Other query failures retain the three-retry limit. Keep permission failures out of the retry path, including Demo Mode rejections.
-- Async UI event handlers must consume mutation rejections and show an inline error or toast. `BookEditDialog` shows metadata/review save errors inline and preserves its draft; the top-nav `ResyncButton` reports scan-creation failures with a toast.
+- Async UI event handlers must consume mutation rejections and show an inline error or toast (except for Demo Mode rejections, see below). `BookEditDialog` shows metadata/review save errors inline and preserves its draft; the top-nav `ResyncButton` reports scan-creation failures with a toast.
 - `CreateListDialog` treats a resolved `onCreate`/`onUpdate` promise as success. Parent callbacks that show an error toast must rethrow so the dialog stays open and retains unsaved-changes protection. Test these flows through their callers, not just the dialog with a rejecting stub: a caller swallowing the rejection is the failure to catch.
 
 ### Demo Mode
 
 `useAuth()` exposes `demoMode`, sourced from the unauthenticated `GET /auth/status` response. Use this flag for Demo Mode UI behavior rather than checking the hostname or username.
 
-`ShishoAPI.checkStatus` maps a `403` response with the `demo_mode` code to the toast `This action is unavailable in the demo.` Keep mutating controls visible unless the Public Demo specification explicitly hides them. The backend remains the write boundary.
+`ShishoAPI.checkStatus` is the only place that reports a Demo Mode rejection. On a `403` with the `demo_mode` code it shows the toast `This action is unavailable in the demo.` (id `demo-mode`, so concurrent rejections collapse into one) before rejecting. Callers still receive the rejection, so dialogs stay open and keep their drafts, but they must not report it again:
 
-The toast is a fallback for callers with no error UI of their own. A caller that renders the request error inline (the `BookEditDialog` banner, the `MetadataEditDialog` and `PublisherEditDialog` server errors) must call `markErrorDisplayed(error)` from `@/libraries/api` in its `catch` block, which suppresses the toast so the message is not reported twice. The toast is deferred by one task, so the call has to happen synchronously in the `catch`, not after another `await`. A caller that shows its own failure toast is deduplicated only when that toast's text contains `error.message` (verbatim or prefixed, e.g. `Failed to save: ${error.message}`). A caller that toasts a fixed string must call `markErrorDisplayed(error)` too, or Demo Mode shows two toasts.
+- Toast request failures with `toastRequestError(error, message)` from `@/libraries/api`, not `toast.error`. It shows `message` unless `isDemoModeError(error)`. Plain `toast.error` is for client-side validation that never reached the server.
+- Inline error UI (the `BookEditDialog` and `FileEditDialog` banners, the `MetadataEditDialog` and `PublisherEditDialog` server errors) skips a Demo Mode rejection with `isDemoModeError(error)` and renders every other error as before.
+
+Test a caller that toasts through the real `API` with a `demo_mode` 403 and a real `<Toaster />`, and count the visible messages; a mocked rejection never reaches `checkStatus`. A dialog that only renders an injected `onSave` rejection inline can be tested with a rejected `ShishoAPIError` directly.
+
+Demo Mode hides these controls on top of the role-based hiding below: the file download button and format popover, the supplement download button, the bulk download action, the admin gear and mobile drawer admin entries, and the security settings route. Anything else a role may use stays visible and gets the toast. The backend remains the write boundary.
 
 Preferences stay browser-local in Demo Mode. User settings use the `shisho-demo-user-settings` local storage key. Per-library settings use `shisho-demo-library-settings-{libraryId}`. The query hooks fetch server defaults first, merge stored values over those defaults, and write Demo Mode mutations to local storage and the TanStack Query cache without sending a write request.
 
@@ -95,7 +100,7 @@ Do not gate on `canWrite`:
 
 - **List membership.** Add to list, create list, and the per-list actions follow the list's own `permission` field (owner/manager/editor/viewer), never Books Write.
 - **Selection mode and downloads.** Selection stays available for lists and downloads; only merge, delete, and review actions inside `SelectionToolbar` are hidden.
-- **Demo Mode.** `canWrite` reflects role permissions only. Demo Mode keeps controls visible and relies on the backend rejection plus toast (see above).
+- **Demo Mode.** `canWrite` reflects role permissions only. Role-based hiding still applies in Demo Mode; Demo Mode hides only the extra controls listed above, and any other control the role can use relies on the backend rejection plus toast.
 
 Hide the whole control rather than disabling it, and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
 

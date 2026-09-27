@@ -21,6 +21,10 @@ type Cache struct {
 
 	// cleanups tracks background cleanups so Wait can drain them.
 	cleanups sync.WaitGroup
+
+	// generating serializes generation per destination path. Requests for the
+	// same output wait and then reuse the file the first one published.
+	generating keyedLock
 }
 
 // NewCache creates a new Cache with the given directory and max size.
@@ -45,58 +49,27 @@ func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *mode
 		return "", "", errors.Wrap(err, "failed to hash fingerprint")
 	}
 
-	// Check if we have a valid cached file
-	existingPath, err := GetCachedFilePath(c.dir, file.ID, file.FileType, hash)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to check cache")
-	}
-
 	downloadFilename = FormatDownloadFilename(book, file)
 
-	if existingPath != "" {
-		// Update last accessed time (non-fatal if it fails)
-		_ = UpdateLastAccessed(c.dir, file.ID)
-		return existingPath, downloadFilename, nil
-	}
-
-	// Need to generate a new file
-	destPath := cachedFilename(c.dir, file.ID, file.FileType)
-
-	// Get the appropriate generator
-	generator, err := filegen.GetGenerator(file.FileType)
+	cachedPath, err = c.getOrGenerate(ctx, cachedFilename(c.dir, file.ID, file.FileType), cacheOps{
+		lookup: func() (string, error) { return GetCachedFilePath(c.dir, file.ID, file.FileType, hash) },
+		touch:  func() { _ = UpdateLastAccessed(c.dir, file.ID) },
+		generate: func(stagedPath string) error {
+			generator, err := filegen.GetGenerator(file.FileType)
+			if err != nil {
+				return errors.Wrap(err, "failed to get generator")
+			}
+			return errors.Wrap(generator.Generate(ctx, file.Filepath, stagedPath, book, file), "failed to generate file")
+		},
+		writeMeta: func(meta *CacheMetadata) error {
+			return errors.Wrap(WriteMetadata(c.dir, meta), "failed to write cache metadata")
+		},
+		meta: CacheMetadata{FileID: file.ID, FingerprintHash: hash},
+	})
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get generator")
+		return "", "", err
 	}
-
-	// Generate the file
-	if err := generator.Generate(ctx, file.Filepath, destPath, book, file); err != nil {
-		return "", "", errors.Wrap(err, "failed to generate file")
-	}
-
-	// Get the size of the generated file
-	info, err := os.Stat(destPath)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to stat generated file")
-	}
-
-	// Write the metadata
-	now := time.Now()
-	meta := &CacheMetadata{
-		FileID:          file.ID,
-		FingerprintHash: hash,
-		GeneratedAt:     now,
-		LastAccessedAt:  now,
-		SizeBytes:       info.Size(),
-	}
-	if err := WriteMetadata(c.dir, meta); err != nil {
-		// Clean up the generated file if we can't write metadata
-		os.Remove(destPath)
-		return "", "", errors.Wrap(err, "failed to write cache metadata")
-	}
-
-	c.triggerCleanupAsync()
-
-	return destPath, downloadFilename, nil
+	return cachedPath, downloadFilename, nil
 }
 
 // GetOrGenerateKepub returns the path to a cached KePub file, generating it if necessary.
@@ -120,59 +93,89 @@ func (c *Cache) GetOrGenerateKepub(ctx context.Context, book *models.Book, file 
 		return "", "", errors.Wrap(err, "failed to hash fingerprint")
 	}
 
-	// Check if we have a valid cached file
-	existingPath, err := GetKepubCachedFilePath(c.dir, file.ID, hash)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to check kepub cache")
-	}
-
 	downloadFilename = FormatKepubDownloadFilename(book, file)
 
-	if existingPath != "" {
-		// Update last accessed time (non-fatal if it fails)
-		_ = UpdateKepubLastAccessed(c.dir, file.ID)
-		return existingPath, downloadFilename, nil
-	}
-
-	// Need to generate a new file
-	destPath := kepubCachedFilename(c.dir, file.ID)
-
-	// Get the appropriate KePub generator
-	generator, err := filegen.GetKepubGenerator(file.FileType)
+	cachedPath, err = c.getOrGenerate(ctx, kepubCachedFilename(c.dir, file.ID), cacheOps{
+		lookup: func() (string, error) { return GetKepubCachedFilePath(c.dir, file.ID, hash) },
+		touch:  func() { _ = UpdateKepubLastAccessed(c.dir, file.ID) },
+		generate: func(stagedPath string) error {
+			generator, err := filegen.GetKepubGenerator(file.FileType)
+			if err != nil {
+				return errors.Wrap(err, "failed to get kepub generator")
+			}
+			return errors.Wrap(generator.Generate(ctx, file.Filepath, stagedPath, book, file), "failed to generate kepub file")
+		},
+		writeMeta: func(meta *CacheMetadata) error {
+			return errors.Wrap(WriteKepubMetadata(c.dir, meta), "failed to write kepub cache metadata")
+		},
+		meta: CacheMetadata{FileID: file.ID, Format: FormatKepub, FingerprintHash: hash},
+	})
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get kepub generator")
+		return "", "", err
+	}
+	return cachedPath, downloadFilename, nil
+}
+
+// cacheOps describes one kind of cache entry for getOrGenerate.
+type cacheOps struct {
+	// lookup returns the published path if it matches the current
+	// fingerprint, or "" on a miss.
+	lookup func() (string, error)
+	// touch records a cache hit. Failures are ignored.
+	touch func()
+	// generate writes the output to stagedPath.
+	generate func(stagedPath string) error
+	// writeMeta publishes metadata for a freshly generated file.
+	writeMeta func(meta *CacheMetadata) error
+	// meta carries the identifying fields; timestamps and size are filled in.
+	meta CacheMetadata
+}
+
+// getOrGenerate returns destPath when lookup reports a hit, and otherwise
+// generates it. Generation for a given destPath is serialized, and every
+// waiter checks the cache again once it holds the lock, so concurrent cold
+// reads of the same file generate it once. Different fingerprints of one file
+// share a destPath, so they are serialized too.
+func (c *Cache) getOrGenerate(ctx context.Context, destPath string, ops cacheOps) (string, error) {
+	if existing, err := ops.lookup(); err != nil {
+		return "", errors.Wrap(err, "failed to check cache")
+	} else if existing != "" {
+		ops.touch()
+		return existing, nil
 	}
 
-	// Generate the file
-	if err := generator.Generate(ctx, file.Filepath, destPath, book, file); err != nil {
-		return "", "", errors.Wrap(err, "failed to generate kepub file")
-	}
-
-	// Get the size of the generated file
-	info, err := os.Stat(destPath)
+	release, err := c.generating.acquire(ctx, destPath)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to stat generated kepub file")
+		return "", errors.Wrap(err, "waiting for cache generation")
+	}
+	defer release()
+
+	if existing, err := ops.lookup(); err != nil {
+		return "", errors.Wrap(err, "failed to check cache")
+	} else if existing != "" {
+		ops.touch()
+		return existing, nil
 	}
 
-	// Write the metadata
+	size, err := generateInto(c.dir, destPath, ops.generate)
+	if err != nil {
+		return "", err
+	}
+
 	now := time.Now()
-	meta := &CacheMetadata{
-		FileID:          file.ID,
-		Format:          FormatKepub,
-		FingerprintHash: hash,
-		GeneratedAt:     now,
-		LastAccessedAt:  now,
-		SizeBytes:       info.Size(),
-	}
-	if err := WriteKepubMetadata(c.dir, meta); err != nil {
-		// Clean up the generated file if we can't write metadata
+	meta := ops.meta
+	meta.GeneratedAt = now
+	meta.LastAccessedAt = now
+	meta.SizeBytes = size
+	if err := ops.writeMeta(&meta); err != nil {
+		// Without metadata the file is unreachable, so don't leave it behind.
 		os.Remove(destPath)
-		return "", "", errors.Wrap(err, "failed to write kepub cache metadata")
+		return "", err
 	}
 
 	c.triggerCleanupAsync()
 
-	return destPath, downloadFilename, nil
+	return destPath, nil
 }
 
 // Invalidate removes the cached file for a given file ID.
@@ -209,53 +212,23 @@ func (c *Cache) GetOrGeneratePlugin(ctx context.Context, book *models.Book, file
 		return "", "", errors.Wrap(err, "failed to hash fingerprint")
 	}
 
-	// Check if we have a valid cached file
-	existingPath, err := GetPluginCachedFilePath(c.dir, file.ID, formatID, hash)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to check plugin cache")
-	}
-
 	downloadFilename = FormatPluginDownloadFilename(book, file, formatID)
 
-	if existingPath != "" {
-		// Update last accessed time (non-fatal if it fails)
-		_ = UpdatePluginLastAccessed(c.dir, file.ID, formatID)
-		return existingPath, downloadFilename, nil
-	}
-
-	// Need to generate a new file
-	destPath := pluginCachedFilename(c.dir, file.ID, formatID)
-
-	// Generate the file
-	if err := generator.Generate(ctx, file.Filepath, destPath, book, file); err != nil {
-		return "", "", errors.Wrap(err, "failed to generate plugin file")
-	}
-
-	// Get the size of the generated file
-	info, err := os.Stat(destPath)
+	cachedPath, err = c.getOrGenerate(ctx, pluginCachedFilename(c.dir, file.ID, formatID), cacheOps{
+		lookup: func() (string, error) { return GetPluginCachedFilePath(c.dir, file.ID, formatID, hash) },
+		touch:  func() { _ = UpdatePluginLastAccessed(c.dir, file.ID, formatID) },
+		generate: func(stagedPath string) error {
+			return errors.Wrap(generator.Generate(ctx, file.Filepath, stagedPath, book, file), "failed to generate plugin file")
+		},
+		writeMeta: func(meta *CacheMetadata) error {
+			return errors.Wrap(WritePluginMetadata(c.dir, file.ID, formatID, meta), "failed to write plugin cache metadata")
+		},
+		meta: CacheMetadata{FileID: file.ID, Format: "plugin:" + formatID, FingerprintHash: hash},
+	})
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to stat generated plugin file")
+		return "", "", err
 	}
-
-	// Write the metadata
-	now := time.Now()
-	meta := &CacheMetadata{
-		FileID:          file.ID,
-		Format:          "plugin:" + formatID,
-		FingerprintHash: hash,
-		GeneratedAt:     now,
-		LastAccessedAt:  now,
-		SizeBytes:       info.Size(),
-	}
-	if err := WritePluginMetadata(c.dir, file.ID, formatID, meta); err != nil {
-		// Clean up the generated file if we can't write metadata
-		os.Remove(destPath)
-		return "", "", errors.Wrap(err, "failed to write plugin cache metadata")
-	}
-
-	c.triggerCleanupAsync()
-
-	return destPath, downloadFilename, nil
+	return cachedPath, downloadFilename, nil
 }
 
 // InvalidatePlugin removes the cached plugin file for a given file ID and format.

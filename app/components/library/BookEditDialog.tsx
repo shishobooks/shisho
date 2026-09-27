@@ -46,7 +46,7 @@ import {
 } from "@/hooks/queries/entity-search";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { markErrorDisplayed } from "@/libraries/api";
+import { isDemoModeError } from "@/libraries/api";
 import {
   AuthorRoleWriter,
   DataSourceManual,
@@ -431,10 +431,13 @@ export function BookEditDialog({
         });
       }
     } catch (error) {
-      markErrorDisplayed(error);
-      setSaveError(
-        error instanceof Error ? error.message : "Failed to save book",
-      );
+      // checkStatus already toasted a Demo Mode rejection; keep the draft
+      // open without repeating it inline.
+      if (!isDemoModeError(error)) {
+        setSaveError(
+          error instanceof Error ? error.message : "Failed to save book",
+        );
+      }
       return;
     }
 

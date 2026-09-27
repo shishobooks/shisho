@@ -112,7 +112,8 @@ const DraggableBookItem = ({
 interface DraggableBookListProps {
   books: ListBook[];
   isOwner: boolean;
-  onReorder: (bookIds: number[]) => void;
+  // Rejecting restores the order from before the drag.
+  onReorder: (bookIds: number[]) => Promise<unknown>;
   gallerySize?: GallerySize;
 }
 
@@ -126,6 +127,14 @@ export const DraggableBookList = ({
   const [activeId, setActiveId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
   const isDraggingRef = useRef(false);
+  // The server order, read when a save fails so overlapping drags fall back
+  // to what the server holds rather than an order captured by an older drag.
+  const booksRef = useRef(books);
+  // Counts drags so a rejection only rolls back if no newer drag followed it.
+  const reorderSeqRef = useRef(0);
+  useEffect(() => {
+    booksRef.current = books;
+  }, [books]);
 
   // Sync items from props, but only when not actively dragging
   // This prevents the flash/glitch when server responds after reorder
@@ -182,7 +191,13 @@ export const DraggableBookList = ({
 
         const newItems = arrayMove(items, oldIndex, newIndex);
         setItems(newItems);
-        onReorder(newItems.map((item) => item.book_id));
+        // A rejected save (including a Demo Mode rejection) leaves the server
+        // order unchanged, and an unchanged refetch would not resync the
+        // props, so put the server order back here.
+        const seq = ++reorderSeqRef.current;
+        onReorder(newItems.map((item) => item.book_id)).catch(() => {
+          if (seq === reorderSeqRef.current) setItems(booksRef.current);
+        });
       }
 
       // Allow prop sync after a short delay to let optimistic update settle

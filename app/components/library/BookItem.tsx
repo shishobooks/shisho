@@ -37,6 +37,7 @@ import {
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
@@ -144,7 +145,8 @@ const BookItem = ({
       });
       toast.success("Book rescanned");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to rescan book",
       );
     }
@@ -155,7 +157,8 @@ const BookItem = ({
       await deleteBookMutation.mutateAsync(book.id);
       toast.success("Book deleted");
     } catch (error) {
-      toast.error(
+      toastRequestError(
+        error,
         error instanceof Error ? error.message : "Failed to delete book",
       );
     }

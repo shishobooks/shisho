@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMoveBookToPosition } from "@/hooks/queries/lists";
+import { toastRequestError } from "@/libraries/api";
 
 interface MoveToPositionDialogProps {
   listId: number;
@@ -54,7 +55,7 @@ export const MoveToPositionDialog = ({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to move book";
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 

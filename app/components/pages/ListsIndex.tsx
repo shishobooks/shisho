@@ -14,6 +14,7 @@ import {
   useListTemplates,
 } from "@/hooks/queries/lists";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse, ListTemplate } from "@/types";
 
 const ListsIndex = () => {
@@ -39,7 +40,7 @@ const ListsIndex = () => {
       if (error instanceof Error) {
         message = error.message;
       }
-      toast.error(message);
+      toastRequestError(error, message);
       throw error; // Let CreateListDialog preserve the draft on failure.
     }
   };
@@ -55,7 +56,7 @@ const ListsIndex = () => {
       if (error instanceof Error) {
         message = error.message;
       }
-      toast.error(message);
+      toastRequestError(error, message);
     }
   };
 

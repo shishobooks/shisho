@@ -44,7 +44,7 @@ import {
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetFileReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { markErrorDisplayed } from "@/libraries/api";
+import { isDemoModeError } from "@/libraries/api";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   FileRoleMain,
@@ -510,10 +510,13 @@ export function FileEditDialog({
         });
       }
     } catch (error) {
-      markErrorDisplayed(error);
-      setSaveError(
-        error instanceof Error ? error.message : "Failed to save file",
-      );
+      // checkStatus already toasted a Demo Mode rejection; keep the draft
+      // open without repeating it inline.
+      if (!isDemoModeError(error)) {
+        setSaveError(
+          error instanceof Error ? error.message : "Failed to save file",
+        );
+      }
       return;
     }
 

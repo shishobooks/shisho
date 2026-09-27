@@ -1,12 +1,11 @@
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API, markErrorDisplayed, ShishoAPIError } from "./api";
+import { API, isDemoModeError, ShishoAPIError, toastRequestError } from "./api";
 
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
-    getToasts: vi.fn(() => []),
   },
 }));
 
@@ -30,18 +29,12 @@ const rejection = (response: Response) =>
     (caught: unknown) => caught,
   );
 
-const visibleDemoToast = {
-  id: 1,
-  title: "This action is unavailable in the demo.",
-  type: "error" as const,
-};
-
 describe("ShishoAPI Demo Mode errors", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(toast.getToasts).mockReturnValue([]);
   });
-  it("shows the Demo Mode toast once and still rejects with the API error", async () => {
+
+  it("shows the Demo Mode toast before rejecting with the API error", async () => {
     const error = await rejection(demoModeResponse());
 
     expect(error).toBeInstanceOf(ShishoAPIError);
@@ -50,8 +43,8 @@ describe("ShishoAPI Demo Mode errors", () => {
       message: "This action is unavailable in the demo.",
       status: 403,
     });
-    await vi.runOnlyPendingTimersAsync();
-
+    expect(isDemoModeError(error)).toBe(true);
+    // Reported synchronously, so callers never need to wait for it.
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith(
       "This action is unavailable in the demo.",
@@ -59,55 +52,63 @@ describe("ShishoAPI Demo Mode errors", () => {
     );
   });
 
-  it("does not add a fallback when the caller already showed the message", async () => {
-    vi.mocked(toast.getToasts).mockReturnValue([visibleDemoToast]);
-
-    await API.checkStatus(demoModeResponse()).catch(() => undefined);
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(toast.error).not.toHaveBeenCalled();
-  });
-
-  it("does not add a fallback when the caller showed the message with a prefix", async () => {
-    vi.mocked(toast.getToasts).mockReturnValue([
-      {
-        ...visibleDemoToast,
-        title: "Failed to save: This action is unavailable in the demo.",
-      },
-    ]);
-
-    await API.checkStatus(demoModeResponse()).catch(() => undefined);
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(toast.error).not.toHaveBeenCalled();
-  });
-
-  it("does not add a fallback when the caller displays the error inline", async () => {
-    await API.checkStatus(demoModeResponse()).catch(markErrorDisplayed);
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(toast.error).not.toHaveBeenCalled();
-  });
-
-  it("coalesces concurrent Demo Mode fallback toasts", async () => {
-    vi.mocked(toast.getToasts).mockImplementation(() =>
-      vi.mocked(toast.error).mock.calls.length > 0 ? [visibleDemoToast] : [],
-    );
-
+  it("reuses one toast id for concurrent rejections", async () => {
     await Promise.all([
       API.checkStatus(demoModeResponse()).catch(() => undefined),
       API.checkStatus(demoModeResponse()).catch(() => undefined),
     ]);
-    await vi.runOnlyPendingTimersAsync();
 
-    expect(toast.error).toHaveBeenCalledTimes(1);
+    // sonner replaces a toast that shares an id, so both calls render one toast.
+    expect(toast.error).toHaveBeenCalledTimes(2);
+    for (const call of vi.mocked(toast.error).mock.calls) {
+      expect(call).toEqual([
+        "This action is unavailable in the demo.",
+        { id: "demo-mode" },
+      ]);
+    }
+  });
+
+  it("does not treat other 403s as Demo Mode rejections", async () => {
+    const error = await rejection(
+      Response.json(
+        { error: { code: "forbidden", message: "Nope" } },
+        { status: 403 },
+      ),
+    );
+
+    expect(isDemoModeError(error)).toBe(false);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("toastRequestError", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the caller's message for ordinary failures", () => {
+    toastRequestError(new ShishoAPIError("Boom", "internal", 500), "Boom");
+
+    expect(toast.error).toHaveBeenCalledWith("Boom", undefined);
+  });
+
+  it("stays silent for a Demo Mode rejection", () => {
+    toastRequestError(
+      new ShishoAPIError(
+        "This action is unavailable in the demo.",
+        "demo_mode",
+        403,
+      ),
+      "Failed to save: This action is unavailable in the demo.",
+    );
+
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
 
 describe("ShishoAPI error responses", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(toast.getToasts).mockReturnValue([]);
   });
 
   it("rejects a 504 HTML proxy page with a status-based API error", async () => {
@@ -232,7 +233,6 @@ describe("ShishoAPI error responses", () => {
         headers: { "content-type": "text/plain" },
       }),
     );
-    await vi.runOnlyPendingTimersAsync();
 
     expect(error).toBeInstanceOf(ShishoAPIError);
     expect(error).toMatchObject({ code: undefined, status: 403 });
