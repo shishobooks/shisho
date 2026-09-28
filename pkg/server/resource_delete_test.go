@@ -383,3 +383,155 @@ func TestDeleteFile_ReindexesSurvivingBook(t *testing.T) {
 	assert.Empty(t, f.searchBookIDs("Brackenridge"), "the deleted File's narrator no longer matches the Book")
 	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Harbor"), "the surviving Book stays in the search index")
 }
+
+// seriesWithBooks creates a Series holding the given Books and indexes it in
+// series_fts, whose book_authors column carries the Books' author names.
+func (f *resourceDeleteFixture) seriesWithBooks(name string, bookIDs ...int) *models.Series {
+	f.t.Helper()
+	series := &models.Series{
+		LibraryID:      f.lib.ID,
+		Name:           name,
+		NameSource:     models.DataSourceManual,
+		SortName:       name,
+		SortNameSource: models.DataSourceFilepath,
+	}
+	f.insert(series)
+	for i, bookID := range bookIDs {
+		f.insert(&models.BookSeries{BookID: bookID, SeriesID: series.ID, SortOrder: i + 1})
+	}
+	require.NoError(f.t, f.searchSvc.IndexSeries(f.ctx, series))
+	return series
+}
+
+// searchSeriesIDs returns the IDs of the Series that a series search for
+// query matches.
+func (f *resourceDeleteFixture) searchSeriesIDs(query string) []int {
+	f.t.Helper()
+	results, _, err := f.searchSvc.SearchSeries(f.ctx, f.lib.ID, query, 10, 0)
+	require.NoError(f.t, err)
+	ids := []int{}
+	for _, r := range results {
+		ids = append(ids, r.ID)
+	}
+	return ids
+}
+
+// Merging People who author the same Book in the same role succeeds instead
+// of tripping ux_authors_book_person_role, and the Book keeps one row for the
+// target.
+func TestMergePeople_SharedBookSameRole_Succeeds(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	writer := models.AuthorRoleWriter
+	_, err := f.db.NewUpdate().Model((*models.Author)(nil)).Set("role = ?", writer).Where("book_id = ?", seeded.bookID).Exec(f.ctx)
+	require.NoError(t, err)
+	source := f.person("Ottoline Brackenridge")
+	f.insert(&models.Author{BookID: seeded.bookID, PersonID: source.ID, SortOrder: 2, Role: &writer})
+
+	f.request(http.MethodPost, fmt.Sprintf("/api/people/%d/merge", seeded.author.ID), fmt.Sprintf(`{"source_id":%d}`, source.ID), http.StatusNoContent)
+
+	var personIDs []int
+	require.NoError(t, f.db.NewSelect().Model((*models.Author)(nil)).Column("person_id").Where("book_id = ?", seeded.bookID).Scan(f.ctx, &personIDs))
+	assert.Equal(t, []int{seeded.author.ID}, personIDs)
+}
+
+// Renaming a Person re-indexes the Series of the Books it authored, so a
+// series search matches the new name and stops matching the old one.
+func TestUpdatePerson_RenameReindexesAuthoredSeries(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	series := f.seriesWithBooks("Lanternfall Cycle", seeded.bookID)
+	require.Equal(t, []int{series.ID}, f.searchSeriesIDs("Quillfeather"), "precondition: the author name matches the Series")
+
+	f.request(http.MethodPatch, fmt.Sprintf("/api/people/%d", seeded.author.ID), `{"name":"Wilhelmina Starling"}`, http.StatusOK)
+
+	assert.Empty(t, f.searchSeriesIDs("Quillfeather"), "the old author name no longer matches the Series")
+	assert.Equal(t, []int{series.ID}, f.searchSeriesIDs("Starling"), "the new author name matches the Series")
+}
+
+// Deleting a Person re-indexes the Series of the Books it authored, so a
+// series search stops matching the deleted name.
+func TestDeletePerson_ReindexesAuthoredSeries(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	series := f.seriesWithBooks("Lanternfall Cycle", seeded.bookID)
+	require.Equal(t, []int{series.ID}, f.searchSeriesIDs("Quillfeather"), "precondition: the author name matches the Series")
+
+	f.delete(fmt.Sprintf("/api/people/%d", seeded.author.ID))
+
+	assert.Empty(t, f.searchSeriesIDs("Quillfeather"), "the deleted author name no longer matches the Series")
+	assert.Equal(t, []int{series.ID}, f.searchSeriesIDs("Lanternfall"), "the Series stays in the search index")
+}
+
+// Merging a Person re-indexes the Series of the Books the source authored,
+// so a series search matches the target name and stops matching the source
+// name, which series_fts does not carry as an alias.
+func TestMergePeople_ReindexesSourceSeries(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	series := f.seriesWithBooks("Lanternfall Cycle", seeded.bookID)
+	target := f.person("Marigold Ashcombe")
+	require.Empty(t, f.searchSeriesIDs("Ashcombe"), "precondition: the target name does not match the Series")
+
+	f.request(http.MethodPost, fmt.Sprintf("/api/people/%d/merge", target.ID), fmt.Sprintf(`{"source_id":%d}`, seeded.author.ID), http.StatusNoContent)
+
+	assert.Equal(t, []int{series.ID}, f.searchSeriesIDs("Ashcombe"), "the target name matches the Series")
+	assert.Empty(t, f.searchSeriesIDs("Quillfeather"), "the merged source name no longer matches the Series")
+}
+
+// Deleting the only File a Narrator narrated, while the Book survives with
+// another File, removes the now orphaned Narrator and its persons_fts row.
+// The cleanup covers People only, so an unrelated orphaned Genre is left for
+// the next Scan, as before.
+func TestDeleteFile_RemovesOrphanedNarrator(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeM4B, nil)
+	var book models.Book
+	require.NoError(t, f.db.NewSelect().Model(&book).Where("b.id = ?", seeded.bookID).Scan(f.ctx))
+	f.insert(&models.File{
+		LibraryID:     f.lib.ID,
+		BookID:        seeded.bookID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      book.Filepath + "/book.epub",
+		FilesizeBytes: 1,
+	})
+	require.NoError(t, f.searchSvc.IndexPerson(f.ctx, seeded.narrator))
+	require.NoError(t, f.searchSvc.IndexPerson(f.ctx, seeded.author))
+	require.Equal(t, []int{seeded.narrator.ID}, f.searchPersonIDs("Brackenridge"), "precondition: the narrator is in people search")
+	orphanGenre := &models.Genre{LibraryID: f.lib.ID, Name: "Unused Genre"}
+	f.insert(orphanGenre)
+
+	f.request(http.MethodDelete, fmt.Sprintf("/api/books/files/%d", seeded.fileID), "", http.StatusOK)
+
+	exists, err := f.db.NewSelect().Model((*models.Person)(nil)).Where("id = ?", seeded.narrator.ID).Exists(f.ctx)
+	require.NoError(t, err)
+	assert.False(t, exists, "the orphaned narrator is deleted")
+	assert.Empty(t, f.searchPersonIDs("Brackenridge"), "the orphaned narrator leaves people search")
+	assert.Equal(t, []int{seeded.author.ID}, f.searchPersonIDs("Quillfeather"), "the author, who still has the Book, stays")
+	genreExists, err := f.db.NewSelect().Model((*models.Genre)(nil)).Where("id = ?", orphanGenre.ID).Exists(f.ctx)
+	require.NoError(t, err)
+	assert.True(t, genreExists, "a single-file delete does not clean up other kinds of orphans")
+}
+
+// Renaming a Person without touching its aliases re-indexes the Books it
+// authored or narrated, since books_fts stores their names.
+func TestUpdatePerson_RenameReindexesBooks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeM4B, nil)
+	require.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Quillfeather"), "precondition: the author name matches the Book")
+
+	f.request(http.MethodPatch, fmt.Sprintf("/api/people/%d", seeded.author.ID), `{"name":"Wilhelmina Starling"}`, http.StatusOK)
+	f.request(http.MethodPatch, fmt.Sprintf("/api/people/%d", seeded.narrator.ID), `{"name":"Cordelia Fairweather"}`, http.StatusOK)
+
+	assert.Empty(t, f.searchBookIDs("Quillfeather"), "the old author name no longer matches the Book")
+	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Starling"), "the new author name matches the Book")
+	assert.Empty(t, f.searchBookIDs("Brackenridge"), "the old narrator name no longer matches the Book")
+	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Fairweather"), "the new narrator name matches the Book")
+}

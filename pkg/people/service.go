@@ -410,17 +410,68 @@ func personBookIDs(ctx context.Context, db bun.IDB, personID int) ([]int, error)
 	return bookIDs, errors.WithStack(err)
 }
 
+// SeriesForBooks returns the Series that hold any of the given Books, each
+// once. Callers re-index them in series_fts, whose book_authors column
+// carries the names of the People who author the Books in each Series.
+func (svc *Service) SeriesForBooks(ctx context.Context, bookIDs []int) ([]*models.Series, error) {
+	series := []*models.Series{}
+	if len(bookIDs) == 0 {
+		return series, nil
+	}
+	err := svc.db.NewSelect().
+		Model(&series).
+		Where("s.id IN (SELECT bs.series_id FROM book_series AS bs WHERE bs.book_id IN (?))", bun.List(bookIDs)).
+		Order("s.id ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return series, nil
+}
+
 // MergePeople merges sourcePerson into targetPerson (moves all associations,
 // transfers aliases, deletes source). It returns the IDs of the books the
 // source authored plus the books that own a file the source narrated, each
 // once, so the caller can re-index them after the transaction commits.
+//
+// A Person cannot be merged into itself. Where the source and the target
+// already author the same Book in the same role, or narrate the same File,
+// the source's row is dropped instead of re-pointed, so the merge never
+// violates ux_authors_book_person_role or ux_narrators_file_person and never
+// lists the target twice.
 func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) ([]int, error) {
+	if targetID == sourceID {
+		return nil, errcodes.ValidationError("A person cannot be merged into itself")
+	}
+
 	var movedBookIDs []int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		var err error
 		movedBookIDs, err = personBookIDs(ctx, tx, sourceID)
 		if err != nil {
 			return err
+		}
+
+		// Drop the source's author rows that duplicate one of the target's.
+		// IS compares NULL roles as equal; the unique index does not, so a
+		// generic author would otherwise be listed twice.
+		_, err = tx.NewDelete().
+			Model((*models.Author)(nil)).
+			Where("a.person_id = ?", sourceID).
+			Where("EXISTS (SELECT 1 FROM authors AS t WHERE t.person_id = ? AND t.book_id = a.book_id AND t.role IS a.role)", targetID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Drop the source's narrator rows for Files the target also narrates.
+		_, err = tx.NewDelete().
+			Model((*models.Narrator)(nil)).
+			Where("n.person_id = ?", sourceID).
+			Where("EXISTS (SELECT 1 FROM narrators AS t WHERE t.person_id = ? AND t.file_id = n.file_id)", targetID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
 		}
 
 		// Update all authors from source to target

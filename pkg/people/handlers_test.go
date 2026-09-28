@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -473,4 +475,102 @@ func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Items[0].Aliases, &aliasStrings),
 		"aliases must unmarshal into []string, proving it is a JSON array of strings")
 	assert.ElementsMatch(t, []string{"B. Sanderson", "Brandon S."}, aliasStrings)
+}
+
+// callMerge runs the merge handler as user, merging sourceID into targetID.
+func callMerge(t *testing.T, h *handler, user *models.User, targetID, sourceID int) error {
+	t.Helper()
+	e := newTestEcho(t)
+	body := fmt.Sprintf(`{"source_id":%d}`, sourceID)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(targetID))
+	c.Set("user", user)
+	return h.merge(c)
+}
+
+// userWithLibraryAccess returns a User who can access only the given
+// Library.
+func userWithLibraryAccess(libraryID int) *models.User {
+	return &models.User{LibraryAccess: []*models.UserLibraryAccess{{LibraryID: &libraryID}}}
+}
+
+// The merge checks library access for the source as well as the target, so
+// a user cannot pull a Person out of a Library they cannot see.
+func TestMerge_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	h := newTestHandler(db)
+	visible := createTestLibrary(t, db)
+	hidden := createTestLibrary(t, db)
+	target := seedPersonWithAuthoredBooks(t, db, visible, "Target Person", []string{"Visible Book"})
+	source := seedPersonWithAuthoredBooks(t, db, hidden, "Source Person", []string{"Hidden Book"})
+
+	err := callMerge(t, h, userWithLibraryAccess(visible.ID), target.ID, source.ID)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusForbidden, codeErr.HTTPCode)
+
+	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &source.ID})
+	require.NoError(t, err, "the source Person still exists")
+}
+
+// People belong to one Library, so a merge across Libraries is rejected even
+// when the user can access both.
+func TestMerge_SourceInOtherLibrary_Rejected(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	h := newTestHandler(db)
+	first := createTestLibrary(t, db)
+	second := createTestLibrary(t, db)
+	target := seedPersonWithAuthoredBooks(t, db, first, "Target Person", []string{"First Book"})
+	source := seedPersonWithAuthoredBooks(t, db, second, "Source Person", []string{"Second Book"})
+	allAccess := &models.User{LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}}
+
+	err := callMerge(t, h, allAccess, target.ID, source.ID)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, "validation_error", codeErr.Code)
+
+	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &source.ID})
+	require.NoError(t, err, "the source Person still exists")
+}
+
+// A self-merge through the handler is rejected as a validation error and
+// leaves the Person in place.
+func TestMerge_SelfMerge_Rejected(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	h := newTestHandler(db)
+	lib := createTestLibrary(t, db)
+	person := seedPersonWithAuthoredBooks(t, db, lib, "Only Person", []string{"Only Book"})
+
+	err := callMerge(t, h, userWithLibraryAccess(lib.ID), person.ID, person.ID)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, "validation_error", codeErr.Code)
+
+	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &person.ID})
+	require.NoError(t, err, "the Person still exists")
+}
+
+// A merge whose source does not exist returns 404 instead of silently
+// succeeding, and leaves the target in place.
+func TestMerge_MissingSource_NotFound(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	h := newTestHandler(db)
+	lib := createTestLibrary(t, db)
+	target := seedPersonWithAuthoredBooks(t, db, lib, "Target Person", []string{"Target Book"})
+
+	err := callMerge(t, h, userWithLibraryAccess(lib.ID), target.ID, target.ID+1000)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode)
+
+	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &target.ID})
+	require.NoError(t, err, "the target Person still exists")
 }
