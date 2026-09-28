@@ -123,11 +123,12 @@ func (h *publicHandler) book(c echo.Context) error {
 
 // blankForRecipient removes everything that describes the server's layout:
 // filesystem paths (a supplement keeps its filename as its display name),
-// cover filenames, scan errors (which can quote paths), and the library. It also drops the library-facing fields the recipient page
-// hides (sort title, file URLs, file identifiers). Other fields the page does
-// not render (timestamps, sources, review flags) stay; timestamps are needed
-// because file cover URLs use updated_at as their cache key. The downloaded
-// file itself still carries the book's full metadata.
+// cover filenames, scan errors (which can quote paths), and the library. It
+// also drops the library-facing fields the recipient page hides (sort title,
+// file URLs, file identifiers). Other fields the page does not render
+// (timestamps, sources, review flags) stay; timestamps are needed because
+// file cover URLs use updated_at as their cache key. The downloaded file
+// itself still carries the book's full metadata.
 func blankForRecipient(book *models.Book) {
 	book.Filepath = ""
 	book.Library = nil

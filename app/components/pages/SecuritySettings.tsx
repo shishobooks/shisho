@@ -701,7 +701,14 @@ function KoboSetupDialog({
 }) {
   const [scopeType, setScopeType] = useState<"all" | "library" | "list">("all");
   const [scopeId, setScopeId] = useState("");
-  const { data: librariesData } = useLibraries();
+  // A role without Libraries Read cannot list libraries, so it can sync all
+  // libraries or a list but not pick one library.
+  const { hasPermission } = useAuth();
+  const canReadLibraries = hasPermission("libraries", "read");
+  const { data: librariesData } = useLibraries(
+    {},
+    { enabled: canReadLibraries },
+  );
   const { data: listsData } = useListLists();
   const clearKoboSync = useClearKoboSync();
 
@@ -768,20 +775,22 @@ function KoboSetupDialog({
               >
                 All Libraries
               </button>
-              <button
-                className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                  scopeType === "library"
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-                onClick={() => {
-                  setScopeType("library");
-                  setScopeId("");
-                }}
-                type="button"
-              >
-                Library
-              </button>
+              {canReadLibraries && (
+                <button
+                  className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                    scopeType === "library"
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  }`}
+                  onClick={() => {
+                    setScopeType("library");
+                    setScopeId("");
+                  }}
+                  type="button"
+                >
+                  Library
+                </button>
+              )}
               <button
                 className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer ${
                   scopeType === "list"

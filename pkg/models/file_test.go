@@ -48,14 +48,19 @@ func TestFile_ResolveDisplayName(t *testing.T) {
 			want: "Maps and Charts",
 		},
 		{
-			name: "supplement keeps a name restored from its sidecar",
+			// A sidecar name is not proof the user set it: editing the book
+			// writes every file's sidecar, supplements included, with the
+			// scanner-stored stem, and a rescan restores that stem with
+			// source sidecar. Trusting it would bring back the pre-rename
+			// title this label exists to avoid.
+			name: "supplement shows its filename over a sidecar-sourced name",
 			file: File{
 				FileRole:   FileRoleSupplement,
-				Name:       str("Maps and Charts"),
+				Name:       str("Original Title"),
 				NameSource: str(DataSourceSidecar),
-				Filepath:   "/lib/Book/maps.pdf",
+				Filepath:   "/lib/The Lighthouse Keeper/The Lighthouse Keeper.pdf",
 			},
-			want: "Maps and Charts",
+			want: "The Lighthouse Keeper.pdf",
 		},
 		{
 			name: "no name and no path gives an empty name",

@@ -21,8 +21,15 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/components/library/TopNav", () => ({ default: () => null }));
 
+const auth = vi.hoisted(() => ({ canReadLibraries: true }));
+
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ user: { must_change_password: false }, refetch: vi.fn() }),
+  useAuth: () => ({
+    user: { must_change_password: false },
+    refetch: vi.fn(),
+    hasPermission: (resource: string, operation: string) =>
+      resource === "libraries" && operation === "read" && auth.canReadLibraries,
+  }),
 }));
 
 const apiKey = (id: string, permission: string): APIKey => ({
@@ -66,8 +73,20 @@ vi.mock("@/hooks/queries/apiKeys", () => ({
   }),
 }));
 
+const librariesOptions = vi.hoisted(
+  () => [] as Array<{ enabled?: boolean } | undefined>,
+);
+
 vi.mock("@/hooks/queries/libraries", () => ({
-  useLibraries: () => ({ data: { items: [], total: 0 } }),
+  useLibraries: (_query?: unknown, options?: { enabled?: boolean }) => {
+    librariesOptions.push(options);
+    return {
+      data:
+        options?.enabled === false
+          ? undefined
+          : { items: [{ id: 1, name: "Fiction" }], total: 1 },
+    };
+  },
 }));
 vi.mock("@/hooks/queries/lists", () => ({
   useListLists: () => ({ data: { items: [], total: 0 } }),
@@ -93,6 +112,8 @@ const openSetup = async (index: number) => {
 
 describe("SecuritySettings copy buttons", () => {
   beforeEach(() => {
+    auth.canReadLibraries = true;
+    librariesOptions.length = 0;
     vi.mocked(copyText).mockReset();
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
@@ -154,5 +175,36 @@ describe("SecuritySettings copy buttons", () => {
       expect(toast.error).toHaveBeenCalledWith("Could not copy the URL"),
     );
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("SecuritySettings Kobo sync scope", () => {
+  beforeEach(() => {
+    auth.canReadLibraries = true;
+    librariesOptions.length = 0;
+  });
+
+  it("offers the Library scope to a role that can read libraries", async () => {
+    await openSetup(1);
+
+    expect(
+      await screen.findByRole("button", { name: "Library" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Library scope and requests no libraries without Libraries Read", async () => {
+    auth.canReadLibraries = false;
+    await openSetup(1);
+
+    expect(
+      await screen.findByRole("button", { name: "All Libraries" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Library" }),
+    ).not.toBeInTheDocument();
+    expect(librariesOptions.length).toBeGreaterThan(0);
+    for (const options of librariesOptions) {
+      expect(options?.enabled).toBe(false);
+    }
   });
 });

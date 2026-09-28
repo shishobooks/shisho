@@ -93,15 +93,15 @@ type File struct {
 
 // ResolveDisplayName returns the label for the file. A main file shows its
 // name (the edition title), falling back to the filename. A supplement shows
-// its filename unless the user set a name: the scanner stores the filename
-// stem as the name when it first sees a supplement, and that stored value
-// goes stale when the book is renamed or reorganized. A name the user set
-// has source manual, or sidecar once a rebuild restores it from the sidecar.
+// its filename unless the user set a name (source manual): the scanner stores
+// the filename stem as the name when it first sees a supplement, and that
+// stored value goes stale when the book is renamed or reorganized. A sidecar
+// source does not count, because book edits write every file's sidecar with
+// its stored name, so a rescan can restore the stale stem as sidecar.
 func (f *File) ResolveDisplayName() string {
 	if f.Name != nil && *f.Name != "" {
-		userSet := f.NameSource != nil &&
-			(*f.NameSource == DataSourceManual || *f.NameSource == DataSourceSidecar)
-		if f.FileRole != FileRoleSupplement || userSet {
+		manual := f.NameSource != nil && *f.NameSource == DataSourceManual
+		if f.FileRole != FileRoleSupplement || manual {
 			return *f.Name
 		}
 	}
