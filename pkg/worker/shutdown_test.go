@@ -28,7 +28,7 @@ func TestShutdown_CancelsInFlightJob(t *testing.T) {
 	// the same way they are in production. The test context's worker is built
 	// manually and doesn't have Start/Shutdown-ready plumbing.
 	cfg := &config.Config{WorkerProcesses: 1}
-	w := New(cfg, tc.db, nil, nil, nil)
+	w := New(cfg, tc.db, nil, nil, nil, nil)
 
 	// Install a test-only process function under the scan job type that blocks
 	// until its context is cancelled. This stands in for a slow, real job
@@ -109,7 +109,7 @@ func TestShutdown_PersistsFailedJobStatus(t *testing.T) {
 	tc := newTestContext(t)
 
 	cfg := &config.Config{WorkerProcesses: 1}
-	w := New(cfg, tc.db, nil, nil, nil)
+	w := New(cfg, tc.db, nil, nil, nil, nil)
 
 	// Handler returns ctx.Err() once cancelled — same shape as a real job
 	// that observes shutdown and bails out.
@@ -169,7 +169,7 @@ func TestShouldSkipCleanup_SkipsAfterShutdown(t *testing.T) {
 
 	dlCache := downloadcache.NewCache(t.TempDir(), 100<<20)
 	cfg := &config.Config{WorkerProcesses: 1}
-	w := New(cfg, tc.db, nil, nil, dlCache)
+	w := New(cfg, tc.db, nil, nil, nil, dlCache)
 
 	// Before shutdown: no active bulk-download jobs exist, so the closure
 	// should allow cleanup (false == "don't skip").

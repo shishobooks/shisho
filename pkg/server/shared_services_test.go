@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
@@ -19,6 +20,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
+	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +35,7 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
 	injectedDir := t.TempDir()
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil,
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil,
 		downloadcache.NewCache(t.TempDir(), 1<<30), cbzpages.NewCache(injectedDir), pdfpages.NewCache(t.TempDir(), 150, 85), nil)
 	require.NoError(t, err)
 	f := &resourceDeleteFixture{t: t, ctx: t.Context(), db: db, handler: srv.Handler, authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())}
@@ -63,6 +65,29 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 		return err
 	}))
 	assert.Empty(t, stray, "nothing is cached under cfg.CacheDir by a cache the route built itself")
+}
+
+// The plugin routes read through the plugin service handed to New, not one
+// the server builds for itself. The injected service points at a second
+// database holding a plugin the server's own database lacks, so the plugin
+// showing up in the installed list proves the route used it.
+func TestListInstalledPlugins_UsesPluginServiceFromServerNew(t *testing.T) {
+	t.Parallel()
+	db := newPermissionTestDB(t)
+	cfg := newPermissionTestConfig(t)
+	otherDB := newPermissionTestDB(t)
+	injected := plugins.NewService(otherDB)
+	require.NoError(t, injected.InstallPlugin(t.Context(), &models.Plugin{
+		Scope: "test", ID: "injected", Name: "Injected", Version: "1.0.0", InstalledAt: time.Now(),
+	}))
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), injected, nil, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+	f := &resourceDeleteFixture{t: t, ctx: t.Context(), db: db, handler: srv.Handler, authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())}
+	f.admin = insertPermissionTestUser(f.ctx, t, db, "admin", models.RoleAdmin, nil)
+
+	body := f.request(http.MethodGet, "/api/plugins/installed", "", http.StatusOK)
+
+	assert.Contains(t, body, `"id":"injected"`, "the installed list comes from the injected plugin service")
 }
 
 // Updating a Book through the real routes recomputes its review state. This

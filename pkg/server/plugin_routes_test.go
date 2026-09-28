@@ -99,7 +99,7 @@ func TestPluginRoutes_Permissions(t *testing.T) {
 	}).Exec(ctx)
 	require.NoError(t, err)
 
-	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	do := func(method, path, body, roleName string) *httptest.ResponseRecorder {

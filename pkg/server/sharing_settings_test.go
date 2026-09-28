@@ -40,7 +40,7 @@ func newSharingSettingsFixture(t *testing.T, demoMode bool) *sharingSettingsFixt
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
 	cfg.DemoMode = demoMode
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	f := &sharingSettingsFixture{

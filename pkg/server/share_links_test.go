@@ -58,7 +58,7 @@ func newShareLinksFixture(t *testing.T) *shareLinksFixture {
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
 	dlCache := downloadcache.NewCache(t.TempDir(), 1<<30)
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil, dlCache, nil, nil, nil)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil, dlCache, nil, nil, nil)
 	require.NoError(t, err)
 
 	f := &shareLinksFixture{
@@ -561,7 +561,7 @@ func TestShareLinks_ManagementRejectedInDemoMode(t *testing.T) {
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
 	cfg.DemoMode = true
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	authSvc := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
 	admin := insertPermissionTestUser(context.Background(), t, db, "admin", models.RoleAdmin, nil)

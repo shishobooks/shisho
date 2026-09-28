@@ -140,6 +140,11 @@ vi.mock("@/hooks/queries/plugins", async () => {
   };
 });
 
+// LanguageCombobox reads the role's Libraries Read permission.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ hasPermission: () => true }),
+}));
+
 vi.mock("@/hooks/queries/entity-search", () => ({
   usePeopleSearch: () => ({ data: [], isLoading: false }),
   useSeriesSearch: () => ({ data: [], isLoading: false }),

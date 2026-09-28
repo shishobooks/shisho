@@ -54,7 +54,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache, logBuffer *logs.RingBuffer) (*http.Server, error) {
+func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugins.Service, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache, logBuffer *logs.RingBuffer) (*http.Server, error) {
 	e := echo.New()
 
 	b, err := binder.New()
@@ -93,8 +93,12 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	// Services and caches that more than one route family uses are built once
 	// and injected. The books service carries app settings so every mutation
 	// through it recomputes Reviewed. See "Shared services" in pkg/AGENTS.md.
-	// Tests may pass nil page caches. Build them from the config, as the
-	// books routes did before they were injected, so page routes still work.
+	// Tests may pass nil page caches and a nil plugin service. Build them
+	// here, as the books routes did before the caches were injected, so page
+	// and plugin routes still work.
+	if pluginService == nil {
+		pluginService = plugins.NewService(db)
+	}
 	if cbzCache == nil {
 		cbzCache = cbzpages.NewCache(cfg.CacheDir)
 	}
@@ -103,7 +107,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	}
 	svcs := sharedServices{
 		appSettings: appsettings.NewService(db),
-		plugins:     plugins.NewService(db),
+		plugins:     pluginService,
 		shareLinks:  sharelinks.NewService(db),
 		dlCache:     dlCache,
 		cbzCache:    cbzCache,
