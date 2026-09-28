@@ -61,6 +61,8 @@ Each control follows the resource its request needs, not the page it appears on.
 
 Lists are independent of these role permissions. Any signed-in user can create a personal list and add books to a list they own or that has been shared with them with editor or manager access, even without Books Write. See [Lists](./lists.md).
 
+A role without Libraries Read cannot see the library list. When such a user opens the home page, Shisho opens one of the libraries in their [library access](#library-access) list if the role has Books Read and the user is limited to specific libraries, and opens **Lists** otherwise.
+
 ## Custom Roles
 
 On **Settings > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role in the **Roles** section to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.

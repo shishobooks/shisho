@@ -22,7 +22,7 @@ func TestServerDoesNotGrantCORS(t *testing.T) {
 	tc := newTestContext(t)
 	cfg := config.NewForTest()
 	cfg.CacheDir = t.TempDir()
-	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	for _, method := range []string{http.MethodGet, http.MethodOptions} {
 		req := httptest.NewRequest(method, "/api/auth/status", nil)
@@ -44,7 +44,7 @@ func TestProxyTrustForLoginAndOPDS(t *testing.T) {
 	svc := auth.NewService(tc.db, cfg.JWTSecret, cfg.SessionDuration())
 	_, err := svc.CreateFirstAdmin(t.Context(), "admin", nil, "test-password-123")
 	require.NoError(t, err)
-	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	for _, test := range []struct {
 		peer, base string
@@ -86,7 +86,7 @@ func TestEventStreamFlushesWithoutGzip(t *testing.T) {
 	token, err := svc.GenerateToken(user)
 	require.NoError(t, err)
 	broker := events.NewBroker()
-	srv, err := New(cfg, tc.db, tc.worker, nil, broker, nil, nil, nil, nil)
+	srv, err := New(cfg, tc.db, tc.worker, nil, nil, broker, nil, nil, nil, nil)
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()

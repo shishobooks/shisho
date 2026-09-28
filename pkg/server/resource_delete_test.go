@@ -41,7 +41,7 @@ func newResourceDeleteFixture(t *testing.T) *resourceDeleteFixture {
 	t.Helper()
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil, downloadcache.NewCache(t.TempDir(), 1<<30), nil, nil, nil)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil, downloadcache.NewCache(t.TempDir(), 1<<30), nil, nil, nil)
 	require.NoError(t, err)
 	f := &resourceDeleteFixture{
 		t:         t,

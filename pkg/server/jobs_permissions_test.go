@@ -51,7 +51,7 @@ func newJobsPermissionFixture(t *testing.T) *jobsPermissionFixture {
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
 	dlCache := downloadcache.NewCache(t.TempDir(), 1<<30)
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil), nil, nil, dlCache, nil, nil, nil)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil, dlCache, nil, nil, nil)
 	require.NoError(t, err)
 
 	f := &jobsPermissionFixture{

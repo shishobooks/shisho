@@ -82,7 +82,9 @@ func main() {
 		log.Info("migrated to new group", logger.Data{"group_id": group.ID, "migration_names": group.Migrations.String()})
 	}
 
-	// Plugin system
+	// Plugin system. The Manager, the worker, and the server share this one
+	// plugin service (see "Shared services" in pkg/AGENTS.md). worker.New and
+	// server.New build their own when handed nil, which only tests should do.
 	pluginService := plugins.NewService(db)
 	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir, cfg.PluginDataDir)
 	if cfg.DemoMode {
@@ -95,9 +97,9 @@ func main() {
 	cbzCache := cbzpages.NewCache(cfg.CacheDir)
 	pdfCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
-	wrkr := worker.New(cfg, db, pluginManager, broker, dlCache)
+	wrkr := worker.New(cfg, db, pluginService, pluginManager, broker, dlCache)
 
-	srv, err := server.New(cfg, db, wrkr, pluginManager, broker, dlCache, cbzCache, pdfCache, logBuffer)
+	srv, err := server.New(cfg, db, wrkr, pluginService, pluginManager, broker, dlCache, cbzCache, pdfCache, logBuffer)
 	if err != nil {
 		log.Err(err).Fatal("server error")
 	}

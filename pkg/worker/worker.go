@@ -89,7 +89,10 @@ type Worker struct {
 	cancel context.CancelFunc
 }
 
-func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
+// New builds the worker. pluginService is the one cmd/api/main.go shares with
+// the plugin Manager and the server; tests may pass nil, and New then builds
+// its own.
+func New(cfg *config.Config, db *bun.DB, pluginService *plugins.Service, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
 	aliasService := aliases.NewService(db)
 	appSettingsService := appsettings.NewService(db)
 	bookService := books.NewService(db).WithAppSettings(appSettingsService)
@@ -103,7 +106,9 @@ func New(cfg *config.Config, db *bun.DB, pm *plugins.Manager, broker *events.Bro
 	searchService := search.NewService(db)
 	seriesService := series.NewService(db)
 	tagService := tags.NewService(db)
-	pluginService := plugins.NewService(db)
+	if pluginService == nil {
+		pluginService = plugins.NewService(db)
+	}
 	fingerprintService := fingerprints.NewService(db)
 
 	ctx, cancel := context.WithCancel(context.Background())

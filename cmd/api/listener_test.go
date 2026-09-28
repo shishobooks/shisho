@@ -17,7 +17,7 @@ func TestListenServer_UsesConfiguredHost(t *testing.T) {
 	cfg.Environment = ""
 	cfg.ServerHost = "127.0.0.1"
 	cfg.ServerPort = 0
-	srv, err := server.New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil)
+	srv, err := server.New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	listener, err := listenServer(t.Context(), srv)

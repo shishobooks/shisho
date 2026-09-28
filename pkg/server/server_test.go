@@ -23,7 +23,7 @@ func TestNew_RoutingBoundary(t *testing.T) {
 	cfg.Environment = ""
 	cfg.CacheDir = t.TempDir()
 	originalNotFound := reflect.ValueOf(echo.NotFoundHandler).Pointer()
-	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, originalNotFound, reflect.ValueOf(echo.NotFoundHandler).Pointer(), "constructing a server must not mutate Echo's global fallback")
 
@@ -75,7 +75,7 @@ func TestNew_ServerAddress(t *testing.T) {
 	cfg.Environment = ""
 	cfg.ServerHost = "::1"
 	cfg.ServerPort = 3689
-	srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "[::1]:3689", srv.Addr)
 }
@@ -91,7 +91,7 @@ func TestNew_DemoModeSession(t *testing.T) {
 
 	for _, demo := range []bool{false, true} {
 		cfg.DemoMode = demo
-		srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil)
+		srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
 		require.NoError(t, err)
 		rec := httptest.NewRecorder()
 		srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/status", nil))
@@ -146,7 +146,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			cfg.DemoMode = demo
 			cfg.Environment = "test"
 			cfg.CacheDir = t.TempDir()
-			srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil)
+			srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 			require.NoError(t, err)
 			e := srv.Handler.(*echo.Echo)
 			routes := make(map[string]bool)
