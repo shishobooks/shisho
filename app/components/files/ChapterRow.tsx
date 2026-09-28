@@ -36,6 +36,7 @@ import {
   type Chapter,
   type FileType,
 } from "@/types";
+import type { PageSourceFile } from "@/utils/pageUrl";
 
 import {
   countDescendants,
@@ -160,7 +161,7 @@ export interface ChapterRowProps {
   libraryId?: number;
   bookId?: number;
   // Page-based (CBZ, PDF)
-  fileId?: number;
+  file?: PageSourceFile;
   pageCount?: number;
   // M4B
   maxDurationMs?: number;
@@ -186,7 +187,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     onStop,
     libraryId,
     bookId,
-    fileId,
+    file,
   } = props;
 
   const children = (chapter.children?.filter(Boolean) as Chapter[]) ?? [];
@@ -436,7 +437,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             <ChapterRow
               chapter={child}
               depth={depth + 1}
-              fileId={fileId}
+              file={file}
               fileType={fileType}
               isEditing={isEditing}
               key={child.id ?? `new-${index}`}
@@ -456,9 +457,9 @@ const ChapterRow = (props: ChapterRowProps) => {
     return (
       <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
         {/* Small thumbnail with hover preview (clickable to open page picker) */}
-        {fileId != null && (
+        {file != null && (
           <PagePreview
-            fileId={fileId}
+            file={file}
             onClick={() => setPagePickerOpen(true)}
             page={currentPage}
             thumbnailSize={60}
@@ -519,11 +520,11 @@ const ChapterRow = (props: ChapterRowProps) => {
         </Button>
 
         {/* Page picker dialog */}
-        {fileId != null && (
+        {file != null && (
           <PagePicker
             currentPage={currentPage}
-            fileId={fileId}
-            key={fileId}
+            file={file}
+            key={file.id}
             onOpenChange={setPagePickerOpen}
             onSelect={handlePageSelect}
             open={pagePickerOpen}
@@ -641,9 +642,9 @@ const ChapterRow = (props: ChapterRowProps) => {
         ) : null}
 
         {/* Page thumbnail with hover preview */}
-        {isPageBased && chapter.start_page != null && fileId != null && (
+        {isPageBased && chapter.start_page != null && file != null && (
           <PagePreview
-            fileId={fileId}
+            file={file}
             page={chapter.start_page}
             thumbnailSize={60}
           />
@@ -653,11 +654,11 @@ const ChapterRow = (props: ChapterRowProps) => {
         {isPageBased &&
         libraryId &&
         bookId &&
-        fileId &&
+        file &&
         chapter.start_page != null ? (
           <Link
             className="flex-1 truncate hover:underline text-primary"
-            to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read?page=${chapter.start_page}`}
+            to={`/libraries/${libraryId}/books/${bookId}/files/${file.id}/read?page=${chapter.start_page}`}
           >
             {chapter.title}
           </Link>
@@ -698,7 +699,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             bookId={bookId}
             chapter={child}
             depth={depth + 1}
-            fileId={fileId}
+            file={file}
             fileType={fileType}
             isEditing={isEditing}
             key={child.id}

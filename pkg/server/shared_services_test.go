@@ -35,7 +35,7 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 	db := newPermissionTestDB(t)
 	cfg := newPermissionTestConfig(t)
 	injectedDir := t.TempDir()
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, nil,
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil,
 		downloadcache.NewCache(t.TempDir(), 1<<30), cbzpages.NewCache(injectedDir), pdfpages.NewCache(t.TempDir(), 150, 85), nil)
 	require.NoError(t, err)
 	f := &resourceDeleteFixture{t: t, ctx: t.Context(), db: db, handler: srv.Handler, authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())}
@@ -80,7 +80,7 @@ func TestListInstalledPlugins_UsesPluginServiceFromServerNew(t *testing.T) {
 	require.NoError(t, injected.InstallPlugin(t.Context(), &models.Plugin{
 		Scope: "test", ID: "injected", Name: "Injected", Version: "1.0.0", InstalledAt: time.Now(),
 	}))
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), injected, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), injected, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	f := &resourceDeleteFixture{t: t, ctx: t.Context(), db: db, handler: srv.Handler, authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())}
 	f.admin = insertPermissionTestUser(f.ctx, t, db, "admin", models.RoleAdmin, nil)

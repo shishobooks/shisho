@@ -97,7 +97,7 @@ func main() {
 	cbzCache := cbzpages.NewCache(cfg.CacheDir)
 	pdfCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
-	wrkr := worker.New(cfg, db, pluginService, pluginManager, broker, dlCache)
+	wrkr := worker.New(cfg, db, pluginService, pluginManager, broker, dlCache, cbzCache, pdfCache)
 
 	srv, err := server.New(cfg, db, wrkr, pluginService, pluginManager, broker, dlCache, cbzCache, pdfCache, logBuffer)
 	if err != nil {

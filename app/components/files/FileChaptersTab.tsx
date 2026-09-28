@@ -34,6 +34,7 @@ import {
   type ChapterInput,
   type File,
 } from "@/types";
+import { filePageUrl } from "@/utils/pageUrl";
 
 export interface FileChaptersTabHandle {
   save: () => void;
@@ -698,7 +699,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               chapter={chapter as unknown as Chapter}
               chapterIndex={isM4b ? index : undefined}
               depth={0}
-              fileId={file.id}
+              file={file}
               fileType={file.file_type}
               isEditing={true}
               key={chapter._editKey}
@@ -903,7 +904,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                 <img
                   alt="Page 1"
                   className="h-[60px] w-auto rounded border border-border object-contain bg-muted"
-                  src={`/api/books/files/${file.id}/page/0`}
+                  src={filePageUrl(file, 0)}
                 />
                 <div className="flex-1 min-w-0">
                   <span className="text-amber-600 dark:text-amber-400 font-medium">
@@ -938,7 +939,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             chapter={chapter}
             chapterIndex={isM4bFile ? index : undefined}
             depth={0}
-            fileId={file.id}
+            file={file}
             fileType={file.file_type}
             isEditing={false}
             key={chapter.id}

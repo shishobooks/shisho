@@ -7,9 +7,10 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/libraries/utils";
+import { filePageUrl, type PageSourceFile } from "@/utils/pageUrl";
 
 export interface PagePreviewProps {
-  fileId: number;
+  file: PageSourceFile;
   /** 0-indexed page number */
   page: number;
   /** Size of the thumbnail in pixels */
@@ -33,7 +34,7 @@ export interface PagePreviewProps {
  * Can wrap custom children or render a default thumbnail.
  */
 const PagePreview = ({
-  fileId,
+  file,
   page,
   thumbnailSize = 60,
   previewSize = 300,
@@ -46,6 +47,17 @@ const PagePreview = ({
   const [hasError, setHasError] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
 
+  const imageUrl = filePageUrl(file, page);
+  // Start over when the URL changes (another page, or a new cache key after
+  // the file was replaced), so an earlier error does not hide the new image.
+  const [shownUrl, setShownUrl] = useState(imageUrl);
+  if (shownUrl !== imageUrl) {
+    setShownUrl(imageUrl);
+    setIsLoading(true);
+    setHasError(false);
+    setPreviewLoading(true);
+  }
+
   const handleLoad = () => {
     setIsLoading(false);
   };
@@ -55,7 +67,6 @@ const PagePreview = ({
     setHasError(true);
   };
 
-  const imageUrl = `/api/books/files/${fileId}/page/${page}`;
   // Display is 1-indexed
   const displayPage = page + 1;
 

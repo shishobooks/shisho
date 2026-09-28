@@ -59,6 +59,7 @@ import {
   type FileRole,
   type ReviewOverride,
 } from "@/types";
+import { filePageUrl } from "@/utils/pageUrl";
 
 interface FileEditDialogProps {
   file: File;
@@ -706,7 +707,7 @@ export function FileEditDialog({
                             <img
                               alt="Pending cover page"
                               className="w-full h-full object-cover"
-                              src={`/api/books/files/${file.id}/page/${pendingCoverPage}`}
+                              src={filePageUrl(file, pendingCoverPage)}
                             />
                           ) : file.cover_mime_type ||
                             file.cover_image_filename ? (
@@ -800,7 +801,7 @@ export function FileEditDialog({
               {isPageBased && file.page_count != null && (
                 <PagePicker
                   currentPage={pendingCoverPage ?? file.cover_page ?? null}
-                  fileId={file.id}
+                  file={file}
                   onOpenChange={setCoverPagePickerOpen}
                   onSelect={handleCoverPageSelect}
                   open={coverPagePickerOpen}

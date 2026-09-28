@@ -207,38 +207,59 @@ func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions, cache *Scan
 }
 
 // fileContentChanged reports whether a file's on-disk content differs from
-// what was last scanned into the DB. It compares size + mtime (truncated to
-// seconds, since SQLite drops sub-second precision). ForceRefresh forces a
-// "changed" result so the caller re-parses metadata; a missing
-// FileModifiedAt on the existing row also forces "changed" since we can't
-// reason about it.
-//
-// Returns an error only if stat fails for a reason other than "not exists".
+// what was last scanned into the DB (see fileStatChanged). ForceRefresh
+// forces a "changed" result so the caller re-parses metadata. A stat failure
+// returns true along with the error.
 func fileContentChanged(path string, existing *models.File, forceRefresh bool) (bool, error) {
 	if forceRefresh {
-		return true, nil
-	}
-	// A file flagged unreadable must always be re-parsed. A failed parse
-	// leaves the stored size/mtime at their last good values, so a repair
-	// that restores both (e.g. cp -p from a backup) would otherwise look
-	// unchanged and the flag would never clear.
-	if existing.ScanError != nil {
-		return true, nil
-	}
-	if existing.FileModifiedAt == nil {
 		return true, nil
 	}
 	stat, err := os.Stat(path)
 	if err != nil {
 		return true, err
 	}
+	return fileStatChanged(stat, existing), nil
+}
+
+// fileStatChanged reports whether stat differs from the size and mtime the
+// last scan stored for existing. Mtime is truncated to seconds, since SQLite
+// drops sub-second precision. A missing FileModifiedAt counts as changed,
+// since we can't reason about it.
+//
+// A file flagged unreadable also counts as changed, so it is always
+// re-parsed. A failed parse leaves the stored size/mtime at their last good
+// values, so a repair that restores both (e.g. cp -p from a backup) would
+// otherwise look unchanged and the flag would never clear.
+func fileStatChanged(stat os.FileInfo, existing *models.File) bool {
+	if existing.ScanError != nil || existing.FileModifiedAt == nil {
+		return true
+	}
 	if stat.Size() != existing.FilesizeBytes {
-		return true, nil
+		return true
 	}
-	if !stat.ModTime().Truncate(time.Second).Equal(existing.FileModifiedAt.Truncate(time.Second)) {
-		return true, nil
+	return !stat.ModTime().Truncate(time.Second).Equal(existing.FileModifiedAt.Truncate(time.Second))
+}
+
+// invalidatePageCaches drops a file's cached CBZ and PDF page images. Both
+// caches are keyed by file ID only, so after the file changes on disk the
+// page endpoint would otherwise keep serving the old file's pages. Removing a
+// directory that does not exist is a no-op, so this does not check the type.
+//
+// A failure is logged, not returned: a cache directory that cannot be cleared
+// must not stop the scan from recording the file's new metadata. The stale
+// renders then stay in the server cache until the next refresh or content
+// change clears them.
+func (w *Worker) invalidatePageCaches(fileID int, logWarn func(msg string, data logger.Data)) {
+	if w.cbzPageCache != nil {
+		if err := w.cbzPageCache.Invalidate(fileID); err != nil {
+			logWarn("failed to invalidate cached CBZ pages", logger.Data{"file_id": fileID, "error": err.Error()})
+		}
 	}
-	return false, nil
+	if w.pdfPageCache != nil {
+		if err := w.pdfPageCache.Invalidate(fileID); err != nil {
+			logWarn("failed to invalidate cached PDF pages", logger.Data{"file_id": fileID, "error": err.Error()})
+		}
+	}
 }
 
 // scanFileByPath handles batch scan mode - discovering or creating file/book records by path.
@@ -261,13 +282,34 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			// UNIQUE(filepath, library_id)). The supplement is already tracked,
 			// so we just need to keep its fingerprint in sync with its content:
 			// if the supplement's bytes changed on disk, drop the stored
-			// fingerprint so the next hash generation job recomputes it.
+			// fingerprint so the next hash generation job recomputes it, and
+			// drop its cached page images, since supplement PDFs and CBZs can
+			// be opened in the reader.
 			if existingFile.FileRole == models.FileRoleSupplement {
-				if changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh); changedErr == nil && changed {
+				stat, statErr := os.Stat(opts.FilePath)
+				if statErr == nil && (opts.ForceRefresh || fileStatChanged(stat, existingFile)) {
 					if w.fingerprintService != nil {
 						if err := w.fingerprintService.DeleteForFile(ctx, existingFile.ID); err != nil {
 							return nil, errors.Wrap(err, "invalidate stale supplement fingerprints")
 						}
+					}
+					w.invalidatePageCaches(existingFile.ID, func(msg string, data logger.Data) {
+						logger.FromContext(ctx).Warn(msg, data)
+						if opts.JobLog != nil {
+							opts.JobLog.Warn(msg, data)
+						}
+					})
+					// Record the new size and mtime. Supplements are created
+					// without an mtime, so without this every scan would count
+					// them as changed and wipe their cached pages again. The
+					// update also bumps updated_at, the page URL's cache key.
+					modTime := stat.ModTime()
+					existingFile.FileModifiedAt = &modTime
+					existingFile.FilesizeBytes = stat.Size()
+					if err := w.bookService.UpdateFile(ctx, existingFile, books.UpdateFileOptions{
+						Columns: []string{"file_modified_at", "filesize_bytes"},
+					}); err != nil {
+						return nil, errors.Wrap(err, "record supplement size and mtime")
 					}
 				}
 				return &ScanResult{File: existingFile}, nil
@@ -508,6 +550,16 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	// If stat returned an error other than NotExist, return it
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to stat file")
+	}
+
+	// Drop the file's cached page images when its content changed, or when a
+	// refresh or reset re-reads it from scratch. This runs before parsing so
+	// enrichers that request pages see the new file. A successful scan below
+	// then bumps updated_at, the cache key the frontend puts on page URLs
+	// (see app/utils/pageUrl.ts), so browsers refetch the pages too. A failed
+	// parse bumps it as well, through recordFileScanError.
+	if opts.ForceRefresh || opts.Reset || fileStatChanged(fileStat, file) {
+		w.invalidatePageCaches(file.ID, logWarn)
 	}
 
 	// Check and recover missing cover if needed
@@ -2787,11 +2839,14 @@ func scanErrorMessage(scanErr error) string {
 
 // recordFileScanError persists a parse failure on the file row so the UI can
 // show that the file is unreadable without digging through job logs.
+//
+// It always writes, even when the message matches the stored one, because
+// the write bumps updated_at, the page URL's cache key. A second unreadable
+// replacement that fails the same way still gets new page URLs. A file that
+// stays unreadable is re-parsed on every scan (see fileStatChanged), so its
+// updated_at moves on each scan too.
 func (w *Worker) recordFileScanError(ctx context.Context, file *models.File, scanErr error, logWarn func(msg string, data logger.Data)) {
 	msg := scanErrorMessage(scanErr)
-	if file.ScanError != nil && *file.ScanError == msg {
-		return
-	}
 	file.ScanError = &msg
 	if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"scan_error"}}); err != nil {
 		logWarn("failed to record file scan error", logger.Data{"file_id": file.ID, "error": err.Error()})

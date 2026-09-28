@@ -97,7 +97,7 @@ The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the re
 
 ### Frontend
 
-**Cover images require URL-based cache busting** — API cover endpoints use `Cache-Control: immutable` so browsers cache forever. Cover URLs must include `?v=${cacheKey}` where `cacheKey` is a backend-computed `cover_cache_key` (for books/series) or `file.updated_at` (for file covers) that only changes when the actual cover changes. See `app/AGENTS.md` for details.
+**Cover and page images require URL-based cache busting.** API cover endpoints and the CBZ/PDF page endpoint use `Cache-Control: immutable` so browsers cache forever. Cover URLs must include `?v=${cacheKey}` where `cacheKey` is a backend-computed `cover_cache_key` (for books/series) or `file.updated_at` (for file covers) that only changes when the actual cover changes. Page URLs must be built with `filePageUrl(file, page)` from `app/utils/pageUrl.ts`, which keys them on `file.updated_at`. See `app/AGENTS.md` for details.
 
 ```tsx
 <img

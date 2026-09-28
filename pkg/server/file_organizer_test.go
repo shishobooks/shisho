@@ -70,7 +70,7 @@ func newTestContext(t *testing.T) *testContext {
 		WorkerProcesses:           1,
 		SupplementExcludePatterns: []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"},
 	}
-	w := worker.New(cfg, db, nil, nil, nil, nil)
+	w := worker.New(cfg, db, nil, nil, nil, nil, nil, nil)
 
 	// Create file organizer
 	fo := &fileOrganizer{

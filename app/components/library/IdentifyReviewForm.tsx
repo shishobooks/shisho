@@ -80,6 +80,7 @@ import {
   formatPageCount,
 } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
+import { filePageUrl } from "@/utils/pageUrl";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
@@ -749,7 +750,7 @@ export function IdentifyReviewForm({
   const newCoverPreviewUrl =
     newCoverUrl ??
     (file && newCoverPage != null
-      ? `/api/books/files/${file.id}/page/${newCoverPage}`
+      ? filePageUrl(file, newCoverPage)
       : undefined);
   const currentCoverUrl = file?.cover_image_filename
     ? `/api/books/files/${file.id}/cover?v=${new Date(file.updated_at).getTime()}`

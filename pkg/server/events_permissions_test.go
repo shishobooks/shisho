@@ -64,7 +64,7 @@ func TestEventStream_LogEntriesRequireConfigRead(t *testing.T) {
 	cfg := newPermissionTestConfig(t)
 	broker := events.NewBroker()
 	logBuffer := logs.NewRingBuffer(100, broker)
-	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil), nil, nil, broker, nil, nil, nil, logBuffer)
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, broker, nil, nil, nil, logBuffer)
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.Handler)
 	t.Cleanup(ts.Close)
