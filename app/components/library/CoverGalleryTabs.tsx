@@ -9,7 +9,6 @@ import {
 import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
-import { getFilename } from "@/utils/format";
 
 interface CoverGalleryTabsProps {
   files: File[];
@@ -183,9 +182,7 @@ function CoverGalleryTabs({
                 {file.label}
               </button>
             </TooltipTrigger>
-            <TooltipContent>
-              {file.name || getFilename(file.filepath)}
-            </TooltipContent>
+            <TooltipContent>{file.display_name}</TooltipContent>
           </Tooltip>
         ))}
       </div>

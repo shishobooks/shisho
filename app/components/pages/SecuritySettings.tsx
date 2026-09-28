@@ -47,6 +47,7 @@ import {
   type APIKey,
   type APIKeyShortURL,
 } from "@/types/generated/apikeys";
+import { copyText } from "@/utils/clipboard";
 import { formatDateTime } from "@/utils/format";
 
 const SecuritySettings = () => {
@@ -448,11 +449,14 @@ function EReaderSetupDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (shortUrl) {
       const url = `${window.location.origin}/e/${shortUrl.shortCode}`;
-      navigator.clipboard.writeText(url);
-      toast.success("Copied to clipboard");
+      if (await copyText(url)) {
+        toast.success("Copied to clipboard");
+      } else {
+        toast.error("Could not copy the URL");
+      }
     }
   };
 
@@ -476,7 +480,11 @@ function EReaderSetupDialog({
                 readOnly
                 value={`${window.location.origin}/e/${shortUrl.shortCode}`}
               />
-              <Button onClick={handleCopy} variant="outline">
+              <Button
+                aria-label="Copy setup URL"
+                onClick={handleCopy}
+                variant="outline"
+              >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
@@ -724,9 +732,12 @@ function KoboSetupDialog({
 
   const syncURL = buildSyncURL();
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(syncURL);
-    toast.success("Copied to clipboard");
+  const handleCopy = async () => {
+    if (await copyText(syncURL)) {
+      toast.success("Copied to clipboard");
+    } else {
+      toast.error("Could not copy the URL");
+    }
   };
 
   return (
@@ -821,7 +832,12 @@ function KoboSetupDialog({
             <Label>API Endpoint URL</Label>
             <div className="flex gap-2">
               <Input className="font-mono text-xs" readOnly value={syncURL} />
-              <Button onClick={handleCopy} size="sm" variant="outline">
+              <Button
+                aria-label="Copy sync URL"
+                onClick={handleCopy}
+                size="sm"
+                variant="outline"
+              >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>

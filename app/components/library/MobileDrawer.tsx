@@ -55,7 +55,11 @@ const MobileDrawer = () => {
   const { isOpen, close } = useMobileNav();
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
-  const librariesQuery = useLibraries({});
+  // A role without Libraries Read cannot list libraries; hide the picker
+  // rather than show "Select Library" over nothing. Lists keep their own
+  // nav item below.
+  const canReadLibraries = hasPermission("libraries", "read");
+  const librariesQuery = useLibraries({}, { enabled: canReadLibraries });
   const libraries = librariesQuery.data?.items || [];
   const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
@@ -177,7 +181,7 @@ const MobileDrawer = () => {
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
           {/* Library/List Picker */}
-          {(libraries.length > 0 || lists.length > 0) && (
+          {canReadLibraries && (libraries.length > 0 || lists.length > 0) && (
             <div className="border-b border-border">
               <button
                 className="flex items-center justify-between w-full px-4 py-3.5 text-left hover:bg-muted transition-colors"

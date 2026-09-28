@@ -7,7 +7,7 @@ import PaginationFooter from "@/components/library/PaginationFooter";
 import { Badge } from "@/components/ui/badge";
 import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
-import { formatDuration, getFilename } from "@/utils/format";
+import { formatDuration } from "@/utils/format";
 
 export const FILE_LIST_ITEMS_PER_PAGE = 50;
 
@@ -134,7 +134,7 @@ export function FileListSection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate">
-                {file.name || getFilename(file.filepath)}
+                {file.display_name}
               </p>
               <p className="text-xs text-muted-foreground truncate">
                 {fileSubtitle(file)}

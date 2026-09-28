@@ -29,6 +29,7 @@ const book: Book = {
       created_at: "2024-01-01T00:00:00Z",
       updated_at: "2024-01-01T00:00:00Z",
       filepath: "/library/book.epub",
+      display_name: "book.epub",
       file_type: "epub",
       file_role: "main",
       filesize_bytes: 100,

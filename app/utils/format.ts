@@ -12,6 +12,14 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 /**
+ * Formats a page count with the right plural.
+ * @example formatPageCount(1) // "1 page"
+ * @example formatPageCount(12) // "12 pages"
+ */
+export const formatPageCount = (count: number): string =>
+  `${count} ${count === 1 ? "page" : "pages"}`;
+
+/**
  * Formats seconds into a human-readable duration string.
  * @example formatDuration(3661) // "1h 1m"
  */

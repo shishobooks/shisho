@@ -18,6 +18,7 @@ import {
   formatDuration,
   formatFileSize,
   formatIdentifierType,
+  formatPageCount,
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
@@ -101,7 +102,9 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
           file.page_count != null && (
             <div>
               <p className="font-semibold">Page Count</p>
-              <p className="text-muted-foreground">{file.page_count} pages</p>
+              <p className="text-muted-foreground">
+                {formatPageCount(file.page_count)}
+              </p>
             </div>
           )}
 
@@ -151,11 +154,7 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
         <div>
           <p className="font-semibold">Abridged</p>
           <p className="text-muted-foreground">
-            {file.abridged == null
-              ? "Unknown"
-              : file.abridged
-                ? "Abridged"
-                : "Unabridged"}
+            {file.abridged == null ? "Unknown" : file.abridged ? "Yes" : "No"}
           </p>
         </div>
       </div>

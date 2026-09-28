@@ -1,6 +1,8 @@
 package models
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -82,6 +84,45 @@ type File struct {
 	ReviewOverriddenAt       *time.Time        `json:"review_overridden_at"`
 	Reviewed                 *bool             `json:"reviewed"`
 	IsPreferredCover         bool              `bun:",default:false" json:"is_preferred_cover"`
+	// DisplayName is the label the UI shows for the file. It is not stored:
+	// MarshalJSON fills it from ResolveDisplayName, so every response that
+	// carries a file carries it. Set it directly only when the source fields
+	// are about to be blanked (the Share Link payload clears Filepath).
+	DisplayName string `bun:"-" json:"display_name"`
+}
+
+// ResolveDisplayName returns the label for the file. A main file shows its
+// name (the edition title), falling back to the filename. A supplement shows
+// its filename unless the user set a name by hand: the scanner stores the
+// filename stem as the name when it first sees a supplement, and that stored
+// value goes stale when the book is renamed or reorganized.
+func (f *File) ResolveDisplayName() string {
+	if f.Name != nil && *f.Name != "" {
+		manual := f.NameSource != nil && *f.NameSource == DataSourceManual
+		if f.FileRole != FileRoleSupplement || manual {
+			return *f.Name
+		}
+	}
+	if f.Filepath == "" {
+		return ""
+	}
+	return filepath.Base(f.Filepath)
+}
+
+// fileJSON has File's fields and none of its methods, so MarshalJSON can
+// hand it to encoding/json without recursing.
+type fileJSON File
+
+// MarshalJSON adds display_name to the file's JSON. It has a pointer
+// receiver because files are always serialized through pointers
+// ([]*File, *File). Do not embed File by value in a response struct: the
+// promoted method would replace the outer struct's JSON.
+func (f *File) MarshalJSON() ([]byte, error) {
+	out := fileJSON(*f)
+	if out.DisplayName == "" {
+		out.DisplayName = f.ResolveDisplayName()
+	}
+	return json.Marshal(&out)
 }
 
 func (f *File) CoverExtension() string {

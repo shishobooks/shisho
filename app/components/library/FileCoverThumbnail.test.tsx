@@ -13,6 +13,7 @@ function makeFile(overrides: Partial<File> = {}): File {
     library_id: 1,
     book_id: 1,
     filepath: "/library/book.epub",
+    display_name: "book.epub",
     file_type: "epub",
     file_role: "main",
     filesize_bytes: 1000,

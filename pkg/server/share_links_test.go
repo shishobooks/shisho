@@ -420,6 +420,11 @@ func TestShareLinks_RecipientFetchesBookWithoutPaths(t *testing.T) {
 	for _, file := range shared.Files {
 		assert.Empty(t, file.Filepath)
 		assert.Nil(t, file.CoverImageFilename)
+		if file.FileRole == models.FileRoleSupplement {
+			assert.Equal(t, "notes.pdf", file.DisplayName, "supplements show their filename without the path")
+		} else {
+			assert.NotEmpty(t, file.DisplayName)
+		}
 	}
 	assert.Empty(t, shared.Filepath)
 	assert.Nil(t, shared.Library)

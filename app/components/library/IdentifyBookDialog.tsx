@@ -278,7 +278,7 @@ export function IdentifyBookDialog({
                           {file.file_type.toUpperCase()}
                         </Badge>
                         <span className="text-sm truncate min-w-0">
-                          {file.name || getFilename(file.filepath)}
+                          {file.display_name}
                         </span>
                       </div>
                       <div className="flex items-center gap-x-2 mt-1 text-xs text-muted-foreground">

@@ -228,7 +228,7 @@ describe("BookDetailBody in Share Link context", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBody({ shareLink });
 
-    await user.click(screen.getByRole("button", { expanded: false }));
+    await user.click(screen.getByRole("button", { name: "Show file details" }));
     expect(screen.getByText("Tor Books").closest("a")).toBeNull();
   });
 
@@ -296,7 +296,7 @@ describe("BookDetailBody in Share Link context", () => {
       shareLink,
     });
 
-    await user.click(screen.getByRole("button", { expanded: false }));
+    await user.click(screen.getByRole("button", { name: "Show file details" }));
     expect(screen.getByText("Tor Books")).toBeInTheDocument();
     expect(screen.getByText("Released")).toBeInTheDocument();
     expect(screen.getByText("Language")).toBeInTheDocument();
@@ -322,7 +322,7 @@ describe("BookDetailBody in Share Link context", () => {
     });
 
     expect(
-      screen.queryByRole("button", { expanded: false }),
+      screen.queryByRole("button", { name: "Show file details" }),
     ).not.toBeInTheDocument();
   });
 
@@ -530,5 +530,79 @@ describe("BookDetailBody Share entry", () => {
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
     ).toEqual({ canCreate: false, canList: true, requireExpiration: false });
+  });
+});
+
+describe("BookDetailBody file rows", () => {
+  it("names the details toggle and reports its state", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody();
+
+    const toggle = screen.getByRole("button", { name: "Show file details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "Hide file details" }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("says Yes for an abridged file instead of repeating the label", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({ book: { ...book, files: [{ ...epub, abridged: true }] } });
+
+    await user.click(screen.getByRole("button", { name: "Show file details" }));
+    const label = screen.getByText("Abridged");
+    expect(label.nextElementSibling).toHaveTextContent("Yes");
+  });
+
+  it("says No for an unabridged audiobook", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({ book: { ...book, files: [{ ...m4b, abridged: false }] } });
+
+    await user.click(screen.getByRole("button", { name: "Show file details" }));
+    const label = screen.getByText("Abridged");
+    expect(label.nextElementSibling).toHaveTextContent("No");
+  });
+
+  it("uses the singular for a one-page file", () => {
+    renderBody({
+      book: { ...book, files: [{ ...epub, file_type: "cbz", page_count: 1 }] },
+    });
+
+    expect(screen.getAllByText("1 page").length).toBeGreaterThan(0);
+    expect(screen.queryByText("1 pages")).not.toBeInTheDocument();
+  });
+});
+
+describe("BookDetailBody supplement names", () => {
+  const supplement = {
+    ...timestamps,
+    id: 44,
+    book_id: 7,
+    library_id: 1,
+    file_type: "pdf",
+    file_role: "supplement",
+    filepath: "/lib/The Lighthouse Keeper/The Lighthouse Keeper.pdf",
+    filesize_bytes: 500,
+    name: "Original Title",
+    display_name: "The Lighthouse Keeper.pdf",
+  } as unknown as File;
+
+  it("labels a supplement with the server's display name, not its stale stored name", () => {
+    renderBody({ book: { ...book, files: [epub, supplement] } });
+
+    expect(screen.getByText("The Lighthouse Keeper.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Original Title")).not.toBeInTheDocument();
+  });
+
+  it("uses the display name in the Share Link view, where the path is blank", () => {
+    renderBody({
+      book: { ...book, files: [epub, { ...supplement, filepath: "" }] },
+      shareLink,
+    });
+
+    expect(screen.getByText("The Lighthouse Keeper.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Original Title")).not.toBeInTheDocument();
   });
 });
