@@ -104,6 +104,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 	svcs := sharedServices{
 		appSettings: appsettings.NewService(db),
 		plugins:     plugins.NewService(db),
+		shareLinks:  sharelinks.NewService(db),
 		dlCache:     dlCache,
 		cbzCache:    cbzCache,
 		pdfCache:    pdfCache,
@@ -137,7 +138,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 
 		// Register the anonymous Share Link recipient routes
-		sharelinks.RegisterPublicRoutes(api, db, svcs.books, svcs.dlCache)
+		sharelinks.RegisterPublicRoutes(api, svcs.shareLinks, svcs.books, svcs.dlCache)
 	}
 
 	// Config routes (require authentication)
@@ -199,9 +200,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 }
 
 // sharedServices holds the services and caches that pkg/server builds once
-// and injects into every route family that needs them. The app settings and
-// plugin services hold only the database handle but are shared so each has
-// one construction site. Other database-only services (search, aliases,
+// and injects into every route family that needs them. The app settings,
+// plugin, and Share Link services hold only the database handle but are
+// shared so each has one construction site. Other database-only services (search, aliases,
 // libraries, jobs, settings, API keys, and the entity services) are cheap
 // and stateless, so route packages may still build those locally.
 type sharedServices struct {
@@ -212,9 +213,12 @@ type sharedServices struct {
 	books       *books.Service
 	appSettings *appsettings.Service
 	plugins     *plugins.Service
-	dlCache     *downloadcache.Cache
-	cbzCache    *cbzpages.Cache
-	pdfCache    *pdfpages.Cache
+	// shareLinks backs both the management routes and the public recipient
+	// routes, so one instance serves both families.
+	shareLinks *sharelinks.Service
+	dlCache    *downloadcache.Cache
+	cbzCache   *cbzpages.Cache
+	pdfCache   *pdfpages.Cache
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
@@ -227,7 +231,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, bookService, svcs.cbzCache, svcs.pdfCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
-	sharelinks.RegisterBookRoutes(booksGroup, db, authMiddleware, svcs.appSettings)
+	sharelinks.RegisterBookRoutes(booksGroup, authMiddleware, svcs.shareLinks, svcs.appSettings)
 
 	// Libraries routes
 	librariesGroup := e.Group("/libraries")

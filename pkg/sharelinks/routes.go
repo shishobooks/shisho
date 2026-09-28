@@ -7,7 +7,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers the sharing settings endpoints under /settings.
@@ -32,8 +31,8 @@ func RegisterRoutes(api *echo.Group, authMiddleware *auth.Middleware, appSetting
 // RegisterBookRoutes registers the management routes on the books group,
 // which already requires authentication and Books Read. Each route checks
 // its shares operation here and the book's library access in the handler.
-func RegisterBookRoutes(booksGroup *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, appSettingsService *appsettings.Service) {
-	h := &handler{service: NewService(db), appSettingsService: appSettingsService}
+func RegisterBookRoutes(booksGroup *echo.Group, authMiddleware *auth.Middleware, shareLinkService *Service, appSettingsService *appsettings.Service) {
+	h := &handler{service: shareLinkService, appSettingsService: appSettingsService}
 	// Shares Write also lists, so a sharer can always copy the links they make.
 	booksGroup.GET("/:id/share-links", h.list, authMiddleware.RequireAnyPermission(
 		auth.Permission{Resource: models.ResourceShares, Operation: models.OperationRead},
@@ -46,9 +45,9 @@ func RegisterBookRoutes(booksGroup *echo.Group, db *bun.DB, authMiddleware *auth
 
 // RegisterPublicRoutes registers the unauthenticated recipient family under
 // /share/:token. The server skips it in Demo Mode.
-func RegisterPublicRoutes(api *echo.Group, db *bun.DB, bookService *books.Service, dlCache *downloadcache.Cache) {
+func RegisterPublicRoutes(api *echo.Group, shareLinkService *Service, bookService *books.Service, dlCache *downloadcache.Cache) {
 	h := &publicHandler{
-		service:            NewService(db),
+		service:            shareLinkService,
 		bookService:        bookService,
 		appSettingsService: bookService.AppSettings(),
 		downloadCache:      dlCache,
