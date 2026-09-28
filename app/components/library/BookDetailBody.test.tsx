@@ -13,7 +13,7 @@ import {
   vi,
 } from "vitest";
 
-import type { Book, File } from "@/types";
+import type { Book, File, SharingSettingsResponse } from "@/types";
 
 import BookDetailBody, { type ShareLinkContext } from "./BookDetailBody";
 
@@ -47,7 +47,8 @@ vi.mock("@/hooks/useAuth", () => ({
 }));
 
 const sharing = vi.hoisted(() => ({
-  settings: { enabled: false, require_expiration: false },
+  settings: { enabled: false, require_expiration: false } as
+    SharingSettingsResponse | undefined,
   options: [] as Array<{ enabled?: boolean } | undefined>,
 }));
 
@@ -64,6 +65,8 @@ vi.mock("@/components/library/ShareLinkDialog", () => ({
     canWrite: boolean;
     canList: boolean;
     requireExpiration: boolean;
+    sharingEnabled: boolean;
+    canManageSharing: boolean;
   }) =>
     props.open ? (
       <div data-testid="share-dialog">
@@ -71,6 +74,8 @@ vi.mock("@/components/library/ShareLinkDialog", () => ({
           canWrite: props.canWrite,
           canList: props.canList,
           requireExpiration: props.requireExpiration,
+          sharingEnabled: props.sharingEnabled,
+          canManageSharing: props.canManageSharing,
         })}
       </div>
     ) : null,
@@ -428,12 +433,13 @@ describe("BookDetailBody without Share Link context", () => {
     ).toEqual([
       "Edit",
       "Add to list",
+      "Share",
       "Rescan book",
       "Identify book",
       "Merge into another book",
       "Delete book",
     ]);
-    expect(within(menu).getAllByRole("separator")).toHaveLength(3);
+    expect(within(menu).getAllByRole("separator")).toHaveLength(4);
   });
 });
 
@@ -469,8 +475,28 @@ describe("BookDetailBody Share entry", () => {
     expect(await menuItems()).toEqual(["Add to list", "Share"]);
   });
 
-  it("hides Share when sharing is disabled", () => {
+  it("offers Share while sharing is disabled so links can be revoked", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    renderBody();
+
+    expect(await menuItems()).toEqual(["Add to list", "Share"]);
+    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
+    ).toEqual({
+      canWrite: true,
+      canList: true,
+      requireExpiration: false,
+      sharingEnabled: false,
+      canManageSharing: false,
+    });
+  });
+
+  it("hides Share until the sharing settings have loaded", () => {
+    auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    sharing.settings = undefined;
     renderBody();
 
     expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
@@ -488,8 +514,9 @@ describe("BookDetailBody Share entry", () => {
     expect(screen.queryByText("Share")).not.toBeInTheDocument();
   });
 
-  it("opens the dialog with the form for Shares Write and the policy", async () => {
+  it("opens the dialog with the form, the policy, and the settings link for Config Write", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    auth.permissions = new Set([...ALL_PERMISSIONS, "config:write"]);
     sharing.settings = { enabled: true, require_expiration: true };
     renderBody();
 
@@ -498,7 +525,13 @@ describe("BookDetailBody Share entry", () => {
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
-    ).toEqual({ canWrite: true, canList: true, requireExpiration: true });
+    ).toEqual({
+      canWrite: true,
+      canList: true,
+      requireExpiration: true,
+      sharingEnabled: true,
+      canManageSharing: true,
+    });
   });
 
   it("offers Share with the form and the list for Shares Write without Shares Read", async () => {
@@ -515,7 +548,13 @@ describe("BookDetailBody Share entry", () => {
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
-    ).toEqual({ canWrite: true, canList: true, requireExpiration: false });
+    ).toEqual({
+      canWrite: true,
+      canList: true,
+      requireExpiration: false,
+      sharingEnabled: true,
+      canManageSharing: false,
+    });
   });
 
   it("opens the dialog without the form for Shares Read only", async () => {
@@ -529,7 +568,13 @@ describe("BookDetailBody Share entry", () => {
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
-    ).toEqual({ canWrite: false, canList: true, requireExpiration: false });
+    ).toEqual({
+      canWrite: false,
+      canList: true,
+      requireExpiration: false,
+      sharingEnabled: true,
+      canManageSharing: false,
+    });
   });
 });
 

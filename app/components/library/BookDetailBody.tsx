@@ -732,7 +732,12 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     enabled:
       !isShareLink && (canListShares || hasPermission(ResourceConfig, "read")),
   });
-  const canShare = canListShares && sharingSettings?.enabled === true;
+  // Share stays offered while sharing is off: no link works then, but a
+  // sharer can still revoke or delete one without an admin turning sharing
+  // back on. The dialog explains the state and hides the new-link form, so it
+  // waits for the settings rather than guessing the policy.
+  const canShare = canListShares && sharingSettings !== undefined;
+  const sharingEnabled = sharingSettings?.enabled === true;
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes({
     enabled: !isShareLink,
   });
@@ -1726,10 +1731,12 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
           bookId={book.id}
           bookTitle={book.title}
           canList={canListShares}
+          canManageSharing={canWrite(ResourceConfig)}
           canWrite={canWriteShares}
           onOpenChange={setShareDialogOpen}
           open={shareDialogOpen}
           requireExpiration={sharingSettings?.require_expiration ?? false}
+          sharingEnabled={sharingEnabled}
         />
       )}
 

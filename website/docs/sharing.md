@@ -10,7 +10,7 @@ Share Links are off on a new server. They are controlled from **Settings > Shari
 Anyone who holds a Share Link can open the shared book and download its files, whether or not they have an account. The link only works if the recipient can reach this server, so a server that is only available on your local network or through a VPN cannot be reached by recipients outside it. Decide which roles may create links, and whether links must expire, before you turn sharing on.
 :::
 
-- **Enable Share Links** allows users with the Shares permission to create links. Turning it off stops every existing link from working but deletes none of them, so turning it back on restores them.
+- **Enable Share Links** allows users with the Shares permission to create links. Turning it off stops every existing link from working but deletes none of them, so turning it back on restores them. Links can still be revoked and deleted while it is off, so you never have to turn sharing back on just to pull one link.
 - **Require expiration** makes every new link expire. When it is off, users can also create links that never expire.
 
 ## Who Can Share
@@ -24,9 +24,9 @@ Both also require access to the book's library. To let other users share books, 
 
 ## Creating a Link
 
-With sharing turned on, users with Shares Read or Shares Write see a **Share** entry in a book's action menu (the **⋮** button next to the title). It appears even for users who cannot edit the book. Choosing it opens the Share dialog.
+Users with Shares Read or Shares Write see a **Share** entry in a book's action menu (the **⋮** button next to the title). It appears even for users who cannot edit the book. Choosing it opens the Share dialog.
 
-Users with Shares Write see a form at the top of the dialog:
+With sharing turned on, users with Shares Write see a form at the top of the dialog:
 
 - **Label** is optional and only visible to you and other sharers. Use it to tell links apart, for example "for Alice".
 - **Expires after** offers 1 day, 7 days (the default), and 30 days. **Never** is offered last unless the admin has turned on **Require expiration**. An expiration is fixed when the link is created and cannot be extended later; create a new link instead.
@@ -52,7 +52,7 @@ Users with Shares Write can act on any link on the book, including links other u
 
 Expired links stay in the list, marked as expired, until someone deletes them. Shisho never removes them on its own.
 
-Revoking and deleting are not available while sharing is turned off.
+While sharing is turned off, the dialog says so instead of showing the form (with a link to **Settings > Sharing** for users who can change it), and no link can be copied, but links can still be revoked and deleted. A link revoked or deleted then stays that way when sharing is turned back on.
 
 ## When a Link Stops Working
 
