@@ -169,7 +169,7 @@ end-to-end through tygo) and #384 (remaining type-boundary stragglers).
   relations `tstype:"-"`. A future reshape of a model relation must check for
   object consumers before excluding it.
 - The convention must be enforced to avoid re-eroding. The root and
-  subdirectory `CLAUDE.md` files will document the rule (no anonymous responses,
+  subdirectory `AGENTS.md` files will document the rule (no anonymous responses,
   no manual TS duplicates, `tstype` on enum fields, embed-with-extends for
   responses) so reviewers can treat violations as review failures.
 - Some responses legitimately have no body. Endpoints that return a cosmetic

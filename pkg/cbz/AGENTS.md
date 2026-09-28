@@ -278,7 +278,7 @@ Priority 3: Filepath
 
 ## KePub Conversion
 
-CBZ files can be converted to fixed-layout KePub for Kobo devices. See `pkg/kepub/CLAUDE.md` for details.
+CBZ files can be converted to fixed-layout KePub for Kobo devices. See `pkg/kepub/AGENTS.md` for details.
 
 **Quick Reference:**
 - Converts to fixed-layout EPUB with `rendition:layout="pre-paginated"`

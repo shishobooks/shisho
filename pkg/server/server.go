@@ -92,7 +92,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 
 	// Services and caches that more than one route family uses are built once
 	// and injected. The books service carries app settings so every mutation
-	// through it recomputes Reviewed. See "Shared services" in pkg/CLAUDE.md.
+	// through it recomputes Reviewed. See "Shared services" in pkg/AGENTS.md.
 	// Tests may pass nil page caches. Build them from the config, as the
 	// books routes did before they were injected, so page routes still work.
 	if cbzCache == nil {

@@ -99,7 +99,7 @@ Do not publish:
 - Database schemas, package layout, migration details, or test implementation
 - Unsupported endpoints, private APIs, or incidental implementation behavior
 - Changelog-style narration of how a feature evolved
-- Links to any `CLAUDE.md` as user documentation
+- Links to any `AGENTS.md` as user documentation
 
 Link to an external technical source only when it is part of a supported contract or necessary context. Never send users to internal package notes for product guidance.
 
@@ -165,7 +165,7 @@ Only correct a versioned page when it was factually wrong for that release, and 
 
 ## Adding or Changing Documentation
 
-1. Read this file, the root `CLAUDE.md`, the canonical owner page, and related pages completely.
+1. Read this file, the root `AGENTS.md`, the canonical owner page, and related pages completely.
 2. Confirm the inclusion test and identify the primary audience and task.
 3. Search current docs for duplicate claims, inbound links, exact UI text, and established URLs.
 4. Verify behavior against shipped code and tests when the existing docs are insufficient.

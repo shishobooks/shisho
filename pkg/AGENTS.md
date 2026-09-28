@@ -123,11 +123,11 @@ When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if
 ### File Types
 
 - To learn more about all the file types that we support, refer to:
-  - EPUB: `pkg/epub/CLAUDE.md`
-  - CBZ: `pkg/cbz/CLAUDE.md`
-  - M4B: `pkg/mp4/CLAUDE.md`
-  - PDF: `pkg/pdf/CLAUDE.md`
-  - KePub: `pkg/kepub/CLAUDE.md`
+  - EPUB: `pkg/epub/AGENTS.md`
+  - CBZ: `pkg/cbz/AGENTS.md`
+  - M4B: `pkg/mp4/AGENTS.md`
+  - PDF: `pkg/pdf/AGENTS.md`
+  - KePub: `pkg/kepub/AGENTS.md`
 
 ### Cover Image System
 
@@ -437,7 +437,7 @@ Check existing queries in `pkg/books/service.go` for reference. Common aliases: 
 
 ### Sidecars
 
-- **Series number groups are atomic:** `series_number`, `series_number_end`, and `series_number_unit` must always come from one metadata source. Copy, merge, clear, validate, and sidecar-overlay all three together. An end requires a finite start, both endpoints must be finite, and external ranges require end greater than start. Malformed external groups (hook results, sidecars) are discarded as a whole; the Identify apply endpoint instead rejects them as a validation error in both the array and scalar shapes (see `pkg/plugins/CLAUDE.md`).
+- **Series number groups are atomic:** `series_number`, `series_number_end`, and `series_number_unit` must always come from one metadata source. Copy, merge, clear, validate, and sidecar-overlay all three together. An end requires a finite start, both endpoints must be finite, and external ranges require end greater than start. Malformed external groups (hook results, sidecars) are discarded as a whole; the Identify apply endpoint instead rejects them as a validation error in both the array and scalar shapes (see `pkg/plugins/AGENTS.md`).
 - Sidecar metadata files kept for every file parsed into the system
 - Don't store non-modifiable intrinsic properties (e.g., bitrate, duration)
 - Source fields (e.g., title_source, name_source) shouldn't be saved into the sidecar

@@ -246,7 +246,7 @@ func (g *PDFGenerator) buildProperties(book *models.Book, file *models.File) map
 	props := make(map[string]string)
 
 	// Title — prefer file.Name over book.Title per the file-level vs
-	// book-level convention in pkg/CLAUDE.md, matching the M4B generator.
+	// book-level convention in pkg/AGENTS.md, matching the M4B generator.
 	title := book.Title
 	if file != nil && file.Name != nil && *file.Name != "" {
 		title = *file.Name
