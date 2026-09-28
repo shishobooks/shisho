@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
@@ -17,6 +18,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
@@ -66,6 +68,11 @@ type Worker struct {
 
 	broker        *events.Broker
 	downloadCache *downloadcache.Cache
+	// cbzPageCache and pdfPageCache are the page image caches the server's
+	// page endpoint reads through. The scan drops a file's cached pages when
+	// its content changes, so both must be the instances the server holds.
+	cbzPageCache *cbzpages.Cache
+	pdfPageCache *pdfpages.Cache
 
 	monitor *Monitor
 
@@ -91,8 +98,9 @@ type Worker struct {
 
 // New builds the worker. pluginService is the one cmd/api/main.go shares with
 // the plugin Manager and the server; tests may pass nil, and New then builds
-// its own.
-func New(cfg *config.Config, db *bun.DB, pluginService *plugins.Service, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache) *Worker {
+// its own. cbzCache and pdfCache must be the page caches the server holds,
+// because the scan drops a changed file's cached pages from them.
+func New(cfg *config.Config, db *bun.DB, pluginService *plugins.Service, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) *Worker {
 	aliasService := aliases.NewService(db)
 	appSettingsService := appsettings.NewService(db)
 	bookService := books.NewService(db).WithAppSettings(appSettingsService)
@@ -139,6 +147,8 @@ func New(cfg *config.Config, db *bun.DB, pluginService *plugins.Service, pm *plu
 		pluginManager:      pm,
 		broker:             broker,
 		downloadCache:      dlCache,
+		cbzPageCache:       cbzCache,
+		pdfPageCache:       pdfCache,
 
 		queue:           make(chan *models.Job, cfg.WorkerProcesses),
 		shutdown:        make(chan struct{}),

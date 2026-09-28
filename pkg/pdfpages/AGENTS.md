@@ -44,6 +44,12 @@ func (c *Cache) SizeBytes() (int64, int, error)
 func (c *Cache) Clear() error
 ```
 
+## Invalidation
+
+The cache is keyed by file ID and page only, so it does not notice when a file is replaced on disk. The scan calls `Invalidate` (through `invalidatePageCaches` in `pkg/worker/scan_unified.go`) for both this cache and `cbzpages` when a file's size or mtime changed, or on a refresh or reset. This covers supplements too, since they can be opened in the reader. A failed invalidation is logged as a warning and the scan continues. The worker gets these instances from `cmd/api/main.go`, the same ones `server.New` receives. The frontend keys page URLs on `file.updated_at`, which the same scan bumps.
+
+`Invalidate` is a plain `os.RemoveAll`, so it has the same race with an in-flight `GetPage` as `Clear()` above: that request can fail once with `ENOENT`, and a render that opened the old file before the swap can write one old page back after the invalidation. The window is a single page render, so it is accepted rather than locked.
+
 ## Relationship to cbzpages
 
 This package mirrors the same pattern as `pkg/cbzpages`: a `Cache` struct with `NewCache`, `GetPage`, and `Invalidate`. The difference is that CBZ pages are extracted directly from the ZIP archive (no rendering needed), while PDF pages must be rendered via go-pdfium WASM.

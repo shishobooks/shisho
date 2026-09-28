@@ -16,9 +16,10 @@ import {
 import { FormDialog } from "@/components/ui/form-dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/libraries/utils";
+import { filePageUrl, type PageSourceFile } from "@/utils/pageUrl";
 
 export interface PagePickerProps {
-  fileId: number;
+  file: PageSourceFile;
   pageCount: number;
   currentPage: number | null;
   onSelect: (page: number) => void;
@@ -32,7 +33,7 @@ export interface PagePickerProps {
  * Shows a large preview of the focused page with a scrollable thumbnail strip below.
  */
 const PagePicker = ({
-  fileId,
+  file,
   pageCount,
   currentPage,
   onSelect,
@@ -251,7 +252,7 @@ const PagePicker = ({
                 setLoadedPage(focusedPage);
                 if (!previewLoaded) setPreviewLoaded(true);
               }}
-              src={`/api/books/files/${fileId}/page/${focusedPage}`}
+              src={filePageUrl(file, focusedPage)}
             />
           </div>
         </div>
@@ -304,7 +305,7 @@ const PagePicker = ({
                         alt={`Page ${page + 1}`}
                         className="w-full h-full object-contain"
                         loading="lazy"
-                        src={`/api/books/files/${fileId}/page/${page}`}
+                        src={filePageUrl(file, page)}
                       />
                     ) : (
                       <div className="w-full h-full bg-muted animate-pulse" />

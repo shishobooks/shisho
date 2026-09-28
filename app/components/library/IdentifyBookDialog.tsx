@@ -35,6 +35,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
+import { filePageUrl, type PageSourceFile } from "@/utils/pageUrl";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import { computeIdentifyEmptyState, pickInitialFile } from "./identify-utils";
@@ -475,7 +476,7 @@ export function IdentifyBookDialog({
                             coverPage={result.cover_page}
                             coverUrl={result.cover_url}
                             isAudiobook={isAudiobook}
-                            previewFileId={selectedFileId ?? selectedFile?.id}
+                            previewFile={selectedFile}
                             previewFileType={selectedFileType}
                             previewPageCount={selectedFile?.page_count}
                           />
@@ -746,23 +747,27 @@ function ResultCoverThumbnail({
   coverUrl,
   coverPage,
   isAudiobook,
-  previewFileId,
+  previewFile,
   previewFileType,
   previewPageCount,
 }: {
   coverUrl?: string;
   coverPage?: number | null;
   isAudiobook: boolean;
-  previewFileId?: number;
+  previewFile?: PageSourceFile;
   previewFileType?: string;
   previewPageCount?: number | null;
 }) {
   const [imgError, setImgError] = useState(false);
+  const pageUrl =
+    previewFile && coverPage != null
+      ? filePageUrl(previewFile, coverPage)
+      : undefined;
   // Reset on URL change so a previous broken result doesn't latch the
   // placeholder when results swap in.
   useEffect(() => {
     setImgError(false);
-  }, [coverUrl, coverPage, previewFileId]);
+  }, [coverUrl, pageUrl]);
 
   const thumbClass = cn(
     "w-16 object-cover rounded shrink-0 bg-muted",
@@ -797,7 +802,7 @@ function ResultCoverThumbnail({
     !coverUrl &&
     !imgError &&
     coverPageInRange &&
-    previewFileId &&
+    pageUrl &&
     (previewFileType === "cbz" || previewFileType === "pdf")
   ) {
     return (
@@ -805,7 +810,7 @@ function ResultCoverThumbnail({
         alt=""
         className={thumbClass}
         onError={() => setImgError(true)}
-        src={`/api/books/files/${previewFileId}/page/${coverPage}`}
+        src={pageUrl}
       />
     );
   }

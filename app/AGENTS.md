@@ -435,6 +435,13 @@ Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of
 - [ ] For mutation-capable pages, `<img key={cacheKey}>` for React remount
 - [ ] Cover-mutating mutations invalidate the query whose data drives the key
 
+### Page images
+
+The CBZ/PDF page endpoint (`/api/books/files/:id/page/:n`) is also served `private, max-age=31536000, immutable`, so page URLs follow the same rule. Build every page URL with `filePageUrl(file, page)` from `app/utils/pageUrl.ts`, which appends `?v=` with the file's `updated_at`. Never write the page URL inline: a URL without the key keeps showing the old pages for a year after the file is replaced on disk.
+
+- Components that render pages take the file (`PageSourceFile`, which is `id` plus `updated_at`), not a bare `fileId`, so they can build the keyed URL. `PagePicker`, `PagePreview`, and `ChapterRow` follow this.
+- `updated_at` is the key because every rescan that re-reads a changed file bumps it. The same scan drops the server's cached pages for that file (`invalidatePageCaches` in `pkg/worker/scan_unified.go`), so the new URL never gets an old render. The key also changes on unrelated metadata edits; that only causes a refetch, never a stale page. A size-plus-mtime key would churn less, but it would not change on a forced refresh, which is the manual fix after a replacement that kept the same size and mtime.
+
 ### Breadcrumbs
 
 Make breadcrumbs responsive with truncation:

@@ -15,7 +15,7 @@ func TestNew_UsesInjectedPluginService(t *testing.T) {
 	tc := newTestContext(t)
 	pluginService := plugins.NewService(tc.db)
 
-	w := New(&config.Config{WorkerProcesses: 1}, tc.db, pluginService, nil, nil, nil)
+	w := New(&config.Config{WorkerProcesses: 1}, tc.db, pluginService, nil, nil, nil, nil, nil)
 
 	assert.Same(t, pluginService, w.pluginService)
 }
@@ -26,7 +26,7 @@ func TestNew_BuildsPluginServiceWhenNil(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
 
-	w := New(&config.Config{WorkerProcesses: 1}, tc.db, nil, nil, nil, nil)
+	w := New(&config.Config{WorkerProcesses: 1}, tc.db, nil, nil, nil, nil, nil, nil)
 
 	assert.NotNil(t, w.pluginService)
 }
