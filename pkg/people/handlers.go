@@ -251,6 +251,21 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// series_fts lists the names of the authors of each Series' Books, so a
+	// rename must refresh the Series of every Book this person authored.
+	if nameChanged {
+		authoredBooks, err := h.personService.GetAuthoredBooks(ctx, id)
+		if err != nil {
+			log.Warn("failed to get authored books for series reindex after person rename", logger.Data{"person_id": id, "error": err.Error()})
+		} else {
+			bookIDs := make([]int, len(authoredBooks))
+			for i, book := range authoredBooks {
+				bookIDs[i] = book.ID
+			}
+			h.reindexSeriesForBooks(ctx, bookIDs, "rename")
+		}
+	}
+
 	// If name changed and file organizer is configured, reorganize associated files
 	if nameChanged && h.fileOrganizer != nil {
 		// Check if library has OrganizeFileStructure enabled
@@ -411,11 +426,25 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Fetch the source person, which the merge deletes, so the same library
+	// access check covers it.
+	source, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+		ID: &params.SourceID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Check library access
 	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) {
+		if !user.HasLibraryAccess(person.LibraryID) || !user.HasLibraryAccess(source.LibraryID) {
 			return errcodes.Forbidden("You don't have access to this library")
 		}
+	}
+
+	// People belong to one library, so the target must share the source's.
+	if source.LibraryID != person.LibraryID {
+		return errcodes.ValidationError("People can only be merged within the same library")
 	}
 
 	// Merge source person into target (this) person
@@ -439,6 +468,7 @@ func (h *handler) merge(c echo.Context) error {
 			log.Warn("failed to update book search index after person merge", logger.Data{"book_id": bookID, "error": err.Error()})
 		}
 	}
+	h.reindexSeriesForBooks(ctx, movedBookIDs, "merge")
 
 	// Re-index the target person, whose aliases now include the source name
 	// and the source's aliases.
@@ -494,6 +524,7 @@ func (h *handler) deletePerson(c echo.Context) error {
 			log.Warn("failed to update book search index after person delete", logger.Data{"book_id": bookID, "error": err.Error()})
 		}
 	}
+	h.reindexSeriesForBooks(ctx, affectedBookIDs, "delete")
 
 	// Remove the deleted person itself from the person FTS index.
 	if err := h.searchService.DeleteFromPersonIndex(ctx, id); err != nil {
@@ -501,4 +532,23 @@ func (h *handler) deletePerson(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+// reindexSeriesForBooks re-indexes every Series that holds one of the given
+// Books, because series_fts carries the names of the People who author each
+// Series' Books. It logs and continues on failure, like the per-Book
+// re-index, so a search index problem never fails the person change that
+// already committed. action names that change in the log.
+func (h *handler) reindexSeriesForBooks(ctx context.Context, bookIDs []int, action string) {
+	log := logger.FromContext(ctx)
+	seriesList, err := h.personService.SeriesForBooks(ctx, bookIDs)
+	if err != nil {
+		log.Warn("failed to load series for search reindex after person "+action, logger.Data{"error": err.Error()})
+		return
+	}
+	for _, series := range seriesList {
+		if err := h.searchService.IndexSeries(ctx, series); err != nil {
+			log.Warn("failed to update series search index after person "+action, logger.Data{"series_id": series.ID, "error": err.Error()})
+		}
+	}
 }

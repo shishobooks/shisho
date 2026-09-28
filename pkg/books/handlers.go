@@ -2505,10 +2505,16 @@ func (h *handler) deleteFile(c echo.Context) error {
 			log.Warn("failed to remove book from search index", logger.Data{"book_id": result.BookID, "error": err.Error()})
 		}
 		CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
-	} else if err := h.searchService.ReindexBookByID(ctx, result.BookID); err != nil {
+	} else {
 		// The surviving book's books_fts row still lists the deleted file's
 		// path and narrators until it is re-indexed.
-		log.Warn("failed to update book search index after file delete", logger.Data{"book_id": result.BookID, "error": err.Error()})
+		if err := h.searchService.ReindexBookByID(ctx, result.BookID); err != nil {
+			log.Warn("failed to update book search index after file delete", logger.Data{"book_id": result.BookID, "error": err.Error()})
+		}
+		// The deleted file's narrators may have narrated nothing else. Only
+		// the people kind runs, so a file delete does not start sweeping up
+		// other kinds of orphans that the full cleanup would remove.
+		CleanupOrphanedPeople(ctx, log, h.orphanCleanupServices())
 	}
 
 	// If a supplement was promoted, scan it to extract cover and update metadata
