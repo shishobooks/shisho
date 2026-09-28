@@ -61,14 +61,14 @@ vi.mock("@/hooks/queries/sharing", () => ({
 vi.mock("@/components/library/ShareLinkDialog", () => ({
   ShareLinkDialog: (props: {
     open: boolean;
-    canCreate: boolean;
+    canWrite: boolean;
     canList: boolean;
     requireExpiration: boolean;
   }) =>
     props.open ? (
       <div data-testid="share-dialog">
         {JSON.stringify({
-          canCreate: props.canCreate,
+          canWrite: props.canWrite,
           canList: props.canList,
           requireExpiration: props.requireExpiration,
         })}
@@ -498,7 +498,7 @@ describe("BookDetailBody Share entry", () => {
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
-    ).toEqual({ canCreate: true, canList: true, requireExpiration: true });
+    ).toEqual({ canWrite: true, canList: true, requireExpiration: true });
   });
 
   it("offers Share with the form and the list for Shares Write without Shares Read", async () => {
@@ -515,7 +515,7 @@ describe("BookDetailBody Share entry", () => {
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
-    ).toEqual({ canCreate: true, canList: true, requireExpiration: false });
+    ).toEqual({ canWrite: true, canList: true, requireExpiration: false });
   });
 
   it("opens the dialog without the form for Shares Read only", async () => {
@@ -529,7 +529,7 @@ describe("BookDetailBody Share entry", () => {
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
-    ).toEqual({ canCreate: false, canList: true, requireExpiration: false });
+    ).toEqual({ canWrite: false, canList: true, requireExpiration: false });
   });
 });
 

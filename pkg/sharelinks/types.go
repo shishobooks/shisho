@@ -26,11 +26,13 @@ type UpdateSharingSettingsPayload struct {
 }
 
 // ShareLinkResponse is one Share Link as the sharer sees it: the model plus
-// its derived state and the creator's username. The list endpoint returns a
-// bare array of these, and create returns one.
+// its derived state, why an active link is paused (omitted when it is not),
+// and the creator's username. The list endpoint returns a bare array of
+// these, and create and revoke return one.
 type ShareLinkResponse struct {
 	models.ShareLink  `tstype:",extends"`
 	State             string `json:"state" tstype:"ShareLinkState"`
+	PausedReason      string `json:"paused_reason,omitempty" tstype:"ShareLinkPausedReason"`
 	CreatedByUsername string `json:"created_by_username"`
 }
 

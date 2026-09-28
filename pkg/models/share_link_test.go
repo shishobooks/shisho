@@ -31,3 +31,27 @@ func TestShareLinkState_ExpiresAtBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestShareLinkPausedReason(t *testing.T) {
+	t.Parallel()
+	libraryID := 3
+	other := 4
+	tests := []struct {
+		name    string
+		creator *User
+		want    string
+	}{
+		{"creator not loaded fails closed", nil, ShareLinkPausedCreatorDeactivated},
+		{"deactivated creator", &User{IsActive: false, LibraryAccess: []*UserLibraryAccess{{LibraryID: nil}}}, ShareLinkPausedCreatorDeactivated},
+		{"creator without the library", &User{IsActive: true, LibraryAccess: []*UserLibraryAccess{{LibraryID: &other}}}, ShareLinkPausedCreatorNoLibraryAccess},
+		{"creator with the library", &User{IsActive: true, LibraryAccess: []*UserLibraryAccess{{LibraryID: &libraryID}}}, ""},
+		{"creator with every library", &User{IsActive: true, LibraryAccess: []*UserLibraryAccess{{LibraryID: nil}}}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			link := ShareLink{CreatedByUser: tt.creator}
+			assert.Equal(t, tt.want, link.PausedReason(libraryID))
+		})
+	}
+}

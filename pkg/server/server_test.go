@@ -185,6 +185,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/books", "GET /api/books/files/:id/download",
 				"GET /api/books/files/:id/page/:pageNum", "GET /api/books/files/:id/stream",
 				"GET /api/books/:id/share-links", "POST /api/books/:id/share-links",
+				"POST /api/books/:id/share-links/:linkId/revoke", "DELETE /api/books/:id/share-links/:linkId",
 			} {
 				assert.True(t, routes[route], route)
 			}
@@ -212,6 +213,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodHead, "/api/books/files/42/download/kepub"},
 				{http.MethodGet, "/api/jobs/42/download"},
 				{http.MethodPost, "/api/books/42/share-links"},
+				{http.MethodPost, "/api/books/42/share-links/1/revoke"},
+				{http.MethodDelete, "/api/books/42/share-links/1"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

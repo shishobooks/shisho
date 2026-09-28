@@ -98,7 +98,7 @@ A user-owned virtual collection of **Books** that may span libraries, either ord
 _Avoid_: collection, shelf, playlist
 
 **Share Link**:
-An anonymous link that grants whoever holds it access to one **Book** and its **Files** without a Shisho account or library access. A share link is active, expired, or revoked; only an active link resolves. It may expire at a set time, and a book may have many share links at once. It is distinct from a **List Share**, which is a grant to a named user and requires login.
+An anonymous link that grants whoever holds it access to one **Book** and its **Files** without a Shisho account or library access. A share link is active, expired, or revoked. Only an active link resolves, and only while sharing is on and the link is not paused. An active link is paused while its creator is deactivated or cannot reach the book's library, and resolves again when that access returns. It may expire at a set time, and a book may have many share links at once. It is distinct from a **List Share**, which is a grant to a named user and requires login.
 _Avoid_: public link, guest link, share (alone, which is ambiguous with list share)
 
 **List Share**:

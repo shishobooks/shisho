@@ -1,9 +1,10 @@
-import { Copy, Info, Loader2 } from "lucide-react";
+import { Ban, Copy, Info, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DialogBody,
   DialogContent,
@@ -21,12 +22,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useBookShareLinks, useCreateShareLink } from "@/hooks/queries/sharing";
+import {
+  useBookShareLinks,
+  useCreateShareLink,
+  useDeleteShareLink,
+  useRevokeShareLink,
+} from "@/hooks/queries/sharing";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
+  ShareLinkPausedCreatorDeactivated,
   ShareLinkStateActive,
   ShareLinkStateExpired,
+  ShareLinkStateRevoked,
   type ShareLinkResponse,
 } from "@/types";
 import { copyText } from "@/utils/clipboard";
@@ -48,7 +56,12 @@ const PRESETS = [
 const shareLinkUrl = (token: string) =>
   `${window.location.origin}/share/${token}`;
 
+// A revoked link shows when it was pulled rather than an expiry that no
+// longer matters.
 const expiryText = (link: ShareLinkResponse) => {
+  if (link.state === ShareLinkStateRevoked && link.revoked_at) {
+    return `Revoked ${formatDateTime(link.revoked_at)}`;
+  }
   if (!link.expires_at) return "Never expires";
   const when = formatDateTime(link.expires_at);
   return link.state === ShareLinkStateExpired
@@ -56,13 +69,40 @@ const expiryText = (link: ShareLinkResponse) => {
     : `Expires ${when}`;
 };
 
+const plural = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+// Opens count recipient page loads and downloads count file downloads, so a
+// download is definite proof the recipient got the file.
+const usageText = (link: ShareLinkResponse) =>
+  [
+    plural(link.open_count, "open"),
+    plural(link.download_count, "download"),
+    link.last_accessed_at
+      ? `Last used ${formatDateTime(link.last_accessed_at)}`
+      : "Never used",
+  ].join(" · ");
+
+const pausedText = (link: ShareLinkResponse) =>
+  link.paused_reason === ShareLinkPausedCreatorDeactivated
+    ? `Paused because ${link.created_by_username} was deactivated`
+    : `Paused because ${link.created_by_username} no longer has access to this library`;
+
+// The confirmation names the link, since on a phone it covers the row.
+const linkSubject = (link: ShareLinkResponse | null) => {
+  if (!link) return "The link";
+  return link.label
+    ? `The link "${link.label}"`
+    : `The unlabeled link created by ${link.created_by_username}`;
+};
+
 interface ShareLinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bookId: number;
   bookTitle: string;
-  /** Shares Write: show the new-link form. */
-  canCreate: boolean;
+  /** Shares Write: show the new-link form and the revoke and delete actions. */
+  canWrite: boolean;
   /** Shares Read: show the book's links. */
   canList: boolean;
   /** The admin requires every link to expire, so Never is not offered. */
@@ -74,7 +114,7 @@ export function ShareLinkDialog({
   onOpenChange,
   bookId,
   bookTitle,
-  canCreate,
+  canWrite,
   canList,
   requireExpiration,
 }: ShareLinkDialogProps) {
@@ -92,6 +132,14 @@ export function ShareLinkDialog({
 
   const linksQuery = useBookShareLinks(bookId, { enabled: open && canList });
   const createMutation = useCreateShareLink();
+  const revokeMutation = useRevokeShareLink();
+  const deleteMutation = useDeleteShareLink();
+  // The target outlives its confirmation's open flag so the text does not
+  // change while the confirmation animates closed.
+  const [toRevoke, setToRevoke] = useState<ShareLinkResponse | null>(null);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [toDelete, setToDelete] = useState<ShareLinkResponse | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const presets = requireExpiration
     ? PRESETS
@@ -135,145 +183,254 @@ export function ShareLinkDialog({
     }
   };
 
+  const handleRevoke = async () => {
+    if (!toRevoke) return;
+    try {
+      await revokeMutation.mutateAsync({ bookId, linkId: toRevoke.id });
+      toast.success("Share link revoked");
+    } catch (error) {
+      toastRequestError(
+        error,
+        error instanceof Error ? error.message : "Failed to revoke share link",
+      );
+    } finally {
+      // The list refetches after either outcome, so a link another sharer
+      // already removed drops out instead of holding the confirmation open.
+      setRevokeOpen(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!toDelete) return;
+    try {
+      await deleteMutation.mutateAsync({ bookId, linkId: toDelete.id });
+      toast.success("Share link deleted");
+    } catch (error) {
+      toastRequestError(
+        error,
+        error instanceof Error ? error.message : "Failed to delete share link",
+      );
+    } finally {
+      setDeleteOpen(false);
+    }
+  };
+
   const links = linksQuery.data ?? [];
 
   return (
-    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-lg overflow-x-hidden">
-        <DialogHeader className="pr-8">
-          <DialogTitle>Share</DialogTitle>
-          <DialogDescription>
-            Anyone with a link can view and download "{bookTitle}" without an
-            account.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <FormDialog
+        hasChanges={hasChanges}
+        onOpenChange={onOpenChange}
+        open={open}
+      >
+        <DialogContent className="max-w-lg overflow-x-hidden">
+          <DialogHeader className="pr-8">
+            <DialogTitle>Share</DialogTitle>
+            <DialogDescription>
+              Anyone with a link can view and download "{bookTitle}" without an
+              account.
+            </DialogDescription>
+          </DialogHeader>
 
-        <DialogBody className="space-y-6">
-          {canCreate && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium">New Link</h3>
-              <div className="space-y-2">
-                <Label htmlFor="share-link-label">Label (optional)</Label>
-                <Input
-                  id="share-link-label"
-                  maxLength={200}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. for Alice"
-                  value={label}
-                />
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-                <div className="space-y-2 flex-1">
-                  <Label htmlFor="share-link-expiration">Expires after</Label>
-                  <Select onValueChange={setPreset} value={selectedPreset}>
-                    <SelectTrigger id="share-link-expiration">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {presets.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <DialogBody className="space-y-6">
+            {canWrite && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">New Link</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="share-link-label">Label (optional)</Label>
+                  <Input
+                    id="share-link-label"
+                    maxLength={200}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="e.g. for Alice"
+                    value={label}
+                  />
                 </div>
-                <Button
-                  disabled={createMutation.isPending}
-                  onClick={handleCreate}
-                >
-                  {createMutation.isPending && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  Create link
-                </Button>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="share-link-expiration">Expires after</Label>
+                    <Select onValueChange={setPreset} value={selectedPreset}>
+                      <SelectTrigger id="share-link-expiration">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {presets.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    disabled={createMutation.isPending}
+                    onClick={handleCreate}
+                  >
+                    {createMutation.isPending && (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    Create link
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {canList && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium">Links</h3>
-              {linksQuery.isLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : links.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  This book has no share links yet.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {links.map((link) => {
-                    // An inactive link keeps its row but recedes: no fill, a
-                    // muted label, and the muted status badge.
-                    const active = link.state === ShareLinkStateActive;
-                    return (
-                      <li
-                        className={cn(
-                          "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
-                          active && "bg-muted/50",
-                        )}
-                        key={link.id}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                "font-medium truncate",
-                                (!link.label || !active) &&
-                                  "text-muted-foreground",
-                                !link.label && "italic",
-                              )}
-                              title={link.label}
-                            >
-                              {link.label || "No label"}
-                            </span>
-                            <Badge
-                              className={cn(
-                                "capitalize",
-                                !active &&
-                                  "border-transparent bg-muted text-muted-foreground",
-                              )}
-                              variant={active ? "success" : "outline"}
-                            >
-                              {link.state}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Created by {link.created_by_username} ·{" "}
-                            {expiryText(link)}
-                          </p>
-                        </div>
-                        <Button
-                          aria-label={`Copy link ${link.label || ""}`.trim()}
-                          className="h-8 w-8 shrink-0"
-                          disabled={!active}
-                          onClick={() => handleCopy(link.token)}
-                          size="icon"
-                          title="Copy link"
-                          variant="ghost"
+            {canList && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">Links</h3>
+                {linksQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : links.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    This book has no share links yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {links.map((link) => {
+                      // A link that does not resolve keeps its row but recedes:
+                      // no fill, a muted label, and the muted status badge. A
+                      // paused link is still active (it can be revoked) but its
+                      // creator stops it from resolving.
+                      const active = link.state === ShareLinkStateActive;
+                      const paused = active && Boolean(link.paused_reason);
+                      const live = active && !paused;
+                      return (
+                        <li
+                          className={cn(
+                            "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
+                            live && "bg-muted/50",
+                          )}
+                          key={link.id}
                         >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "font-medium truncate",
+                                  (!link.label || !live) &&
+                                    "text-muted-foreground",
+                                  !link.label && "italic",
+                                )}
+                                title={link.label}
+                              >
+                                {link.label || "No label"}
+                              </span>
+                              <Badge
+                                className={cn(
+                                  "capitalize",
+                                  !live &&
+                                    "border-transparent bg-muted text-muted-foreground",
+                                )}
+                                variant={live ? "success" : "outline"}
+                              >
+                                {paused ? "paused" : link.state}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Created by {link.created_by_username} ·{" "}
+                              {expiryText(link)}
+                            </p>
+                            {paused && (
+                              <p className="text-xs text-muted-foreground">
+                                {pausedText(link)}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {usageText(link)}
+                            </p>
+                          </div>
+                          <div className="flex items-center shrink-0">
+                            <Button
+                              aria-label={`Copy link ${link.label || ""}`.trim()}
+                              className="h-8 w-8"
+                              disabled={!live}
+                              onClick={() => handleCopy(link.token)}
+                              size="icon"
+                              title="Copy link"
+                              variant="ghost"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            {canWrite && active && (
+                              <Button
+                                aria-label={`Revoke ${link.label || ""}`.trim()}
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setToRevoke(link);
+                                  setRevokeOpen(true);
+                                }}
+                                size="icon"
+                                title="Revoke"
+                                variant="ghost"
+                              >
+                                <Ban className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canWrite && (
+                              <Button
+                                aria-label={`Delete ${link.label || ""}`.trim()}
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                  setToDelete(link);
+                                  setDeleteOpen(true);
+                                }}
+                                size="icon"
+                                title="Delete"
+                                variant="ghost"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
 
-          <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50 text-sm text-muted-foreground">
-            <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <p>
-              Recipients see the book's cover, details, and files, and who
-              shared it. The link must be opened from a network that can reach
-              this server.
-            </p>
-          </div>
-        </DialogBody>
-      </DialogContent>
-    </FormDialog>
+            <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50 text-sm text-muted-foreground">
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              <p>
+                Recipients see the book's cover, details, and files, and who
+                shared it. The link must be opened from a network that can reach
+                this server.
+              </p>
+            </div>
+          </DialogBody>
+        </DialogContent>
+      </FormDialog>
+
+      <ConfirmDialog
+        confirmLabel="Revoke"
+        description={
+          toRevoke?.paused_reason
+            ? `${linkSubject(toRevoke)} is paused and will not work again when its creator's access returns. It stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`
+            : `${linkSubject(toRevoke)} stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`
+        }
+        isPending={revokeMutation.isPending}
+        onConfirm={handleRevoke}
+        onOpenChange={setRevokeOpen}
+        open={revokeOpen}
+        title="Revoke Link"
+      />
+      <ConfirmDialog
+        confirmLabel="Delete"
+        description={
+          toDelete?.state === ShareLinkStateActive && !toDelete.paused_reason
+            ? `${linkSubject(toDelete)} stops working immediately and is removed from the list with its counts. This cannot be undone.`
+            : `${linkSubject(toDelete)} is removed from the list with its counts. This cannot be undone.`
+        }
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDelete}
+        onOpenChange={setDeleteOpen}
+        open={deleteOpen}
+        title="Delete Link"
+      />
+    </>
   );
 }
