@@ -39,6 +39,31 @@ func TestParseOPF_Identifiers(t *testing.T) {
 	assert.Equal(t, "12345678", idByType["goodreads"])
 }
 
+func TestParseOPF_IdentifierTypeRefinement(t *testing.T) {
+	t.Parallel()
+	// EPUB 3 names an identifier's type with a refining meta, not opf:scheme.
+	opfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:identifier id="gr">12345678</dc:identifier>
+    <meta refines="#gr" property="identifier-type">GOODREADS</meta>
+    <dc:identifier id="isbn">9780316769488</dc:identifier>
+    <meta refines="#isbn" property="identifier-type" scheme="onix:codelist5">15</meta>
+  </metadata>
+</package>`
+
+	result, err := ParseOPF("test.opf", io.NopCloser(strings.NewReader(opfXML)))
+	require.NoError(t, err)
+
+	idByType := make(map[string]string)
+	for _, id := range result.OPF.Identifiers {
+		idByType[id.Type] = id.Value
+	}
+	assert.Equal(t, map[string]string{"goodreads": "12345678", "isbn_13": "9780316769488"}, idByType,
+		"an unrecognized identifier-type (ONIX code) falls back to value detection")
+}
+
 func TestParseOPF_IdentifiersPatternMatch(t *testing.T) {
 	t.Parallel()
 	opfXML := `<?xml version="1.0" encoding="UTF-8"?>

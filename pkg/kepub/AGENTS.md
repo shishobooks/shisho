@@ -156,7 +156,7 @@ Ensures cover images have the `cover-image` property required by Kobo.
 
 **Property Addition:**
 - Finds manifest item by ID
-- Adds `cover-image` to properties (idempotent)
+- Adds `cover-image` to properties (idempotent: it checks the `properties` tokens, not the whole tag, so an id or href containing `cover-image` does not count)
 - Handles both self-closing and regular tag formats
 
 ## CBZ to Fixed-Layout KePub (`pkg/kepub/cbz.go`)
