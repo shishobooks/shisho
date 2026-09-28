@@ -41,8 +41,8 @@ func errUnavailable() error {
 
 // resolve decides whether the token in the path is usable and returns the
 // link and its book. A link resolves only while sharing is enabled, the
-// token exists, the link is active (not revoked, not expired), and its
-// creator is active and can still reach the book's library. A deleted
+// token exists, the link is active (not revoked, not expired), and it is
+// not paused: its creator is active and can still reach the book's library. A deleted
 // creator or book takes the row with it. Every failure returns
 // errUnavailable.
 func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book, error) {
@@ -67,8 +67,7 @@ func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book
 	if err != nil {
 		return nil, nil, err
 	}
-	creator := link.CreatedByUser
-	if link.State(time.Now()) != models.ShareLinkStateActive || creator == nil || !creator.IsActive {
+	if link.State(time.Now()) != models.ShareLinkStateActive {
 		return nil, nil, errUnavailable()
 	}
 
@@ -79,7 +78,8 @@ func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book
 	if err != nil {
 		return nil, nil, err
 	}
-	if !creator.HasLibraryAccess(book.LibraryID) {
+	// The Share dialog reports the same reason, so the sharer sees why.
+	if link.PausedReason(book.LibraryID) != "" {
 		return nil, nil, errUnavailable()
 	}
 	return link, book, nil

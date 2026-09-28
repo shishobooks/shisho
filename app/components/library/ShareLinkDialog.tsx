@@ -31,6 +31,7 @@ import {
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
+  ShareLinkPausedCreatorDeactivated,
   ShareLinkStateActive,
   ShareLinkStateExpired,
   ShareLinkStateRevoked,
@@ -81,6 +82,11 @@ const usageText = (link: ShareLinkResponse) =>
       ? `Last used ${formatDateTime(link.last_accessed_at)}`
       : "Never used",
   ].join(" · ");
+
+const pausedText = (link: ShareLinkResponse) =>
+  link.paused_reason === ShareLinkPausedCreatorDeactivated
+    ? `Paused because ${link.created_by_username} was deactivated`
+    : `Paused because ${link.created_by_username} no longer has access to this library`;
 
 // The confirmation names the link, since on a phone it covers the row.
 const linkSubject = (link: ShareLinkResponse | null) => {
@@ -284,14 +290,18 @@ export function ShareLinkDialog({
                 ) : (
                   <ul className="space-y-2">
                     {links.map((link) => {
-                      // An inactive link keeps its row but recedes: no fill, a
-                      // muted label, and the muted status badge.
+                      // A link that does not resolve keeps its row but recedes:
+                      // no fill, a muted label, and the muted status badge. A
+                      // paused link is still active (it can be revoked) but its
+                      // creator stops it from resolving.
                       const active = link.state === ShareLinkStateActive;
+                      const paused = active && Boolean(link.paused_reason);
+                      const live = active && !paused;
                       return (
                         <li
                           className={cn(
                             "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
-                            active && "bg-muted/50",
+                            live && "bg-muted/50",
                           )}
                           key={link.id}
                         >
@@ -300,7 +310,7 @@ export function ShareLinkDialog({
                               <span
                                 className={cn(
                                   "font-medium truncate",
-                                  (!link.label || !active) &&
+                                  (!link.label || !live) &&
                                     "text-muted-foreground",
                                   !link.label && "italic",
                                 )}
@@ -311,18 +321,23 @@ export function ShareLinkDialog({
                               <Badge
                                 className={cn(
                                   "capitalize",
-                                  !active &&
+                                  !live &&
                                     "border-transparent bg-muted text-muted-foreground",
                                 )}
-                                variant={active ? "success" : "outline"}
+                                variant={live ? "success" : "outline"}
                               >
-                                {link.state}
+                                {paused ? "paused" : link.state}
                               </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
                               Created by {link.created_by_username} ·{" "}
                               {expiryText(link)}
                             </p>
+                            {paused && (
+                              <p className="text-xs text-muted-foreground">
+                                {pausedText(link)}
+                              </p>
+                            )}
                             <p className="text-xs text-muted-foreground">
                               {usageText(link)}
                             </p>
@@ -331,7 +346,7 @@ export function ShareLinkDialog({
                             <Button
                               aria-label={`Copy link ${link.label || ""}`.trim()}
                               className="h-8 w-8"
-                              disabled={!active}
+                              disabled={!live}
                               onClick={() => handleCopy(link.token)}
                               size="icon"
                               title="Copy link"

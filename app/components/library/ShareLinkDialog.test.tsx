@@ -380,4 +380,42 @@ describe("ShareLinkDialog", () => {
     );
     expect(row).not.toHaveTextContent("Expires");
   });
+
+  it("marks an active link paused by its creator and says why", () => {
+    mocks.links = [
+      link({
+        id: 1,
+        label: "deactivated",
+        created_by_username: "editor",
+        paused_reason: "creator_deactivated",
+      }),
+      link({
+        id: 2,
+        label: "lost access",
+        created_by_username: "editor",
+        paused_reason: "creator_no_library_access",
+      }),
+    ];
+    renderDialog();
+
+    const [deactivated, lostAccess] = screen.getAllByRole("listitem");
+    expect(deactivated).toHaveTextContent("paused");
+    expect(deactivated).not.toHaveTextContent("active");
+    expect(deactivated).toHaveTextContent(
+      "Paused because editor was deactivated",
+    );
+    expect(lostAccess).toHaveTextContent(
+      "Paused because editor no longer has access to this library",
+    );
+    for (const row of [deactivated, lostAccess]) {
+      // A paused link would 404 for the recipient, so it cannot be copied,
+      // but it can still be revoked so it does not come back.
+      expect(
+        within(row).getByRole("button", { name: /Copy link/ }),
+      ).toBeDisabled();
+      expect(
+        within(row).getByRole("button", { name: /Revoke/ }),
+      ).toBeInTheDocument();
+    }
+  });
 });

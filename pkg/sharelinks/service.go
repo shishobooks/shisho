@@ -82,12 +82,12 @@ func (svc *Service) Create(ctx context.Context, opts CreateOptions) (*models.Sha
 }
 
 // ListForBook returns every Share Link on a book from every creator, newest
-// first, with creators loaded.
+// first, with creators and their library access loaded.
 func (svc *Service) ListForBook(ctx context.Context, bookID int) ([]*models.ShareLink, error) {
 	var links []*models.ShareLink
 	err := svc.db.NewSelect().
 		Model(&links).
-		Relation("CreatedByUser").
+		Relation("CreatedByUser.LibraryAccess").
 		Where("sl.book_id = ?", bookID).
 		Order("sl.created_at DESC", "sl.id DESC").
 		Scan(ctx)
@@ -166,18 +166,18 @@ func (svc *Service) recordAccess(ctx context.Context, linkID int, counter string
 // RetrieveByToken returns the Share Link with the given token, its creator,
 // and the creator's library access, or errcodes.NotFound.
 func (svc *Service) RetrieveByToken(ctx context.Context, token string) (*models.ShareLink, error) {
-	return svc.retrieve(ctx, "sl.token = ?", token, "CreatedByUser.LibraryAccess")
+	return svc.retrieve(ctx, "sl.token = ?", token)
 }
 
-func (svc *Service) retrieve(ctx context.Context, where string, arg any, relations ...string) (*models.ShareLink, error) {
+// retrieve loads one link with its creator and the creator's library access,
+// which PausedReason needs.
+func (svc *Service) retrieve(ctx context.Context, where string, arg any) (*models.ShareLink, error) {
 	link := &models.ShareLink{}
-	q := svc.db.NewSelect().
+	err := svc.db.NewSelect().
 		Model(link).
-		Relation("CreatedByUser")
-	for _, r := range relations {
-		q = q.Relation(r)
-	}
-	err := q.Where(where, arg).Scan(ctx)
+		Relation("CreatedByUser.LibraryAccess").
+		Where(where, arg).
+		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errcodes.NotFound("Share Link")

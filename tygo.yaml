@@ -147,7 +147,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/sharelinks"
     output_path: "app/types/generated/sharelinks.ts"
     frontmatter: |
-      import { Book, CoverAspectRatio, ShareLink, ShareLinkState } from "@/types";
+      import { Book, CoverAspectRatio, ShareLink, ShareLinkPausedReason, ShareLinkState } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/cache"

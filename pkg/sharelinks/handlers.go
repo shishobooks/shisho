@@ -20,47 +20,54 @@ type handler struct {
 	appSettingsService *appsettings.Service
 }
 
-// requireBookAccess returns the book ID from the path after checking that
-// the book exists and the user can reach its library.
-func (h *handler) requireBookAccess(c echo.Context) (int, *models.User, error) {
+// bookAccess is the book named in the path and the user who reached it.
+type bookAccess struct {
+	bookID    int
+	libraryID int
+	user      *models.User
+}
+
+// requireBookAccess resolves the book in the path after checking that it
+// exists and the user can reach its library.
+func (h *handler) requireBookAccess(c echo.Context) (bookAccess, error) {
 	bookID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return 0, nil, errcodes.NotFound("Book")
+		return bookAccess{}, errcodes.NotFound("Book")
 	}
 	user, ok := c.Get("user").(*models.User)
 	if !ok {
-		return 0, nil, errcodes.Unauthorized("User not found in context")
+		return bookAccess{}, errcodes.Unauthorized("User not found in context")
 	}
 	libraryID, err := h.service.BookLibraryID(c.Request().Context(), bookID)
 	if err != nil {
-		return 0, nil, err
+		return bookAccess{}, err
 	}
 	if !user.HasLibraryAccess(libraryID) {
-		return 0, nil, errcodes.Forbidden("You don't have access to this library")
+		return bookAccess{}, errcodes.Forbidden("You don't have access to this library")
 	}
-	return bookID, user, nil
+	return bookAccess{bookID: bookID, libraryID: libraryID, user: user}, nil
 }
 
 func (h *handler) list(c echo.Context) error {
-	bookID, _, err := h.requireBookAccess(c)
+	access, err := h.requireBookAccess(c)
 	if err != nil {
 		return err
 	}
-	links, err := h.service.ListForBook(c.Request().Context(), bookID)
+	links, err := h.service.ListForBook(c.Request().Context(), access.bookID)
 	if err != nil {
 		return err
 	}
 	now := time.Now()
 	resp := make([]ShareLinkResponse, 0, len(links))
 	for _, link := range links {
-		resp = append(resp, newShareLinkResponse(link, now))
+		resp = append(resp, newShareLinkResponse(link, access.libraryID, now))
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
 func (h *handler) create(c echo.Context) error {
 	ctx := c.Request().Context()
-	bookID, user, err := h.requireBookAccess(c)
+	access, err := h.requireBookAccess(c)
 	if err != nil {
 		return err
 	}
@@ -87,33 +94,34 @@ func (h *handler) create(c echo.Context) error {
 		label = nil
 	}
 	link, err := h.service.Create(ctx, CreateOptions{
-		BookID:          bookID,
-		CreatedByUserID: user.ID,
+		BookID:          access.bookID,
+		CreatedByUserID: access.user.ID,
 		Label:           label,
 		ExpiresAt:       payload.ExpiresAt,
 	})
 	if err != nil {
 		return err
 	}
-	return errors.WithStack(c.JSON(http.StatusCreated, newShareLinkResponse(link, now)))
+	return errors.WithStack(c.JSON(http.StatusCreated, newShareLinkResponse(link, access.libraryID, now)))
 }
 
 // requireWritableLink checks book access and that sharing is enabled, then
 // returns the link named in the path, which must belong to the book.
-func (h *handler) requireWritableLink(c echo.Context) (*models.ShareLink, error) {
+func (h *handler) requireWritableLink(c echo.Context) (*models.ShareLink, bookAccess, error) {
 	ctx := c.Request().Context()
-	bookID, _, err := h.requireBookAccess(c)
+	access, err := h.requireBookAccess(c)
 	if err != nil {
-		return nil, err
+		return nil, access, err
 	}
 	if _, err := h.requireSharingEnabled(ctx); err != nil {
-		return nil, err
+		return nil, access, err
 	}
 	linkID, err := strconv.Atoi(c.Param("linkId"))
 	if err != nil {
-		return nil, errcodes.NotFound("Share Link")
+		return nil, access, errcodes.NotFound("Share Link")
 	}
-	return h.service.RetrieveForBook(ctx, bookID, linkID)
+	link, err := h.service.RetrieveForBook(ctx, access.bookID, linkID)
+	return link, access, err
 }
 
 // requireSharingEnabled refuses every management write while sharing is off
@@ -130,7 +138,7 @@ func (h *handler) requireSharingEnabled(ctx context.Context) (Settings, error) {
 }
 
 func (h *handler) revoke(c echo.Context) error {
-	link, err := h.requireWritableLink(c)
+	link, access, err := h.requireWritableLink(c)
 	if err != nil {
 		return err
 	}
@@ -138,11 +146,11 @@ func (h *handler) revoke(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return errors.WithStack(c.JSON(http.StatusOK, newShareLinkResponse(revoked, time.Now())))
+	return errors.WithStack(c.JSON(http.StatusOK, newShareLinkResponse(revoked, access.libraryID, time.Now())))
 }
 
 func (h *handler) delete(c echo.Context) error {
-	link, err := h.requireWritableLink(c)
+	link, _, err := h.requireWritableLink(c)
 	if err != nil {
 		return err
 	}
@@ -152,8 +160,13 @@ func (h *handler) delete(c echo.Context) error {
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
-func newShareLinkResponse(link *models.ShareLink, now time.Time) ShareLinkResponse {
+// newShareLinkResponse derives the link's state and, for an active link, why
+// its creator has paused it. libraryID is the library of the link's book.
+func newShareLinkResponse(link *models.ShareLink, libraryID int, now time.Time) ShareLinkResponse {
 	resp := ShareLinkResponse{ShareLink: *link, State: link.State(now)}
+	if resp.State == models.ShareLinkStateActive {
+		resp.PausedReason = link.PausedReason(libraryID)
+	}
 	if link.CreatedByUser != nil {
 		resp.CreatedByUsername = link.CreatedByUser.Username
 	}

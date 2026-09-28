@@ -31,7 +31,7 @@ Users with Shares Write see a form at the top of the dialog:
 - **Label** is optional and only visible to you and other sharers. Use it to tell links apart, for example "for Alice".
 - **Expires after** offers 1 day, 7 days (the default), and 30 days. **Never** is offered last unless the admin has turned on **Require expiration**. An expiration is fixed when the link is created and cannot be extended later; create a new link instead.
 
-**Create link** adds the link to the list below the form. The list shows every link on the book, including links other users created, with its label, who created it, whether it is active, expired, or revoked, when it expires, and how it has been used (see [Managing Links](#managing-links)). The copy button next to an active link puts its URL on your clipboard, ready to paste into a message. Users with only Shares Read see the list without the form.
+**Create link** adds the link to the list below the form. The list shows every link on the book, including links other users created, with its label, who created it, whether it is active, paused, expired, or revoked, when it expires, and how it has been used (see [Managing Links](#managing-links)). The copy button next to a working link puts its URL on your clipboard, ready to paste into a message. Users with only Shares Read see the list without the form.
 
 The copied URL uses the address you are browsing Shisho on. If you reach Shisho through a local address such as `http://192.168.1.10:5173`, the link will only work for people on your network. Open Shisho through the address your recipient can reach before copying.
 
@@ -71,13 +71,13 @@ The checks run each time the link is used, so some of them can be reversed:
 | Someone revokes the link | Stops working; stays listed as revoked |
 | Someone deletes the link | Stops working; removed from the list |
 | An admin turns sharing off | Stops working; works again when sharing is turned back on |
-| The creator is deactivated | Stops working; stays listed, and works again if the account is reactivated |
-| The creator loses access to the book's library | Stops working; works again if their access is restored |
+| The creator is deactivated | Stops working and shows as paused; works again if the account is reactivated |
+| The creator loses access to the book's library | Stops working and shows as paused; works again if their access is restored |
 | The book is deleted | Stops working; removed |
 
 Changing the creator's role, including removing Shares Write from it, does not stop the links they already created.
 
-The Share dialog still shows a link from a deactivated creator, or one who lost access to the library, as active, because its own state has not changed. Revoke or delete it if it should not come back when the creator's access does.
+The Share dialog marks a link from a deactivated creator, or from one who lost access to the library, as **paused** and says which of the two happened. A paused link cannot be copied. Revoke or delete it if it should not come back when the creator's access does.
 
 ## What Recipients See
 

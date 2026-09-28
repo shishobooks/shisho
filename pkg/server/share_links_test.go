@@ -818,7 +818,10 @@ func TestShareLinks_CreatorAndBookLifecycle(t *testing.T) {
 
 		f.assertUnavailable(link.Token, f.epubA.ID)
 		assert.True(t, f.linkRowExists(link), "the link stays listed")
-		assert.Contains(t, f.listed(f.bookA), link.ID)
+		listed := f.listed(f.bookA)
+		require.Contains(t, listed, link.ID)
+		assert.Equal(t, models.ShareLinkStateActive, listed[link.ID].State, "the link's own state is unchanged")
+		assert.Equal(t, models.ShareLinkPausedCreatorDeactivated, listed[link.ID].PausedReason, "the sharer can see why it stopped")
 	})
 
 	t.Run("removing the creator's access to the library", func(t *testing.T) {
@@ -831,11 +834,30 @@ func TestShareLinks_CreatorAndBookLifecycle(t *testing.T) {
 
 		f.assertUnavailable(link.Token, f.epubA.ID)
 		assert.True(t, f.linkRowExists(link))
+		assert.Equal(t, models.ShareLinkPausedCreatorNoLibraryAccess, f.listed(f.bookA)[link.ID].PausedReason)
 
 		// Giving access back restores the link, as with the sharing switch.
 		rec = f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/users/%d", f.sharer.ID), `{"all_library_access":true}`)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+		assert.Empty(t, f.listed(f.bookA)[link.ID].PausedReason)
+	})
+
+	t.Run("a paused link that is revoked reports only its revocation", func(t *testing.T) {
+		t.Parallel()
+		f := newShareLinksFixture(t)
+		f.setSharing(true, false)
+		link := f.mustCreate(f.sharer, f.bookA, `{}`)
+		assert.Empty(t, link.PausedReason, "a new link from a creator with access is not paused")
+		require.Equal(t, http.StatusNoContent, f.do(f.admin, http.MethodDelete, fmt.Sprintf("/api/users/%d", f.sharer.ID), "").Code)
+
+		rec := f.revoke(f.admin, f.bookA, link)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var revoked sharelinks.ShareLinkResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &revoked))
+		assert.Equal(t, models.ShareLinkStateRevoked, revoked.State)
+		assert.Empty(t, revoked.PausedReason)
+		assert.Empty(t, f.listed(f.bookA)[link.ID].PausedReason)
 	})
 
 	t.Run("deleting the creator", func(t *testing.T) {
