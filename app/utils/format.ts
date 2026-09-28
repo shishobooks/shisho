@@ -12,6 +12,17 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 /**
+ * The label for a file: the server-resolved display_name (a supplement's is
+ * its filename), or the file type when the file has neither a name nor a
+ * path, which happens only in the Share Link payload.
+ * @example fileLabel({ display_name: "", file_type: "epub" }) // "EPUB"
+ */
+export const fileLabel = (file: {
+  display_name: string;
+  file_type: string;
+}): string => file.display_name || file.file_type.toUpperCase();
+
+/**
  * Formats a page count with the right plural.
  * @example formatPageCount(1) // "1 page"
  * @example formatPageCount(12) // "12 pages"

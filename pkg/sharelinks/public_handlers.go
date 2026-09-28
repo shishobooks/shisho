@@ -134,11 +134,16 @@ func blankForRecipient(book *models.Book) {
 	book.SortTitle = ""
 	for _, f := range book.Files {
 		// A supplement's label is its filename, so resolve it while the path
-		// is still here. A main file is labeled by its name, which survives
-		// blanking; one without a name gets no label rather than its on-disk
-		// filename, and the page shows its type.
+		// is still here. A main file is labeled only by its stored name: one
+		// without a name gets no label rather than its on-disk filename, and
+		// the page shows its type.
 		if f.FileRole == models.FileRoleSupplement {
 			f.DisplayName = f.ResolveDisplayName()
+		} else {
+			f.DisplayName = ""
+			if f.Name != nil {
+				f.DisplayName = *f.Name
+			}
 		}
 		f.Filepath = ""
 		f.CoverImageFilename = nil

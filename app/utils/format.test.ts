@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fileLabel,
   formatDate,
   formatDateTime,
   formatPageCount,
@@ -78,5 +79,17 @@ describe("formatPageCount", () => {
     expect(formatPageCount(0)).toBe("0 pages");
     expect(formatPageCount(2)).toBe("2 pages");
     expect(formatPageCount(350)).toBe("350 pages");
+  });
+});
+
+describe("fileLabel", () => {
+  it("uses the server's display name", () => {
+    expect(fileLabel({ display_name: "notes.pdf", file_type: "pdf" })).toBe(
+      "notes.pdf",
+    );
+  });
+
+  it("falls back to the file type when there is no display name", () => {
+    expect(fileLabel({ display_name: "", file_type: "epub" })).toBe("EPUB");
   });
 });

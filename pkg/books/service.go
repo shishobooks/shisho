@@ -269,6 +269,7 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 		return nil, errors.WithStack(err)
 	}
 
+	models.ResolveBookFileDisplayNames(book)
 	return book, nil
 }
 
@@ -318,6 +319,7 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 		return nil, errors.WithStack(err)
 	}
 
+	models.ResolveBookFileDisplayNames(book)
 	return book, nil
 }
 
@@ -496,6 +498,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		return nil, 0, errors.WithStack(err)
 	}
 
+	models.ResolveBookFileDisplayNames(books...)
 	return books, total, nil
 }
 
@@ -790,6 +793,7 @@ func (svc *Service) GetFirstBookInSeriesByID(ctx context.Context, seriesID int) 
 		return nil, errors.WithStack(err)
 	}
 
+	models.ResolveBookFileDisplayNames(&book)
 	return &book, nil
 }
 

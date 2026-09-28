@@ -1,7 +1,7 @@
 package models
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +48,16 @@ func TestFile_ResolveDisplayName(t *testing.T) {
 			want: "Maps and Charts",
 		},
 		{
+			name: "supplement keeps a name restored from its sidecar",
+			file: File{
+				FileRole:   FileRoleSupplement,
+				Name:       str("Maps and Charts"),
+				NameSource: str(DataSourceSidecar),
+				Filepath:   "/lib/Book/maps.pdf",
+			},
+			want: "Maps and Charts",
+		},
+		{
 			name: "no name and no path gives an empty name",
 			file: File{FileRole: FileRoleSupplement},
 			want: "",
@@ -61,32 +71,20 @@ func TestFile_ResolveDisplayName(t *testing.T) {
 	}
 }
 
-func TestFile_MarshalJSONIncludesDisplayName(t *testing.T) {
+func TestFile_AfterScanRowResolvesDisplayName(t *testing.T) {
 	t.Parallel()
 
 	name := "Original Title"
 	file := &File{FileRole: FileRoleSupplement, Name: &name, Filepath: "/lib/Book/notes.pdf"}
-
-	data, err := json.Marshal([]*File{file})
-	require.NoError(t, err)
-
-	var out []map[string]any
-	require.NoError(t, json.Unmarshal(data, &out))
-	require.Len(t, out, 1)
-	assert.Equal(t, "notes.pdf", out[0]["display_name"])
-	assert.Equal(t, "Original Title", out[0]["name"], "the stored name is left alone")
-	assert.Equal(t, "/lib/Book/notes.pdf", out[0]["filepath"])
-	assert.Empty(t, file.DisplayName, "marshaling does not mutate the model")
+	require.NoError(t, file.AfterScanRow(context.Background()))
+	assert.Equal(t, "notes.pdf", file.DisplayName)
+	assert.Equal(t, "Original Title", *file.Name, "the stored name is left alone")
 }
 
-func TestFile_MarshalJSONKeepsPresetDisplayName(t *testing.T) {
+func TestResolveFileDisplayNames(t *testing.T) {
 	t.Parallel()
 
-	// The Share Link payload resolves the display name and then blanks the
-	// path, so a preset value must survive marshaling.
-	file := &File{FileRole: FileRoleSupplement, DisplayName: "notes.pdf"}
-
-	data, err := json.Marshal(file)
-	require.NoError(t, err)
-	assert.Contains(t, string(data), `"display_name":"notes.pdf"`)
+	books := []*Book{{Files: []*File{{FileRole: FileRoleSupplement, Filepath: "/lib/Book/a.pdf"}, nil}}, nil}
+	ResolveBookFileDisplayNames(books...)
+	assert.Equal(t, "a.pdf", books[0].Files[0].DisplayName)
 }

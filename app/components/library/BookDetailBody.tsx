@@ -94,6 +94,7 @@ import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType } from "@/utils/coverSelection";
 import {
+  fileLabel,
   formatDate,
   formatDateTime,
   formatDuration,
@@ -234,10 +235,8 @@ const FileRow = ({
   isDeletingFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
-  // The server resolves display_name (a supplement shows its filename). It
-  // is empty only when the file has neither a name nor a path, so fall back
-  // to the type rather than rendering blank.
-  const displayName = file.display_name || file.file_type.toUpperCase();
+  // fileLabel falls back to the type when the Share Link payload has no name.
+  const displayName = fileLabel(file);
   const readingAction = isShareLink ? null : getReadingAction(file.file_type);
   const isListen = readingAction === "listen";
   const readButton = readingAction && (
@@ -1572,7 +1571,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               : null;
             return (
               <RescanDialog
-                entityName={rescanFile ? rescanFile.display_name : ""}
+                entityName={rescanFile ? fileLabel(rescanFile) : ""}
                 entityType="file"
                 isPending={resyncFileMutation.isPending}
                 onConfirm={(mode) => {

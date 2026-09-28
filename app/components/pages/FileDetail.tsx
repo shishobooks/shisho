@@ -23,6 +23,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 import { ResourceBooks, type File } from "@/types";
+import { fileLabel } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
 
 const validTabs = ["details", "chapters"] as const;
@@ -134,7 +135,7 @@ const FileDetail = () => {
   const fileForTitle = bookQuery.data?.files?.find(
     (f) => f.id === parseInt(fileId || "0"),
   );
-  usePageTitle(fileForTitle?.display_name || "File Details");
+  usePageTitle(fileForTitle ? fileLabel(fileForTitle) : "File Details");
 
   // Find file in book.files array
   const file = bookQuery.data?.files?.find(
@@ -177,7 +178,7 @@ const FileDetail = () => {
 
   const book = bookQuery.data;
   const library = libraryQuery.data;
-  const filename = file.display_name;
+  const filename = fileLabel(file);
 
   return (
     <LibraryLayout>
