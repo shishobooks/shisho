@@ -24,9 +24,9 @@ Click **Setup**, then select one of these scopes:
 |-------|-----------|
 | **All Libraries** | Compatible books across the user's accessible libraries |
 | **Library** | Compatible books in the selected library, if the user has access |
-| **List** | Compatible books that belong to the selected list |
+| **List** | Compatible books that belong to the selected list, in libraries the user has access to |
 
-For a list scope, treat the selected list itself as the sync boundary. Do not assume library access settings will further narrow the list's contents. Choose a list containing only the books you intend to send to that device.
+A list shared with you can hold books from libraries you cannot access. Those books are left out of the sync, just as they are hidden from the list in Shisho.
 
 :::warning
 After selecting **Library** or **List**, actually choose a library or list before copying the URL. The current setup dialog can display an incomplete route while the selector is empty, and that route will not work.
