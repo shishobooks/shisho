@@ -319,19 +319,10 @@ func (h *handler) createBook(c echo.Context) error {
 		}
 	}
 
-	// Index book in FTS for search functionality
-	_, err = h.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
-		 VALUES (?, ?, ?, ?, ?, '', '', '', '', '')`,
-		book.ID,
-		book.ID,
-		book.LibraryID,
-		book.Title,
-		filepath,
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to index book in FTS")
-	}
+	// Index the book, and the series it joined, through the production
+	// indexer so search sees the same authors, files, and series names it
+	// would after an edit or a scan.
+	search.NewService(h.db).ReindexAffected(ctx, &search.Affected{BookIDs: []int{book.ID}})
 
 	return c.JSON(http.StatusCreated, createBookResponse{
 		ID:     book.ID,

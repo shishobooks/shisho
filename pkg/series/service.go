@@ -295,8 +295,7 @@ func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, erro
 }
 
 // MergeSeries merges sourceSeries into targetSeries (moves all books,
-// deletes source). Returns the IDs of books whose join rows moved so
-// the caller can recompute search indexes that bake in the series name.
+// deletes source). Returns the IDs of books whose join rows moved.
 func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]int, error) {
 	var movedBookIDs []int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
@@ -343,16 +342,6 @@ func (svc *Service) GetSeriesBookCount(ctx context.Context, seriesID int) (int, 
 		Where("series_id = ?", seriesID).
 		Count(ctx)
 	return count, errors.WithStack(err)
-}
-
-func (svc *Service) GetSeriesBookIDs(ctx context.Context, seriesID int) ([]int, error) {
-	var ids []int
-	err := svc.db.NewSelect().
-		Model((*models.BookSeries)(nil)).
-		Column("book_id").
-		Where("series_id = ?", seriesID).
-		Scan(ctx, &ids)
-	return ids, errors.WithStack(err)
 }
 
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.

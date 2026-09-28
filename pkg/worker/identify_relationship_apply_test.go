@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -16,7 +17,10 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// Capture database writes at the handler boundary, including FTS churn.
+// identifyWrites records the INSERT and DELETE statements an apply runs
+// against source tables. Rewrites of the derived FTS tables are left out: the
+// apply route always reindexes the book's search rows on the way out, which
+// changes nothing when the apply was a no-op.
 type identifyWrites struct{ queries []string }
 
 func (q *identifyWrites) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
@@ -24,10 +28,13 @@ func (q *identifyWrites) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) con
 }
 func (q *identifyWrites) AfterQuery(_ context.Context, event *bun.QueryEvent) {
 	sql := strings.ToUpper(strings.TrimSpace(event.Query))
-	if strings.HasPrefix(sql, "INSERT") || strings.HasPrefix(sql, "DELETE") {
+	if (strings.HasPrefix(sql, "INSERT") || strings.HasPrefix(sql, "DELETE")) && !ftsWritePattern.MatchString(sql) {
 		q.queries = append(q.queries, event.Query)
 	}
 }
+
+// ftsWritePattern matches a statement that writes one of the FTS tables.
+var ftsWritePattern = regexp.MustCompile(`^(INSERT( OR REPLACE)? INTO|DELETE FROM) "?[A-Z_]+_FTS\b`)
 
 func relationshipFields() map[string]any {
 	return map[string]any{

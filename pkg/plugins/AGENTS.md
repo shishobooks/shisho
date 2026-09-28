@@ -143,7 +143,10 @@ Conventions and gotchas specific to this surface:
     IDs. Authors compare ordered Person IDs and roles, treating nil and empty
     roles equally. Narrators compare ordered Person IDs. Genres and Tags
     compare unordered sets and deduplicate aliases resolving to the same ID.
-    A no-op preserves the source and skips relationship writes and FTS work.
+    A no-op preserves the source and skips relationship writes and the
+    new-entity `Index*` calls. The apply route still reindexes the Book and
+    every Series it was or is in on the way out, through `CollectAffected`
+    and a deferred `ReindexAffected`, whether or not anything changed.
     Lookup and insert failures must return errors, not silently drop entries.
     Complete clears null the aggregate source, including stale sources on
     already-empty collections; partial edits use the submitted intent.

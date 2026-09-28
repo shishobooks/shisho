@@ -268,17 +268,17 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// The edit can change the Book's title, authors, series, and file paths,
+	// which books_fts and the series_fts rows of every Series the Book is in,
+	// or was in, copy. Collect those Series before relinking.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Keep track of what's been changed.
 	opts := UpdateBookOptions{Columns: []string{}}
 	authorsChanged := false
 	seriesChanged := false
 	shouldOrganizeFiles := false
-
-	// Track old series IDs for FTS re-indexing
-	oldSeriesIDs := make([]int, 0)
-	for _, bs := range book.BookSeries {
-		oldSeriesIDs = append(oldSeriesIDs, bs.SeriesID)
-	}
 
 	// Update title
 	if params.Title != nil && *params.Title != book.Title {
@@ -662,35 +662,9 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	// Update FTS index for this book
-	if err := h.searchService.IndexBook(ctx, book); err != nil {
-		log.Warn("failed to update search index for book", logger.Data{"book_id": book.ID, "error": err.Error()})
-	}
-
-	// Update FTS index for affected series (old and new)
-	if seriesChanged {
-		// Re-index old series
-		for _, seriesID := range oldSeriesIDs {
-			seriesRecord, err := h.bookService.RetrieveSeriesByID(ctx, seriesID)
-			if err == nil {
-				if err := h.searchService.IndexSeries(ctx, seriesRecord); err != nil {
-					log.Warn("failed to update search index for old series", logger.Data{"series_id": seriesID, "error": err.Error()})
-				}
-			}
-		}
-		// Re-index new series
-		for _, bs := range book.BookSeries {
-			if bs.Series != nil {
-				if err := h.searchService.IndexSeries(ctx, bs.Series); err != nil {
-					log.Warn("failed to update search index for new series", logger.Data{"series_id": bs.SeriesID, "error": err.Error()})
-				}
-			}
-		}
-	}
-
-	// Update FTS index for affected people (old and new)
+	// Index the book's authors, which may be newly created. The deferred
+	// ReindexAffected covers the book and its series.
 	if authorsChanged {
-		// Re-index new people (they may be newly created)
 		for _, author := range book.Authors {
 			if author.Person != nil {
 				if err := h.searchService.IndexPerson(ctx, author.Person); err != nil {
@@ -786,6 +760,12 @@ func (h *handler) updateFile(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	// The book's books_fts row lists the file's path and narrators. Narrator
+	// writes commit before later validation can fail the request, so the
+	// reindex is deferred to cover those error paths too.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{file.BookID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
 
 	narratorsChanged := false
 	opts := UpdateFileOptions{Columns: []string{}}
@@ -924,6 +904,11 @@ func (h *handler) updateFile(c echo.Context) error {
 			if err != nil {
 				log.Error("failed to find/create person", logger.Data{"narrator": narratorName, "error": err.Error()})
 				continue
+			}
+			// Index the person as it is attached, since it may be newly
+			// created and the request can still fail further down.
+			if err := h.searchService.IndexPerson(ctx, person); err != nil {
+				log.Warn("failed to update search index for narrator", logger.Data{"person_id": person.ID, "error": err.Error()})
 			}
 			narrator := &models.Narrator{
 				FileID:    file.ID,
@@ -1183,28 +1168,6 @@ func (h *handler) updateFile(c echo.Context) error {
 	// Write file sidecar
 	if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
 		log.Warn("failed to write file sidecar", logger.Data{"file_id": file.ID, "error": err.Error()})
-	}
-
-	// Re-index the parent book (narrators are indexed in books_fts)
-	book, err = h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
-		ID: &file.BookID,
-	})
-	if err == nil {
-		if err := h.searchService.IndexBook(ctx, book); err != nil {
-			log.Warn("failed to update search index for book", logger.Data{"book_id": book.ID, "error": err.Error()})
-		}
-	}
-
-	// Update FTS index for affected people (new narrators)
-	if narratorsChanged {
-		// Re-index new people (they may be newly created)
-		for _, narrator := range file.Narrators {
-			if narrator.Person != nil {
-				if err := h.searchService.IndexPerson(ctx, narrator.Person); err != nil {
-					log.Warn("failed to update search index for new person", logger.Data{"person_id": narrator.PersonID, "error": err.Error()})
-				}
-			}
-		}
 	}
 
 	// Cleanup orphaned people
@@ -2197,7 +2160,6 @@ func (h *handler) updateBookLists(c echo.Context) error {
 // moveFiles moves files from this book to another book (or a new book).
 func (h *handler) moveFiles(c echo.Context) error {
 	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
 
 	// Parse book ID from URL param
 	id, err := strconv.Atoi(c.Param("id"))
@@ -2252,6 +2214,16 @@ func (h *handler) moveFiles(c echo.Context) error {
 		}
 	}
 
+	// The move changes both Books' files, may delete the source (whose
+	// book_series rows CASCADE away), and may create a new Book that copies
+	// the source's Series memberships.
+	affectedBooks := []int{id}
+	if params.TargetBookID != nil {
+		affectedBooks = append(affectedBooks, *params.TargetBookID)
+	}
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: affectedBooks})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Call service method
 	result, err := h.bookService.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:         params.FileIDs,
@@ -2262,32 +2234,8 @@ func (h *handler) moveFiles(c echo.Context) error {
 	if err != nil {
 		return errcodes.ValidationError(err.Error())
 	}
-
-	// Update search indexes: IndexBook for target
 	if result.TargetBook != nil {
-		if err := h.searchService.IndexBook(ctx, result.TargetBook); err != nil {
-			log.Warn("failed to update search index for target book", logger.Data{"book_id": result.TargetBook.ID, "error": err.Error()})
-		}
-	}
-
-	// Update search indexes: IndexBook for source (if still exists)
-	if !result.SourceBookDeleted {
-		// Reload source book to get fresh data
-		updatedSourceBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
-			ID: &id,
-		})
-		if err == nil {
-			if err := h.searchService.IndexBook(ctx, updatedSourceBook); err != nil {
-				log.Warn("failed to update search index for source book", logger.Data{"book_id": id, "error": err.Error()})
-			}
-		}
-	}
-
-	// DeleteFromBookIndex for deleted books
-	for _, deletedBookID := range result.DeletedBookIDs {
-		if err := h.searchService.DeleteFromBookIndex(ctx, deletedBookID); err != nil {
-			log.Warn("failed to delete book from search index", logger.Data{"book_id": deletedBookID, "error": err.Error()})
-		}
+		affected.BookIDs = append(affected.BookIDs, result.TargetBook.ID)
 	}
 
 	// Return MoveFilesResponse
@@ -2301,7 +2249,6 @@ func (h *handler) moveFiles(c echo.Context) error {
 // mergeBooks merges multiple books into a single target book.
 func (h *handler) mergeBooks(c echo.Context) error {
 	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
 
 	// Bind payload
 	params := MergeBooksPayload{}
@@ -2356,6 +2303,11 @@ func (h *handler) mergeBooks(c echo.Context) error {
 		})
 	}
 
+	// The merge deletes the emptied sources, whose book_series rows CASCADE
+	// away, so collect their Series first.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: append([]int{params.TargetBookID}, params.SourceBookIDs...)})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Call service method to move all files to target book
 	result, err := h.bookService.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:         allFileIDs,
@@ -2365,20 +2317,6 @@ func (h *handler) mergeBooks(c echo.Context) error {
 	})
 	if err != nil {
 		return errcodes.ValidationError(err.Error())
-	}
-
-	// Update search indexes: IndexBook for target
-	if result.TargetBook != nil {
-		if err := h.searchService.IndexBook(ctx, result.TargetBook); err != nil {
-			log.Warn("failed to update search index for target book", logger.Data{"book_id": result.TargetBook.ID, "error": err.Error()})
-		}
-	}
-
-	// DeleteFromBookIndex for deleted books
-	for _, deletedBookID := range result.DeletedBookIDs {
-		if err := h.searchService.DeleteFromBookIndex(ctx, deletedBookID); err != nil {
-			log.Warn("failed to delete book from search index", logger.Data{"book_id": deletedBookID, "error": err.Error()})
-		}
 	}
 
 	// Return MergeBooksResponse
@@ -2432,15 +2370,15 @@ func (h *handler) deleteBook(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// The delete CASCADEs the book's book_series rows away, so collect its
+	// Series first. The reindex drops the book's own row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Delete book and files
 	result, err := h.bookService.DeleteBookAndFiles(ctx, id, library)
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	// Clean up search indexes
-	if err := h.searchService.DeleteFromBookIndex(ctx, id); err != nil {
-		log.Warn("failed to remove book from search index", logger.Data{"book_id": id, "error": err.Error()})
 	}
 
 	CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
@@ -2493,24 +2431,21 @@ func (h *handler) deleteFile(c echo.Context) error {
 		}
 	}
 
+	// The book's books_fts row lists the file's path and narrators. When the
+	// last main file goes the book is deleted too, and its book_series rows
+	// CASCADE away, so collect its Series first.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{file.BookID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Delete file
 	result, err := h.bookService.DeleteFileAndCleanup(ctx, id, library, supportedTypes, h.config.SupplementExcludePatterns)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// Clean up search indexes if book was deleted
 	if result.BookDeleted {
-		if err := h.searchService.DeleteFromBookIndex(ctx, result.BookID); err != nil {
-			log.Warn("failed to remove book from search index", logger.Data{"book_id": result.BookID, "error": err.Error()})
-		}
 		CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
 	} else {
-		// The surviving book's books_fts row still lists the deleted file's
-		// path and narrators until it is re-indexed.
-		if err := h.searchService.ReindexBookByID(ctx, result.BookID); err != nil {
-			log.Warn("failed to update book search index after file delete", logger.Data{"book_id": result.BookID, "error": err.Error()})
-		}
 		// The deleted file's narrators may have narrated nothing else. Only
 		// the people kind runs, so a file delete does not start sweeping up
 		// other kinds of orphans that the full cleanup would remove.
@@ -2578,17 +2513,15 @@ func (h *handler) deleteBooks(c echo.Context) error {
 		}
 	}
 
+	// The delete CASCADEs the books' book_series rows away, so collect their
+	// Series first. The reindex drops the books' own rows.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{BookIDs: req.BookIDs})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Delete books
 	result, err := h.bookService.DeleteBooksAndFiles(ctx, req.BookIDs, library)
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	// Clean up search indexes
-	for _, bookID := range req.BookIDs {
-		if err := h.searchService.DeleteFromBookIndex(ctx, bookID); err != nil {
-			log.Warn("failed to remove book from search index", logger.Data{"error": err.Error(), "book_id": bookID})
-		}
 	}
 	CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
 
