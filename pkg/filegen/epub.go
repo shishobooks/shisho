@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -235,9 +236,13 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 		title = *file.Name
 	}
 
-	// Update title
+	// Update title. A retitled element drops its unmodeled attributes
+	// (xml:lang, dir, opf:file-as): they described the old text.
 	if len(pkg.Metadata.Titles) > 0 {
-		pkg.Metadata.Titles[0].Text = title
+		if pkg.Metadata.Titles[0].Text != title {
+			pkg.Metadata.Titles[0].Text = title
+			pkg.Metadata.Titles[0].Attrs = nil
+		}
 	} else {
 		pkg.Metadata.Titles = []opfTitle{{Text: title}}
 	}
@@ -261,8 +266,9 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 				Text: *book.Subtitle,
 				ID:   "subtitle",
 			})
-		} else {
+		} else if pkg.Metadata.Titles[1].Text != *book.Subtitle {
 			pkg.Metadata.Titles[1].Text = *book.Subtitle
+			pkg.Metadata.Titles[1].Attrs = nil
 		}
 	}
 
@@ -284,6 +290,13 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 	// Update language from file if available
 	if file != nil && file.Language != nil && *file.Language != "" {
 		pkg.Metadata.Language = *file.Language
+		// The package's xml:lang is the default language of its text, so
+		// it follows the file's language when the source declared one.
+		for i, attr := range pkg.Attrs {
+			if attr.Name.Space == xmlNamespace && attr.Name.Local == "lang" {
+				pkg.Attrs[i].Value = *file.Language
+			}
+		}
 	}
 
 	// Update authors - replace all creators with role="aut"
@@ -464,32 +477,82 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 }
 
 // replaceIdentifiers swaps the package's identifiers for the file's, keeping
-// the one package@unique-identifier points at. That element is the
+// the element package@unique-identifier points at. That element is the
 // publication's stable identity, and dropping it leaves the package pointing
-// at a missing id, which is invalid. A file identifier with the same value is
-// skipped rather than written twice.
+// at a missing id, which is invalid. Its value follows the file's
+// identifiers, though: a file identifier with the same normalized value is
+// not written twice (so "urn:isbn:978..." and "978..." count as one), and
+// when the file has a different identifier of the same kind, such as a
+// corrected ISBN, that value replaces the stale one under the unique id.
 func replaceIdentifiers(existing []opfID, uniqueID string, fileIdentifiers []*models.FileIdentifier) []opfID {
-	var result []opfID
-	var uniqueValue string
+	var unique *opfID
 	if uniqueID != "" {
-		for _, id := range existing {
-			if id.ID == uniqueID {
-				result = append(result, id)
-				uniqueValue = strings.TrimSpace(id.Text)
+		for i := range existing {
+			if existing[i].ID == uniqueID {
+				kept := existing[i]
+				unique = &kept
 				break
 			}
 		}
 	}
-	for _, id := range fileIdentifiers {
-		if uniqueValue != "" && strings.TrimSpace(id.Value) == uniqueValue {
-			continue
+
+	newID := func(id *models.FileIdentifier) opfID {
+		return opfID{Text: id.Value, Scheme: identifierTypeToScheme(id.Type)}
+	}
+	if unique == nil {
+		result := make([]opfID, 0, len(fileIdentifiers))
+		for _, id := range fileIdentifiers {
+			result = append(result, newID(id))
 		}
-		result = append(result, opfID{
-			Text:   id.Value,
-			Scheme: identifierTypeToScheme(id.Type),
-		})
+		return result
+	}
+
+	uniqueType := identifiers.DetectType(unique.Text, unique.Scheme)
+	uniqueKey := identifiers.NormalizeValue(string(uniqueType), unique.Text)
+	sameValue := func(id *models.FileIdentifier) bool {
+		if uniqueType == identifiers.TypeUnknown {
+			return strings.TrimSpace(id.Value) == strings.TrimSpace(unique.Text)
+		}
+		return identifierFamily(id.Type) == identifierFamily(string(uniqueType)) &&
+			identifiers.NormalizeValue(id.Type, id.Value) == uniqueKey
+	}
+
+	// Which file identifier the unique element absorbs: one with the same
+	// value first, otherwise the first of the same kind.
+	absorbed := -1
+	for i, id := range fileIdentifiers {
+		if sameValue(id) {
+			absorbed = i
+			break
+		}
+	}
+	if absorbed == -1 && uniqueType != identifiers.TypeUnknown {
+		for i, id := range fileIdentifiers {
+			if identifierFamily(id.Type) == identifierFamily(string(uniqueType)) {
+				unique.Text = id.Value
+				absorbed = i
+				break
+			}
+		}
+	}
+
+	result := []opfID{*unique}
+	for i, id := range fileIdentifiers {
+		if i != absorbed {
+			result = append(result, newID(id))
+		}
 	}
 	return result
+}
+
+// identifierFamily groups identifier types that name the same thing, so an
+// ISBN-10 unique identifier can take a corrected ISBN-13.
+func identifierFamily(idType string) string {
+	t := identifiers.Type(idType)
+	if t == identifiers.TypeISBN10 || t == identifiers.TypeISBN13 {
+		return "isbn"
+	}
+	return idType
 }
 
 // readZipFile reads the contents of a zip file entry.
@@ -631,6 +694,9 @@ type opfGuideReference struct {
 	Href  string `xml:"href,attr"`
 	Title string `xml:"title,attr,omitempty"`
 }
+
+// xmlNamespace is the namespace encoding/xml gives the xml: prefix.
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
 
 // opfAttrs carries the attributes an OPF struct does not model by name, so
 // the generator round-trips them instead of dropping them. Without it,

@@ -101,6 +101,10 @@ type fidelityPackage struct {
 		ID   string `xml:"id,attr"`
 		Text string `xml:",chardata"`
 	} `xml:"metadata>identifier"`
+	Titles []struct {
+		Text string `xml:",chardata"`
+		Lang string `xml:"http://www.w3.org/XML/1998/namespace lang,attr"`
+	} `xml:"metadata>title"`
 	Items []struct {
 		ID         string `xml:"id,attr"`
 		Properties string `xml:"properties,attr"`
@@ -117,10 +121,15 @@ type fidelityPackage struct {
 
 func generateFidelityEPUB(t *testing.T, file *models.File) (string, fidelityPackage) {
 	t.Helper()
+	return generateFromOPF(t, epub3FidelityOPF, file)
+}
+
+func generateFromOPF(t *testing.T, opf string, file *models.File) (string, fidelityPackage) {
+	t.Helper()
 
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "source.epub")
-	createEPUBWithOPF(t, srcPath, epub3FidelityOPF, map[string]string{
+	createEPUBWithOPF(t, srcPath, opf, map[string]string{
 		"nav.xhtml":      epub3FidelityNav,
 		"chapter1.xhtml": `<html xmlns="http://www.w3.org/1999/xhtml"><body><p>One</p></body></html>`,
 		"notes.xhtml":    `<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Notes</p></body></html>`,
@@ -234,4 +243,68 @@ func TestEPUBGenerator_DoesNotDuplicateUniqueIdentifierValue(t *testing.T) {
 
 	require.Len(t, pkg.Identifiers, 1)
 	assert.Equal(t, "pub-id", pkg.Identifiers[0].ID)
+}
+
+// isbnUniqueOPF points unique-identifier at an ISBN, as many publisher EPUBs
+// do. The title carries its own xml:lang.
+const isbnUniqueOPF = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id" xml:lang="ja">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:identifier id="pub-id">urn:isbn:9780316769488</dc:identifier>
+    <dc:title xml:lang="ja">Source Title</dc:title>
+    <dc:language>ja</dc:language>
+  </metadata>
+  <manifest>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter1"/>
+  </spine>
+</package>`
+
+func TestEPUBGenerator_CorrectedISBNReplacesStaleUniqueIdentifier(t *testing.T) {
+	t.Parallel()
+
+	_, pkg := generateFromOPF(t, isbnUniqueOPF, &models.File{
+		FileType: models.FileTypeEPUB,
+		Identifiers: []*models.FileIdentifier{
+			{Type: "isbn_13", Value: "9780306406157"},
+			{Type: "asin", Value: "B08N5WRWNW"},
+		},
+	})
+
+	require.Equal(t, "pub-id", pkg.UniqueIdentifier)
+	values := map[string]string{}
+	for _, id := range pkg.Identifiers {
+		values[id.Text] = id.ID
+	}
+	assert.Equal(t, map[string]string{"9780306406157": "pub-id", "B08N5WRWNW": ""}, values,
+		"the user's ISBN takes over the unique identifier and the stale ISBN is gone")
+}
+
+func TestEPUBGenerator_SameISBNWithURNPrefixIsNotDuplicated(t *testing.T) {
+	t.Parallel()
+
+	_, pkg := generateFromOPF(t, isbnUniqueOPF, &models.File{
+		FileType:    models.FileTypeEPUB,
+		Identifiers: []*models.FileIdentifier{{Type: "isbn_13", Value: "9780316769488"}},
+	})
+
+	require.Len(t, pkg.Identifiers, 1)
+	assert.Equal(t, "pub-id", pkg.Identifiers[0].ID)
+}
+
+func TestEPUBGenerator_RetitleDropsStaleTitleAttributes(t *testing.T) {
+	t.Parallel()
+
+	lang := "en"
+	_, pkg := generateFromOPF(t, isbnUniqueOPF, &models.File{
+		FileType: models.FileTypeEPUB,
+		Language: &lang,
+	})
+
+	require.NotEmpty(t, pkg.Titles)
+	assert.Equal(t, "Regenerated Title", pkg.Titles[0].Text)
+	assert.Empty(t, pkg.Titles[0].Lang, "the source title's xml:lang does not describe the new title")
+	assert.Equal(t, "en", pkg.Lang, "the package language follows the file's language")
 }
