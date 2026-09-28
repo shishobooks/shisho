@@ -423,7 +423,9 @@ func TestShareLinks_RecipientFetchesBookWithoutPaths(t *testing.T) {
 		if file.FileRole == models.FileRoleSupplement {
 			assert.Equal(t, "notes.pdf", file.DisplayName, "supplements show their filename without the path")
 		} else {
-			assert.NotEmpty(t, file.DisplayName)
+			// A main file without a name must not fall back to its on-disk
+			// filename for a recipient; the page shows the file type instead.
+			assert.Empty(t, file.DisplayName)
 		}
 	}
 	assert.Empty(t, shared.Filepath)

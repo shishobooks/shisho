@@ -147,6 +147,7 @@ describe("MobileDrawer library picker", () => {
     expect(
       within(getDrawer()).queryByText("Select Library"),
     ).not.toBeInTheDocument();
+    expect(useLibraries).toHaveBeenCalled();
     for (const call of vi.mocked(useLibraries).mock.calls) {
       expect(call[1]?.enabled).toBe(false);
     }

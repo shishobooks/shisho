@@ -33,6 +33,7 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { useTagsList } from "@/hooks/queries/tags";
+import { useAuth } from "@/hooks/useAuth";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -50,7 +51,11 @@ import type { Book, GallerySize, Genre, ReviewedFilter, Tag } from "@/types";
 const HomeContent = () => {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const libraryQuery = useLibrary(libraryId);
+  const { hasPermission } = useAuth();
+  const canReadLibraries = hasPermission("libraries", "read");
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId) && canReadLibraries,
+  });
 
   usePageTitle(libraryQuery.data?.name ?? "Books");
   const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
@@ -114,7 +119,9 @@ const HomeContent = () => {
 
   // Fetch distinct languages for the library
   const libraryIdNum = libraryId ? parseInt(libraryId, 10) : undefined;
-  const languagesQuery = useLibraryLanguages(libraryIdNum);
+  const languagesQuery = useLibraryLanguages(libraryIdNum, {
+    enabled: Boolean(libraryIdNum) && canReadLibraries,
+  });
 
   // Fetch per-library sort preference. Hooks can't be called conditionally,
   // so we pass a 0 placeholder when libraryIdNum is undefined. Both hooks

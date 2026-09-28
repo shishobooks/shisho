@@ -48,7 +48,7 @@ const DialogClose = DialogPrimitive.Close;
 // DialogContent renders a hidden DialogPrimitive.Close and exposes its ref via
 // this context. DialogHeader's visible close button forwards clicks to that
 // hidden close button. This keeps DialogHeader renderable outside a Dialog
-// (e.g. in unit tests) — the context will be null and the visible button is
+// (e.g. in unit tests): the context will be null and the visible button is
 // simply omitted instead of throwing from Radix's internal context check.
 const DialogCloseRefContext =
   React.createContext<React.RefObject<HTMLButtonElement | null> | null>(null);
@@ -79,8 +79,9 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<
 }
 
 // Candidates for Radix's open autofocus, in document order.
+// Links are left out because Radix skips them for the initial focus too.
 const TABBABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type="hidden"]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 // Radix focuses the first tabbable element when a dialog opens. With a
 // DialogHeader that is the close button, and a dialog opened from a dropdown
@@ -118,7 +119,7 @@ const DialogContent = React.forwardRef<
         <DialogPrimitive.Content
           ref={ref}
           className={cn(
-            // Base styles — flex column so Header/Footer stay sticky and only the
+            // Base styles: flex column so Header/Footer stay sticky and only the
             // Body scrolls. Content's overflow-hidden + each child's shrink behavior
             // means there's no overscroll on the Header/Footer. outline-none
             // because the content itself takes focus on open (see
@@ -145,7 +146,7 @@ const DialogContent = React.forwardRef<
           <DialogCloseRefContext.Provider value={closeRef}>
             {children}
           </DialogCloseRefContext.Provider>
-          {/* Hidden close target — the visible X lives in DialogHeader and forwards
+          {/* Hidden close target: the visible X lives in DialogHeader and forwards
             clicks here so Radix's close behavior runs without DialogHeader needing
             to consume Radix's internal context. */}
           <DialogPrimitive.Close

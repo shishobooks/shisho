@@ -17,6 +17,8 @@ let writableResources: string[] = ["books", "series", "people"];
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     canWrite: (resource: string) => writableResources.includes(resource),
+    hasPermission: (resource: string, operation: string) =>
+      operation === "read" || writableResources.includes(resource),
   }),
 }));
 

@@ -150,7 +150,7 @@ function CoverGalleryTabs({
         {/* Image hidden until loaded */}
         {hasCover && (
           <img
-            alt={`${selectedFile?.name || "File"} Cover`}
+            alt={`${selectedFile?.display_name || "File"} Cover`}
             className={cn(
               "absolute inset-0 w-full h-full object-cover",
               !coverLoaded && "opacity-0",

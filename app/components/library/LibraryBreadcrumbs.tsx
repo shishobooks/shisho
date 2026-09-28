@@ -14,10 +14,11 @@ interface LibraryBreadcrumbsProps {
   items: BreadcrumbItem[];
 }
 
-// The library crumb needs a name. A role without Libraries Read cannot fetch
-// the library, so it shows the name only when the caller found it in data
-// the role can read (a book carries its library) and drops the crumb
-// otherwise, rather than showing a generic "Library".
+// The library crumb shows the caller's libraryName, or a "Library"
+// placeholder while a role with Libraries Read waits for it. A role without
+// Libraries Read cannot fetch the library, so it sees the crumb only when the
+// caller found the name in data the role can read (a book carries its
+// library); otherwise the crumb is dropped rather than left generic.
 const LibraryBreadcrumbs = ({
   libraryId,
   libraryName,
