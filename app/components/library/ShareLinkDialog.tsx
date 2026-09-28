@@ -407,7 +407,11 @@ export function ShareLinkDialog({
 
       <ConfirmDialog
         confirmLabel="Revoke"
-        description={`${linkSubject(toRevoke)} stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`}
+        description={
+          toRevoke?.paused_reason
+            ? `${linkSubject(toRevoke)} is paused and will not work again when its creator's access returns. It stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`
+            : `${linkSubject(toRevoke)} stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`
+        }
         isPending={revokeMutation.isPending}
         onConfirm={handleRevoke}
         onOpenChange={setRevokeOpen}
@@ -417,7 +421,7 @@ export function ShareLinkDialog({
       <ConfirmDialog
         confirmLabel="Delete"
         description={
-          toDelete?.state === ShareLinkStateActive
+          toDelete?.state === ShareLinkStateActive && !toDelete.paused_reason
             ? `${linkSubject(toDelete)} stops working immediately and is removed from the list with its counts. This cannot be undone.`
             : `${linkSubject(toDelete)} is removed from the list with its counts. This cannot be undone.`
         }

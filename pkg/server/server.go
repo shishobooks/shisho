@@ -202,9 +202,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pm *plugins.Manager, 
 // sharedServices holds the services and caches that pkg/server builds once
 // and injects into every route family that needs them. The app settings,
 // plugin, and Share Link services hold only the database handle but are
-// shared so each has one construction site. Other database-only services (search, aliases,
-// libraries, jobs, settings, API keys, and the entity services) are cheap
-// and stateless, so route packages may still build those locally.
+// shared so each has one construction site. Other database-only services
+// (search, aliases, libraries, jobs, settings, API keys, and the entity
+// services) are cheap and stateless, so route packages may still build those
+// locally.
 type sharedServices struct {
 	// books carries app settings, so the chapter replace handler, the genre,
 	// tag, people, series, and publisher delete handlers, and every books
@@ -213,12 +214,10 @@ type sharedServices struct {
 	books       *books.Service
 	appSettings *appsettings.Service
 	plugins     *plugins.Service
-	// shareLinks backs both the management routes and the public recipient
-	// routes, so one instance serves both families.
-	shareLinks *sharelinks.Service
-	dlCache    *downloadcache.Cache
-	cbzCache   *cbzpages.Cache
-	pdfCache   *pdfpages.Cache
+	shareLinks  *sharelinks.Service
+	dlCache     *downloadcache.Cache
+	cbzCache    *cbzpages.Cache
+	pdfCache    *pdfpages.Cache
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.

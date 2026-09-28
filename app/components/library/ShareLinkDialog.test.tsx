@@ -418,4 +418,25 @@ describe("ShareLinkDialog", () => {
       ).toBeInTheDocument();
     }
   });
+
+  it("does not tell the sharer a paused link will stop working", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mocks.links = [
+      link({ id: 6, label: "paused", paused_reason: "creator_deactivated" }),
+    ];
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: "Revoke paused" }));
+    const revoke = screen.getByRole("dialog", { name: "Revoke Link" });
+    expect(revoke).toHaveTextContent(
+      "will not work again when its creator's access returns",
+    );
+    expect(revoke).not.toHaveTextContent("stops working immediately");
+    await user.click(within(revoke).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete paused" }));
+    expect(
+      screen.getByRole("dialog", { name: "Delete Link" }),
+    ).not.toHaveTextContent("stops working immediately");
+  });
 });

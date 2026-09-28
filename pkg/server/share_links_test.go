@@ -834,13 +834,17 @@ func TestShareLinks_CreatorAndBookLifecycle(t *testing.T) {
 
 		f.assertUnavailable(link.Token, f.epubA.ID)
 		assert.True(t, f.linkRowExists(link))
-		assert.Equal(t, models.ShareLinkPausedCreatorNoLibraryAccess, f.listed(f.bookA)[link.ID].PausedReason)
+		paused := f.listed(f.bookA)
+		require.Contains(t, paused, link.ID)
+		assert.Equal(t, models.ShareLinkPausedCreatorNoLibraryAccess, paused[link.ID].PausedReason)
 
 		// Giving access back restores the link, as with the sharing switch.
 		rec = f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/users/%d", f.sharer.ID), `{"all_library_access":true}`)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
-		assert.Empty(t, f.listed(f.bookA)[link.ID].PausedReason)
+		restored := f.listed(f.bookA)
+		require.Contains(t, restored, link.ID)
+		assert.Empty(t, restored[link.ID].PausedReason)
 	})
 
 	t.Run("a paused link that is revoked reports only its revocation", func(t *testing.T) {
@@ -857,7 +861,9 @@ func TestShareLinks_CreatorAndBookLifecycle(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &revoked))
 		assert.Equal(t, models.ShareLinkStateRevoked, revoked.State)
 		assert.Empty(t, revoked.PausedReason)
-		assert.Empty(t, f.listed(f.bookA)[link.ID].PausedReason)
+		listed := f.listed(f.bookA)
+		require.Contains(t, listed, link.ID)
+		assert.Empty(t, listed[link.ID].PausedReason)
 	})
 
 	t.Run("deleting the creator", func(t *testing.T) {

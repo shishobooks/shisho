@@ -31,7 +31,7 @@ Users with Shares Write see a form at the top of the dialog:
 - **Label** is optional and only visible to you and other sharers. Use it to tell links apart, for example "for Alice".
 - **Expires after** offers 1 day, 7 days (the default), and 30 days. **Never** is offered last unless the admin has turned on **Require expiration**. An expiration is fixed when the link is created and cannot be extended later; create a new link instead.
 
-**Create link** adds the link to the list below the form. The list shows every link on the book, including links other users created, with its label, who created it, whether it is active, paused, expired, or revoked, when it expires, and how it has been used (see [Managing Links](#managing-links)). The copy button next to a working link puts its URL on your clipboard, ready to paste into a message. Users with only Shares Read see the list without the form.
+**Create link** adds the link to the list below the form. The list shows every link on the book, including links other users created, with its label, who created it, whether it is active, paused, expired, or revoked, when it expires (or when it was revoked), and how it has been used (see [Managing Links](#managing-links)). The copy button next to a working link puts its URL on your clipboard, ready to paste into a message. Users with only Shares Read see the list without the form.
 
 The copied URL uses the address you are browsing Shisho on. If you reach Shisho through a local address such as `http://192.168.1.10:5173`, the link will only work for people on your network. Open Shisho through the address your recipient can reach before copying.
 
@@ -47,7 +47,7 @@ Viewing the book's cover does not count as either. The dialog fetches fresh figu
 
 Users with Shares Write can act on any link on the book, including links other users created:
 
-- **Revoke** (the ⊘ button, offered on active links) stops the link immediately. The link stays in the list, marked as revoked with the time it was revoked, and keeps its figures, so you can still see whether it was used before you pulled it. Revoking cannot be undone. To share the book again, create a new link.
+- **Revoke** (the ⊘ button, offered on active and paused links) stops the link immediately. The link stays in the list, marked as revoked with the time it was revoked, and keeps its figures, so you can still see whether it was used before you pulled it. Revoking cannot be undone. To share the book again, create a new link.
 - **Delete** (the trash button, offered on every link) removes the link and its figures from the list. Deleting an active link also stops it.
 
 Expired links stay in the list, marked as expired, until someone deletes them. Shisho never removes them on its own.
@@ -71,7 +71,7 @@ The checks run each time the link is used, so some of them can be reversed:
 | Someone revokes the link | Stops working; stays listed as revoked |
 | Someone deletes the link | Stops working; removed from the list |
 | An admin turns sharing off | Stops working; works again when sharing is turned back on |
-| The creator is deactivated | Stops working and shows as paused; works again if the account is reactivated |
+| The creator is deactivated | Stops working and shows as paused; works again if the account is reactivated (the app has no reactivation control yet, see [Deactivate Users](./users-and-permissions.md#deactivate-users)) |
 | The creator loses access to the book's library | Stops working and shows as paused; works again if their access is restored |
 | The book is deleted | Stops working; removed |
 

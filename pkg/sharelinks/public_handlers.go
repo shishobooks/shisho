@@ -42,8 +42,8 @@ func errUnavailable() error {
 // resolve decides whether the token in the path is usable and returns the
 // link and its book. A link resolves only while sharing is enabled, the
 // token exists, the link is active (not revoked, not expired), and it is
-// not paused: its creator is active and can still reach the book's library. A deleted
-// creator or book takes the row with it. Every failure returns
+// not paused: its creator is active and can still reach the book's library.
+// A deleted creator or book takes the row with it. Every failure returns
 // errUnavailable.
 func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book, error) {
 	ctx := c.Request().Context()
