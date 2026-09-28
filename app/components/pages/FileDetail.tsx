@@ -23,7 +23,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 import { ResourceBooks, type File } from "@/types";
-import { getFilename } from "@/utils/format";
+import { fileLabel } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
 
 const validTabs = ["details", "chapters"] as const;
@@ -37,7 +37,7 @@ const FileDetail = () => {
     tab?: string;
   }>();
   const navigate = useNavigate();
-  const { canWrite } = useAuth();
+  const { canWrite, hasPermission } = useAuth();
   // File metadata, cover, chapters, and deletion all require Books Write.
   const canWriteBooks = canWrite(ResourceBooks);
 
@@ -104,7 +104,9 @@ const FileDetail = () => {
     useUnsavedChanges(chaptersActionState.hasChanges);
 
   const bookQuery = useBook(bookId);
-  const libraryQuery = useLibrary(libraryId);
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
+  });
 
   // Handle file deletion
   const handleDeleteFile = async () => {
@@ -133,11 +135,7 @@ const FileDetail = () => {
   const fileForTitle = bookQuery.data?.files?.find(
     (f) => f.id === parseInt(fileId || "0"),
   );
-  usePageTitle(
-    fileForTitle?.name ||
-      getFilename(fileForTitle?.filepath ?? "") ||
-      "File Details",
-  );
+  usePageTitle(fileForTitle ? fileLabel(fileForTitle) : "File Details");
 
   // Find file in book.files array
   const file = bookQuery.data?.files?.find(
@@ -180,7 +178,7 @@ const FileDetail = () => {
 
   const book = bookQuery.data;
   const library = libraryQuery.data;
-  const filename = file.name || getFilename(file.filepath);
+  const filename = fileLabel(file);
 
   return (
     <LibraryLayout>
@@ -190,7 +188,7 @@ const FileDetail = () => {
           { label: filename },
         ]}
         libraryId={libraryId!}
-        libraryName={library?.name}
+        libraryName={library?.name ?? book.library?.name}
       />
 
       {/* File title with Edit/Save/Cancel buttons */}

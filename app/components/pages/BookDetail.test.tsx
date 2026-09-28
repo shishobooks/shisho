@@ -66,6 +66,7 @@ const { book } = vi.hoisted(() => {
       created_at: "2024-01-01T00:00:00Z",
       updated_at: "2024-01-01T00:00:00Z",
       files,
+      library: { id: 1, name: "Fiction" },
     },
   };
 });
@@ -81,8 +82,11 @@ vi.mock("@/hooks/queries/books", () => ({
   useResyncBook: idle,
   useResyncFile: idle,
 }));
+// Honors enabled like react-query does: a disabled query has no data.
 vi.mock("@/hooks/queries/libraries", () => ({
-  useLibrary: () => ({ data: { id: 1, name: "Lib" } }),
+  useLibrary: (_id?: string, options?: { enabled?: boolean }) => ({
+    data: options?.enabled === false ? undefined : { id: 1, name: "Lib" },
+  }),
 }));
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
@@ -100,7 +104,9 @@ vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@/components/library/LibraryBreadcrumbs", () => ({
-  default: () => <nav />,
+  default: ({ libraryName }: { libraryName?: string }) => (
+    <nav data-testid="breadcrumbs">{libraryName ?? ""}</nav>
+  ),
 }));
 vi.mock("@/components/library/AddToListPopover", () => ({
   default: ({ trigger }: { trigger: ReactNode }) => (
@@ -180,5 +186,15 @@ describe("BookDetail write controls", () => {
     expect(
       screen.getAllByRole("button", { name: "Download" }).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("BookDetail library name", () => {
+  it("names the library from the book payload for a role without Libraries Read", () => {
+    // The mocked role holds books permissions only, so the library endpoint
+    // is off limits and the name must come from the book.
+    renderPage();
+
+    expect(screen.getByTestId("breadcrumbs")).toHaveTextContent("Fiction");
   });
 });

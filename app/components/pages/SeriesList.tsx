@@ -23,6 +23,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { useAuth } from "@/hooks/useAuth";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
@@ -206,7 +207,10 @@ const SeriesList = () => {
     );
   };
 
-  const libraryQuery = useLibrary(libraryId);
+  const { hasPermission } = useAuth();
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
+  });
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
   const seriesQuery = useSeriesList(

@@ -48,7 +48,7 @@ const DialogClose = DialogPrimitive.Close;
 // DialogContent renders a hidden DialogPrimitive.Close and exposes its ref via
 // this context. DialogHeader's visible close button forwards clicks to that
 // hidden close button. This keeps DialogHeader renderable outside a Dialog
-// (e.g. in unit tests) — the context will be null and the visible button is
+// (e.g. in unit tests): the context will be null and the visible button is
 // simply omitted instead of throwing from Radix's internal context check.
 const DialogCloseRefContext =
   React.createContext<React.RefObject<HTMLButtonElement | null> | null>(null);
@@ -78,49 +78,88 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<
   mobileSheet?: boolean;
 }
 
+// Candidates for Radix's open autofocus, in document order.
+// Links are left out because Radix skips them for the initial focus too.
+const TABBABLE =
+  'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type="hidden"]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
+
+// Radix focuses the first tabbable element when a dialog opens. With a
+// DialogHeader that is the close button, and a dialog opened from a dropdown
+// menu inherits the menu's keyboard-style focus, so the button showed its
+// focus ring on every open. Focus the dialog itself in that case: Tab still
+// reaches the close button first. Dialogs whose first tabbable element is a
+// field keep Radix's default and focus that field.
+const focusDialogInsteadOfClose = (event: Event) => {
+  const content = event.currentTarget ?? event.target;
+  if (!(content instanceof HTMLElement)) return;
+  const first = Array.from(
+    content.querySelectorAll<HTMLElement>(TABBABLE),
+  ).find(
+    (el) =>
+      !el.closest("[hidden]") && el.getAttribute("aria-hidden") !== "true",
+  );
+  if (first?.hasAttribute("data-dialog-header-close")) {
+    event.preventDefault();
+    content.focus({ preventScroll: true });
+  }
+};
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, mobileSheet = false, ...props }, ref) => {
-  const closeRef = React.useRef<HTMLButtonElement>(null);
-  return (
-    <DialogPortal>
-      <DialogOverlay />
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn(
-          // Base styles — flex column so Header/Footer stay sticky and only the
-          // Body scrolls. Content's overflow-hidden + each child's shrink behavior
-          // means there's no overscroll on the Header/Footer.
-          "fixed z-50 flex w-full flex-col overflow-hidden border bg-background shadow-lg duration-200",
-          // Animation base
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          // Mobile sheet variant
-          mobileSheet
-            ? // Mobile: slide up from bottom, desktop: centered modal
-              "inset-x-0 bottom-0 rounded-t-lg max-h-[90vh] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:max-w-lg sm:max-h-[85vh] sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%] sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95"
-            : // Default: centered modal
-              "left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] max-w-lg max-h-[90vh] data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
-          className,
-        )}
-        {...props}
-      >
-        <DialogCloseRefContext.Provider value={closeRef}>
-          {children}
-        </DialogCloseRefContext.Provider>
-        {/* Hidden close target — the visible X lives in DialogHeader and forwards
+>(
+  (
+    { className, children, mobileSheet = false, onOpenAutoFocus, ...props },
+    ref,
+  ) => {
+    const closeRef = React.useRef<HTMLButtonElement>(null);
+    return (
+      <DialogPortal>
+        <DialogOverlay />
+        <DialogPrimitive.Content
+          ref={ref}
+          className={cn(
+            // Base styles: flex column so Header/Footer stay sticky and only the
+            // Body scrolls. Content's overflow-hidden + each child's shrink behavior
+            // means there's no overscroll on the Header/Footer. outline-none
+            // because the content itself takes focus on open (see
+            // focusDialogInsteadOfClose).
+            "fixed z-50 flex w-full flex-col overflow-hidden border bg-background shadow-lg duration-200 outline-none",
+            // Animation base
+            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            // Mobile sheet variant
+            mobileSheet
+              ? // Mobile: slide up from bottom, desktop: centered modal
+                "inset-x-0 bottom-0 rounded-t-lg max-h-[90vh] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:max-w-lg sm:max-h-[85vh] sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%] sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95"
+              : // Default: centered modal
+                "left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] max-w-lg max-h-[90vh] data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+            className,
+          )}
+          onOpenAutoFocus={(event) => {
+            onOpenAutoFocus?.(event);
+            if (!event.defaultPrevented) {
+              focusDialogInsteadOfClose(event);
+            }
+          }}
+          {...props}
+        >
+          <DialogCloseRefContext.Provider value={closeRef}>
+            {children}
+          </DialogCloseRefContext.Provider>
+          {/* Hidden close target: the visible X lives in DialogHeader and forwards
             clicks here so Radix's close behavior runs without DialogHeader needing
             to consume Radix's internal context. */}
-        <DialogPrimitive.Close
-          aria-hidden
-          className="hidden"
-          ref={closeRef}
-          tabIndex={-1}
-        />
-      </DialogPrimitive.Content>
-    </DialogPortal>
-  );
-});
+          <DialogPrimitive.Close
+            aria-hidden
+            className="hidden"
+            ref={closeRef}
+            tabIndex={-1}
+          />
+        </DialogPrimitive.Content>
+      </DialogPortal>
+    );
+  },
+);
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 // Header is a distinct elevated band that frames the dialog. The close button
@@ -152,9 +191,13 @@ const DialogHeader = ({
       {...props}
     >
       {children}
+      {/* DialogContent focuses the dialog rather than this button on open
+          (data-dialog-header-close marks it). The ring uses focus-visible so
+          it shows when a keyboard user tabs to it. */}
       {handleClose && (
         <button
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none cursor-pointer"
+          data-dialog-header-close=""
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none cursor-pointer"
           onClick={handleClose}
           type="button"
         >

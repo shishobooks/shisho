@@ -6,6 +6,7 @@ import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Input } from "@/components/ui/input";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { useGlobalSearch } from "@/hooks/queries/search";
+import { useAuth } from "@/hooks/useAuth";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 import type {
@@ -128,7 +129,10 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLAnchorElement | null)[]>([]);
 
-  const libraryQuery = useLibrary(libraryId);
+  const { hasPermission } = useAuth();
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
+  });
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
   // Library-level variant used for series (which don't have file types)
   const libraryVariant: "book" | "audiobook" = coverAspectRatio.startsWith(

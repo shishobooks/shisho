@@ -377,6 +377,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	if err = q.Scan(ctx); err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
+	for _, lb := range listBooks {
+		models.ResolveBookFileDisplayNames(lb.Book)
+	}
 
 	return listBooks, total, nil
 }

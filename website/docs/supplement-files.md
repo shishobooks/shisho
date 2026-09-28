@@ -6,7 +6,7 @@ Supplement files are additional files associated with a book, such as companion 
 
 Shisho's native main-file formats are EPUB, CBZ, M4B, and PDF. CBR is not native unless a [plugin](./plugins/overview.md) adds support. Files that are not recognized as main files can be linked to a nearby book as supplements.
 
-A supplement's display name is derived from its filename. Shisho does not extract embedded book or file metadata from supplements.
+A supplement is labeled with its current filename, including the extension, so the label follows the file when the book is renamed or reorganized. A name you set yourself in the file's edit dialog replaces the filename. Shisho does not extract embedded book or file metadata from supplements.
 
 ## Directory-Based Discovery
 
@@ -79,7 +79,7 @@ Demoting a main file clears its extracted format metadata, including its cover a
 You can:
 
 - Download a supplement.
-- Rename its display name.
+- Give it a display name. The name you set replaces the filename as its label.
 - **Promote** a supported supplement to a main file. Promotion triggers metadata extraction for that format.
 - **Demote** a main file to a supplement. Demotion clears its format-specific metadata.
 

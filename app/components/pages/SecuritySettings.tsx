@@ -47,6 +47,7 @@ import {
   type APIKey,
   type APIKeyShortURL,
 } from "@/types/generated/apikeys";
+import { copyText } from "@/utils/clipboard";
 import { formatDateTime } from "@/utils/format";
 
 const SecuritySettings = () => {
@@ -448,11 +449,14 @@ function EReaderSetupDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (shortUrl) {
       const url = `${window.location.origin}/e/${shortUrl.shortCode}`;
-      navigator.clipboard.writeText(url);
-      toast.success("Copied to clipboard");
+      if (await copyText(url)) {
+        toast.success("Copied to clipboard");
+      } else {
+        toast.error("Could not copy the URL");
+      }
     }
   };
 
@@ -476,7 +480,11 @@ function EReaderSetupDialog({
                 readOnly
                 value={`${window.location.origin}/e/${shortUrl.shortCode}`}
               />
-              <Button onClick={handleCopy} variant="outline">
+              <Button
+                aria-label="Copy setup URL"
+                onClick={handleCopy}
+                variant="outline"
+              >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
@@ -693,7 +701,14 @@ function KoboSetupDialog({
 }) {
   const [scopeType, setScopeType] = useState<"all" | "library" | "list">("all");
   const [scopeId, setScopeId] = useState("");
-  const { data: librariesData } = useLibraries();
+  // A role without Libraries Read cannot list libraries, so it can sync all
+  // libraries or a list but not pick one library.
+  const { hasPermission } = useAuth();
+  const canReadLibraries = hasPermission("libraries", "read");
+  const { data: librariesData } = useLibraries(
+    {},
+    { enabled: canReadLibraries },
+  );
   const { data: listsData } = useListLists();
   const clearKoboSync = useClearKoboSync();
 
@@ -724,9 +739,12 @@ function KoboSetupDialog({
 
   const syncURL = buildSyncURL();
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(syncURL);
-    toast.success("Copied to clipboard");
+  const handleCopy = async () => {
+    if (await copyText(syncURL)) {
+      toast.success("Copied to clipboard");
+    } else {
+      toast.error("Could not copy the URL");
+    }
   };
 
   return (
@@ -757,20 +775,22 @@ function KoboSetupDialog({
               >
                 All Libraries
               </button>
-              <button
-                className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                  scopeType === "library"
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-                onClick={() => {
-                  setScopeType("library");
-                  setScopeId("");
-                }}
-                type="button"
-              >
-                Library
-              </button>
+              {canReadLibraries && (
+                <button
+                  className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                    scopeType === "library"
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  }`}
+                  onClick={() => {
+                    setScopeType("library");
+                    setScopeId("");
+                  }}
+                  type="button"
+                >
+                  Library
+                </button>
+              )}
               <button
                 className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer ${
                   scopeType === "list"
@@ -821,7 +841,12 @@ function KoboSetupDialog({
             <Label>API Endpoint URL</Label>
             <div className="flex gap-2">
               <Input className="font-mono text-xs" readOnly value={syncURL} />
-              <Button onClick={handleCopy} size="sm" variant="outline">
+              <Button
+                aria-label="Copy sync URL"
+                onClick={handleCopy}
+                size="sm"
+                variant="outline"
+              >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>

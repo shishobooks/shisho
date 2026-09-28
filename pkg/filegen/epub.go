@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -235,9 +236,13 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 		title = *file.Name
 	}
 
-	// Update title
+	// Update title. A retitled element drops its unmodeled attributes
+	// (xml:lang, dir, opf:file-as): they described the old text.
 	if len(pkg.Metadata.Titles) > 0 {
-		pkg.Metadata.Titles[0].Text = title
+		if pkg.Metadata.Titles[0].Text != title {
+			pkg.Metadata.Titles[0].Text = title
+			pkg.Metadata.Titles[0].Attrs = nil
+		}
 	} else {
 		pkg.Metadata.Titles = []opfTitle{{Text: title}}
 	}
@@ -261,8 +266,9 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 				Text: *book.Subtitle,
 				ID:   "subtitle",
 			})
-		} else {
+		} else if pkg.Metadata.Titles[1].Text != *book.Subtitle {
 			pkg.Metadata.Titles[1].Text = *book.Subtitle
+			pkg.Metadata.Titles[1].Attrs = nil
 		}
 	}
 
@@ -284,6 +290,13 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 	// Update language from file if available
 	if file != nil && file.Language != nil && *file.Language != "" {
 		pkg.Metadata.Language = *file.Language
+		// The package's xml:lang is the default language of its text, so
+		// it follows the file's language when the source declared one.
+		for i, attr := range pkg.Attrs {
+			if attr.Name.Space == xmlNamespace && attr.Name.Local == "lang" {
+				pkg.Attrs[i].Value = *file.Language
+			}
+		}
 	}
 
 	// Update authors - replace all creators with role="aut"
@@ -439,15 +452,7 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 
 	// Update identifiers from file
 	if file != nil && len(file.Identifiers) > 0 {
-		var newIdentifiers []opfID
-		for _, id := range file.Identifiers {
-			scheme := identifierTypeToScheme(id.Type)
-			newIdentifiers = append(newIdentifiers, opfID{
-				Text:   id.Value,
-				Scheme: scheme,
-			})
-		}
-		pkg.Metadata.Identifiers = newIdentifiers
+		pkg.Metadata.Identifiers = replaceIdentifiers(pkg.Metadata.Identifiers, pkg.UniqueIdentifier, file.Identifiers)
 	}
 
 	// Update cover mime type in manifest if we're replacing the cover
@@ -469,6 +474,85 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 	// Add XML declaration
 	result := append([]byte(xml.Header), output...)
 	return result, nil
+}
+
+// replaceIdentifiers swaps the package's identifiers for the file's, keeping
+// the element package@unique-identifier points at. That element is the
+// publication's stable identity, and dropping it leaves the package pointing
+// at a missing id, which is invalid. Its value follows the file's
+// identifiers, though: a file identifier with the same normalized value is
+// not written twice (so "urn:isbn:978..." and "978..." count as one), and
+// when the file has a different identifier of the same kind, such as a
+// corrected ISBN, that value replaces the stale one under the unique id.
+func replaceIdentifiers(existing []opfID, uniqueID string, fileIdentifiers []*models.FileIdentifier) []opfID {
+	var unique *opfID
+	if uniqueID != "" {
+		for i := range existing {
+			if existing[i].ID == uniqueID {
+				kept := existing[i]
+				unique = &kept
+				break
+			}
+		}
+	}
+
+	newID := func(id *models.FileIdentifier) opfID {
+		return opfID{Text: id.Value, Scheme: identifierTypeToScheme(id.Type)}
+	}
+	if unique == nil {
+		result := make([]opfID, 0, len(fileIdentifiers))
+		for _, id := range fileIdentifiers {
+			result = append(result, newID(id))
+		}
+		return result
+	}
+
+	uniqueType := identifiers.DetectType(unique.Text, unique.Scheme)
+	uniqueKey := identifiers.NormalizeValue(string(uniqueType), unique.Text)
+	sameValue := func(id *models.FileIdentifier) bool {
+		if uniqueType == identifiers.TypeUnknown {
+			return strings.TrimSpace(id.Value) == strings.TrimSpace(unique.Text)
+		}
+		return identifierFamily(id.Type) == identifierFamily(string(uniqueType)) &&
+			identifiers.NormalizeValue(id.Type, id.Value) == uniqueKey
+	}
+
+	// Which file identifier the unique element absorbs: one with the same
+	// value first, otherwise the first of the same kind.
+	absorbed := -1
+	for i, id := range fileIdentifiers {
+		if sameValue(id) {
+			absorbed = i
+			break
+		}
+	}
+	if absorbed == -1 && uniqueType != identifiers.TypeUnknown {
+		for i, id := range fileIdentifiers {
+			if identifierFamily(id.Type) == identifierFamily(string(uniqueType)) {
+				unique.Text = id.Value
+				absorbed = i
+				break
+			}
+		}
+	}
+
+	result := []opfID{*unique}
+	for i, id := range fileIdentifiers {
+		if i != absorbed {
+			result = append(result, newID(id))
+		}
+	}
+	return result
+}
+
+// identifierFamily groups identifier types that name the same thing, so an
+// ISBN-10 unique identifier can take a corrected ISBN-13.
+func identifierFamily(idType string) string {
+	t := identifiers.Type(idType)
+	if t == identifiers.TypeISBN10 || t == identifiers.TypeISBN13 {
+		return "isbn"
+	}
+	return idType
 }
 
 // readZipFile reads the contents of a zip file entry.
@@ -527,6 +611,7 @@ type opfPackage struct {
 	Manifest         opfManifest `xml:"manifest"`
 	Spine            opfSpine    `xml:"spine"`
 	Guide            *opfGuide   `xml:"guide,omitempty"`
+	Attrs            opfAttrs    `xml:",any,attr"`
 }
 
 type opfMetadata struct {
@@ -545,30 +630,34 @@ type opfMetadata struct {
 }
 
 type opfTitle struct {
-	Text string `xml:",chardata"`
-	ID   string `xml:"id,attr,omitempty"`
+	Text  string   `xml:",chardata"`
+	ID    string   `xml:"id,attr,omitempty"`
+	Attrs opfAttrs `xml:",any,attr"`
 }
 
 type opfCreator struct {
-	Text   string `xml:",chardata"`
-	ID     string `xml:"id,attr,omitempty"`
-	Role   string `xml:"role,attr,omitempty"`
-	FileAs string `xml:"file-as,attr,omitempty"`
+	Text   string   `xml:",chardata"`
+	ID     string   `xml:"id,attr,omitempty"`
+	Role   string   `xml:"role,attr,omitempty"`
+	FileAs string   `xml:"file-as,attr,omitempty"`
+	Attrs  opfAttrs `xml:",any,attr"`
 }
 
 type opfID struct {
-	Text   string `xml:",chardata"`
-	ID     string `xml:"id,attr,omitempty"`
-	Scheme string `xml:"scheme,attr,omitempty"`
+	Text   string   `xml:",chardata"`
+	ID     string   `xml:"id,attr,omitempty"`
+	Scheme string   `xml:"scheme,attr,omitempty"`
+	Attrs  opfAttrs `xml:",any,attr"`
 }
 
 type opfMeta struct {
-	Text     string `xml:",chardata"`
-	Name     string `xml:"name,attr,omitempty"`
-	Content  string `xml:"content,attr,omitempty"`
-	ID       string `xml:"id,attr,omitempty"`
-	Refines  string `xml:"refines,attr,omitempty"`
-	Property string `xml:"property,attr,omitempty"`
+	Text     string   `xml:",chardata"`
+	Name     string   `xml:"name,attr,omitempty"`
+	Content  string   `xml:"content,attr,omitempty"`
+	ID       string   `xml:"id,attr,omitempty"`
+	Refines  string   `xml:"refines,attr,omitempty"`
+	Property string   `xml:"property,attr,omitempty"`
+	Attrs    opfAttrs `xml:",any,attr"`
 }
 
 type opfManifest struct {
@@ -577,19 +666,22 @@ type opfManifest struct {
 }
 
 type opfManifestItem struct {
-	ID        string `xml:"id,attr"`
-	Href      string `xml:"href,attr"`
-	MediaType string `xml:"media-type,attr"`
+	ID        string   `xml:"id,attr"`
+	Href      string   `xml:"href,attr"`
+	MediaType string   `xml:"media-type,attr"`
+	Attrs     opfAttrs `xml:",any,attr"`
 }
 
 type opfSpine struct {
 	XMLName xml.Name       `xml:"spine"`
 	Toc     string         `xml:"toc,attr,omitempty"`
 	Items   []opfSpineItem `xml:"itemref"`
+	Attrs   opfAttrs       `xml:",any,attr"`
 }
 
 type opfSpineItem struct {
-	IDRef string `xml:"idref,attr"`
+	IDRef string   `xml:"idref,attr"`
+	Attrs opfAttrs `xml:",any,attr"`
 }
 
 type opfGuide struct {
@@ -601,4 +693,26 @@ type opfGuideReference struct {
 	Type  string `xml:"type,attr"`
 	Href  string `xml:"href,attr"`
 	Title string `xml:"title,attr,omitempty"`
+}
+
+// xmlNamespace is the namespace encoding/xml gives the xml: prefix.
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
+
+// opfAttrs carries the attributes an OPF struct does not model by name, so
+// the generator round-trips them instead of dropping them. Without it,
+// manifest properties="nav" and "cover-image", itemref linear and
+// properties, and package prefix/xml:lang were lost on every generated EPUB.
+type opfAttrs []xml.Attr
+
+// UnmarshalXMLAttr records every leftover attribute except namespace
+// declarations. encoding/xml reports xmlns and xmlns:* as ordinary attributes
+// on decode but cannot re-emit them: the marshaler prints them as a duplicate
+// xmlns attribute or under an invented "_xmlns" prefix, which is malformed.
+// It already declares the namespaces the struct tags need.
+func (a *opfAttrs) UnmarshalXMLAttr(attr xml.Attr) error {
+	if attr.Name.Space == "xmlns" || (attr.Name.Space == "" && attr.Name.Local == "xmlns") {
+		return nil
+	}
+	*a = append(*a, attr)
+	return nil
 }

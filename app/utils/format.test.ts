@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDate, formatDateTime, formatPlayerTime } from "./format";
+import {
+  fileLabel,
+  formatDate,
+  formatDateTime,
+  formatPageCount,
+  formatPlayerTime,
+} from "./format";
 
 describe("formatDate", () => {
   it("preserves the UTC date regardless of local timezone", () => {
@@ -61,5 +67,29 @@ describe("formatPlayerTime", () => {
     expect(formatPlayerTime(NaN)).toBe("0:00");
     expect(formatPlayerTime(-10)).toBe("0:00");
     expect(formatPlayerTime(Infinity)).toBe("0:00");
+  });
+});
+
+describe("formatPageCount", () => {
+  it("uses the singular for one page", () => {
+    expect(formatPageCount(1)).toBe("1 page");
+  });
+
+  it("uses the plural otherwise", () => {
+    expect(formatPageCount(0)).toBe("0 pages");
+    expect(formatPageCount(2)).toBe("2 pages");
+    expect(formatPageCount(350)).toBe("350 pages");
+  });
+});
+
+describe("fileLabel", () => {
+  it("uses the server's display name", () => {
+    expect(fileLabel({ display_name: "notes.pdf", file_type: "pdf" })).toBe(
+      "notes.pdf",
+    );
+  });
+
+  it("falls back to the file type when there is no display name", () => {
+    expect(fileLabel({ display_name: "", file_type: "epub" })).toBe("EPUB");
   });
 });

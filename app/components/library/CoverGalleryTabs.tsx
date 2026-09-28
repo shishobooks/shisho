@@ -9,7 +9,7 @@ import {
 import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
-import { getFilename } from "@/utils/format";
+import { fileLabel } from "@/utils/format";
 
 interface CoverGalleryTabsProps {
   files: File[];
@@ -151,7 +151,7 @@ function CoverGalleryTabs({
         {/* Image hidden until loaded */}
         {hasCover && (
           <img
-            alt={`${selectedFile?.name || "File"} Cover`}
+            alt={`${selectedFile ? fileLabel(selectedFile) : "File"} Cover`}
             className={cn(
               "absolute inset-0 w-full h-full object-cover",
               !coverLoaded && "opacity-0",
@@ -183,9 +183,7 @@ function CoverGalleryTabs({
                 {file.label}
               </button>
             </TooltipTrigger>
-            <TooltipContent>
-              {file.name || getFilename(file.filepath)}
-            </TooltipContent>
+            <TooltipContent>{fileLabel(file)}</TooltipContent>
           </Tooltip>
         ))}
       </div>

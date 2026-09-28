@@ -109,8 +109,10 @@ export function ResourceDetail({
   onEditClick,
   children,
 }: ResourceDetailProps) {
-  const libraryQuery = useLibrary(libraryId);
-  const { canWrite } = useAuth();
+  const { canWrite, hasPermission } = useAuth();
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
+  });
   const canMutate = canWrite(writeResourceForEntity(entityType));
 
   const [editOpen, setEditOpen] = useState(false);

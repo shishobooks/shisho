@@ -78,6 +78,7 @@ const baseFile: File = {
   library_id: 1,
   book_id: 1,
   filepath: "/library/book/book.epub",
+  display_name: "book.epub",
   file_type: FileTypeEPUB,
   file_role: FileRoleMain,
   filesize_bytes: 1000,

@@ -27,6 +27,8 @@ let canWriteBooks = true;
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     canWrite: (resource: string) => resource === "books" && canWriteBooks,
+    hasPermission: (resource: string, operation: string) =>
+      resource === "books" && (operation === "read" || canWriteBooks),
   }),
 }));
 

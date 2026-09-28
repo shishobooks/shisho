@@ -94,11 +94,13 @@ import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType } from "@/utils/coverSelection";
 import {
+  fileLabel,
   formatDate,
   formatDateTime,
   formatDuration,
   formatFileSize,
   formatIdentifierType,
+  formatPageCount,
   getFilename,
 } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
@@ -233,10 +235,8 @@ const FileRow = ({
   isDeletingFile,
 }: FileRowProps) => {
   const showChevron = hasExpandableMetadata && !isSupplement;
-  // A Share Link payload blanks filesystem paths, so a file without a stored
-  // name falls back to its type rather than rendering blank.
-  const displayName =
-    file.name || getFilename(file.filepath) || file.file_type.toUpperCase();
+  // fileLabel falls back to the type when the Share Link payload has no name.
+  const displayName = fileLabel(file);
   const readingAction = isShareLink ? null : getReadingAction(file.file_type);
   const isListen = readingAction === "listen";
   const readButton = readingAction && (
@@ -283,6 +283,7 @@ const FileRow = ({
       {showChevron ? (
         <button
           aria-expanded={isExpanded}
+          aria-label={isExpanded ? "Hide file details" : "Show file details"}
           className="p-0.5 rounded hover:bg-muted/50 shrink-0 cursor-pointer self-start mt-1"
           onClick={onToggleExpand}
           type="button"
@@ -367,7 +368,7 @@ const FileRow = ({
             {/* CBZ stats */}
             {file.page_count && (
               <>
-                <span>{file.page_count} pages</span>
+                <span>{formatPageCount(file.page_count)}</span>
                 <span className="text-muted-foreground/50">·</span>
               </>
             )}
@@ -472,7 +473,7 @@ const FileRow = ({
           {/* CBZ stats */}
           {file.page_count && (
             <>
-              <span>{file.page_count} pages</span>
+              <span>{formatPageCount(file.page_count)}</span>
               <span className="text-muted-foreground/50">·</span>
             </>
           )}
@@ -539,18 +540,20 @@ const FileRow = ({
           )}
         </div>
 
-        {/* Filename row - only show when name differs from filename. The
+        {/* Filename row - only show when the display name differs from the filename. The
             share payload blanks filesystem paths, so there is nothing to show. */}
-        {file.name && !isShareLink && (
-          <div>
-            <span
-              className="text-xs text-muted-foreground truncate block"
-              title={file.filepath}
-            >
-              {getFilename(file.filepath)}
-            </span>
-          </div>
-        )}
+        {!isShareLink &&
+          file.filepath &&
+          file.display_name !== getFilename(file.filepath) && (
+            <div>
+              <span
+                className="text-xs text-muted-foreground truncate block"
+                title={file.filepath}
+              >
+                {getFilename(file.filepath)}
+              </span>
+            </div>
+          )}
 
         {/* Narrators row - M4B only, always visible when present */}
         {file.narrators && file.narrators.length > 0 && (
@@ -640,8 +643,8 @@ const FileRow = ({
                     {file.abridged == null
                       ? "Unknown"
                       : file.abridged
-                        ? "Abridged"
-                        : "Unabridged"}
+                        ? "Yes"
+                        : "No"}
                   </span>
                 </>
               )}
@@ -1568,11 +1571,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               : null;
             return (
               <RescanDialog
-                entityName={
-                  rescanFile
-                    ? rescanFile.name || getFilename(rescanFile.filepath)
-                    : ""
-                }
+                entityName={rescanFile ? fileLabel(rescanFile) : ""}
                 entityType="file"
                 isPending={resyncFileMutation.isPending}
                 onConfirm={(mode) => {

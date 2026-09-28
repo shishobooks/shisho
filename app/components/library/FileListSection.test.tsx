@@ -50,6 +50,7 @@ function makeFile(id: number, overrides: Partial<File> = {}): File {
     filesize_bytes: 1000,
     cover_image_filename: "cover.jpg",
     name: `Edition ${id}`,
+    display_name: `Edition ${id}`,
     book: {
       id: id * 10,
       title: `Book Title ${id}`,
@@ -308,9 +309,13 @@ describe("FileListSection", () => {
     expect(rowLink).toBeDefined();
   });
 
-  it("shows filename when file has no name", () => {
+  it("shows the server's display name, the filename when the file has no name", () => {
     const files = [
-      makeFile(1, { name: undefined, filepath: "/library/mybook.epub" }),
+      makeFile(1, {
+        name: undefined,
+        filepath: "/library/mybook.epub",
+        display_name: "mybook.epub",
+      }),
     ];
     render(
       wrap(

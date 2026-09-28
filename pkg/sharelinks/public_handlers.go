@@ -122,17 +122,30 @@ func (h *publicHandler) book(c echo.Context) error {
 }
 
 // blankForRecipient removes everything that describes the server's layout:
-// filesystem paths, cover filenames, scan errors (which can quote paths),
-// and the library. It also drops the library-facing fields the recipient page
-// hides (sort title, file URLs, file identifiers). Other fields the page does
-// not render (timestamps, sources, review flags) stay; timestamps are needed
-// because file cover URLs use updated_at as their cache key. The downloaded
-// file itself still carries the book's full metadata.
+// filesystem paths (a supplement keeps its filename as its display name),
+// cover filenames, scan errors (which can quote paths), and the library. It
+// also drops the library-facing fields the recipient page hides (sort title,
+// file URLs, file identifiers). Other fields the page does not render
+// (timestamps, sources, review flags) stay; timestamps are needed because
+// file cover URLs use updated_at as their cache key. The downloaded file
+// itself still carries the book's full metadata.
 func blankForRecipient(book *models.Book) {
 	book.Filepath = ""
 	book.Library = nil
 	book.SortTitle = ""
 	for _, f := range book.Files {
+		// A supplement's label is its filename, so resolve it while the path
+		// is still here. A main file is labeled only by its stored name: one
+		// without a name gets no label rather than its on-disk filename, and
+		// the page shows its type.
+		if f.FileRole == models.FileRoleSupplement {
+			f.DisplayName = f.ResolveDisplayName()
+		} else {
+			f.DisplayName = ""
+			if f.Name != nil {
+				f.DisplayName = *f.Name
+			}
+		}
 		f.Filepath = ""
 		f.CoverImageFilename = nil
 		f.ScanError = nil

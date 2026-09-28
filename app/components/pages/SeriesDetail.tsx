@@ -51,9 +51,11 @@ const SeriesDetail = () => {
   const currentPage = parsePageParam(searchParams.get("page"));
   const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
 
-  const libraryQuery = useLibrary(libraryId);
+  const { canWrite, hasPermission } = useAuth();
+  const libraryQuery = useLibrary(libraryId, {
+    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
+  });
   const seriesQuery = useSeries(seriesId);
-  const { canWrite } = useAuth();
   // Series edit, merge, and delete require Series Write on the backend.
   const canWriteSeries = canWrite(ResourceSeries);
 

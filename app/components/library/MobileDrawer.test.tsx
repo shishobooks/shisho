@@ -116,3 +116,44 @@ describe("MobileDrawer", () => {
     expect(getActiveLabels()).toEqual(["Lists"]);
   });
 });
+
+describe("MobileDrawer library picker", () => {
+  beforeEach(() => {
+    vi.mocked(useListLists).mockReturnValue({
+      data: { items: [{ id: 3, name: "To Read", book_count: 2 }] },
+    } as never);
+  });
+
+  it("offers the library picker to a role that can read libraries", () => {
+    vi.mocked(useLibraries).mockReturnValue({
+      data: { items: [{ id: 1, name: "Fiction" }] },
+    } as never);
+    renderDrawer("/libraries/1/books/7");
+
+    expect(within(getDrawer()).getByText("Fiction")).toBeInTheDocument();
+  });
+
+  it("hides the library picker from a role without Libraries Read", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      demoMode: false,
+      user: { username: "reader", role_name: "Shares Only" },
+      logout: vi.fn(),
+      hasPermission: (resource: string, operation: string) =>
+        resource === "books" && operation === "read",
+    } as never);
+    vi.mocked(useLibraries).mockClear();
+    renderDrawer("/libraries/1/books/7");
+
+    expect(
+      within(getDrawer()).queryByText("Select Library"),
+    ).not.toBeInTheDocument();
+    expect(useLibraries).toHaveBeenCalled();
+    for (const call of vi.mocked(useLibraries).mock.calls) {
+      expect(call[1]?.enabled).toBe(false);
+    }
+    // Lists stay reachable from the drawer's own nav item.
+    expect(
+      within(getDrawer()).getByRole("link", { name: "Lists" }),
+    ).toBeInTheDocument();
+  });
+});

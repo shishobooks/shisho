@@ -74,7 +74,11 @@ import {
   type SourceIntents,
 } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
-import { formatDuration, formatMetadataFieldLabel } from "@/utils/format";
+import {
+  formatDuration,
+  formatMetadataFieldLabel,
+  formatPageCount,
+} from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
@@ -1091,7 +1095,7 @@ export function IdentifyReviewForm({
       parts.push(`${Math.round(file.audiobook_bitrate_bps / 1000)} kbps`);
     }
     if (file.page_count != null) {
-      parts.push(`${file.page_count} pages`);
+      parts.push(formatPageCount(file.page_count));
     }
     return parts.join(" · ");
   }, [file]);

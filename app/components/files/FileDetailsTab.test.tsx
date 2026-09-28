@@ -40,6 +40,35 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("FileDetailsTab", () => {
+  describe("abridged and page count", () => {
+    it("says Yes for an abridged file instead of repeating the label", () => {
+      render(wrap(<FileDetailsTab file={makeFile({ abridged: true })} />));
+
+      const label = screen.getByText("Abridged");
+      expect(label.nextElementSibling).toHaveTextContent("Yes");
+    });
+
+    it("says No for an unabridged file", () => {
+      render(wrap(<FileDetailsTab file={makeFile({ abridged: false })} />));
+
+      expect(screen.getByText("Abridged").nextElementSibling).toHaveTextContent(
+        "No",
+      );
+    });
+
+    it("uses the singular for a one-page file", () => {
+      render(
+        wrap(
+          <FileDetailsTab
+            file={makeFile({ file_type: "cbz", page_count: 1 })}
+          />,
+        ),
+      );
+
+      expect(screen.getByText("1 page")).toBeInTheDocument();
+    });
+  });
+
   describe("scan error", () => {
     it("shows an unreadable alert with the scan error message", () => {
       const file = makeFile({ scan_error: "zip: not a valid zip file" });

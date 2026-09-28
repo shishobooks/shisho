@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -82,6 +84,31 @@ type File struct {
 	ReviewOverriddenAt       *time.Time        `json:"review_overridden_at"`
 	Reviewed                 *bool             `json:"reviewed"`
 	IsPreferredCover         bool              `bun:",default:false" json:"is_preferred_cover"`
+	// DisplayName is the label the UI shows for the file. It is not stored:
+	// AfterScanRow fills it for files loaded directly, and the book loaders
+	// call ResolveBookFileDisplayNames for Book.Files, which Bun loads as a
+	// has-many relation without row hooks. See pkg/CLAUDE.md.
+	DisplayName string `bun:"-" json:"display_name"`
+}
+
+// ResolveDisplayName returns the label for the file. A main file shows its
+// name (the edition title), falling back to the filename. A supplement shows
+// its filename unless the user set a name (source manual): the scanner stores
+// the filename stem as the name when it first sees a supplement, and that
+// stored value goes stale when the book is renamed or reorganized. A sidecar
+// source does not count, because book edits write every file's sidecar with
+// its stored name, so a rescan can restore the stale stem as sidecar.
+func (f *File) ResolveDisplayName() string {
+	if f.Name != nil && *f.Name != "" {
+		manual := f.NameSource != nil && *f.NameSource == DataSourceManual
+		if f.FileRole != FileRoleSupplement || manual {
+			return *f.Name
+		}
+	}
+	if f.Filepath == "" {
+		return ""
+	}
+	return filepath.Base(f.Filepath)
 }
 
 func (f *File) CoverExtension() string {
@@ -103,4 +130,31 @@ func (f *File) CoverExtension() string {
 // external sources (plugins, uploads).
 func IsPageBasedFileType(fileType string) bool {
 	return fileType == FileTypeCBZ || fileType == FileTypePDF
+}
+
+// AfterScanRow is a Bun hook that resolves DisplayName for files loaded by a
+// direct query (a single file, or a slice of files). It does not run for
+// Book.Files: Bun scans has-many relations without row hooks.
+func (f *File) AfterScanRow(_ context.Context) error {
+	f.DisplayName = f.ResolveDisplayName()
+	return nil
+}
+
+// ResolveFileDisplayNames sets DisplayName on each file.
+func ResolveFileDisplayNames(files []*File) {
+	for _, f := range files {
+		if f != nil {
+			f.DisplayName = f.ResolveDisplayName()
+		}
+	}
+}
+
+// ResolveBookFileDisplayNames sets DisplayName on every file of each book.
+// Call it wherever books are loaded with their Files relation.
+func ResolveBookFileDisplayNames(books ...*Book) {
+	for _, b := range books {
+		if b != nil {
+			ResolveFileDisplayNames(b.Files)
+		}
+	}
 }

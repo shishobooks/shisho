@@ -244,6 +244,7 @@ describe("FileEditDialog", () => {
     book_id: 1,
     library_id: 1,
     filepath: "/test/file.cbz",
+    display_name: "file.cbz",
     file_type: FileTypeCBZ,
     file_role: FileRoleMain,
     filesize_bytes: 1000,
