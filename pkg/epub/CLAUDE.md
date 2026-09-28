@@ -109,6 +109,14 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 | Language | `<dc:language>` (from file.Language) |
 | Cover | Replaces image file and updates manifest MIME type |
 
+**Round-trip fidelity:** `modifyOPF` unmarshals the whole OPF into `opfPackage`, edits it, and marshals it back, so anything the structs do not carry is silently dropped from every generated EPUB (and the KePub, OPDS, eReader, Kobo, and Share Link downloads built on it). Rules:
+
+- The package, spine, manifest item, itemref, and metadata child structs (title, creator, identifier, meta) each carry an ``Attrs opfAttrs `xml:",any,attr"` `` catch-all. That is what keeps manifest `properties` (`nav`, `cover-image`), itemref `linear` and `properties`, spine `page-progression-direction`, and package `prefix`/`xml:lang`. Add the field to any new OPF struct rather than modeling attributes one at a time.
+- `opfAttrs.UnmarshalXMLAttr` drops `xmlns` and `xmlns:*`. encoding/xml hands namespace declarations to `,any,attr` fields but cannot re-emit them: it prints a duplicate `xmlns` attribute or an invented `_xmlns:` prefix. The struct tags declare the namespaces themselves.
+- Replacing `dc:identifier` elements keeps the one whose `id` matches `package@unique-identifier` (the publication's identity) and skips a file identifier with the same value. Dropping it leaves the package pointing at a missing id, which is invalid.
+- Cover replacement still finds the cover only through `<meta name="cover">`. An EPUB 3 file that marks its cover only with `properties="cover-image"` keeps that attribute but does not get Shisho's cover swapped in.
+- `pkg/filegen/epub_opf_fidelity_test.go` generates from an EPUB 3 fixture using all of the above. Extend it when adding OPF handling.
+
 **Series Dual Format Example:**
 ```xml
 <!-- Calibre format (for Calibre, older readers) -->
@@ -300,6 +308,7 @@ type ParsedChapter struct {
 - `pkg/epub/epub.go` - EPUB file handling
 - `pkg/filegen/epub.go` - EPUB generation
 - `pkg/filegen/epub_test.go` - EPUB generation tests
+- `pkg/filegen/epub_opf_fidelity_test.go` - OPF round-trip fidelity tests (EPUB 3 attributes, unique identifier)
 - `pkg/sidecar/types.go` - Sidecar data structures
 - `pkg/worker/scan.go` - Scanner integration
 - `internal/testgen/epub.go` - Test file generation
