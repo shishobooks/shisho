@@ -33,6 +33,7 @@ import { cn } from "@/libraries/utils";
 import {
   ShareLinkStateActive,
   ShareLinkStateExpired,
+  ShareLinkStateRevoked,
   type ShareLinkResponse,
 } from "@/types";
 import { copyText } from "@/utils/clipboard";
@@ -54,7 +55,12 @@ const PRESETS = [
 const shareLinkUrl = (token: string) =>
   `${window.location.origin}/share/${token}`;
 
+// A revoked link shows when it was pulled rather than an expiry that no
+// longer matters.
 const expiryText = (link: ShareLinkResponse) => {
+  if (link.state === ShareLinkStateRevoked && link.revoked_at) {
+    return `Revoked ${formatDateTime(link.revoked_at)}`;
+  }
   if (!link.expires_at) return "Never expires";
   const when = formatDateTime(link.expires_at);
   return link.state === ShareLinkStateExpired
@@ -75,6 +81,14 @@ const usageText = (link: ShareLinkResponse) =>
       ? `Last used ${formatDateTime(link.last_accessed_at)}`
       : "Never used",
   ].join(" · ");
+
+// The confirmation names the link, since on a phone it covers the row.
+const linkSubject = (link: ShareLinkResponse | null) => {
+  if (!link) return "The link";
+  return link.label
+    ? `The link "${link.label}"`
+    : `The unlabeled link created by ${link.created_by_username}`;
+};
 
 interface ShareLinkDialogProps {
   open: boolean;
@@ -378,7 +392,7 @@ export function ShareLinkDialog({
 
       <ConfirmDialog
         confirmLabel="Revoke"
-        description="The link stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again."
+        description={`${linkSubject(toRevoke)} stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`}
         isPending={revokeMutation.isPending}
         onConfirm={handleRevoke}
         onOpenChange={setRevokeOpen}
@@ -389,8 +403,8 @@ export function ShareLinkDialog({
         confirmLabel="Delete"
         description={
           toDelete?.state === ShareLinkStateActive
-            ? "The link stops working immediately and is removed from the list with its counts. This cannot be undone."
-            : "The link is removed from the list with its counts. This cannot be undone."
+            ? `${linkSubject(toDelete)} stops working immediately and is removed from the list with its counts. This cannot be undone.`
+            : `${linkSubject(toDelete)} is removed from the list with its counts. This cannot be undone.`
         }
         isPending={deleteMutation.isPending}
         onConfirm={handleDelete}

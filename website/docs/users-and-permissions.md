@@ -122,7 +122,7 @@ Deactivation immediately prevents that user from logging in. It does not delete 
 
 A user with Users Write permission can select another active account and choose **Deactivate User**. The account and its historical records remain stored.
 
-Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can delete them.
+Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can revoke or delete them.
 
 ## Sessions
 

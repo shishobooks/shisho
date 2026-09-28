@@ -243,6 +243,7 @@ describe("ShareLinkDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Revoke for Alice" }));
     const confirm = screen.getByRole("dialog", { name: "Revoke Link" });
+    expect(confirm).toHaveTextContent('The link "for Alice" stops working');
     expect(confirm).toHaveTextContent("cannot be undone");
     expect(mocks.revoke).not.toHaveBeenCalled();
     await user.click(within(confirm).getByRole("button", { name: "Revoke" }));
@@ -323,6 +324,7 @@ describe("ShareLinkDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete revoked" }));
     const confirm = screen.getByRole("dialog", { name: "Delete Link" });
+    expect(confirm).toHaveTextContent('The link "revoked" is removed');
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
     expect(mocks.remove).toHaveBeenCalledWith({ bookId: 7, linkId: 2 });
 
@@ -347,5 +349,35 @@ describe("ShareLinkDialog", () => {
     expect(
       screen.queryByRole("button", { name: /Delete/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("names an unlabeled link by its creator in the confirmation", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mocks.links = [link({ id: 5, created_by_username: "editor" })];
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(
+      screen.getByRole("dialog", { name: "Delete Link" }),
+    ).toHaveTextContent(
+      "The unlabeled link created by editor stops working immediately",
+    );
+  });
+
+  it("shows when a revoked link was revoked instead of its expiry", () => {
+    mocks.links = [
+      link({
+        state: "revoked",
+        expires_at: "2026-10-04T12:00:00Z",
+        revoked_at: "2026-09-26T09:15:00Z",
+      }),
+    ];
+    renderDialog();
+
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveTextContent(
+      `Revoked ${formatDateTime("2026-09-26T09:15:00Z")}`,
+    );
+    expect(row).not.toHaveTextContent("Expires");
   });
 });

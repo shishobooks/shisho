@@ -47,7 +47,7 @@ Viewing the book's cover does not count as either. The dialog fetches fresh figu
 
 Users with Shares Write can act on any link on the book, including links other users created:
 
-- **Revoke** (the ⊘ button, offered on active links) stops the link immediately. The link stays in the list, marked as revoked, with its figures, so you can still see whether it was used before you pulled it. Revoking cannot be undone. To share the book again, create a new link.
+- **Revoke** (the ⊘ button, offered on active links) stops the link immediately. The link stays in the list, marked as revoked with the time it was revoked, and keeps its figures, so you can still see whether it was used before you pulled it. Revoking cannot be undone. To share the book again, create a new link.
 - **Delete** (the trash button, offered on every link) removes the link and its figures from the list. Deleting an active link also stops it.
 
 Expired links stay in the list, marked as expired, until someone deletes them. Shisho never removes them on its own.
@@ -71,7 +71,7 @@ The checks run each time the link is used, so some of them can be reversed:
 | Someone revokes the link | Stops working; stays listed as revoked |
 | Someone deletes the link | Stops working; removed from the list |
 | An admin turns sharing off | Stops working; works again when sharing is turned back on |
-| The creator is deactivated | Stops working; stays listed |
+| The creator is deactivated | Stops working; stays listed, and works again if the account is reactivated |
 | The creator loses access to the book's library | Stops working; works again if their access is restored |
 | The book is deleted | Stops working; removed |
 
