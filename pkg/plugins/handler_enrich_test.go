@@ -130,6 +130,24 @@ func TestAggregateEnricherSearches_SkipsUnsupportedFileType(t *testing.T) {
 	assert.Equal(t, "cbz-only", skipped[0].PluginID)
 }
 
+// Each result names the plugin that produced it, so the review form can
+// label the source without loading the installed plugin list.
+func TestAggregateEnricherSearches_ResultsCarryPluginName(t *testing.T) {
+	t.Parallel()
+
+	rt := newFakeEnricher("goodreads", []string{"epub"})
+	rt.manifest.Name = "Goodreads Metadata"
+	runSearch := func(_ context.Context, rt *fakeEnricherRuntime) (*SearchResponse, error) {
+		return &SearchResponse{Results: []mediafile.ParsedMetadata{{Title: "One", PluginScope: rt.Scope(), PluginID: rt.PluginID()}}}, nil
+	}
+	disabled := func(_ context.Context, _ *fakeEnricherRuntime) []string { return nil }
+
+	results, _, _ := aggregateEnricherSearches(context.Background(), []*fakeEnricherRuntime{rt}, "epub", runSearch, disabled, testLogger())
+
+	require.Len(t, results, 1)
+	assert.Equal(t, "Goodreads Metadata", results[0].PluginName)
+}
+
 func testLogger() logger.Logger {
 	return logger.New()
 }

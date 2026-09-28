@@ -122,6 +122,14 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 
 	// Register user and role management routes
 	users.RegisterRoutes(api, db, authMiddleware)
+	// The user directory lists every active username. In Demo Mode that
+	// would show every visitor the admin's name, so it is not registered
+	// there, and the path falls through to GET /users/:id (Users Read).
+	if !cfg.DemoMode {
+		userDirectoryGroup := api.Group("/users/directory")
+		userDirectoryGroup.Use(authMiddleware.Authenticate)
+		users.RegisterDirectoryRoutes(userDirectoryGroup, db)
+	}
 	roles.RegisterRoutes(api, db, authMiddleware)
 
 	// API Keys routes
@@ -234,7 +242,30 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, bookService, svcs.cbzCache, svcs.pdfCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
-	sharelinks.RegisterBookRoutes(booksGroup, authMiddleware, svcs.shareLinks, svcs.appSettings)
+
+	// Share Link management under /books/:id/share-links. A role may hold
+	// only shares operations, so this group authenticates without Books
+	// Read; each route checks its shares permission and the handlers check
+	// the book's library access.
+	shareLinksGroup := e.Group("/books")
+	shareLinksGroup.Use(authMiddleware.Authenticate)
+	sharelinks.RegisterBookRoutes(shareLinksGroup, authMiddleware, svcs.shareLinks, svcs.appSettings)
+
+	// The caller's accessible libraries, for reader pages. Authentication
+	// only: every role that can sign in can see which libraries it reaches.
+	userLibrariesGroup := e.Group("/user/libraries")
+	userLibrariesGroup.Use(authMiddleware.Authenticate)
+	libraries.RegisterUserRoutes(userLibrariesGroup, db)
+
+	// GET /libraries also opens to users:write, which lists libraries to
+	// assign access when creating or editing a user.
+	libraryListGroup := e.Group("/libraries")
+	libraryListGroup.Use(authMiddleware.Authenticate)
+	libraryListGroup.Use(authMiddleware.RequireAnyPermission(
+		auth.Permission{Resource: models.ResourceLibraries, Operation: models.OperationRead},
+		auth.Permission{Resource: models.ResourceUsers, Operation: models.OperationWrite},
+	))
+	libraries.RegisterListRoutes(libraryListGroup, db)
 
 	// Libraries routes
 	librariesGroup := e.Group("/libraries")
@@ -246,7 +277,13 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	if !cfg.DemoMode {
 		plugins.RegisterLibraryRoutes(librariesGroup, svcs.plugins, pm, authMiddleware)
 	}
-	books.RegisterLibraryRoutes(librariesGroup, db, authMiddleware, bookService)
+
+	// Per-library book data (languages) is Books Read plus library access,
+	// not Libraries Read, so it gets its own group.
+	libraryBooksGroup := e.Group("/libraries")
+	libraryBooksGroup.Use(authMiddleware.Authenticate)
+	libraryBooksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	books.RegisterLibraryRoutes(libraryBooksGroup, db, authMiddleware, bookService)
 
 	// Jobs routes
 	jobsGroup := e.Group("/jobs")
@@ -271,7 +308,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	// Lists routes
 	listsGroup := e.Group("/lists")
 	listsGroup.Use(authMiddleware.Authenticate)
-	lists.RegisterRoutes(listsGroup, db)
+	lists.RegisterRoutes(listsGroup, db, authMiddleware)
 
 	// Genres routes
 	genresGroup := e.Group("/genres")
@@ -291,7 +328,9 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	publishersGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	publishers.RegisterRoutes(publishersGroup, db, authMiddleware, bookService)
 
-	// Search routes (requires read access to books since search returns book data)
+	// Search routes (requires read access to books since search returns book
+	// data). The handler adds the series and people sections only for roles
+	// holding series:read and people:read.
 	searchGroup := e.Group("/search")
 	searchGroup.Use(authMiddleware.Authenticate)
 	searchGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
@@ -330,11 +369,18 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	pluginLookupGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	plugins.RegisterLookupRoutes(pluginLookupGroup, pluginService)
 
-	// Plugins management routes (admin only)
+	// Plugin management reads: the plugins page requires config:read, so
+	// its reads do too.
+	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
+	pluginReadGroup := e.Group("/plugins")
+	pluginReadGroup.Use(authMiddleware.Authenticate)
+	pluginReadGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationRead))
+	plugins.RegisterReadRoutes(pluginReadGroup, pluginService, pm, pluginInstaller)
+
+	// Plugins management mutations (admin only)
 	pluginsGroup := e.Group("/plugins")
 	pluginsGroup.Use(authMiddleware.Authenticate)
 	pluginsGroup.Use(authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
-	pluginInstaller := plugins.NewInstaller(cfg.PluginDir)
 	plugins.RegisterRoutes(pluginsGroup, pluginService, pm, pluginInstaller, db, enrichDeps)
 }
 

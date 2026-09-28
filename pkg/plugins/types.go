@@ -93,6 +93,7 @@ type EnrichSearchResult struct {
 	mediafile.ParsedMetadata `tstype:",extends"`
 	PluginScope              string   `json:"plugin_scope"`
 	PluginID                 string   `json:"plugin_id"`
+	PluginName               string   `json:"plugin_name"`
 	DisabledFields           []string `json:"disabled_fields,omitempty"`
 }
 

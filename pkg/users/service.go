@@ -171,6 +171,23 @@ func (s *Service) List(ctx context.Context, opts ListOptions) ([]*models.User, i
 	return users, total, nil
 }
 
+// ListDirectory returns every active user's id and username, sorted by
+// username. It selects only those two columns so nothing else can leak into
+// the directory.
+func (s *Service) ListDirectory(ctx context.Context) ([]UserDirectoryEntry, error) {
+	entries := []UserDirectoryEntry{}
+	err := s.db.NewSelect().
+		Model((*models.User)(nil)).
+		Column("u.id", "u.username").
+		Where("u.is_active = ?", true).
+		Order("u.username ASC").
+		Scan(ctx, &entries)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return entries, nil
+}
+
 // UpdateOptions contains options for updating a user.
 type UpdateOptions struct {
 	Columns             []string

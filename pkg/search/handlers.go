@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -21,18 +22,27 @@ func (h *handler) globalSearch(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(params.LibraryID) {
-			return c.JSON(http.StatusOK, &GlobalSearchResponse{
-				Books:  []BookSearchResult{},
-				Series: []SeriesSearchResult{},
-				People: []PersonSearchResult{},
-			})
-		}
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("Authentication required")
 	}
 
-	result, err := h.searchService.GlobalSearch(ctx, params.LibraryID, params.Query)
+	// Check library access
+	if !user.HasLibraryAccess(params.LibraryID) {
+		return c.JSON(http.StatusOK, &GlobalSearchResponse{
+			Books:  []BookSearchResult{},
+			Series: []SeriesSearchResult{},
+			People: []PersonSearchResult{},
+		})
+	}
+
+	// The route requires books:read. Series and people come back only to
+	// roles that can read them.
+	sections := GlobalSearchSections{
+		Series: user.HasPermission(models.ResourceSeries, models.OperationRead),
+		People: user.HasPermission(models.ResourcePeople, models.OperationRead),
+	}
+	result, err := h.searchService.GlobalSearch(ctx, params.LibraryID, params.Query, sections)
 	if err != nil {
 		return errors.WithStack(err)
 	}

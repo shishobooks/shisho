@@ -33,3 +33,13 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	// and users:write is required for resetting another user's password.
 	users.POST("/:id/reset-password", h.resetPassword)
 }
+
+// RegisterDirectoryRoutes registers GET /users/directory on a group the
+// server has already configured with authentication only. Any user who owns
+// a list can share it, so they must be able to pick a recipient; the
+// directory returns active users' ids and usernames only. The server skips
+// it in Demo Mode.
+func RegisterDirectoryRoutes(g *echo.Group, db *bun.DB) {
+	h := &handler{userService: NewService(db)}
+	g.GET("", h.directory)
+}

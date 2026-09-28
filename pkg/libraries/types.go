@@ -15,6 +15,19 @@ type ListLibrariesResponse struct {
 	Total int               `json:"total"`
 }
 
+// LibrarySummary is one library the caller can access, as listed by
+// GET /user/libraries. It carries only what reader pages need (the library
+// picker, breadcrumbs, cover aspect ratio, download preference, and the
+// Merge and Move dialogs), not paths or timestamps, because the route
+// requires no permission beyond authentication.
+type LibrarySummary struct {
+	ID                       int    `json:"id"`
+	Name                     string `json:"name"`
+	CoverAspectRatio         string `json:"cover_aspect_ratio" tstype:"CoverAspectRatio"`
+	DownloadFormatPreference string `json:"download_format_preference" tstype:"DownloadFormat"`
+	OrganizeFileStructure    bool   `json:"organize_file_structure"`
+}
+
 type CreateLibraryPayload struct {
 	Name                     string   `json:"name" validate:"required,max=100"`
 	OrganizeFileStructure    *bool    `json:"organize_file_structure,omitempty"`

@@ -14,6 +14,9 @@ import (
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
+// allSections searches every GlobalSearch section.
+var allSections = GlobalSearchSections{Series: true, People: true}
+
 func setupTestDB(t *testing.T) *bun.DB {
 	t.Helper()
 
@@ -85,7 +88,7 @@ func TestGlobalSearch_ReturnsFileTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Search for the book
-	results, err := svc.GlobalSearch(ctx, library.ID, "Audiobook")
+	results, err := svc.GlobalSearch(ctx, library.ID, "Audiobook", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find one book")
 	require.Equal(t, "My Audiobook", results.Books[0].Title)
@@ -149,7 +152,7 @@ func TestGlobalSearch_ReturnsMultipleFileTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Search for the book
-	results, err := svc.GlobalSearch(ctx, library.ID, "Multi")
+	results, err := svc.GlobalSearch(ctx, library.ID, "Multi", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find one book")
 	require.Equal(t, "Multi Format Book", results.Books[0].Title)
@@ -312,7 +315,7 @@ func TestGlobalSearch_DeduplicatesAuthorNames(t *testing.T) {
 	require.NoError(t, err)
 
 	// Search for the book
-	results, err := svc.GlobalSearch(ctx, library.ID, "Spider")
+	results, err := svc.GlobalSearch(ctx, library.ID, "Spider", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find one book")
 
@@ -478,7 +481,7 @@ func TestRebuildAllIndexes_DeduplicatesAuthorNames(t *testing.T) {
 	require.NoError(t, err, "RebuildAllIndexes should not fail")
 
 	// Search for the book
-	results, err := svc.GlobalSearch(ctx, library.ID, "Spider")
+	results, err := svc.GlobalSearch(ctx, library.ID, "Spider", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find one book")
 
@@ -648,7 +651,7 @@ func TestIndexBook_IncludesAuthorAliases(t *testing.T) {
 	err = svc.IndexBook(ctx, book)
 	require.NoError(t, err)
 
-	results, err := svc.GlobalSearch(ctx, library.ID, "Bachman")
+	results, err := svc.GlobalSearch(ctx, library.ID, "Bachman", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find book by author alias 'Bachman'")
 	require.Equal(t, "Thinner", results.Books[0].Title)
@@ -694,7 +697,7 @@ func TestIndexBook_IncludesNarratorAliases(t *testing.T) {
 	err = svc.IndexBook(ctx, book)
 	require.NoError(t, err)
 
-	results, err := svc.GlobalSearch(ctx, library.ID, "James Dale")
+	results, err := svc.GlobalSearch(ctx, library.ID, "James Dale", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find book by narrator alias 'James Dale'")
 }
@@ -739,7 +742,7 @@ func TestIndexBook_IncludesSeriesAliases(t *testing.T) {
 	err = svc.IndexBook(ctx, book)
 	require.NoError(t, err)
 
-	results, err := svc.GlobalSearch(ctx, library.ID, "DT Series")
+	results, err := svc.GlobalSearch(ctx, library.ID, "DT Series", allSections)
 	require.NoError(t, err)
 	require.Len(t, results.Books, 1, "Should find book by series alias 'DT Series'")
 }
@@ -775,7 +778,7 @@ func TestIndexBook_ExcludesGenreAndTagAliases(t *testing.T) {
 	err = svc.IndexBook(ctx, book)
 	require.NoError(t, err)
 
-	results, err := svc.GlobalSearch(ctx, library.ID, "Spooky")
+	results, err := svc.GlobalSearch(ctx, library.ID, "Spooky", allSections)
 	require.NoError(t, err)
 	require.Empty(t, results.Books, "Genre aliases should not be in books_fts")
 }
@@ -886,11 +889,11 @@ func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, tagCount, "RebuildAllIndexes should include tag aliases")
 
-	bookResults, err := svc.GlobalSearch(ctx, library.ID, "Bachman")
+	bookResults, err := svc.GlobalSearch(ctx, library.ID, "Bachman", allSections)
 	require.NoError(t, err)
 	require.Len(t, bookResults.Books, 1, "RebuildAllIndexes should include author aliases in books_fts")
 
-	bookResults, err = svc.GlobalSearch(ctx, library.ID, "DT Series")
+	bookResults, err = svc.GlobalSearch(ctx, library.ID, "DT Series", allSections)
 	require.NoError(t, err)
 	require.Len(t, bookResults.Books, 1, "RebuildAllIndexes should include series aliases in books_fts")
 

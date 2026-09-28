@@ -158,6 +158,7 @@ function response(
         chapters: [],
         plugin_scope: "shisho",
         plugin_id: "test",
+        plugin_name: "Test Plugin",
         ...overrides,
       },
     ],

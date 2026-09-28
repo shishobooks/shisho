@@ -64,6 +64,16 @@ func (h *handler) list(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// directory lists active users' ids and usernames for the list sharing
+// dialog. It needs only authentication.
+func (h *handler) directory(c echo.Context) error {
+	entries, err := h.userService.ListDirectory(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, entries))
+}
+
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
 

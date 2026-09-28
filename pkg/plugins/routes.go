@@ -21,7 +21,9 @@ type EnrichDeps struct {
 	PageExtractor   pageExtractor
 }
 
-// RegisterRoutes registers plugin management API routes.
+// RegisterRoutes registers the plugin management mutations. The server
+// mounts them on a group that requires config:write. The reads the plugins
+// page makes live in RegisterReadRoutes.
 func RegisterRoutes(g *echo.Group, service *Service, manager *Manager, installer *Installer, db *bun.DB, ed *EnrichDeps) {
 	h := &handler{service: service, manager: manager, installer: installer, db: db}
 	if ed != nil {
@@ -38,24 +40,36 @@ func RegisterRoutes(g *echo.Group, service *Service, manager *Manager, installer
 		}
 	}
 
-	g.GET("/installed", h.listInstalled)
 	g.POST("/installed", h.install)
 	g.POST("/scan", h.scan)
 	g.DELETE("/installed/:scope/:id", h.uninstall)
 	g.PATCH("/installed/:scope/:id", h.update)
-	g.GET("/installed/:scope/:id/config", h.getConfig)
-	g.GET("/installed/:scope/:id/fields", h.getFieldSettings)
 	g.PUT("/installed/:scope/:id/fields", h.setFieldSettings)
-	g.GET("/installed/:scope/:id/image", h.getImage)
-	g.GET("/installed/:scope/:id/manifest", h.getManifest)
 	g.POST("/installed/:scope/:id/reload", h.reload)
 	g.POST("/installed/:scope/:id/update", h.updateVersion)
 	g.PUT("/order/:hookType", h.setOrder)
 
-	g.GET("/repositories", h.listRepositories)
 	g.POST("/repositories", h.addRepository)
 	g.DELETE("/repositories/:scope", h.removeRepository)
 	g.POST("/repositories/:scope/sync", h.syncRepository)
+}
+
+// RegisterReadRoutes registers the plugin management reads the plugins page
+// makes: the installed and available lists, repositories, and an installed
+// plugin's config (secrets masked), field settings, manifest, and image. The
+// server mounts them on a group that requires config:read, the permission
+// the page itself needs; the mutations in RegisterRoutes stay on
+// config:write.
+func RegisterReadRoutes(g *echo.Group, service *Service, manager *Manager, installer *Installer) {
+	h := &handler{service: service, manager: manager, installer: installer}
+
+	g.GET("/installed", h.listInstalled)
+	g.GET("/installed/:scope/:id/config", h.getConfig)
+	g.GET("/installed/:scope/:id/fields", h.getFieldSettings)
+	g.GET("/installed/:scope/:id/image", h.getImage)
+	g.GET("/installed/:scope/:id/manifest", h.getManifest)
+
+	g.GET("/repositories", h.listRepositories)
 
 	g.GET("/available", h.listAvailable)
 	g.GET("/available/:scope/:id", h.retrieveAvailable)

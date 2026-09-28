@@ -33,7 +33,7 @@ type List struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	UserID      int       `bun:",nullzero" json:"user_id"`
-	User        *User     `bun:"rel:belongs-to,join:user_id=id" json:"user,omitempty" tstype:"User"`
+	User        *UserRef  `bun:"rel:belongs-to,join:user_id=id" json:"user,omitempty" tstype:"UserRef"`
 	Name        string    `bun:",nullzero" json:"name"`
 	Description *string   `json:"description"`
 	IsOrdered   bool      `json:"is_ordered"`
@@ -54,7 +54,7 @@ type ListBook struct {
 	Book          *Book     `bun:"rel:belongs-to,join:book_id=id" json:"book,omitempty" tstype:"Book"`
 	AddedAt       time.Time `json:"added_at"`
 	AddedByUserID *int      `json:"added_by_user_id"`
-	AddedByUser   *User     `bun:"rel:belongs-to,join:added_by_user_id=id" json:"added_by_user,omitempty" tstype:"User"`
+	AddedByUser   *UserRef  `bun:"rel:belongs-to,join:added_by_user_id=id" json:"added_by_user,omitempty" tstype:"UserRef"`
 	SortOrder     *int      `json:"sort_order"`
 }
 
@@ -65,9 +65,9 @@ type ListShare struct {
 	ListID         int       `bun:",nullzero" json:"list_id"`
 	List           *List     `bun:"rel:belongs-to,join:list_id=id" json:"list,omitempty" tstype:"List"`
 	UserID         int       `bun:",nullzero" json:"user_id"`
-	User           *User     `bun:"rel:belongs-to,join:user_id=id" json:"user,omitempty" tstype:"User"`
+	User           *UserRef  `bun:"rel:belongs-to,join:user_id=id" json:"user,omitempty" tstype:"UserRef"`
 	Permission     string    `bun:",nullzero" json:"permission" tstype:"ListPermission"`
 	CreatedAt      time.Time `json:"created_at"`
 	SharedByUserID *int      `json:"shared_by_user_id"`
-	SharedByUser   *User     `bun:"rel:belongs-to,join:shared_by_user_id=id" json:"shared_by_user,omitempty" tstype:"User"`
+	SharedByUser   *UserRef  `bun:"rel:belongs-to,join:shared_by_user_id=id" json:"shared_by_user,omitempty" tstype:"UserRef"`
 }

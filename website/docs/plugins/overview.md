@@ -9,7 +9,7 @@ Go to **Settings > Plugins**. The page has two tabs:
 - **Installed** lists plugins already on this Shisho server, their versions, capabilities, status, source repository, and available updates.
 - **Discover** fetches the current indexes from configured repositories. Use search, capability, and source filters to find a plugin.
 
-Plugin management, including viewing this page, requires the **Config: Write** permission. Manual book identification requires **Books: Write** and access to the relevant library.
+Viewing this page, including installed plugins, their settings, and the Discover tab, requires the **Config: Read** permission. Installing, updating, configuring, reordering, and removing plugins, and managing repositories, require **Config: Write**. Manual book identification requires **Books: Write** and access to the relevant library.
 
 ## Install a Plugin
 

@@ -254,6 +254,7 @@ function makeResult(
     chapters: [],
     plugin_scope: "library",
     plugin_id: "test",
+    plugin_name: "Test Plugin",
     ...overrides,
   };
 }

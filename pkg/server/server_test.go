@@ -177,6 +177,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/share/:token/files/:fileId/cover",
 				"GET /api/share/:token/files/:fileId/download",
 				"HEAD /api/share/:token/files/:fileId/download",
+				"GET /api/users/directory",
 			} {
 				assert.Equal(t, !demo, routes[route], route)
 			}
@@ -186,6 +187,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/books/files/:id/page/:pageNum", "GET /api/books/files/:id/stream",
 				"GET /api/books/:id/share-links", "POST /api/books/:id/share-links",
 				"POST /api/books/:id/share-links/:linkId/revoke", "DELETE /api/books/:id/share-links/:linkId",
+				"GET /api/user/libraries",
 			} {
 				assert.True(t, routes[route], route)
 			}

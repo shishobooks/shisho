@@ -15,8 +15,25 @@ type RegisterRoutesOptions struct {
 	OnLibraryChanged func()
 }
 
+// RegisterListRoutes registers GET /libraries on a group the server has
+// already configured with authentication and either libraries:read or
+// users:write, since the user forms list libraries to assign access.
+func RegisterListRoutes(g *echo.Group, db *bun.DB) {
+	h := &handler{libraryService: NewService(db)}
+	g.GET("", h.list)
+}
+
+// RegisterUserRoutes registers GET /user/libraries on a group the server has
+// already configured with authentication only. It lists the caller's
+// accessible libraries as LibrarySummary rows.
+func RegisterUserRoutes(g *echo.Group, db *bun.DB) {
+	h := &handler{libraryService: NewService(db)}
+	g.GET("", h.listForUser)
+}
+
 // RegisterRoutes registers library routes on a group the server has already
-// configured with authentication and the resource's read permission.
+// configured with authentication and the resource's read permission. The
+// list lives in RegisterListRoutes because more roles may read it.
 func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, opts ...RegisterRoutesOptions) {
 	libraryService := NewService(db)
 	jobService := jobs.NewService(db)
@@ -29,7 +46,6 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 		h.onLibraryChanged = opts[0].OnLibraryChanged
 	}
 
-	g.GET("", h.list)
 	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("id"))
 	g.POST("", h.create, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite))
 	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite), authMiddleware.RequireLibraryAccess("id"))

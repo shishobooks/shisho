@@ -142,8 +142,8 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 	require.NoError(t, json.Unmarshal(top["results"], &results))
 	require.Len(t, results, 1)
 
-	// Each result is ParsedMetadata flattened with server-added plugin_scope
-	// and plugin_id. disabled_fields is omitempty and absent when no fields
+	// Each result is ParsedMetadata flattened with server-added plugin_scope,
+	// plugin_id, and plugin_name. disabled_fields is omitempty and absent when no fields
 	// are disabled. Keys are snake_case (this is NOT manifest passthrough).
 	assert.Equal(t, []string{
 		"authors",
@@ -158,6 +158,7 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 		"identifiers",
 		"narrators",
 		"plugin_id",
+		"plugin_name",
 		"plugin_scope",
 		"publisher",
 		"series",

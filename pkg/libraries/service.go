@@ -18,7 +18,10 @@ type RetrieveLibraryOptions struct {
 type ListLibrariesOptions struct {
 	Limit      *int
 	Offset     *int
-	LibraryIDs []int // If set, only return libraries with these IDs
+	LibraryIDs []int // If non-nil, only return libraries with these IDs; an empty slice returns none
+	// WithoutPaths skips loading LibraryPaths for callers that never return
+	// them, such as the user-scoped library summaries.
+	WithoutPaths bool
 
 	includeTotal bool
 }
@@ -121,15 +124,24 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 	var total int
 	var err error
 
+	// A non-nil empty filter is a user with no library access, not "no
+	// filter". Callers pass GetAccessibleLibraryIDs, which is nil only for
+	// all-library access.
+	if opts.LibraryIDs != nil && len(opts.LibraryIDs) == 0 {
+		return libraries, 0, nil
+	}
+
 	q := svc.db.
 		NewSelect().
 		Model(&libraries).
 		Column("l.*").
-		Relation("LibraryPaths", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.Order("filepath ASC")
-		}).
 		Group("l.id").
 		Order("l.name ASC")
+	if !opts.WithoutPaths {
+		q = q.Relation("LibraryPaths", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("filepath ASC")
+		})
+	}
 
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)
@@ -137,7 +149,7 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 	if opts.Offset != nil {
 		q = q.Offset(*opts.Offset)
 	}
-	if len(opts.LibraryIDs) > 0 {
+	if opts.LibraryIDs != nil {
 		q = q.Where("l.id IN (?)", bun.List(opts.LibraryIDs))
 	}
 

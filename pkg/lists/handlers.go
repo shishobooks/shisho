@@ -456,11 +456,6 @@ func (h *handler) listShares(c echo.Context) error {
 		return errcodes.Unauthorized("User not found in context")
 	}
 
-	// Require users:read permission to view shares (shows user information)
-	if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
-		return errcodes.Forbidden("You need users:read permission to manage list sharing")
-	}
-
 	// Check manage permission to view shares
 	canManage, err := h.listsService.CanManage(ctx, id, user.ID)
 	if err != nil {
@@ -496,11 +491,6 @@ func (h *handler) createShare(c echo.Context) error {
 		return errcodes.Unauthorized("User not found in context")
 	}
 
-	// Require users:read permission to create shares (requires seeing user list)
-	if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
-		return errcodes.Forbidden("You need users:read permission to manage list sharing")
-	}
-
 	// Check manage permission
 	canManage, err := h.listsService.CanManage(ctx, id, user.ID)
 	if err != nil {
@@ -513,6 +503,16 @@ func (h *handler) createShare(c echo.Context) error {
 	// Can't share with yourself
 	if params.UserID == user.ID {
 		return errcodes.ValidationError("You cannot share a list with yourself")
+	}
+
+	// Only an active user can receive a share. An unknown id gets the same
+	// answer so the route cannot be used to probe for accounts.
+	active, err := h.listsService.IsActiveUser(ctx, params.UserID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !active {
+		return errcodes.ValidationError("You can only share a list with an active user")
 	}
 
 	// Can't share with the list owner
@@ -569,11 +569,6 @@ func (h *handler) updateShare(c echo.Context) error {
 		return errcodes.Unauthorized("User not found in context")
 	}
 
-	// Require users:read permission to update shares
-	if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
-		return errcodes.Forbidden("You need users:read permission to manage list sharing")
-	}
-
 	// Check manage permission
 	canManage, err := h.listsService.CanManage(ctx, id, user.ID)
 	if err != nil {
@@ -609,11 +604,6 @@ func (h *handler) deleteShare(c echo.Context) error {
 		return errcodes.Unauthorized("User not found in context")
 	}
 
-	// Require users:read permission to delete shares
-	if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
-		return errcodes.Forbidden("You need users:read permission to manage list sharing")
-	}
-
 	// Check manage permission
 	canManage, err := h.listsService.CanManage(ctx, id, user.ID)
 	if err != nil {
@@ -647,11 +637,6 @@ func (h *handler) checkVisibility(c echo.Context) error {
 	user, ok := c.Get("user").(*models.User)
 	if !ok {
 		return errcodes.Unauthorized("User not found in context")
-	}
-
-	// Require users:read permission to check visibility (deals with user access)
-	if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
-		return errcodes.Forbidden("You need users:read permission to manage list sharing")
 	}
 
 	// Check manage permission

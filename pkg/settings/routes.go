@@ -29,9 +29,13 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 	g.GET("/libraries/:library_id", libraryH.getLibrarySettings)
 	g.PUT("/libraries/:library_id", libraryH.updateLibrarySettings)
 
-	// GET is books:read so the ReviewPanel can render the missing-fields hint
-	// for any user who can view books (editors and viewers, not just admins).
-	// PUT remains admin-only via config:write.
-	g.GET("/review-criteria", reviewCriteriaH.getReviewCriteria, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	// GET allows books:read so the ReviewPanel can render the missing-fields
+	// hint for any user who can view books (editors and viewers, not just
+	// admins), and config:read so the review criteria settings page loads for
+	// any role that can open it. PUT remains admin-only via config:write.
+	g.GET("/review-criteria", reviewCriteriaH.getReviewCriteria, authMiddleware.RequireAnyPermission(
+		auth.Permission{Resource: models.ResourceBooks, Operation: models.OperationRead},
+		auth.Permission{Resource: models.ResourceConfig, Operation: models.OperationRead},
+	))
 	g.PUT("/review-criteria", reviewCriteriaH.putReviewCriteria, authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
 }
