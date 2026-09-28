@@ -52,6 +52,9 @@ export const useUpdateSharingSettings = () => {
 };
 
 // Every Share Link on a book, from every creator. Requires Shares Read.
+// Recipients change the counts without the sharer doing anything, so the list
+// is always stale: reopening the dialog (which flips `enabled`) or returning
+// to the window refetches it instead of showing the global Infinity cache.
 export const useBookShareLinks = (
   bookId: number,
   options: Omit<
@@ -60,6 +63,7 @@ export const useBookShareLinks = (
   > = {},
 ) =>
   useQuery<ShareLinkResponse[], ShishoAPIError>({
+    staleTime: 0,
     ...options,
     queryKey: [QueryKey.BookShareLinks, bookId],
     queryFn: ({ signal }) =>
@@ -83,15 +87,52 @@ export const useCreateShareLink = () => {
   });
 };
 
+// Revocation is permanent: the link stays listed as revoked with its counts.
+export const useRevokeShareLink = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ShareLinkResponse,
+    ShishoAPIError,
+    { bookId: number; linkId: number }
+  >({
+    mutationFn: ({ bookId, linkId }) =>
+      API.request("POST", `/books/${bookId}/share-links/${linkId}/revoke`),
+    // Refetch on failure too: a 404 means another sharer deleted the link.
+    onSettled: (_data, _error, { bookId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.BookShareLinks, bookId],
+      });
+    },
+  });
+};
+
+// Removes a link in any state, active included.
+export const useDeleteShareLink = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, { bookId: number; linkId: number }>({
+    mutationFn: ({ bookId, linkId }) =>
+      API.request("DELETE", `/books/${bookId}/share-links/${linkId}`),
+    onSettled: (_data, _error, { bookId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.BookShareLinks, bookId],
+      });
+    },
+  });
+};
+
 // The book behind a Share Link, fetched anonymously by the recipient page.
 // A 404 means the link is unavailable and is final. Anything else may be a
 // blip, so retry it once before the page offers Try again.
+//
+// Each fetch counts as an open, so the query deliberately ignores the abort
+// signal. With it, the StrictMode remount in development aborts a request the
+// server already counted and sends a second one; without it, the remount
+// reuses the request in flight.
 export const useSharedBook = (token: string | undefined) =>
   useQuery<SharedBookResponse, ShishoAPIError>({
     enabled: Boolean(token),
     queryKey: [QueryKey.SharedBook, token],
-    queryFn: ({ signal }) =>
-      API.request("GET", `/share/${token}`, null, null, signal),
+    queryFn: () => API.request("GET", `/share/${token}`),
     retry: (failureCount, error) =>
       !(error instanceof ShishoAPIError && error.status === 404) &&
       failureCount < 1,

@@ -1,10 +1,12 @@
 package sharelinks
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -39,8 +41,10 @@ func errUnavailable() error {
 
 // resolve decides whether the token in the path is usable and returns the
 // link and its book. A link resolves only while sharing is enabled, the
-// token exists, and the link is active (not revoked, not expired). Every
-// failure returns errUnavailable.
+// token exists, the link is active (not revoked, not expired), and its
+// creator is active and can still reach the book's library. A deleted
+// creator or book takes the row with it. Every failure returns
+// errUnavailable.
 func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book, error) {
 	ctx := c.Request().Context()
 	token := c.Param("token")
@@ -63,7 +67,8 @@ func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book
 	if err != nil {
 		return nil, nil, err
 	}
-	if link.State(time.Now()) != models.ShareLinkStateActive || link.CreatedByUser == nil {
+	creator := link.CreatedByUser
+	if link.State(time.Now()) != models.ShareLinkStateActive || creator == nil || !creator.IsActive {
 		return nil, nil, errUnavailable()
 	}
 
@@ -74,26 +79,40 @@ func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book
 	if err != nil {
 		return nil, nil, err
 	}
+	if !creator.HasLibraryAccess(book.LibraryID) {
+		return nil, nil, errUnavailable()
+	}
 	return link, book, nil
 }
 
 // resolveFile resolves the token and returns the requested file, which must
 // belong to the link's book.
-func (h *publicHandler) resolveFile(c echo.Context) (*models.Book, *models.File, error) {
-	_, book, err := h.resolve(c)
+func (h *publicHandler) resolveFile(c echo.Context) (*models.ShareLink, *models.Book, *models.File, error) {
+	link, book, err := h.resolve(c)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	fileID, err := strconv.Atoi(c.Param("fileId"))
 	if err != nil {
-		return nil, nil, errcodes.NotFound("File")
+		return nil, nil, nil, errcodes.NotFound("File")
 	}
 	for _, f := range book.Files {
 		if f.ID == fileID {
-			return book, f, nil
+			return link, book, f, nil
 		}
 	}
-	return nil, nil, errcodes.NotFound("File")
+	return nil, nil, nil, errcodes.NotFound("File")
+}
+
+// countAccess applies a usage count. A failed count is logged rather than
+// returned, so the recipient still gets the page or the file.
+func countAccess(ctx context.Context, link *models.ShareLink, record func(context.Context, int) error) {
+	if err := record(ctx, link.ID); err != nil {
+		logger.FromContext(ctx).Warn("failed to record share link access", logger.Data{
+			"share_link_id": link.ID,
+			"error":         err.Error(),
+		})
+	}
 }
 
 func coverAspectRatio(book *models.Book) string {
@@ -108,6 +127,7 @@ func (h *publicHandler) book(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	countAccess(c.Request().Context(), link, h.service.RecordOpen)
 	aspectRatio := coverAspectRatio(book)
 	// The cache key reads cover filenames, so compute it before blanking.
 	book.CoverCacheKey = covers.CacheKey(book.Files, aspectRatio)
@@ -169,7 +189,7 @@ func (h *publicHandler) bookCover(c echo.Context) error {
 }
 
 func (h *publicHandler) fileCover(c echo.Context) error {
-	_, file, err := h.resolveFile(c)
+	_, _, file, err := h.resolveFile(c)
 	if err != nil {
 		return err
 	}
@@ -192,7 +212,7 @@ func (h *publicHandler) fileCover(c echo.Context) error {
 // generator download as-is. Original and KePub variants are not offered.
 func (h *publicHandler) download(c echo.Context) error {
 	ctx := c.Request().Context()
-	book, file, err := h.resolveFile(c)
+	link, book, file, err := h.resolveFile(c)
 	if err != nil {
 		return err
 	}
@@ -200,20 +220,37 @@ func (h *publicHandler) download(c echo.Context) error {
 		return err
 	}
 
-	// Supplements cannot be generated, and neither can formats only a plugin
-	// parses, which have no built-in generator.
+	path, filename, err := h.downloadFile(ctx, book, file)
+	if err != nil {
+		return err
+	}
+	if startsDownload(c.Request()) {
+		countAccess(ctx, link, h.service.RecordDownload)
+	}
+	httputil.SetAttachmentFilename(c.Response(), filename)
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return errors.WithStack(c.File(path))
+}
+
+// downloadFile returns the path to serve and its download filename: the
+// generated file, or the original for supplements, formats with no generator
+// (those only a plugin parses), and a failed generation.
+func (h *publicHandler) downloadFile(ctx context.Context, book *models.Book, file *models.File) (string, string, error) {
+	original := func() (string, string, error) {
+		return file.Filepath, filepath.Base(file.Filepath), nil
+	}
 	if file.FileRole == models.FileRoleSupplement {
-		return serveOriginal(c, file)
+		return original()
 	}
 	if _, err := filegen.GetGenerator(file.FileType); err != nil {
-		return serveOriginal(c, file)
+		return original()
 	}
 
 	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, file)
 	if err != nil {
 		var genErr *filegen.GenerationError
 		if !errors.As(err, &genErr) {
-			return errors.WithStack(err)
+			return "", "", errors.WithStack(err)
 		}
 		// A recipient has no Download Original to fall back on, so serve the
 		// original rather than an error, as the eReader download does.
@@ -222,16 +259,18 @@ func (h *publicHandler) download(c echo.Context) error {
 			"file_type": file.FileType,
 			"error":     genErr.Message,
 		})
-		return serveOriginal(c, file)
+		return original()
 	}
-
-	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return errors.WithStack(c.File(cachedPath))
+	return cachedPath, downloadFilename, nil
 }
 
-func serveOriginal(c echo.Context, file *models.File) error {
-	httputil.SetAttachmentFilename(c.Response(), filepath.Base(file.Filepath))
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return errors.WithStack(c.File(file.Filepath))
+// startsDownload reports whether a download request counts as a download. HEAD
+// only checks the file, and a range past the first byte continues a download
+// already counted (a resumed transfer or a download manager's later segment).
+func startsDownload(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	rng := r.Header.Get("Range")
+	return rng == "" || strings.HasPrefix(rng, "bytes=0-")
 }

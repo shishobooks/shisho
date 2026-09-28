@@ -76,6 +76,8 @@ Role permissions and library access intersect:
 
 For example, a user with Books Write but access to only one library can edit books only in that library. Library access does not add permissions that the role lacks.
 
+Removing a user's access to a library also stops every [Share Link](./sharing.md#when-a-link-stops-working) they created for a book in it. The links work again if the access is restored.
+
 When creating or editing a user, choose one of these options under **Library Access**:
 
 - **Access to all libraries** grants access to every current library and automatically includes libraries created in the future.
@@ -119,6 +121,8 @@ Deactivation immediately prevents that user from logging in. It does not delete 
 :::
 
 A user with Users Write permission can select another active account and choose **Deactivate User**. The account and its historical records remain stored.
+
+Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can delete them.
 
 ## Sessions
 

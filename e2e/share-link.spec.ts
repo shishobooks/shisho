@@ -1,8 +1,9 @@
 /**
  * E2E happy path for Share Links: an admin turns sharing on, creates a link on
  * a book and copies it, and a browser context with no session opens the link,
- * sees the book, and downloads a file. Turning sharing off then shows the
- * unavailable page.
+ * sees the book, and downloads a file. The sharer then sees the open and the
+ * download in the dialog and revokes the link, which shows the recipient the
+ * unavailable page. Turning sharing off does the same for another link.
  *
  * This is the only test of the anonymous browser path end to end, and it runs
  * in every browser. Only the clipboard check is Chromium-only, because
@@ -161,8 +162,25 @@ test.describe("Share Links", () => {
       expect(download.suggestedFilename()).toMatch(/\.epub$/);
       expect(await download.failure()).toBeNull();
 
-      // Turning sharing off makes the link unavailable.
-      await setSharing(getApiBaseURL(browserName), false);
+      // Reopening the dialog shows the recipient's open and download.
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await page.getByLabel("Book actions").click();
+      await page.getByRole("menuitem", { name: "Share", exact: true }).click();
+      await expect(row).toContainText("1 open · 1 download");
+      await expect(row).toContainText("Last used");
+
+      // Revoking keeps the link listed with its counts and stops it at once.
+      await row
+        .getByRole("button", { name: "Revoke for the e2e test" })
+        .click();
+      const confirm = page.getByRole("dialog", { name: "Revoke Link" });
+      await confirm.getByRole("button", { name: "Revoke" }).click();
+      await expect(confirm).toBeHidden();
+      await expect(row).toContainText("revoked");
+      await expect(row).toContainText("1 open · 1 download");
+      await expect(row.getByRole("button", { name: /^Revoke/ })).toHaveCount(0);
+
       await recipient.reload({ waitUntil: "domcontentloaded" });
       await expect(
         recipient.getByRole("heading", {
@@ -211,6 +229,15 @@ test.describe("Share Links", () => {
           .getByRole("button", { name: "Download", exact: true })
           .filter({ visible: true }),
       ).not.toHaveCount(0);
+
+      // Turning sharing off makes the link unavailable.
+      await setSharing(getApiBaseURL(browserName), false);
+      await recipient.reload({ waitUntil: "domcontentloaded" });
+      await expect(
+        recipient.getByRole("heading", {
+          name: "This link is no longer available",
+        }),
+      ).toBeVisible();
     } finally {
       await anonymous.close();
       await setSharing(getApiBaseURL(browserName), false);

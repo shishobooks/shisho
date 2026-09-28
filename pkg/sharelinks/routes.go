@@ -40,6 +40,8 @@ func RegisterBookRoutes(booksGroup *echo.Group, db *bun.DB, authMiddleware *auth
 		auth.Permission{Resource: models.ResourceShares, Operation: models.OperationWrite},
 	))
 	booksGroup.POST("/:id/share-links", h.create, authMiddleware.RequirePermission(models.ResourceShares, models.OperationWrite))
+	booksGroup.POST("/:id/share-links/:linkId/revoke", h.revoke, authMiddleware.RequirePermission(models.ResourceShares, models.OperationWrite))
+	booksGroup.DELETE("/:id/share-links/:linkId", h.delete, authMiddleware.RequirePermission(models.ResourceShares, models.OperationWrite))
 }
 
 // RegisterPublicRoutes registers the unauthenticated recipient family under

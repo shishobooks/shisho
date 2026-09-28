@@ -1,6 +1,7 @@
 package sharelinks
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -69,12 +70,9 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	settings, err := LoadSettings(ctx, h.appSettingsService)
+	settings, err := h.requireSharingEnabled(ctx)
 	if err != nil {
 		return err
-	}
-	if !settings.Enabled {
-		return errcodes.Forbidden("Sharing is turned off. An admin can turn it on in Settings > Sharing.")
 	}
 	if payload.ExpiresAt == nil && settings.RequireExpiration {
 		return errcodes.ValidationError("An expiration is required for new share links.")
@@ -98,6 +96,60 @@ func (h *handler) create(c echo.Context) error {
 		return err
 	}
 	return errors.WithStack(c.JSON(http.StatusCreated, newShareLinkResponse(link, now)))
+}
+
+// requireWritableLink checks book access and that sharing is enabled, then
+// returns the link named in the path, which must belong to the book.
+func (h *handler) requireWritableLink(c echo.Context) (*models.ShareLink, error) {
+	ctx := c.Request().Context()
+	bookID, _, err := h.requireBookAccess(c)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.requireSharingEnabled(ctx); err != nil {
+		return nil, err
+	}
+	linkID, err := strconv.Atoi(c.Param("linkId"))
+	if err != nil {
+		return nil, errcodes.NotFound("Share Link")
+	}
+	return h.service.RetrieveForBook(ctx, bookID, linkID)
+}
+
+// requireSharingEnabled refuses every management write while sharing is off
+// and returns the settings for callers that need the rest of the policy.
+func (h *handler) requireSharingEnabled(ctx context.Context) (Settings, error) {
+	settings, err := LoadSettings(ctx, h.appSettingsService)
+	if err != nil {
+		return settings, err
+	}
+	if !settings.Enabled {
+		return settings, errcodes.Forbidden("Sharing is turned off. An admin can turn it on in Settings > Sharing.")
+	}
+	return settings, nil
+}
+
+func (h *handler) revoke(c echo.Context) error {
+	link, err := h.requireWritableLink(c)
+	if err != nil {
+		return err
+	}
+	revoked, err := h.service.Revoke(c.Request().Context(), link)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, newShareLinkResponse(revoked, time.Now())))
+}
+
+func (h *handler) delete(c echo.Context) error {
+	link, err := h.requireWritableLink(c)
+	if err != nil {
+		return err
+	}
+	if err := h.service.Delete(c.Request().Context(), link); err != nil {
+		return err
+	}
+	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
 func newShareLinkResponse(link *models.ShareLink, now time.Time) ShareLinkResponse {

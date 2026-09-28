@@ -1725,8 +1725,8 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         <ShareLinkDialog
           bookId={book.id}
           bookTitle={book.title}
-          canCreate={canWriteShares}
           canList={canListShares}
+          canWrite={canWriteShares}
           onOpenChange={setShareDialogOpen}
           open={shareDialogOpen}
           requireExpiration={sharingSettings?.require_expiration ?? false}

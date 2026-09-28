@@ -498,6 +498,13 @@ func TestShareLinks_UnavailableLinksShareOneResponse(t *testing.T) {
 	active := f.mustCreate(f.admin, f.bookA, `{}`)
 	expired := f.mustCreate(f.admin, f.bookA, fmt.Sprintf(`{"expires_at":%q}`, futureJSON(time.Hour)))
 	f.expire(expired)
+	revoked := f.mustCreate(f.admin, f.bookA, `{}`)
+	require.Equal(t, http.StatusOK, f.revoke(f.admin, f.bookA, revoked).Code)
+	byDeactivated := f.mustCreate(f.sharer, f.bookA, `{}`)
+	require.Equal(t, http.StatusNoContent, f.do(f.admin, http.MethodDelete, fmt.Sprintf("/api/users/%d", f.sharer.ID), "").Code)
+	byOutsider := f.mustCreate(f.writer, f.bookA, `{}`)
+	rec := f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/users/%d", f.writer.ID), fmt.Sprintf(`{"library_ids":[%d]}`, f.libB.ID))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	paths := func(token string) []string {
 		return []string{
@@ -529,6 +536,15 @@ func TestShareLinks_UnavailableLinksShareOneResponse(t *testing.T) {
 	for _, path := range paths(expired.Token) {
 		check("expired", path)
 	}
+	for _, path := range paths(revoked.Token) {
+		check("revoked", path)
+	}
+	for _, path := range paths(byDeactivated.Token) {
+		check("deactivated creator", path)
+	}
+	for _, path := range paths(byOutsider.Token) {
+		check("creator without library access", path)
+	}
 
 	// Turning sharing off stops every link without deleting it.
 	f.setSharing(false, false)
@@ -552,13 +568,19 @@ func TestShareLinks_ManagementRejectedInDemoMode(t *testing.T) {
 	token, err := authSvc.GenerateToken(admin)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/books/1/share-links", strings.NewReader(`{}`))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
-	rec := httptest.NewRecorder()
-	srv.Handler.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), `"code":"demo_mode"`)
+	for _, request := range []struct{ method, path string }{
+		{http.MethodPost, "/api/books/1/share-links"},
+		{http.MethodPost, "/api/books/1/share-links/1/revoke"},
+		{http.MethodDelete, "/api/books/1/share-links/1"},
+	} {
+		req := httptest.NewRequest(request.method, request.path, strings.NewReader(`{}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code, "%s %s", request.method, request.path)
+		assert.Contains(t, rec.Body.String(), `"code":"demo_mode"`)
+	}
 }
 
 func TestShareLinks_SharesWriteReadsSharingSettings(t *testing.T) {
@@ -569,4 +591,298 @@ func TestShareLinks_SharesWriteReadsSharingSettings(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code, "a sharer without Shares Read needs the policy to render the form")
 	rec = f.do(f.editor, http.MethodGet, "/api/settings/sharing", "")
 	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func (f *shareLinksFixture) revoke(user *models.User, book *models.Book, link sharelinks.ShareLinkResponse) *httptest.ResponseRecorder {
+	f.t.Helper()
+	return f.do(user, http.MethodPost, fmt.Sprintf("/api/books/%d/share-links/%d/revoke", book.ID, link.ID), "")
+}
+
+func (f *shareLinksFixture) deleteLink(user *models.User, book *models.Book, link sharelinks.ShareLinkResponse) *httptest.ResponseRecorder {
+	f.t.Helper()
+	return f.do(user, http.MethodDelete, fmt.Sprintf("/api/books/%d/share-links/%d", book.ID, link.ID), "")
+}
+
+// listed returns the book's links as the admin sees them, keyed by id.
+func (f *shareLinksFixture) listed(book *models.Book) map[int]sharelinks.ShareLinkResponse {
+	f.t.Helper()
+	rec := f.list(f.admin, book)
+	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
+	var links []sharelinks.ShareLinkResponse
+	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &links))
+	byID := map[int]sharelinks.ShareLinkResponse{}
+	for _, l := range links {
+		byID[l.ID] = l
+	}
+	return byID
+}
+
+func TestShareLinks_RevokeStopsTheLinkAndKeepsItListed(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	link := f.mustCreate(f.sharer, f.bookA, `{"label":"for Alice"}`)
+	other := f.mustCreate(f.sharer, f.bookA, `{"label":"for Bob"}`)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+
+	rec := f.revoke(f.sharer, f.bookA, link)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var revoked sharelinks.ShareLinkResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &revoked))
+	assert.Equal(t, models.ShareLinkStateRevoked, revoked.State)
+	require.NotNil(t, revoked.RevokedAt)
+
+	assert.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+	assert.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+other.Token, "").Code, "other links on the book keep working")
+
+	listed := f.listed(f.bookA)
+	require.Contains(t, listed, link.ID, "a revoked link stays listed")
+	assert.Equal(t, models.ShareLinkStateRevoked, listed[link.ID].State)
+	assert.Equal(t, models.ShareLinkStateActive, listed[other.ID].State)
+
+	// Revoking again changes nothing; there is no way back to active.
+	rec = f.revoke(f.admin, f.bookA, link)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var again sharelinks.ShareLinkResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &again))
+	assert.Equal(t, models.ShareLinkStateRevoked, again.State)
+	assert.True(t, revoked.RevokedAt.Equal(*again.RevokedAt), "the first revocation time is kept")
+	assert.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+}
+
+func TestShareLinks_DeleteRemovesLinksInEveryState(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	active := f.mustCreate(f.sharer, f.bookA, `{"label":"active"}`)
+	expired := f.mustCreate(f.admin, f.bookA, fmt.Sprintf(`{"label":"expired","expires_at":%q}`, futureJSON(time.Hour)))
+	f.expire(expired)
+	revoked := f.mustCreate(f.sharer, f.bookA, `{"label":"revoked"}`)
+	require.Equal(t, http.StatusOK, f.revoke(f.sharer, f.bookA, revoked).Code)
+	kept := f.mustCreate(f.sharer, f.bookA, `{"label":"kept"}`)
+
+	for _, link := range []sharelinks.ShareLinkResponse{active, expired, revoked} {
+		rec := f.deleteLink(f.sharer, f.bookA, link)
+		require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+		assert.Empty(t, rec.Body.String())
+		assert.Equal(t, http.StatusNotFound, f.deleteLink(f.sharer, f.bookA, link).Code, "a deleted link is gone")
+	}
+
+	listed := f.listed(f.bookA)
+	assert.Len(t, listed, 1)
+	assert.Contains(t, listed, kept.ID)
+	var count int
+	require.NoError(t, f.db.NewRaw("SELECT COUNT(*) FROM share_links").Scan(context.Background(), &count))
+	assert.Equal(t, 1, count)
+	assert.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+active.Token, "").Code)
+}
+
+func TestShareLinks_RevokeAndDeletePermissions(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	onA := f.mustCreate(f.admin, f.bookA, `{}`)
+	onB := f.mustCreate(f.admin, f.bookB, `{}`)
+
+	tests := []struct {
+		name   string
+		user   *models.User
+		book   *models.Book
+		link   sharelinks.ShareLinkResponse
+		status int
+	}{
+		{"editor without shares", f.editor, f.bookA, onA, http.StatusForbidden},
+		{"viewer without shares", f.viewer, f.bookA, onA, http.StatusForbidden},
+		{"shares read only", f.auditor, f.bookA, onA, http.StatusForbidden},
+		{"shares write without library access", f.sharer, f.bookB, onB, http.StatusForbidden},
+		{"shares write in another library", f.outsider, f.bookA, onA, http.StatusForbidden},
+		{"a link on another book", f.admin, f.bookA, onB, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.status, f.revoke(tt.user, tt.book, tt.link).Code, "revoke")
+			assert.Equal(t, tt.status, f.deleteLink(tt.user, tt.book, tt.link).Code, "delete")
+		})
+	}
+	listed := f.listed(f.bookA)
+	require.Contains(t, listed, onA.ID)
+	assert.Equal(t, models.ShareLinkStateActive, listed[onA.ID].State, "a refused revoke changes nothing")
+	assert.Contains(t, f.listed(f.bookB), onB.ID, "a refused delete changes nothing")
+
+	// Revoking and deleting are writes, refused while sharing is off.
+	f.setSharing(false, false)
+	rec := f.revoke(f.admin, f.bookA, onA)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Sharing is turned off")
+	assert.Equal(t, http.StatusForbidden, f.deleteLink(f.admin, f.bookA, onA).Code)
+	f.setSharing(true, false)
+
+	// Shares Write without Shares Read can revoke and delete.
+	require.Equal(t, http.StatusOK, f.revoke(f.writer, f.bookA, onA).Code)
+	require.Equal(t, http.StatusNoContent, f.deleteLink(f.writer, f.bookA, onA).Code)
+}
+
+func TestShareLinks_Counters(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	link := f.mustCreate(f.sharer, f.bookA, `{}`)
+	assert.Zero(t, link.OpenCount)
+	assert.Zero(t, link.DownloadCount)
+	assert.Nil(t, link.LastAccessedAt)
+	download := fmt.Sprintf("/api/share/%s/files/%d/download", link.Token, f.epubA.ID)
+	counts := func() sharelinks.ShareLinkResponse {
+		t.Helper()
+		return f.listed(f.bookA)[link.ID]
+	}
+
+	// Covers, HEAD, and a refused download change nothing.
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token+"/cover", "").Code)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/cover", link.Token, f.epubA.ID), "").Code)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodHead, download, "").Code)
+	require.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/download", link.Token, f.epubB.ID), "").Code)
+	got := counts()
+	assert.Zero(t, got.OpenCount)
+	assert.Zero(t, got.DownloadCount)
+	assert.Nil(t, got.LastAccessedAt)
+
+	// Opening the page counts an open and sets last used.
+	before := time.Now().Add(-time.Second)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+	got = counts()
+	assert.Equal(t, 2, got.OpenCount)
+	assert.Zero(t, got.DownloadCount)
+	require.NotNil(t, got.LastAccessedAt)
+	assert.True(t, got.LastAccessedAt.After(before))
+	opened := *got.LastAccessedAt
+
+	// A download GET counts a download, including a supplement.
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, download, "").Code)
+	require.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/download", link.Token, f.suppA.ID), "").Code)
+	got = counts()
+	assert.Equal(t, 2, got.OpenCount)
+	assert.Equal(t, 2, got.DownloadCount)
+	require.NotNil(t, got.LastAccessedAt)
+	assert.True(t, got.LastAccessedAt.After(opened), "a download moves last used")
+
+	// A revoked link keeps its counts, and requests to it count nothing.
+	require.Equal(t, http.StatusOK, f.revoke(f.sharer, f.bookA, link).Code)
+	require.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+	require.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, download, "").Code)
+	revoked := counts()
+	assert.Equal(t, models.ShareLinkStateRevoked, revoked.State)
+	assert.Equal(t, 2, revoked.OpenCount)
+	assert.Equal(t, 2, revoked.DownloadCount)
+	assert.True(t, got.LastAccessedAt.Equal(*revoked.LastAccessedAt))
+}
+
+// linkRowExists reports whether the share_links row is still there. Deleting
+// a creator or a book removes the row, which no endpoint can show once the
+// book is gone.
+func (f *shareLinksFixture) linkRowExists(link sharelinks.ShareLinkResponse) bool {
+	f.t.Helper()
+	var count int
+	require.NoError(f.t, f.db.NewRaw("SELECT COUNT(*) FROM share_links WHERE id = ?", link.ID).Scan(context.Background(), &count))
+	return count == 1
+}
+
+// assertUnavailable checks every public path for token returns the same 404
+// body as a token that never existed.
+func (f *shareLinksFixture) assertUnavailable(token string, fileID int) {
+	f.t.Helper()
+	unknown := f.do(nil, http.MethodGet, "/api/share/"+base64.RawURLEncoding.EncodeToString(make([]byte, 32)), "")
+	require.Equal(f.t, http.StatusNotFound, unknown.Code)
+	for _, path := range []string{
+		"/api/share/" + token,
+		"/api/share/" + token + "/cover",
+		fmt.Sprintf("/api/share/%s/files/%d/cover", token, fileID),
+		fmt.Sprintf("/api/share/%s/files/%d/download", token, fileID),
+	} {
+		rec := f.do(nil, http.MethodGet, path, "")
+		require.Equal(f.t, http.StatusNotFound, rec.Code, path)
+		assert.JSONEq(f.t, unknown.Body.String(), rec.Body.String(), path)
+	}
+}
+
+func TestShareLinks_CreatorAndBookLifecycle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("deactivating the creator", func(t *testing.T) {
+		t.Parallel()
+		f := newShareLinksFixture(t)
+		f.setSharing(true, false)
+		link := f.mustCreate(f.sharer, f.bookA, `{}`)
+		require.Equal(t, http.StatusNoContent, f.do(f.admin, http.MethodDelete, fmt.Sprintf("/api/users/%d", f.sharer.ID), "").Code)
+
+		f.assertUnavailable(link.Token, f.epubA.ID)
+		assert.True(t, f.linkRowExists(link), "the link stays listed")
+		assert.Contains(t, f.listed(f.bookA), link.ID)
+	})
+
+	t.Run("removing the creator's access to the library", func(t *testing.T) {
+		t.Parallel()
+		f := newShareLinksFixture(t)
+		f.setSharing(true, false)
+		link := f.mustCreate(f.sharer, f.bookA, `{}`)
+		rec := f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/users/%d", f.sharer.ID), fmt.Sprintf(`{"library_ids":[%d]}`, f.libB.ID))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+		f.assertUnavailable(link.Token, f.epubA.ID)
+		assert.True(t, f.linkRowExists(link))
+
+		// Giving access back restores the link, as with the sharing switch.
+		rec = f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/users/%d", f.sharer.ID), `{"all_library_access":true}`)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Equal(t, http.StatusOK, f.do(nil, http.MethodGet, "/api/share/"+link.Token, "").Code)
+	})
+
+	t.Run("deleting the creator", func(t *testing.T) {
+		t.Parallel()
+		f := newShareLinksFixture(t)
+		f.setSharing(true, false)
+		link := f.mustCreate(f.sharer, f.bookA, `{}`)
+		_, err := f.db.NewDelete().Model((*models.User)(nil)).Where("id = ?", f.sharer.ID).Exec(context.Background())
+		require.NoError(t, err)
+
+		f.assertUnavailable(link.Token, f.epubA.ID)
+		assert.False(t, f.linkRowExists(link))
+	})
+
+	t.Run("deleting the book", func(t *testing.T) {
+		t.Parallel()
+		f := newShareLinksFixture(t)
+		f.setSharing(true, false)
+		link := f.mustCreate(f.sharer, f.bookA, `{}`)
+		rec := f.do(f.admin, http.MethodDelete, fmt.Sprintf("/api/books/%d", f.bookA.ID), "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+		f.assertUnavailable(link.Token, f.epubA.ID)
+		assert.False(t, f.linkRowExists(link))
+	})
+}
+
+func TestShareLinks_PartialDownloadsCountOnce(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	link := f.mustCreate(f.admin, f.bookA, `{}`)
+	download := func(rangeHeader string) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/download", link.Token, f.suppA.ID), nil)
+		if rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+		rec := httptest.NewRecorder()
+		f.handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// A download manager resuming or splitting a file sends ranges past the
+	// start; only the request that starts at byte 0 is a new download.
+	require.Equal(t, http.StatusPartialContent, download("bytes=0-3"))
+	require.Equal(t, http.StatusPartialContent, download("bytes=4-"))
+	require.Equal(t, http.StatusPartialContent, download("bytes=8-11"))
+	assert.Equal(t, 1, f.listed(f.bookA)[link.ID].DownloadCount)
 }

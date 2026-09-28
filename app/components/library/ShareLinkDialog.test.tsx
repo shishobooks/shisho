@@ -1,8 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShareLinkResponse } from "@/types";
+import { formatDateTime } from "@/utils/format";
 
 import { ShareLinkDialog } from "./ShareLinkDialog";
 
@@ -10,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   links: [] as ShareLinkResponse[],
   listOptions: [] as Array<{ enabled?: boolean } | undefined>,
   create: vi.fn(),
+  revoke: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("@/hooks/queries/sharing", () => ({
@@ -18,6 +21,8 @@ vi.mock("@/hooks/queries/sharing", () => ({
     return { data: mocks.links, isLoading: false };
   },
   useCreateShareLink: () => ({ mutateAsync: mocks.create, isPending: false }),
+  useRevokeShareLink: () => ({ mutateAsync: mocks.revoke, isPending: false }),
+  useDeleteShareLink: () => ({ mutateAsync: mocks.remove, isPending: false }),
 }));
 
 const link = (overrides: Partial<ShareLinkResponse>): ShareLinkResponse => ({
@@ -41,8 +46,8 @@ const renderDialog = (
     <ShareLinkDialog
       bookId={7}
       bookTitle="Test Book"
-      canCreate
       canList
+      canWrite
       onOpenChange={() => {}}
       open
       requireExpiration={false}
@@ -66,6 +71,8 @@ beforeEach(() => {
   mocks.links = [];
   mocks.listOptions.length = 0;
   mocks.create.mockReset().mockResolvedValue(link({}));
+  mocks.revoke.mockReset().mockResolvedValue(link({ state: "revoked" }));
+  mocks.remove.mockReset().mockResolvedValue(undefined);
 });
 
 describe("ShareLinkDialog", () => {
@@ -185,7 +192,7 @@ describe("ShareLinkDialog", () => {
 
   it("shows only the list for Shares Read without Shares Write", () => {
     mocks.links = [link({ label: "for Alice" })];
-    renderDialog({ canCreate: false });
+    renderDialog({ canWrite: false });
 
     expect(screen.queryByLabelText("Label (optional)")).not.toBeInTheDocument();
     expect(
@@ -204,5 +211,141 @@ describe("ShareLinkDialog", () => {
     expect(
       screen.getByRole("button", { name: "Create link" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows opens, downloads, and last used for each link", () => {
+    mocks.links = [
+      link({
+        id: 1,
+        label: "used",
+        open_count: 3,
+        download_count: 1,
+        last_accessed_at: "2026-09-25T15:30:00Z",
+      }),
+      link({ id: 2, label: "one open", open_count: 1, download_count: 2 }),
+      link({ id: 3, label: "unused" }),
+    ];
+    renderDialog();
+
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("3 opens · 1 download");
+    expect(rows[0]).toHaveTextContent(
+      `Last used ${formatDateTime("2026-09-25T15:30:00Z")}`,
+    );
+    expect(rows[1]).toHaveTextContent("1 open · 2 downloads");
+    expect(rows[2]).toHaveTextContent("0 opens · 0 downloads · Never used");
+  });
+
+  it("revokes an active link after confirmation", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mocks.links = [link({ id: 4, label: "for Alice" })];
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: "Revoke for Alice" }));
+    const confirm = screen.getByRole("dialog", { name: "Revoke Link" });
+    expect(confirm).toHaveTextContent("cannot be undone");
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    await user.click(within(confirm).getByRole("button", { name: "Revoke" }));
+
+    expect(mocks.revoke).toHaveBeenCalledWith({ bookId: 7, linkId: 4 });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Revoke Link" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("closes the confirmation when a revoke or delete fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mocks.revoke.mockRejectedValue(new Error("Share Link not found"));
+    mocks.remove.mockRejectedValue(new Error("Share Link not found"));
+    mocks.links = [link({ id: 4, label: "for Alice" })];
+    renderDialog();
+
+    // Another sharer may have deleted the link already; the list refetches
+    // after any outcome, so the confirmation does not linger on it.
+    await user.click(screen.getByRole("button", { name: "Revoke for Alice" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Revoke Link" })).getByRole(
+        "button",
+        { name: "Revoke" },
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Revoke Link" }),
+      ).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete for Alice" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Delete Link" })).getByRole(
+        "button",
+        { name: "Delete" },
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Delete Link" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("offers no revoke on a link that is not active", () => {
+    mocks.links = [
+      link({ id: 1, label: "revoked", state: "revoked" }),
+      link({ id: 2, label: "expired", state: "expired" }),
+    ];
+    renderDialog();
+
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("revoked");
+    for (const row of rows) {
+      expect(
+        within(row).queryByRole("button", { name: /Revoke/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(row).getByRole("button", { name: /Copy link/ }),
+      ).toBeDisabled();
+      expect(
+        within(row).getByRole("button", { name: /Delete/ }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("deletes a link in any state after confirmation", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mocks.links = [
+      link({ id: 1, label: "active" }),
+      link({ id: 2, label: "revoked", state: "revoked" }),
+    ];
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: "Delete revoked" }));
+    const confirm = screen.getByRole("dialog", { name: "Delete Link" });
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+    expect(mocks.remove).toHaveBeenCalledWith({ bookId: 7, linkId: 2 });
+
+    await user.click(screen.getByRole("button", { name: "Delete active" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Delete Link" })).getByRole(
+        "button",
+        { name: "Delete" },
+      ),
+    );
+    expect(mocks.remove).toHaveBeenCalledWith({ bookId: 7, linkId: 1 });
+  });
+
+  it("shows counts but no revoke or delete without Shares Write", () => {
+    mocks.links = [link({ label: "for Alice", open_count: 2 })];
+    renderDialog({ canWrite: false });
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("2 opens");
+    expect(
+      screen.queryByRole("button", { name: /Revoke/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Delete/ }),
+    ).not.toBeInTheDocument();
   });
 });
