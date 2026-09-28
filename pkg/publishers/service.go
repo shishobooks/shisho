@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
@@ -300,8 +301,19 @@ func (svc *Service) GetFilesPaginated(ctx context.Context, publisherID, limit, o
 	return files, total, nil
 }
 
-// MergePublishers merges sourcePublisher into targetPublisher (moves all file associations, deletes source).
+// MergePublishers merges sourcePublisher into targetPublisher (moves all file
+// associations, re-parents the source's children to the target, deletes
+// source). A Publisher cannot be merged into itself.
+//
+// When the target sits anywhere below the source, it first takes the source's
+// place under the source's parent (or becomes a root when the source has
+// none). Otherwise re-parenting the source's children to the target would make
+// the target's own ancestor its child while it stayed that ancestor's
+// descendant, a cycle.
 func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int) error {
+	if targetID == sourceID {
+		return merge.SelfMergeError("publisher")
+	}
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		// Update all files from source to target
 		_, err := tx.NewUpdate().
@@ -313,21 +325,57 @@ func (svc *Service) MergePublishers(ctx context.Context, targetID, sourceID int)
 			return errors.WithStack(err)
 		}
 
+		// When the target sits below the source, it takes the source's place
+		// under the source's parent before the source's children move to it.
+		// Otherwise the target's own ancestor would become its child.
+		targetBelowSource, err := tx.NewSelect().
+			Model((*models.Publisher)(nil)).
+			Where("id = ?", targetID).
+			Where("id IN ("+descendantIDsSubquery()+")", sourceID).
+			Exists(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if targetBelowSource {
+			var newParentID *int
+			err = tx.NewSelect().
+				Model((*models.Publisher)(nil)).
+				Column("parent_id").
+				Where("id = ?", sourceID).
+				Scan(ctx, &newParentID)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			// Only a pre-existing cycle puts the source's parent at or below
+			// the target; the target then becomes a root instead.
+			if newParentID != nil {
+				loops, err := tx.NewSelect().
+					Model((*models.Publisher)(nil)).
+					Where("id = ?", *newParentID).
+					Where("id IN ("+descendantIDsSubquery()+")", targetID).
+					Exists(ctx)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+				if loops {
+					newParentID = nil
+				}
+			}
+			_, err = tx.NewUpdate().
+				Model((*models.Publisher)(nil)).
+				Set("parent_id = ?", newParentID).
+				Where("id = ?", targetID).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
 		// Re-parent children of source to target (exclude target itself to avoid self-reference)
 		_, err = tx.NewUpdate().
 			Model((*models.Publisher)(nil)).
 			Set("parent_id = ?", targetID).
 			Where("parent_id = ? AND id != ?", sourceID, targetID).
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// If target was a child of source, clear target's parent_id to avoid dangling reference
-		_, err = tx.NewUpdate().
-			Model((*models.Publisher)(nil)).
-			Set("parent_id = NULL").
-			Where("id = ? AND parent_id = ?", targetID, sourceID).
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -575,12 +623,13 @@ func (svc *Service) GetDescendantIDs(ctx context.Context, publisherID int) ([]in
 
 // descendantIDsSubquery returns a raw SQL expression that computes all publisher IDs
 // in the subtree rooted at the given publisherID (inclusive of the root itself).
-// Uses a recursive CTE to traverse the publisher hierarchy.
+// Uses a recursive CTE to traverse the publisher hierarchy. UNION, not UNION
+// ALL, so the walk stops on corrupt circular data instead of looping forever.
 func descendantIDsSubquery() string {
 	return `SELECT id FROM (
 		WITH RECURSIVE publisher_tree(id) AS (
 			SELECT ?
-			UNION ALL
+			UNION
 			SELECT p.id FROM publishers p JOIN publisher_tree pt ON p.parent_id = pt.id
 		)
 		SELECT id FROM publisher_tree

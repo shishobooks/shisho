@@ -10,6 +10,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -179,6 +180,19 @@ func (h *handler) update(c echo.Context) error {
 	nameChanged := false
 
 	if params.Name != nil && *params.Name != person.Name {
+		// A rename onto another Person's name is rejected rather than merged,
+		// so combining two People stays an explicit merge.
+		existing, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
+			Name:      params.Name,
+			LibraryID: &person.LibraryID,
+		})
+		if err == nil && existing.ID != id {
+			return errcodes.ValidationError("A person with this name already exists. Merge the two people instead.")
+		}
+		if err != nil && !errors.Is(err, errcodes.NotFound("Person")) {
+			return errors.WithStack(err)
+		}
+
 		nameChanged = true
 		person.Name = *params.Name
 		// Regenerate sort name when name changes (unless sort_name_source is manual)
@@ -370,33 +384,26 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the target person to check library access
+	// Fetch both sides, so a missing target or source is a 404, then run the
+	// shared merge checks.
 	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
 		ID: &id,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Fetch the source person, which the merge deletes, so the same library
-	// access check covers it.
 	source, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
 		ID: &params.SourceID,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) || !user.HasLibraryAccess(source.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
-	}
-
-	// People belong to one library, so the target must share the source's.
-	if source.LibraryID != person.LibraryID {
-		return errcodes.ValidationError("People can only be merged within the same library")
+	user, _ := c.Get("user").(*models.User)
+	if err := merge.CheckPreconditions(user, "person",
+		merge.Side{ID: person.ID, LibraryID: person.LibraryID},
+		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
+	); err != nil {
+		return err
 	}
 
 	// Every book either person authors or narrates lists the target name and

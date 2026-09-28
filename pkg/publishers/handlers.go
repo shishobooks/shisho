@@ -11,6 +11,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
@@ -357,30 +358,35 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Fetch both sides, so a missing target or source is a 404, then run the
+	// shared merge checks.
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
 		ID: &id,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(publisher.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
-	}
-
-	err = h.publisherService.MergePublishers(ctx, id, params.SourceID)
+	source, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
+		ID: &params.SourceID,
+	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	log := logger.FromContext(ctx)
-	if err := h.searchService.DeleteFromPublisherIndex(ctx, params.SourceID); err != nil {
-		log.Warn("failed to remove merged publisher from search index", logger.Data{"publisher_id": params.SourceID, "error": err.Error()})
+	user, _ := c.Get("user").(*models.User)
+	if err := merge.CheckPreconditions(user, "publisher",
+		merge.Side{ID: publisher.ID, LibraryID: publisher.LibraryID},
+		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
+	); err != nil {
+		return err
 	}
-	if err := h.searchService.IndexPublisher(ctx, publisher); err != nil {
-		log.Warn("failed to re-index target publisher after merge", logger.Data{"publisher_id": publisher.ID, "error": err.Error()})
+
+	// The target's publishers_fts row gains the source name as an alias, and
+	// the reindex drops the deleted source's row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{PublisherIDs: []int{id, params.SourceID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
+	if err := h.publisherService.MergePublishers(ctx, id, params.SourceID); err != nil {
+		return errors.WithStack(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)

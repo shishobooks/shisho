@@ -436,3 +436,47 @@ func TestAddAlias_ReturnsValidationError(t *testing.T) {
 	require.ErrorAs(t, err, &validationErr)
 	assert.Equal(t, 422, validationErr.HTTPCode)
 }
+
+// A source whose name is already a third resource's alias keeps that alias
+// where it is instead of tripping the alias table's unique index.
+func TestTransferAliasesOnMerge_SourceNameIsAnotherResourcesAlias_Skipped(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	lib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Fantasy", lib.ID)
+	source := createTestGenre(t, db, "Sci-Fi", lib.ID)
+	other := createTestGenre(t, db, "Science Fiction", lib.ID)
+	svc := NewService(db)
+	_, err := db.NewRaw("INSERT INTO genre_aliases (created_at, genre_id, name, library_id) VALUES (CURRENT_TIMESTAMP, ?, ?, ?)", other.ID, "SCI-FI", lib.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID))
+
+	targetAliases, err := svc.ListAliases(ctx, GenreConfig, target.ID)
+	require.NoError(t, err)
+	assert.Empty(t, targetAliases)
+	otherAliases, err := svc.ListAliases(ctx, GenreConfig, other.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"SCI-FI"}, otherAliases)
+}
+
+// The source's name is added as an alias under the target's Library, which
+// owns the alias from then on.
+func TestTransferAliasesOnMerge_InsertsUnderTargetLibrary(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	targetLib := createTestLibrary(t, db)
+	sourceLib := createTestLibrary(t, db)
+	target := createTestGenre(t, db, "Fantasy", targetLib.ID)
+	source := createTestGenre(t, db, "High Fantasy", sourceLib.ID)
+
+	require.NoError(t, TransferAliasesOnMerge(ctx, db, GenreConfig, source.ID, target.ID))
+
+	var libraryID int
+	require.NoError(t, db.NewSelect().TableExpr("genre_aliases").Column("library_id").Where("genre_id = ?", target.ID).Scan(ctx, &libraryID))
+	assert.Equal(t, targetLib.ID, libraryID)
+}

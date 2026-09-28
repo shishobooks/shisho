@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
@@ -422,7 +423,7 @@ func personBookIDs(ctx context.Context, db bun.IDB, personID int) ([]int, error)
 // lists the target twice.
 func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) ([]int, error) {
 	if targetID == sourceID {
-		return nil, errcodes.ValidationError("A person cannot be merged into itself")
+		return nil, merge.SelfMergeError("person")
 	}
 
 	var movedBookIDs []int

@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
@@ -295,8 +296,18 @@ func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, erro
 }
 
 // MergeSeries merges sourceSeries into targetSeries (moves all books,
-// deletes source). Returns the IDs of books whose join rows moved.
+// deletes source). Returns the IDs of the source's books.
+//
+// A Series cannot be merged into itself. Where a Book is in both Series, the
+// target's row stays and the source's is dropped, so the merge never violates
+// ux_book_series_book_series. When the target's row has no number, it takes
+// the source's number, end, and unit together, since a number group always
+// comes from one place.
 func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]int, error) {
+	if targetID == sourceID {
+		return nil, merge.SelfMergeError("series")
+	}
+
 	var movedBookIDs []int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		err := tx.NewSelect().
@@ -308,7 +319,35 @@ func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]
 			return errors.WithStack(err)
 		}
 
-		// Update all book_series entries from source series to target series
+		// For a Book in both Series, fill an unnumbered target row from the
+		// source row before the source row goes.
+		_, err = tx.NewRaw(`
+			UPDATE book_series
+			SET series_number = s.series_number,
+				series_number_end = s.series_number_end,
+				series_number_unit = s.series_number_unit
+			FROM book_series AS s
+			WHERE book_series.series_id = ?
+			AND book_series.series_number IS NULL
+			AND s.series_id = ?
+			AND s.book_id = book_series.book_id
+			AND s.series_number IS NOT NULL
+		`, targetID, sourceID).Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Drop the source's rows for Books the target already holds.
+		_, err = tx.NewDelete().
+			Model((*models.BookSeries)(nil)).
+			Where("bs.series_id = ?", sourceID).
+			Where("EXISTS (SELECT 1 FROM book_series AS t WHERE t.series_id = ? AND t.book_id = bs.book_id)", targetID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Move the remaining book_series rows from the source to the target.
 		_, err = tx.NewUpdate().
 			Model((*models.BookSeries)(nil)).
 			Set("series_id = ?", targetID).
