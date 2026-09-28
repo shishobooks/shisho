@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type contextKey string
@@ -16,6 +17,7 @@ type contextKey string
 const (
 	contextKeyAPIKey contextKey = "kobo_api_key" //nolint:gosec
 	contextKeyScope  contextKey = "kobo_scope"
+	contextKeyUser   contextKey = "kobo_user"
 )
 
 // Middleware provides authentication and scope middleware for Kobo routes.
@@ -29,7 +31,10 @@ func NewMiddleware(apiKeyService *apikeys.Service) *Middleware {
 }
 
 // APIKeyAuth validates the API key from c.Param("apiKey"), checks kobo_sync permission,
-// touches last accessed (fire and forget goroutine), and stores the API key in context.
+// loads the key's owner (rejecting a deactivated owner or one without books:read),
+// touches last accessed (fire and forget goroutine), and stores the API key and
+// owner in context. Handlers read the owner with GetUserFromContext and never
+// re-query it.
 func (m *Middleware) APIKeyAuth() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -50,13 +55,19 @@ func (m *Middleware) APIKeyAuth() echo.MiddlewareFunc {
 				return errcodes.Forbidden("This API key does not allow Kobo sync access.")
 			}
 
+			user, err := m.apiKeyService.AuthenticateOwner(c.Request().Context(), apiKey)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
 			// Touch last accessed (fire and forget)
 			go func() {
 				_ = m.apiKeyService.TouchLastAccessed(context.Background(), apiKey.ID)
 			}()
 
-			// Store API key in context
+			// Store API key and owner in context
 			ctx := context.WithValue(c.Request().Context(), contextKeyAPIKey, apiKey)
+			ctx = context.WithValue(ctx, contextKeyUser, user)
 			c.SetRequest(c.Request().WithContext(ctx))
 
 			return next(c)
@@ -101,6 +112,15 @@ func (m *Middleware) ScopeParser(scopeType string) echo.MiddlewareFunc {
 func GetAPIKeyFromContext(ctx context.Context) *apikeys.APIKey {
 	if apiKey, ok := ctx.Value(contextKeyAPIKey).(*apikeys.APIKey); ok {
 		return apiKey
+	}
+	return nil
+}
+
+// GetUserFromContext retrieves the API key's owner, loaded by APIKeyAuth with
+// Role, Role.Permissions and LibraryAccess. Returns nil if not found.
+func GetUserFromContext(ctx context.Context) *models.User {
+	if user, ok := ctx.Value(contextKeyUser).(*models.User); ok {
+		return user
 	}
 	return nil
 }

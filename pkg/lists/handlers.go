@@ -336,6 +336,23 @@ func (h *handler) addBooks(c echo.Context) error {
 		return errcodes.Forbidden("You don't have permission to add books to this list")
 	}
 
+	// Every book must exist and sit in a library the user can access. An
+	// unknown id is a 404 rather than a foreign-key failure, and nothing is
+	// added unless every id passes.
+	bookLibraryIDs, err := h.listsService.BookLibraryIDs(ctx, params.BookIDs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	for _, bookID := range params.BookIDs {
+		libraryID, ok := bookLibraryIDs[bookID]
+		if !ok {
+			return errcodes.NotFound("Book")
+		}
+		if !user.HasLibraryAccess(libraryID) {
+			return errcodes.Forbidden("You don't have access to this library")
+		}
+	}
+
 	err = h.listsService.AddBooks(ctx, AddBooksOptions{
 		ListID:        id,
 		BookIDs:       params.BookIDs,

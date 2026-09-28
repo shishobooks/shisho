@@ -172,12 +172,11 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		db:             db,
 		bookService:    bookService,
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
+	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
@@ -269,12 +268,11 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		db:             db,
 		bookService:    bookService,
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
+	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
@@ -368,12 +366,11 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		db:             db,
 		bookService:    bookService,
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
+	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; U; Android 2.0; Kobo Touch)")
 	req = req.WithContext(apiKeyCtx)
@@ -472,12 +469,11 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		db:             db,
 		bookService:    bookService,
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
+	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()

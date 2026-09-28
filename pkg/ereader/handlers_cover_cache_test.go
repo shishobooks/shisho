@@ -97,13 +97,12 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		db:             db,
 		bookService:    bookService,
 		libraryService: libraryService,
 	}
 
 	// Inject API key into context (as middleware would do).
-	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
+	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req = req.WithContext(apiKeyCtx)
@@ -201,12 +200,11 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		db:             db,
 		bookService:    bookService,
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := context.WithValue(ctx, contextKeyAPIKey, apiKey)
+	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 
 	// First GET to capture the ETag.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)

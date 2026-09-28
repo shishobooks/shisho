@@ -60,12 +60,13 @@ func TestHandleDownload_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			require.NoError(t, err)
 
 			h := &handler{
+				service:       NewService(db),
 				bookService:   books.NewService(db),
 				downloadCache: downloadcache.NewCache(t.TempDir(), 1<<30),
 			}
 
 			e := echo.New()
-			req := httptest.NewRequest(method, "/", nil)
+			req := withKeyOwner(httptest.NewRequest(method, "/", nil))
 			c := e.NewContext(req, httptest.NewRecorder())
 			c.SetParamNames("bookId")
 			c.SetParamValues(ShishoID(file.ID))

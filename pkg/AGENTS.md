@@ -223,7 +223,7 @@ Server-rendered HTML pages for stock eReader browsers (Kobo, Kindle) that can't 
 **Key files:**
 - `handlers.go` - HTTP handlers mirroring OPDS structure
 - `templates.go` - Go string templates for HTML rendering
-- `middleware.go` - API key authentication from URL path
+- `middleware.go` - API key authentication from URL path. Loads the key's owner once and stores it in context; handlers read library access from it (see Best Practice 10 under Authentication & Authorization)
 - `routes.go` - Routes under `/ereader/key/:apiKey/*`
 
 **eReader Browser Limitations:**
@@ -343,6 +343,8 @@ if user, ok := c.Get("user").(*models.User); ok {
 6. **Both frontend and backend checks required** - Backend for security, frontend for UX
 7. **Read-only lookups used on shared pages must not inherit an admin group's permission** - A GET called by pages that every role can open (for example `GET /api/plugins/identifier-types`, rendered on book and file pages, and `GET /api/plugins/order/:hookType`, read by the identify dialog) belongs in its own group with the read permission its consumers hold (`books:read` here). Registering it inside the `config:write` plugin management group returns 403 to editors and viewers, and the frontend fails silently.
 8. **Bulk download does not need Jobs permissions** - The `/api/jobs` group only authenticates. `GET /api/jobs` and `GET /api/jobs/:id/logs` require `jobs:read` per route. `POST /api/jobs` requires `jobs:read` and `jobs:write` in the handler, except `bulk_download`, which requires `books:read` plus library access to every existing requested file and stores only `file_ids` and `estimated_size_bytes` with no `library_id`. `GET /api/jobs/:id` and `/:id/download` allow `jobs:read` or the job's creator (`jobs.created_by_user_id`) for a `bulk_download` job (`canReadJob`), and return 404 otherwise so job IDs cannot be probed. Do not re-add a group-level `jobs:read` middleware; it breaks bulk download for editors and viewers.
+9. **Device routes (Kobo, eReader, OPDS) that load an entity by id must re-check scope and library access** - The id in the URL is attacker-chosen, so check it against the same rules the route uses to list entities. `kobo.Service.FileInScope` is the reference: it reuses `scopedFilesQuery`, the query behind the sync, so the download, cover, and metadata routes can only serve files the key syncs, and returns `errcodes.NotFound("File")` otherwise (never 403, never the Kobo store proxy). An entity nested under a library path (a series under `/libraries/:id/series/:id`) must belong to that library, or 404. Do not copy the web handlers' `if user, ok := c.Get("user")...` shape into key-authenticated routes, because it fails open when no user is set.
+10. **API key middleware loads the key's owner** - Kobo and eReader `APIKeyAuth` call `apikeys.Service.AuthenticateOwner`, which loads the owner with `Role`, `Role.Permissions`, and `LibraryAccess`, returns 401 for a missing or deactivated owner and 403 without `books:read`, and stores the owner in the request context (`kobo.GetUserFromContext`, `ereader.GetUserFromContext`). Handlers reuse that user instead of re-querying it, and treat a missing one as 401. The eReader `/e/:shortCode` redirect also calls `AuthenticateOwner` before revealing the key URL. A new API key middleware must do the same.
 
 #### Permission Check Flow
 
