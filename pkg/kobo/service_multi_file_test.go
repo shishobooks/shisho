@@ -208,6 +208,21 @@ func insertList(ctx context.Context, t *testing.T, koboSvc *Service, userID int,
 	return list
 }
 
+// insertOtherUser creates a second user who can own lists the test user does
+// not own.
+func insertOtherUser(ctx context.Context, t *testing.T, koboSvc *Service) *models.User {
+	t.Helper()
+	other := &models.User{
+		Username:     "otheruser",
+		PasswordHash: "test",
+		RoleID:       1,
+		IsActive:     true,
+	}
+	_, err := koboSvc.db.NewInsert().Model(other).Exec(ctx)
+	require.NoError(t, err)
+	return other
+}
+
 func TestGetScopedFiles_ListScopeFiltersByLibraryAccess(t *testing.T) {
 	t.Parallel()
 	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
@@ -286,4 +301,83 @@ func TestGetScopedFiles_ListScopeWithoutLibraryAccessSyncsNothing(t *testing.T) 
 	require.NoError(t, err)
 
 	assert.Empty(t, files)
+}
+
+func TestGetScopedFiles_ListScopeUnsharedListSyncsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
+
+	// The user can access the library, but the list belongs to someone else
+	// and is not shared with them.
+	owner := insertOtherUser(ctx, t, koboSvc)
+	book := createBook(ctx, t, bookSvc, library.ID, "Private")
+	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-unshared/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
+	list := insertList(ctx, t, koboSvc, owner.ID, book.ID)
+
+	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	require.NoError(t, err)
+
+	assert.NotNil(t, files)
+	assert.Empty(t, files, "a list the user neither owns nor has a share on must not sync")
+}
+
+func TestGetScopedFiles_ListScopeSharedListSyncs(t *testing.T) {
+	t.Parallel()
+	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
+
+	owner := insertOtherUser(ctx, t, koboSvc)
+	book := createBook(ctx, t, bookSvc, library.ID, "Shared")
+	epub := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-shared/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
+	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-shared/book.m4b", models.FileTypeM4B, models.FileRoleMain, 5000)
+	list := insertList(ctx, t, koboSvc, owner.ID, book.ID)
+
+	// A viewer share is enough to sync the list.
+	_, err := koboSvc.db.NewInsert().Model(&models.ListShare{
+		ListID:         list.ID,
+		UserID:         user.ID,
+		Permission:     models.ListPermissionViewer,
+		CreatedAt:      time.Now(),
+		SharedByUserID: &owner.ID,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	require.NoError(t, err)
+
+	assert.Equal(t, []int{epub.ID}, scopedFileIDs(files))
+}
+
+func TestGetScopedFiles_ListScopeMissingListSyncsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
+
+	book := createBook(ctx, t, bookSvc, library.ID, "Orphan")
+	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-missing/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
+
+	missingID := 999999
+	scope := &SyncScope{Type: "list", ListID: &missingID}
+	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	require.NoError(t, err)
+
+	assert.NotNil(t, files)
+	assert.Empty(t, files)
+}
+
+func TestGetScopedFiles_ScopeWithoutIDSyncsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
+
+	book := createBook(ctx, t, bookSvc, library.ID, "Unscoped")
+	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/no-id/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
+
+	// A library or list scope missing its id must fail closed instead of
+	// falling through to every file.
+	for _, scopeType := range []string{"library", "list"} {
+		files, err := koboSvc.GetScopedFiles(ctx, user.ID, &SyncScope{Type: scopeType})
+		require.NoError(t, err)
+		assert.NotNil(t, files, scopeType)
+		assert.Empty(t, files, scopeType)
+	}
 }

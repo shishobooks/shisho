@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -33,12 +34,13 @@ type SyncChanges struct {
 
 // Service provides sync operations for Kobo devices.
 type Service struct {
-	db *bun.DB
+	db          *bun.DB
+	listService *lists.Service
 }
 
 // NewService creates a new Kobo sync service.
 func NewService(db *bun.DB) *Service {
-	return &Service{db: db}
+	return &Service{db: db, listService: lists.NewService(db)}
 }
 
 // CreateSyncPoint creates a new in-progress sync point with the given files.
@@ -229,9 +231,11 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 }
 
 // GetScopedFiles queries all Kobo-compatible main files (EPUB, CBZ) in scope,
-// filtered by library access. Supplement files and non-Kobo formats (M4B, PDF)
-// are excluded. A book with multiple compatible files (e.g. two EPUBs) will
-// have all of them returned — each gets its own content ID on the device.
+// filtered by library access. A library or list scope the user cannot see
+// returns an empty slice rather than an error. Supplement files and non-Kobo
+// formats (M4B, PDF) are excluded. A book with multiple compatible files (e.g.
+// two EPUBs) will have all of them returned. Each gets its own content ID on
+// the device.
 func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncScope) ([]ScopedFile, error) {
 	// Load user with library access.
 	user := new(models.User)
@@ -262,22 +266,33 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 	// Apply scope.
 	switch scope.Type {
 	case "library":
-		if scope.LibraryID != nil {
-			// Verify user has access to this library.
-			if !user.HasLibraryAccess(*scope.LibraryID) {
-				return []ScopedFile{}, nil
-			}
-			q = q.Where("f.library_id = ?", *scope.LibraryID)
+		// A library scope without an id fails closed rather than syncing
+		// every library.
+		if scope.LibraryID == nil || !user.HasLibraryAccess(*scope.LibraryID) {
+			return []ScopedFile{}, nil
 		}
+		q = q.Where("f.library_id = ?", *scope.LibraryID)
 	case "list":
+		// A list scope without an id fails closed, like the library scope.
+		if scope.ListID == nil {
+			return []ScopedFile{}, nil
+		}
+		// Only the owner or a share recipient may sync the list. A list the
+		// user cannot see, or one that does not exist, syncs nothing, the same
+		// as an inaccessible library.
+		canView, err := svc.listService.CanView(ctx, *scope.ListID, userID)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to check list visibility")
+		}
+		if !canView {
+			return []ScopedFile{}, nil
+		}
 		// A list can hold books from libraries the user cannot access (it may
 		// be shared with them), so the list is not the access boundary.
-		if scope.ListID != nil {
-			q = q.Join("JOIN list_books AS lb ON lb.book_id = f.book_id").
-				Where("lb.list_id = ?", *scope.ListID)
-			if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
-				q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
-			}
+		q = q.Join("JOIN list_books AS lb ON lb.book_id = f.book_id").
+			Where("lb.list_id = ?", *scope.ListID)
+		if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
 		}
 	default: // "all"
 		libraryIDs := user.GetAccessibleLibraryIDs()
