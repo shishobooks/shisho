@@ -518,3 +518,20 @@ func TestDeleteFile_RemovesOrphanedNarrator(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, genreExists, "a single-file delete does not clean up other kinds of orphans")
 }
+
+// Renaming a Person without touching its aliases re-indexes the Books it
+// authored or narrated, since books_fts stores their names.
+func TestUpdatePerson_RenameReindexesBooks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	seeded := f.seedReviewedBook(models.FileTypeM4B, nil)
+	require.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Quillfeather"), "precondition: the author name matches the Book")
+
+	f.request(http.MethodPatch, fmt.Sprintf("/api/people/%d", seeded.author.ID), `{"name":"Wilhelmina Starling"}`, http.StatusOK)
+	f.request(http.MethodPatch, fmt.Sprintf("/api/people/%d", seeded.narrator.ID), `{"name":"Cordelia Fairweather"}`, http.StatusOK)
+
+	assert.Empty(t, f.searchBookIDs("Quillfeather"), "the old author name no longer matches the Book")
+	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Starling"), "the new author name matches the Book")
+	assert.Empty(t, f.searchBookIDs("Brackenridge"), "the old narrator name no longer matches the Book")
+	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Fairweather"), "the new narrator name matches the Book")
+}

@@ -556,3 +556,21 @@ func TestMerge_SelfMerge_Rejected(t *testing.T) {
 	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &person.ID})
 	require.NoError(t, err, "the Person still exists")
 }
+
+// A merge whose source does not exist returns 404 instead of silently
+// succeeding, and leaves the target in place.
+func TestMerge_MissingSource_NotFound(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	h := newTestHandler(db)
+	lib := createTestLibrary(t, db)
+	target := seedPersonWithAuthoredBooks(t, db, lib, "Target Person", []string{"Target Book"})
+
+	err := callMerge(t, h, userWithLibraryAccess(lib.ID), target.ID, target.ID+1000)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode)
+
+	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &target.ID})
+	require.NoError(t, err, "the target Person still exists")
+}
