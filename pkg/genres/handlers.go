@@ -132,7 +132,12 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	nameChanged := false
+	// The rename commits before SyncAliases runs, so the reindex is deferred
+	// to also cover a rejected alias list. A rename onto an existing genre
+	// merges into it, and the reindex drops the merged row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{GenreIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	if params.Name != nil && *params.Name != genre.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -146,18 +151,10 @@ func (h *handler) update(c echo.Context) error {
 		})
 		if err == nil && existing.ID != id {
 			// Merge into existing genre
+			affected.GenreIDs = append(affected.GenreIDs, existing.ID)
 			err = h.genreService.MergeGenres(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
-			}
-
-			// Remove merged genre from FTS index and re-index the target
-			log := logger.FromContext(ctx)
-			if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
-				log.Warn("failed to remove merged genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
-			}
-			if err := h.searchService.IndexGenre(ctx, existing); err != nil {
-				log.Warn("failed to re-index target genre after merge", logger.Data{"genre_id": existing.ID, "error": err.Error()})
 			}
 
 			// Return the target genre
@@ -173,7 +170,6 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		nameChanged = true
 	}
 
 	// Sync aliases if provided
@@ -187,13 +183,6 @@ func (h *handler) update(c echo.Context) error {
 	genre, err = h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	if nameChanged || params.Aliases != nil {
-		log := logger.FromContext(ctx)
-		if err := h.searchService.IndexGenre(ctx, genre); err != nil {
-			log.Warn("failed to update search index for genre", logger.Data{"genre_id": genre.ID, "error": err.Error()})
-		}
 	}
 
 	bookCount, _ := h.genreService.GetBookCount(ctx, id)

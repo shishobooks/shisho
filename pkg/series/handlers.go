@@ -6,7 +6,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
@@ -146,6 +145,12 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// The name and aliases are copied into series_fts and into books_fts for
+	// every member book. The rename commits before SyncAliases runs, so the
+	// reindex is deferred to also cover a rejected alias list.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{SeriesIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Keep track of what's been changed
 	opts := UpdateSeriesOptions{Columns: []string{}}
 
@@ -186,12 +191,10 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Sync aliases if provided
-	aliasesChanged := false
 	if params.Aliases != nil {
 		if err := h.aliasService.SyncAliases(ctx, aliases.SeriesConfig, id, series.LibraryID, params.Aliases); err != nil {
 			return errors.WithStack(err)
 		}
-		aliasesChanged = true
 	}
 
 	// Reload the model
@@ -200,26 +203,6 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	// Update FTS index for this series
-	log := logger.FromContext(ctx)
-	if err := h.searchService.IndexSeries(ctx, series); err != nil {
-		log.Warn("failed to update search index for series", logger.Data{"series_id": series.ID, "error": err.Error()})
-	}
-
-	// Re-index associated books when aliases change (books_fts includes series aliases)
-	if aliasesChanged {
-		bookIDs, err := h.seriesService.GetSeriesBookIDs(ctx, id)
-		if err != nil {
-			log.Warn("failed to get series book IDs for FTS reindex after alias change", logger.Data{"series_id": id, "error": err.Error()})
-		} else {
-			for _, bookID := range bookIDs {
-				if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
-					log.Warn("failed to reindex book after series alias change", logger.Data{"series_id": id, "book_id": bookID, "error": err.Error()})
-				}
-			}
-		}
 	}
 
 	// Get book count
@@ -349,35 +332,15 @@ func (h *handler) merge(c echo.Context) error {
 		}
 	}
 
+	// Every book of both series lists the target name and the source name,
+	// which becomes an alias of the target, and the target's series_fts row
+	// gains the moved books. The reindex drops the deleted source's row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{SeriesIDs: []int{id, params.SourceID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Merge source series into target (this) series
-	movedBookIDs, err := h.seriesService.MergeSeries(ctx, id, params.SourceID)
-	if err != nil {
+	if _, err := h.seriesService.MergeSeries(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
-	}
-
-	log := logger.FromContext(ctx)
-
-	// Remove the merged (source) series from FTS index
-	if err := h.searchService.DeleteFromSeriesIndex(ctx, params.SourceID); err != nil {
-		log.Warn("failed to remove merged series from search index", logger.Data{"series_id": params.SourceID, "error": err.Error()})
-	}
-
-	// Books that moved need their books_fts row refreshed to reflect the
-	// target series name and the source name (now an alias of the target).
-	for _, bookID := range movedBookIDs {
-		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
-			log.Warn("failed to update book search index after series merge", logger.Data{"book_id": bookID, "error": err.Error()})
-		}
-	}
-
-	// Re-index the target series since it now has more books
-	series, err = h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
-		ID: &id,
-	})
-	if err == nil {
-		if err := h.searchService.IndexSeries(ctx, series); err != nil {
-			log.Warn("failed to update search index for target series", logger.Data{"series_id": id, "error": err.Error()})
-		}
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -405,28 +368,20 @@ func (h *handler) deleteSeries(c echo.Context) error {
 		}
 	}
 
+	// The member books' books_fts rows list the series name. The delete
+	// CASCADEs the links away, so collect the books first. The reindex drops
+	// the series' own row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{SeriesIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	affectedBookIDs, err := h.seriesService.DeleteSeries(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log := logger.FromContext(ctx)
-
 	// Removing the join rows can flip the books' Reviewed completeness state
-	// (e.g. when `series` is a required field) and stales their books_fts
-	// rows, which still reference the deleted series name. Recompute review
-	// state and re-index each affected book.
+	// (e.g. when `series` is a required field).
 	h.bookService.RecomputeReviewedForBooks(ctx, affectedBookIDs)
-	for _, bookID := range affectedBookIDs {
-		if err := h.searchService.ReindexBookByID(ctx, bookID); err != nil {
-			log.Warn("failed to update book search index after series delete", logger.Data{"book_id": bookID, "error": err.Error()})
-		}
-	}
-
-	// Remove the deleted series itself from the series FTS index.
-	if err := h.searchService.DeleteFromSeriesIndex(ctx, id); err != nil {
-		log.Warn("failed to remove series from search index", logger.Data{"series_id": id, "error": err.Error()})
-	}
 
 	return c.NoContent(http.StatusNoContent)
 }

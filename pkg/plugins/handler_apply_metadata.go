@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 )
 
 func (h *handler) applyMetadata(c echo.Context) error {
@@ -115,6 +116,16 @@ func (h *handler) applyMetadata(c echo.Context) error {
 		if !DownloadCoverFromURL(ctx, md, allowedDomains, log) {
 			warnings = append(warnings, coverWarning("the cover could not be downloaded"))
 		}
+	}
+
+	// The apply can change the title, authors, series, narrators, and file
+	// paths, and organizing below moves the files after they are persisted.
+	// Collect the series the book is in before relinking, and reindex after
+	// everything, including when a later write fails after earlier ones
+	// committed.
+	if h.enrich.searchIndexer != nil {
+		affected := h.enrich.searchIndexer.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
+		defer h.enrich.searchIndexer.ReindexAffected(ctx, affected)
 	}
 
 	// Persist metadata (no field filtering — user already selected fields)

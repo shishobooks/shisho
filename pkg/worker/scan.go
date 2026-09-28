@@ -365,6 +365,20 @@ func discoverRootLevelSupplements(mainFilePath string, libraryPath string, exclu
 func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *joblogs.JobLogger) error {
 	jobLog.Info("processing scan job", nil)
 
+	// A full scan creates entities in FilePath mode without indexing them
+	// and relies on the rebuild at the end. A scan that fails part way still
+	// rebuilds on the way out, so what it committed is searchable. A scan
+	// cancelled by shutdown does not: the rebuild would race the shutdown
+	// deadline. Start rebuilds instead, through
+	// rebuildSearchAfterIncompleteScan, when the last scan did not complete.
+	ctx = withSearchRebuildPending(ctx)
+	rebuilt := false
+	defer func() {
+		if !rebuilt && ctx.Err() == nil {
+			w.rebuildSearchIndexes(ctx, jobLog)
+		}
+	}()
+
 	allLibraries, err := w.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{})
 	if err != nil {
 		return errors.WithStack(err)
@@ -661,18 +675,43 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 	w.cleanupOrphanedEntities(ctx, logger.FromContext(ctx))
 
 	// Rebuild FTS indexes after scan completes
-	if w.searchService != nil {
-		jobLog.Info("rebuilding search indexes", nil)
-		err = w.searchService.RebuildAllIndexes(ctx)
-		if err != nil {
-			jobLog.Error("failed to rebuild search indexes", err, nil)
-		} else {
-			jobLog.Info("search indexes rebuilt successfully", nil)
-		}
-	}
+	rebuilt = true
+	w.rebuildSearchIndexes(ctx, jobLog)
 
 	jobLog.Info("finished scan job", nil)
 	return nil
+}
+
+// searchRebuildPendingKey marks a context as belonging to a full scan.
+type searchRebuildPendingKey struct{}
+
+// withSearchRebuildPending marks ctx as belonging to a full scan, whose
+// closing RebuildAllIndexes (or the failure-path or startup rebuild) rewrites
+// every FTS row. A changed file that the scan hands to scanFileByID then skips
+// the per-file reindex a single-file resync does.
+func withSearchRebuildPending(ctx context.Context) context.Context {
+	return context.WithValue(ctx, searchRebuildPendingKey{}, true)
+}
+
+// searchRebuildPending reports whether ctx belongs to a full scan (see
+// withSearchRebuildPending).
+func searchRebuildPending(ctx context.Context) bool {
+	pending, _ := ctx.Value(searchRebuildPendingKey{}).(bool)
+	return pending
+}
+
+// rebuildSearchIndexes rebuilds every FTS table from the database, logging
+// the outcome to the job log.
+func (w *Worker) rebuildSearchIndexes(ctx context.Context, jobLog *joblogs.JobLogger) {
+	if w.searchService == nil {
+		return
+	}
+	jobLog.Info("rebuilding search indexes", nil)
+	if err := w.searchService.RebuildAllIndexes(ctx); err != nil {
+		jobLog.Error("failed to rebuild search indexes", err, nil)
+		return
+	}
+	jobLog.Info("search indexes rebuilt successfully", nil)
 }
 
 // runInputConverters runs input converter plugins on discovered files.

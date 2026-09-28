@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -75,13 +76,15 @@ type publisherFinder interface {
 // searchIndexer updates the search index after metadata changes. Each entity
 // type has its own FTS table (books_fts, series_fts, persons_fts, genres_fts,
 // tags_fts, publishers_fts), and rows in those tables are populated only by
-// explicit Index* calls. They are NOT maintained by triggers on the
-// underlying table. Any entity created via the apply path must therefore be
-// re-indexed here, or it will be invisible to the search-driven dropdowns in
-// the UI.
+// explicit calls. They are NOT maintained by triggers on the underlying
+// table. The apply handler reindexes the book and every series it was or is
+// in through CollectAffected and a deferred ReindexAffected. People, genres,
+// tags, and publishers created during the apply are indexed where they are
+// attached, or they would be invisible to the search-driven dropdowns in the
+// UI.
 type searchIndexer interface {
-	IndexBook(ctx context.Context, book *models.Book) error
-	IndexSeries(ctx context.Context, series *models.Series) error
+	CollectAffected(ctx context.Context, a search.Affected) *search.Affected
+	ReindexAffected(ctx context.Context, a *search.Affected)
 	IndexPerson(ctx context.Context, person *models.Person) error
 	IndexGenre(ctx context.Context, genre *models.Genre) error
 	IndexTag(ctx context.Context, tag *models.Tag) error

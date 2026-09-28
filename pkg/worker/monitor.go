@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 )
 
 // pendingEvent represents a filesystem event accumulated during the debounce window.
@@ -551,6 +552,10 @@ func (m *Monitor) processPendingEvents() {
 	// post-batch loop skips them to avoid undoing that conditional
 	// optimization with a full re-index.
 	newlyCreatedBookIDs := make(map[int]struct{})
+	// movedBookIDs tracks books whose file was repurposed by move detection.
+	// The move rewrote files.filepath (and books.filepath when the directory
+	// changed) outside any scan, so nothing has reindexed them yet.
+	movedBookIDs := make(map[int]struct{})
 
 	applyResult := func(result *ScanResult) {
 		if result == nil {
@@ -594,6 +599,7 @@ func (m *Monitor) processPendingEvents() {
 				// for the old path skips it, and track for search indexing.
 				movedFileIDs[movedFile.ID] = struct{}{}
 				affectedBookIDs[movedFile.BookID] = struct{}{}
+				movedBookIDs[movedFile.BookID] = struct{}{}
 				// If the library has organize_file_structure enabled, the
 				// book should be re-organized back into the structured layout
 				// even though the user renamed the folder. organizeBooks
@@ -662,49 +668,49 @@ func (m *Monitor) processPendingEvents() {
 	}
 
 	// Update search indexes for affected books. There are four cases:
-	//   1. Book was deleted (RetrieveBook returns NotFound) — remove its
-	//      books_fts row.
-	//   2. Book is newly created (FilePath-mode event, FileCreated=true) —
+	//   1. Book was deleted (RetrieveBook returns NotFound): scanFileByID
+	//      already reindexed it and the Series that held it on the way out;
+	//      ReindexAffected below drops any row left behind.
+	//   2. Book is newly created (FilePath-mode event, FileCreated=true):
 	//      scanFileCore was called with isResync=false so per-book indexing
 	//      was deferred. Index the book and all its relations now. Empty
 	//      snapshot is correct because the book had no relations before
 	//      this batch, so every loaded relation is "newly attached".
-	//   3. Book was updated via a FileID-mode event (resync) —
-	//      scanFileCore already ran with isResync=true and indexed
-	//      conditionally via its own snapshot. Skip to avoid a full
-	//      re-index that would undo the conditional savings.
-	//   4. Book had a file move detected (tryDetectMove) — only
-	//      file.Filepath changed, no books_fts column or relation has
-	//      changed. Falls into case 3's skip branch by default.
+	//   3. Book was updated via a FileID-mode event (resync):
+	//      scanFileCore already ran with isResync=true and reindexed the
+	//      book, its series, and its newly attached relations. Skip.
+	//   4. Book had a file move detected (tryDetectMove): files.filepath
+	//      changed, books.filepath too when the directory changed, and
+	//      organizeBooks above may have moved the files again. books_fts
+	//      copies both paths, so reindex the book after the organize.
 	if m.worker.searchService != nil {
 		logWarn := func(msg string, data logger.Data) {
 			m.log.Warn(msg, data)
 		}
+		var affected search.Affected
+		for bookID := range movedBookIDs {
+			affected.BookIDs = append(affected.BookIDs, bookID)
+		}
 		for bookID := range affectedBookIDs {
 			book, err := m.worker.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
 			if err != nil {
-				// Case 1: book was deleted during the batch. Drop its
-				// books_fts row; orphan cleanup handles series_fts /
-				// persons_fts / etc.
-				_ = m.worker.searchService.DeleteFromBookIndex(ctx, bookID)
+				// Case 1: book was deleted during the batch.
+				affected.BookIDs = append(affected.BookIDs, bookID)
 				continue
 			}
 			if _, newlyCreated := newlyCreatedBookIDs[bookID]; !newlyCreated {
-				// Cases 3 + 4: scanFileCore's per-event indexing
-				// already ran (or no FTS change was needed at all for
-				// move detection).
+				// Cases 3 + 4: scanFileCore's per-event indexing already
+				// ran, and moved books are reindexed below.
 				continue
 			}
-			// Case 2: catch up indexing for a newly-created book.
-			if err := m.worker.searchService.IndexBook(ctx, book); err != nil {
-				m.log.Warn("failed to index book", logger.Data{"book_id": bookID, "error": err.Error()})
-			}
-			// Empty snapshot means every loaded relation looks
-			// newly-attached and gets indexed. No aggregate-staleness
-			// hint needed — there were no pre-batch values to go
-			// stale against.
-			m.worker.indexBookRelations(ctx, book, bookRelationsSnapshot{}, indexRelationsHints{}, logWarn)
+			// Case 2: catch up indexing for a newly-created book. The
+			// book and its series are reindexed below. Empty snapshot
+			// means every loaded relation looks newly-attached, so its
+			// people, genres, tags, and publishers get their own rows.
+			affected.BookIDs = append(affected.BookIDs, bookID)
+			m.worker.indexBookRelations(ctx, book, bookRelationsSnapshot{}, logWarn)
 		}
+		m.worker.searchService.ReindexAffected(ctx, &affected)
 	}
 }
 

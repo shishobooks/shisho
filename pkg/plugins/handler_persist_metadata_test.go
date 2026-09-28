@@ -15,6 +15,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -598,29 +599,23 @@ func TestPersistMetadata_CoverPage_EPUB_Ignored(t *testing.T) {
 }
 
 // stubSearchIndexer records calls to each Index* method so tests can assert
-// that persistMetadata keeps the FTS index in sync with newly-created or
-// re-associated entities. Without these calls, an entity created during the
-// identify-apply flow exists in its table but has no FTS row, so it is
-// invisible to search-driven dropdowns (e.g. the series combobox in the
-// IdentifyReviewForm).
+// that persistMetadata keeps the FTS index in sync with newly-created
+// entities. Without these calls, an entity created during the identify-apply
+// flow exists in its table but has no FTS row, so it is invisible to
+// search-driven dropdowns. The book and its series are reindexed by the apply
+// handler, which the worker package tests through the real route.
 type stubSearchIndexer struct {
-	indexedBookIDs      []int
-	indexedSeriesIDs    []int
 	indexedPersonIDs    []int
 	indexedGenreIDs     []int
 	indexedTagIDs       []int
 	indexedPublisherIDs []int
 }
 
-func (s *stubSearchIndexer) IndexBook(_ context.Context, b *models.Book) error {
-	s.indexedBookIDs = append(s.indexedBookIDs, b.ID)
-	return nil
+func (s *stubSearchIndexer) CollectAffected(_ context.Context, a search.Affected) *search.Affected {
+	return &a
 }
 
-func (s *stubSearchIndexer) IndexSeries(_ context.Context, sr *models.Series) error {
-	s.indexedSeriesIDs = append(s.indexedSeriesIDs, sr.ID)
-	return nil
-}
+func (s *stubSearchIndexer) ReindexAffected(_ context.Context, _ *search.Affected) {}
 
 func (s *stubSearchIndexer) IndexPerson(_ context.Context, p *models.Person) error {
 	s.indexedPersonIDs = append(s.indexedPersonIDs, p.ID)
@@ -673,32 +668,6 @@ func (s *stubTagFinderForPersist) FindOrCreateTag(_ context.Context, name string
 	return &models.Tag{ID: s.nextID, LibraryID: libraryID, Name: name}, nil
 }
 
-// TestPersistMetadata_IndexesNewSeries is a regression test for the bug where
-// a series created via the identify-apply flow ("Create 'Series'" option in
-// the IdentifyReviewForm combobox) never received a series_fts row, so it
-// was invisible to subsequent series search dropdowns even though the row
-// existed in the series table. The fix calls IndexSeries after CreateBookSeries
-// to keep the FTS index in sync.
-func TestPersistMetadata_IndexesNewSeries(t *testing.T) {
-	t.Parallel()
-
-	book := newApplyTestBook(t, "Book")
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			searchIndexer: indexer,
-		},
-	}
-
-	md := &mediafile.ParsedMetadata{Series: "My New Series"}
-	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err)
-
-	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series created via identify-apply must be added to series_fts so it shows up in series search dropdowns")
-}
-
 // TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags is a regression
 // test for the same FTS-sync gap on the other entities created during the
 // identify-apply flow. Persons, genres, and tags all use FTS for their list
@@ -732,219 +701,6 @@ func TestPersistMetadata_IndexesNewAuthorsNarratorsGenresTags(t *testing.T) {
 	assert.Len(t, indexer.indexedPersonIDs, 2, "both new author and new narrator must be added to persons_fts")
 	assert.Len(t, indexer.indexedGenreIDs, 1, "new genre must be added to genres_fts")
 	assert.Len(t, indexer.indexedTagIDs, 1, "new tag must be added to tags_fts")
-}
-
-func TestPersistMetadata_ReindexesAttachedSeriesWhenAuthorsCleared(t *testing.T) {
-	t.Parallel()
-
-	book := newApplyTestBook(t, "Book")
-	series := &models.Series{ID: 99, LibraryID: book.LibraryID, Name: "Series"}
-	book.BookSeries = []*models.BookSeries{{BookID: book.ID, SeriesID: series.ID, Series: series}}
-	person := &models.Person{ID: 7, LibraryID: book.LibraryID, Name: "Author"}
-	book.Authors = []*models.Author{{BookID: book.ID, PersonID: person.ID, Person: person}}
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			searchIndexer: indexer,
-		},
-	}
-	overrides := &ApplyOverrides{SelectedFields: map[string]bool{"authors": true}}
-
-	_, err := h.persistMetadata(context.Background(), book, nil, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
-	require.NoError(t, err)
-
-	assert.Contains(t, indexer.indexedSeriesIDs, series.ID)
-}
-
-// TestPersistMetadata_ReindexesDetachedOldSeries verifies that when an apply
-// replaces a book's series, the previously-attached series gets re-indexed
-// so its series_fts.book_titles / book_authors aggregate columns stop
-// listing this book. Without this, searching by the moved book's title or
-// author would still surface the old series.
-func TestPersistMetadata_ReindexesDetachedOldSeries(t *testing.T) {
-	t.Parallel()
-
-	book := newApplyTestBook(t, "Book")
-	// Pre-attach the book to an existing series (ID 99). When apply runs
-	// with a different series, the stub FindOrCreateSeries returns ID 1,
-	// so series 99 becomes detached and must be re-indexed for aggregate
-	// freshness.
-	oldSeries := &models.Series{ID: 99, LibraryID: book.LibraryID, Name: "Old Series"}
-	book.BookSeries = []*models.BookSeries{{
-		BookID:   book.ID,
-		SeriesID: oldSeries.ID,
-		Series:   oldSeries,
-	}}
-
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			searchIndexer: indexer,
-		},
-	}
-
-	md := &mediafile.ParsedMetadata{Series: "New Series"}
-	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err)
-
-	assert.Contains(t, indexer.indexedSeriesIDs, 1, "newly-attached series (id 1 from stub) must be indexed")
-	assert.Contains(t, indexer.indexedSeriesIDs, 99, "detached old series (id 99) must be re-indexed so its book_titles aggregate stops listing this book")
-}
-
-// TestPersistMetadata_SkipsSeriesIndexWhenAttachmentUnchanged verifies that
-// re-applying the same series to a book does not trigger an unnecessary
-// IndexSeries call. The new series ID matches the existing attachment, so
-// neither the membership nor the aggregate columns change — re-indexing
-// would be pure DELETE+INSERT churn against series_fts.
-func TestPersistMetadata_SkipsSeriesIndexWhenAttachmentUnchanged(t *testing.T) {
-	t.Parallel()
-
-	book := newApplyTestBook(t, "Book")
-	// Pre-attach the book to series ID 1 — same ID the stub returns for
-	// every FindOrCreateSeries call.
-	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
-	book.BookSeries = []*models.BookSeries{{
-		BookID:   book.ID,
-		SeriesID: existingSeries.ID,
-		Series:   existingSeries,
-	}}
-
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			searchIndexer: indexer,
-		},
-	}
-
-	md := &mediafile.ParsedMetadata{Series: "Same Series"}
-	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err)
-
-	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment to this book did not change must NOT be re-indexed (avoids series_fts churn)")
-}
-
-// TestPersistMetadata_ReindexesSameSeriesWhenTitleChanges verifies that a
-// series whose attachment to this book did not change is still re-indexed
-// when book.title changes during the apply — series_fts has aggregate
-// columns (book_titles, book_authors) that would otherwise go stale.
-// Without this branch, searching for a book by its new title within a
-// series search would still surface the old title.
-func TestPersistMetadata_ReindexesSameSeriesWhenTitleChanges(t *testing.T) {
-	t.Parallel()
-
-	book := newApplyTestBook(t, "Old Title")
-	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
-	book.BookSeries = []*models.BookSeries{{
-		BookID:   book.ID,
-		SeriesID: existingSeries.ID,
-		Series:   existingSeries,
-	}}
-
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			searchIndexer: indexer,
-		},
-	}
-
-	md := &mediafile.ParsedMetadata{
-		Title:  "New Title",
-		Series: "Same Series",
-	}
-	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err)
-
-	assert.Contains(t, indexer.indexedSeriesIDs, 1, "series whose membership did not change must still be re-indexed when book.title changed, otherwise series_fts.book_titles goes stale")
-}
-
-// TestPersistMetadata_SkipsSeriesIndexWhenSameTitleReapplied verifies that
-// re-applying the same title (alongside an unchanged series) does not
-// trigger an IndexSeries call. The previous over-trigger keyed off "title
-// block ran" rather than "title actually changed", causing one extra
-// series_fts DELETE+INSERT per identical-title apply.
-func TestPersistMetadata_SkipsSeriesIndexWhenSameTitleReapplied(t *testing.T) {
-	t.Parallel()
-
-	book := newApplyTestBook(t, "Same Title")
-	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
-	book.BookSeries = []*models.BookSeries{{
-		BookID:   book.ID,
-		SeriesID: existingSeries.ID,
-		Series:   existingSeries,
-	}}
-
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			searchIndexer: indexer,
-		},
-	}
-
-	md := &mediafile.ParsedMetadata{
-		Title:  "Same Title",
-		Series: "Same Series",
-	}
-	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err)
-
-	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose aggregate inputs (title) did not actually change must NOT be re-indexed")
-}
-
-// TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied verifies
-// that re-applying the same author set (alongside an unchanged series)
-// does not trigger an IndexSeries call. The previous over-trigger keyed
-// off "authors block ran" rather than "author set actually changed",
-// causing one extra series_fts DELETE+INSERT per identical-authors apply.
-func TestPersistMetadata_SkipsSeriesIndexWhenSameAuthorsReapplied(t *testing.T) {
-	t.Parallel()
-
-	book, _ := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
-	// Pre-attach the book to a series (ID 1, matching the stub
-	// FindOrCreateSeries return) and an author (ID 1, matching the stub
-	// person finder's first return).
-	existingSeries := &models.Series{ID: 1, LibraryID: book.LibraryID, Name: "Same Series"}
-	book.BookSeries = []*models.BookSeries{{
-		BookID:   book.ID,
-		SeriesID: existingSeries.ID,
-		Series:   existingSeries,
-	}}
-	existingPerson := &models.Person{ID: 1, LibraryID: book.LibraryID, Name: "Same Author"}
-	role := "writer"
-	book.Authors = []*models.Author{{
-		Role:     &role,
-		BookID:   book.ID,
-		PersonID: existingPerson.ID,
-		Person:   existingPerson,
-	}}
-
-	indexer := &stubSearchIndexer{}
-	h := &handler{
-		enrich: &enrichDeps{
-			bookStore:     &stubBookStoreForPersist{book: book},
-			relStore:      &stubRelStoreForApply{},
-			personFinder:  &stubPersonFinderForPersist{},
-			searchIndexer: indexer,
-		},
-	}
-
-	md := &mediafile.ParsedMetadata{
-		Authors: []mediafile.ParsedAuthor{{Name: "Same Author", Role: "writer"}},
-		Series:  "Same Series",
-	}
-	_, err := h.persistMetadata(context.Background(), book, nil, md, "test", "plugin-id", nil, testLogger())
-	require.NoError(t, err)
-
-	assert.NotContains(t, indexer.indexedSeriesIDs, 1, "series whose attachment did not change AND whose author-set aggregate input did not actually change must NOT be re-indexed")
 }
 
 // TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor verifies that an

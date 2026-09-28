@@ -59,14 +59,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// leaves the database pointing at a deleted file.
 	var staleCovers []string
 
-	// Track whether changes ran that would affect series_fts aggregate
-	// columns (book_titles / book_authors). When they did, the series
-	// block re-indexes the attached series even if its attachment to this
-	// book didn't change — otherwise the aggregate columns would go stale
-	// until something else triggered IndexSeries.
-	seriesAggregateMayBeStale := false
-	bookIndexChanged := false
-
 	// Title
 	title := strings.TrimSpace(md.Title)
 	if title != "" && title != book.Title {
@@ -81,7 +73,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			book.SortTitleSource = models.DataSourceFilepath
 			columns = append(columns, "sort_title", "sort_title_source")
 		}
-		seriesAggregateMayBeStale = true
 	}
 
 	// Subtitle
@@ -102,7 +93,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Apply scalar column updates
 	if len(columns) > 0 {
-		bookIndexChanged = true
 		if err := h.enrich.bookStore.UpdateBook(ctx, book, columns); err != nil {
 			return nil, errors.Wrap(err, "failed to update book")
 		}
@@ -110,12 +100,9 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 
 	// Authors
 	if (len(md.Authors) > 0 || applyFieldSelected(overrides, "authors")) && h.enrich.relStore != nil && (len(md.Authors) == 0 || h.enrich.personFinder != nil) {
-		changed, err := h.applyAuthors(ctx, book, md.Authors, attr, log)
-		if err != nil {
+		if err := h.applyAuthors(ctx, book, md.Authors, attr, log); err != nil {
 			return nil, err
 		}
-		seriesAggregateMayBeStale = seriesAggregateMayBeStale || changed
-		bookIndexChanged = bookIndexChanged || changed
 	}
 
 	// Series. The multi-entry path (Identify form) takes precedence over the
@@ -132,31 +119,23 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 		seriesTouched = true
 	}
 	if seriesTouched && h.enrich.relStore != nil {
-		changed, err := h.applySeries(ctx, book, seriesEntries, attr, seriesAggregateMayBeStale, log)
-		if err != nil {
+		if err := h.applySeries(ctx, book, seriesEntries, attr); err != nil {
 			return nil, err
 		}
-		bookIndexChanged = bookIndexChanged || changed
-	} else if seriesAggregateMayBeStale {
-		h.indexSeries(ctx, attachedSeries(book), log)
 	}
 
 	// Genres
 	if (len(md.Genres) > 0 || applyFieldSelected(overrides, "genres")) && h.enrich.relStore != nil && (len(md.Genres) == 0 || h.enrich.genreFinder != nil) {
-		changed, err := h.applyGenres(ctx, book, md.Genres, attr, log)
-		if err != nil {
+		if err := h.applyGenres(ctx, book, md.Genres, attr, log); err != nil {
 			return nil, err
 		}
-		bookIndexChanged = bookIndexChanged || changed
 	}
 
 	// Tags
 	if (len(md.Tags) > 0 || applyFieldSelected(overrides, "tags")) && h.enrich.relStore != nil && (len(md.Tags) == 0 || h.enrich.tagFinder != nil) {
-		changed, err := h.applyTags(ctx, book, md.Tags, attr, log)
-		if err != nil {
+		if err := h.applyTags(ctx, book, md.Tags, attr, log); err != nil {
 			return nil, err
 		}
-		bookIndexChanged = bookIndexChanged || changed
 	}
 
 	// Narrators (file-level, applied only to M4B target files)
@@ -287,7 +266,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	}
 
 	// Flush all file-level column updates in a single DB call
-	bookIndexChanged = bookIndexChanged || len(fileColumns) > 0
 	if len(fileColumns) > 0 && targetFile != nil {
 		if err := h.enrich.bookStore.UpdateFile(ctx, targetFile, fileColumns); err != nil {
 			return nil, errors.Wrap(err, "failed to update file metadata")
@@ -309,13 +287,6 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 			if sErr := sidecar.WriteFileSidecarFromModel(file); sErr != nil {
 				log.Warn("failed to write file sidecar", logger.Data{"file_id": file.ID, "error": sErr.Error()})
 			}
-		}
-	}
-
-	// Update FTS index
-	if h.enrich.searchIndexer != nil && updatedBook != nil && bookIndexChanged {
-		if err := h.enrich.searchIndexer.IndexBook(ctx, updatedBook); err != nil {
-			log.Warn("failed to update search index", logger.Data{"error": err.Error()})
 		}
 	}
 

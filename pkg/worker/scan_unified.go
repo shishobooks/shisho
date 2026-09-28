@@ -31,6 +31,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/shishobooks/shisho/pkg/pdf"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
@@ -428,6 +429,13 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		fileDir := filepath.Dir(file.Filepath)
 		bookPath := book.Filepath
 
+		// The book's books_fts row lists the file's path and narrators, and a
+		// promoted supplement changes them again. When no main file remains
+		// the book is deleted, and its book_series rows CASCADE away, so
+		// collect its Series first.
+		affected := w.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
+		defer w.searchService.ReindexAffected(ctx, affected)
+
 		// Delete the file record
 		if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
 			return nil, errors.Wrap(err, "failed to delete file record")
@@ -498,12 +506,6 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 			}
 
 			if bookDeleted {
-				// Delete from search index before deleting the book
-				if w.searchService != nil {
-					if err := w.searchService.DeleteFromBookIndex(ctx, book.ID); err != nil {
-						logWarn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
-					}
-				}
 				if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
 					return nil, errors.Wrap(err, "failed to delete orphaned book")
 				}
@@ -530,12 +532,9 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 			}
 		}
 
-		// Return a minimal Book stub so callers (e.g. the monitor's
-		// search-index pruning loop) can track the deleted book's ID even
-		// though the row no longer exists. scanFileByID already pruned the
-		// search index above; callers that also look up RetrieveBook for
-		// this ID will get NotFound and fall through to DeleteFromBookIndex
-		// as a redundant safety net.
+		// Return a minimal Book stub so callers (e.g. the monitor) can track
+		// the deleted book's ID even though the row no longer exists. The
+		// deferred ReindexAffected above drops its search row.
 		var bookStub *models.Book
 		if bookDeleted {
 			bookStub = &models.Book{ID: book.ID}
@@ -740,12 +739,10 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		logInfo("book has no files, deleting", logger.Data{"book_id": book.ID})
 		bookPath := book.Filepath
 
-		// Delete from search index before deleting the book
-		if w.searchService != nil {
-			if err := w.searchService.DeleteFromBookIndex(ctx, book.ID); err != nil {
-				logWarn("failed to delete book from search index", logger.Data{"book_id": book.ID, "error": err.Error()})
-			}
-		}
+		// The delete CASCADEs the book's book_series rows away, so collect
+		// its Series first. The reindex drops the book's own row.
+		affected := w.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
+		defer w.searchService.ReindexAffected(ctx, affected)
 
 		// Delete book
 		if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
@@ -885,15 +882,18 @@ func (w *Worker) scanFileCore(
 		return &ScanResult{File: file, Book: book}, nil
 	}
 
-	// Capture pre-update relation IDs so the post-update FTS reindex can
-	// skip churn for entities whose attachment to this book didn't change.
-	// Holds Series pointers (not just IDs) so detached series can be
-	// re-indexed for aggregate freshness without an extra DB round-trip.
-	// Skipped for non-resync scans (full ProcessScanJob), where the
-	// snapshot is never consumed — RebuildAllIndexes runs at the end.
+	// A resync reindexes the book and every series it was or is in when it
+	// returns, including on an error after some writes committed. It also
+	// captures which people, genres, and tags were attached, so only the
+	// newly attached ones get their own rows rewritten. Skipped for
+	// non-resync scans and for a changed file a full ProcessScanJob hands to
+	// scanFileByID, since RebuildAllIndexes runs at the end of the scan.
+	indexSearch := isResync && !searchRebuildPending(ctx)
 	var oldRels bookRelationsSnapshot
-	if isResync {
+	if indexSearch {
 		oldRels = snapshotBookRelations(book, file)
+		affected := w.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
+		defer w.searchService.ReindexAffected(ctx, affected)
 	}
 
 	sidecarSource := models.DataSourceSidecar
@@ -2320,28 +2320,14 @@ func (w *Worker) scanFileCore(
 	// ==========================================================================
 
 	// Only update search index for individual resyncs. For full library scans,
-	// RebuildAllIndexes is called at the end of ProcessScanJob, making individual
-	// IndexBook calls redundant and wasteful.
-	//
-	// Series/persons/genres/tags created via FindOrCreate* during this resync
-	// must also be indexed: their FTS tables (series_fts, persons_fts, etc.)
-	// have no triggers, so a row exists in the primary table but is invisible
-	// to the FTS-backed list/search endpoints until something explicitly
-	// indexes it. Existing rows get re-indexed too — Index* methods are
-	// idempotent (delete + reinsert), and that also refreshes
-	// series_fts.book_titles / book_authors so they reflect the just-attached
-	// book.
-	if isResync && w.searchService != nil {
-		if err := w.searchService.IndexBook(ctx, book); err != nil {
-			logWarn("failed to update search index", logger.Data{"book_id": book.ID, "error": err.Error()})
-		}
-		// bookTitleChanged / authorsChanged feed into the helper's
-		// series-aggregate-staleness check: when either changed, the
-		// still-attached series must be re-indexed so series_fts.book_titles
-		// / book_authors reflect the new values.
-		w.indexBookRelations(ctx, book, oldRels, indexRelationsHints{
-			bookTitleOrAuthorsChanged: bookTitleChanged || authorsChanged,
-		}, logWarn)
+	// RebuildAllIndexes is called at the end of ProcessScanJob. The book and
+	// its series are reindexed by the deferred ReindexAffected set up with
+	// the snapshot above. People, genres, tags, and publishers created via
+	// FindOrCreate* during this resync still need their own rows: their FTS
+	// tables have no triggers, so a new row is invisible to the FTS-backed
+	// list/search endpoints until something indexes it.
+	if indexSearch {
+		w.indexBookRelations(ctx, book, oldRels, logWarn)
 	}
 
 	// ==========================================================================
@@ -4344,31 +4330,26 @@ func (w *Worker) getConfidenceThresholdFromCache(pluginThreshold *float64) float
 
 // bookRelationsSnapshot captures the entity IDs already attached to a book
 // before a scan/apply mutates them, so indexBookRelations can skip churn for
-// entities whose attachment to this book did not change.
-//
-// seriesByID holds the *models.Series pointers (not just IDs) so a series
-// that gets detached can be re-indexed for aggregate freshness without an
-// extra DB round-trip.
+// entities whose attachment to this book did not change. Series are not
+// tracked: the book and its series are reindexed through ReindexAffected.
 type bookRelationsSnapshot struct {
-	seriesByID        map[int]*models.Series
 	authorPersonIDs   map[int]struct{}
 	narratorPersonIDs map[int]struct{}
 	genreIDs          map[int]struct{}
 	tagIDs            map[int]struct{}
 }
 
-// snapshotBookRelations captures which series, persons (as authors and
+// snapshotBookRelations captures which persons (as authors and
 // narrators), genres, and tags are attached to book + file BEFORE any
 // pending mutation. Pass the result to indexBookRelations after the
 // mutation completes so it can compute the symmetric difference and skip
 // re-indexing entities whose attachment didn't change.
 //
-// Caller must pass models loaded with Authors.Person, BookSeries.Series,
-// BookGenres.Genre, BookTags.Tag, and (for file) Narrators.Person — i.e.
-// the shape returned by books.Service.RetrieveBook.
+// Caller must pass models loaded with Authors.Person, BookGenres.Genre,
+// BookTags.Tag, and (for file) Narrators.Person, which is the shape
+// returned by books.Service.RetrieveBook.
 func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSnapshot {
 	snap := bookRelationsSnapshot{
-		seriesByID:        map[int]*models.Series{},
 		authorPersonIDs:   map[int]struct{}{},
 		narratorPersonIDs: map[int]struct{}{},
 		genreIDs:          map[int]struct{}{},
@@ -4376,11 +4357,6 @@ func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSn
 	}
 	if book == nil {
 		return snap
-	}
-	for _, bs := range book.BookSeries {
-		if bs.Series != nil {
-			snap.seriesByID[bs.Series.ID] = bs.Series
-		}
 	}
 	for _, a := range book.Authors {
 		if a.Person != nil {
@@ -4407,79 +4383,29 @@ func snapshotBookRelations(book *models.Book, file *models.File) bookRelationsSn
 	return snap
 }
 
-// indexRelationsHints carries signals from the surrounding scan/apply about
-// which book-level fields changed, so indexBookRelations can refresh
-// derived FTS columns even when the relation membership itself didn't
-// change. Currently the only consumer is series_fts, which aggregates
-// book.title and author names into its book_titles / book_authors columns.
-type indexRelationsHints struct {
-	// bookTitleOrAuthorsChanged should be set when book.title or any
-	// author on this book changed during the surrounding scan/apply.
-	// When true, attached series get re-indexed even if their membership
-	// didn't change, so series_fts aggregates stay fresh.
-	bookTitleOrAuthorsChanged bool
-}
-
-// indexBookRelations refreshes the FTS rows for entities whose attachment
-// to book changed during the surrounding scan/apply, given the pre-mutation
-// snapshot. It is required by any flow that may create or re-attach those
-// entities outside of a full ProcessScanJob (which rebuilds all FTS tables
-// at the end). Without this, a row exists in the primary table but the
-// corresponding *_fts table has no entry, so the entity is invisible to
-// the FTS-backed list/search endpoints that drive the dropdowns in the UI.
+// indexBookRelations writes the FTS rows of the people, genres, and tags
+// newly attached to book during the surrounding scan/apply, given the
+// pre-mutation snapshot, and of each file's publisher. It is required by any
+// flow that may create or re-attach those entities outside of a full
+// ProcessScanJob (which rebuilds all FTS tables at the end). Without it, a
+// row exists in the primary table but the corresponding *_fts table has no
+// entry, so the entity is invisible to the FTS-backed list/search endpoints
+// that drive the dropdowns in the UI. Those tables have no aggregate
+// columns, so unchanged or detached entities skip the DELETE+INSERT churn.
 //
-// What gets re-indexed:
-//   - Series newly attached to this book (covers newly-created series and
-//     existing series attached to this book for the first time).
-//   - Series detached from this book — series_fts has aggregate columns
-//     (book_titles, book_authors) that must stop listing this book.
-//   - Series whose membership didn't change but whose aggregate columns
-//     went stale because book.title / authors changed during this scan
-//     (signaled via hints.bookTitleOrAuthorsChanged).
-//   - Persons / genres / tags newly attached to this book — those tables
-//     have no aggregate columns, so unchanged or detached entities skip
-//     the DELETE+INSERT churn against persons_fts / genres_fts / tags_fts.
+// The book and its series are not handled here. Callers reindex them through
+// search.Service.ReindexAffected, whose expansion covers series the book
+// joined, left, or stayed in.
 //
-// Caller must pass book loaded with Authors.Person, BookSeries.Series,
-// BookGenres.Genre, BookTags.Tag, and Files.Narrators.Person — i.e. the
-// shape returned by books.Service.RetrieveBook.
-//
-// oldRels.seriesByID holds the *models.Series pointers captured before
-// the mutation; IndexSeries reads the entity's Name/Description/LibraryID
-// off those pointers, so callers must not mutate Series fields between
-// snapshotting and re-indexing. nil maps in oldRels are safe — Go map
-// reads on a nil map return the zero value, so an empty
+// Caller must pass book loaded with Authors.Person, BookGenres.Genre,
+// BookTags.Tag, Files.Narrators.Person, and Files.Publisher, which is the
+// shape returned by books.Service.RetrieveBook. nil maps in oldRels are safe:
+// Go map reads on a nil map return the zero value, so an empty
 // bookRelationsSnapshot{} is treated as "nothing was previously attached"
 // and every loaded relation looks newly-attached.
-func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldRels bookRelationsSnapshot, hints indexRelationsHints, logWarn func(msg string, data logger.Data)) {
+func (w *Worker) indexBookRelations(ctx context.Context, book *models.Book, oldRels bookRelationsSnapshot, logWarn func(msg string, data logger.Data)) {
 	if w.searchService == nil || book == nil {
 		return
-	}
-	// Series: re-index newly-attached, plus detached old ones for
-	// aggregate-column freshness, plus still-attached ones whose
-	// aggregate columns may have been invalidated by book.title /
-	// authors changes during this scan.
-	newSeriesIDs := map[int]bool{}
-	for _, bs := range book.BookSeries {
-		if bs.Series == nil || newSeriesIDs[bs.Series.ID] {
-			continue
-		}
-		newSeriesIDs[bs.Series.ID] = true
-		_, alreadyAttached := oldRels.seriesByID[bs.Series.ID]
-		if alreadyAttached && !hints.bookTitleOrAuthorsChanged {
-			continue
-		}
-		if err := w.searchService.IndexSeries(ctx, bs.Series); err != nil {
-			logWarn("failed to update search index for series", logger.Data{"series_id": bs.Series.ID, "error": err.Error()})
-		}
-	}
-	for oldID, oldSer := range oldRels.seriesByID {
-		if newSeriesIDs[oldID] {
-			continue
-		}
-		if err := w.searchService.IndexSeries(ctx, oldSer); err != nil {
-			logWarn("failed to update search index for detached series", logger.Data{"series_id": oldID, "error": err.Error()})
-		}
 	}
 
 	// Persons (authors + narrators): re-index only newly-attached.

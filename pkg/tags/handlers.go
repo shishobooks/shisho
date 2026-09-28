@@ -127,7 +127,12 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	nameChanged := false
+	// The rename commits before SyncAliases runs, so the reindex is deferred
+	// to also cover a rejected alias list. A rename onto an existing tag
+	// merges into it, and the reindex drops the merged row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{TagIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	if params.Name != nil && *params.Name != tag.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -139,17 +144,10 @@ func (h *handler) update(c echo.Context) error {
 			LibraryID: &tag.LibraryID,
 		})
 		if err == nil && existing.ID != id {
+			affected.TagIDs = append(affected.TagIDs, existing.ID)
 			err = h.tagService.MergeTags(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
-			}
-
-			log := logger.FromContext(ctx)
-			if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
-				log.Warn("failed to remove merged tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
-			}
-			if err := h.searchService.IndexTag(ctx, existing); err != nil {
-				log.Warn("failed to re-index target tag after merge", logger.Data{"tag_id": existing.ID, "error": err.Error()})
 			}
 
 			bookCount, _ := h.tagService.GetBookCount(ctx, existing.ID)
@@ -164,7 +162,6 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		nameChanged = true
 	}
 
 	if params.Aliases != nil {
@@ -176,13 +173,6 @@ func (h *handler) update(c echo.Context) error {
 	tag, err = h.tagService.RetrieveTag(ctx, RetrieveTagOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	if nameChanged || params.Aliases != nil {
-		log := logger.FromContext(ctx)
-		if err := h.searchService.IndexTag(ctx, tag); err != nil {
-			log.Warn("failed to update search index for tag", logger.Data{"tag_id": tag.ID, "error": err.Error()})
-		}
 	}
 
 	bookCount, _ := h.tagService.GetBookCount(ctx, id)

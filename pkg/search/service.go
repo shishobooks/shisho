@@ -333,282 +333,23 @@ func (svc *Service) countPeopleInternal(ctx context.Context, ftsQuery string, li
 	return count, errors.WithStack(err)
 }
 
-// FTS rows are keyed by rowid equal to the entity id (see deleteFTSRow). Every
-// insert below uses INSERT OR REPLACE because nothing holds a transaction
-// across the delete and the insert, in the Index methods or in
-// RebuildAllIndexes. When another writer indexes the same entity in between,
-// the insert finds that writer's row already holding the rowid and replaces it
-// instead of failing on the conflict.
-
-// IndexBook adds or updates a book in the FTS index.
-func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
-	// First, delete any existing entry
-	err := svc.DeleteFromBookIndex(ctx, book.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Collect author names and their aliases (deduplicated)
-	seenAuthors := make(map[string]bool)
-	seenAuthorIDs := make(map[int]bool)
-	var authorNames []string
-	for _, author := range book.Authors {
-		if author.Person != nil && !seenAuthors[author.Person.Name] {
-			authorNames = append(authorNames, author.Person.Name)
-			seenAuthors[author.Person.Name] = true
-		}
-		if author.Person != nil && !seenAuthorIDs[author.PersonID] {
-			seenAuthorIDs[author.PersonID] = true
-			aliasNames, _ := svc.queryAliasNames(ctx, "person_aliases", "person_id", author.PersonID)
-			for _, a := range aliasNames {
-				if !seenAuthors[a] {
-					authorNames = append(authorNames, a)
-					seenAuthors[a] = true
-				}
-			}
-		}
-	}
-
-	// Collect file names and narrators with aliases (deduplicated)
-	var filenames []string
-	seenNarrators := make(map[string]bool)
-	seenNarratorIDs := make(map[int]bool)
-	var narratorNames []string
-	for _, file := range book.Files {
-		filenames = append(filenames, file.Filepath)
-		for _, narrator := range file.Narrators {
-			if narrator.Person != nil && !seenNarrators[narrator.Person.Name] {
-				narratorNames = append(narratorNames, narrator.Person.Name)
-				seenNarrators[narrator.Person.Name] = true
-			}
-			if narrator.Person != nil && !seenNarratorIDs[narrator.PersonID] {
-				seenNarratorIDs[narrator.PersonID] = true
-				aliasNames, _ := svc.queryAliasNames(ctx, "person_aliases", "person_id", narrator.PersonID)
-				for _, a := range aliasNames {
-					if !seenNarrators[a] {
-						narratorNames = append(narratorNames, a)
-						seenNarrators[a] = true
-					}
-				}
-			}
-		}
-	}
-
-	// Collect series names with aliases
-	var seriesNames []string
-	for _, bs := range book.BookSeries {
-		if bs.Series != nil {
-			seriesNames = append(seriesNames, bs.Series.Name)
-			aliasNames, _ := svc.queryAliasNames(ctx, "series_aliases", "series_id", bs.SeriesID)
-			seriesNames = append(seriesNames, aliasNames...)
-		}
-	}
-
-	subtitle := ""
-	if book.Subtitle != nil {
-		subtitle = *book.Subtitle
-	}
-
-	_, err = svc.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		book.ID,
-		book.ID,
-		book.LibraryID,
-		book.Title,
-		book.Filepath,
-		subtitle,
-		strings.Join(authorNames, " "),
-		strings.Join(filenames, " "),
-		strings.Join(narratorNames, " "),
-		strings.Join(seriesNames, " "),
-	)
-	return errors.WithStack(err)
-}
-
-// DeleteFromBookIndex removes a book from the FTS index.
-func (svc *Service) DeleteFromBookIndex(ctx context.Context, bookID int) error {
-	return svc.deleteFTSRow(ctx, "books_fts", bookID)
-}
-
-// IndexSeries adds or updates a series in the FTS index.
-func (svc *Service) IndexSeries(ctx context.Context, series *models.Series) error {
-	// First, delete any existing entry
-	err := svc.DeleteFromSeriesIndex(ctx, series.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Get books in this series for indexing book titles and authors
-	var bookTitles []string
-	var bookAuthors []string
-
-	type bookInfo struct {
-		Title   string
-		Authors string
-	}
-	var books []bookInfo
-
-	err = svc.db.NewSelect().
-		TableExpr("books b").
-		ColumnExpr("b.title").
-		ColumnExpr("(SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id)) AS authors").
-		Join("JOIN book_series bs ON bs.book_id = b.id").
-		Where("bs.series_id = ?", series.ID).
-		Scan(ctx, &books)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	for _, b := range books {
-		bookTitles = append(bookTitles, b.Title)
-		if b.Authors != "" {
-			bookAuthors = append(bookAuthors, b.Authors)
-		}
-	}
-
-	description := ""
-	if series.Description != nil {
-		description = *series.Description
-	}
-
-	nameWithAliases, err := svc.nameWithAliases(ctx, "series_aliases", "series_id", series.ID, series.Name)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, err = svc.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO series_fts (rowid, series_id, library_id, name, description, book_titles, book_authors)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		series.ID,
-		series.ID,
-		series.LibraryID,
-		nameWithAliases,
-		description,
-		strings.Join(bookTitles, " "),
-		strings.Join(bookAuthors, " "),
-	)
-	return errors.WithStack(err)
-}
-
-// DeleteFromSeriesIndex removes a series from the FTS index.
-func (svc *Service) DeleteFromSeriesIndex(ctx context.Context, seriesID int) error {
-	return svc.deleteFTSRow(ctx, "series_fts", seriesID)
-}
-
-// IndexPerson adds or updates a person in the FTS index.
-func (svc *Service) IndexPerson(ctx context.Context, person *models.Person) error {
-	// First, delete any existing entry
-	err := svc.DeleteFromPersonIndex(ctx, person.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	nameWithAliases, err := svc.nameWithAliases(ctx, "person_aliases", "person_id", person.ID, person.Name)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, err = svc.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO persons_fts (rowid, person_id, library_id, name, sort_name)
-		 VALUES (?, ?, ?, ?, ?)`,
-		person.ID, person.ID, person.LibraryID, nameWithAliases, person.SortName,
-	)
-	return errors.WithStack(err)
-}
-
-// DeleteFromPersonIndex removes a person from the FTS index.
-func (svc *Service) DeleteFromPersonIndex(ctx context.Context, personID int) error {
-	return svc.deleteFTSRow(ctx, "persons_fts", personID)
-}
-
-// IndexGenre adds or updates a genre in the FTS index.
-func (svc *Service) IndexGenre(ctx context.Context, genre *models.Genre) error {
-	// First, delete any existing entry
-	err := svc.DeleteFromGenreIndex(ctx, genre.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	nameWithAliases, err := svc.nameWithAliases(ctx, "genre_aliases", "genre_id", genre.ID, genre.Name)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, err = svc.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO genres_fts (rowid, genre_id, library_id, name)
-		 VALUES (?, ?, ?, ?)`,
-		genre.ID, genre.ID, genre.LibraryID, nameWithAliases,
-	)
-	return errors.WithStack(err)
-}
-
-// DeleteFromGenreIndex removes a genre from the FTS index.
-func (svc *Service) DeleteFromGenreIndex(ctx context.Context, genreID int) error {
-	return svc.deleteFTSRow(ctx, "genres_fts", genreID)
-}
-
-// IndexTag adds or updates a tag in the FTS index.
-func (svc *Service) IndexTag(ctx context.Context, tag *models.Tag) error {
-	// First, delete any existing entry
-	err := svc.DeleteFromTagIndex(ctx, tag.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	nameWithAliases, err := svc.nameWithAliases(ctx, "tag_aliases", "tag_id", tag.ID, tag.Name)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, err = svc.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO tags_fts (rowid, tag_id, library_id, name)
-		 VALUES (?, ?, ?, ?)`,
-		tag.ID, tag.ID, tag.LibraryID, nameWithAliases,
-	)
-	return errors.WithStack(err)
-}
-
-// DeleteFromTagIndex removes a tag from the FTS index.
-func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
-	return svc.deleteFTSRow(ctx, "tags_fts", tagID)
-}
-
-// IndexPublisher adds or updates a publisher in the FTS index.
-func (svc *Service) IndexPublisher(ctx context.Context, publisher *models.Publisher) error {
-	// First, delete any existing entry
-	err := svc.DeleteFromPublisherIndex(ctx, publisher.ID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	nameWithAliases, err := svc.nameWithAliases(ctx, "publisher_aliases", "publisher_id", publisher.ID, publisher.Name)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	_, err = svc.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO publishers_fts (rowid, publisher_id, library_id, name)
-		 VALUES (?, ?, ?, ?)`,
-		publisher.ID, publisher.ID, publisher.LibraryID, nameWithAliases,
-	)
-	return errors.WithStack(err)
-}
-
-// DeleteFromPublisherIndex removes a publisher from the FTS index.
-func (svc *Service) DeleteFromPublisherIndex(ctx context.Context, publisherID int) error {
-	return svc.deleteFTSRow(ctx, "publishers_fts", publisherID)
-}
-
-// ReindexBookByID re-indexes a single book in books_fts using the same SQL
-// pattern as RebuildAllIndexes. Useful when related data changes (e.g., an
-// author's or series' aliases are modified) without a full book model in hand.
-func (svc *Service) ReindexBookByID(ctx context.Context, bookID int) error {
-	if err := svc.DeleteFromBookIndex(ctx, bookID); err != nil {
-		return err
-	}
-
-	_, err := svc.db.ExecContext(ctx, `
+// Each FTS table has one INSERT ... SELECT that computes its rows from the
+// source tables. RebuildAllIndexes runs it unfiltered, and reindexRow, behind
+// every per-entity method, appends a filter on the entity id, so an edit and a
+// scan always write the same row. The Index* methods take a model for their callers' convenience
+// but read only its ID: indexing never depends on which relations a caller
+// happened to load.
+//
+// FTS rows are keyed by rowid equal to the entity id (see deleteFTSRow). The
+// per-entity methods delete the row and then insert it outside any
+// transaction, so every insert uses INSERT OR REPLACE: when another writer
+// indexes the same entity in between, the insert finds that writer's row
+// already holding the rowid and replaces it instead of failing on the
+// conflict.
+const (
+	// books_fts includes person aliases in authors and narrators, and series
+	// aliases in series_names.
+	booksFTSInsert = `
 		INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
 		SELECT
 			b.id AS rowid,
@@ -633,10 +374,148 @@ func (svc *Service) ReindexBookByID(ctx context.Context, bookID int) error {
 				UNION
 				SELECT sa.name FROM book_series bs JOIN series_aliases sa ON sa.series_id = bs.series_id WHERE bs.book_id = b.id
 			)), '')
-		FROM books b
-		WHERE b.id = ?
-	`, bookID)
+		FROM books b`
+
+	// series_fts includes series aliases in name, and the titles and author
+	// names (without aliases) of the Series' Books.
+	seriesFTSInsert = `
+		INSERT OR REPLACE INTO series_fts (rowid, series_id, library_id, name, description, book_titles, book_authors)
+		SELECT
+			s.id AS rowid,
+			s.id,
+			s.library_id,
+			s.name || COALESCE(' ' || (SELECT GROUP_CONCAT(sa.name, ' ') FROM series_aliases sa WHERE sa.series_id = s.id), ''),
+			COALESCE(s.description, ''),
+			COALESCE((SELECT GROUP_CONCAT(b.title, ' ') FROM book_series bs JOIN books b ON bs.book_id = b.id WHERE bs.series_id = s.id), ''),
+			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM book_series bs JOIN books b ON bs.book_id = b.id JOIN authors a ON a.book_id = b.id JOIN persons p ON a.person_id = p.id WHERE bs.series_id = s.id)), '')
+		FROM series s`
+
+	personsFTSInsert = `
+		INSERT OR REPLACE INTO persons_fts (rowid, person_id, library_id, name, sort_name)
+		SELECT p.id AS rowid, p.id, p.library_id,
+			p.name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM person_aliases pa WHERE pa.person_id = p.id), ''),
+			p.sort_name
+		FROM persons p`
+
+	genresFTSInsert = `
+		INSERT OR REPLACE INTO genres_fts (rowid, genre_id, library_id, name)
+		SELECT g.id AS rowid, g.id, g.library_id,
+			g.name || COALESCE(' ' || (SELECT GROUP_CONCAT(ga.name, ' ') FROM genre_aliases ga WHERE ga.genre_id = g.id), '')
+		FROM genres g`
+
+	tagsFTSInsert = `
+		INSERT OR REPLACE INTO tags_fts (rowid, tag_id, library_id, name)
+		SELECT t.id AS rowid, t.id, t.library_id,
+			t.name || COALESCE(' ' || (SELECT GROUP_CONCAT(ta.name, ' ') FROM tag_aliases ta WHERE ta.tag_id = t.id), '')
+		FROM tags t`
+
+	publishersFTSInsert = `
+		INSERT OR REPLACE INTO publishers_fts (rowid, publisher_id, library_id, name)
+		SELECT p.id AS rowid, p.id, p.library_id,
+			p.name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM publisher_aliases pa WHERE pa.publisher_id = p.id), '')
+		FROM publishers p`
+)
+
+// ftsSource describes how one FTS table is filled: its insert, and the alias
+// of the source table in that insert, which a per-entity reindex filters on.
+type ftsSource struct {
+	name   string
+	insert string
+	alias  string
+}
+
+var (
+	booksFTS      = ftsSource{"books_fts", booksFTSInsert, "b"}
+	seriesFTS     = ftsSource{"series_fts", seriesFTSInsert, "s"}
+	personsFTS    = ftsSource{"persons_fts", personsFTSInsert, "p"}
+	genresFTS     = ftsSource{"genres_fts", genresFTSInsert, "g"}
+	tagsFTS       = ftsSource{"tags_fts", tagsFTSInsert, "t"}
+	publishersFTS = ftsSource{"publishers_fts", publishersFTSInsert, "p"}
+
+	allFTSTables = []ftsSource{booksFTS, seriesFTS, personsFTS, genresFTS, tagsFTS, publishersFTS}
+)
+
+// reindexRow rewrites one entity's row in table from its source tables. When
+// the entity no longer exists the insert selects nothing, so the row is only
+// deleted.
+func (svc *Service) reindexRow(ctx context.Context, table ftsSource, id int) error {
+	if err := svc.deleteFTSRow(ctx, table.name, id); err != nil {
+		return err
+	}
+	_, err := svc.db.ExecContext(ctx, table.insert+" WHERE "+table.alias+".id = ?", id)
 	return errors.WithStack(err)
+}
+
+// IndexBook adds or updates a book in the FTS index.
+func (svc *Service) IndexBook(ctx context.Context, book *models.Book) error {
+	return svc.ReindexBookByID(ctx, book.ID)
+}
+
+// DeleteFromBookIndex removes a book from the FTS index.
+func (svc *Service) DeleteFromBookIndex(ctx context.Context, bookID int) error {
+	return svc.deleteFTSRow(ctx, booksFTS.name, bookID)
+}
+
+// IndexSeries adds or updates a series in the FTS index.
+func (svc *Service) IndexSeries(ctx context.Context, series *models.Series) error {
+	return svc.ReindexSeriesByID(ctx, series.ID)
+}
+
+// DeleteFromSeriesIndex removes a series from the FTS index.
+func (svc *Service) DeleteFromSeriesIndex(ctx context.Context, seriesID int) error {
+	return svc.deleteFTSRow(ctx, seriesFTS.name, seriesID)
+}
+
+// IndexPerson adds or updates a person in the FTS index.
+func (svc *Service) IndexPerson(ctx context.Context, person *models.Person) error {
+	return svc.reindexRow(ctx, personsFTS, person.ID)
+}
+
+// DeleteFromPersonIndex removes a person from the FTS index.
+func (svc *Service) DeleteFromPersonIndex(ctx context.Context, personID int) error {
+	return svc.deleteFTSRow(ctx, personsFTS.name, personID)
+}
+
+// IndexGenre adds or updates a genre in the FTS index.
+func (svc *Service) IndexGenre(ctx context.Context, genre *models.Genre) error {
+	return svc.reindexRow(ctx, genresFTS, genre.ID)
+}
+
+// DeleteFromGenreIndex removes a genre from the FTS index.
+func (svc *Service) DeleteFromGenreIndex(ctx context.Context, genreID int) error {
+	return svc.deleteFTSRow(ctx, genresFTS.name, genreID)
+}
+
+// IndexTag adds or updates a tag in the FTS index.
+func (svc *Service) IndexTag(ctx context.Context, tag *models.Tag) error {
+	return svc.reindexRow(ctx, tagsFTS, tag.ID)
+}
+
+// DeleteFromTagIndex removes a tag from the FTS index.
+func (svc *Service) DeleteFromTagIndex(ctx context.Context, tagID int) error {
+	return svc.deleteFTSRow(ctx, tagsFTS.name, tagID)
+}
+
+// IndexPublisher adds or updates a publisher in the FTS index.
+func (svc *Service) IndexPublisher(ctx context.Context, publisher *models.Publisher) error {
+	return svc.reindexRow(ctx, publishersFTS, publisher.ID)
+}
+
+// DeleteFromPublisherIndex removes a publisher from the FTS index.
+func (svc *Service) DeleteFromPublisherIndex(ctx context.Context, publisherID int) error {
+	return svc.deleteFTSRow(ctx, publishersFTS.name, publisherID)
+}
+
+// ReindexBookByID rewrites one book's books_fts row from the database, or
+// deletes it when the book no longer exists.
+func (svc *Service) ReindexBookByID(ctx context.Context, bookID int) error {
+	return svc.reindexRow(ctx, booksFTS, bookID)
+}
+
+// ReindexSeriesByID rewrites one series' series_fts row from the database, or
+// deletes it when the series no longer exists.
+func (svc *Service) ReindexSeriesByID(ctx context.Context, seriesID int) error {
+	return svc.reindexRow(ctx, seriesFTS, seriesID)
 }
 
 // deleteFTSRow removes one entity's row from an FTS table. Every insert sets
@@ -651,149 +530,24 @@ func (svc *Service) deleteFTSRow(ctx context.Context, table string, id int) erro
 	return errors.WithStack(err)
 }
 
-func (svc *Service) queryAliasNames(ctx context.Context, table, fkColumn string, resourceID int) ([]string, error) {
-	var names []string
-	err := svc.db.NewSelect().
-		TableExpr(table).
-		Column("name").
-		Where(fkColumn+" = ?", resourceID).
-		Scan(ctx, &names)
-	return names, errors.WithStack(err)
-}
-
-func (svc *Service) nameWithAliases(ctx context.Context, table, fkColumn string, resourceID int, primaryName string) (string, error) {
-	aliasNames, err := svc.queryAliasNames(ctx, table, fkColumn, resourceID)
-	if err != nil {
-		return primaryName, err
-	}
-	if len(aliasNames) == 0 {
-		return primaryName, nil
-	}
-	return primaryName + " " + strings.Join(aliasNames, " "), nil
-}
-
-// RebuildAllIndexes rebuilds all FTS indexes from scratch.
-// This should be called after a scan job completes.
+// RebuildAllIndexes rebuilds all FTS indexes from scratch in one transaction,
+// so no search sees half-empty tables and a failure part way through leaves
+// the previous index in place. The database pool has a single connection
+// (pkg/database), so every other query waits until the transaction commits.
+// A scan job calls it when it finishes or fails, and the worker calls it at
+// startup when the last scan was cut short by shutdown.
 func (svc *Service) RebuildAllIndexes(ctx context.Context) error {
-	// Clear all indexes
-	_, err := svc.db.ExecContext(ctx, "DELETE FROM books_fts")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	_, err = svc.db.ExecContext(ctx, "DELETE FROM series_fts")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	_, err = svc.db.ExecContext(ctx, "DELETE FROM persons_fts")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	_, err = svc.db.ExecContext(ctx, "DELETE FROM genres_fts")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	_, err = svc.db.ExecContext(ctx, "DELETE FROM tags_fts")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	_, err = svc.db.ExecContext(ctx, "DELETE FROM publishers_fts")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Rebuild books index (includes person and series aliases in authors/narrators/series_names)
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO books_fts (rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names)
-		SELECT
-			b.id AS rowid,
-			b.id,
-			b.library_id,
-			b.title,
-			b.filepath,
-			COALESCE(b.subtitle, ''),
-			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
-				SELECT DISTINCT p.name FROM authors a JOIN persons p ON a.person_id = p.id WHERE a.book_id = b.id
-				UNION
-				SELECT DISTINCT pa.name FROM authors a JOIN person_aliases pa ON pa.person_id = a.person_id WHERE a.book_id = b.id
-			)), ''),
-			COALESCE((SELECT GROUP_CONCAT(f.filepath, ' ') FROM files f WHERE f.book_id = b.id), ''),
-			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
-				SELECT DISTINCT p.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN persons p ON n.person_id = p.id WHERE f.book_id = b.id
-				UNION
-				SELECT DISTINCT pa.name FROM files f JOIN narrators n ON n.file_id = f.id JOIN person_aliases pa ON pa.person_id = n.person_id WHERE f.book_id = b.id
-			)), ''),
-			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
-				SELECT s.name FROM book_series bs JOIN series s ON bs.series_id = s.id WHERE bs.book_id = b.id
-				UNION
-				SELECT sa.name FROM book_series bs JOIN series_aliases sa ON sa.series_id = bs.series_id WHERE bs.book_id = b.id
-			)), '')
-		FROM books b
-	`)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Rebuild series index (includes series aliases in name column)
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO series_fts (rowid, series_id, library_id, name, description, book_titles, book_authors)
-		SELECT
-			s.id AS rowid,
-			s.id,
-			s.library_id,
-			s.name || COALESCE(' ' || (SELECT GROUP_CONCAT(sa.name, ' ') FROM series_aliases sa WHERE sa.series_id = s.id), ''),
-			COALESCE(s.description, ''),
-			COALESCE((SELECT GROUP_CONCAT(b.title, ' ') FROM book_series bs JOIN books b ON bs.book_id = b.id WHERE bs.series_id = s.id), ''),
-			COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (SELECT DISTINCT p.name FROM book_series bs JOIN books b ON bs.book_id = b.id JOIN authors a ON a.book_id = b.id JOIN persons p ON a.person_id = p.id WHERE bs.series_id = s.id)), '')
-		FROM series s
-	`)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Rebuild persons index (includes person aliases in name column)
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO persons_fts (rowid, person_id, library_id, name, sort_name)
-		SELECT id AS rowid, id, library_id,
-			name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM person_aliases pa WHERE pa.person_id = persons.id), ''),
-			sort_name
-		FROM persons
-	`)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Rebuild genres index (includes genre aliases in name column)
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO genres_fts (rowid, genre_id, library_id, name)
-		SELECT id AS rowid, id, library_id,
-			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ga.name, ' ') FROM genre_aliases ga WHERE ga.genre_id = genres.id), '')
-		FROM genres
-	`)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Rebuild tags index (includes tag aliases in name column)
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO tags_fts (rowid, tag_id, library_id, name)
-		SELECT id AS rowid, id, library_id,
-			name || COALESCE(' ' || (SELECT GROUP_CONCAT(ta.name, ' ') FROM tag_aliases ta WHERE ta.tag_id = tags.id), '')
-		FROM tags
-	`)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Rebuild publishers index (includes publisher aliases in name column)
-	_, err = svc.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO publishers_fts (rowid, publisher_id, library_id, name)
-		SELECT id AS rowid, id, library_id,
-			name || COALESCE(' ' || (SELECT GROUP_CONCAT(pa.name, ' ') FROM publisher_aliases pa WHERE pa.publisher_id = publishers.id), '')
-		FROM publishers
-	`)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return errors.WithStack(svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		for _, table := range allFTSTables {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table.name); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+		for _, table := range allFTSTables {
+			if _, err := tx.ExecContext(ctx, table.insert); err != nil {
+				return errors.Wrapf(err, "rebuild %s", table.name)
+			}
+		}
+		return nil
+	}))
 }

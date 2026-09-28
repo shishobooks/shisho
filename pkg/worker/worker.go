@@ -213,6 +213,10 @@ func (w *Worker) Start() {
 }
 
 func (w *Worker) fetchJobs() {
+	// Before picking up jobs, so the rebuild does not interleave with a scan
+	// that fetchJobs is about to resume.
+	w.rebuildSearchAfterIncompleteScan(w.ctx)
+
 	duration := 5 * time.Second
 	timer := time.NewTimer(duration)
 
@@ -477,6 +481,35 @@ func (w *Worker) cleanupOrphanedEntities(ctx context.Context, log logger.Logger)
 func (w *Worker) RefreshMonitorWatches() {
 	if w.monitor != nil {
 		w.monitor.RefreshWatches()
+	}
+}
+
+// rebuildSearchAfterIncompleteScan rebuilds every FTS table when the most
+// recent scan that started did not complete. A full scan indexes nothing until
+// its closing RebuildAllIndexes, and a scan cancelled by shutdown skips that
+// rebuild (see ProcessScanJob), so the Books, Series, and People it had
+// already created are missing from search until the next scan finishes. Every
+// completed scan rebuilds all tables, so only the latest scan matters.
+func (w *Worker) rebuildSearchAfterIncompleteScan(ctx context.Context) {
+	if w.searchService == nil {
+		return
+	}
+	scanType := models.JobTypeScan
+	latest, err := w.jobService.ListJobs(ctx, jobs.ListJobsOptions{
+		Limit:    pointerutil.Int(1),
+		Type:     &scanType,
+		Statuses: []string{models.JobStatusInProgress, models.JobStatusCompleted, models.JobStatusFailed},
+	})
+	if err != nil {
+		w.log.Err(err).Warn("failed to check the last scan before rebuilding search indexes")
+		return
+	}
+	if len(latest) == 0 || latest[0].Status == models.JobStatusCompleted {
+		return
+	}
+	w.log.Info("last scan did not complete, rebuilding search indexes", logger.Data{"job_id": latest[0].ID})
+	if err := w.searchService.RebuildAllIndexes(ctx); err != nil {
+		w.log.Err(err).Warn("failed to rebuild search indexes after an incomplete scan")
 	}
 }
 

@@ -1506,24 +1506,6 @@ func (svc *Service) CleanupOrphanedSeries(ctx context.Context) ([]int, error) {
 	return deletedIDs, nil
 }
 
-// RetrieveSeriesByID retrieves a series by its ID.
-func (svc *Service) RetrieveSeriesByID(ctx context.Context, id int) (*models.Series, error) {
-	series := &models.Series{}
-	err := svc.db.
-		NewSelect().
-		Model(series).
-		Relation("Library").
-		Where("s.id = ?", id).
-		Scan(ctx)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errcodes.NotFound("Series")
-		}
-		return nil, errors.WithStack(err)
-	}
-	return series, nil
-}
-
 // CreateBookGenre creates a book-genre association.
 func (svc *Service) CreateBookGenre(ctx context.Context, bookGenre *models.BookGenre) error {
 	_, err := svc.db.

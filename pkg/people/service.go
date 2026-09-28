@@ -229,7 +229,7 @@ func (svc *Service) UpdatePerson(ctx context.Context, person *models.Person, opt
 //
 // Returns the IDs of the books the person authored plus the books that own
 // a file the person narrated, each once, so the caller can recompute their
-// review state and re-index them after the transaction commits.
+// review state after the transaction commits.
 func (svc *Service) DeletePerson(ctx context.Context, personID int) ([]int, error) {
 	var affectedBookIDs []int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
@@ -410,29 +410,10 @@ func personBookIDs(ctx context.Context, db bun.IDB, personID int) ([]int, error)
 	return bookIDs, errors.WithStack(err)
 }
 
-// SeriesForBooks returns the Series that hold any of the given Books, each
-// once. Callers re-index them in series_fts, whose book_authors column
-// carries the names of the People who author the Books in each Series.
-func (svc *Service) SeriesForBooks(ctx context.Context, bookIDs []int) ([]*models.Series, error) {
-	series := []*models.Series{}
-	if len(bookIDs) == 0 {
-		return series, nil
-	}
-	err := svc.db.NewSelect().
-		Model(&series).
-		Where("s.id IN (SELECT bs.series_id FROM book_series AS bs WHERE bs.book_id IN (?))", bun.List(bookIDs)).
-		Order("s.id ASC").
-		Scan(ctx)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return series, nil
-}
-
 // MergePeople merges sourcePerson into targetPerson (moves all associations,
 // transfers aliases, deletes source). It returns the IDs of the books the
 // source authored plus the books that own a file the source narrated, each
-// once, so the caller can re-index them after the transaction commits.
+// once.
 //
 // A Person cannot be merged into itself. Where the source and the target
 // already author the same Book in the same role, or narrate the same File,

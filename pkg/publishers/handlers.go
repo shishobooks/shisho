@@ -207,6 +207,12 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// The rename commits before SyncAliases runs, so the reindex is deferred
+	// to also cover a rejected alias list. A rename onto an existing publisher
+	// merges into it, and the reindex drops the merged row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{PublisherIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	// Handle parent update before name-change/merge so that the parent change
 	// applies even when a rename triggers a merge (which returns early).
 	// resolvedParentID tracks the parent ID resolved from either path so the
@@ -232,10 +238,7 @@ func (h *handler) update(c echo.Context) error {
 		resolvedParentID = &parentPublisher.ID
 		parentWasSet = true
 		// Index the parent publisher in case it was just created
-		if indexErr := h.searchService.IndexPublisher(ctx, parentPublisher); indexErr != nil {
-			log := logger.FromContext(ctx)
-			log.Warn("failed to index new parent publisher", logger.Data{"publisher_id": parentPublisher.ID, "error": indexErr.Error()})
-		}
+		affected.PublisherIDs = append(affected.PublisherIDs, parentPublisher.ID)
 		if err := h.publisherService.SetParent(ctx, id, &parentPublisher.ID); err != nil {
 			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
 				return errcodes.ValidationError(err.Error())
@@ -244,7 +247,6 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	nameChanged := false
 	if params.Name != nil && *params.Name != publisher.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
@@ -266,17 +268,10 @@ func (h *handler) update(c echo.Context) error {
 				}
 			}
 
+			affected.PublisherIDs = append(affected.PublisherIDs, existing.ID)
 			err = h.publisherService.MergePublishers(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
-			}
-
-			log := logger.FromContext(ctx)
-			if err := h.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
-				log.Warn("failed to remove merged publisher from search index", logger.Data{"publisher_id": id, "error": err.Error()})
-			}
-			if err := h.searchService.IndexPublisher(ctx, existing); err != nil {
-				log.Warn("failed to re-index target publisher after merge", logger.Data{"publisher_id": existing.ID, "error": err.Error()})
 			}
 
 			// Re-retrieve to pick up parent_id change
@@ -294,7 +289,6 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		nameChanged = true
 	}
 
 	if params.Aliases != nil {
@@ -306,13 +300,6 @@ func (h *handler) update(c echo.Context) error {
 	publisher, err = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &id})
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	if nameChanged || params.Aliases != nil {
-		log := logger.FromContext(ctx)
-		if err := h.searchService.IndexPublisher(ctx, publisher); err != nil {
-			log.Warn("failed to update search index for publisher", logger.Data{"publisher_id": publisher.ID, "error": err.Error()})
-		}
 	}
 
 	response, err := h.buildPublisherResponse(ctx, publisher)
