@@ -4,7 +4,7 @@ A Share Link lets someone open one book and download its files without a Shisho 
 
 ## Turning On Share Links
 
-Share Links are off on a new server. They are controlled from **Settings > Sharing**, not from the [configuration file](./configuration.md), and changes apply as soon as you switch them. Viewing the page requires Config Read, and changing its switches requires Config Write.
+Share Links are off on a new server. They are controlled from **Settings > Sharing**, not from the [configuration file](./configuration.md). Each switch saves as soon as you flip it and confirms the new state with a short message. Viewing the page requires Config Read, and changing its switches requires Config Write.
 
 :::caution[Share Links Expose Books Outside Your Server]
 Anyone who holds a Share Link can open the shared book and download its files, whether or not they have an account. The link only works if the recipient can reach this server, so a server that is only available on your local network or through a VPN cannot be reached by recipients outside it. Decide which roles may create links, and whether links must expire, before you turn sharing on.

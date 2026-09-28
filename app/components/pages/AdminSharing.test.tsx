@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +10,10 @@ import AdminSharing from "./AdminSharing";
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 const mockSettings = { enabled: false, require_expiration: false };
@@ -57,6 +62,7 @@ const renderPage = () =>
 
 describe("AdminSharing", () => {
   beforeEach(() => {
+    vi.mocked(toast.success).mockReset();
     mockMutate.mockReset();
     mockIsPending = false;
     mockSettings.enabled = false;
@@ -124,6 +130,53 @@ describe("AdminSharing", () => {
     expect(mockMutate).toHaveBeenCalledWith(
       { require_expiration: true },
       expect.anything(),
+    );
+  });
+
+  // The mocked mutation resolves at once so the success callback runs.
+  const resolveSaves = () =>
+    mockMutate.mockImplementation(
+      (
+        _payload: { enabled?: boolean; require_expiration?: boolean },
+        options: { onSuccess?: () => void },
+      ) => {
+        options.onSuccess?.();
+      },
+    );
+
+  it("confirms turning each switch on with a toast", async () => {
+    resolveSaves();
+    const user = createUser();
+    renderPage();
+
+    await user.click(
+      screen.getByRole("switch", { name: "Enable Share Links" }),
+    );
+    expect(toast.success).toHaveBeenLastCalledWith("Share Links turned on");
+
+    await user.click(
+      screen.getByRole("switch", { name: "Require expiration" }),
+    );
+    expect(toast.success).toHaveBeenLastCalledWith("New links must now expire");
+  });
+
+  it("confirms turning each switch off with a toast", async () => {
+    resolveSaves();
+    mockSettings.enabled = true;
+    mockSettings.require_expiration = true;
+    const user = createUser();
+    renderPage();
+
+    await user.click(
+      screen.getByRole("switch", { name: "Enable Share Links" }),
+    );
+    expect(toast.success).toHaveBeenLastCalledWith("Share Links turned off");
+
+    await user.click(
+      screen.getByRole("switch", { name: "Require expiration" }),
+    );
+    expect(toast.success).toHaveBeenLastCalledWith(
+      "New links may now last forever",
     );
   });
 
