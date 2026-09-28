@@ -270,9 +270,14 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 			q = q.Where("f.library_id = ?", *scope.LibraryID)
 		}
 	case "list":
+		// A list can hold books from libraries the user cannot access (it may
+		// be shared with them), so the list is not the access boundary.
 		if scope.ListID != nil {
 			q = q.Join("JOIN list_books AS lb ON lb.book_id = f.book_id").
 				Where("lb.list_id = ?", *scope.ListID)
+			if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+				q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
+			}
 		}
 	default: // "all"
 		libraryIDs := user.GetAccessibleLibraryIDs()

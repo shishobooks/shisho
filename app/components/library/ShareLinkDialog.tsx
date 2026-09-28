@@ -1,5 +1,6 @@
-import { Ban, Copy, Info, Loader2, Trash2 } from "lucide-react";
+import { Ban, Copy, Info, Loader2, PowerOff, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,24 @@ const linkSubject = (link: ShareLinkResponse | null) => {
     : `The unlabeled link created by ${link.created_by_username}`;
 };
 
+// A link that already does not work (paused, or sharing off) is told it will
+// not come back, rather than that it stops now.
+const revokeDescription = (
+  link: ShareLinkResponse | null,
+  sharingEnabled: boolean,
+) => {
+  const subject = linkSubject(link);
+  const tail =
+    "It stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.";
+  if (link?.paused_reason) {
+    return `${subject} is paused and will not work again when its creator's access returns. ${tail}`;
+  }
+  if (!sharingEnabled) {
+    return `${subject} will not work again when sharing is turned back on. ${tail}`;
+  }
+  return `${subject} stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`;
+};
+
 interface ShareLinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -107,6 +126,14 @@ interface ShareLinkDialogProps {
   canList: boolean;
   /** The admin requires every link to expire, so Never is not offered. */
   requireExpiration: boolean;
+  /**
+   * Sharing is on. While it is off no link works and none can be created,
+   * but links can still be revoked and deleted so an admin never has to turn
+   * sharing back on, and so restore every link, just to pull one.
+   */
+  sharingEnabled: boolean;
+  /** Config Write: the sharing-off notice links to the Sharing settings. */
+  canManageSharing: boolean;
 }
 
 export function ShareLinkDialog({
@@ -117,6 +144,8 @@ export function ShareLinkDialog({
   canWrite,
   canList,
   requireExpiration,
+  sharingEnabled,
+  canManageSharing,
 }: ShareLinkDialogProps) {
   const [label, setLabel] = useState("");
   const [preset, setPreset] = useState(DEFAULT_PRESET);
@@ -234,7 +263,33 @@ export function ShareLinkDialog({
           </DialogHeader>
 
           <DialogBody className="space-y-6">
-            {canWrite && (
+            {!sharingEnabled && (
+              <div
+                className="flex items-start gap-2 p-3 rounded-md bg-muted/50 text-sm text-muted-foreground"
+                role="status"
+              >
+                <PowerOff className="h-4 w-4 mt-0.5 shrink-0" />
+                <p>
+                  Sharing is turned off, so no link works right now. Links you
+                  revoke or delete here stay that way when an admin turns
+                  sharing back on in{" "}
+                  {canManageSharing ? (
+                    <Link
+                      className="underline underline-offset-4 hover:text-foreground"
+                      onClick={() => onOpenChange(false)}
+                      to="/settings/sharing"
+                    >
+                      Settings &gt; Sharing
+                    </Link>
+                  ) : (
+                    "Settings > Sharing"
+                  )}
+                  .
+                </p>
+              </div>
+            )}
+
+            {canWrite && sharingEnabled && (
               <div className="space-y-3">
                 <h3 className="text-sm font-medium">New Link</h3>
                 <div className="space-y-2">
@@ -296,7 +351,7 @@ export function ShareLinkDialog({
                       // creator stops it from resolving.
                       const active = link.state === ShareLinkStateActive;
                       const paused = active && Boolean(link.paused_reason);
-                      const live = active && !paused;
+                      const live = active && !paused && sharingEnabled;
                       return (
                         <li
                           className={cn(
@@ -407,11 +462,7 @@ export function ShareLinkDialog({
 
       <ConfirmDialog
         confirmLabel="Revoke"
-        description={
-          toRevoke?.paused_reason
-            ? `${linkSubject(toRevoke)} is paused and will not work again when its creator's access returns. It stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`
-            : `${linkSubject(toRevoke)} stops working immediately and stays in the list as revoked, with its counts. This cannot be undone; create a new link to share the book again.`
-        }
+        description={revokeDescription(toRevoke, sharingEnabled)}
         isPending={revokeMutation.isPending}
         onConfirm={handleRevoke}
         onOpenChange={setRevokeOpen}
@@ -421,7 +472,9 @@ export function ShareLinkDialog({
       <ConfirmDialog
         confirmLabel="Delete"
         description={
-          toDelete?.state === ShareLinkStateActive && !toDelete.paused_reason
+          toDelete?.state === ShareLinkStateActive &&
+          !toDelete.paused_reason &&
+          sharingEnabled
             ? `${linkSubject(toDelete)} stops working immediately and is removed from the list with its counts. This cannot be undone.`
             : `${linkSubject(toDelete)} is removed from the list with its counts. This cannot be undone.`
         }

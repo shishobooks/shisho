@@ -1,5 +1,6 @@
 import { Info } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Switch } from "@/components/ui/switch";
@@ -70,8 +71,11 @@ const AdminSharing = () => {
   const settingsQuery = useSharingSettings();
   const updateMutation = useUpdateSharingSettings();
 
-  const save = (payload: UpdateSharingSettingsPayload) => {
+  // A switch saves at once with no button to press, so the toast is the only
+  // confirmation. It names the state the switch is now in.
+  const save = (payload: UpdateSharingSettingsPayload, saved: string) => {
     updateMutation.mutate(payload, {
+      onSuccess: () => toast.success(saved),
       onError: (error) => toastRequestError(error, error.message),
     });
   };
@@ -121,7 +125,12 @@ const AdminSharing = () => {
               disabled={updateMutation.isPending}
               id="sharing-enabled"
               label="Enable Share Links"
-              onCheckedChange={(checked) => save({ enabled: checked })}
+              onCheckedChange={(checked) =>
+                save(
+                  { enabled: checked },
+                  checked ? "Share Links turned on" : "Share Links turned off",
+                )
+              }
             />
             <div className="flex gap-2 rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
               <Info className="h-4 w-4 shrink-0" />
@@ -140,7 +149,14 @@ const AdminSharing = () => {
             disabled={updateMutation.isPending}
             id="sharing-require-expiration"
             label="Require expiration"
-            onCheckedChange={(checked) => save({ require_expiration: checked })}
+            onCheckedChange={(checked) =>
+              save(
+                { require_expiration: checked },
+                checked
+                  ? "New links must now expire"
+                  : "New links may now last forever",
+              )
+            }
           />
         </div>
 

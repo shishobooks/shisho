@@ -709,14 +709,6 @@ func TestShareLinks_RevokeAndDeletePermissions(t *testing.T) {
 	assert.Equal(t, models.ShareLinkStateActive, listed[onA.ID].State, "a refused revoke changes nothing")
 	assert.Contains(t, f.listed(f.bookB), onB.ID, "a refused delete changes nothing")
 
-	// Revoking and deleting are writes, refused while sharing is off.
-	f.setSharing(false, false)
-	rec := f.revoke(f.admin, f.bookA, onA)
-	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Sharing is turned off")
-	assert.Equal(t, http.StatusForbidden, f.deleteLink(f.admin, f.bookA, onA).Code)
-	f.setSharing(true, false)
-
 	// Shares Write without Shares Read can revoke and delete.
 	require.Equal(t, http.StatusOK, f.revoke(f.writer, f.bookA, onA).Code)
 	require.Equal(t, http.StatusNoContent, f.deleteLink(f.writer, f.bookA, onA).Code)
@@ -913,4 +905,32 @@ func TestShareLinks_PartialDownloadsCountOnce(t *testing.T) {
 	require.Equal(t, http.StatusPartialContent, download("bytes=4-"))
 	require.Equal(t, http.StatusPartialContent, download("bytes=8-11"))
 	assert.Equal(t, 1, f.listed(f.bookA)[link.ID].DownloadCount)
+}
+
+func TestShareLinks_RevokeAndDeleteWorkWhileSharingDisabled(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	leaked := f.mustCreate(f.sharer, f.bookA, `{"label":"leaked"}`)
+	stale := f.mustCreate(f.sharer, f.bookA, `{"label":"stale"}`)
+
+	// The kill switch must not force an admin to turn sharing back on, and so
+	// briefly resurrect every link, just to pull one that leaked.
+	f.setSharing(false, false)
+
+	rec := f.revoke(f.sharer, f.bookA, leaked)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var revoked sharelinks.ShareLinkResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &revoked))
+	assert.Equal(t, models.ShareLinkStateRevoked, revoked.State)
+
+	rec = f.deleteLink(f.sharer, f.bookA, stale)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+	assert.False(t, f.linkRowExists(stale))
+
+	// Creating is still refused, and the revocation holds once sharing returns.
+	assert.Equal(t, http.StatusForbidden, f.create(f.sharer, f.bookA, `{}`).Code)
+	f.setSharing(true, false)
+	assert.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+leaked.Token, "").Code)
+	assert.Equal(t, models.ShareLinkStateRevoked, f.listed(f.bookA)[leaked.ID].State)
 }

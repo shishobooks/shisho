@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShareLinkResponse } from "@/types";
@@ -43,16 +44,20 @@ const renderDialog = (
   props: Partial<React.ComponentProps<typeof ShareLinkDialog>> = {},
 ) =>
   render(
-    <ShareLinkDialog
-      bookId={7}
-      bookTitle="Test Book"
-      canList
-      canWrite
-      onOpenChange={() => {}}
-      open
-      requireExpiration={false}
-      {...props}
-    />,
+    <MemoryRouter>
+      <ShareLinkDialog
+        bookId={7}
+        bookTitle="Test Book"
+        canList
+        canManageSharing={false}
+        canWrite
+        onOpenChange={() => {}}
+        open
+        requireExpiration={false}
+        sharingEnabled
+        {...props}
+      />
+    </MemoryRouter>,
   );
 
 const expirationOptions = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -336,6 +341,64 @@ describe("ShareLinkDialog", () => {
       ),
     );
     expect(mocks.remove).toHaveBeenCalledWith({ bookId: 7, linkId: 1 });
+  });
+
+  it("offers revoke and delete but no form or copy while sharing is off", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mocks.links = [link({ id: 3, label: "leaked" })];
+    renderDialog({ sharingEnabled: false });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Sharing is turned off, so no link works right now.",
+    );
+    expect(screen.queryByLabelText("Label (optional)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create link" }),
+    ).not.toBeInTheDocument();
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveTextContent("active");
+    expect(
+      within(row).getByRole("button", { name: /Copy link/ }),
+    ).toBeDisabled();
+    expect(
+      within(row).getByRole("button", { name: /Delete/ }),
+    ).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: /Revoke/ }));
+    const revoke = screen.getByRole("dialog", { name: "Revoke Link" });
+    expect(revoke).toHaveTextContent(
+      "will not work again when sharing is turned back on",
+    );
+    expect(revoke).not.toHaveTextContent("stops working immediately");
+    await user.click(within(revoke).getByRole("button", { name: "Revoke" }));
+    await waitFor(() =>
+      expect(mocks.revoke).toHaveBeenCalledWith({ bookId: 7, linkId: 3 }),
+    );
+  });
+
+  it("links the sharing-off notice to the settings for Config Write and closes on the way", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onOpenChange = vi.fn();
+    renderDialog({
+      sharingEnabled: false,
+      canManageSharing: true,
+      onOpenChange,
+    });
+
+    const link = within(screen.getByRole("status")).getByRole("link", {
+      name: "Settings > Sharing",
+    });
+    expect(link).toHaveAttribute("href", "/settings/sharing");
+    await user.click(link);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("names the settings without a link when the user cannot change them", () => {
+    renderDialog({ sharingEnabled: false });
+
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("Settings > Sharing");
+    expect(within(notice).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("shows counts but no revoke or delete without Shares Write", () => {

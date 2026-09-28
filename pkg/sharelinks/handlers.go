@@ -105,15 +105,15 @@ func (h *handler) create(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusCreated, newShareLinkResponse(link, access.libraryID, now)))
 }
 
-// requireWritableLink checks book access and that sharing is enabled, then
-// returns the link named in the path, which must belong to the book.
+// requireWritableLink checks book access, then returns the link named in the
+// path, which must belong to the book. It does not require sharing to be on:
+// revoking and deleting must stay available while sharing is off, or an admin
+// would have to turn sharing back on, and so briefly restore every link, just
+// to pull one that leaked.
 func (h *handler) requireWritableLink(c echo.Context) (*models.ShareLink, bookAccess, error) {
 	ctx := c.Request().Context()
 	access, err := h.requireBookAccess(c)
 	if err != nil {
-		return nil, access, err
-	}
-	if _, err := h.requireSharingEnabled(ctx); err != nil {
 		return nil, access, err
 	}
 	linkID, err := strconv.Atoi(c.Param("linkId"))
@@ -124,8 +124,8 @@ func (h *handler) requireWritableLink(c echo.Context) (*models.ShareLink, bookAc
 	return link, access, err
 }
 
-// requireSharingEnabled refuses every management write while sharing is off
-// and returns the settings for callers that need the rest of the policy.
+// requireSharingEnabled refuses creating a link while sharing is off and
+// returns the settings for callers that need the rest of the policy.
 func (h *handler) requireSharingEnabled(ctx context.Context) (Settings, error) {
 	settings, err := LoadSettings(ctx, h.appSettingsService)
 	if err != nil {
