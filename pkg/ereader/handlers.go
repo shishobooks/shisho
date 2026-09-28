@@ -24,13 +24,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
-	"github.com/uptrace/bun"
 )
 
 const defaultPageSize = 50
 
 type handler struct {
-	db              *bun.DB
 	libraryService  *libraries.Service
 	bookService     *books.Service
 	seriesService   *series.Service
@@ -40,7 +38,6 @@ type handler struct {
 }
 
 func newHandler(
-	db *bun.DB,
 	libraryService *libraries.Service,
 	bookService *books.Service,
 	seriesService *series.Service,
@@ -49,7 +46,6 @@ func newHandler(
 	settingsService *settings.Service,
 ) *handler {
 	return &handler{
-		db:              db,
 		libraryService:  libraryService,
 		bookService:     bookService,
 		seriesService:   seriesService,
@@ -64,16 +60,13 @@ func (h *handler) baseURL(c echo.Context) string {
 	return "/ereader/key/" + apiKey
 }
 
-// getUserLibraryIDs gets the library IDs a user can access.
-func (h *handler) getUserLibraryIDs(ctx echo.Context, userID int) ([]int, error) {
-	var user models.User
-	err := h.db.NewSelect().
-		Model(&user).
-		Relation("LibraryAccess").
-		Where("u.id = ?", userID).
-		Scan(ctx.Request().Context())
-	if err != nil {
-		return nil, errors.WithStack(err)
+// getUserLibraryIDs returns the library IDs the key's owner can access, or nil
+// for all libraries. The owner is loaded once by APIKeyAuth; a request without
+// one is rejected rather than treated as unrestricted.
+func (h *handler) getUserLibraryIDs(c echo.Context) ([]int, error) {
+	user := GetUserFromContext(c.Request().Context())
+	if user == nil {
+		return nil, errcodes.Unauthorized("User not found or inactive")
 	}
 	return user.GetAccessibleLibraryIDs(), nil
 }
@@ -110,7 +103,7 @@ func (h *handler) Libraries(c echo.Context) error {
 	}
 
 	// Get user's accessible library IDs
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -176,7 +169,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -231,7 +224,7 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -287,7 +280,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -302,7 +295,9 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if s == nil {
+	// A series from another library is not found here, so its name never
+	// renders under a library path it does not belong to.
+	if s == nil || s.LibraryID != libraryIDInt {
 		return errcodes.NotFound("Series")
 	}
 
@@ -353,7 +348,7 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -409,7 +404,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -490,7 +485,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -567,7 +562,7 @@ func (h *handler) Download(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -657,7 +652,7 @@ func (h *handler) Cover(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -698,7 +693,7 @@ func (h *handler) DownloadFile(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -776,7 +771,7 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 	}
 
 	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c, apiKey.UserID)
+	libraryIDs, err := h.getUserLibraryIDs(c)
 	if err != nil {
 		return err
 	}
@@ -1068,6 +1063,11 @@ func ResolveShortURL(c echo.Context, apiKeyService *apikeys.Service) error {
 	}
 	if apiKey == nil {
 		return errcodes.NotFound("Short URL")
+	}
+
+	// Refuse before revealing the key URL when the owner can no longer use it.
+	if _, err := apiKeyService.AuthenticateOwner(c.Request().Context(), apiKey); err != nil {
+		return errors.WithStack(err)
 	}
 
 	redirectURL := fmt.Sprintf("/ereader/key/%s/", apiKey.Key)

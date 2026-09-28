@@ -235,24 +235,19 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 // returns an empty slice rather than an error. Supplement files and non-Kobo
 // formats (M4B, PDF) are excluded. A book with multiple compatible files (e.g.
 // two EPUBs) will have all of them returned. Each gets its own content ID on
-// the device.
-func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncScope) ([]ScopedFile, error) {
-	// Load user with library access.
-	user := new(models.User)
-	err := svc.db.NewSelect().
-		Model(user).
-		Relation("LibraryAccess").
-		Where("u.id = ?", userID).
-		Scan(ctx)
+// the device. The user must be loaded with LibraryAccess, as the API key
+// middleware does.
+func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope *SyncScope) ([]ScopedFile, error) {
+	var files []models.File
+	q, closed, err := svc.scopedFilesQuery(ctx, user, scope, &files)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load user")
+		return nil, err
+	}
+	if closed {
+		return []ScopedFile{}, nil
 	}
 
-	// Query all Kobo-compatible main files (EPUB, CBZ) — supplements are
-	// excluded so only real editions sync to the device.
-	var files []models.File
-	q := svc.db.NewSelect().
-		Model(&files).
+	err = q.
 		Relation("Book").
 		Relation("Book.Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("a.sort_order ASC")
@@ -260,48 +255,7 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 		Relation("Book.Authors.Person").
 		Relation("Book.BookSeries.Series").
 		Relation("Publisher").
-		Where("f.file_type IN (?)", bun.List([]string{models.FileTypeEPUB, models.FileTypeCBZ})).
-		Where("f.file_role = ?", models.FileRoleMain)
-
-	// Apply scope.
-	switch scope.Type {
-	case "library":
-		// A library scope without an id fails closed rather than syncing
-		// every library.
-		if scope.LibraryID == nil || !user.HasLibraryAccess(*scope.LibraryID) {
-			return []ScopedFile{}, nil
-		}
-		q = q.Where("f.library_id = ?", *scope.LibraryID)
-	case "list":
-		// A list scope without an id fails closed, like the library scope.
-		if scope.ListID == nil {
-			return []ScopedFile{}, nil
-		}
-		// Only the owner or a share recipient may sync the list. A list the
-		// user cannot see, or one that does not exist, syncs nothing, the same
-		// as an inaccessible library.
-		canView, err := svc.listService.CanView(ctx, *scope.ListID, userID)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to check list visibility")
-		}
-		if !canView {
-			return []ScopedFile{}, nil
-		}
-		// A list can hold books from libraries the user cannot access (it may
-		// be shared with them), so the list is not the access boundary.
-		q = q.Join("JOIN list_books AS lb ON lb.book_id = f.book_id").
-			Where("lb.list_id = ?", *scope.ListID)
-		if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
-			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
-		}
-	default: // "all"
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
-		}
-	}
-
-	err = q.Scan(ctx)
+		Scan(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to query scoped files")
 	}
@@ -318,6 +272,82 @@ func (svc *Service) GetScopedFiles(ctx context.Context, userID int, scope *SyncS
 	}
 
 	return result, nil
+}
+
+// FileInScope reports whether fileID is one of the files GetScopedFiles
+// would sync for this user and scope. The by-id Kobo routes (download, cover,
+// metadata) call it before loading the file, so a key can only fetch what it
+// syncs. The user must be loaded with LibraryAccess.
+func (svc *Service) FileInScope(ctx context.Context, user *models.User, scope *SyncScope, fileID int) (bool, error) {
+	q, closed, err := svc.scopedFilesQuery(ctx, user, scope, (*models.File)(nil))
+	if err != nil {
+		return false, err
+	}
+	if closed {
+		return false, nil
+	}
+	exists, err := q.Where("f.id = ?", fileID).Exists(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to check file scope")
+	}
+	return exists, nil
+}
+
+// scopedFilesQuery builds the query for the Kobo-compatible main files (EPUB,
+// CBZ) in scope, selecting into model. Supplements are excluded so only real
+// editions sync to the device. closed is true when the scope can hold no
+// files for this user (a missing scope id, an inaccessible library, or a list
+// the user cannot view); callers then skip the query. Callers must pass a
+// non-nil user (the handlers reject a request without one). The nil guard
+// exists so a future caller that forgets fails closed with an error instead
+// of failing open or panicking on a nil dereference.
+func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, scope *SyncScope, model any) (q *bun.SelectQuery, closed bool, err error) {
+	if user == nil {
+		return nil, true, errors.New("scoped files query requires a user")
+	}
+
+	q = svc.db.NewSelect().
+		Model(model).
+		Where("f.file_type IN (?)", bun.List([]string{models.FileTypeEPUB, models.FileTypeCBZ})).
+		Where("f.file_role = ?", models.FileRoleMain)
+
+	switch scope.Type {
+	case "library":
+		// A library scope without an id fails closed rather than syncing
+		// every library.
+		if scope.LibraryID == nil || !user.HasLibraryAccess(*scope.LibraryID) {
+			return nil, true, nil
+		}
+		q = q.Where("f.library_id = ?", *scope.LibraryID)
+	case "list":
+		// A list scope without an id fails closed, like the library scope.
+		if scope.ListID == nil {
+			return nil, true, nil
+		}
+		// Only the owner or a share recipient may sync the list. A list the
+		// user cannot see, or one that does not exist, syncs nothing, the same
+		// as an inaccessible library.
+		canView, err := svc.listService.CanView(ctx, *scope.ListID, user.ID)
+		if err != nil {
+			return nil, false, errors.Wrap(err, "failed to check list visibility")
+		}
+		if !canView {
+			return nil, true, nil
+		}
+		// A list can hold books from libraries the user cannot access (it may
+		// be shared with them), so the list is not the access boundary.
+		q = q.Join("JOIN list_books AS lb ON lb.book_id = f.book_id").
+			Where("lb.list_id = ?", *scope.ListID)
+		if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
+		}
+	default: // "all"
+		if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
+		}
+	}
+
+	return q, false, nil
 }
 
 // ClearAllSyncPoints deletes all sync points for an API key, forcing a fresh sync.

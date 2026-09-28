@@ -95,9 +95,9 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
-	h := &handler{db: db, bookService: books.NewService(db)}
+	h := &handler{bookService: books.NewService(db)}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(context.WithValue(ctx, contextKeyAPIKey, apiKey))
+	req = req.WithContext(keyContext(ctx, t, db, apiKey))
 	c := echo.New().NewContext(req, httptest.NewRecorder())
 	c.SetParamNames("apiKey", "bookId")
 	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))

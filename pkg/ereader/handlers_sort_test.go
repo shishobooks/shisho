@@ -151,7 +151,7 @@ func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 
 	settingsSvc := settings.NewService(db)
 	// Other deps are unused by resolveSort; nil keeps the test focused.
-	h := newHandler(db, nil, nil, nil, nil, nil, settingsSvc)
+	h := newHandler(nil, nil, nil, nil, nil, settingsSvc)
 
 	apiKey := &apikeys.APIKey{UserID: user.ID}
 	got := h.resolveSort(context.Background(), apiKey, lib.ID)
@@ -170,7 +170,7 @@ func TestHandlerResolveSort_NilApiKeyFallsBackToBuiltinDefault(t *testing.T) {
 
 	db := setupEReaderDB(t)
 	settingsSvc := settings.NewService(db)
-	h := newHandler(db, nil, nil, nil, nil, nil, settingsSvc)
+	h := newHandler(nil, nil, nil, nil, nil, settingsSvc)
 
 	got := h.resolveSort(context.Background(), nil, 1)
 

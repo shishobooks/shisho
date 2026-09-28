@@ -28,6 +28,8 @@ Click **Setup**, then select one of these scopes:
 
 The List scope only works for lists you own or that are shared with you. A list shared with you can hold books from libraries you cannot access. Those books are left out of the sync, just as they are hidden from the list in Shisho.
 
+Book downloads, covers, and metadata follow the same scope, so a Kobo URL cannot fetch a book outside it.
+
 :::warning
 After selecting **Library** or **List**, actually choose a library or list before copying the URL. The current setup dialog can display an incomplete route while the selector is empty, and that route will not work.
 :::

@@ -267,6 +267,22 @@ func (svc *Service) BuildLibrarySeriesListFeed(ctx context.Context, baseURL, fil
 	return feed, nil
 }
 
+// retrieveLibrarySeries loads a series and returns a 404 when it belongs to a
+// different library than the feed's, so its name never appears in a feed for
+// a library the caller may not access.
+func (svc *Service) retrieveLibrarySeries(ctx context.Context, libraryID, seriesID int) (*models.Series, error) {
+	s, err := svc.seriesService.RetrieveSeries(ctx, series.RetrieveSeriesOptions{
+		ID: &seriesID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if s.LibraryID != libraryID {
+		return nil, errcodes.NotFound("Series")
+	}
+	return s, nil
+}
+
 // BuildLibrarySeriesBooksFeed builds an acquisition feed with books in a series.
 func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fileTypes string, libraryID, seriesID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
 	types := parseFileTypes(fileTypes)
@@ -278,9 +294,7 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 		return nil, err
 	}
 
-	s, err := svc.seriesService.RetrieveSeries(ctx, series.RetrieveSeriesOptions{
-		ID: &seriesID,
-	})
+	s, err := svc.retrieveLibrarySeries(ctx, libraryID, seriesID)
 	if err != nil {
 		return nil, err
 	}
@@ -331,9 +345,7 @@ func (svc *Service) BuildLibrarySeriesBooksFeedKepub(ctx context.Context, baseUR
 		return nil, err
 	}
 
-	s, err := svc.seriesService.RetrieveSeries(ctx, series.RetrieveSeriesOptions{
-		ID: &seriesID,
-	})
+	s, err := svc.retrieveLibrarySeries(ctx, libraryID, seriesID)
 	if err != nil {
 		return nil, err
 	}

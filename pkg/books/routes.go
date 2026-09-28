@@ -72,7 +72,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddlewar
 	// Bulk delete books - must be before /:id routes
 	g.POST("/delete", h.deleteBooks, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 
-	g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("libraryId"))
+	g.GET("/:id", h.retrieve)
 	g.DELETE("/:id", h.deleteBook, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.GET("", h.list)
 	g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))

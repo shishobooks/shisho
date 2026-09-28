@@ -384,6 +384,31 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	return listBooks, total, nil
 }
 
+// BookLibraryIDs maps each existing book id in bookIDs to its library id. Ids
+// with no book are absent from the map.
+func (svc *Service) BookLibraryIDs(ctx context.Context, bookIDs []int) (map[int]int, error) {
+	result := make(map[int]int, len(bookIDs))
+	if len(bookIDs) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		ID        int `bun:"id"`
+		LibraryID int `bun:"library_id"`
+	}
+	err := svc.db.NewSelect().
+		Model((*models.Book)(nil)).
+		Column("b.id", "b.library_id").
+		Where("b.id IN (?)", bun.List(bookIDs)).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range rows {
+		result[row.ID] = row.LibraryID
+	}
+	return result, nil
+}
+
 type AddBooksOptions struct {
 	ListID        int
 	BookIDs       []int

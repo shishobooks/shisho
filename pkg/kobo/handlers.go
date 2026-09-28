@@ -95,11 +95,15 @@ func (h *handler) handleSync(c echo.Context) error {
 	if apiKey == nil {
 		return errcodes.Unauthorized("API key not found")
 	}
+	user := GetUserFromContext(ctx)
+	if user == nil {
+		return errcodes.Unauthorized("User not found or inactive")
+	}
 	scope := GetScopeFromContext(ctx)
 
 	inToken := decodeSyncToken(c.Request().Header.Get("X-Kobo-SyncToken"))
 
-	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, apiKey.ID, apiKey.UserID, scope, inToken)
+	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, apiKey.ID, user, scope, inToken)
 	if err != nil {
 		return err
 	}
@@ -205,7 +209,7 @@ func decodeSyncToken(header string) SyncToken {
 func (h *handler) resolveSyncPoint(
 	ctx context.Context,
 	apiKeyID string,
-	userID int,
+	user *models.User,
 	scope *SyncScope,
 	inToken SyncToken,
 ) (*SyncPoint, string, bool, error) {
@@ -222,7 +226,7 @@ func (h *handler) resolveSyncPoint(
 	}
 
 	// Fresh sync: snapshot current state.
-	scopedFiles, err := h.service.GetScopedFiles(ctx, userID, scope)
+	scopedFiles, err := h.service.GetScopedFiles(ctx, user, scope)
 	if err != nil {
 		return nil, "", false, errors.WithStack(err)
 	}
@@ -231,6 +235,24 @@ func (h *handler) resolveSyncPoint(
 		return nil, "", false, errors.WithStack(err)
 	}
 	return sp, inToken.LastSyncPointID, false, nil
+}
+
+// requireFileInScope returns a 404 for a file outside the key's sync scope,
+// the same response as a file that does not exist, so a key cannot probe or
+// fetch files it does not sync. Kobo routes never return 403 for this.
+func (h *handler) requireFileInScope(ctx context.Context, fileID int) error {
+	user := GetUserFromContext(ctx)
+	if user == nil {
+		return errcodes.Unauthorized("User not found or inactive")
+	}
+	inScope, err := h.service.FileInScope(ctx, user, GetScopeFromContext(ctx), fileID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !inScope {
+		return errcodes.NotFound("File")
+	}
+	return nil
 }
 
 // handleDownload handles GET /v1/books/:bookId/file/epub.
@@ -243,6 +265,9 @@ func (h *handler) handleDownload(c echo.Context) error {
 	fileID, ok := ParseShishoID(bookID)
 	if !ok {
 		return proxyToKoboStore(c)
+	}
+	if err := h.requireFileInScope(ctx, fileID); err != nil {
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
@@ -298,6 +323,9 @@ func (h *handler) handleCover(c echo.Context) error {
 	fileID, ok := ParseShishoID(imageID)
 	if !ok {
 		return proxyToKoboStore(c)
+	}
+	if err := h.requireFileInScope(ctx, fileID); err != nil {
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
@@ -380,6 +408,9 @@ func (h *handler) handleMetadata(c echo.Context) error {
 	fileID, ok := ParseShishoID(bookID)
 	if !ok {
 		return proxyToKoboStore(c)
+	}
+	if err := h.requireFileInScope(ctx, fileID); err != nil {
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})

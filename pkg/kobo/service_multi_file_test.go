@@ -50,6 +50,17 @@ func setupScopedFilesTest(t *testing.T) (context.Context, *books.Service, *Servi
 	return ctx, bookSvc, koboSvc, library, user
 }
 
+// loadUserWithAccess reloads a user with LibraryAccess, the way the API key
+// middleware hands the owner to GetScopedFiles. Tests call it at query time so
+// grants changed during the test are picked up.
+func loadUserWithAccess(ctx context.Context, t *testing.T, koboSvc *Service, userID int) *models.User {
+	t.Helper()
+	user := new(models.User)
+	err := koboSvc.db.NewSelect().Model(user).Relation("LibraryAccess").Where("u.id = ?", userID).Scan(ctx)
+	require.NoError(t, err)
+	return user
+}
+
 func createBook(ctx context.Context, t *testing.T, bookSvc *books.Service, libraryID int, title string) *models.Book {
 	t.Helper()
 	db := bookSvc.DB()
@@ -102,7 +113,7 @@ func TestGetScopedFiles_TwoEPUBsSyncsBoth(t *testing.T) {
 	file2 := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/two-epubs/edition2.epub", models.FileTypeEPUB, models.FileRoleMain, 2000)
 
 	scope := &SyncScope{Type: "all"}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Equal(t, []int{file1.ID, file2.ID}, scopedFileIDs(files))
@@ -117,7 +128,7 @@ func TestGetScopedFiles_EPUBPlusM4BSyncsOnlyEPUB(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/epub-m4b/book.m4b", models.FileTypeM4B, models.FileRoleMain, 5000)
 
 	scope := &SyncScope{Type: "all"}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	require.Len(t, files, 1)
@@ -132,7 +143,7 @@ func TestGetScopedFiles_OnlyM4BSyncsNothing(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/m4b-only/audiobook.m4b", models.FileTypeM4B, models.FileRoleMain, 5000)
 
 	scope := &SyncScope{Type: "all"}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Empty(t, files)
@@ -146,7 +157,7 @@ func TestGetScopedFiles_SingleEPUBSyncsNormally(t *testing.T) {
 	epub := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/single-epub/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 
 	scope := &SyncScope{Type: "all"}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	require.Len(t, files, 1)
@@ -162,7 +173,7 @@ func TestGetScopedFiles_SupplementFilesExcluded(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/supplement/guide.epub", models.FileTypeEPUB, models.FileRoleSupplement, 500)
 
 	scope := &SyncScope{Type: "all"}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	require.Len(t, files, 1)
@@ -178,7 +189,7 @@ func TestGetScopedFiles_CBZFilesSyncToo(t *testing.T) {
 	cbz := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/epub-cbz/book.cbz", models.FileTypeCBZ, models.FileRoleMain, 2000)
 
 	scope := &SyncScope{Type: "all"}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Equal(t, []int{epub.ID, cbz.ID}, scopedFileIDs(files))
@@ -245,7 +256,7 @@ func TestGetScopedFiles_ListScopeFiltersByLibraryAccess(t *testing.T) {
 	list := insertList(ctx, t, koboSvc, user.ID, mine.ID, theirs.ID)
 
 	scope := &SyncScope{Type: "list", ListID: &list.ID}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Equal(t, []int{mineFile.ID}, scopedFileIDs(files), "a list scope only syncs books in libraries the user can access")
@@ -278,7 +289,7 @@ func TestGetScopedFiles_ListScopeWithAllLibraryAccess(t *testing.T) {
 	list := insertList(ctx, t, koboSvc, user.ID, mine.ID, theirs.ID)
 
 	scope := &SyncScope{Type: "list", ListID: &list.ID}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Equal(t, []int{mineFile.ID, theirsFile.ID}, scopedFileIDs(files))
@@ -297,7 +308,7 @@ func TestGetScopedFiles_ListScopeWithoutLibraryAccessSyncsNothing(t *testing.T) 
 	list := insertList(ctx, t, koboSvc, user.ID, book.ID)
 
 	scope := &SyncScope{Type: "list", ListID: &list.ID}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Empty(t, files)
@@ -315,7 +326,7 @@ func TestGetScopedFiles_ListScopeUnsharedListSyncsNothing(t *testing.T) {
 	list := insertList(ctx, t, koboSvc, owner.ID, book.ID)
 
 	scope := &SyncScope{Type: "list", ListID: &list.ID}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.NotNil(t, files)
@@ -343,7 +354,7 @@ func TestGetScopedFiles_ListScopeSharedListSyncs(t *testing.T) {
 	require.NoError(t, err)
 
 	scope := &SyncScope{Type: "list", ListID: &list.ID}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.Equal(t, []int{epub.ID}, scopedFileIDs(files))
@@ -358,7 +369,7 @@ func TestGetScopedFiles_ListScopeMissingListSyncsNothing(t *testing.T) {
 
 	missingID := 999999
 	scope := &SyncScope{Type: "list", ListID: &missingID}
-	files, err := koboSvc.GetScopedFiles(ctx, user.ID, scope)
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
 	assert.NotNil(t, files)
@@ -375,7 +386,7 @@ func TestGetScopedFiles_ScopeWithoutIDSyncsNothing(t *testing.T) {
 	// A library or list scope missing its id must fail closed instead of
 	// falling through to every file.
 	for _, scopeType := range []string{"library", "list"} {
-		files, err := koboSvc.GetScopedFiles(ctx, user.ID, &SyncScope{Type: scopeType})
+		files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), &SyncScope{Type: scopeType})
 		require.NoError(t, err)
 		assert.NotNil(t, files, scopeType)
 		assert.Empty(t, files, scopeType)
