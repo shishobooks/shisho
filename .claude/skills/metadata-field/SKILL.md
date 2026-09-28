@@ -93,7 +93,7 @@ git grep -n 'ValidMetadataFields' pkg/plugins/manifest.go
 # 6. Documentation. Update website/docs/ but NOT website/versioned_docs/
 # (those are historical snapshots — never backport current behavior).
 git grep -il 'language' website/docs/
-git grep -l 'language' pkg/*/CLAUDE.md
+git grep -l 'language' pkg/*/AGENTS.md
 
 # 7. Find every ParsedMetadata constructor (any place that builds the struct
 # from scratch is a place that might need your new field set).
@@ -182,7 +182,7 @@ The only places that use `snake_case` for the field name are the database column
 - `website/docs/sidecar-files.md`
 - `website/docs/supported-formats.md`
 - `website/docs/plugins/development.md`
-- Relevant `pkg/*/CLAUDE.md` files
+- Relevant `pkg/*/AGENTS.md` files
 - **Do NOT update `website/versioned_docs/`** — those are historical snapshots that document past behavior. Backporting current behavior into them is wrong.
 
 **Tests**
@@ -210,7 +210,7 @@ Work in this order to minimize rework:
 10. **Other backend consumers** — OPDS, Kobo, etc.
 11. **Frontend edit + display**
 12. **Frontend identify review form + plugin config labels**
-13. **Docs + CLAUDE.md**
+13. **Docs + AGENTS.md**
 14. **`mise check:quiet`** to verify
 
 ### Phase 4 — Verification (the killer step)

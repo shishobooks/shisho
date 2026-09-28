@@ -87,7 +87,7 @@ type File struct {
 	// DisplayName is the label the UI shows for the file. It is not stored:
 	// AfterScanRow fills it for files loaded directly, and the book loaders
 	// call ResolveBookFileDisplayNames for Book.Files, which Bun loads as a
-	// has-many relation without row hooks. See pkg/CLAUDE.md.
+	// has-many relation without row hooks. See pkg/AGENTS.md.
 	DisplayName string `bun:"-" json:"display_name"`
 }
 

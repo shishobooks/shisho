@@ -712,7 +712,7 @@ interface BookDetailBodyProps {
 // and the file list with download and read controls, plus the action menus
 // and the dialogs behind them. The page supplies the book and library from
 // the authenticated query hooks; a share page supplies a share payload and a
-// `shareLink`. See "Book Detail body" in app/CLAUDE.md.
+// `shareLink`. See "Book Detail body" in app/AGENTS.md.
 const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;

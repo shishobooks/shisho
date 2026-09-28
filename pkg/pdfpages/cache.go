@@ -153,7 +153,7 @@ func (c *Cache) SizeBytes() (int64, int, error) {
 //
 // A concurrent GetPage call may race the removal and fail with ENOENT as its
 // MkdirAll/WriteFile sequence hits the deleted tree; the next attempt recreates
-// the directory and succeeds. See pkg/pdfpages/CLAUDE.md "Thread Safety" for
+// the directory and succeeds. See pkg/pdfpages/AGENTS.md "Thread Safety" for
 // the full interaction with the pdfium pool.
 func (c *Cache) Clear() error {
 	if err := os.RemoveAll(c.rootDir()); err != nil {

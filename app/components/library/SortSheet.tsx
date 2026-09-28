@@ -335,7 +335,7 @@ const SortSheet = ({
 };
 
 // forwardRef + spread so SheetTrigger/DrawerTrigger asChild can attach its DOM
-// ref and merge handlers onto the underlying button. See app/CLAUDE.md →
+// ref and merge handlers onto the underlying button. See app/AGENTS.md →
 // "asChild trigger components must forwardRef".
 export const SortButton = forwardRef<
   HTMLButtonElement,

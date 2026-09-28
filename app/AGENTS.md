@@ -160,7 +160,7 @@ onSuccess: () => {
 - Components follow shadcn/ui patterns
 - Add new shadcn components using `npx shadcn@latest add`
 - **Copy to the clipboard through `copyText` (`app/utils/clipboard.ts`), never `navigator.clipboard` directly.** The async clipboard is undefined over plain HTTP (a LAN address), so a direct call throws there. `copyText` falls back to `execCommand` and returns `false` on failure; toast an error in that case instead of a success.
-- **File labels come from the server.** Render `fileLabel(file)` from `@/utils/format`: the Go-resolved `display_name` (see `pkg/CLAUDE.md`), or the file type when it is empty, which happens only in the Share Link payload for a main file without a name. Never rebuild the label from `file.name || getFilename(file.filepath)`. A supplement's label is its filename, and the Share Link payload has no path to rebuild it from.
+- **File labels come from the server.** Render `fileLabel(file)` from `@/utils/format`: the Go-resolved `display_name` (see `pkg/AGENTS.md`), or the file type when it is empty, which happens only in the Share Link payload for a main file without a name. Never rebuild the label from `file.name || getFilename(file.filepath)`. A supplement's label is its filename, and the Share Link payload has no path to rebuild it from.
 - **Pluralize counts.** Use `formatPageCount` from `@/utils/format` for page counts, and a `count === 1` check for other nouns, never a hard-coded plural ("1 pages").
 - **Dialogs focus themselves on open, not the close button.** Radix focuses the first tabbable element on open. With a `DialogHeader` that is the close button, and a dialog opened from a dropdown menu inherits the menu's keyboard-style focus, so even a `focus-visible:` ring showed. `DialogContent` therefore focuses its own container when the first tabbable element is the header close button (marked `data-dialog-header-close`), and leaves Radix's default alone otherwise, so a dialog whose first tabbable element is a field still focuses that field. A caller's `onOpenAutoFocus` runs first and wins if it calls `preventDefault()`. Close buttons (dialog and sheet) keep `focus-visible:` rings so they show only when a keyboard user tabs to them.
 - **Icon-only buttons need an accessible name.** Give them an `aria-label`, and give disclosure toggles `aria-expanded` with a label that says what they do ("Show file details" / "Hide file details"). Tests find them by that name.
@@ -609,7 +609,7 @@ const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
 ### E2E Tests
 
-**See `e2e/CLAUDE.md` for detailed E2E patterns**, including:
+**See `e2e/AGENTS.md` for detailed E2E patterns**, including:
 - Test independence via `beforeAll` hooks
 - Test-only API endpoints (`ENVIRONMENT=test`)
 - Common pitfalls (shared database, toast assertions, redirect expectations)
