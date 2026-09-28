@@ -410,3 +410,54 @@ func TestUpdateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), paths[0].CreatedAt, time.Minute)
 	assert.WithinDuration(t, time.Now(), paths[0].UpdatedAt, time.Minute)
 }
+
+// A non-nil empty LibraryIDs means the caller reaches no library, so the
+// list is empty. Only a nil filter lists every library.
+func TestListLibraries_EmptyLibraryIDsListsNothing(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	svc := NewService(db)
+	for _, name := range []string{"Alpha", "Beta"} {
+		require.NoError(t, svc.CreateLibrary(t.Context(), &models.Library{
+			Name:             name,
+			CoverAspectRatio: models.CoverAspectRatioBook,
+			LibraryPaths:     []*models.LibraryPath{{Filepath: t.TempDir()}},
+		}))
+	}
+
+	none, total, err := svc.ListLibrariesWithTotal(t.Context(), ListLibrariesOptions{LibraryIDs: []int{}})
+	require.NoError(t, err)
+	assert.Empty(t, none)
+	assert.Equal(t, 0, total)
+
+	none, err = svc.ListLibraries(t.Context(), ListLibrariesOptions{LibraryIDs: []int{}})
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	all, err := svc.ListLibraries(t.Context(), ListLibrariesOptions{})
+	require.NoError(t, err)
+	assert.Len(t, all, 2)
+}
+
+// WithoutPaths skips the library paths relation for callers that never
+// return paths.
+func TestListLibraries_WithoutPathsSkipsPaths(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	svc := NewService(db)
+	require.NoError(t, svc.CreateLibrary(t.Context(), &models.Library{
+		Name:             "Alpha",
+		CoverAspectRatio: models.CoverAspectRatioBook,
+		LibraryPaths:     []*models.LibraryPath{{Filepath: t.TempDir()}},
+	}))
+
+	libs, err := svc.ListLibraries(t.Context(), ListLibrariesOptions{WithoutPaths: true})
+	require.NoError(t, err)
+	require.Len(t, libs, 1)
+	assert.Nil(t, libs[0].LibraryPaths)
+
+	libs, err = svc.ListLibraries(t.Context(), ListLibrariesOptions{})
+	require.NoError(t, err)
+	require.Len(t, libs, 1)
+	assert.Len(t, libs[0].LibraryPaths, 1)
+}

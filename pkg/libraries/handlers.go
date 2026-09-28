@@ -117,12 +117,10 @@ func (h *handler) list(c echo.Context) error {
 		Offset: &params.Offset,
 	}
 
-	// Filter by user's library access if user is in context
+	// Filter by user's library access if user is in context. A user with
+	// no library access gets an empty (non-nil) list, which lists nothing.
 	if user, ok := c.Get("user").(*models.User); ok {
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			opts.LibraryIDs = libraryIDs
-		}
+		opts.LibraryIDs = user.GetAccessibleLibraryIDs()
 	}
 
 	libraries, total, err := h.libraryService.ListLibrariesWithTotal(ctx, opts)
@@ -133,6 +131,38 @@ func (h *handler) list(c echo.Context) error {
 	resp := ListLibrariesResponse{Items: libraries, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// listForUser returns every library the caller can access, sorted by name,
+// as a bare array of summaries. It is unpaginated: a user reaches few
+// libraries and the reader pages need all of them.
+func (h *handler) listForUser(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	user, ok := c.Get("user").(*models.User)
+	if !ok {
+		return errcodes.Unauthorized("Authentication required")
+	}
+
+	libraries, err := h.libraryService.ListLibraries(ctx, ListLibrariesOptions{
+		LibraryIDs:   user.GetAccessibleLibraryIDs(),
+		WithoutPaths: true,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	summaries := make([]LibrarySummary, 0, len(libraries))
+	for _, library := range libraries {
+		summaries = append(summaries, LibrarySummary{
+			ID:                       library.ID,
+			Name:                     library.Name,
+			CoverAspectRatio:         library.CoverAspectRatio,
+			DownloadFormatPreference: library.DownloadFormatPreference,
+			OrganizeFileStructure:    library.OrganizeFileStructure,
+		})
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, summaries))
 }
 
 func (h *handler) update(c echo.Context) error {

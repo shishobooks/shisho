@@ -241,6 +241,7 @@ func aggregateEnricherSearches[T enricherRuntime](
 				ParsedMetadata: md,
 				PluginScope:    md.PluginScope,
 				PluginID:       md.PluginID,
+				PluginName:     manifest.Name,
 				DisabledFields: df,
 			})
 		}

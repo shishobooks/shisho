@@ -73,6 +73,17 @@ func (u *User) GetAccessibleLibraryIDs() []int {
 	return ids
 }
 
+// UserRef is a read-only view of a user carrying only the id and username.
+// Payloads that any signed-in user can read, such as a list's owner, its
+// shares, and who added each book, embed it instead of User so they never
+// carry an email address, role, or account state.
+type UserRef struct {
+	bun.BaseModel `bun:"table:users,alias:u" tstype:"-"`
+
+	ID       int    `bun:",pk,nullzero" json:"id"`
+	Username string `json:"username"`
+}
+
 type UserLibraryAccess struct {
 	bun.BaseModel `bun:"table:user_library_access,alias:ula" tstype:"-"`
 

@@ -4,7 +4,7 @@ Shisho provides library-scoped search, gallery controls, and selection tools for
 
 ## Search
 
-The global search field in the header is scoped to the current library. It searches **Books**, **Series**, and **People**, then groups matching results by resource type. Switch libraries before searching if the item belongs elsewhere.
+The global search field in the header is scoped to the current library. It searches **Books**, **Series**, and **People**, then groups matching results by resource type. Series results appear only for roles with Series Read, and People results only for roles with People Read. Switch libraries before searching if the item belongs elsewhere.
 
 The search field in the library gallery searches books only. Use it with **Filter** to narrow the gallery without searching series or people.
 

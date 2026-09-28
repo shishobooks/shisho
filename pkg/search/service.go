@@ -22,9 +22,18 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db}
 }
 
-// GlobalSearch searches across books, series, and people in a library.
-// Returns up to 5 results per resource type for popover display.
-func (svc *Service) GlobalSearch(ctx context.Context, libraryID int, query string) (*GlobalSearchResponse, error) {
+// GlobalSearchSections picks the optional sections GlobalSearch fills. Books
+// are always searched because the search route requires books:read; a
+// section left out comes back as an empty array, not a missing key.
+type GlobalSearchSections struct {
+	Series bool
+	People bool
+}
+
+// GlobalSearch searches a library's books, plus the series and people
+// that sections asks for. Returns up to 5 results per resource type for
+// popover display.
+func (svc *Service) GlobalSearch(ctx context.Context, libraryID int, query string, sections GlobalSearchSections) (*GlobalSearchResponse, error) {
 	ftsQuery := BuildPrefixQuery(query)
 	if ftsQuery == "" {
 		return &GlobalSearchResponse{
@@ -40,16 +49,20 @@ func (svc *Service) GlobalSearch(ctx context.Context, libraryID int, query strin
 		return nil, errors.WithStack(err)
 	}
 
-	// Search series
-	series, err := svc.searchSeriesInternal(ctx, ftsQuery, libraryID, globalSearchLimit, 0)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	series := []SeriesSearchResult{}
+	if sections.Series {
+		series, err = svc.searchSeriesInternal(ctx, ftsQuery, libraryID, globalSearchLimit, 0)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
-	// Search people
-	people, err := svc.searchPeopleInternal(ctx, ftsQuery, libraryID, globalSearchLimit, 0)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	people := []PersonSearchResult{}
+	if sections.People {
+		people, err = svc.searchPeopleInternal(ctx, ftsQuery, libraryID, globalSearchLimit, 0)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	return &GlobalSearchResponse{

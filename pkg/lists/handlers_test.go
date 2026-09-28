@@ -28,20 +28,6 @@ func newTestHandler(db *bun.DB) *handler {
 	return &handler{listsService: NewService(db)}
 }
 
-// userWithUsersRead returns a User that has all-library access and users:read,
-// so it passes the sharing permission checks used by checkVisibility.
-func userWithUsersRead(t *testing.T, db *bun.DB, username string) *models.User {
-	t.Helper()
-	user := createTestUser(t, db, username)
-	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
-	user.Role = &models.Role{
-		Permissions: []*models.Permission{
-			{Resource: models.ResourceUsers, Operation: models.OperationRead},
-		},
-	}
-	return user
-}
-
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
@@ -163,7 +149,10 @@ func TestCheckVisibility_ResponseShape(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t)
 	e := newTestEcho(t)
-	user := userWithUsersRead(t, db, "owner")
+	// No role permissions: sharing checks only the caller's permission on
+	// the list.
+	user := createTestUser(t, db, "owner")
+	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
 	h := newTestHandler(db)
 
 	list, err := h.listsService.CreateList(t.Context(), CreateListOptions{UserID: user.ID, Name: "My List"})

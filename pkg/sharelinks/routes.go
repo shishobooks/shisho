@@ -28,9 +28,10 @@ func RegisterRoutes(api *echo.Group, authMiddleware *auth.Middleware, appSetting
 	g.PUT("/sharing", h.update, authMiddleware.RequirePermission(models.ResourceConfig, models.OperationWrite))
 }
 
-// RegisterBookRoutes registers the management routes on the books group,
-// which already requires authentication and Books Read. Each route checks
-// its shares operation here and the book's library access in the handler.
+// RegisterBookRoutes registers the management routes under /books on a
+// group that only authenticates, since a role may hold shares operations
+// without Books Read. Each route checks its shares operation here and the
+// book's library access in the handler.
 func RegisterBookRoutes(booksGroup *echo.Group, authMiddleware *auth.Middleware, shareLinkService *Service, appSettingsService *appsettings.Service) {
 	h := &handler{service: shareLinkService, appSettingsService: appSettingsService}
 	// Shares Write also lists, so a sharer can always copy the links they make.

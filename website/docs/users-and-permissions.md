@@ -41,7 +41,14 @@ Some library data is edited under a broader resource than its name suggests:
 - Library rescans create jobs, so they require Jobs Read and Jobs Write. Viewing jobs and their logs requires Jobs Read.
 - Bulk downloads also create jobs, but they need Books Read and access to the files' libraries instead of Jobs permissions. See [Bulk Download Permissions](./browsing-search-bulk-actions.md#bulk-download-permissions).
 
-Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role.
+Some reads follow the data they return rather than the page that shows it:
+
+- A list's books are book data, so reading them requires Books Read, even for the list's owner. Creating a list and renaming it need no role permission. The API also lets any owner or Manager of a list manage its sharing without Users Read; the app enables this in a following release. See [Lists](./lists.md#sharing).
+- Global search returns Series results only to roles with Series Read and People results only to roles with People Read. Books results need Books Read, like the rest of search.
+- The review criteria can be read with Books Read, for the review panel on book pages, or with Config Read, for **Settings > Review Criteria**. Changing them requires Config Write.
+- The plugin manager under **Settings > Plugins** can be viewed with Config Read. Installing, configuring, and removing plugins requires Config Write. See [Plugins](./plugins/overview.md).
+
+Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role. Shares permissions and library access are all the server checks; they do not depend on Books Read. The **Share** entry lives on the book page, though, and opening a book page needs Books Read.
 
 The server log under **Settings > Logs** requires Config Read. Live log updates follow the same rule, so users without Config Read never receive server log lines.
 
@@ -61,7 +68,9 @@ Each control follows the resource its request needs, not the page it appears on.
 
 Lists are independent of these role permissions. Any signed-in user can create a personal list and add books to a list they own or that has been shared with them with editor or manager access, even without Books Write. See [Lists](./lists.md).
 
-A role without Libraries Read cannot see the library list. When such a user opens the home page, Shisho opens one of the libraries in their [library access](#library-access) list if the role has Books Read and the user is limited to specific libraries, and opens **Lists** otherwise.
+A role without Libraries Read cannot open library settings or the full library list. When such a user opens the home page, Shisho opens one of the libraries in their [library access](#library-access) list if the role has Books Read and the user is limited to specific libraries, and opens **Lists** otherwise.
+
+Without Libraries Read, the API still gives every signed-in user the name and display settings (cover aspect ratio, download format, and whether files are organized) of each library in their library access list, never those libraries' folders, and lets a role with Books Read load the languages used in a library it can access. The app uses these for the library picker, breadcrumbs, and language suggestions in a following release. A role with Users Write can list libraries without Libraries Read, so it can assign [library access](#library-access) when creating or editing a user.
 
 ## Custom Roles
 

@@ -869,6 +869,17 @@ func (svc *Service) CreateShare(ctx context.Context, opts CreateShareOptions) (*
 	return share, nil
 }
 
+// IsActiveUser reports whether userID names an active user, the only kind
+// a list can be shared with.
+func (svc *Service) IsActiveUser(ctx context.Context, userID int) (bool, error) {
+	exists, err := svc.db.NewSelect().
+		Model((*models.User)(nil)).
+		Where("u.id = ?", userID).
+		Where("u.is_active = ?", true).
+		Exists(ctx)
+	return exists, errors.WithStack(err)
+}
+
 func (svc *Service) UpdateShare(ctx context.Context, shareID int, permission string) error {
 	_, err := svc.db.NewUpdate().
 		Model((*models.ListShare)(nil)).

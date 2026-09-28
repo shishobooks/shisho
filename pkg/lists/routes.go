@@ -2,12 +2,18 @@ package lists
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers lists routes on a group the server has already
-// configured with authentication.
-func RegisterRoutes(g *echo.Group, db *bun.DB) {
+// configured with authentication. Lists are user-scoped, so the handlers
+// check the caller's permission on the list rather than a role permission.
+// Reading a list's books also requires books:read, because it returns book
+// data. Sharing needs no users permission: recipients come from the
+// authenticated GET /users/directory.
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	listsService := NewService(db)
 
 	h := &handler{
@@ -22,7 +28,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	g.DELETE("/:id", h.delete)
 
 	// List books
-	g.GET("/:id/books", h.listBooks)
+	g.GET("/:id/books", h.listBooks, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	g.POST("/:id/books", h.addBooks)
 	g.DELETE("/:id/books", h.removeBooks)
 	g.PATCH("/:id/books/reorder", h.reorderBooks)
