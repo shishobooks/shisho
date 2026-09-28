@@ -228,3 +228,42 @@ func TestTransformOPFBytes(t *testing.T) {
 		assert.Contains(t, string(output), `properties="cover-image"`)
 	})
 }
+
+// TestAddCoverImageProperty_ChecksPropertiesTokens is a regression test: the
+// "already marked" check used to search the whole item tag, so an item whose
+// id or href contained "cover-image" never got the property.
+func TestAddCoverImageProperty_ChecksPropertiesTokens(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		content  string
+		coverID  string
+		expected string
+	}{
+		{
+			name:     "id containing cover-image",
+			content:  `<item id="cover-image" href="cover.jpg" media-type="image/jpeg"/>`,
+			coverID:  "cover-image",
+			expected: `<item id="cover-image" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>`,
+		},
+		{
+			name:     "href containing cover-image",
+			content:  `<item id="c" href="cover-image.jpg" media-type="image/jpeg" properties="svg"/>`,
+			coverID:  "c",
+			expected: `<item id="c" href="cover-image.jpg" media-type="image/jpeg" properties="svg cover-image"/>`,
+		},
+		{
+			name:     "already marked among other tokens",
+			content:  `<item id="cover-image" href="c.jpg" properties="svg cover-image"/>`,
+			coverID:  "cover-image",
+			expected: `<item id="cover-image" href="c.jpg" properties="svg cover-image"/>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, addCoverImageProperty(tt.content, tt.coverID))
+		})
+	}
+}

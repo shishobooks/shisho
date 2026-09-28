@@ -451,7 +451,13 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 		if value == "" {
 			continue
 		}
-		idType := identifiers.DetectType(value, identifier.Scheme)
+		// EPUB 2 names the type with opf:scheme; EPUB 3 with a refining
+		// <meta property="identifier-type">.
+		scheme := identifier.Scheme
+		if scheme == "" && identifier.ID != "" && metaProperties[identifier.ID] != nil {
+			scheme = metaProperties[identifier.ID]["identifier-type"]
+		}
+		idType := identifiers.DetectType(value, scheme)
 		if idType == identifiers.TypeUnknown {
 			// Skip unknown identifier types for EPUB
 			continue

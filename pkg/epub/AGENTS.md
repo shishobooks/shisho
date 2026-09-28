@@ -37,9 +37,9 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | Element | Usage |
 |---------|-------|
 | `<dc:title>` | Book title (multiple allowed; prefers id="title-main" or `title-type="main"` property) |
-| `<dc:creator>` | Authors (with `opf:role="aut"` and `opf:file-as` attributes) |
+| `<dc:creator>` | Authors. EPUB 2: `opf:role="aut"` and `opf:file-as` attributes. EPUB 3: `<meta refines="#id" property="role">` and `property="file-as"` |
 | `<dc:subject>` | **Genres** (one element per genre) |
-| `<dc:identifier>` | Unique identifier (ISBN, UUID, etc.) |
+| `<dc:identifier>` | Unique identifier (ISBN, UUID, etc.). Type from `opf:scheme` (EPUB 2) or `<meta refines="#id" property="identifier-type">` (EPUB 3) |
 | `<dc:language>` | Language code (e.g., "en") |
 | `<dc:description>` | Book description |
 | `<dc:publisher>` | Publisher name |
@@ -76,7 +76,7 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | Field | Source | Notes |
 |-------|--------|-------|
 | Title | `<dc:title>` | Prefers element with id="title-main" or `title-type="main"` property |
-| Authors | `<dc:creator role="aut">` | All creators with role="aut", or any creator if only one exists |
+| Authors | `<dc:creator>` with role "aut" | Role from the `role` attribute (any namespace), else the creator's `role` refinement. Any creator counts if only one exists |
 | Series Name | `<meta name="calibre:series">` | From content attribute |
 | Series Number | `<meta name="calibre:series_index">` | Parsed as float (supports decimals like 1.5) |
 | Genres | `<dc:subject>` | All subject elements |
@@ -86,7 +86,8 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | URL | `<meta name="shisho:url">`, then `<dc:relation>`, then `<dc:source>` | `shisho:url` is what the generator writes, so it wins. The `dc:` elements are heuristics for files from elsewhere: first value starting with http:// or https:// |
 | Release Date | `<dc:date>` | Tries 4 date formats in order |
 | Language | `<dc:language>` | BCP 47 tag, normalized via `NormalizeLanguage` (handles ISO 639-2/T like "eng" → "en") |
-| Cover Image | Via manifest + meta reference | Found by `<meta name="cover" content="ID"/>` |
+| Identifiers | `<dc:identifier>` | Type from `scheme` (any namespace), else the `identifier-type` refinement, else detected from the value. Unknown types are skipped |
+| Cover Image | Via manifest | `<meta name="cover" content="ID"/>`, then the image item with `properties="cover-image"` |
 
 **Data Source:** All extracted metadata tagged with `models.DataSourceEPUBMetadata` (priority 2)
 
@@ -98,7 +99,7 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 |-------|-------------|
 | Title | `<dc:title>[0].Text` |
 | Subtitle | Second `<dc:title>` with id="subtitle" |
-| Authors | `<dc:creator role="aut">` (sorted by SortOrder) |
+| Authors | `<dc:creator>` with role "aut" and file-as from the person's sort name (sorted by SortOrder), written per version (see OPF attribute rules) |
 | Genres | Individual `<dc:subject>` elements (if book has genres) |
 | Tags | `<meta name="calibre:tags" content="Tag1, Tag2"/>` |
 | Series | **Both** Calibre (`calibre:series`) **AND** EPUB3 (`belongs-to-collection`) formats |
@@ -107,7 +108,7 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 | URL | `<meta name="shisho:url" content="..."/>` |
 | Description | `<dc:description>` |
 | Language | `<dc:language>` (from file.Language) |
-| Cover | Replaces image file and updates manifest MIME type |
+| Cover | Replaces the cover image file and updates its manifest MIME type, or adds one (see cover rules) |
 
 **Round-trip fidelity:** `modifyOPF` unmarshals the whole OPF into `opfPackage`, edits it, and marshals it back, so anything the structs do not carry is silently dropped from every generated EPUB (and the KePub, OPDS, eReader, Kobo, and Share Link downloads built on it). Rules:
 
@@ -115,8 +116,24 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 - `opfAttrs.UnmarshalXMLAttr` drops `xmlns` and `xmlns:*`. encoding/xml hands namespace declarations to `,any,attr` fields but cannot re-emit them: it prints a duplicate `xmlns` attribute or an invented `_xmlns:` prefix. The struct tags declare the namespaces themselves.
 - Replacing `dc:identifier` elements keeps the one whose `id` matches `package@unique-identifier` (the publication's identity). Dropping it leaves the package pointing at a missing id, which is invalid. Its value follows the file: a file identifier with the same normalized value is not written twice (`urn:isbn:978...` equals `978...`), and a file identifier of the same kind (ISBN-10 and ISBN-13 count as one kind) replaces a stale value under the unique id. If the file has no identifier of that kind, the source value stays so the package keeps an identity.
 - A retitled `dc:title` drops its unmodeled attributes (`xml:lang`, `dir`, `opf:file-as`) because they described the old text. When the file has a language, the package's `xml:lang`, if present, is set to it.
-- Cover replacement still finds the cover only through `<meta name="cover">`. An EPUB 3 file that marks its cover only with `properties="cover-image"` keeps that attribute but does not get Shisho's cover swapped in.
 - `pkg/filegen/epub_opf_fidelity_test.go` generates from an EPUB 3 fixture using all of the above. Extend it when adding OPF handling.
+
+**EPUB version:** `isEPUB3` reads `package@version`. `3.x` and later is EPUB 3; a missing or `2.x` version is EPUB 2. The cover and attribute rules below branch on it.
+
+**Cover rules (`findCoverImage`, `addCoverImage`):**
+
+- The cover is the manifest item named by the last `<meta name="cover" content="ID"/>`, else the item whose `properties` tokens include `cover-image`, else an item whose id is `cover`, `cover-image`, or `coverimage` (case-insensitive). This is the parser's order. The writer also requires an `image/*` media type at every step, so a meta pointing at an XHTML cover page is never overwritten with image bytes.
+- Hrefs resolve relative to the OPF file (`path.Join` of the OPF directory and the percent-decoded href), so `../Images/cover.jpg` finds its entry.
+- When Shisho has a cover and the package has none, it adds the image as a new zip entry (`cover.<ext>` next to the OPF, suffixed if taken) and a manifest item with an unused id based on `cover`. EPUB 3 marks it with `properties="cover-image"`; EPUB 2 adds `<meta name="cover">`. An existing `<meta name="cover">` that pointed at nothing usable is repointed rather than duplicated.
+
+**OPF attribute rules (`writeRefinements`):**
+
+- `opfCreator.Role`/`FileAs` and `opfID.Scheme` parse `role`, `file-as`, and `scheme` in any namespace (encoding/xml matches an unnamespaced attr tag against every namespace). They are parse-only: `writeRefinements` moves them out and clears them before marshal, because as plain fields they would print without the `opf:` prefix. Any new code path that marshals `opfPackage` must call it.
+- EPUB 2 writes them as `opf:role`, `opf:file-as`, and `opf:scheme` in the OPF namespace (`opfAttrs.setOPF`), removing any other spelling from the `Attrs` catch-all so nothing prints twice.
+- EPUB 3 does not allow them on `dc:` elements. The writer gives the element an id if it lacks one and writes `<meta refines="#id" property="role" scheme="marc:relators">`, `property="file-as"`, or `property="identifier-type"`. An existing refinement with the same value is kept as is (with its own attributes); a role or file-as refinement Shisho changed takes the new value and drops its stale attributes. An existing `identifier-type` refinement always wins, since sources often use another vocabulary (ONIX codes) for the same type.
+- A creator's role is its attribute or its `role` refinement. A refinement counts only with no scheme or `scheme="marc:relators"`; one in another vocabulary (ONIX `A01`) is treated as no role, so a same-named book author reuses that element instead of being written twice. Non-author creators and all `dc:contributor` elements are kept. A source author whose name matches a book author keeps its element (id, attributes, other refinements such as `alternate-script`); only role and file-as are set. A dropped author or identifier takes the metas refining its id with it, so no refinement dangles.
+- An unchanged `dc:title` keeps its attributes. In EPUB 2 that includes `opf:file-as`; in EPUB 3 an `opf:file-as` on the title moves into a `file-as` refinement (an existing one wins).
+- `pkg/filegen/epub_opf_version_test.go` covers both versions and validates the generated OPF with `xmllint --noout` (skipped if not installed) and epubcheck (only if installed).
 
 **Series Dual Format Example:**
 ```xml
@@ -139,8 +156,8 @@ func ParseOPF(r io.Reader) (*OPFPackage, error)
 // Extract ParsedMetadata from EPUB file
 func Parse(path string) (*mediafile.ParsedMetadata, error)
 
-// Modify OPF content with new metadata
-func (g *EPUBGenerator) modifyOPF(pkg *opfPackage, book *models.Book, file *models.File) error
+// Apply book/file metadata to the parsed OPF and marshal it
+func modifyOPF(pkg *opfPackage, book *models.Book, file *models.File, coverInfo *coverImageInfo, newCoverMimeType string) ([]byte, error)
 
 // Generate EPUB with updated metadata (atomic write)
 func (g *EPUBGenerator) Generate(ctx, srcPath, destPath string, book *models.Book, file *models.File) error
@@ -163,9 +180,10 @@ Located at `META-INF/container.xml`, points to the OPF file:
 
 Covers are identified by (in order of preference):
 
-1. `<meta name="cover" content="cover-image-id"/>` in metadata
-2. `<item id="cover-image-id" href="cover.jpg" media-type="image/jpeg"/>` in manifest
-3. Properties attribute: `<item properties="cover-image" .../>`
+1. `<meta name="cover" content="cover-image-id"/>` in metadata, naming a manifest item (EPUB 2 style, also common in EPUB 3)
+2. A manifest image item with `properties="cover-image"` (EPUB 3)
+
+Parsing and generation use the same order. Generation swaps the image either way, and adds a cover marked the version's way when the package has none (see the cover rules under Generation).
 
 **Cover Path Resolution:**
 - Root-level books: Cover stored in parent directory of file
@@ -192,8 +210,8 @@ If EPUB metadata has no title, extracts from filename.
 - Falls back to filepath if all EPUB titles are empty
 
 **Author Role:**
-- Only "aut" role extracted during parsing
-- During generation, all authors written with `role="aut"`
+- Only "aut" role extracted during parsing (from the attribute or an EPUB 3 `role` refinement)
+- During generation, all authors are written with role "aut": `opf:role` in EPUB 2, a `role` refinement in EPUB 3
 
 **Series Numbers:**
 - Supports decimals (1.5) and integers
@@ -310,6 +328,7 @@ type ParsedChapter struct {
 - `pkg/filegen/epub.go` - EPUB generation
 - `pkg/filegen/epub_test.go` - EPUB generation tests
 - `pkg/filegen/epub_opf_fidelity_test.go` - OPF round-trip fidelity tests (EPUB 3 attributes, unique identifier)
+- `pkg/filegen/epub_opf_version_test.go` - Version-dependent generation tests (cover lookup and adding, `opf:` attributes vs refinements)
 - `pkg/sidecar/types.go` - Sidecar data structures
 - `pkg/worker/scan.go` - Scanner integration
 - `internal/testgen/epub.go` - Test file generation

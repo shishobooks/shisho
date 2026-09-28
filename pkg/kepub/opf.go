@@ -78,29 +78,28 @@ func addCoverImageProperty(content, coverID string) string {
 		return content // Item not found
 	}
 
-	// Check if already has cover-image property
-	if strings.Contains(match, "cover-image") {
-		return content // Already has cover-image property
-	}
-
-	// Check if item has any properties attribute
-	if strings.Contains(match, "properties=") {
+	// Check the properties tokens, not the whole tag: an id or href can
+	// contain "cover-image" too.
+	propertiesPattern := regexp.MustCompile(`(\sproperties\s*=\s*["'])([^"']*)["']`)
+	if props := propertiesPattern.FindStringSubmatch(match); props != nil {
+		for _, prop := range strings.Fields(props[2]) {
+			if prop == "cover-image" {
+				return content // Already has cover-image property
+			}
+		}
 		// Add cover-image to existing properties
-		propertiesPattern := regexp.MustCompile(`(properties\s*=\s*["'])([^"']*)["']`)
 		newMatch := propertiesPattern.ReplaceAllString(match, `${1}${2} cover-image"`)
 		// Clean up double spaces
 		newMatch = strings.ReplaceAll(newMatch, "  ", " ")
 		return strings.Replace(content, match, newMatch, 1)
 	}
 
-	// Add properties attribute before the closing >
-	newMatch := strings.TrimSuffix(match, "/>")
-	newMatch = strings.TrimSuffix(newMatch, ">")
-	if strings.HasSuffix(strings.TrimSpace(newMatch), "/") {
-		newMatch = strings.TrimSuffix(strings.TrimSpace(newMatch), "/")
-		newMatch += ` properties="cover-image"/>`
+	// Add properties attribute before the closing > or />
+	var newMatch string
+	if trimmed, ok := strings.CutSuffix(match, "/>"); ok {
+		newMatch = strings.TrimRight(trimmed, " \t\r\n") + ` properties="cover-image"/>`
 	} else {
-		newMatch += ` properties="cover-image">`
+		newMatch = strings.TrimSuffix(match, ">") + ` properties="cover-image">`
 	}
 
 	return strings.Replace(content, match, newMatch, 1)

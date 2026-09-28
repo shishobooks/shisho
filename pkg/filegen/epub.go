@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -57,24 +60,24 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 
 	destZip := zip.NewWriter(destFile)
 
-	// Find the OPF file and cover image info
-	var opfPath string
-	var coverInfo *coverImageInfo
+	// Find the OPF file
+	var opfFile *zip.File
+	srcNames := make(map[string]bool, len(srcZip.File))
 	for _, f := range srcZip.File {
-		if filepath.Ext(f.Name) == ".opf" {
-			opfPath = f.Name
-			// Parse OPF to find cover image path
-			coverInfo, err = findCoverImageInOPF(f)
-			if err != nil {
-				// Not fatal - we just won't replace the cover
-				coverInfo = nil
-			}
-			break
+		srcNames[f.Name] = true
+		if opfFile == nil && filepath.Ext(f.Name) == ".opf" {
+			opfFile = f
 		}
 	}
 
-	if opfPath == "" {
+	if opfFile == nil {
 		return NewGenerationError(models.FileTypeEPUB, nil, "no OPF file found in EPUB")
+	}
+	opfPath := opfFile.Name
+
+	pkg, err := readOPFPackage(opfFile)
+	if err != nil {
+		return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
 	}
 
 	// Determine if we need to replace the cover
@@ -92,6 +95,16 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 		}
 	}
 
+	coverInfo := findCoverImage(pkg, opfPath)
+	if coverInfo == nil && len(newCoverData) > 0 {
+		coverInfo = addCoverImage(pkg, opfPath, srcNames, filepath.Ext(*file.CoverImageFilename), newCoverMimeType)
+	}
+
+	opfContent, err := modifyOPF(pkg, book, file, coverInfo, newCoverMimeType)
+	if err != nil {
+		return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
+	}
+
 	// Process each file in the source EPUB
 	for _, srcZipFile := range srcZip.File {
 		select {
@@ -104,11 +117,7 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 		var err error
 
 		if srcZipFile.Name == opfPath {
-			// Modify the OPF file
-			destFileContent, err = modifyOPF(srcZipFile, book, file, coverInfo, newCoverMimeType)
-			if err != nil {
-				return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
-			}
+			destFileContent = opfContent
 		} else if coverInfo != nil && srcZipFile.Name == coverInfo.path && len(newCoverData) > 0 {
 			// Replace cover image
 			destFileContent = newCoverData
@@ -134,6 +143,17 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 		}
 	}
 
+	// A cover Shisho added to a package that had none is a new entry.
+	if coverInfo != nil && coverInfo.added {
+		w, err := destZip.Create(coverInfo.path)
+		if err != nil {
+			return NewGenerationError(models.FileTypeEPUB, err, "failed to create cover in destination EPUB")
+		}
+		if _, err := w.Write(newCoverData); err != nil {
+			return NewGenerationError(models.FileTypeEPUB, err, "failed to write cover to destination EPUB")
+		}
+	}
+
 	// Close the zip writer
 	if err := destZip.Close(); err != nil {
 		return NewGenerationError(models.FileTypeEPUB, err, "failed to finalize destination EPUB")
@@ -154,82 +174,151 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 
 // coverImageInfo holds information about the cover image in an EPUB.
 type coverImageInfo struct {
-	path     string
-	mimeType string
-	id       string
+	path string // zip entry name
+	id   string // manifest item id
+	// added is set when the package had no cover and Shisho added the
+	// manifest item, so the image is a new zip entry rather than a swap.
+	added bool
 }
 
-// findCoverImageInOPF finds the cover image path from an OPF file.
-func findCoverImageInOPF(opfFile *zip.File) (*coverImageInfo, error) {
-	r, err := opfFile.Open()
+// readOPFPackage reads and parses the OPF file.
+func readOPFPackage(opfFile *zip.File) (*opfPackage, error) {
+	data, err := readZipFile(opfFile)
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
 	var pkg opfPackage
 	if err := xml.Unmarshal(data, &pkg); err != nil {
 		return nil, err
 	}
+	return &pkg, nil
+}
 
-	// Find cover ID from meta tags
+// isEPUB3 reports whether the package declares version 3 or later. A
+// missing or 2.x version is EPUB 2.
+func isEPUB3(version string) bool {
+	major, _, _ := strings.Cut(strings.TrimSpace(version), ".")
+	n, err := strconv.Atoi(major)
+	return err == nil && n >= 3
+}
+
+// opfEntryPath resolves a manifest href to its zip entry name. Hrefs are
+// relative to the OPF file and may be percent-encoded.
+func opfEntryPath(opfPath, href string) string {
+	if unescaped, err := url.PathUnescape(href); err == nil {
+		href = unescaped
+	}
+	return path.Join(path.Dir(opfPath), href)
+}
+
+// findCoverImage finds the cover in the parser's order (pkg/epub ParseOPF):
+// the manifest item named by the last <meta name="cover" content="ID"/>,
+// then the item whose properties include cover-image (EPUB 3), then an item
+// with a conventional cover id. Only image items count, so a meta pointing
+// at an XHTML cover page is never overwritten with image bytes.
+func findCoverImage(pkg *opfPackage, opfPath string) *coverImageInfo {
+	found := func(item opfManifestItem) *coverImageInfo {
+		return &coverImageInfo{path: opfEntryPath(opfPath, item.Href), id: item.ID}
+	}
+	isImage := func(item opfManifestItem) bool {
+		return strings.HasPrefix(item.MediaType, "image/")
+	}
+
 	var coverID string
 	for _, meta := range pkg.Metadata.Meta {
-		if meta.Name == "cover" {
+		if meta.Name == "cover" && meta.Content != "" {
 			coverID = meta.Content
-			break
 		}
 	}
-
-	if coverID == "" {
-		return nil, nil
-	}
-
-	// Find the manifest item with that ID
-	basePath := filepath.Dir(opfFile.Name)
-	if basePath == "." {
-		basePath = ""
-	} else {
-		basePath += "/"
+	if coverID != "" {
+		for _, item := range pkg.Manifest.Items {
+			if item.ID == coverID && isImage(item) {
+				return found(item)
+			}
+		}
 	}
 
 	for _, item := range pkg.Manifest.Items {
-		if item.ID == coverID {
-			return &coverImageInfo{
-				path:     basePath + item.Href,
-				mimeType: item.MediaType,
-				id:       coverID,
-			}, nil
+		if !isImage(item) {
+			continue
+		}
+		properties, _ := item.Attrs.get("", "properties")
+		for _, prop := range strings.Fields(properties) {
+			if prop == "cover-image" {
+				return found(item)
+			}
 		}
 	}
 
-	return nil, nil
+	for _, item := range pkg.Manifest.Items {
+		if !isImage(item) {
+			continue
+		}
+		switch strings.ToLower(item.ID) {
+		case "cover-image", "cover", "coverimage":
+			return found(item)
+		}
+	}
+
+	return nil
 }
 
-// modifyOPF modifies the OPF file with new metadata.
-func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInfo *coverImageInfo, newCoverMimeType string) ([]byte, error) {
-	r, err := opfFile.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
+// coverExtensions maps the cover media types Shisho stores to a file
+// extension for a cover it adds to the package.
+var coverExtensions = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+	"image/webp": ".webp",
+}
 
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
+// addCoverImage adds a manifest item for Shisho's cover to a package that
+// has none, marked the way the package's version expects: properties
+// "cover-image" for EPUB 3 and <meta name="cover"> for EPUB 2. An existing
+// <meta name="cover"> that pointed at a missing or non-image item is
+// repointed. It returns nil when the cover's media type is not a known image
+// type.
+func addCoverImage(pkg *opfPackage, opfPath string, srcNames map[string]bool, coverExt, mimeType string) *coverImageInfo {
+	if mimeType == "" {
+		mimeType = mime.TypeByExtension(coverExt)
+	}
+	mimeType, _, _ = strings.Cut(mimeType, ";")
+	ext, ok := coverExtensions[strings.TrimSpace(mimeType)]
+	if !ok {
+		return nil
+	}
+	mimeType = strings.TrimSpace(mimeType)
+
+	href := "cover" + ext
+	for n := 2; srcNames[opfEntryPath(opfPath, href)]; n++ {
+		href = "cover-" + strconv.Itoa(n) + ext
+	}
+	id := uniqueID(usedIDs(pkg), "cover")
+
+	item := opfManifestItem{ID: id, Href: href, MediaType: mimeType}
+	epub3 := isEPUB3(pkg.Version)
+	if epub3 {
+		item.Attrs = opfAttrs{{Name: xml.Name{Local: "properties"}, Value: "cover-image"}}
+	}
+	pkg.Manifest.Items = append(pkg.Manifest.Items, item)
+
+	repointed := false
+	for i, meta := range pkg.Metadata.Meta {
+		if meta.Name == "cover" {
+			pkg.Metadata.Meta[i].Content = id
+			repointed = true
+		}
+	}
+	if !epub3 && !repointed {
+		pkg.Metadata.Meta = append(pkg.Metadata.Meta, opfMeta{Name: "cover", Content: id})
 	}
 
-	// Parse the OPF
-	var pkg opfPackage
-	if err := xml.Unmarshal(data, &pkg); err != nil {
-		return nil, err
-	}
+	return &coverImageInfo{path: opfEntryPath(opfPath, href), id: id, added: true}
+}
 
+// modifyOPF applies the book and file metadata to the parsed OPF and returns
+// the marshaled document.
+func modifyOPF(pkg *opfPackage, book *models.Book, file *models.File, coverInfo *coverImageInfo, newCoverMimeType string) ([]byte, error) {
 	// Determine title - prefer file.Name over book.Title
 	title := book.Title
 	if file != nil && file.Name != nil && *file.Name != "" {
@@ -299,16 +388,35 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 		}
 	}
 
-	// Update authors - replace all creators with role="aut"
+	// Update authors: keep non-author creators and replace the authors with
+	// the book's. A creator's role is its role attribute (EPUB 2) or its
+	// refining meta (EPUB 3); one with no role counts as an author. A role
+	// refinement counts only in the MARC relator vocabulary (no scheme or
+	// scheme="marc:relators"): a code from another list, such as ONIX A01
+	// for an author, cannot be read here, so that creator is treated like
+	// one with no role instead of kept beside the book's author.
 	var newCreators []opfCreator
-	// First, keep non-author creators
+	var sourceAuthors []opfCreator
 	for _, creator := range pkg.Metadata.Creators {
-		if creator.Role != "" && creator.Role != "aut" {
+		role := creator.Role
+		if role == "" && creator.ID != "" {
+			if meta := findRefinement(pkg.Metadata.Meta, creator.ID, "role"); meta != nil {
+				if scheme, _ := meta.Attrs.get("", "scheme"); scheme == "" || scheme == "marc:relators" {
+					role = strings.TrimSpace(meta.Text)
+				}
+			}
+		}
+		if role != "" && role != "aut" {
 			newCreators = append(newCreators, creator)
+		} else {
+			sourceAuthors = append(sourceAuthors, creator)
 		}
 	}
 
-	// Add book authors sorted by sort order
+	// Add book authors sorted by sort order. An author already in the
+	// source keeps its element (id, attributes, refinements) so only the
+	// values Shisho sets change.
+	reused := make([]bool, len(sourceAuthors))
 	if len(book.Authors) > 0 {
 		authors := make([]*models.Author, len(book.Authors))
 		copy(authors, book.Authors)
@@ -316,16 +424,34 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 			return authors[i].SortOrder < authors[j].SortOrder
 		})
 		for _, a := range authors {
-			if a.Person != nil {
-				newCreators = append(newCreators, opfCreator{
-					Text:   a.Person.Name,
-					Role:   "aut",
-					FileAs: a.Person.SortName,
-				})
+			if a.Person == nil {
+				continue
 			}
+			creator := opfCreator{Text: a.Person.Name}
+			for i, src := range sourceAuthors {
+				if !reused[i] && strings.TrimSpace(src.Text) == strings.TrimSpace(a.Person.Name) {
+					creator = src
+					reused[i] = true
+					break
+				}
+			}
+			creator.Role = "aut"
+			if a.Person.SortName != "" {
+				creator.FileAs = a.Person.SortName
+			}
+			newCreators = append(newCreators, creator)
 		}
 	}
 	pkg.Metadata.Creators = newCreators
+
+	// Elements Shisho removed take their refinements with them, or the
+	// package is left with metas refining ids that no longer exist.
+	removedIDs := map[string]bool{}
+	for i, src := range sourceAuthors {
+		if !reused[i] && src.ID != "" {
+			removedIDs[src.ID] = true
+		}
+	}
 
 	// Update series - using both Calibre meta tags and EPUB3 properties
 	// First, remove existing series meta tags (both formats)
@@ -452,8 +578,30 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 
 	// Update identifiers from file
 	if file != nil && len(file.Identifiers) > 0 {
-		pkg.Metadata.Identifiers = replaceIdentifiers(pkg.Metadata.Identifiers, pkg.UniqueIdentifier, file.Identifiers)
+		replaced := replaceIdentifiers(pkg.Metadata.Identifiers, pkg.UniqueIdentifier, file.Identifiers)
+		kept := map[string]bool{}
+		for _, id := range replaced {
+			kept[id.ID] = true
+		}
+		for _, id := range pkg.Metadata.Identifiers {
+			if id.ID != "" && !kept[id.ID] {
+				removedIDs[id.ID] = true
+			}
+		}
+		pkg.Metadata.Identifiers = replaced
 	}
+
+	if len(removedIDs) > 0 {
+		var metas []opfMeta
+		for _, meta := range pkg.Metadata.Meta {
+			if !removedIDs[strings.TrimPrefix(strings.TrimSpace(meta.Refines), "#")] {
+				metas = append(metas, meta)
+			}
+		}
+		pkg.Metadata.Meta = metas
+	}
+
+	writeRefinements(pkg)
 
 	// Update cover mime type in manifest if we're replacing the cover
 	if coverInfo != nil && newCoverMimeType != "" {
@@ -474,6 +622,174 @@ func modifyOPF(opfFile *zip.File, book *models.Book, file *models.File, coverInf
 	// Add XML declaration
 	result := append([]byte(xml.Header), output...)
 	return result, nil
+}
+
+// opfNamespace is the OPF namespace. EPUB 2 puts role, file-as, and scheme
+// in it (opf:role) on Dublin Core elements.
+const opfNamespace = "http://www.idpf.org/2007/opf"
+
+// writeRefinements writes the creator and identifier Role, FileAs, and
+// Scheme fields the way the package version expects, then clears them.
+// Those fields parse role, file-as, and scheme in any namespace, and they
+// must be empty by marshal time: as plain attributes they would print
+// without the opf: prefix.
+//
+// EPUB 2 puts them on the element as opf:role, opf:file-as, and opf:scheme.
+// EPUB 3 does not allow them on Dublin Core elements; it states them with
+// <meta refines="#id" property="role|file-as|identifier-type">. An existing
+// refinement is updated in place, so its own attributes survive; an
+// identifier-type refinement is left alone, since the source's value may
+// use another vocabulary (such as ONIX codes) for the same type.
+func writeRefinements(pkg *opfPackage) {
+	type creatorRef struct {
+		c      *opfCreator
+		idBase string
+	}
+	creators := make([]creatorRef, 0, len(pkg.Metadata.Creators)+len(pkg.Metadata.Contributors))
+	for i := range pkg.Metadata.Creators {
+		creators = append(creators, creatorRef{&pkg.Metadata.Creators[i], "creator"})
+	}
+	for i := range pkg.Metadata.Contributors {
+		creators = append(creators, creatorRef{&pkg.Metadata.Contributors[i], "contributor"})
+	}
+
+	if !isEPUB3(pkg.Version) {
+		for _, ref := range creators {
+			c := ref.c
+			c.Attrs.setOPF("role", c.Role)
+			c.Attrs.setOPF("file-as", c.FileAs)
+			c.Role, c.FileAs = "", ""
+		}
+		for i := range pkg.Metadata.Identifiers {
+			id := &pkg.Metadata.Identifiers[i]
+			id.Attrs.setOPF("scheme", id.Scheme)
+			id.Scheme = ""
+		}
+		return
+	}
+
+	used := usedIDs(pkg)
+	for _, ref := range creators {
+		c := ref.c
+		if (c.Role != "" || c.FileAs != "") && c.ID == "" {
+			c.ID = uniqueID(used, ref.idBase)
+		}
+		if c.Role != "" {
+			setRefinement(pkg, c.ID, "role", c.Role, "marc:relators", true)
+		}
+		if c.FileAs != "" {
+			setRefinement(pkg, c.ID, "file-as", c.FileAs, "", true)
+		}
+		c.Role, c.FileAs = "", ""
+	}
+	// A title Shisho did not change keeps its attributes, so an EPUB 3
+	// source's opf:file-as on dc:title (invalid there) moves into a
+	// refinement too.
+	for i := range pkg.Metadata.Titles {
+		t := &pkg.Metadata.Titles[i]
+		fileAs, ok := t.Attrs.get(opfNamespace, "file-as")
+		if !ok {
+			continue
+		}
+		t.Attrs.setOPF("file-as", "")
+		if fileAs == "" {
+			continue
+		}
+		if t.ID == "" {
+			t.ID = uniqueID(used, "title")
+		}
+		setRefinement(pkg, t.ID, "file-as", fileAs, "", false)
+	}
+	for i := range pkg.Metadata.Identifiers {
+		id := &pkg.Metadata.Identifiers[i]
+		if id.Scheme != "" {
+			if id.ID == "" {
+				id.ID = uniqueID(used, "identifier")
+			}
+			setRefinement(pkg, id.ID, "identifier-type", id.Scheme, "", false)
+		}
+		id.Scheme = ""
+	}
+}
+
+// findRefinement returns the meta refining id with property, or nil.
+func findRefinement(metas []opfMeta, id, property string) *opfMeta {
+	for i := range metas {
+		if strings.TrimSpace(metas[i].Refines) == "#"+id && metas[i].Property == property {
+			return &metas[i]
+		}
+	}
+	return nil
+}
+
+// setRefinement makes the meta refining id with property hold value. An
+// existing meta with that value is kept as is. With overwrite, one holding
+// another value takes the new value and drops its attributes (such as a
+// scheme or xml:lang), which described the old value; without it, the
+// existing meta wins.
+func setRefinement(pkg *opfPackage, id, property, value, scheme string, overwrite bool) {
+	meta := findRefinement(pkg.Metadata.Meta, id, property)
+	if meta != nil {
+		if !overwrite || strings.TrimSpace(meta.Text) == value {
+			return
+		}
+		meta.Text = value
+		meta.Attrs = nil
+	} else {
+		pkg.Metadata.Meta = append(pkg.Metadata.Meta, opfMeta{Refines: "#" + id, Property: property, Text: value})
+		meta = &pkg.Metadata.Meta[len(pkg.Metadata.Meta)-1]
+	}
+	if scheme != "" {
+		meta.Attrs = append(meta.Attrs, xml.Attr{Name: xml.Name{Local: "scheme"}, Value: scheme})
+	}
+}
+
+// usedIDs collects the ids in the package so generated ones do not collide.
+func usedIDs(pkg *opfPackage) map[string]bool {
+	used := map[string]bool{}
+	add := func(id string, attrs opfAttrs) {
+		if id != "" {
+			used[id] = true
+		}
+		if v, ok := attrs.get("", "id"); ok {
+			used[v] = true
+		}
+	}
+	add("", pkg.Attrs)
+	for _, t := range pkg.Metadata.Titles {
+		add(t.ID, t.Attrs)
+	}
+	for _, c := range pkg.Metadata.Creators {
+		add(c.ID, c.Attrs)
+	}
+	for _, c := range pkg.Metadata.Contributors {
+		add(c.ID, c.Attrs)
+	}
+	for _, id := range pkg.Metadata.Identifiers {
+		add(id.ID, id.Attrs)
+	}
+	for _, m := range pkg.Metadata.Meta {
+		add(m.ID, m.Attrs)
+	}
+	for _, item := range pkg.Manifest.Items {
+		add(item.ID, item.Attrs)
+	}
+	add("", pkg.Spine.Attrs)
+	for _, item := range pkg.Spine.Items {
+		add("", item.Attrs)
+	}
+	return used
+}
+
+// uniqueID returns base, or base-2, base-3, ... if it is taken, and marks
+// the result used.
+func uniqueID(used map[string]bool, base string) string {
+	id := base
+	for n := 2; used[id]; n++ {
+		id = base + "-" + strconv.Itoa(n)
+	}
+	used[id] = true
+	return id
 }
 
 // replaceIdentifiers swaps the package's identifiers for the file's, keeping
@@ -615,18 +931,18 @@ type opfPackage struct {
 }
 
 type opfMetadata struct {
-	XMLName     xml.Name     `xml:"metadata"`
-	Titles      []opfTitle   `xml:"http://purl.org/dc/elements/1.1/ title"`
-	Creators    []opfCreator `xml:"http://purl.org/dc/elements/1.1/ creator"`
-	Identifiers []opfID      `xml:"http://purl.org/dc/elements/1.1/ identifier"`
-	Language    string       `xml:"http://purl.org/dc/elements/1.1/ language,omitempty"`
-	Publisher   string       `xml:"http://purl.org/dc/elements/1.1/ publisher,omitempty"`
-	Date        string       `xml:"http://purl.org/dc/elements/1.1/ date,omitempty"`
-	Description string       `xml:"http://purl.org/dc/elements/1.1/ description,omitempty"`
-	Rights      string       `xml:"http://purl.org/dc/elements/1.1/ rights,omitempty"`
-	Meta        []opfMeta    `xml:"meta"`
-	Subjects    []string     `xml:"http://purl.org/dc/elements/1.1/ subject"`
-	Contributor *opfCreator  `xml:"http://purl.org/dc/elements/1.1/ contributor,omitempty"`
+	XMLName      xml.Name     `xml:"metadata"`
+	Titles       []opfTitle   `xml:"http://purl.org/dc/elements/1.1/ title"`
+	Creators     []opfCreator `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	Identifiers  []opfID      `xml:"http://purl.org/dc/elements/1.1/ identifier"`
+	Language     string       `xml:"http://purl.org/dc/elements/1.1/ language,omitempty"`
+	Publisher    string       `xml:"http://purl.org/dc/elements/1.1/ publisher,omitempty"`
+	Date         string       `xml:"http://purl.org/dc/elements/1.1/ date,omitempty"`
+	Description  string       `xml:"http://purl.org/dc/elements/1.1/ description,omitempty"`
+	Rights       string       `xml:"http://purl.org/dc/elements/1.1/ rights,omitempty"`
+	Meta         []opfMeta    `xml:"meta"`
+	Subjects     []string     `xml:"http://purl.org/dc/elements/1.1/ subject"`
+	Contributors []opfCreator `xml:"http://purl.org/dc/elements/1.1/ contributor"`
 }
 
 type opfTitle struct {
@@ -635,6 +951,10 @@ type opfTitle struct {
 	Attrs opfAttrs `xml:",any,attr"`
 }
 
+// opfCreator's Role and FileAs, and opfID's Scheme, parse the attribute in
+// any namespace but must be empty at marshal time, or they print without the
+// opf: prefix. writeRefinements moves them to the right place and clears
+// them; any new marshal path must call it.
 type opfCreator struct {
 	Text   string   `xml:",chardata"`
 	ID     string   `xml:"id,attr,omitempty"`
@@ -715,4 +1035,30 @@ func (a *opfAttrs) UnmarshalXMLAttr(attr xml.Attr) error {
 	}
 	*a = append(*a, attr)
 	return nil
+}
+
+// get returns the value of the attribute with the given namespace and name.
+func (a opfAttrs) get(space, local string) (string, bool) {
+	for _, attr := range a {
+		if attr.Name.Space == space && attr.Name.Local == local {
+			return attr.Value, true
+		}
+	}
+	return "", false
+}
+
+// setOPF replaces any attribute named local, in any namespace, with
+// opf:local set to value, or removes it when value is empty. Clearing the
+// other spellings keeps an attribute from printing twice.
+func (a *opfAttrs) setOPF(local, value string) {
+	kept := (*a)[:0]
+	for _, attr := range *a {
+		if attr.Name.Local != local {
+			kept = append(kept, attr)
+		}
+	}
+	*a = kept
+	if value != "" {
+		*a = append(*a, xml.Attr{Name: xml.Name{Space: opfNamespace, Local: local}, Value: value})
+	}
 }

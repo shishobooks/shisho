@@ -278,8 +278,12 @@ func TestEPUBGenerator_CorrectedISBNReplacesStaleUniqueIdentifier(t *testing.T) 
 	for _, id := range pkg.Identifiers {
 		values[id.Text] = id.ID
 	}
-	assert.Equal(t, map[string]string{"9780306406157": "pub-id", "B08N5WRWNW": ""}, values,
-		"the user's ISBN takes over the unique identifier and the stale ISBN is gone")
+	require.Len(t, values, 2, "the stale ISBN is gone")
+	assert.Equal(t, "pub-id", values["9780306406157"], "the user's ISBN takes over the unique identifier")
+	// The ASIN gets an id of its own so its EPUB 3 identifier-type
+	// refinement has something to point at.
+	assert.NotEmpty(t, values["B08N5WRWNW"])
+	assert.NotEqual(t, "pub-id", values["B08N5WRWNW"])
 }
 
 func TestEPUBGenerator_SameISBNWithURNPrefixIsNotDuplicated(t *testing.T) {
