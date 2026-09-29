@@ -1,7 +1,13 @@
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API, isDemoModeError, ShishoAPIError, toastRequestError } from "./api";
+import {
+  API,
+  isDemoModeError,
+  requestErrorMessage,
+  ShishoAPIError,
+  toastRequestError,
+} from "./api";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -81,15 +87,89 @@ describe("ShishoAPI Demo Mode errors", () => {
   });
 });
 
+describe("requestErrorMessage", () => {
+  it("prefers the error's message and falls back otherwise", () => {
+    expect(
+      requestErrorMessage(new ShishoAPIError("Gone", "not_found", 404), "x"),
+    ).toBe("Gone");
+    expect(requestErrorMessage(undefined, "Fallback")).toBe("Fallback");
+    expect(
+      requestErrorMessage(new ShishoAPIError("", "internal", 500), "Fallback"),
+    ).toBe("Fallback");
+  });
+
+  it("falls back when the API error carries only a status", () => {
+    // checkStatus builds this when a proxy answers instead of the server, so
+    // it says nothing about which action failed.
+    expect(
+      requestErrorMessage(
+        new ShishoAPIError(
+          "Request failed with status 502 (Bad Gateway)",
+          undefined,
+          502,
+        ),
+        "Failed to delete book",
+      ),
+    ).toBe("Failed to delete book");
+  });
+
+  it("falls back for the server's generic internal error", () => {
+    // An unhandled server fault renders as this code with a message that
+    // does not say which action failed.
+    expect(
+      requestErrorMessage(
+        new ShishoAPIError(
+          "Internal Server Error",
+          "internal_server_error",
+          500,
+        ),
+        "Failed to delete book",
+      ),
+    ).toBe("Failed to delete book");
+  });
+
+  it("falls back for errors that did not come from the API", () => {
+    // A network failure or a bug surfaces as a plain Error whose text means
+    // nothing to the user.
+    expect(
+      requestErrorMessage(new TypeError("Failed to fetch"), "Fallback"),
+    ).toBe("Fallback");
+  });
+});
+
 describe("toastRequestError", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("shows the caller's message for ordinary failures", () => {
-    toastRequestError(new ShishoAPIError("Boom", "internal", 500), "Boom");
+  it("shows the error's own message when it has one", () => {
+    toastRequestError(
+      new ShishoAPIError("Name already taken", "conflict", 409),
+      "Failed to create list",
+    );
 
-    expect(toast.error).toHaveBeenCalledWith("Boom", undefined);
+    expect(toast.error).toHaveBeenCalledWith("Name already taken", undefined);
+  });
+
+  it("falls back to the caller's message for a non-Error rejection", () => {
+    toastRequestError("nope", "Failed to create list");
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Failed to create list",
+      undefined,
+    );
+  });
+
+  it("falls back to the caller's message for an API error with a blank message", () => {
+    toastRequestError(
+      new ShishoAPIError("  ", "internal", 500),
+      "Failed to create list",
+    );
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Failed to create list",
+      undefined,
+    );
   });
 
   it("stays silent for a Demo Mode rejection", () => {
@@ -99,7 +179,7 @@ describe("toastRequestError", () => {
         "demo_mode",
         403,
       ),
-      "Failed to save: This action is unavailable in the demo.",
+      "Failed to save",
     );
 
     expect(toast.error).not.toHaveBeenCalled();

@@ -7,9 +7,9 @@ import {
   FileTypePDF,
   type ChapterInput,
 } from "@/types";
+import { formatTimestamp } from "@/utils/format";
 
 import {
-  formatTimestampMs,
   getNextChapterTitle,
   normalizeChapterOrder,
   parseTimestampMs,
@@ -41,38 +41,38 @@ describe("getNextChapterTitle", () => {
   });
 });
 
-describe("formatTimestampMs", () => {
+describe("formatTimestamp", () => {
   it("formats 0 as 00:00:00.000", () => {
-    expect(formatTimestampMs(0)).toBe("00:00:00.000");
+    expect(formatTimestamp(0)).toBe("00:00:00.000");
   });
 
   it("formats 3661001 as 01:01:01.001", () => {
-    expect(formatTimestampMs(3661001)).toBe("01:01:01.001");
+    expect(formatTimestamp(3661001)).toBe("01:01:01.001");
   });
 
   it("formats milliseconds correctly", () => {
-    expect(formatTimestampMs(500)).toBe("00:00:00.500");
+    expect(formatTimestamp(500)).toBe("00:00:00.500");
   });
 
   it("formats seconds correctly", () => {
-    expect(formatTimestampMs(5000)).toBe("00:00:05.000");
+    expect(formatTimestamp(5000)).toBe("00:00:05.000");
   });
 
   it("formats minutes correctly", () => {
-    expect(formatTimestampMs(300000)).toBe("00:05:00.000");
+    expect(formatTimestamp(300000)).toBe("00:05:00.000");
   });
 
   it("formats hours correctly", () => {
-    expect(formatTimestampMs(3600000)).toBe("01:00:00.000");
+    expect(formatTimestamp(3600000)).toBe("01:00:00.000");
   });
 
   it("formats large values correctly", () => {
     // 99 hours, 59 minutes, 59 seconds, 999 milliseconds
-    expect(formatTimestampMs(359999999)).toBe("99:59:59.999");
+    expect(formatTimestamp(359999999)).toBe("99:59:59.999");
   });
 
   it("pads single-digit values with leading zeros", () => {
-    expect(formatTimestampMs(1001)).toBe("00:00:01.001");
+    expect(formatTimestamp(1001)).toBe("00:00:01.001");
   });
 });
 
@@ -146,10 +146,10 @@ describe("parseTimestampMs", () => {
     expect(parseTimestampMs("00:00:00.")).toBe(null);
   });
 
-  it("is inverse of formatTimestampMs", () => {
+  it("is inverse of formatTimestamp", () => {
     const testValues = [0, 1000, 60000, 3600000, 5400500, 3661001];
     for (const ms of testValues) {
-      const formatted = formatTimestampMs(ms);
+      const formatted = formatTimestamp(ms);
       const parsed = parseTimestampMs(formatted);
       expect(parsed).toBe(ms);
     }

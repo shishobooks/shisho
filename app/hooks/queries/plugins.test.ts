@@ -26,7 +26,7 @@ const makeWrapper = (client: QueryClient) => {
 
 describe("useUninstallPlugin", () => {
   // AdvancedOrderSection reads from [PluginOrder, <hookType>] and
-  // LibraryPluginsTab reads from ["libraries", libraryId, "plugins", "order", hookType].
+  // LibraryPluginsTab reads from [LibraryPluginOrder, libraryId, hookType].
   // Both caches must be invalidated on uninstall so the removed plugin stops
   // appearing — otherwise the order lists keep showing a now-gone plugin.
   it("invalidates plugin order queries (global and library-scoped) on success", async () => {
@@ -37,7 +37,7 @@ describe("useUninstallPlugin", () => {
     // Seed caches so we can detect invalidation via state.isInvalidated.
     client.setQueryData([QueryKey.PluginOrder, "metadataEnricher"], []);
     client.setQueryData(
-      ["libraries", "lib-1", "plugins", "order", "metadataEnricher"],
+      [QueryKey.LibraryPluginOrder, "lib-1", "metadataEnricher"],
       { customized: false, plugins: [] },
     );
 
@@ -58,22 +58,20 @@ describe("useUninstallPlugin", () => {
     });
 
     const libraryOrder = client.getQueryState([
-      "libraries",
+      QueryKey.LibraryPluginOrder,
       "lib-1",
-      "plugins",
-      "order",
       "metadataEnricher",
     ]);
     expect(libraryOrder?.isInvalidated).toBe(true);
   });
 
-  it("does not invalidate unrelated 'libraries'-prefixed queries", async () => {
+  it("does not invalidate unrelated library-scoped queries", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
 
-    // Unrelated library-scoped query — e.g. a library's books. Blanket
-    // invalidation on the "libraries" prefix would sweep this up too.
+    // Unrelated library-scoped queries, e.g. a library's books and settings,
+    // must not refetch on every uninstall.
     client.setQueryData(["libraries", "lib-1", "books"], []);
     client.setQueryData(["libraries", "lib-1", "settings"], {});
 
@@ -142,10 +140,10 @@ describe("useUpdatePlugin", () => {
     client.setQueryData([QueryKey.PluginIdentifierTypes], []);
     client.setQueryData([QueryKey.PluginOrder, "metadataEnricher"], []);
     client.setQueryData(
-      ["libraries", "lib-1", "plugins", "order", "metadataEnricher"],
+      [QueryKey.LibraryPluginOrder, "lib-1", "metadataEnricher"],
       { customized: false, plugins: [] },
     );
-    // Sanity guard — the unrelated library-prefixed query must NOT be swept up.
+    // Sanity guard: an unrelated library-scoped query must NOT be swept up.
     client.setQueryData(["libraries", "lib-1", "books"], []);
 
     const { result } = renderHook(() => useUpdatePlugin(), {
@@ -171,10 +169,8 @@ describe("useUpdatePlugin", () => {
     ).toBe(true);
     expect(
       client.getQueryState([
-        "libraries",
+        QueryKey.LibraryPluginOrder,
         "lib-1",
-        "plugins",
-        "order",
         "metadataEnricher",
       ])?.isInvalidated,
     ).toBe(true);

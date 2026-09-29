@@ -5,7 +5,6 @@ import type {
   APIKey,
   APIKeyShortURL,
   CreateAPIKeyPayload,
-  UpdateAPIKeyNamePayload,
 } from "@/types/generated/apikeys";
 
 export class ShishoAPIError extends Error {
@@ -32,16 +31,40 @@ export const isDemoModeError = (error: unknown): error is ShishoAPIError =>
   error.status === 403 &&
   error.code === "demo_mode";
 
+// The Go error handler's code for an unhandled server fault, whose message
+// is a generic "Internal Server Error" (pkg/errcodes/handler.go).
+const INTERNAL_SERVER_ERROR_CODE = "internal_server_error";
+
+// The message to show for a rejected request: the server's own message, or
+// `fallback`, which names the action ("Failed to delete book"). The fallback
+// wins whenever the rejection says nothing the user can act on: an API error
+// without a Shisho error body (checkStatus's status-only text from a proxy),
+// the server's generic internal error, or a rejection that did not come from
+// the API at all (a network TypeError, an abort, a bug). Every request error
+// the UI reports derives its wording here, so the same failure reads the
+// same everywhere.
+export const requestErrorMessage = (
+  error: unknown,
+  fallback: string,
+): string =>
+  error instanceof ShishoAPIError &&
+  error.code !== undefined &&
+  error.code !== INTERNAL_SERVER_ERROR_CODE &&
+  error.message.trim() !== ""
+    ? error.message
+    : fallback;
+
 // Shows a failure toast for a rejected request, unless the rejection came from
-// Demo Mode, which checkStatus reports on its own. Use this instead of
-// toast.error wherever the toast describes a request error.
+// Demo Mode, which checkStatus reports on its own. The toast reads
+// requestErrorMessage(error, fallback). Use this instead of toast.error
+// wherever the toast describes a request error.
 export const toastRequestError = (
   error: unknown,
-  message: string,
+  fallback: string,
   options?: Parameters<typeof toast.error>[1],
 ) => {
   if (isDemoModeError(error)) return;
-  toast.error(message, options);
+  toast.error(requestErrorMessage(error, fallback), options);
 };
 
 // Reads the { error: { code, message } } body the Go API sends on failure.
@@ -167,11 +190,6 @@ class ShishoAPI {
     return this.request("POST", "/user/api-keys", payload);
   }
 
-  updateApiKeyName(id: string, name: string): Promise<APIKey> {
-    const payload: UpdateAPIKeyNamePayload = { name };
-    return this.request("PATCH", `/user/api-keys/${id}`, payload);
-  }
-
   deleteApiKey(id: string): Promise<void> {
     return this.request("DELETE", `/user/api-keys/${id}`);
   }
@@ -179,13 +197,6 @@ class ShishoAPI {
   addApiKeyPermission(id: string, permission: string): Promise<APIKey> {
     return this.request(
       "POST",
-      `/user/api-keys/${id}/permissions/${permission}`,
-    );
-  }
-
-  removeApiKeyPermission(id: string, permission: string): Promise<APIKey> {
-    return this.request(
-      "DELETE",
       `/user/api-keys/${id}/permissions/${permission}`,
     );
   }

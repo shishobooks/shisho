@@ -3,6 +3,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import {
   afterEach,
   beforeAll,
@@ -14,6 +15,7 @@ import {
 } from "vitest";
 
 import { setAuth } from "@/testing/auth";
+import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, File, SharingSettingsResponse } from "@/types";
 import type { Permission } from "@/utils/permissions";
 
@@ -82,8 +84,9 @@ beforeEach(() => {
   sharing.settings = { enabled: false, require_expiration: false };
 });
 
-const { idle } = vi.hoisted(() => ({
+const { idle, review } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
+  review: { mutate: undefined as undefined | ((...args: never[]) => void) },
 }));
 
 vi.mock("@/hooks/queries/books", () => ({
@@ -96,7 +99,10 @@ vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/queries/review", () => ({
-  useSetBookReview: idle,
+  useSetBookReview: () => ({
+    ...idle(),
+    ...(review.mutate ? { mutate: review.mutate } : {}),
+  }),
   useReviewCriteria: () => ({
     data: { book_fields: [], audio_fields: [] },
   }),
@@ -689,5 +695,22 @@ describe("BookDetailBody supplement names", () => {
 
     expect(screen.getByText("The Lighthouse Keeper.pdf")).toBeInTheDocument();
     expect(screen.queryByText("Original Title")).not.toBeInTheDocument();
+  });
+});
+
+describe("BookDetailBody review toggle", () => {
+  afterEach(() => {
+    review.mutate = undefined;
+  });
+
+  it("toasts when the review change fails", async () => {
+    const error = vi.spyOn(toast, "error");
+    review.mutate = rejectingMutate();
+    renderBody();
+
+    await userEvent.click(screen.getByRole("switch"));
+
+    expect(review.mutate).toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
   });
 });

@@ -90,6 +90,12 @@ import {
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType } from "@/utils/coverSelection";
+import { bookCoverUrl } from "@/utils/coverUrl";
+import {
+  fileDownloadUrl,
+  fileKepubDownloadUrl,
+  fileOriginalDownloadUrl,
+} from "@/utils/downloadUrl";
 import {
   fileLabel,
   formatDate,
@@ -198,7 +204,6 @@ interface FileRowProps {
   isFileSelected?: boolean;
   onToggleSelect?: () => void;
   onMoveFile?: () => void;
-  cacheKey?: string;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
 }
@@ -228,7 +233,6 @@ const FileRow = ({
   isFileSelected = false,
   onToggleSelect,
   onMoveFile,
-  cacheKey,
   onDeleteFile,
   isDeletingFile,
 }: FileRowProps) => {
@@ -302,7 +306,6 @@ const FileRow = ({
       {!isSupplement && (
         <div className="shrink-0 self-start">
           <FileCoverThumbnail
-            cacheKey={cacheKey}
             className="h-14"
             file={file}
             getCoverUrl={getCoverUrl}
@@ -829,9 +832,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const coverCacheKey = book.cover_cache_key;
   const coverUrl = shareLink
     ? shareLink.bookCoverUrl(book)
-    : coverCacheKey
-      ? `/api/books/${book.id}/cover?v=${coverCacheKey}`
-      : `/api/books/${book.id}/cover`;
+    : bookCoverUrl(book);
 
   // Reset the error flag whenever the URL changes — either because we
   // navigated to a different book, or because a rescan bumped the
@@ -916,25 +917,16 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
 
     // For kepub preference with supported files, use kepub endpoint
     if (preference === DownloadFormatKepub && supportsKepub(file.file_type)) {
-      await handleDownloadWithEndpoint(
-        file.id,
-        `/api/books/files/${file.id}/download/kepub`,
-      );
+      await handleDownloadWithEndpoint(file.id, fileKepubDownloadUrl(file.id));
     } else {
       // Original format for unsupported files or "original" preference
-      await handleDownloadWithEndpoint(
-        file.id,
-        `/api/books/files/${file.id}/download`,
-      );
+      await handleDownloadWithEndpoint(file.id, fileDownloadUrl(file.id));
     }
   };
 
   const handleDownloadKepub = async (fileId: number) => {
     if (shareLink) return;
-    await handleDownloadWithEndpoint(
-      fileId,
-      `/api/books/files/${fileId}/download/kepub`,
-    );
+    await handleDownloadWithEndpoint(fileId, fileKepubDownloadUrl(fileId));
   };
 
   const handleDownloadOriginal = (fileId: number) => {
@@ -945,7 +937,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       return;
     }
     // Direct download of original file - this won't show any error since it's a simple file serve
-    window.location.assign(`/api/books/files/${fileId}/download/original`);
+    window.location.assign(fileOriginalDownloadUrl(fileId));
     setDownloadError(null);
   };
 
@@ -968,10 +960,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         toast.success("File rescanned");
       }
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to rescan file",
-      );
+      toastRequestError(error, "Failed to rescan file");
     } finally {
       setResyncingFileId(null);
     }
@@ -989,10 +978,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         toast.success("Book rescanned");
       }
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to rescan book",
-      );
+      toastRequestError(error, "Failed to rescan book");
     }
   };
 
@@ -1002,10 +988,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       toast.success("Book deleted");
       navigate("/");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to delete book",
-      );
+      toastRequestError(error, "Failed to delete book");
     }
   };
 
@@ -1022,10 +1005,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         toast.success("File deleted");
       }
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to delete file",
-      );
+      toastRequestError(error, "Failed to delete file");
     } finally {
       setDeletingFileId(null);
     }
@@ -1128,7 +1108,6 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
 
   const renderFileRow = (file: File, isSupplement: boolean) => (
     <FileRow
-      cacheKey={file.updated_at}
       canWriteBooks={canWriteBooks}
       file={file}
       getCoverUrl={shareLink?.fileCoverUrl}
@@ -1210,7 +1189,13 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               files={book.files ?? []}
               isPending={setBookReviewMutation.isPending}
               onChange={(override) =>
-                setBookReviewMutation.mutate({ bookId: book.id, override })
+                setBookReviewMutation.mutate(
+                  { bookId: book.id, override },
+                  {
+                    onError: (error) =>
+                      toastRequestError(error, "Failed to update review state"),
+                  },
+                )
               }
               readOnly={!canWriteBooks}
             />

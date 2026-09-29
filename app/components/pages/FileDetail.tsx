@@ -121,10 +121,7 @@ const FileDetail = () => {
       }
       setShowDeleteDialog(false);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to delete file",
-      );
+      toastRequestError(error, "Failed to delete file");
     }
   };
 

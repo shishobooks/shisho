@@ -14,6 +14,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
+import { formatElapsed } from "@/utils/format";
 
 const JOBS_PER_PAGE = 20;
 
@@ -30,23 +31,6 @@ const getStatusColor = (status: string) => {
     default:
       return "bg-muted text-muted-foreground";
   }
-};
-
-const formatDuration = (start: string, end?: string | null): string => {
-  const startDate = new Date(start);
-  const endDate = end ? new Date(end) : new Date();
-  const durationMs = endDate.getTime() - startDate.getTime();
-
-  if (durationMs < 1000) {
-    return `${durationMs}ms`;
-  }
-  const seconds = Math.floor(durationMs / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
 };
 
 interface JobRowProps {
@@ -68,14 +52,17 @@ const JobRow = ({ job }: JobRowProps) => (
         </Badge>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1 text-xs md:text-sm text-muted-foreground">
-        <span>Started {formatDistanceToNow(new Date(job.created_at))} ago</span>
+        <span>
+          Started{" "}
+          {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+        </span>
         {job.status === JobStatusInProgress && job.created_at && (
-          <span>Running for {formatDuration(job.created_at)}</span>
+          <span>Running for {formatElapsed(job.created_at)}</span>
         )}
         {(job.status === "completed" || job.status === "failed") &&
           job.created_at &&
           job.updated_at && (
-            <span>Took {formatDuration(job.created_at, job.updated_at)}</span>
+            <span>Took {formatElapsed(job.created_at, job.updated_at)}</span>
           )}
       </div>
     </div>
@@ -111,9 +98,7 @@ const AdminJobs = () => {
       });
       toast.success("Library scan started");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to start scan";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to start scan");
     }
   }, [createJobMutation]);
 

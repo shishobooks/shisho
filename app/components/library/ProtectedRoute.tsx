@@ -1,7 +1,7 @@
-import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { useAuth } from "@/hooks/useAuth";
 import type { Requirement } from "@/utils/permissions";
 
@@ -47,7 +47,7 @@ const ProtectedRoute = ({
   if (isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <LoadingSpinner />
       </div>
     );
   }

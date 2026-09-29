@@ -85,6 +85,8 @@ export enum QueryKey {
   PluginRepositories = "PluginRepositories",
   PluginIdentifierTypes = "PluginIdentifierTypes",
   PluginSearch = "PluginSearch",
+  PluginManifest = "PluginManifest",
+  LibraryPluginOrder = "LibraryPluginOrder",
 }
 
 // --- Queries ---
@@ -173,7 +175,7 @@ export const usePluginManifest = (
   options: { enabled?: boolean } = {},
 ) => {
   return useQuery<unknown, ShishoAPIError>({
-    queryKey: ["plugins", "manifest", scope, id],
+    queryKey: [QueryKey.PluginManifest, scope, id],
     enabled: usePluginRouteEnabled(
       "config:read",
       !!scope && !!id && options.enabled !== false,
@@ -268,21 +270,9 @@ export const useUninstallPlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginOrder],
       });
-      // Library-scoped orders (LibraryPluginsTab) are keyed under
-      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
-      // only those, since the shared "libraries" prefix is used by other hooks
-      // too (books, settings) and blanket-invalidating it would trigger
-      // unrelated refetches on every uninstall.
+      // Library-scoped orders (LibraryPluginsTab) change with it too.
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey;
-          return (
-            Array.isArray(key) &&
-            key[0] === "libraries" &&
-            key[2] === "plugins" &&
-            key[3] === "order"
-          );
-        },
+        queryKey: [QueryKey.LibraryPluginOrder],
       });
     },
   });
@@ -328,21 +318,9 @@ export const useUpdatePlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginOrder],
       });
-      // Library-scoped orders (LibraryPluginsTab) are keyed under
-      // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
-      // only those, since the shared "libraries" prefix is used by other hooks
-      // too (books, settings) and blanket-invalidating it would trigger
-      // unrelated refetches on every enable/disable.
+      // Library-scoped orders (LibraryPluginsTab) change with it too.
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey;
-          return (
-            Array.isArray(key) &&
-            key[0] === "libraries" &&
-            key[2] === "plugins" &&
-            key[3] === "order"
-          );
-        },
+        queryKey: [QueryKey.LibraryPluginOrder],
       });
     },
   });
@@ -547,7 +525,7 @@ export const useLibraryPluginOrder = (
   hookType: string,
 ) => {
   return useQuery<LibraryPluginOrderResponse, ShishoAPIError>({
-    queryKey: ["libraries", libraryId, "plugins", "order", hookType],
+    queryKey: [QueryKey.LibraryPluginOrder, libraryId, hookType],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
@@ -582,7 +560,7 @@ export const useSetLibraryPluginOrder = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["libraries", variables.libraryId, "plugins", "order"],
+        queryKey: [QueryKey.LibraryPluginOrder, variables.libraryId],
       });
     },
   });
@@ -606,21 +584,7 @@ export const useResetLibraryPluginOrder = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["libraries", variables.libraryId, "plugins", "order"],
-      });
-    },
-  });
-};
-
-export const useResetAllLibraryPluginOrders = () => {
-  const queryClient = useQueryClient();
-  return useMutation<void, ShishoAPIError, { libraryId: string }>({
-    mutationFn: ({ libraryId }) => {
-      return API.request("DELETE", `/libraries/${libraryId}/plugins/order`);
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["libraries", variables.libraryId, "plugins", "order"],
+        queryKey: [QueryKey.LibraryPluginOrder, variables.libraryId],
       });
     },
   });

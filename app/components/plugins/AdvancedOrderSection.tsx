@@ -107,7 +107,7 @@ export const AdvancedOrderSection = () => {
           toast.success("Plugin order saved.");
         },
         onError: (err) => {
-          toastRequestError(err, `Failed to save order: ${err.message}`);
+          toastRequestError(err, "Failed to save order");
         },
       },
     );

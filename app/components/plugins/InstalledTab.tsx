@@ -36,7 +36,7 @@ export const InstalledTab = () => {
   const handleScan = () => {
     scanPlugins.mutate(undefined, {
       onError: (err) => {
-        toastRequestError(err, `Scan failed: ${err.message}`);
+        toastRequestError(err, "Failed to scan for local plugins");
       },
       onSuccess: (discovered) => {
         if (discovered.length === 0) {
@@ -74,10 +74,7 @@ export const InstalledTab = () => {
                   { id: plugin.id, scope: plugin.scope },
                   {
                     onError: (err) =>
-                      toastRequestError(
-                        err,
-                        `Failed to update plugin: ${err.message}`,
-                      ),
+                      toastRequestError(err, "Failed to update plugin"),
                     onSuccess: (updated) =>
                       toast.success(
                         `Updated ${updated.name} to v${updated.version}`,

@@ -57,10 +57,7 @@ export const PluginVersionHistory = ({
       { id: installed.id, scope: installed.scope },
       {
         onError: (err) => {
-          toastRequestError(
-            err,
-            err instanceof Error ? err.message : "Update failed",
-          );
+          toastRequestError(err, "Failed to update plugin");
         },
         onSuccess: () => {
           toast.success(

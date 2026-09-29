@@ -65,6 +65,8 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 - Code that must call `fetch` directly for a JSON endpoint (e.g. a `FormData` upload, which `API.request` would JSON-encode) passes the response to `API.checkStatus` instead of calling `response.json()` itself. `useUploadFileCover` is the example.
 - The shared QueryClient does not retry `ShishoAPIError` responses with status `401`, `403`, `404`, or `422`. Other query failures retain the three-retry limit. Keep permission failures out of the retry path, including Demo Mode rejections.
 - Async UI event handlers must consume mutation rejections and show an inline error or toast (except for Demo Mode rejections, see below). `BookEditDialog` shows metadata/review save errors inline and preserves its draft; the top-nav `ResyncButton` reports scan-creation failures with a toast.
+- **Report a request failure with `toastRequestError(error, fallback)` from `@/libraries/api`.** It shows `requestErrorMessage(error, fallback)`: the server's message from the Go error body, otherwise `fallback`, which names the action (`"Failed to delete book"`). A `ShishoAPIError` without a Shisho body (the status-only text `checkStatus` builds for a proxy's response, where `code` is `undefined`), the server's generic `internal_server_error` ("Internal Server Error"), and any other rejection (a network `TypeError`, an abort, a client-side `Error`) show the fallback, since their text does not say which action failed. Inline error UI uses `requestErrorMessage` directly. Do not derive the wording yourself (`error instanceof Error ? error.message : ...`, a `let msg` block, `error.message || ...`, or a `"Failed to X: ${error.message}"` prefix); every failure reads the same way everywhere.
+- **Every `mutate()` passes `onError`.** A mutation fired with `mutate()` reports a rejection only through `onError`, so one without it fails silently. ESLint rejects a `mutate()` call with no `onError` outside tests (`app/eslint-rules.test.ts` pins the rule); `mutateAsync` calls belong in a `try`/`catch`. Tests use `rejectingMutate()` from `app/testing/mutations.ts`, which calls the caller's `onError` with a `ShishoAPIError`, and assert the toast.
 - `CreateListDialog` treats a resolved `onCreate`/`onUpdate` promise as success. Parent callbacks that show an error toast must rethrow so the dialog stays open and retains unsaved-changes protection. Test these flows through their callers, not just the dialog with a rejecting stub: a caller swallowing the rejection is the failure to catch.
 
 ### Demo Mode
@@ -73,7 +75,7 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 
 `ShishoAPI.checkStatus` is the only place that reports a Demo Mode rejection. On a `403` with the `demo_mode` code it shows the toast `This action is unavailable in the demo.` (id `demo-mode`, so concurrent rejections collapse into one) before rejecting. Callers still receive the rejection, so dialogs stay open and keep their drafts, but they must not report it again:
 
-- Toast request failures with `toastRequestError(error, message)` from `@/libraries/api`, not `toast.error`. It shows `message` unless `isDemoModeError(error)`. Plain `toast.error` is for client-side validation that never reached the server.
+- Toast request failures with `toastRequestError(error, fallback)` from `@/libraries/api`, not `toast.error`. It stays silent when `isDemoModeError(error)`. Plain `toast.error` is for client-side validation that never reached the server.
 - Inline error UI (the `BookEditDialog` and `FileEditDialog` banners, the `MetadataEditDialog` and `PublisherEditDialog` server errors) skips a Demo Mode rejection with `isDemoModeError(error)` and renders every other error as before.
 
 Test a caller that toasts through the real `API` with a `demo_mode` 403 and a real `<Toaster />`, and count the visible messages; a mocked rejection never reaches `checkStatus`. A dialog that only renders an injected `onSave` rejection inline can be tested with a rejected `ShishoAPIError` directly.
@@ -104,7 +106,7 @@ Do not gate on a write permission:
 - **Selection mode and downloads.** Selection stays available for lists and downloads; only merge, delete, and review actions inside `SelectionToolbar` are hidden.
 - **Demo Mode.** `useCan` and `can` reflect role permissions only. Role-based hiding still applies in Demo Mode; Demo Mode hides only the extra controls listed above, and any other control the role can use relies on the backend rejection plus toast.
 
-Hide the whole control rather than disabling it, and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
+Hide the whole control rather than disabling it (a settings form a role can view but not save is the one exception, see "Read-only forms"), and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
 
 **Action menus gate each entry, not the menu.** The Book Detail action menu is built from entry groups where every entry carries its own `visible` flag, computed from the permission its backend route requires. The menu renders when at least one entry is visible, and separators appear only between non-empty groups. Do not wrap the whole menu in a single `books:write` check: a user can hold one entry's permission without another's (the Share entry needs a `shares` permission, not `books:write`). Add to list has no permission of its own, so it joins the menu whenever another entry puts the menu on screen and is otherwise a standalone button.
 
@@ -447,15 +449,18 @@ Center and constrain cover images on mobile:
 
 ## Cover Image Caching
 
-API cover endpoints use `Cache-Control: private, max-age=31536000, immutable`, so the browser caches the response forever. Freshness is driven by changing the URL via `?v=${cacheKey}`, where `cacheKey` is a backend-computed `cover_cache_key` field (format `"<fileId>-<updatedAt.Unix()>"`) that only changes when the actual cover changes. This is much better than the old `dataUpdatedAt` approach, which changed on every TanStack Query refetch and defeated caching.
+API cover endpoints use `Cache-Control: private, max-age=31536000, immutable`, so the browser caches the response forever. Freshness comes from changing the URL: every cover URL carries a `?v=` key that changes only when the cover does. **Build every cover URL with the helpers in `app/utils/coverUrl.ts`**, which always add the key, never inline. ESLint rejects a literal `/api/.../cover` URL outside `app/utils` (`app/eslint-rules.test.ts` pins it).
 
-### Cache key sources by endpoint
+### Helpers and their keys
 
-| Endpoint | Cache key source |
-|----------|-----------------|
-| `/api/books/:id/cover` | `book.cover_cache_key` from API response |
-| `/api/books/files/:id/cover` | `file.updated_at` from API response |
-| `/api/series/:id/cover` | `series.cover_cache_key` from API response |
+| Helper | Endpoint | Key |
+|--------|----------|-----|
+| `bookCoverUrl(book)` | `/api/books/:id/cover` | `book.cover_cache_key`, computed by the backend as `"<fileId>-<updatedAt.Unix()>"` of the file the cover comes from (empty when there is none) |
+| `seriesCoverUrl(series)` | `/api/series/:id/cover` | `series.cover_cache_key` |
+| `fileCoverUrl(file)` | `/api/books/files/:id/cover` | `fileCacheKey(file)`: `file.updated_at` in epoch milliseconds, the same key as page images |
+| `shareBookCoverUrl(token, book)`, `shareFileCoverUrl(token, file)` | the Share Link cover routes | as above |
+
+`fileCoverUploadUrl(fileId)` is the POST endpoint `useUploadFileCover` sends a new cover to. It has no key, so never render it.
 
 ### Why URL-based busting is still required
 
@@ -463,25 +468,23 @@ Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of
 
 ### Rules
 
-- **Append `?v=${cacheKey}`** to cover URLs where `cacheKey` comes from the backend (`book.cover_cache_key`, `series.cover_cache_key`, or `file.updated_at`).
-- **For pages that mutate covers** (BookDetail, FileEditDialog), also add `key={cacheKey}` to the `<img>` tag. React remounting combined with URL change gives reliable refresh.
-- **For child components that render covers**, accept a `cacheKey?: string` prop. Parents pass the appropriate cache key from the API response.
-
-### Exceptions (no change needed)
-
-- `GlobalSearch.tsx`: keep `searchQuery.dataUpdatedAt` (search results don't include `cover_cache_key`, small number of covers)
-- `FileEditDialog.tsx`: keep `Date.now()` for immediate preview after cover mutation
-- `IdentifyReviewForm.tsx`: keep `new Date(file.updated_at).getTime()`
+- **Pass the model, not a key.** Components that render a cover take the book, series, or file and call the helper, so no caller can hand in the wrong key or none. `BookItem`, `SeriesCard`, `FileCoverThumbnail`, `CoverGalleryTabs`, and `M4BReader` follow this.
+- **Key the `<img>` on its URL** (`key={coverUrl}`) where the cover can change while mounted, so React remounts it and a failed load does not stick.
+- **Sources without a key.** Search results carry no `cover_cache_key`, so `GlobalSearch` passes `String(searchQuery.dataUpdatedAt)` as the key, which refetches covers on each new search. `FileEditDialog` builds its preview from `fileCoverUrl` with the time of its last cover mutation standing in for `updated_at`, so the preview refreshes on save before the parent refetches.
 
 ### Checklist for new cover components
 
-- [ ] Cover URL includes `?v=${cacheKey}` with the appropriate backend-provided cache key
-- [ ] For mutation-capable pages, `<img key={cacheKey}>` for React remount
+- [ ] The URL comes from a `coverUrl.ts` helper
+- [ ] For mutation-capable pages, `<img key={coverUrl}>` for React remount
 - [ ] Cover-mutating mutations invalidate the query whose data drives the key
+
+### Download and stream URLs
+
+Download and stream endpoints are served `private, no-store`, so their URLs carry no key, but they are built in one place too: `fileDownloadUrl`, `fileKepubDownloadUrl`, `fileOriginalDownloadUrl`, `fileStreamUrl`, `bulkDownloadUrl`, and `shareFileDownloadUrl` in `app/utils/downloadUrl.ts`. The same ESLint rule rejects a literal `/download` or `/stream` URL outside `app/utils`.
 
 ### Page images
 
-The CBZ/PDF page endpoint (`/api/books/files/:id/page/:n`) is also served `private, max-age=31536000, immutable`, so page URLs follow the same rule. Build every page URL with `filePageUrl(file, page)` from `app/utils/pageUrl.ts`, which appends `?v=` with the file's `updated_at`. Never write the page URL inline: a URL without the key keeps showing the old pages for a year after the file is replaced on disk.
+The CBZ/PDF page endpoint (`/api/books/files/:id/page/:n`) is also served `private, max-age=31536000, immutable`, so page URLs follow the same rule. Build every page URL with `filePageUrl(file, page)` from `app/utils/pageUrl.ts`, which appends `?v=` with `fileCacheKey(file)` (the file's `updated_at` in epoch milliseconds, like file covers). Never write the page URL inline: a URL without the key keeps showing the old pages for a year after the file is replaced on disk. ESLint rejects a literal `/api/.../page/` URL outside `app/utils`.
 
 - Components that render pages take the file (`PageSourceFile`, which is `id` plus `updated_at`), not a bare `fileId`, so they can build the keyed URL. `PagePicker`, `PagePreview`, and `ChapterRow` follow this.
 - `updated_at` is the key because every rescan that re-reads a changed file bumps it. The same scan drops the server's cached pages for that file (`invalidatePageCaches` in `pkg/worker/scan_unified.go`), so the new URL never gets an old render. The key also changes on unrelated metadata edits; that only causes a refetch, never a stale page. A size-plus-mtime key would churn less, but it would not change on a forced refresh, which is the manual fix after a replacement that kept the same size and mtime.
@@ -942,7 +945,7 @@ All list pages (Books, Series, People, Genres, Tags) should follow consistent pa
 1. **Page header** with title and subtitle in `<div className="mb-6">`
 2. **Search input** with `max-w-xs` and appropriate placeholder
 3. **Item count display**: Show "Showing X-Y of Z [items]" above the list **only when total > 0** (hide when empty to avoid "Showing 1-0 of 0")
-4. **Loading state**: Use `<LoadingSpinner />` component, not raw text
+4. **Loading state**: Use `<LoadingSpinner />` component, not raw text (see "Loading states" below)
 5. **Pagination**: Use shadcn/ui `Pagination` components, never raw `<button>` elements
 
 **Use the Gallery Component for Grid Layouts:**
@@ -966,7 +969,7 @@ For pages displaying items in a grid (books, series), use the `Gallery` componen
 **For List-Based Pages (People, Genres, Tags):**
 Even though these pages don't use Gallery, they should still:
 - Show "Showing X-Y of Z [items]" count **only when total > 0**
-- Use `<LoadingSpinner />` for loading states
+- Use `<LoadingSpinner />` for loading states (see "Loading states" below)
 - Use shadcn/ui Pagination components
 - Have consistent empty state messages that differentiate between "no results" and "no results matching search"
 
@@ -1130,6 +1133,22 @@ When using raw `<button>` elements outside of the Button component, always add `
 ```
 
 `cn()` wraps `clsx` + `tailwind-merge`, so it handles conditional classes, deduplication, and Tailwind conflict resolution. Template literals bypass all of that.
+
+### Loading states
+
+A region waiting for its content (a page, a section, a dialog body, a popover list, a reader overlay) shows `<LoadingSpinner />` from `@/components/library/LoadingSpinner`, never "Loading..." text, a skeleton, or a bare `Loader2`. It carries `role="status"` and a screen-reader label, so tests find it with `getByRole("status")`. Its `className` overrides the container spacing where the default `py-8` is too tall, such as `py-3` in a popover menu. A `Loader2` stays only where it marks a pending action inside a control: the spinner in a Save or Download button, beside a list row being added, inside a search input, or the small indicator over results already on screen while they refetch (`IdentifyBookDialog`). Combobox dropdowns keep their inline "Loading..." row.
+
+### Read-only forms
+
+A settings form a role may read but not save keeps its inputs, disabled, and shows `<ReadOnlyNotice />` (`@/components/library/ReadOnlyNotice`, a `role="note"` line saying the values can be viewed but not changed) at the top. Its Save button is hidden, not disabled. `PluginConfigForm` (`canWrite`), `UserDetail` (`users:write`), `AdminReviewCriteria` (`config:write`), and `AdminSharing` (`config:write`) follow this. Disabled inputs keep the layout and values identical to what a writer sees, so the page does not need a second, text-only rendering. Pass a child to reword the note for a page that is not settings (`UserDetail`).
+
+### Gallery size
+
+Cover galleries read their size from the `size` URL param through `useGallerySizeParam({ onChange? })` (`@/hooks/useGallerySizeParam`), with the user's saved size as the default. It returns `savedSize`, `effectiveSize`, `isSizeDirty`, `itemsPerPage`, `currentPage`, `offset`, `settingsResolved`, `isSaving`, `applyGallerySize`, and `saveSizeAsDefault`. `applyGallerySize` moves to the page that keeps the first visible item on screen, drops `size` when it equals the saved size and `page` when it is 1, then calls `onChange(size, page)`. `saveSizeAsDefault` saves the effective size, drops the `size` param on success, and toasts a failure. `Home`, `SeriesList`, `ListDetail`, and `BookGallerySection` use all of it; the genre, tag, series, and person detail pages take `itemsPerPage`, `offset`, and `settingsResolved` from it to size the query they hand `BookGallerySection`. A new gallery should use it rather than reading `size` itself. Gate the gallery's query on `settingsResolved` so it does not fetch once with the default size and again with the saved one.
+
+### Relative times
+
+Write relative times with `formatDistanceToNow(date, { addSuffix: true })` from `date-fns` ("5 minutes ago"), not a hand-appended "ago". A date-only value such as a plugin release date says "today" or "yesterday" for the last two days (`PluginVersionCard`), since it has no time of day to count hours from, and uses `addSuffix` past that. Durations between two timestamps use `formatElapsed(start, end?)` from `@/utils/format`; byte counts use `formatFileSize`.
 
 ## Sortable List Row Keys
 

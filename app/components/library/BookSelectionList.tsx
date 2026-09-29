@@ -1,6 +1,7 @@
 import { Loader2, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -60,11 +61,7 @@ export function BookSelectionList({
         </label>
       )}
 
-      {booksQuery.isLoading && (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      )}
+      {booksQuery.isLoading && <LoadingSpinner />}
 
       {!booksQuery.isLoading && (
         <>

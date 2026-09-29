@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -205,10 +206,7 @@ export function ShareLinkDialog({
       setLabel("");
       setPreset(DEFAULT_PRESET);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to create share link",
-      );
+      toastRequestError(error, "Failed to create share link");
     }
   };
 
@@ -218,10 +216,7 @@ export function ShareLinkDialog({
       await revokeMutation.mutateAsync({ bookId, linkId: toRevoke.id });
       toast.success("Share link revoked");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to revoke share link",
-      );
+      toastRequestError(error, "Failed to revoke share link");
     } finally {
       // The list refetches after either outcome, so a link another sharer
       // already removed drops out instead of holding the confirmation open.
@@ -235,10 +230,7 @@ export function ShareLinkDialog({
       await deleteMutation.mutateAsync({ bookId, linkId: toDelete.id });
       toast.success("Share link deleted");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to delete share link",
-      );
+      toastRequestError(error, "Failed to delete share link");
     } finally {
       setDeleteOpen(false);
     }
@@ -335,9 +327,7 @@ export function ShareLinkDialog({
               <div className="space-y-3">
                 <h3 className="text-sm font-medium">Links</h3>
                 {linksQuery.isLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
+                  <LoadingSpinner />
                 ) : links.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">
                     This book has no share links yet.

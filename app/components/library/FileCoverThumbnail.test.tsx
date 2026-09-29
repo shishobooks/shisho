@@ -24,11 +24,13 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("FileCoverThumbnail", () => {
-  it("renders cover image when file has a cover", () => {
+  it("renders the cover keyed on updated_at in epoch milliseconds", () => {
     const { container } = render(<FileCoverThumbnail file={makeFile()} />);
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
-    expect(img?.getAttribute("src")).toBe("/api/books/files/1/cover");
+    expect(img?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=1704067200000",
+    );
   });
 
   it("hides the img and shows placeholder after load error", () => {
@@ -40,25 +42,25 @@ describe("FileCoverThumbnail", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
-  it("re-mounts the img when cacheKey bumps after an error", () => {
-    const file = makeFile();
+  it("re-mounts the img when updated_at bumps after an error", () => {
     const { container, rerender } = render(
-      <FileCoverThumbnail cacheKey="111" file={file} />,
+      <FileCoverThumbnail file={makeFile()} />,
     );
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
-    expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=111",
-    );
 
     fireEvent.error(firstImg!);
     expect(container.querySelector("img")).toBeNull();
 
-    rerender(<FileCoverThumbnail cacheKey="222" file={file} />);
+    rerender(
+      <FileCoverThumbnail
+        file={makeFile({ updated_at: "2024-06-01T00:00:00Z" })}
+      />,
+    );
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=222",
+      "/api/books/files/1/cover?v=1717200000000",
     );
   });
 

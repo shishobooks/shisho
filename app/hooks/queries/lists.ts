@@ -355,24 +355,3 @@ export const useUpdateBookLists = () => {
     },
   });
 };
-
-export const useMoveBookToPosition = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation<
-    void,
-    ShishoAPIError,
-    { listId: number; bookId: number; position: number }
-  >({
-    mutationFn: ({ listId, bookId, position }) => {
-      return API.request("PATCH", `/lists/${listId}/books/${bookId}/position`, {
-        position,
-      });
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.ListBooks, variables.listId],
-      });
-    },
-  });
-};

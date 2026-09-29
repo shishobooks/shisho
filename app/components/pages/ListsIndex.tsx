@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,11 +37,7 @@ const ListsIndex = () => {
       await createListMutation.mutateAsync(payload);
       toast.success(`Created "${payload.name}" list`);
     } catch (error) {
-      let message = "Failed to create list";
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to create list");
       throw error; // Let CreateListDialog preserve the draft on failure.
     }
   };
@@ -52,11 +49,7 @@ const ListsIndex = () => {
       });
       toast.success(`Created "${template.display_name}" list`);
     } catch (error) {
-      let message = "Failed to create list";
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to create list");
     }
   };
 
@@ -125,9 +118,7 @@ const ListsIndex = () => {
           </div>
         </div>
 
-        {listsQuery.isLoading && (
-          <div className="text-muted-foreground">Loading...</div>
-        )}
+        {listsQuery.isLoading && <LoadingSpinner />}
 
         {listsQuery.isSuccess && !hasLists && (
           <div className="space-y-6">

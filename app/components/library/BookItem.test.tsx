@@ -301,3 +301,14 @@ describe("BookItem write controls", () => {
     );
   });
 });
+
+describe("BookItem cover", () => {
+  it("keys the cover URL on the book's cover_cache_key", () => {
+    const book = makeBook({ cover_cache_key: "10-1704067200" });
+    render(wrap(<BookItem book={book} libraryId="1" />));
+    expect(screen.getByAltText("Test Book Cover")).toHaveAttribute(
+      "src",
+      "/api/books/1/cover?v=10-1704067200",
+    );
+  });
+});

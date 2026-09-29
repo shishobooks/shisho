@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
+import { fileCoverUrl } from "@/utils/coverUrl";
 
 interface FileCoverThumbnailProps {
   file: File;
   className?: string;
   onClick?: () => void;
-  cacheKey?: string;
   /**
    * Whether to apply interactive styles (cursor-pointer, hover:scale, hover:shadow).
    * Defaults to true. Pass false for non-interactive contexts like file list rows.
@@ -16,7 +16,8 @@ interface FileCoverThumbnailProps {
   interactive?: boolean;
   /**
    * Builds the cover URL, or returns null when there is no cover. Defaults to
-   * the authenticated file cover endpoint when the file has a cover.
+   * the authenticated file cover endpoint (`fileCoverUrl`) when the file has
+   * a cover.
    */
   getCoverUrl?: (file: File) => string | null;
 }
@@ -30,7 +31,6 @@ function FileCoverThumbnail({
   file,
   className,
   onClick,
-  cacheKey,
   interactive = true,
   getCoverUrl,
 }: FileCoverThumbnailProps) {
@@ -40,13 +40,11 @@ function FileCoverThumbnail({
   const coverUrl = getCoverUrl
     ? getCoverUrl(file)
     : file.cover_image_filename
-      ? cacheKey
-        ? `/api/books/files/${file.id}/cover?v=${cacheKey}`
-        : `/api/books/files/${file.id}/cover`
+      ? fileCoverUrl(file)
       : null;
 
   // Reset both flags when the URL would change — either the cover filename
-  // was replaced or the cacheKey bumped from a data refetch. Without resetting
+  // was replaced or updated_at bumped from a data refetch. Without resetting
   // imageError, a transient load failure latches the placeholder forever
   // because the <img> is conditionally unrendered and the `key` bump can't
   // remount it. Without resetting imageLoaded, the remounted <img> renders at
@@ -54,7 +52,7 @@ function FileCoverThumbnail({
   useEffect(() => {
     setImageError(false);
     setImageLoaded(false);
-  }, [cacheKey, file.cover_image_filename, coverUrl]);
+  }, [file.cover_image_filename, coverUrl]);
 
   const isAudiobook = file.file_type === "m4b";
   const aspectClass = isAudiobook ? "aspect-square" : "aspect-[2/3]";
@@ -88,7 +86,7 @@ function FileCoverThumbnail({
             "absolute inset-0 w-full h-full object-cover",
             !imageLoaded && "opacity-0",
           )}
-          key={`${file.id}-${cacheKey ?? ""}`}
+          key={coverUrl}
           onError={() => setImageError(true)}
           onLoad={() => setImageLoaded(true)}
           src={coverUrl}

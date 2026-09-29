@@ -28,10 +28,7 @@ export const PluginDangerZone = ({
       { id: plugin.id, scope: plugin.scope },
       {
         onError: (err) => {
-          toastRequestError(
-            err,
-            err instanceof Error ? err.message : "Uninstall failed",
-          );
+          toastRequestError(err, "Failed to uninstall plugin");
         },
         onSuccess: () => {
           toast.success(`${plugin.name} uninstalled`);

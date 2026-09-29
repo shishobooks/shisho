@@ -73,6 +73,7 @@ import {
   type SourceIntents,
 } from "@/types";
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
+import { fileCoverUrl } from "@/utils/coverUrl";
 import {
   formatDuration,
   formatMetadataFieldLabel,
@@ -745,7 +746,7 @@ export function IdentifyReviewForm({
       ? filePageUrl(file, newCoverPage)
       : undefined);
   const currentCoverUrl = file?.cover_image_filename
-    ? `/api/books/files/${file.id}/cover?v=${new Date(file.updated_at).getTime()}`
+    ? fileCoverUrl(file)
     : undefined;
   const currentCoverPage = file?.cover_page ?? null;
   const isPageBasedCoverChoice = isFilePageBased && newCoverPage != null;
@@ -1299,9 +1300,7 @@ export function IdentifyReviewForm({
       }
       onClose();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to apply metadata.";
-      toastRequestError(err, message);
+      toastRequestError(err, "Failed to apply metadata");
     }
   };
 

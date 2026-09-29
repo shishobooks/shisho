@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 
 import Home from "./Home";
@@ -29,13 +31,13 @@ vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-const renderHome = () => {
+const renderHome = (entry = "/libraries/1") => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/libraries/1"]}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route element={<Home />} path="/libraries/:libraryId" />
         </Routes>
@@ -86,5 +88,56 @@ describe("Home permission gating", () => {
     await flush();
 
     expect(requestedPaths(request)).toContain("/books");
+  });
+});
+
+describe("Home save-as-default failures", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setAuth({ permissions: ["books:read"] });
+    // Every read succeeds and every write fails.
+    vi.spyOn(API, "request").mockImplementation(async (method, path) => {
+      if (method !== "GET") {
+        throw new ShishoAPIError("Settings are read-only", "internal", 500);
+      }
+      if (path === "/settings/user") return { gallery_size: "m" };
+      if (path === "/settings/libraries/1") return { sort_spec: null };
+      if (path === "/user/libraries" || path.endsWith("/languages")) return [];
+      return { items: [], total: 0 };
+    });
+  });
+
+  it("toasts when saving the sort as the library default fails", async () => {
+    const error = vi.spyOn(toast, "error");
+    const user = userEvent.setup();
+    renderHome("/libraries/1?sort=title:desc");
+    await flush();
+
+    await user.click(screen.getByRole("button", { name: /^sort/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /save as my default for this library/i,
+      }),
+    );
+    await flush();
+
+    expect(error).toHaveBeenCalledWith("Settings are read-only", undefined);
+  });
+
+  it("toasts when saving the gallery size as the default fails", async () => {
+    const error = vi.spyOn(toast, "error");
+    const user = userEvent.setup();
+    renderHome("/libraries/1?size=l");
+    await flush();
+
+    await user.click(screen.getByRole("button", { name: /^size/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /save as my default everywhere/i,
+      }),
+    );
+    await flush();
+
+    expect(error).toHaveBeenCalledWith("Settings are read-only", undefined);
   });
 });

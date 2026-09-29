@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import Logo from "@/components/library/Logo";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
@@ -266,9 +267,7 @@ function EReaderSection() {
       </div>
 
       {isLoading ? (
-        <div className="py-6 text-center text-sm text-muted-foreground">
-          Loading...
-        </div>
+        <LoadingSpinner />
       ) : eReaderKeys?.length === 0 ? (
         <div className="rounded-md border border-dashed border-border py-6 text-center">
           <p className="text-sm text-muted-foreground">
@@ -532,9 +531,7 @@ function KoboSyncSection() {
       </div>
 
       {isLoading ? (
-        <div className="py-6 text-center text-sm text-muted-foreground">
-          Loading...
-        </div>
+        <LoadingSpinner />
       ) : koboKeys?.length === 0 ? (
         <div className="rounded-md border border-dashed border-border py-6 text-center">
           <p className="text-sm text-muted-foreground">

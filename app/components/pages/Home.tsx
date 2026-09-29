@@ -1,4 +1,4 @@
-import { CheckSquare, Loader2 } from "lucide-react";
+import { CheckSquare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
 import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
@@ -14,10 +15,6 @@ import SortedByChips from "@/components/library/SortedByChips";
 import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { Button } from "@/components/ui/button";
 import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
-import {
-  DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
-} from "@/constants/gallerySize";
 import { getLanguageName } from "@/constants/languages";
 import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
@@ -28,16 +25,12 @@ import {
   useUpdateLibrarySettings,
 } from "@/hooks/queries/librarySettings";
 import { useSeries } from "@/hooks/queries/series";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
-import { parsePageParam } from "@/libraries/pagination";
+import { toastRequestError } from "@/libraries/api";
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -45,7 +38,7 @@ import {
   sortSpecsEqual,
   type SortLevel,
 } from "@/libraries/sortSpec";
-import type { Book, GallerySize, Genre, ReviewedFilter, Tag } from "@/types";
+import type { Book, Genre, ReviewedFilter, Tag } from "@/types";
 
 const HomeContent = () => {
   const { libraryId } = useParams();
@@ -55,7 +48,6 @@ const HomeContent = () => {
   usePageTitle(libraryQuery.data?.name ?? "Books");
   const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
     useBulkSelection();
-  const currentPage = parsePageParam(searchParams.get("page"));
   const seriesIdParam = searchParams.get("series_id");
   const searchQuery = searchParams.get("search") ?? "";
   const fileTypesParam = searchParams.get("file_types") ?? "";
@@ -125,16 +117,17 @@ const HomeContent = () => {
   const librarySettingsQuery = useLibrarySettings(libraryIdNum ?? 0);
   const updateLibrarySettings = useUpdateLibrarySettings(libraryIdNum ?? 0);
 
-  const userSettingsQuery = useUserSettings();
-  const updateUserSettings = useUpdateUserSettings();
-
-  const sizeParam = searchParams.get("size");
-  const urlSize: GallerySize | null = parseGallerySize(sizeParam);
-  const savedSize: GallerySize =
-    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
-  const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
-  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
+  const {
+    savedSize,
+    effectiveSize,
+    isSizeDirty,
+    itemsPerPage,
+    offset,
+    settingsResolved: userSettingsResolved,
+    isSaving: isSavingSize,
+    applyGallerySize,
+    saveSizeAsDefault,
+  } = useGallerySizeParam();
 
   // Resolve effective sort: URL wins if valid; else stored preference; else builtin.
   const storedSort: SortLevel[] | null = librarySettingsQuery.data?.sort_spec
@@ -154,8 +147,6 @@ const HomeContent = () => {
     libraryIdNum === undefined ||
     librarySettingsQuery.isSuccess ||
     librarySettingsQuery.isError;
-  const userSettingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
   const settingsResolved = librarySettingsResolved && userSettingsResolved;
 
   // Group languages by base subtag for the filter dropdown.
@@ -252,10 +243,6 @@ const HomeContent = () => {
   const selectedTags = selectedTagIds
     .map((id) => tagCache.get(id))
     .filter((t): t is Tag => t !== undefined);
-
-  // Calculate pagination parameters
-  const limit = itemsPerPage;
-  const offset = (currentPage - 1) * limit;
 
   const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
 
@@ -355,6 +342,8 @@ const HomeContent = () => {
     updateLibrarySettings.mutate(
       { sort_spec: serialized || null },
       {
+        onError: (error) =>
+          toastRequestError(error, "Failed to save the default sort"),
         onSuccess: () => {
           setSearchParams((prev) => {
             const params = new URLSearchParams(prev);
@@ -380,35 +369,6 @@ const HomeContent = () => {
     });
   };
 
-  const applyGallerySize = (next: GallerySize) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next === savedSize) {
-        params.delete("size");
-      } else {
-        params.set("size", next);
-      }
-      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
-      params.set("page", String(newPage));
-      return params;
-    });
-  };
-
-  const handleSaveSizeAsDefault = () => {
-    updateUserSettings.mutate(
-      { gallery_size: effectiveSize },
-      {
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("size");
-            return params;
-          });
-        },
-      },
-    );
-  };
-
   const hasActiveFilters =
     selectedFileTypes.length > 0 ||
     selectedGenreIds.length > 0 ||
@@ -418,7 +378,7 @@ const HomeContent = () => {
 
   // Build query with search and file types
   const booksQueryParams: Parameters<typeof useBooks>[0] = {
-    limit,
+    limit: itemsPerPage,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     series_id: seriesId,
@@ -526,7 +486,6 @@ const HomeContent = () => {
   const renderBookItem = (book: Book) => (
     <SelectableBookItem
       book={book}
-      cacheKey={book.cover_cache_key}
       coverAspectRatio={coverAspectRatio}
       gallerySize={effectiveSize}
       key={book.id}
@@ -598,9 +557,9 @@ const HomeContent = () => {
           <div className="hidden sm:flex">
             <SizePopover
               effectiveSize={effectiveSize}
-              isSaving={updateUserSettings.isPending}
+              isSaving={isSavingSize}
               onChange={applyGallerySize}
-              onSaveAsDefault={handleSaveSizeAsDefault}
+              onSaveAsDefault={saveSizeAsDefault}
               savedSize={savedSize}
               trigger={<SizeButton isDirty={isSizeDirty} />}
             />
@@ -649,7 +608,7 @@ const HomeContent = () => {
 
       {!settingsResolved ? (
         <div className="flex min-h-[300px] items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <LoadingSpinner />
         </div>
       ) : (
         <Gallery

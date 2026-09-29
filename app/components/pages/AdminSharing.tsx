@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Switch } from "@/components/ui/switch";
 import {
   useSharingSettings,
@@ -34,31 +35,18 @@ const SettingRow = ({
 }: SettingRowProps) => (
   <div className="flex items-start justify-between gap-4">
     <div>
-      <label
-        className="text-sm font-medium"
-        htmlFor={canEdit ? id : undefined}
-        id={`${id}-label`}
-      >
+      <label className="text-sm font-medium" htmlFor={id}>
         {label}
       </label>
       <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
     </div>
-    {canEdit ? (
-      <Switch
-        checked={checked}
-        className="mt-0.5"
-        disabled={disabled}
-        id={id}
-        onCheckedChange={onCheckedChange}
-      />
-    ) : (
-      <span
-        aria-labelledby={`${id}-label`}
-        className="shrink-0 text-sm text-muted-foreground"
-      >
-        {checked ? "On" : "Off"}
-      </span>
-    )}
+    <Switch
+      checked={checked}
+      className="mt-0.5"
+      disabled={!canEdit || disabled}
+      id={id}
+      onCheckedChange={onCheckedChange}
+    />
   </div>
 );
 
@@ -75,7 +63,8 @@ const AdminSharing = () => {
   const save = (payload: UpdateSharingSettingsPayload, saved: string) => {
     updateMutation.mutate(payload, {
       onSuccess: () => toast.success(saved),
-      onError: (error) => toastRequestError(error, error.message),
+      onError: (error) =>
+        toastRequestError(error, "Failed to save sharing settings"),
     });
   };
 
@@ -116,6 +105,7 @@ const AdminSharing = () => {
       {pageHeader}
       <div className="grid gap-6">
         <div className="border border-border rounded-md p-4 md:p-6 space-y-6">
+          {!canEdit && <ReadOnlyNotice />}
           <div className="space-y-3">
             <SettingRow
               canEdit={canEdit}

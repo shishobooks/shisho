@@ -67,9 +67,7 @@ export function MoveFilesDialog({
       }
       onOpenChange(false);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to move files";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to move files");
     }
   };
 

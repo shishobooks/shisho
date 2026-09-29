@@ -63,9 +63,7 @@ export function MergeIntoDialog({
       }
       onOpenChange(false);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to merge books";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to merge books");
     }
   };
 

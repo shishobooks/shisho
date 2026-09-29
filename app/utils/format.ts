@@ -1,14 +1,19 @@
 // Shared formatting utilities
 
 /**
- * Formats bytes into a human-readable file size string.
+ * Formats bytes into a human-readable size in 1024-byte units, rounded to two
+ * decimals. Values past the largest unit stay in terabytes.
  * @example formatFileSize(1024) // "1 KB"
+ * @example formatFileSize(2 * 1024 ** 4) // "2 TB"
  */
 export const formatFileSize = (bytes: number): string => {
-  const sizes = ["B", "KB", "MB", "GB"];
-  if (bytes === 0) return "0 B";
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  if (bytes <= 0) return "0 B";
+  const i = Math.min(
+    sizes.length - 1,
+    Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))),
+  );
+  return `${Math.round((bytes / 1024 ** i) * 100) / 100} ${sizes[i]}`;
 };
 
 /**
@@ -41,6 +46,24 @@ export const formatDuration = (seconds: number): string => {
     return `${hours}h ${minutes}m`;
   }
   return `${minutes}m`;
+};
+
+/**
+ * Formats the time between two ISO timestamps, or from `start` until now when
+ * `end` is omitted, as milliseconds, seconds, or minutes and seconds.
+ * @example formatElapsed("2024-01-01T00:00:00Z", "2024-01-01T00:03:05Z") // "3m 5s"
+ */
+export const formatElapsed = (start: string, end?: string | null): string => {
+  const endMs = end ? new Date(end).getTime() : Date.now();
+  const durationMs = endMs - new Date(start).getTime();
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  }
+  const seconds = Math.floor(durationMs / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 };
 
 /**

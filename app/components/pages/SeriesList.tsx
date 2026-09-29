@@ -15,21 +15,16 @@ import {
 import {
   COVER_WIDTH_CLASS,
   DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
 } from "@/constants/gallerySize";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
+import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
-import { parsePageParam } from "@/libraries/pagination";
 import { cn } from "@/libraries/utils";
 import type { GallerySize, SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { seriesCoverUrl } from "@/utils/coverUrl";
 
 // For series, we don't have access to the underlying files, so we use the
 // library's cover_aspect_ratio preference to determine aspect ratio.
@@ -51,22 +46,18 @@ interface SeriesCardProps {
   libraryId: string;
   aspectClass: string;
   isAudiobook: boolean;
-  cacheKey?: string;
   gallerySize?: GallerySize;
 }
 
-const SeriesCard = ({
+export const SeriesCard = ({
   seriesItem,
   libraryId,
   aspectClass,
   isAudiobook,
-  cacheKey,
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: SeriesCardProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
-  const coverUrl = cacheKey
-    ? `/api/series/${seriesItem.id}/cover?v=${cacheKey}`
-    : `/api/series/${seriesItem.id}/cover`;
+  const coverUrl = seriesCoverUrl(seriesItem);
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const bookCount = seriesItem.book_count ?? 0;
@@ -138,7 +129,6 @@ const SeriesList = () => {
 
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = parsePageParam(searchParams.get("page"));
   const searchQuery = searchParams.get("search") ?? "";
 
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
@@ -159,59 +149,24 @@ const SeriesList = () => {
     }
   };
 
-  const userSettingsQuery = useUserSettings();
-  const updateUserSettings = useUpdateUserSettings();
-
-  const urlSize: GallerySize | null = parseGallerySize(
-    searchParams.get("size"),
-  );
-  const savedSize: GallerySize =
-    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
-  const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
-  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
-
-  const userSettingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
-
-  const limit = itemsPerPage;
-  const offset = (currentPage - 1) * limit;
-
-  const applyGallerySize = (next: GallerySize) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next === savedSize) {
-        params.delete("size");
-      } else {
-        params.set("size", next);
-      }
-      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
-      params.set("page", String(newPage));
-      return params;
-    });
-  };
-
-  const handleSaveSizeAsDefault = () => {
-    updateUserSettings.mutate(
-      { gallery_size: effectiveSize },
-      {
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("size");
-            return params;
-          });
-        },
-      },
-    );
-  };
+  const {
+    savedSize,
+    effectiveSize,
+    isSizeDirty,
+    itemsPerPage,
+    offset,
+    settingsResolved: userSettingsResolved,
+    isSaving: isSavingSize,
+    applyGallerySize,
+    saveSizeAsDefault,
+  } = useGallerySizeParam();
 
   const libraryQuery = useUserLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
   const seriesQuery = useSeriesList(
     {
-      limit,
+      limit: itemsPerPage,
       offset,
       library_id: libraryId ? parseInt(libraryId, 10) : undefined,
       search: debouncedSearch || undefined,
@@ -239,7 +194,6 @@ const SeriesList = () => {
     return (
       <SeriesCard
         aspectClass={aspectClass}
-        cacheKey={seriesItem.cover_cache_key}
         gallerySize={effectiveSize}
         isAudiobook={isAudiobook}
         key={seriesItem.id}
@@ -267,9 +221,9 @@ const SeriesList = () => {
         <div className="hidden sm:flex">
           <SizePopover
             effectiveSize={effectiveSize}
-            isSaving={updateUserSettings.isPending}
+            isSaving={isSavingSize}
             onChange={applyGallerySize}
-            onSaveAsDefault={handleSaveSizeAsDefault}
+            onSaveAsDefault={saveSizeAsDefault}
             savedSize={savedSize}
             trigger={<SizeButton isDirty={isSizeDirty} />}
           />

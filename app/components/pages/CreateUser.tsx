@@ -137,11 +137,7 @@ const CreateUser = () => {
       setChangesSaved(true);
       requestNavigate(`/settings/users/${user.id}`);
     } catch (error) {
-      let msg = "Failed to create user";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Failed to create user");
     }
   };
 

@@ -24,6 +24,7 @@ import type {
   UpdateFileCoverPagePayload,
   UpdateFilePayload,
 } from "@/types";
+import { fileCoverUploadUrl } from "@/utils/coverUrl";
 
 import { QueryKey as GenresQueryKey } from "./genres";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
@@ -168,7 +169,7 @@ export const useUploadFileCover = () => {
       formData.append("cover", file);
       // Raw fetch because API.request JSON-encodes the body; checkStatus still
       // maps error responses (including a proxy's HTML 413) to ShishoAPIError.
-      const response = await fetch(`/api/books/files/${id}/cover`, {
+      const response = await fetch(fileCoverUploadUrl(id), {
         method: "POST",
         body: formData,
       });

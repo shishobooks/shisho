@@ -2,6 +2,7 @@ import equal from "fast-deep-equal";
 import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -396,11 +397,7 @@ export function IdentifyBookDialog({
                 first search has no prior data, so it shows the centered spinner
                 alone. */}
             <div className="relative min-h-[200px] max-h-[60vh] overflow-y-auto">
-              {isSearching && !searchQuery.data && (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              )}
+              {isSearching && !searchQuery.data && <LoadingSpinner />}
 
               {isSearching && searchQuery.data && (
                 <div className="pointer-events-none sticky top-0 z-10 flex items-center justify-center py-2">

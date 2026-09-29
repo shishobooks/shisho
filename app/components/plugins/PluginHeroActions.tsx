@@ -31,10 +31,7 @@ export const PluginHeroActions = ({
       await reload.mutateAsync({ id: plugin.id, scope: plugin.scope });
       toast.success(`${plugin.name} reloaded from disk`);
     } catch (err) {
-      toastRequestError(
-        err,
-        err instanceof Error ? err.message : "Reload failed",
-      );
+      toastRequestError(err, "Failed to reload plugin");
     }
   };
 

@@ -290,6 +290,44 @@ describe("FileEditDialog", () => {
     mockUploadFileCover.mockResolvedValue({});
   });
 
+  describe("cover preview URL", () => {
+    const coveredFile = {
+      ...mockFile,
+      cover_image_filename: "file.cbz.cover.jpg",
+      updated_at: "2024-01-01T00:00:00Z",
+    };
+
+    it("keys the current cover on the file's updated_at in epoch milliseconds", async () => {
+      renderDialog({ file: coveredFile });
+
+      expect(await screen.findByAltText("File cover")).toHaveAttribute(
+        "src",
+        "/api/books/files/1/cover?v=1704067200000",
+      );
+    });
+
+    it("moves to a new key after a cover change is saved", async () => {
+      const user = createUser();
+      renderDialog({ file: coveredFile });
+      const before = (await screen.findByAltText("File cover")).getAttribute(
+        "src",
+      );
+
+      await user.click(screen.getByRole("button", { name: /select page/i }));
+      await user.click(await screen.findByTestId("select-page-5"));
+      await user.click(screen.getByRole("button", { name: /save/i }));
+
+      await waitFor(() => {
+        expect(screen.getByAltText("File cover").getAttribute("src")).not.toBe(
+          before,
+        );
+      });
+      expect(screen.getByAltText("File cover").getAttribute("src")).toMatch(
+        /^\/api\/books\/files\/1\/cover\?v=\d+$/,
+      );
+    });
+  });
+
   describe("cover page change race condition", () => {
     it("should reset pendingCoverPage after successful save so hasChanges becomes false", async () => {
       // This test reproduces the bug:
@@ -739,7 +777,11 @@ describe("FileEditDialog", () => {
       vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-url");
       vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
       mockUploadFileCover.mockRejectedValue(
-        new Error("The uploaded file is not a decodable image"),
+        new ShishoAPIError(
+          "The uploaded file is not a decodable image",
+          "invalid_image",
+          422,
+        ),
       );
 
       const user = createUser();

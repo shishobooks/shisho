@@ -106,6 +106,7 @@ describe("AdminReviewCriteria", () => {
     wrap(<AdminReviewCriteria />);
 
     expect(screen.getByRole("checkbox", { name: "Authors" })).toBeDisabled();
+    expect(screen.getByRole("note")).toHaveTextContent(/view.*not change/i);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Recompute now" })).toBeNull();
   });
@@ -115,6 +116,7 @@ describe("AdminReviewCriteria", () => {
     wrap(<AdminReviewCriteria />);
 
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.queryByRole("note")).toBeNull();
     expect(screen.queryByRole("button", { name: "Recompute now" })).toBeNull();
   });
 

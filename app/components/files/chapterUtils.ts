@@ -5,14 +5,6 @@ import {
   type Chapter,
   type ChapterInput,
 } from "@/types";
-import { formatTimestamp } from "@/utils/format";
-
-/**
- * Formats milliseconds as HH:MM:SS.mmm timestamp.
- * Re-exports formatTimestamp from utils/format.ts for consistency.
- * @example formatTimestampMs(3661500) // "01:01:01.500"
- */
-export const formatTimestampMs = formatTimestamp;
 
 /**
  * Parses a timestamp string in HH:MM:SS.mmm format to milliseconds.

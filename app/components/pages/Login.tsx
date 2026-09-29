@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import Logo from "@/components/library/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,11 +51,7 @@ const Login = () => {
       await login(username, password);
       navigate(redirectTo);
     } catch (error) {
-      let msg = "Login failed. Please check your credentials.";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Login failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
     }
@@ -63,7 +60,7 @@ const Login = () => {
   if (authLoading) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <LoadingSpinner />
       </div>
     );
   }

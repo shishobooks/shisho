@@ -44,7 +44,7 @@ import {
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetFileReview } from "@/hooks/queries/review";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { isDemoModeError } from "@/libraries/api";
+import { isDemoModeError, requestErrorMessage } from "@/libraries/api";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   FileRoleMain,
@@ -59,6 +59,7 @@ import {
   type FileRole,
   type ReviewOverride,
 } from "@/types";
+import { fileCoverUrl } from "@/utils/coverUrl";
 import { filePageUrl } from "@/utils/pageUrl";
 
 interface FileEditDialogProps {
@@ -98,10 +99,14 @@ export function FileEditDialog({
     [narrators],
   );
   const isPageBased = isPageBasedFileType(file.file_type);
-  // Dialog-local cover cache key — bumped synchronously after cover mutations
-  // (upload / set-cover-page) so the preview `<img>` refreshes immediately on
-  // save, without waiting for the parent query to refetch.
-  const [coverCacheKey, setCoverCacheKey] = useState(() => Date.now());
+  // Set to the time of the last cover mutation (upload / set-cover-page) so
+  // the preview `<img>` refreshes immediately on save, without waiting for the
+  // parent query to refetch the file's new updated_at.
+  const [coverChangedAt, setCoverChangedAt] = useState<string | null>(null);
+  const coverUrl = fileCoverUrl({
+    id: file.id,
+    updated_at: coverChangedAt ?? file.updated_at,
+  });
   const [coverPagePickerOpen, setCoverPagePickerOpen] = useState(false);
   const [pendingCoverPage, setPendingCoverPage] = useState<number | null>(null);
   // A rejected save stays visible in the dialog so the edits are not lost.
@@ -479,7 +484,7 @@ export function FileEditDialog({
           id: file.id,
           file: pendingCoverFile,
         });
-        setCoverCacheKey(Date.now());
+        setCoverChangedAt(new Date().toISOString());
         setPendingCoverFile(null);
       }
 
@@ -493,7 +498,7 @@ export function FileEditDialog({
           id: file.id,
           page: pendingCoverPage,
         });
-        setCoverCacheKey(Date.now());
+        setCoverChangedAt(new Date().toISOString());
         setPendingCoverPage(null);
       }
 
@@ -514,9 +519,7 @@ export function FileEditDialog({
       // checkStatus already toasted a Demo Mode rejection; keep the draft
       // open without repeating it inline.
       if (!isDemoModeError(error)) {
-        setSaveError(
-          error instanceof Error ? error.message : "Failed to save file",
-        );
+        setSaveError(requestErrorMessage(error, "Failed to save file"));
       }
       return;
     }
@@ -686,8 +689,8 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              key={`${file.id}-${coverCacheKey}`}
-                              src={`/api/books/files/${file.id}/cover?v=${coverCacheKey}`}
+                              key={coverUrl}
+                              src={coverUrl}
                             />
                           ) : (
                             <CoverPlaceholder
@@ -714,8 +717,8 @@ export function FileEditDialog({
                             <img
                               alt="File cover"
                               className="w-full h-full object-cover"
-                              key={`${file.id}-${coverCacheKey}`}
-                              src={`/api/books/files/${file.id}/cover?v=${coverCacheKey}`}
+                              key={coverUrl}
+                              src={coverUrl}
                             />
                           ) : (
                             <CoverPlaceholder

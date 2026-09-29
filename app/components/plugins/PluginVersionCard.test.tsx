@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PluginVersion } from "@/hooks/queries/plugins";
 
@@ -21,11 +21,12 @@ const makeVersion = (
 });
 
 describe("PluginVersionCard date formatting", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     // Pin to a known "now" so the "relative" string is deterministic.
+    vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-04-20T12:00:00Z"));
   });
-  afterAll(() => {
+  afterEach(() => {
     vi.useRealTimers();
   });
 
@@ -52,6 +53,28 @@ describe("PluginVersionCard date formatting", () => {
     );
     const released = screen.getByText(/released/i);
     expect(released.textContent).toMatch(/Apr 14, 2026/);
+  });
+
+  it("words older releases with date-fns relative time", () => {
+    render(
+      <PluginVersionCard
+        state="latest"
+        version={makeVersion({ releaseDate: "2025-01-10" })}
+      />,
+    );
+    expect(screen.getByText(/released/i).textContent).toMatch(
+      /over 1 year ago/,
+    );
+  });
+
+  it("says yesterday for a release the day before", () => {
+    render(
+      <PluginVersionCard
+        state="latest"
+        version={makeVersion({ releaseDate: "2026-04-19" })}
+      />,
+    );
+    expect(screen.getByText(/released/i).textContent).toMatch(/yesterday/);
   });
 
   it("omits the Released line when releaseDate is empty", () => {

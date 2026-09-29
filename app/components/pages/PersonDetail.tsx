@@ -9,10 +9,6 @@ import {
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import { Badge } from "@/components/ui/badge";
 import {
-  DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
-} from "@/constants/gallerySize";
-import {
   useDeletePerson,
   useMergePerson,
   usePeopleList,
@@ -21,13 +17,11 @@ import {
   usePersonNarratedFiles,
   useUpdatePerson,
 } from "@/hooks/queries/people";
-import { useUserSettings } from "@/hooks/queries/settings";
 import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
-import type { GallerySize } from "@/types";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const PersonDetail = () => {
@@ -36,18 +30,11 @@ const PersonDetail = () => {
   const [searchParams] = useSearchParams();
   const personId = id ? parseInt(id, 10) : undefined;
 
-  const userSettingsQuery = useUserSettings();
-  const userSettingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
-
-  const urlSize: GallerySize | null = parseGallerySize(
-    searchParams.get("size"),
-  );
-  const savedSize: GallerySize =
-    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
-  const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const currentPage = parsePageParam(searchParams.get("page"));
-  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
+  const {
+    itemsPerPage,
+    offset,
+    settingsResolved: userSettingsResolved,
+  } = useGallerySizeParam();
 
   const filePage = parsePageParam(searchParams.get("filePage"));
 
@@ -58,7 +45,7 @@ const PersonDetail = () => {
     personId,
     {
       limit: itemsPerPage,
-      offset: (currentPage - 1) * itemsPerPage,
+      offset,
     },
     {
       enabled: userSettingsResolved && Boolean(personId),

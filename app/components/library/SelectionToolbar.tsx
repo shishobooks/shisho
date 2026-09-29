@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -145,9 +146,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       );
       exitSelectionMode();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to start download";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to start download");
     }
   };
 
@@ -169,9 +168,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       setActionsPopoverOpen(false);
       exitSelectionMode();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to add books to list";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to add books to list");
     } finally {
       setAddingToListId(null);
     }
@@ -198,9 +195,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       );
       exitSelectionMode();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create list";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to create list");
       throw error; // Re-throw so CreateListDialog knows it failed
     }
   };
@@ -218,11 +213,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       );
       exitSelectionMode();
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to update review state";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to update review state");
     }
   };
 
@@ -237,9 +228,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       setShowDeleteDialog(false);
       exitSelectionMode();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to delete books";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to delete books");
     }
   };
 
@@ -315,11 +304,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       <p className="text-xs font-medium text-muted-foreground px-3 py-2">
         Add to List
       </p>
-      {listsQuery.isLoading && (
-        <div className="flex items-center justify-center py-4">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      )}
+      {listsQuery.isLoading && <LoadingSpinner className="py-3" />}
       {!listsQuery.isLoading && editableLists.length === 0 && (
         <p className="text-sm text-muted-foreground px-3 py-3 text-center">
           No editable lists

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import Logo from "@/components/library/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,11 +99,7 @@ const Setup = () => {
       setChangesSaved(true);
       requestNavigate("/");
     } catch (error) {
-      let msg = "Setup failed. Please try again.";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Setup failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -122,11 +119,7 @@ const Setup = () => {
       setChangesSaved(true);
       requestNavigate("/");
     } catch (error) {
-      let msg = "Setup failed. Please try again.";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Setup failed. Please try again.");
     } finally {
       setIsDevLoading(false);
     }
@@ -135,7 +128,7 @@ const Setup = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <LoadingSpinner />
       </div>
     );
   }

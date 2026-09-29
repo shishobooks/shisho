@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { AddToListDialog } from "@/components/library/AddToListDialog";
 import { CreateListDialog } from "@/components/library/CreateListDialog";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -81,9 +82,7 @@ const AddToListPopover = ({
         toast.success(`Added to "${list.name}"`);
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update list";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to update list");
     } finally {
       setMutatingListId(null);
     }
@@ -106,9 +105,7 @@ const AddToListPopover = ({
       });
       toast.success(`Added to "${payload.name}"`);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create list";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to create list");
       throw error; // Let CreateListDialog preserve the draft if creation failed.
     }
   };
@@ -136,11 +133,7 @@ const AddToListPopover = ({
           Add to List
         </p>
 
-        {isLoading && (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          </div>
-        )}
+        {isLoading && <LoadingSpinner className="py-3" />}
 
         {!isLoading && !hasLists && (
           <p className="text-sm text-muted-foreground px-3 py-3 text-center">

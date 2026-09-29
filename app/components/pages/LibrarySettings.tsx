@@ -214,11 +214,7 @@ const LibrarySettings = () => {
         libraryPaths: validPaths,
       });
     } catch (e) {
-      let msg = "Something went wrong.";
-      if (e instanceof Error) {
-        msg = e.message;
-      }
-      toastRequestError(e, msg);
+      toastRequestError(e, "Failed to save library settings");
     }
   };
 

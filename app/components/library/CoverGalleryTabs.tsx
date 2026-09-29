@@ -9,6 +9,7 @@ import {
 import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { fileCoverUrl } from "@/utils/coverUrl";
 import { fileLabel } from "@/utils/format";
 
 interface CoverGalleryTabsProps {
@@ -84,15 +85,12 @@ function CoverGalleryTabs({
   const aspectClass = isAudiobook ? "aspect-square" : "aspect-[2/3]";
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
-  const fileCacheKey = selectedFile?.updated_at;
   const coverUrl = !selectedFile
     ? null
     : getCoverUrl
       ? getCoverUrl(selectedFile)
       : selectedFile.cover_image_filename
-        ? fileCacheKey
-          ? `/api/books/files/${selectedFile.id}/cover?v=${fileCacheKey}`
-          : `/api/books/files/${selectedFile.id}/cover`
+        ? fileCoverUrl(selectedFile)
         : null;
   const hasCover = coverUrl && !coverError;
 
@@ -156,7 +154,7 @@ function CoverGalleryTabs({
               "absolute inset-0 w-full h-full object-cover",
               !coverLoaded && "opacity-0",
             )}
-            key={`${selectedFile?.id}-${fileCacheKey ?? ""}`}
+            key={coverUrl}
             onError={() => setCoverError(true)}
             onLoad={handleCoverLoad}
             src={coverUrl}

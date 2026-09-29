@@ -1,6 +1,7 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import { fileDownloadUrl } from "@/utils/downloadUrl";
 
 import { useRequires } from "./permissions";
 
@@ -27,7 +28,7 @@ export const useEpubBlob = (
     staleTime: 60 * 1000,
     gcTime: 60 * 1000,
     queryFn: async ({ signal }) => {
-      const response = await fetch(`/api/books/files/${fileId}/download`, {
+      const response = await fetch(fileDownloadUrl(fileId), {
         signal,
       });
       // checkStatus rejects with the API's error; the body is a file

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,7 +34,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { toastRequestError } from "@/libraries/api";
+import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { sortRoles } from "@/utils/roles";
 
 const UserDetail = () => {
@@ -164,11 +166,7 @@ const UserDetail = () => {
         selectedLibraries: allLibraryAccess ? [] : selectedLibraries,
       });
     } catch (error) {
-      let msg = "Failed to update user";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Failed to update user");
     }
   };
 
@@ -206,11 +204,7 @@ const UserDetail = () => {
       setConfirmPassword("");
       setRequirePasswordReset(false);
     } catch (error) {
-      let msg = "Failed to reset password";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Failed to reset password");
     }
   };
 
@@ -222,11 +216,7 @@ const UserDetail = () => {
       toast.success("User deactivated successfully");
       navigate("/settings/users");
     } catch (error) {
-      let msg = "Failed to deactivate user";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Failed to deactivate user");
     }
   };
 
@@ -249,17 +239,15 @@ const UserDetail = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !user) {
     return (
       <div className="text-center py-20">
-        <p className="text-destructive">{error?.message ?? "User not found"}</p>
+        <p className="text-destructive">
+          {requestErrorMessage(error, "User not found")}
+        </p>
       </div>
     );
   }
@@ -283,6 +271,11 @@ const UserDetail = () => {
       </div>
 
       <div className="max-w-2xl space-y-6 border border-border rounded-md p-4 md:p-6">
+        {!canWrite && (
+          <ReadOnlyNotice>
+            You can view this user but not change their details or access.
+          </ReadOnlyNotice>
+        )}
         {/* Basic Info */}
         <div className="space-y-4">
           <h2 className="text-lg font-medium">Basic Information</h2>

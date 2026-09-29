@@ -9,18 +9,7 @@ import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { Info as CacheInfo } from "@/types/generated/cache";
-
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(
-    sizes.length - 1,
-    Math.floor(Math.log(bytes) / Math.log(k)),
-  );
-  const value = bytes / Math.pow(k, i);
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${sizes[i]}`;
-};
+import { formatFileSize } from "@/utils/format";
 
 const AdminCache = () => {
   usePageTitle("Cache");
@@ -52,14 +41,11 @@ const AdminCache = () => {
     try {
       const result = await clearMutation.mutateAsync(target.id);
       toast.success(
-        `Cleared ${formatBytes(result.cleared_bytes)} (${result.cleared_files} files) from ${target.name}`,
+        `Cleared ${formatFileSize(result.cleared_bytes)} (${result.cleared_files} files) from ${target.name}`,
       );
       setPending(null);
     } catch (err) {
-      toastRequestError(
-        err,
-        err instanceof Error ? err.message : "Failed to clear cache",
-      );
+      toastRequestError(err, "Failed to clear cache");
       setPending(null);
     }
   };
@@ -93,7 +79,7 @@ const AdminCache = () => {
                   </p>
                   <div className="mt-3 text-sm text-muted-foreground">
                     <span className="font-mono">
-                      {formatBytes(cache.size_bytes)}
+                      {formatFileSize(cache.size_bytes)}
                     </span>
                     <span className="mx-2 text-muted-foreground/50">·</span>
                     <span>
@@ -122,7 +108,7 @@ const AdminCache = () => {
         confirmLabel="Clear"
         description={
           pending
-            ? `This will delete ${pending.file_count} files (${formatBytes(pending.size_bytes)}). Content will be regenerated on next access.`
+            ? `This will delete ${pending.file_count} files (${formatFileSize(pending.size_bytes)}). Content will be regenerated on next access.`
             : ""
         }
         isPending={clearMutation.isPending}

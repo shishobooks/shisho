@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import {
   DialogContent,
@@ -242,7 +243,7 @@ const PagePicker = ({
           <div className="w-full h-full flex items-center justify-center p-4 px-16">
             {isInitialLoad && (
               <div className="absolute inset-0 flex items-center justify-center z-10">
-                <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
+                <LoadingSpinner />
               </div>
             )}
             <img

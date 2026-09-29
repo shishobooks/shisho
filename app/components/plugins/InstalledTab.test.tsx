@@ -73,7 +73,7 @@ describe("scanning for local plugins", () => {
       expect(
         screen.getAllByText("This action is unavailable in the demo."),
       ).toHaveLength(1);
-      expect(screen.queryByText(/Scan failed/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Failed to scan/)).not.toBeInTheDocument();
     } finally {
       view.unmount();
       client.clear();
@@ -92,9 +92,8 @@ describe("scanning for local plugins", () => {
       await user.click(
         await screen.findByRole("button", { name: "Scan for Local Plugins" }),
       );
-      expect(
-        await screen.findByText("Scan failed: disk on fire"),
-      ).toBeInTheDocument();
+      // The toast carries the server's message (requestErrorMessage).
+      expect(await screen.findByText("disk on fire")).toBeInTheDocument();
       expect(
         screen.queryByText("This action is unavailable in the demo."),
       ).not.toBeInTheDocument();

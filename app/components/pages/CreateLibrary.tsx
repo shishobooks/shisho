@@ -155,11 +155,7 @@ const CreateLibrary = () => {
       setChangesSaved(true);
       requestNavigate(`/libraries/${library.id}`);
     } catch (e) {
-      let msg = "Something went wrong.";
-      if (e instanceof Error) {
-        msg = e.message;
-      }
-      toastRequestError(e, msg);
+      toastRequestError(e, "Failed to create library");
     }
   };
 

@@ -53,6 +53,7 @@ vi.mock("@/hooks/queries/settings", () => ({
     isSuccess: true,
     isError: false,
   }),
+  useUpdateUserSettings: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,

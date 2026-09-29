@@ -71,13 +71,11 @@ These are common mistakes that cause bugs. Most are summarized here in a line an
 
 ### Frontend
 
-**Cover and page images require URL-based cache busting.** API cover endpoints and the CBZ/PDF page endpoint use `Cache-Control: immutable` so browsers cache forever. Cover URLs must include `?v=${cacheKey}` where `cacheKey` is a backend-computed `cover_cache_key` (for books/series) or `file.updated_at` (for file covers) that only changes when the actual cover changes. Page URLs must be built with `filePageUrl(file, page)` from `app/utils/pageUrl.ts`, which keys them on `file.updated_at`. See `app/AGENTS.md` for details.
+**Cover and page images require URL-based cache busting.** API cover endpoints and the CBZ/PDF page endpoint use `Cache-Control: immutable` so browsers cache forever, so every URL carries a `?v=` key that changes only when the image does. Build cover URLs with `bookCoverUrl`, `seriesCoverUrl`, and `fileCoverUrl` from `app/utils/coverUrl.ts` (keyed on the backend `cover_cache_key` for books and series, and on `file.updated_at` in epoch milliseconds for files) and page URLs with `filePageUrl` from `app/utils/pageUrl.ts`. Download and stream URLs come from `app/utils/downloadUrl.ts`. ESLint rejects a literal `/api/.../cover`, `/page/`, `/download`, or `/stream` URL anywhere outside `app/utils`. See `app/AGENTS.md` for details.
 
 ```tsx
-<img
-  key={book.cover_cache_key}
-  src={`/api/books/${id}/cover?v=${book.cover_cache_key}`}
-/>
+const coverUrl = bookCoverUrl(book);
+<img key={coverUrl} src={coverUrl} />;
 ```
 
 ### Plugins

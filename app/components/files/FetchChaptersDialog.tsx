@@ -1,6 +1,6 @@
-import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -121,7 +121,7 @@ const EntryStage = ({ asinInput, onAsinChange, onFetch }: EntryStageProps) => {
 
 const LoadingStage = () => (
   <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
-    <Loader2 className="h-6 w-6 animate-spin" />
+    <LoadingSpinner className="py-0" />
     <span className="text-sm">Looking up chapters on Audible...</span>
   </div>
 );
