@@ -95,7 +95,7 @@ const PersonDetail = () => {
     aliases?: string[];
   }) => {
     if (!personId) return;
-    await updatePersonMutation.mutateAsync({
+    return updatePersonMutation.mutateAsync({
       personId,
       payload: {
         name: data.name,
@@ -107,7 +107,7 @@ const PersonDetail = () => {
 
   const handleMerge = async (sourceId: number) => {
     if (!personId) return;
-    await mergePersonMutation.mutateAsync({
+    return mergePersonMutation.mutateAsync({
       targetId: personId,
       sourceId,
     });
@@ -115,8 +115,10 @@ const PersonDetail = () => {
 
   const handleDelete = async () => {
     if (!personId) return;
-    await deletePersonMutation.mutateAsync({ personId });
-    navigate(`/libraries/${libraryId}/people`);
+    return deletePersonMutation.mutateAsync(
+      { personId },
+      { onSuccess: () => navigate(`/libraries/${libraryId}/people`) },
+    );
   };
 
   return (
@@ -151,7 +153,6 @@ const PersonDetail = () => {
           </Badge>
         ) : null
       }
-      isLoading={personQuery.isLoading}
       libraryId={libraryId!}
       mergeConfig={{
         entities:
@@ -166,8 +167,8 @@ const PersonDetail = () => {
         onSearch: setMergeSearchRaw,
       }}
       name={person?.name ?? ""}
-      notFound={!personQuery.isLoading && (!personQuery.isSuccess || !person)}
       notFoundLabel="Person Not Found"
+      query={personQuery}
       sortName={person?.sort_name}
     >
       <BookGallerySection

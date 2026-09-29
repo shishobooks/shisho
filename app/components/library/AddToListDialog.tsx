@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -24,7 +25,7 @@ import {
   useUpdateBookLists,
 } from "@/hooks/queries/lists";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { toastRequestError } from "@/libraries/api";
+import { firstFailedQuery, toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListDialogProps {
@@ -63,6 +64,10 @@ export const AddToListDialog = ({
     [listsQuery.data?.items],
   );
   const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
+  // Saving replaces the book's lists, so without the book's current lists
+  // the dialog offers no selection, no Create New List (which selects the new
+  // list), and no Save that would write over them.
+  const failedQuery = firstFailedQuery(listsQuery, bookListsQuery);
 
   // Track previous open state to detect open transitions.
   // Start with false so that if dialog starts open, we detect it as "just opened".
@@ -198,13 +203,17 @@ export const AddToListDialog = ({
             {/* Lists */}
             {isLoading && <LoadingSpinner />}
 
-            {!isLoading && filteredLists.length === 0 && (
+            {!isLoading && failedQuery && (
+              <QueryError fallback="Failed to load lists" query={failedQuery} />
+            )}
+
+            {!isLoading && !failedQuery && filteredLists.length === 0 && (
               <div className="text-sm text-muted-foreground text-center py-8">
                 {search ? "No lists match your search" : "No lists yet"}
               </div>
             )}
 
-            {!isLoading && filteredLists.length > 0 && (
+            {!isLoading && !failedQuery && filteredLists.length > 0 && (
               <ScrollArea className="h-[240px] border rounded-md">
                 <div className="p-2 space-y-1">
                   {filteredLists.map((list) => {
@@ -248,7 +257,7 @@ export const AddToListDialog = ({
             )}
 
             {/* Create New List */}
-            {!isLoading && (
+            {!isLoading && !failedQuery && (
               <Button
                 className="w-full"
                 onClick={handleCreateList}
@@ -269,7 +278,11 @@ export const AddToListDialog = ({
               Cancel
             </Button>
             <Button
-              disabled={!hasChanges || updateBookListsMutation.isPending}
+              disabled={
+                !hasChanges ||
+                Boolean(failedQuery) ||
+                updateBookListsMutation.isPending
+              }
               onClick={handleSave}
               size="sm"
             >

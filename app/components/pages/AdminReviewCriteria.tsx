@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -172,11 +173,16 @@ const AdminReviewCriteria = () => {
   };
 
   const executeSave = async (overrideClear: boolean) => {
-    await updateMutation.mutateAsync({
-      book_fields: bookFields,
-      audio_fields: audioFields,
-      clear_overrides: overrideClear,
-    });
+    try {
+      await updateMutation.mutateAsync({
+        book_fields: bookFields,
+        audio_fields: audioFields,
+        clear_overrides: overrideClear,
+      });
+    } catch (error) {
+      toastRequestError(error, "Failed to save review criteria");
+      return;
+    }
     setInitialValues({ bookFields, audioFields });
     toast.success("Saved. Recompute queued.");
   };
@@ -188,29 +194,26 @@ const AdminReviewCriteria = () => {
       setSaveDialogOpen(true);
       return;
     }
-    try {
-      await executeSave(false);
-    } catch (error) {
-      toastRequestError(error, "Failed to save review criteria");
-    }
+    await executeSave(false);
   };
 
   const handleSaveConfirm = async () => {
     setSaveDialogOpen(false);
-    try {
-      await executeSave(clearOverrides);
-    } catch (error) {
-      toastRequestError(error, "Failed to save review criteria");
-    }
+    await executeSave(clearOverrides);
   };
 
   const executeRecompute = async (overrideClear: boolean) => {
-    await createJobMutation.mutateAsync({
-      payload: {
-        type: JobTypeRecomputeReview,
-        data: { clear_overrides: overrideClear },
-      },
-    });
+    try {
+      await createJobMutation.mutateAsync({
+        payload: {
+          type: JobTypeRecomputeReview,
+          data: { clear_overrides: overrideClear },
+        },
+      });
+    } catch (error) {
+      toastRequestError(error, "Failed to queue recompute job");
+      return;
+    }
     toast.success("Review state recompute queued.");
   };
 
@@ -221,20 +224,12 @@ const AdminReviewCriteria = () => {
       setRecomputeDialogOpen(true);
       return;
     }
-    try {
-      await executeRecompute(false);
-    } catch (error) {
-      toastRequestError(error, "Failed to queue recompute job");
-    }
+    await executeRecompute(false);
   };
 
   const handleRecomputeConfirm = async () => {
     setRecomputeDialogOpen(false);
-    try {
-      await executeRecompute(clearOverrides);
-    } catch (error) {
-      toastRequestError(error, "Failed to queue recompute job");
-    }
+    await executeRecompute(clearOverrides);
   };
 
   const pageHeader = (
@@ -256,13 +251,16 @@ const AdminReviewCriteria = () => {
     );
   }
 
-  if (criteriaQuery.isError || !criteriaQuery.data) {
+  if (!criteriaQuery.data) {
     return (
       <div>
         {pageHeader}
-        <p className="text-sm text-muted-foreground">
-          Failed to load review criteria.
-        </p>
+        {criteriaQuery.error && (
+          <QueryError
+            fallback="Failed to load review criteria"
+            query={criteriaQuery}
+          />
+        )}
       </div>
     );
   }

@@ -1,12 +1,19 @@
 import { useParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import CBZReader from "@/components/pages/CBZReader";
 import EPUBReader from "@/components/pages/EPUBReader";
 import M4BReader from "@/components/pages/M4BReader";
 import PDFReader from "@/components/pages/PDFReader";
 import { useBook } from "@/hooks/queries/books";
+import { isLoadFailure } from "@/libraries/api";
 import { FileTypeCBZ, FileTypeEPUB, FileTypeM4B, FileTypePDF } from "@/types";
+
+// Covers the page below the Demo Mode banner, since readers render outside
+// the library layout.
+const READER_OVERLAY =
+  "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex items-center justify-center";
 
 export default function FileReader() {
   const { libraryId, bookId, fileId } = useParams<{
@@ -15,13 +22,41 @@ export default function FileReader() {
     fileId: string;
   }>();
 
-  const { data: book, isLoading } = useBook(bookId);
+  const bookQuery = useBook(bookId);
+  const book = bookQuery.data;
   const file = book?.files?.find((f) => f.id === Number(fileId));
 
-  if (isLoading || !file) {
+  // isPending, not isLoading, so a query paused while offline keeps the
+  // spinner instead of claiming the file is missing.
+  if (bookQuery.isPending) {
     return (
-      <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex items-center justify-center">
+      <div className={READER_OVERLAY}>
         <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (isLoadFailure(bookQuery)) {
+    return (
+      <div className={READER_OVERLAY}>
+        <QueryError
+          className="mx-4 max-w-md flex-1"
+          fallback="Failed to load book"
+          query={bookQuery}
+        />
+      </div>
+    );
+  }
+
+  if (!file) {
+    return (
+      <div className={READER_OVERLAY}>
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold mb-4">File Not Found</h1>
+          <p className="text-muted-foreground">
+            The file you're looking for doesn't exist or may have been removed.
+          </p>
+        </div>
       </div>
     );
   }
@@ -41,7 +76,7 @@ export default function FileReader() {
       return <M4BReader book={book} file={file} libraryId={libraryId!} />;
     default:
       return (
-        <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex items-center justify-center">
+        <div className={READER_OVERLAY}>
           <p className="text-muted-foreground">
             Reading is not supported for this file type.
           </p>

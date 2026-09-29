@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -37,10 +38,8 @@ interface Props {
 const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
   const [selectedHookType, setSelectedHookType] =
     useState<PluginHookType>("metadataEnricher");
-  const { data, isLoading, error } = useLibraryPluginOrder(
-    libraryId,
-    selectedHookType,
-  );
+  const orderQuery = useLibraryPluginOrder(libraryId, selectedHookType);
+  const { data, isLoading } = orderQuery;
   const setOrder = useSetLibraryPluginOrder();
   const resetOrder = useResetLibraryPluginOrder();
 
@@ -133,11 +132,9 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
     return <LoadingSpinner />;
   }
 
-  if (error) {
+  if (orderQuery.error && !data) {
     return (
-      <p className="text-sm text-destructive">
-        Failed to load plugin order: {error.message}
-      </p>
+      <QueryError fallback="Failed to load plugin order" query={orderQuery} />
     );
   }
 

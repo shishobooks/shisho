@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,7 +121,11 @@ const ListsIndex = () => {
 
         {listsQuery.isLoading && <LoadingSpinner />}
 
-        {listsQuery.isSuccess && !hasLists && (
+        {listsQuery.error && !listsQuery.data && (
+          <QueryError fallback="Failed to load lists" query={listsQuery} />
+        )}
+
+        {listsQuery.data && !hasLists && (
           <div className="space-y-6">
             <div className="text-center py-8">
               <p className="text-muted-foreground mb-4">
@@ -140,7 +145,7 @@ const ListsIndex = () => {
           </div>
         )}
 
-        {listsQuery.isSuccess && hasLists && (
+        {listsQuery.data && hasLists && (
           <div className="space-y-2">{lists.map(renderListCard)}</div>
         )}
       </div>

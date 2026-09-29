@@ -13,10 +13,14 @@ import {
   MetadataMergeDialog,
   type SetChildConfig,
 } from "@/components/library/MetadataMergeDialog";
+import QueryError, {
+  type RetryableQuery,
+} from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useCan } from "@/hooks/useCan";
+import { isLoadFailure } from "@/libraries/api";
 import type { DataSource } from "@/types";
 import { writePermissionForEntity } from "@/utils/permissions";
 
@@ -31,7 +35,7 @@ interface EditConfig {
     name: string;
     sort_name?: string;
     aliases?: string[];
-  }) => Promise<void>;
+  }) => Promise<unknown>;
   /** Show sort name field in edit dialog (for person/series) */
   sortName?: string;
   sortNameSource?: DataSource;
@@ -41,7 +45,7 @@ interface MergeConfig {
   entities: { id: number; name: string; count: number }[];
   isLoadingEntities: boolean;
   isPending: boolean;
-  onMerge: (sourceId: number) => Promise<void>;
+  onMerge: (sourceId: number) => Promise<unknown>;
   onSearch: (search: string) => void;
   /** When provided, the merge dialog shows a "Set as child" option */
   setChildConfig?: SetChildConfig;
@@ -49,7 +53,7 @@ interface MergeConfig {
 
 interface DeleteConfig {
   isPending: boolean;
-  onDelete: () => Promise<void>;
+  onDelete: () => Promise<unknown>;
   /** When true, the Delete button is hidden (e.g. entity still has books) */
   disabled: boolean;
 }
@@ -76,10 +80,12 @@ interface ResourceDetailProps {
   editConfig: EditConfig;
   mergeConfig: MergeConfig;
   deleteConfig: DeleteConfig;
-  /** Whether the main entity query is still loading */
-  isLoading?: boolean;
-  /** Whether the main entity query failed or returned no data */
-  notFound?: boolean;
+  /**
+   * The page's entity query. While it loads the page shows a spinner; without
+   * data it shows the Not Found page for a 404 (or a disabled query) and
+   * QueryError for any other failure.
+   */
+  query: RetryableQuery & { data: unknown; isLoading: boolean };
   /** Label for the not-found page heading (e.g. "Genre Not Found") */
   notFoundLabel?: string;
   /** Override the Edit button to use an external dialog instead of the built-in MetadataEditDialog */
@@ -103,8 +109,7 @@ export function ResourceDetail({
   editConfig,
   mergeConfig,
   deleteConfig,
-  isLoading,
-  notFound,
+  query,
   notFoundLabel,
   onEditClick,
   children,
@@ -116,7 +121,7 @@ export function ResourceDetail({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  if (isLoading) {
+  if (query.isLoading) {
     return (
       <LibraryLayout>
         <LoadingSpinner />
@@ -124,7 +129,15 @@ export function ResourceDetail({
     );
   }
 
-  if (notFound) {
+  if (isLoadFailure(query)) {
+    return (
+      <LibraryLayout>
+        <QueryError fallback={`Failed to load ${entityType}`} query={query} />
+      </LibraryLayout>
+    );
+  }
+
+  if (!query.data) {
     return (
       <LibraryLayout>
         <div className="text-center">

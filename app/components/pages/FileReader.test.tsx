@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { useBook } from "@/hooks/queries/books";
+import { ShishoAPIError } from "@/libraries/api";
 
 import FileReader from "./FileReader";
 
@@ -34,7 +35,11 @@ const renderAt = (fileType: string) => {
     isLoading: false,
   } as never);
 
-  return render(
+  return renderReader();
+};
+
+const renderReader = () =>
+  render(
     <MemoryRouter initialEntries={["/libraries/1/books/7/files/42/read"]}>
       <Routes>
         <Route
@@ -44,7 +49,6 @@ const renderAt = (fileType: string) => {
       </Routes>
     </MemoryRouter>,
   );
-};
 
 describe("FileReader dispatch", () => {
   it("renders the M4B player for m4b files", () => {
@@ -60,5 +64,48 @@ describe("FileReader dispatch", () => {
   it("shows an unsupported message for unknown file types", () => {
     renderAt("txt");
     expect(screen.getByText(/not supported/i)).toBeInTheDocument();
+  });
+});
+
+const failedBook = (error: unknown) =>
+  vi.mocked(useBook).mockReturnValue({
+    data: undefined,
+    error,
+    isError: true,
+    isLoading: false,
+    isFetching: false,
+    isEnabled: true,
+    refetch: vi.fn(),
+  } as never);
+
+describe("FileReader load failure", () => {
+  it("shows an alert instead of spinning when the book fails to load", () => {
+    failedBook(
+      new ShishoAPIError("Internal Server Error", "internal_server_error", 500),
+    );
+    renderReader();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/^Failed to load book/);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("says the file was not found when the book is gone", () => {
+    failedBook(new ShishoAPIError("Book not found", "not_found", 404));
+    renderReader();
+
+    expect(screen.getByText("File Not Found")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("says the file was not found when the book has no such file", () => {
+    vi.mocked(useBook).mockReturnValue({
+      data: { id: 7, title: "Book", files: [] },
+      error: null,
+      isLoading: false,
+    } as never);
+    renderReader();
+
+    expect(screen.getByText("File Not Found")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

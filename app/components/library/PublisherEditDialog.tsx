@@ -37,7 +37,7 @@ interface PublisherEditDialogProps {
   aliases?: string[];
   parentId?: number | null;
   parentName?: string | null;
-  onSave: (data: PublisherEditData) => Promise<void>;
+  onSave: (data: PublisherEditData) => Promise<unknown>;
   isPending: boolean;
   useParentSearch: EntityComboboxProps<PublisherIdOption>["hook"];
 }

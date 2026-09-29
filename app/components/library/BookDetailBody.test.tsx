@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -362,13 +362,27 @@ describe("BookDetailBody in Share Link context", () => {
       "Conversion failed",
     ],
     [
-      "the status for a proxy's error page",
+      "the fallback for a proxy's error page",
       () =>
         new Response("<html>Bad gateway</html>", {
           status: 502,
           statusText: "Bad Gateway",
         }),
-      "Request failed with status 502 (Bad Gateway)",
+      "Failed to download file",
+    ],
+    [
+      "the fallback for the server's generic internal error",
+      () =>
+        Response.json(
+          {
+            error: {
+              code: "internal_server_error",
+              message: "Internal Server Error",
+            },
+          },
+          { status: 500 },
+        ),
+      "Failed to download file",
     ],
   ])("reports %s when a download fails", async (_, errorResponse, message) => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -384,6 +398,25 @@ describe("BookDetailBody in Share Link context", () => {
     await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
 
     expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText(/Request failed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Internal Server Error/)).not.toBeInTheDocument();
+  });
+
+  it("toasts the fallback when the download cannot reach the server", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const error = vi.spyOn(toast, "error");
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+
+    renderBody({ shareLink });
+    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+
+    await waitFor(() => {
+      expect(error).toHaveBeenCalledWith("Failed to download file", undefined);
+    });
   });
 
   it("reports nothing when the download is cancelled while reading the error", async () => {

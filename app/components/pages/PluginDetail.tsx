@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
 import { PluginCapabilitiesSection } from "@/components/plugins/PluginCapabilitiesSection";
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
@@ -22,7 +23,7 @@ import {
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import { firstFailedQuery, toastRequestError } from "@/libraries/api";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
@@ -53,7 +54,10 @@ export const PluginDetail = () => {
   usePageTitle(displayName);
 
   const isLoading = installedQuery.isLoading || availableQuery.isLoading;
-  const hasError = installedQuery.isError || availableQuery.isError;
+  // The query to report and retry; the other one reports after it succeeds.
+  // A failed background refetch keeps the loaded page on screen.
+  const failedQuery = firstFailedQuery(installedQuery, availableQuery);
+  const hasError = failedQuery !== undefined;
   const notFound = !isLoading && !hasError && !installed && !available;
 
   const handleToggleEnabled = async (enabled: boolean) => {
@@ -132,16 +136,8 @@ export const PluginDetail = () => {
 
       {isLoading && <LoadingSpinner />}
 
-      {!isLoading && hasError && (
-        <div className="rounded-md border border-destructive/40 p-8 text-center text-destructive">
-          <p className="text-lg">Failed to load plugin</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {requestErrorMessage(
-              installedQuery.error ?? availableQuery.error,
-              "An unexpected error occurred.",
-            )}
-          </p>
-        </div>
+      {!isLoading && failedQuery && (
+        <QueryError fallback="Failed to load plugin" query={failedQuery} />
       )}
 
       {notFound && (

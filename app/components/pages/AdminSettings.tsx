@@ -1,4 +1,5 @@
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { useConfig } from "@/hooks/queries/config";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
@@ -45,36 +46,40 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
 const AdminSettings = () => {
   usePageTitle("Server Settings");
 
-  const { data: config, isLoading, error } = useConfig();
+  const configQuery = useConfig();
+  const { data: config, isLoading } = configQuery;
 
   if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  if (error) {
+  const pageHeader = (
+    <div className="mb-6 md:mb-8">
+      <h1 className="text-2xl font-semibold mb-1 md:mb-2">Server Settings</h1>
+      <p className="text-sm md:text-base text-muted-foreground">
+        Current system configuration. Settings can be changed via the config
+        file or environment variables.
+      </p>
+    </div>
+  );
+
+  if (!config) {
     return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">
-          Error Loading Configuration
-        </h1>
-        <p className="text-muted-foreground">{error.message}</p>
+      <div>
+        {pageHeader}
+        {configQuery.error && (
+          <QueryError
+            fallback="Failed to load configuration"
+            query={configQuery}
+          />
+        )}
       </div>
     );
   }
 
-  if (!config) {
-    return null;
-  }
-
   return (
     <div>
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl font-semibold mb-1 md:mb-2">Server Settings</h1>
-        <p className="text-sm md:text-base text-muted-foreground">
-          Current system configuration. Settings can be changed via the config
-          file or environment variables.
-        </p>
-      </div>
+      {pageHeader}
 
       <div className="grid gap-6">
         {/* Database Settings */}

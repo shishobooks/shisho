@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toastRequestError } from "@/libraries/api";
 
 import type { EntityType } from "./MetadataEditDialog";
 
@@ -18,7 +19,8 @@ interface MetadataDeleteDialogProps {
   onOpenChange: (open: boolean) => void;
   entityType: EntityType;
   entityName: string;
-  onDelete: () => Promise<void>;
+  /** A rejection is toasted here and keeps the dialog open. */
+  onDelete: () => Promise<unknown>;
   isPending: boolean;
 }
 
@@ -38,6 +40,14 @@ export function MetadataDeleteDialog({
   onDelete,
   isPending,
 }: MetadataDeleteDialogProps) {
+  const handleDelete = async () => {
+    try {
+      await onDelete();
+    } catch (error) {
+      toastRequestError(error, `Failed to delete ${entityType}`);
+    }
+  };
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-w-md">
@@ -67,7 +77,7 @@ export function MetadataDeleteDialog({
           </Button>
           <Button
             disabled={isPending}
-            onClick={onDelete}
+            onClick={handleDelete}
             size="sm"
             variant="destructive"
           >

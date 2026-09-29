@@ -3,13 +3,18 @@ import { useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
+import QueryError, {
+  type RetryableQuery,
+} from "@/components/library/QueryError";
 import { parsePageParam } from "@/libraries/pagination";
 
 interface GalleryProps<T> {
   items: T[];
   total: number;
+  /** True while the shown items are not the current ones (loading, refetching, stale). */
   isLoading: boolean;
-  isSuccess: boolean;
+  /** The query behind the items, for the error report and its Retry. */
+  query: RetryableQuery & { data: unknown };
   itemsPerPage?: number;
   renderItem: (item: T) => ReactNode;
   itemLabel: string;
@@ -20,7 +25,7 @@ const Gallery = <T,>({
   items,
   total,
   isLoading,
-  isSuccess,
+  query,
   itemsPerPage = 20,
   renderItem,
   itemLabel,
@@ -43,8 +48,15 @@ const Gallery = <T,>({
     return <LoadingSpinner />;
   }
 
-  if (!isSuccess) {
-    return <div>Error loading {itemLabel}</div>;
+  if (query.error && !query.data) {
+    return (
+      <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
+    );
+  }
+
+  // A query waiting on its enabled gate has neither data nor an error.
+  if (!query.data) {
+    return <LoadingSpinner />;
   }
 
   return (

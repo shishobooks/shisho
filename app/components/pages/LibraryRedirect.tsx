@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useCan } from "@/hooks/useCan";
@@ -27,19 +28,15 @@ const LibraryRedirect = () => {
     );
   }
 
-  if (librariesQuery.isError) {
+  if (librariesQuery.error && !librariesQuery.data) {
     return (
       <div>
         <TopNav />
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold mb-4">
-              Error Loading Libraries
-            </h1>
-            <p className="text-muted-foreground">
-              There was an error loading your libraries. Please try again.
-            </p>
-          </div>
+        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+          <QueryError
+            fallback="Failed to load libraries"
+            query={librariesQuery}
+          />
         </div>
       </div>
     );

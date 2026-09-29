@@ -1,4 +1,5 @@
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import {
   Dialog,
   DialogBody,
@@ -23,9 +24,8 @@ export const PluginManifestDialog = ({
   open,
   scope,
 }: PluginManifestDialogProps) => {
-  const { data, error, isLoading } = usePluginManifest(scope, id, {
-    enabled: open,
-  });
+  const manifestQuery = usePluginManifest(scope, id, { enabled: open });
+  const { data, error, isLoading } = manifestQuery;
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -42,8 +42,11 @@ export const PluginManifestDialog = ({
         <DialogBody>
           <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4">
             {isLoading && <LoadingSpinner />}
-            {error && (
-              <div className="text-sm text-destructive">{error.message}</div>
+            {error && !data && (
+              <QueryError
+                fallback="Failed to load plugin manifest"
+                query={manifestQuery}
+              />
             )}
             {data !== undefined && data !== null && (
               <pre className="text-xs">

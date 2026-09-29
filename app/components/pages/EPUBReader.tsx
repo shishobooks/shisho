@@ -17,7 +17,7 @@ import {
 } from "@/hooks/queries/settings";
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { toastRequestError } from "@/libraries/api";
+import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { File, UserSettingsPayload } from "@/types";
 
@@ -60,7 +60,6 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   const {
     data: blob,
     isLoading,
-    isError,
     error,
     isEnabled,
     refetch,
@@ -288,16 +287,19 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
 
   const progressPercent = useMemo(() => Math.round(fraction * 100), [fraction]);
 
-  if (isError || loadError) {
-    const displayError = loadError ?? error;
+  // A failed background refetch keeps an open book on screen.
+  if ((error && !blob) || loadError) {
+    // foliate's loadError is client-side and says what went wrong in the
+    // reader; a request error reads through requestErrorMessage.
+    const message = loadError
+      ? loadError.message
+      : requestErrorMessage(error, "Failed to load book");
     return (
       <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
         <div>
           <p className="font-medium">We couldn't load this book.</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {displayError?.message ?? "Unknown error"}
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">{message}</p>
         </div>
         <Button
           onClick={() => {

@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 
 import { AdvancedOrderSection } from "./AdvancedOrderSection";
@@ -51,5 +52,39 @@ describe("AdvancedOrderSection", () => {
     expect(request.mock.calls.map((call) => call[1])).toContain(
       "/plugins/order/metadataEnricher",
     );
+  });
+});
+
+describe("AdvancedOrderSection load failure", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows the fallback for a server fault and retries on request", async () => {
+    setAuth({ permissions: ["config:read", "books:read"] });
+    let orderCalls = 0;
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/plugins/order/metadataEnricher") {
+        orderCalls += 1;
+        if (orderCalls === 1)
+          throw new ShishoAPIError(
+            "Internal Server Error",
+            "internal_server_error",
+            500,
+          );
+      }
+      return [];
+    });
+
+    renderSection();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/^Failed to load plugin order/);
+    expect(screen.queryByText(/Internal Server Error/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("Hook Type")).toBeInTheDocument();
+    expect(orderCalls).toBe(2);
   });
 });

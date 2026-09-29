@@ -9,6 +9,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MetadataDeleteDialog } from "@/components/library/MetadataDeleteDialog";
 import { MetadataEditDialog } from "@/components/library/MetadataEditDialog";
 import { MetadataMergeDialog } from "@/components/library/MetadataMergeDialog";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUserLibrary } from "@/hooks/queries/libraries";
@@ -24,6 +25,7 @@ import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { isLoadFailure } from "@/libraries/api";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -82,31 +84,38 @@ const SeriesDetail = () => {
     aliases?: string[];
   }) => {
     if (!seriesId) return;
-    await updateSeriesMutation.mutateAsync({
-      seriesId,
-      payload: {
-        name: data.name,
-        sort_name: data.sort_name,
-        aliases: data.aliases,
+    return updateSeriesMutation.mutateAsync(
+      {
+        seriesId,
+        payload: {
+          name: data.name,
+          sort_name: data.sort_name,
+          aliases: data.aliases,
+        },
       },
-    });
-    setEditOpen(false);
+      { onSuccess: () => setEditOpen(false) },
+    );
   };
 
   const handleMerge = async (sourceId: number) => {
     if (!seriesId) return;
-    await mergeSeriesMutation.mutateAsync({
-      targetId: seriesId,
-      sourceId,
-    });
-    setMergeOpen(false);
+    return mergeSeriesMutation.mutateAsync(
+      { targetId: seriesId, sourceId },
+      { onSuccess: () => setMergeOpen(false) },
+    );
   };
 
   const handleDelete = async () => {
     if (!seriesId) return;
-    await deleteSeriesMutation.mutateAsync({ seriesId });
-    setDeleteOpen(false);
-    navigate(`/libraries/${libraryId}/series`);
+    return deleteSeriesMutation.mutateAsync(
+      { seriesId },
+      {
+        onSuccess: () => {
+          setDeleteOpen(false);
+          navigate(`/libraries/${libraryId}/series`);
+        },
+      },
+    );
   };
 
   if (seriesQuery.isLoading) {
@@ -117,7 +126,15 @@ const SeriesDetail = () => {
     );
   }
 
-  if (!seriesQuery.isSuccess || !seriesQuery.data) {
+  if (isLoadFailure(seriesQuery)) {
+    return (
+      <LibraryLayout>
+        <QueryError fallback="Failed to load series" query={seriesQuery} />
+      </LibraryLayout>
+    );
+  }
+
+  if (!seriesQuery.data) {
     return (
       <LibraryLayout>
         <div className="text-center">

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCaches, useClearCache } from "@/hooks/queries/cache";
@@ -15,7 +16,8 @@ const AdminCache = () => {
   usePageTitle("Cache");
   const canClear = useCan("config:write");
 
-  const { data, isLoading, error } = useCaches();
+  const cachesQuery = useCaches();
+  const { data, isLoading } = cachesQuery;
   const clearMutation = useClearCache();
 
   const [pending, setPending] = useState<CacheInfo | null>(null);
@@ -24,16 +26,26 @@ const AdminCache = () => {
     return <LoadingSpinner />;
   }
 
-  if (error) {
+  const pageHeader = (
+    <div className="mb-6 md:mb-8">
+      <h1 className="text-2xl font-semibold mb-1 md:mb-2">Cache</h1>
+      <p className="text-sm md:text-base text-muted-foreground">
+        Inspect and clear server caches. Content will be regenerated on next
+        access.
+      </p>
+    </div>
+  );
+
+  if (!data) {
     return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">Error loading caches</h1>
-        <p className="text-muted-foreground">{error.message}</p>
+      <div>
+        {pageHeader}
+        {cachesQuery.error && (
+          <QueryError fallback="Failed to load caches" query={cachesQuery} />
+        )}
       </div>
     );
   }
-
-  if (!data) return null;
 
   const handleConfirm = async () => {
     if (!pending) return;
@@ -52,13 +64,7 @@ const AdminCache = () => {
 
   return (
     <div>
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl font-semibold mb-1 md:mb-2">Cache</h1>
-        <p className="text-sm md:text-base text-muted-foreground">
-          Inspect and clear server caches. Content will be regenerated on next
-          access.
-        </p>
-      </div>
+      {pageHeader}
 
       <div className="grid gap-6">
         {data.map((cache) => {

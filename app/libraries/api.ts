@@ -31,6 +31,30 @@ export const isDemoModeError = (error: unknown): error is ShishoAPIError =>
   error.status === 403 &&
   error.code === "demo_mode";
 
+// True for a 404 from the API or a proxy in front of it. Detail pages show
+// their Not Found page for it and QueryError for any other failure.
+export const isNotFoundError = (error: unknown): error is ShishoAPIError =>
+  error instanceof ShishoAPIError && error.status === 404;
+
+interface QueryOutcome {
+  data: unknown;
+  error: unknown;
+}
+
+// The first query that failed with nothing to show. QueryError reports a
+// query only then, so a failed background refetch keeps the loaded content
+// on screen and a query waiting on its enabled gate reports nothing.
+export const firstFailedQuery = <Qs extends QueryOutcome[]>(
+  ...queries: Qs
+): Qs[number] | undefined =>
+  queries.find((query) => query.error && !query.data);
+
+// True when a detail page's query failed with nothing to show for a reason
+// other than a 404: the page renders QueryError inside its layout. A 404, or
+// no data and no error, renders its Not Found page instead.
+export const isLoadFailure = (query: QueryOutcome): boolean =>
+  firstFailedQuery(query) !== undefined && !isNotFoundError(query.error);
+
 // The Go error handler's code for an unhandled server fault, whose message
 // is a generic "Internal Server Error" (pkg/errcodes/handler.go).
 const INTERNAL_SERVER_ERROR_CODE = "internal_server_error";

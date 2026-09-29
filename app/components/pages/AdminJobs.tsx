@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
@@ -75,10 +76,11 @@ const AdminJobs = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parsePageParam(searchParams.get("page"));
 
-  const { data, isLoading, error, refetch, isEnabled } = useJobs({
+  const jobsQuery = useJobs({
     limit: JOBS_PER_PAGE,
     offset: (currentPage - 1) * JOBS_PER_PAGE,
   });
+  const { data, isLoading, refetch, isEnabled } = jobsQuery;
   const createJobMutation = useCreateJob();
 
   const canCreateJobs = useCan("jobs:write");
@@ -104,15 +106,6 @@ const AdminJobs = () => {
 
   if (isLoading) {
     return <LoadingSpinner />;
-  }
-
-  if (error) {
-    return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">Error Loading Jobs</h1>
-        <p className="text-muted-foreground">{error.message}</p>
-      </div>
-    );
   }
 
   const jobs = data?.items ?? [];
@@ -155,7 +148,9 @@ const AdminJobs = () => {
         </div>
       </div>
 
-      {jobs.length === 0 ? (
+      {jobsQuery.error && !data ? (
+        <QueryError fallback="Failed to load jobs" query={jobsQuery} />
+      ) : jobs.length === 0 ? (
         <div className="border border-border rounded-md p-8 text-center">
           <p className="text-muted-foreground">No jobs found.</p>
         </div>

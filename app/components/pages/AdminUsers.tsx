@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import RoleDialog from "@/components/library/RoleDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,16 +70,10 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
 const AdminUsers = () => {
   usePageTitle("Users & Roles");
 
-  const {
-    data: usersData,
-    isLoading: usersLoading,
-    error: usersError,
-  } = useUsers();
-  const {
-    data: rolesData,
-    isLoading: rolesLoading,
-    error: rolesError,
-  } = useRoles();
+  const usersQuery = useUsers();
+  const rolesQuery = useRoles();
+  const { data: usersData, isLoading: usersLoading } = usersQuery;
+  const { data: rolesData, isLoading: rolesLoading } = rolesQuery;
 
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -100,24 +95,6 @@ const AdminUsers = () => {
 
   if (usersLoading || rolesLoading) {
     return <LoadingSpinner />;
-  }
-
-  if (usersError) {
-    return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">Error Loading Users</h1>
-        <p className="text-muted-foreground">{usersError.message}</p>
-      </div>
-    );
-  }
-
-  if (rolesError) {
-    return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">Error Loading Roles</h1>
-        <p className="text-muted-foreground">{rolesError.message}</p>
-      </div>
-    );
   }
 
   const users = usersData?.items ?? [];
@@ -146,7 +123,9 @@ const AdminUsers = () => {
           )}
         </div>
 
-        {users.length === 0 ? (
+        {usersQuery.error && !usersData ? (
+          <QueryError fallback="Failed to load users" query={usersQuery} />
+        ) : users.length === 0 ? (
           <div className="border border-border rounded-md p-8 text-center">
             <p className="text-muted-foreground">No users found.</p>
           </div>
@@ -178,7 +157,9 @@ const AdminUsers = () => {
           )}
         </div>
 
-        {roles.length === 0 ? (
+        {rolesQuery.error && !rolesData ? (
+          <QueryError fallback="Failed to load roles" query={rolesQuery} />
+        ) : roles.length === 0 ? (
           <div className="border border-border rounded-md p-8 text-center">
             <p className="text-muted-foreground">No roles found.</p>
           </div>

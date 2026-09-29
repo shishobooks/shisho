@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AddToListDialog } from "@/components/library/AddToListDialog";
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -19,7 +20,7 @@ import {
   useListLists,
   useRemoveBooksFromList,
 } from "@/hooks/queries/lists";
-import { toastRequestError } from "@/libraries/api";
+import { firstFailedQuery, toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse } from "@/types";
 
 interface AddToListPopoverProps {
@@ -61,6 +62,9 @@ const AddToListPopover = ({
   );
 
   const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
+  // Without either list the checkmarks would be wrong, so a failure of
+  // either replaces the menu.
+  const failedQuery = firstFailedQuery(listsQuery, bookListsQuery);
   const hasLists = lists.length > 0;
 
   const handleToggle = async (list: ListResponse) => {
@@ -135,13 +139,21 @@ const AddToListPopover = ({
 
         {isLoading && <LoadingSpinner className="py-3" />}
 
-        {!isLoading && !hasLists && (
+        {!isLoading && failedQuery && (
+          <QueryError
+            className="mx-1 mb-1"
+            fallback="Failed to load lists"
+            query={failedQuery}
+          />
+        )}
+
+        {!isLoading && !failedQuery && !hasLists && (
           <p className="text-sm text-muted-foreground px-3 py-3 text-center">
             {allLists.length > 0 ? "No lists you can edit" : "No lists yet"}
           </p>
         )}
 
-        {!isLoading && hasLists && (
+        {!isLoading && !failedQuery && hasLists && (
           <div className="flex flex-col gap-0.5 px-1 pb-1">
             {lists.map((list) => {
               const isInList = bookListIds.has(list.id);

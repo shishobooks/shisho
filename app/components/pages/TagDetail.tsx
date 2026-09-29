@@ -71,7 +71,7 @@ const TagDetail = () => {
 
   const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!tagId) return;
-    await updateTagMutation.mutateAsync({
+    return updateTagMutation.mutateAsync({
       tagId,
       payload: { name: data.name, aliases: data.aliases },
     });
@@ -79,13 +79,15 @@ const TagDetail = () => {
 
   const handleMerge = async (sourceId: number) => {
     if (!tagId) return;
-    await mergeTagMutation.mutateAsync({ targetId: tagId, sourceId });
+    return mergeTagMutation.mutateAsync({ targetId: tagId, sourceId });
   };
 
   const handleDelete = async () => {
     if (!tagId) return;
-    await deleteTagMutation.mutateAsync({ tagId });
-    navigate(`/libraries/${libraryId}/tags`);
+    return deleteTagMutation.mutateAsync(
+      { tagId },
+      { onSuccess: () => navigate(`/libraries/${libraryId}/tags`) },
+    );
   };
 
   return (
@@ -107,7 +109,6 @@ const TagDetail = () => {
       }}
       entityId={tagId!}
       entityType="tag"
-      isLoading={tagQuery.isLoading}
       libraryId={libraryId!}
       mergeConfig={{
         entities:
@@ -122,8 +123,8 @@ const TagDetail = () => {
         onSearch: setMergeSearchRaw,
       }}
       name={tag?.name ?? ""}
-      notFound={!tagQuery.isLoading && (!tagQuery.isSuccess || !tag)}
       notFoundLabel="Tag Not Found"
+      query={tagQuery}
     >
       <BookGallerySection
         emptyMessage="This tag has no associated books."

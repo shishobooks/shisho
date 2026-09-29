@@ -141,3 +141,41 @@ describe("Home save-as-default failures", () => {
     expect(error).toHaveBeenCalledWith("Settings are read-only", undefined);
   });
 });
+
+describe("Home search failure", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setAuth({ permissions: ["books:read"] });
+    // The unfiltered list loads; any search fails.
+    vi.spyOn(API, "request").mockImplementation(
+      async (_method, path, _payload, query) => {
+        if (path === "/settings/user") return { gallery_size: "m" };
+        if (path === "/settings/libraries/1") return { sort_spec: null };
+        if (path === "/user/libraries" || path.endsWith("/languages"))
+          return [];
+        if (path === "/books" && (query as { search?: string })?.search) {
+          throw new ShishoAPIError(
+            "Internal Server Error",
+            "internal_server_error",
+            500,
+          );
+        }
+        return { items: [], total: 0 };
+      },
+    );
+  });
+
+  it("reports a failed search after the unfiltered list loaded", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    expect(
+      await screen.findByText("No books in this library yet."),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Search books..."), "zzz");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /^Failed to load books/,
+    );
+  });
+});

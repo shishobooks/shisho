@@ -137,7 +137,7 @@ const PublisherDetail = () => {
       payload.parent_id = data.parent_id;
     }
 
-    await updatePublisherMutation.mutateAsync({
+    return updatePublisherMutation.mutateAsync({
       publisherId,
       payload,
     });
@@ -145,7 +145,7 @@ const PublisherDetail = () => {
 
   const handleMerge = async (sourceId: number) => {
     if (!publisherId) return;
-    await mergePublisherMutation.mutateAsync({
+    return mergePublisherMutation.mutateAsync({
       targetId: publisherId,
       sourceId,
     });
@@ -153,7 +153,7 @@ const PublisherDetail = () => {
 
   const handleSetChild = async (childId: number) => {
     if (!publisherId) return;
-    await setChildPublisherMutation.mutateAsync({
+    return setChildPublisherMutation.mutateAsync({
       parentId: publisherId,
       childId,
     });
@@ -168,8 +168,10 @@ const PublisherDetail = () => {
 
   const handleDelete = async () => {
     if (!publisherId) return;
-    await deletePublisherMutation.mutateAsync({ publisherId });
-    navigate(`/libraries/${libraryId}/publishers`);
+    return deletePublisherMutation.mutateAsync(
+      { publisherId },
+      { onSuccess: () => navigate(`/libraries/${libraryId}/publishers`) },
+    );
   };
 
   // Hook for parent publisher search, excluding self + descendants
@@ -210,7 +212,6 @@ const PublisherDetail = () => {
             </Badge>
           ) : undefined
         }
-        isLoading={publisherQuery.isLoading}
         libraryId={libraryId!}
         mergeConfig={{
           entities:
@@ -230,11 +231,9 @@ const PublisherDetail = () => {
           },
         }}
         name={publisher?.name ?? ""}
-        notFound={
-          !publisherQuery.isLoading && (!publisherQuery.isSuccess || !publisher)
-        }
         notFoundLabel="Publisher Not Found"
         onEditClick={() => setEditOpen(true)}
+        query={publisherQuery}
       >
         {children.length > 0 && (
           <section className="mb-10">

@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   API,
+  firstFailedQuery,
   isDemoModeError,
+  isLoadFailure,
+  isNotFoundError,
   requestErrorMessage,
   ShishoAPIError,
   toastRequestError,
@@ -134,6 +137,58 @@ describe("requestErrorMessage", () => {
     expect(
       requestErrorMessage(new TypeError("Failed to fetch"), "Fallback"),
     ).toBe("Fallback");
+  });
+});
+
+describe("isNotFoundError", () => {
+  it("is true only for an API 404", () => {
+    expect(
+      isNotFoundError(new ShishoAPIError("Book not found", "not_found", 404)),
+    ).toBe(true);
+    // A proxy's 404 page has no Shisho body but is still a 404.
+    expect(
+      isNotFoundError(
+        new ShishoAPIError("Request failed with status 404", undefined, 404),
+      ),
+    ).toBe(true);
+    expect(
+      isNotFoundError(
+        new ShishoAPIError(
+          "Internal Server Error",
+          "internal_server_error",
+          500,
+        ),
+      ),
+    ).toBe(false);
+    expect(isNotFoundError(new TypeError("Failed to fetch"))).toBe(false);
+    expect(isNotFoundError(null)).toBe(false);
+  });
+});
+
+describe("query failure helpers", () => {
+  const serverFault = new ShishoAPIError(
+    "Internal Server Error",
+    "internal_server_error",
+    500,
+  );
+  const notFound = new ShishoAPIError("Book not found", "not_found", 404);
+
+  it("isLoadFailure is true only for a non-404 error with no data", () => {
+    expect(isLoadFailure({ data: undefined, error: serverFault })).toBe(true);
+    expect(isLoadFailure({ data: undefined, error: notFound })).toBe(false);
+    // A failed background refetch keeps its data on screen.
+    expect(isLoadFailure({ data: { id: 1 }, error: serverFault })).toBe(false);
+    // A query waiting on its enabled gate has neither.
+    expect(isLoadFailure({ data: undefined, error: null })).toBe(false);
+  });
+
+  it("firstFailedQuery returns the first query that failed without data", () => {
+    const loaded = { data: [1], error: serverFault };
+    const failed = { data: undefined, error: notFound };
+    const idle = { data: undefined, error: null };
+
+    expect(firstFailedQuery(idle, loaded, failed)).toBe(failed);
+    expect(firstFailedQuery(idle, loaded)).toBeUndefined();
   });
 });
 

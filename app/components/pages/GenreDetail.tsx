@@ -71,7 +71,7 @@ const GenreDetail = () => {
 
   const handleEdit = async (data: { name: string; aliases?: string[] }) => {
     if (!genreId) return;
-    await updateGenreMutation.mutateAsync({
+    return updateGenreMutation.mutateAsync({
       genreId,
       payload: { name: data.name, aliases: data.aliases },
     });
@@ -79,13 +79,15 @@ const GenreDetail = () => {
 
   const handleMerge = async (sourceId: number) => {
     if (!genreId) return;
-    await mergeGenreMutation.mutateAsync({ targetId: genreId, sourceId });
+    return mergeGenreMutation.mutateAsync({ targetId: genreId, sourceId });
   };
 
   const handleDelete = async () => {
     if (!genreId) return;
-    await deleteGenreMutation.mutateAsync({ genreId });
-    navigate(`/libraries/${libraryId}/genres`);
+    return deleteGenreMutation.mutateAsync(
+      { genreId },
+      { onSuccess: () => navigate(`/libraries/${libraryId}/genres`) },
+    );
   };
 
   return (
@@ -107,7 +109,6 @@ const GenreDetail = () => {
       }}
       entityId={genreId!}
       entityType="genre"
-      isLoading={genreQuery.isLoading}
       libraryId={libraryId!}
       mergeConfig={{
         entities:
@@ -122,8 +123,8 @@ const GenreDetail = () => {
         onSearch: setMergeSearchRaw,
       }}
       name={genre?.name ?? ""}
-      notFound={!genreQuery.isLoading && (!genreQuery.isSuccess || !genre)}
       notFoundLabel="Genre Not Found"
+      query={genreQuery}
     >
       <BookGallerySection
         emptyMessage="This genre has no associated books."

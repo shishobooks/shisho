@@ -3,11 +3,15 @@ import { useSearchParams } from "react-router-dom";
 import BookItem from "@/components/library/BookItem";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
+import QueryError, {
+  type RetryableQuery,
+} from "@/components/library/QueryError";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
+import { firstFailedQuery } from "@/libraries/api";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
 
-interface BookGalleryQuery {
+interface BookGalleryQuery extends RetryableQuery {
   data: ResourceListResponse<Book> | undefined;
   isSuccess: boolean;
   isError: boolean;
@@ -76,6 +80,15 @@ export function BookGallerySection({
       <section className="mb-10">
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <LoadingSpinner />
+      </section>
+    );
+  }
+
+  if (firstFailedQuery(query)) {
+    return (
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-4">{title}</h2>
+        <QueryError fallback="Failed to load books" query={query} />
       </section>
     );
   }

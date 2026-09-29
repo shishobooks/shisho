@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -19,7 +20,8 @@ import { toastRequestError } from "@/libraries/api";
 
 export const AdvancedRepositoriesSection = () => {
   const canWrite = useCan("config:write");
-  const { data: repos, isLoading, error } = usePluginRepositories();
+  const reposQuery = usePluginRepositories();
+  const { data: repos, isLoading } = reposQuery;
   const addRepository = useAddRepository();
   const removeRepository = useRemoveRepository();
   const syncRepository = useSyncRepository();
@@ -29,11 +31,9 @@ export const AdvancedRepositoriesSection = () => {
   const [removeTarget, setRemoveTarget] = useState<string | null>(null);
 
   if (isLoading) return <LoadingSpinner />;
-  if (error) {
+  if (reposQuery.error && !repos) {
     return (
-      <p className="text-sm text-destructive">
-        Failed to load repositories: {error.message}
-      </p>
+      <QueryError fallback="Failed to load repositories" query={reposQuery} />
     );
   }
 

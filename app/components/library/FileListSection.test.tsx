@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
 import type { File, ResourceListResponse } from "@/types";
 
 import { FileListSection } from "./FileListSection";
@@ -62,18 +64,15 @@ function makeFile(id: number, overrides: Partial<File> = {}): File {
   } as File;
 }
 
-function makeQueryResult(
-  files: File[],
-  total: number,
-): {
-  data: ResourceListResponse<File>;
-  isLoading: boolean;
-  isSuccess: boolean;
-} {
+function makeQueryResult(files: File[], total: number) {
   return {
-    data: { items: files, total },
+    data: { items: files, total } as ResourceListResponse<File> | undefined,
+    error: null as unknown,
     isLoading: false,
     isSuccess: true,
+    isFetching: false,
+    isEnabled: true,
+    refetch: vi.fn(),
   };
 }
 
@@ -282,7 +281,7 @@ describe("FileListSection", () => {
         <FileListSection
           libraryId="1"
           query={{
-            data: { items: [], total: 0 },
+            ...makeQueryResult([], 0),
             isLoading: true,
             isSuccess: false,
           }}
@@ -343,5 +342,37 @@ describe("FileListSection", () => {
       ),
     );
     expect(screen.getByText("mybook.epub")).toBeInTheDocument();
+  });
+
+  it("reports a failed query under the heading with Retry", async () => {
+    const query = {
+      ...makeQueryResult([], 0),
+      data: undefined,
+      error: new ShishoAPIError(
+        "Internal Server Error",
+        "internal_server_error",
+        500,
+      ),
+      isSuccess: false,
+    };
+    render(
+      wrap(
+        <FileListSection
+          emptyMessage="No files here."
+          libraryId="1"
+          query={query}
+          title="Files"
+        />,
+      ),
+    );
+
+    expect(screen.getByRole("heading", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /^Failed to load files/,
+    );
+    expect(screen.queryByText("No files here.")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(query.refetch).toHaveBeenCalledTimes(1);
   });
 });

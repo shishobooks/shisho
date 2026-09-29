@@ -443,8 +443,11 @@ const HomeContent = () => {
   // Track whether the confirmed query had any filters applied
   const [confirmedHasFilters, setConfirmedHasFilters] = useState(false);
 
+  // A failed query settles the filters too, so the gallery shows its error
+  // instead of a spinner that waits for a success.
+  const booksSettled = booksQuery.isSuccess || booksQuery.isError;
   useEffect(() => {
-    if (booksQuery.isSuccess && !booksQuery.isFetching) {
+    if (booksSettled && !booksQuery.isFetching) {
       setConfirmedFilterKey(currentFilterKey);
       setConfirmedHasFilters(
         debouncedSearch !== "" ||
@@ -456,7 +459,7 @@ const HomeContent = () => {
       );
     }
   }, [
-    booksQuery.isSuccess,
+    booksSettled,
     booksQuery.isFetching,
     currentFilterKey,
     debouncedSearch,
@@ -522,8 +525,8 @@ const HomeContent = () => {
             fileTypeOptions={FILE_TYPE_OPTIONS}
             genreSearchInput={genreSearchInput}
             genres={genres}
-            genresError={genresQuery.isError}
             genresLoading={genresQuery.isLoading}
+            genresQuery={genresQuery}
             hasActiveFilters={hasActiveFilters}
             languageOptions={languageOptions}
             languageParam={languageParam}
@@ -543,8 +546,8 @@ const HomeContent = () => {
             selectedTags={selectedTags}
             tagSearchInput={tagSearchInput}
             tags={tags}
-            tagsError={tagsQuery.isError}
             tagsLoading={tagsQuery.isLoading}
+            tagsQuery={tagsQuery}
           />
           <SortSheet
             isDirty={isSortDirty}
@@ -620,12 +623,10 @@ const HomeContent = () => {
           isLoading={
             booksQuery.isLoading || booksQuery.isFetching || isStaleData
           }
-          isSuccess={
-            booksQuery.isSuccess && !booksQuery.isFetching && !isStaleData
-          }
           itemLabel="books"
           items={booksQuery.data?.items ?? []}
           itemsPerPage={itemsPerPage}
+          query={booksQuery}
           renderItem={renderBookItem}
           total={booksQuery.data?.total ?? 0}
         />

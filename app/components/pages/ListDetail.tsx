@@ -9,6 +9,7 @@ import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { DraggableBookList } from "@/components/library/DraggableBookList";
 import Gallery from "@/components/library/Gallery";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { ShareListDialog } from "@/components/library/ShareListDialog";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import TopNav from "@/components/library/TopNav";
@@ -32,7 +33,7 @@ import {
 import { useCan } from "@/hooks/useCan";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { toastRequestError } from "@/libraries/api";
+import { isLoadFailure, toastRequestError } from "@/libraries/api";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
@@ -149,7 +150,18 @@ const ListDetail = () => {
     );
   }
 
-  if (!listQuery.isSuccess || !listQuery.data) {
+  if (isLoadFailure(listQuery)) {
+    return (
+      <div>
+        <TopNav />
+        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+          <QueryError fallback="Failed to load list" query={listQuery} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!listQuery.data) {
     return (
       <div>
         <TopNav />
@@ -309,9 +321,12 @@ const ListDetail = () => {
             canEdit &&
             currentPage === 1 &&
             bookCount <= itemsPerPage ? (
-              listBooksQuery.isLoading ? (
-                <LoadingSpinner />
-              ) : listBooksQuery.isSuccess ? (
+              listBooksQuery.error && !listBooksQuery.data ? (
+                <QueryError
+                  fallback="Failed to load books"
+                  query={listBooksQuery}
+                />
+              ) : listBooksQuery.data ? (
                 <DraggableBookList
                   books={books}
                   gallerySize={effectiveSize}
@@ -319,15 +334,16 @@ const ListDetail = () => {
                   onReorder={handleReorder}
                 />
               ) : (
-                <div>Error loading books</div>
+                // Loading, or waiting on the query's enabled gate.
+                <LoadingSpinner />
               )
             ) : (
               <Gallery
                 isLoading={listBooksQuery.isLoading}
-                isSuccess={listBooksQuery.isSuccess}
                 itemLabel="books"
                 items={books}
                 itemsPerPage={itemsPerPage}
+                query={listBooksQuery}
                 renderItem={(listBook: ListBook) =>
                   listBook.book ? (
                     <BookItem

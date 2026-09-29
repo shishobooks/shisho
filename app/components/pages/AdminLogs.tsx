@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import LogViewer, { type LogViewerEntry } from "@/components/library/LogViewer";
+import QueryError from "@/components/library/QueryError";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -28,11 +29,12 @@ const AdminLogs = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const { data, isLoading } = useLogs({
+  const logsQuery = useLogs({
     level: level || undefined,
     search: search || undefined,
     limit: INITIAL_LIMIT,
   });
+  const { data, isLoading } = logsQuery;
 
   const entries: LogViewerEntry[] = useMemo(
     () =>
@@ -88,14 +90,18 @@ const AdminLogs = () => {
       </div>
 
       {/* Log viewer */}
-      <LogViewer
-        className="flex-1"
-        emptyMessage={
-          search || level ? "No logs matching filters." : "No logs yet."
-        }
-        entries={entries}
-        searchTerm={search}
-      />
+      {logsQuery.error && !data ? (
+        <QueryError fallback="Failed to load logs" query={logsQuery} />
+      ) : (
+        <LogViewer
+          className="flex-1"
+          emptyMessage={
+            search || level ? "No logs matching filters." : "No logs yet."
+          }
+          entries={entries}
+          searchTerm={search}
+        />
+      )}
     </div>
   );
 };

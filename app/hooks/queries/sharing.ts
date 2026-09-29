@@ -5,7 +5,7 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 
-import { API, ShishoAPIError } from "@/libraries/api";
+import { API, isNotFoundError, ShishoAPIError } from "@/libraries/api";
 import type {
   CreateShareLinkPayload,
   SharedBookResponse,
@@ -142,7 +142,5 @@ export const useSharedBook = (token: string | undefined) =>
     enabled: Boolean(token),
     queryKey: [QueryKey.SharedBook, token],
     queryFn: () => API.request("GET", `/share/${token}`),
-    retry: (failureCount, error) =>
-      !(error instanceof ShishoAPIError && error.status === 404) &&
-      failureCount < 1,
+    retry: (failureCount, error) => !isNotFoundError(error) && failureCount < 1,
   });
