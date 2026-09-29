@@ -51,6 +51,7 @@ import {
 import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
+import { bookCoverUrl } from "@/utils/coverUrl";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
@@ -64,7 +65,6 @@ interface BookItemProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onShiftSelect?: () => void;
-  cacheKey?: string;
   gallerySize?: GallerySize;
 }
 
@@ -98,7 +98,6 @@ const BookItem = ({
   isSelected = false,
   onSelect,
   onShiftSelect,
-  cacheKey,
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
@@ -118,9 +117,7 @@ const BookItem = ({
   const anyCBZ = hasAnyCBZFile(book);
 
   const aspectClass = getAspectRatioClass(coverAspectRatio, book.files);
-  const coverUrl = cacheKey
-    ? `/api/books/${book.id}/cover?v=${cacheKey}`
-    : `/api/books/${book.id}/cover`;
+  const coverUrl = bookCoverUrl(book);
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
   const [showRescanDialog, setShowRescanDialog] = useState(false);
@@ -145,10 +142,7 @@ const BookItem = ({
       });
       toast.success("Book rescanned");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to rescan book",
-      );
+      toastRequestError(error, "Failed to rescan book");
     }
   };
 
@@ -157,10 +151,7 @@ const BookItem = ({
       await deleteBookMutation.mutateAsync(book.id);
       toast.success("Book deleted");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to delete book",
-      );
+      toastRequestError(error, "Failed to delete book");
     }
   };
 

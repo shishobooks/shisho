@@ -5,6 +5,8 @@ import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
+
 import { DeleteLibraryDialog } from "./DeleteLibraryDialog";
 
 const mockDelete = vi.hoisted(() => vi.fn());
@@ -77,7 +79,9 @@ describe("DeleteLibraryDialog", () => {
   });
 
   it("keeps the dialog open and shows an error toast when the mutation fails", async () => {
-    mockDelete.mockRejectedValueOnce(new Error("server exploded"));
+    mockDelete.mockRejectedValueOnce(
+      new ShishoAPIError("server exploded", "internal", 500),
+    );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { onOpenChange } = renderDialog();
 

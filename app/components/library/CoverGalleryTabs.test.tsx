@@ -35,7 +35,7 @@ describe("CoverGalleryTabs", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=2024-01-01T00:00:00Z",
+      "/api/books/files/1/cover?v=1704067200000",
     );
   });
 
@@ -54,7 +54,7 @@ describe("CoverGalleryTabs", () => {
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=2024-01-01T00:00:00Z",
+      "/api/books/files/1/cover?v=1704067200000",
     );
 
     fireEvent.error(firstImg!);
@@ -73,7 +73,7 @@ describe("CoverGalleryTabs", () => {
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=2024-06-01T00:00:00Z",
+      "/api/books/files/1/cover?v=1717200000000",
     );
   });
 
@@ -92,7 +92,7 @@ describe("CoverGalleryTabs", () => {
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=2024-01-01T00:00:00Z",
+      "/api/books/files/1/cover?v=1704067200000",
     );
 
     const updatedFiles = [
@@ -110,7 +110,7 @@ describe("CoverGalleryTabs", () => {
     expect(secondImg).not.toBeNull();
     expect(secondImg).not.toBe(firstImg);
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=2024-06-01T00:00:00Z",
+      "/api/books/files/1/cover?v=1717200000000",
     );
   });
 

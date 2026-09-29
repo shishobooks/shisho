@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PublisherIdOption } from "@/hooks/queries/entity-search";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
-import { isDemoModeError } from "@/libraries/api";
+import { isDemoModeError, requestErrorMessage } from "@/libraries/api";
 import { resolveAliases } from "@/utils/aliases";
 
 export interface PublisherEditData {
@@ -212,8 +212,8 @@ export function PublisherEditDialog({
     } catch (err) {
       // checkStatus already toasted a Demo Mode rejection; keep the draft
       // open without repeating it inline.
-      if (err instanceof Error && !isDemoModeError(err)) {
-        setServerError(err.message);
+      if (!isDemoModeError(err)) {
+        setServerError(requestErrorMessage(err, "Failed to save changes"));
       }
     }
   };

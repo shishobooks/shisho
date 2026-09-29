@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
 import { PluginCapabilitiesSection } from "@/components/plugins/PluginCapabilitiesSection";
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
@@ -21,7 +22,7 @@ import {
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { toastRequestError } from "@/libraries/api";
+import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
@@ -67,10 +68,7 @@ export const PluginDetail = () => {
         enabled ? `${installed.name} enabled` : `${installed.name} disabled`,
       );
     } catch (err) {
-      toastRequestError(
-        err,
-        err instanceof Error ? err.message : "Failed to update plugin status",
-      );
+      toastRequestError(err, "Failed to update plugin status");
     }
   };
 
@@ -87,7 +85,7 @@ export const PluginDetail = () => {
       },
       {
         onError: (err) => {
-          toastRequestError(err, `Failed to install plugin: ${err.message}`);
+          toastRequestError(err, "Failed to install plugin");
         },
         onSuccess: () => {
           setInstallDialogOpen(false);
@@ -109,10 +107,7 @@ export const PluginDetail = () => {
         targetLabel ? `Updated to v${targetLabel}` : "Plugin updated",
       );
     } catch (err) {
-      toastRequestError(
-        err,
-        err instanceof Error ? err.message : "Update failed",
-      );
+      toastRequestError(err, "Failed to update plugin");
     }
   };
 
@@ -135,17 +130,16 @@ export const PluginDetail = () => {
         </ol>
       </nav>
 
-      {isLoading && <PluginDetailSkeleton />}
+      {isLoading && <LoadingSpinner />}
 
       {!isLoading && hasError && (
         <div className="rounded-md border border-destructive/40 p-8 text-center text-destructive">
           <p className="text-lg">Failed to load plugin</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {installedQuery.error instanceof Error
-              ? installedQuery.error.message
-              : availableQuery.error instanceof Error
-                ? availableQuery.error.message
-                : "An unexpected error occurred."}
+            {requestErrorMessage(
+              installedQuery.error ?? availableQuery.error,
+              "An unexpected error occurred.",
+            )}
           </p>
         </div>
       )}
@@ -220,16 +214,3 @@ export const PluginDetail = () => {
     </div>
   );
 };
-
-const PluginDetailSkeleton = () => (
-  <div className="rounded-md border border-border p-6">
-    <div className="flex gap-4">
-      <div className="h-16 w-16 animate-pulse rounded-xl bg-muted" />
-      <div className="flex-1 space-y-2">
-        <div className="h-5 w-1/3 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
-      </div>
-    </div>
-  </div>
-);

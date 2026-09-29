@@ -36,13 +36,10 @@ import {
   type Chapter,
   type FileType,
 } from "@/types";
+import { formatTimestamp } from "@/utils/format";
 import type { PageSourceFile } from "@/utils/pageUrl";
 
-import {
-  countDescendants,
-  formatTimestampMs,
-  parseTimestampMs,
-} from "./chapterUtils";
+import { countDescendants, parseTimestampMs } from "./chapterUtils";
 import PagePicker from "./PagePicker";
 import PagePreview from "./PagePreview";
 
@@ -219,7 +216,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   // M4B edit mode state: local timestamp value and validation
   const currentTimestampMs = chapter.start_timestamp_ms ?? 0;
   const [localTimestampValue, setLocalTimestampValue] = useState(
-    formatTimestampMs(currentTimestampMs),
+    formatTimestamp(currentTimestampMs),
   );
   const [hasTimestampError, setHasTimestampError] = useState(false);
 
@@ -232,7 +229,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
   // Sync local timestamp value when chapter.start_timestamp_ms changes (e.g., from parent state)
   useEffect(() => {
-    setLocalTimestampValue(formatTimestampMs(chapter.start_timestamp_ms ?? 0));
+    setLocalTimestampValue(formatTimestamp(chapter.start_timestamp_ms ?? 0));
     setHasTimestampError(false);
   }, [chapter.start_timestamp_ms]);
 
@@ -325,7 +322,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   // Does NOT call props.onBlur (see handleDecrementPage for rationale).
   const handleDecrementTimestamp = () => {
     const newMs = Math.max(0, currentTimestampMs - 1000);
-    setLocalTimestampValue(formatTimestampMs(newMs));
+    setLocalTimestampValue(formatTimestamp(newMs));
     setHasTimestampError(false);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
@@ -335,7 +332,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   // Does NOT call props.onBlur (see handleDecrementPage for rationale).
   const handleIncrementTimestamp = () => {
     const newMs = Math.min(maxDurationMs, currentTimestampMs + 1000);
-    setLocalTimestampValue(formatTimestampMs(newMs));
+    setLocalTimestampValue(formatTimestamp(newMs));
     setHasTimestampError(false);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
@@ -684,7 +681,7 @@ const ChapterRow = (props: ChapterRowProps) => {
               onStop={() => onStop?.()}
             />
             <span className="text-muted-foreground text-sm font-mono">
-              {formatTimestampMs(chapter.start_timestamp_ms)}
+              {formatTimestamp(chapter.start_timestamp_ms)}
             </span>
           </div>
         )}

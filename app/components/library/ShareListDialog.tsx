@@ -2,6 +2,7 @@ import { Info, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,10 +109,7 @@ export function ShareListDialog({
       setSelectedUserId("");
       setSelectedPermission(ListPermissionViewer);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to add share",
-      );
+      toastRequestError(error, "Failed to add share");
     }
   };
 
@@ -127,10 +125,7 @@ export function ShareListDialog({
       });
       toast.success("Permission updated");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to update permission",
-      );
+      toastRequestError(error, "Failed to update permission");
     }
   };
 
@@ -139,10 +134,7 @@ export function ShareListDialog({
       await deleteShareMutation.mutateAsync({ listId, shareId });
       toast.success("Share removed");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to remove share",
-      );
+      toastRequestError(error, "Failed to remove share");
     }
   };
 
@@ -231,9 +223,7 @@ export function ShareListDialog({
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Current Shares</h3>
             {sharesQuery.isLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
+              <LoadingSpinner />
             ) : shares.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">
                 This list hasn't been shared with anyone yet.

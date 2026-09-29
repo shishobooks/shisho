@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -190,12 +191,7 @@ const AdminReviewCriteria = () => {
     try {
       await executeSave(false);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error
-          ? error.message
-          : "Failed to save review criteria.",
-      );
+      toastRequestError(error, "Failed to save review criteria");
     }
   };
 
@@ -204,12 +200,7 @@ const AdminReviewCriteria = () => {
     try {
       await executeSave(clearOverrides);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error
-          ? error.message
-          : "Failed to save review criteria.",
-      );
+      toastRequestError(error, "Failed to save review criteria");
     }
   };
 
@@ -233,12 +224,7 @@ const AdminReviewCriteria = () => {
     try {
       await executeRecompute(false);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error
-          ? error.message
-          : "Failed to queue recompute job.",
-      );
+      toastRequestError(error, "Failed to queue recompute job");
     }
   };
 
@@ -247,12 +233,7 @@ const AdminReviewCriteria = () => {
     try {
       await executeRecompute(clearOverrides);
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error
-          ? error.message
-          : "Failed to queue recompute job.",
-      );
+      toastRequestError(error, "Failed to queue recompute job");
     }
   };
 
@@ -298,6 +279,7 @@ const AdminReviewCriteria = () => {
       {pageHeader}
       <div className="border border-border rounded-md p-4 md:p-6">
         <div className="space-y-6">
+          {!canSave && <ReadOnlyNotice />}
           {/* Universal fields */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Required for all books</h3>

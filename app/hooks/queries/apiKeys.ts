@@ -24,16 +24,6 @@ export const useCreateApiKey = () => {
   });
 };
 
-export const useUpdateApiKeyName = () => {
-  const queryClient = useQueryClient();
-  return useMutation<APIKey, ShishoAPIError, { id: string; name: string }>({
-    mutationFn: ({ id, name }) => API.updateApiKeyName(id, name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QueryKey.ListApiKeys] });
-    },
-  });
-};
-
 export const useDeleteApiKey = () => {
   const queryClient = useQueryClient();
   return useMutation<void, ShishoAPIError, string>({
@@ -52,21 +42,6 @@ export const useAddApiKeyPermission = () => {
     { id: string; permission: string }
   >({
     mutationFn: ({ id, permission }) => API.addApiKeyPermission(id, permission),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QueryKey.ListApiKeys] });
-    },
-  });
-};
-
-export const useRemoveApiKeyPermission = () => {
-  const queryClient = useQueryClient();
-  return useMutation<
-    APIKey,
-    ShishoAPIError,
-    { id: string; permission: string }
-  >({
-    mutationFn: ({ id, permission }) =>
-      API.removeApiKeyPermission(id, permission),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListApiKeys] });
     },

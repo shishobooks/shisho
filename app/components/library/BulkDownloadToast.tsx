@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
+import { bulkDownloadUrl } from "@/utils/downloadUrl";
 import { formatFileSize } from "@/utils/format";
 
 export const BulkDownloadToast = () => {
@@ -58,7 +59,7 @@ export const BulkDownloadToast = () => {
 
       {status === "completed" && (
         <Button asChild className="w-full mt-2" size="sm">
-          <a href={`/api/jobs/${jobId}/download`}>
+          <a href={bulkDownloadUrl(jobId)}>
             <Download className="h-4 w-4" />
             Download Zip
           </a>

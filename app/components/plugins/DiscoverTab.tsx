@@ -95,7 +95,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
       },
       {
         onError: (err) => {
-          toastRequestError(err, `Failed to install plugin: ${err.message}`);
+          toastRequestError(err, "Failed to install plugin");
         },
         onSuccess: () => setInstallTarget(null),
       },
@@ -215,7 +215,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                                 onError: (err) =>
                                   toastRequestError(
                                     err,
-                                    `Failed to update plugin: ${err.message}`,
+                                    "Failed to update plugin",
                                   ),
                                 onSuccess: (updated) =>
                                   toast.success(

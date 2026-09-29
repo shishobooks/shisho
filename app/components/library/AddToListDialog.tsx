@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -130,9 +131,7 @@ export const AddToListDialog = ({
       setChangesSaved(true);
       requestClose();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update lists";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to update lists");
     }
   };
 
@@ -148,9 +147,7 @@ export const AddToListDialog = ({
       // Automatically select the newly created list
       setSelectedListIds((prev) => new Set([...prev, newList.id]));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create list";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to create list");
       throw error; // Re-throw so CreateListDialog knows it failed
     }
   };
@@ -199,11 +196,7 @@ export const AddToListDialog = ({
             </div>
 
             {/* Lists */}
-            {isLoading && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            )}
+            {isLoading && <LoadingSpinner />}
 
             {!isLoading && filteredLists.length === 0 && (
               <div className="text-sm text-muted-foreground text-center py-8">

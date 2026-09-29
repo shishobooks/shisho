@@ -114,6 +114,13 @@ describe("SharedBook", () => {
       "src",
       `/api/share/${TOKEN}/cover?v=42-1`,
     );
+    // The file cover carries the file's updated_at in epoch milliseconds.
+    expect(
+      document.querySelector(`img[src^="/api/share/${TOKEN}/files/42/cover"]`),
+    ).toHaveAttribute(
+      "src",
+      `/api/share/${TOKEN}/files/42/cover?v=${Date.parse("2026-09-02T00:00:00Z")}`,
+    );
     // The file row renders its download button once per layout breakpoint.
     expect(
       screen.getAllByRole("button", { name: "Download" }).length,

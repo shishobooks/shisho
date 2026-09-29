@@ -4,6 +4,8 @@ import {
   fileLabel,
   formatDate,
   formatDateTime,
+  formatElapsed,
+  formatFileSize,
   formatPageCount,
   formatPlayerTime,
 } from "./format";
@@ -91,5 +93,50 @@ describe("fileLabel", () => {
 
   it("falls back to the file type when there is no display name", () => {
     expect(fileLabel({ display_name: "", file_type: "epub" })).toBe("EPUB");
+  });
+});
+
+describe("formatFileSize", () => {
+  it("formats zero", () => {
+    expect(formatFileSize(0)).toBe("0 B");
+  });
+
+  it("formats bytes through gigabytes", () => {
+    expect(formatFileSize(512)).toBe("512 B");
+    expect(formatFileSize(1536)).toBe("1.5 KB");
+    expect(formatFileSize(5 * 1024 ** 2)).toBe("5 MB");
+    expect(formatFileSize(3 * 1024 ** 3)).toBe("3 GB");
+  });
+
+  it("formats a terabyte-sized value instead of printing undefined", () => {
+    expect(formatFileSize(2 * 1024 ** 4)).toBe("2 TB");
+  });
+
+  it("stays in terabytes past the largest unit", () => {
+    expect(formatFileSize(2048 * 1024 ** 4)).toBe("2048 TB");
+  });
+
+  it("formats fractions of a byte as bytes", () => {
+    expect(formatFileSize(0.5)).toBe("0.5 B");
+  });
+});
+
+describe("formatElapsed", () => {
+  it("formats sub-second spans in milliseconds", () => {
+    expect(
+      formatElapsed("2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.250Z"),
+    ).toBe("250ms");
+  });
+
+  it("formats sub-minute spans in seconds", () => {
+    expect(formatElapsed("2024-01-01T00:00:00Z", "2024-01-01T00:00:42Z")).toBe(
+      "42s",
+    );
+  });
+
+  it("formats longer spans in minutes and seconds", () => {
+    expect(formatElapsed("2024-01-01T00:00:00Z", "2024-01-01T00:03:05Z")).toBe(
+      "3m 5s",
+    );
   });
 });

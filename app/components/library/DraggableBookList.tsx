@@ -74,7 +74,6 @@ const DraggableBookItem = ({
         <BookItem
           addedByUsername={addedByUsername}
           book={listBook.book}
-          cacheKey={listBook.book.cover_cache_key}
           libraryId={listBook.book.library_id.toString()}
         />
       </div>
@@ -102,7 +101,6 @@ const DraggableBookItem = ({
       <BookItem
         addedByUsername={addedByUsername}
         book={listBook.book}
-        cacheKey={listBook.book.cover_cache_key}
         libraryId={listBook.book.library_id.toString()}
       />
     </div>

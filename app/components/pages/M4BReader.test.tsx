@@ -1,12 +1,14 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, File } from "@/types";
 import { SEEK_TIMEOUT_MS } from "@/utils/audioCodec";
 
@@ -159,7 +161,7 @@ describe("M4BReader", () => {
     renderReader();
     const img = screen.getByRole("img") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(
-      "/api/books/files/42/cover?v=2024-01-01T00:00:00Z",
+      "/api/books/files/42/cover?v=1704067200000",
     );
   });
 
@@ -316,9 +318,26 @@ describe("M4BReader", () => {
       );
       await user.click(await screen.findByRole("option", { name: "0.75x" }));
 
-      expect(updateSettingsMutate).toHaveBeenCalledWith({
-        viewer_playback_speed: 0.75,
-      });
+      expect(updateSettingsMutate).toHaveBeenCalledWith(
+        { viewer_playback_speed: 0.75 },
+        expect.anything(),
+      );
+    });
+
+    it("toasts when saving the chosen speed fails", async () => {
+      const error = vi.spyOn(toast, "error");
+      vi.mocked(useUpdateUserSettings).mockReturnValue({
+        mutate: rejectingMutate(),
+      } as never);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+
+      await user.click(
+        screen.getByRole("combobox", { name: /playback speed/i }),
+      );
+      await user.click(await screen.findByRole("option", { name: "0.75x" }));
+
+      expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
     });
 
     it("offers every discrete step from 0.5x to 3x", async () => {

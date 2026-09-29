@@ -169,15 +169,19 @@ describe("AdminSharing", () => {
     }
   });
 
-  it("shows the saved state as text without config write", () => {
+  it("shows the saved state in disabled switches with a note without config write", () => {
     setAuth({ permissions: ["config:read"] });
     mockSettings.enabled = true;
     renderPage();
 
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Enable Share Links")).toHaveTextContent("On");
-    expect(screen.getByLabelText("Require expiration")).toHaveTextContent(
-      "Off",
-    );
+    const enabled = screen.getByRole("switch", { name: "Enable Share Links" });
+    expect(enabled).toBeDisabled();
+    expect(enabled).toBeChecked();
+    const expiration = screen.getByRole("switch", {
+      name: "Require expiration",
+    });
+    expect(expiration).toBeDisabled();
+    expect(expiration).not.toBeChecked();
+    expect(screen.getByRole("note")).toHaveTextContent(/view.*not change/i);
   });
 });

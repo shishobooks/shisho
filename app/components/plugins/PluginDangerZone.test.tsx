@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 import { PluginDangerZone } from "./PluginDangerZone";
@@ -128,7 +129,7 @@ describe("PluginDangerZone", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mockUninstallMutate.mockReset();
     mockUninstallMutate.mockImplementation((_args, opts) => {
-      opts?.onError?.(new Error("boom"));
+      opts?.onError?.(new ShishoAPIError("boom", "internal", 500));
     });
 
     render(<PluginDangerZone canWrite={true} plugin={makePlugin()} />);

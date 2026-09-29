@@ -23,6 +23,7 @@ import {
   LogLevelInfo,
   LogLevelWarn,
 } from "@/types";
+import { formatElapsed } from "@/utils/format";
 
 const getLevelColor = (level: string) => {
   switch (level) {
@@ -52,23 +53,6 @@ const getStatusColor = (status: string) => {
     default:
       return "bg-muted text-muted-foreground";
   }
-};
-
-const formatDuration = (start: string, end?: string | null): string => {
-  const startDate = new Date(start);
-  const endDate = end ? new Date(end) : new Date();
-  const durationMs = endDate.getTime() - startDate.getTime();
-
-  if (durationMs < 1000) {
-    return `${durationMs}ms`;
-  }
-  const seconds = Math.floor(durationMs / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
 };
 
 const JobDetail = () => {
@@ -190,14 +174,15 @@ const JobDetail = () => {
         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
           <span>Type: {job.type}</span>
           <span>
-            Started {formatDistanceToNow(new Date(job.created_at))} ago
+            Started{" "}
+            {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
           </span>
           {job.status === JobStatusInProgress && (
-            <span>Running for {formatDuration(job.created_at)}</span>
+            <span>Running for {formatElapsed(job.created_at)}</span>
           )}
           {(job.status === "completed" || job.status === "failed") &&
             job.updated_at && (
-              <span>Took {formatDuration(job.created_at, job.updated_at)}</span>
+              <span>Took {formatElapsed(job.created_at, job.updated_at)}</span>
             )}
           {job.process_id && <span>Process: {job.process_id}</span>}
         </div>

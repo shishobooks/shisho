@@ -1,3 +1,4 @@
+import { formatDistanceToNow } from "date-fns";
 import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -37,20 +38,14 @@ const formatReleaseDate = (
   const diffDays = Math.floor(
     (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24),
   );
-  let relative: string;
-  if (diffDays < 1) {
-    relative = "today";
-  } else if (diffDays === 1) {
-    relative = "yesterday";
-  } else if (diffDays < 30) {
-    relative = `${diffDays} days ago`;
-  } else if (diffDays < 365) {
-    const months = Math.floor(diffDays / 30);
-    relative = `${months} month${months === 1 ? "" : "s"} ago`;
-  } else {
-    const years = Math.floor(diffDays / 365);
-    relative = `${years} year${years === 1 ? "" : "s"} ago`;
-  }
+  // A date-only release has no time of day, so the last two days read as
+  // "today" and "yesterday" rather than a count of hours.
+  const relative =
+    diffDays < 1
+      ? "today"
+      : diffDays === 1
+        ? "yesterday"
+        : formatDistanceToNow(d, { addSuffix: true });
   return { absolute, relative };
 };
 

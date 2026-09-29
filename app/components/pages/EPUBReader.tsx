@@ -1,12 +1,7 @@
-import {
-  AlertCircle,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Settings,
-} from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -22,6 +17,7 @@ import {
 } from "@/hooks/queries/settings";
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { File, UserSettingsPayload } from "@/types";
 
@@ -92,7 +88,10 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
 
   const commitSettings = useCallback(
     (partial: UserSettingsPayload) => {
-      updateSettings.mutate(partial);
+      updateSettings.mutate(partial, {
+        onError: (error) =>
+          toastRequestError(error, "Failed to save reader settings"),
+      });
     },
     [updateSettings],
   );
@@ -425,7 +424,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
       >
         {(isLoading || !blob || !bookReady) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background z-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <LoadingSpinner />
             <p className="text-sm text-muted-foreground">Preparing book…</p>
             {showExtendedHint && (
               <p className="text-xs text-muted-foreground">

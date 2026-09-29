@@ -94,7 +94,7 @@ describe("PluginManifestDialog", () => {
       ),
     );
 
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/loading/i);
   });
 
   it("shows an error message when error is set", () => {

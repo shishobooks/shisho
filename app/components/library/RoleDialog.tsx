@@ -133,11 +133,10 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
       });
       requestClose();
     } catch (error) {
-      let msg = isEditMode ? "Failed to update role" : "Failed to create role";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(
+        error,
+        isEditMode ? "Failed to update role" : "Failed to create role",
+      );
     }
   };
 
@@ -154,11 +153,7 @@ const RoleDialog = ({ open, onOpenChange, role }: RoleDialogProps) => {
       setInitialValues({ name: "", permissions: [] });
       requestClose();
     } catch (error) {
-      let msg = "Failed to delete role";
-      if (error instanceof Error) {
-        msg = error.message;
-      }
-      toastRequestError(error, msg);
+      toastRequestError(error, "Failed to delete role");
     }
   };
 

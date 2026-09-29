@@ -4,16 +4,7 @@ import BookItem from "@/components/library/BookItem";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
-import {
-  DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
-} from "@/constants/gallerySize";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
-import { parsePageParam } from "@/libraries/pagination";
+import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
 
 interface BookGalleryQuery {
@@ -44,60 +35,24 @@ export function BookGallerySection({
   onPageChange,
   onSizeChange,
 }: BookGallerySectionProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const userSettingsQuery = useUserSettings();
-  const updateUserSettings = useUpdateUserSettings();
-
-  const urlSize: GallerySize | null = parseGallerySize(
-    searchParams.get("size"),
-  );
-  const savedSize: GallerySize =
-    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
-  const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
-
-  const currentPage = parsePageParam(searchParams.get("page"));
-  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
+  const [, setSearchParams] = useSearchParams();
+  const {
+    savedSize,
+    effectiveSize,
+    isSizeDirty,
+    itemsPerPage,
+    currentPage,
+    offset,
+    isSaving,
+    applyGallerySize,
+    saveSizeAsDefault,
+  } = useGallerySizeParam({
+    onChange: (size, page) => {
+      onSizeChange?.(size);
+      onPageChange?.(page);
+    },
+  });
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
-  const offset = (currentPage - 1) * itemsPerPage;
-
-  const applyGallerySize = (next: GallerySize) => {
-    // Jump to the page that contains the first item currently in view, so
-    // the user keeps their place when the page size changes (matches the
-    // documented behavior and the Home/SeriesList/ListDetail galleries).
-    const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next === savedSize) {
-        params.delete("size");
-      } else {
-        params.set("size", next);
-      }
-      if (newPage === 1) {
-        params.delete("page");
-      } else {
-        params.set("page", String(newPage));
-      }
-      return params;
-    });
-    onSizeChange?.(next);
-    onPageChange?.(newPage);
-  };
-
-  const handleSaveSizeAsDefault = () => {
-    updateUserSettings.mutate(
-      { gallery_size: effectiveSize },
-      {
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("size");
-            return params;
-          });
-        },
-      },
-    );
-  };
 
   const handlePageChange = (page: number) => {
     setSearchParams((prev) => {
@@ -145,9 +100,9 @@ export function BookGallerySection({
         <div className="hidden sm:flex">
           <SizePopover
             effectiveSize={effectiveSize}
-            isSaving={updateUserSettings.isPending}
+            isSaving={isSaving}
             onChange={applyGallerySize}
-            onSaveAsDefault={handleSaveSizeAsDefault}
+            onSaveAsDefault={saveSizeAsDefault}
             savedSize={savedSize}
             trigger={<SizeButton isDirty={isSizeDirty} />}
           />
@@ -163,7 +118,6 @@ export function BookGallerySection({
         {query.data?.items.map((book) => (
           <BookItem
             book={book}
-            cacheKey={book.cover_cache_key}
             gallerySize={effectiveSize}
             key={book.id}
             libraryId={libraryId}

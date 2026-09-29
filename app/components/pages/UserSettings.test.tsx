@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -9,6 +10,7 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { setAuth } from "@/testing/auth";
+import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 
 import UserSettings from "./UserSettings";
 
@@ -104,5 +106,25 @@ describe("UserSettings – gallery size section", () => {
       { gallery_size: "xl" },
       expect.objectContaining({ onError: expect.any(Function) }),
     );
+  });
+});
+
+describe("UserSettings – reader settings", () => {
+  it("toasts when saving the auto-hide setting fails", async () => {
+    const error = vi.spyOn(toast, "error");
+    const user = userEvent.setup();
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m", viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: rejectingMutate(),
+    } as never);
+
+    renderPage();
+
+    await user.click(screen.getByRole("switch", { name: /auto-hide/i }));
+
+    expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
   });
 });

@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -107,7 +108,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
           toast.success("Library plugin order saved.");
         },
         onError: (err) => {
-          toastRequestError(err, `Failed to save: ${err.message}`);
+          toastRequestError(err, "Failed to save plugin order");
         },
       },
     );
@@ -122,18 +123,14 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
           toast.success("Reset to global default.");
         },
         onError: (err) => {
-          toastRequestError(err, `Failed to reset: ${err.message}`);
+          toastRequestError(err, "Failed to reset plugin order");
         },
       },
     );
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error) {

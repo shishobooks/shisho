@@ -1,3 +1,4 @@
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import {
   Dialog,
   DialogBody,
@@ -40,9 +41,7 @@ export const PluginManifestDialog = ({
         </DialogHeader>
         <DialogBody>
           <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4">
-            {isLoading && (
-              <div className="text-sm text-muted-foreground">Loading…</div>
-            )}
+            {isLoading && <LoadingSpinner />}
             {error && (
               <div className="text-sm text-destructive">{error.message}</div>
             )}

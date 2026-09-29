@@ -34,6 +34,7 @@ import {
   type ChapterInput,
   type File,
 } from "@/types";
+import { fileStreamUrl } from "@/utils/downloadUrl";
 import { filePageUrl } from "@/utils/pageUrl";
 
 export interface FileChaptersTabHandle {
@@ -423,7 +424,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             onEditingChange(false);
           },
           onError: (error) => {
-            toastRequestError(error, error.message || "Error saving chapters");
+            toastRequestError(error, "Failed to save chapters");
           },
         },
       );
@@ -690,9 +691,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
           )}
 
           {/* Hidden audio element for M4B playback */}
-          {isM4b && (
-            <audio ref={audioRef} src={`/api/books/files/${file.id}/stream`} />
-          )}
+          {isM4b && <audio ref={audioRef} src={fileStreamUrl(file.id)} />}
 
           {editedChapters.map((chapter, index) => (
             <ChapterRow
@@ -890,9 +889,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     return (
       <div className="py-4">
         {/* Hidden audio element for M4B playback */}
-        {isM4bFile && (
-          <audio ref={audioRef} src={`/api/books/files/${file.id}/stream`} />
-        )}
+        {isM4bFile && <audio ref={audioRef} src={fileStreamUrl(file.id)} />}
 
         {/* Uncovered pages warning (display uses 1-indexed page numbers).
             Clicking it enters edit mode, so read-only users get a plain

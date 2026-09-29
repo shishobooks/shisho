@@ -3,6 +3,8 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -180,8 +182,7 @@ export const PluginConfigForm = ({
         confidenceThreshold,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      toastRequestError(err, `Failed to save configuration: ${msg}`);
+      toastRequestError(err, "Failed to save configuration");
     }
   };
 
@@ -273,11 +274,10 @@ export const PluginConfigForm = ({
   return (
     <section className="space-y-4 rounded-md border border-border p-4 md:p-6">
       <h2 className="text-lg font-semibold">Configuration</h2>
+      {!canWrite && <ReadOnlyNotice />}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSpinner />
       ) : hasSchema ? (
         <div className="space-y-4">
           {Object.entries(data!.schema).map(([key, field]) =>

@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
+
 import { PluginConfigForm } from "./PluginConfigForm";
 
 const mockSaveConfig = vi.fn();
@@ -145,13 +147,19 @@ describe("PluginConfigForm", () => {
     expect(
       screen.getByRole("combobox", { name: /split mode/i }),
     ).toBeDisabled();
+    expect(screen.getByRole("note")).toHaveTextContent(/view.*not change/i);
+  });
+
+  it("shows no read-only note when canWrite is true", () => {
+    render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   // Regression test: when the field-settings save fails we must NOT reset
   // initialValues — otherwise hasChanges flips back to false and the user
   // can navigate away thinking the save succeeded.
   it("keeps the form dirty if the field-settings save fails", async () => {
-    saveFieldsError = new Error("boom");
+    saveFieldsError = new ShishoAPIError("boom", "internal", 500);
     const onDirtyChange = vi.fn();
 
     render(

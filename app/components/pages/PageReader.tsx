@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Loader2, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import React, {
   useCallback,
   useEffect,
@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -24,8 +25,9 @@ import {
 } from "@/hooks/queries/settings";
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import type { Chapter } from "@/types";
+import type { Chapter, UserSettingsPayload } from "@/types";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -99,6 +101,24 @@ export default function PageReader({
   const fitMode = settings?.fit_mode ?? "fit-height";
   const hideChrome = settings?.viewer_hide_chrome ?? false;
   const settingsReady = !settingsLoading && settings != null;
+  // Failures share one toast id, so quick changes that all fail show one
+  // toast instead of a stack.
+  const saveSetting = (payload: UserSettingsPayload, onFailure?: () => void) =>
+    updateSettings.mutate(payload, {
+      onError: (error) => {
+        onFailure?.();
+        toastRequestError(error, "Failed to save reader settings", {
+          id: "reader-settings-error",
+        });
+      },
+    });
+  // The preload slider shows a local draft while it is dragged and saves once
+  // on release. The draft yields to the saved value when that changes, and is
+  // dropped if the save fails so the slider shows what is actually stored.
+  const [preloadDraft, setPreloadDraft] = useState<number | null>(null);
+  useEffect(() => {
+    setPreloadDraft(null);
+  }, [preloadCount]);
 
   const { chromeVisible, toggleChrome } = useAutoHideChrome(hideChrome);
 
@@ -209,7 +229,7 @@ export default function PageReader({
           {/* Settings */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button size="icon" variant="ghost">
+              <Button aria-label="Reader settings" size="icon" variant="ghost">
                 <Settings className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
@@ -217,18 +237,21 @@ export default function PageReader({
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">
-                    Preload Count: {preloadCount}
+                    Preload Count: {preloadDraft ?? preloadCount}
                   </label>
                   <Slider
                     className="mt-2"
                     disabled={!settingsReady}
                     max={10}
                     min={1}
-                    onValueChange={([value]) => {
-                      updateSettings.mutate({ preload_count: value });
-                    }}
+                    onValueChange={([value]) => setPreloadDraft(value)}
+                    onValueCommit={([value]) =>
+                      saveSetting({ preload_count: value }, () =>
+                        setPreloadDraft(null),
+                      )
+                    }
                     step={1}
-                    value={[preloadCount]}
+                    value={[preloadDraft ?? preloadCount]}
                   />
                 </div>
                 <div>
@@ -236,9 +259,7 @@ export default function PageReader({
                   <div className="flex gap-2 mt-2">
                     <Button
                       disabled={!settingsReady}
-                      onClick={() =>
-                        updateSettings.mutate({ fit_mode: "fit-height" })
-                      }
+                      onClick={() => saveSetting({ fit_mode: "fit-height" })}
                       size="sm"
                       variant={fitMode === "fit-height" ? "default" : "outline"}
                     >
@@ -246,9 +267,7 @@ export default function PageReader({
                     </Button>
                     <Button
                       disabled={!settingsReady}
-                      onClick={() =>
-                        updateSettings.mutate({ fit_mode: "fit-width" })
-                      }
+                      onClick={() => saveSetting({ fit_mode: "fit-width" })}
                       size="sm"
                       variant={fitMode === "fit-width" ? "default" : "outline"}
                     >
@@ -265,7 +284,7 @@ export default function PageReader({
                     disabled={!settingsReady}
                     id="hide-chrome"
                     onCheckedChange={(checked) =>
-                      updateSettings.mutate({ viewer_hide_chrome: checked })
+                      saveSetting({ viewer_hide_chrome: checked })
                     }
                   />
                 </div>
@@ -316,7 +335,7 @@ export default function PageReader({
         {/* Loading spinner */}
         {imageLoading && (
           <div className="absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <LoadingSpinner />
           </div>
         )}
 

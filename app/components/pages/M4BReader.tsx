@@ -26,6 +26,7 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   PlaybackSpeeds,
@@ -45,6 +46,8 @@ import {
   resolveSkipTarget,
   SKIP_SECONDS,
 } from "@/utils/chapters";
+import { fileCoverUrl } from "@/utils/coverUrl";
+import { fileStreamUrl } from "@/utils/downloadUrl";
 import { formatPlayerTime } from "@/utils/format";
 
 interface M4BReaderProps {
@@ -69,7 +72,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
 
   usePageTitle(book?.title ? `Listening: ${book.title}` : "Audiobook Player");
 
-  const streamUrl = `/api/books/files/${file.id}/stream`;
+  const streamUrl = fileStreamUrl(file.id);
 
   // Authoritative total: prefer the duration stored on the model (available
   // immediately, before the audio element loads its metadata), fall back to
@@ -152,7 +155,13 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       // Values come from the PlaybackSpeeds list, so the cast is safe.
       const speed = Number(value) as PlaybackSpeed;
       setPlaybackSpeed(speed);
-      updateSettings.mutate({ viewer_playback_speed: speed });
+      updateSettings.mutate(
+        { viewer_playback_speed: speed },
+        {
+          onError: (error) =>
+            toastRequestError(error, "Failed to save playback speed"),
+        },
+      );
     },
     [updateSettings],
   );
@@ -295,10 +304,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const authorNames = joinNames(book?.authors);
   const narratorNames = joinNames(file.narrators);
 
-  const coverCacheKey = file.updated_at;
-  const coverUrl = coverCacheKey
-    ? `/api/books/files/${file.id}/cover?v=${coverCacheKey}`
-    : `/api/books/files/${file.id}/cover`;
+  const coverUrl = fileCoverUrl(file);
 
   const sliderMax = duration > 0 ? duration : 1;
 
@@ -333,7 +339,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
               <img
                 alt={`${book?.title ?? "Audiobook"} cover`}
                 className="h-full w-full rounded-md border border-border object-cover shadow-sm"
-                key={coverCacheKey}
+                key={coverUrl}
                 onError={() => setCoverError(true)}
                 src={coverUrl}
               />

@@ -2,6 +2,7 @@ import { AlertTriangle, GitMerge, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +19,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useBooksByIds, useMergeBooks } from "@/hooks/queries/books";
-import { ShishoAPIError, toastRequestError } from "@/libraries/api";
+import {
+  requestErrorMessage,
+  ShishoAPIError,
+  toastRequestError,
+} from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { Book, LibrarySummary } from "@/types";
 
@@ -92,9 +97,7 @@ export function MergeBooksDialog({
       }
       onOpenChange(false);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to merge books";
-      toastRequestError(error, message);
+      toastRequestError(error, "Failed to merge books");
     }
   };
 
@@ -135,9 +138,7 @@ export function MergeBooksDialog({
 
         {isLoadingBooks && (
           <DialogBody>
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
+            <LoadingSpinner />
           </DialogBody>
         )}
 
@@ -150,7 +151,7 @@ export function MergeBooksDialog({
                   Failed to load books
                 </p>
                 <p className="text-muted-foreground mt-1">
-                  {bookQueryError.message || "An error occurred"}
+                  {requestErrorMessage(bookQueryError, "Failed to load books")}
                 </p>
               </div>
             </div>

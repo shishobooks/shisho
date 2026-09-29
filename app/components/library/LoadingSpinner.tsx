@@ -1,6 +1,13 @@
-const LoadingSpinner = () => {
+import { cn } from "@/libraries/utils";
+
+interface LoadingSpinnerProps {
+  /** Overrides the container's spacing, e.g. `py-3` in a compact popover. */
+  className?: string;
+}
+
+const LoadingSpinner = ({ className }: LoadingSpinnerProps) => {
   return (
-    <div className="flex justify-center py-8" role="status">
+    <div className={cn("flex justify-center py-8", className)} role="status">
       <svg
         aria-hidden="true"
         className="w-8 h-8 text-muted-foreground/20 animate-spin fill-primary"

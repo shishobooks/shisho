@@ -437,8 +437,10 @@ describe("MetadataEditDialog", () => {
       const onSave = vi
         .fn()
         .mockRejectedValue(
-          new Error(
+          new ShishoAPIError(
             'alias "Sci-Fi" conflicts with existing genre "Science Fiction"',
+            "conflict",
+            409,
           ),
         );
       const queryClient = createQueryClient();

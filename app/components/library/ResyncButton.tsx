@@ -37,7 +37,7 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
         { payload: { type: "scan", library_id: libraryId, data: {} } },
         {
           onError: (error) => {
-            toastRequestError(error, error.message || "Failed to start scan");
+            toastRequestError(error, "Failed to start scan");
           },
         },
       );

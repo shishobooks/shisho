@@ -98,6 +98,22 @@ describe("FileListSection", () => {
     expect(screen.getAllByText("Unreadable")).toHaveLength(1);
   });
 
+  it("keys each file cover on updated_at in epoch milliseconds", () => {
+    const { container } = render(
+      wrap(
+        <FileListSection
+          libraryId="1"
+          query={makeQueryResult([makeFile(1)], 1)}
+          title="Files"
+        />,
+      ),
+    );
+
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/books/files/1/cover?v=1704067200000",
+    );
+  });
+
   it("renders section title", () => {
     const files = [makeFile(1)];
     render(

@@ -15,6 +15,7 @@ import type {
   SeriesSearchResult,
 } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
+import { bookCoverUrl, seriesCoverUrl } from "@/utils/coverUrl";
 
 const getSearchThumbnailClasses = (variant: "book" | "audiobook"): string => {
   // For search thumbnails, we use a fixed width and vary the aspect ratio
@@ -50,7 +51,8 @@ interface SearchResultCoverProps {
   id: number;
   thumbnailClasses: string;
   variant: "book" | "audiobook";
-  cacheKey?: number;
+  /** When the results were fetched, standing in for `cover_cache_key`. */
+  cacheKey: number;
 }
 
 const SearchResultCover = ({
@@ -60,9 +62,11 @@ const SearchResultCover = ({
   variant,
   cacheKey,
 }: SearchResultCoverProps) => {
-  const coverUrl = cacheKey
-    ? `/api/${type === "book" ? "books" : "series"}/${id}/cover?v=${cacheKey}`
-    : `/api/${type === "book" ? "books" : "series"}/${id}/cover`;
+  // Search results carry no cover_cache_key, so the covers are keyed on when
+  // the results were fetched.
+  const source = { id, cover_cache_key: String(cacheKey) };
+  const coverUrl =
+    type === "book" ? bookCoverUrl(source) : seriesCoverUrl(source);
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
 

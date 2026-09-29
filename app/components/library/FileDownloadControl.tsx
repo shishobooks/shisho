@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { DownloadFormatAsk, type File } from "@/types";
+import { fileDownloadUrl } from "@/utils/downloadUrl";
 import { supportsKepub } from "@/utils/supportsKepub";
 
 interface FileDownloadControlProps {
@@ -71,7 +72,7 @@ const FileDownloadControl = ({
         onCancel={onCancelDownload}
         onDownloadKepub={onDownloadKepub}
         onDownloadOriginal={() =>
-          onDownloadWithEndpoint(`/api/books/files/${file.id}/download`)
+          onDownloadWithEndpoint(fileDownloadUrl(file.id))
         }
       />
     );

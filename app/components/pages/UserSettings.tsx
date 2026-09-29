@@ -61,12 +61,7 @@ const UserSettings = () => {
       { gallery_size: next },
       {
         onError: (error) =>
-          toastRequestError(
-            error,
-            error instanceof Error
-              ? error.message
-              : "Failed to update gallery size",
-          ),
+          toastRequestError(error, "Failed to update gallery size"),
       },
     );
   };
@@ -151,7 +146,16 @@ const UserSettings = () => {
                 disabled={!userSettingsQuery.data}
                 id="hide-chrome-setting"
                 onCheckedChange={(checked) =>
-                  updateUserSettings.mutate({ viewer_hide_chrome: checked })
+                  updateUserSettings.mutate(
+                    { viewer_hide_chrome: checked },
+                    {
+                      onError: (error) =>
+                        toastRequestError(
+                          error,
+                          "Failed to save reader settings",
+                        ),
+                    },
+                  )
                 }
               />
             </div>

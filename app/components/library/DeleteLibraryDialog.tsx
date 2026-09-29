@@ -47,8 +47,7 @@ export function DeleteLibraryDialog({
       onOpenChange(false);
       navigate("/settings/libraries");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Something went wrong.";
-      toastRequestError(e, msg);
+      toastRequestError(e, "Failed to delete library");
     }
   };
 

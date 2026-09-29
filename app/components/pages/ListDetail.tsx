@@ -1,7 +1,7 @@
 import { format, formatDistanceToNow } from "date-fns";
 import { Edit, Save, Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import BookItem from "@/components/library/BookItem";
@@ -23,25 +23,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
-} from "@/constants/gallerySize";
-import {
   useDeleteList,
   useList,
   useListBooks,
   useReorderListBooks,
   useUpdateList,
 } from "@/hooks/queries/lists";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
 import { useCan } from "@/hooks/useCan";
+import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
-import { parsePageParam } from "@/libraries/pagination";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
@@ -49,7 +40,6 @@ import {
   ListSortAuthorDesc,
   ListSortTitleAsc,
   ListSortTitleDesc,
-  type GallerySize,
   type ListBook,
   type ListSort,
   type UpdateListPayload,
@@ -67,60 +57,23 @@ const SORT_OPTIONS = [
 const ListDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const listId = id ? parseInt(id, 10) : undefined;
   // A list's books and their covers come from Books Read routes. A role
   // without it still sees the list and can manage it, but not its books.
   const canReadBooks = useCan("books:read");
 
-  const userSettingsQuery = useUserSettings();
-  const updateUserSettings = useUpdateUserSettings();
-
-  const urlSize: GallerySize | null = parseGallerySize(
-    searchParams.get("size"),
-  );
-  const savedSize: GallerySize =
-    userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
-  const effectiveSize: GallerySize = urlSize ?? savedSize;
-  const isSizeDirty = urlSize !== null && urlSize !== savedSize;
-  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
-
-  const userSettingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
-
-  // Get current page from URL
-  const currentPage = parsePageParam(searchParams.get("page"));
-  const limit = itemsPerPage;
-  const offset = (currentPage - 1) * limit;
-
-  const applyGallerySize = (next: GallerySize) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next === savedSize) {
-        params.delete("size");
-      } else {
-        params.set("size", next);
-      }
-      const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
-      params.set("page", String(newPage));
-      return params;
-    });
-  };
-
-  const handleSaveSizeAsDefault = () => {
-    updateUserSettings.mutate(
-      { gallery_size: effectiveSize },
-      {
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("size");
-            return params;
-          });
-        },
-      },
-    );
-  };
+  const {
+    savedSize,
+    effectiveSize,
+    isSizeDirty,
+    itemsPerPage,
+    currentPage,
+    offset,
+    settingsResolved: userSettingsResolved,
+    isSaving: isSavingSize,
+    applyGallerySize,
+    saveSizeAsDefault,
+  } = useGallerySizeParam();
 
   const [sort, setSort] = useState<ListSort | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -132,7 +85,7 @@ const ListDetail = () => {
   usePageTitle(listQuery.data?.name ?? "List");
   const listBooksQuery = useListBooks(
     listId,
-    { sort, limit, offset },
+    { sort, limit: itemsPerPage, offset },
     { enabled: userSettingsResolved && Boolean(listId) },
   );
   const updateListMutation = useUpdateList();
@@ -147,10 +100,7 @@ const ListDetail = () => {
         payload: { book_ids: bookIds },
       });
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to reorder list",
-      );
+      toastRequestError(error, "Failed to reorder list");
       throw error; // DraggableBookList restores the previous order
     }
   };
@@ -171,10 +121,7 @@ const ListDetail = () => {
       await updateListMutation.mutateAsync({ listId, payload });
       toast.success("List updated");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to update list",
-      );
+      toastRequestError(error, "Failed to update list");
       throw error; // Let CreateListDialog preserve the draft on failure.
     }
   };
@@ -187,10 +134,7 @@ const ListDetail = () => {
       toast.success("List deleted");
       navigate("/lists");
     } catch (error) {
-      toastRequestError(
-        error,
-        error instanceof Error ? error.message : "Failed to delete list",
-      );
+      toastRequestError(error, "Failed to delete list");
     }
   };
 
@@ -352,9 +296,9 @@ const ListDetail = () => {
               <div className="hidden sm:flex">
                 <SizePopover
                   effectiveSize={effectiveSize}
-                  isSaving={updateUserSettings.isPending}
+                  isSaving={isSavingSize}
                   onChange={applyGallerySize}
-                  onSaveAsDefault={handleSaveSizeAsDefault}
+                  onSaveAsDefault={saveSizeAsDefault}
                   savedSize={savedSize}
                   trigger={<SizeButton isDirty={isSizeDirty} />}
                 />
@@ -391,7 +335,6 @@ const ListDetail = () => {
                         !isOwner ? listBook.added_by_user?.username : undefined
                       }
                       book={listBook.book}
-                      cacheKey={listBook.book.cover_cache_key}
                       gallerySize={effectiveSize}
                       key={listBook.id}
                       libraryId={listBook.book.library_id.toString()}

@@ -24,6 +24,55 @@ const imperativeQueries = {
     "Fetch through a query hook in app/hooks/queries that gates on its route's permission (see app/AGENTS.md).",
 };
 
+// Cover and page endpoints are served immutable, so their URLs must carry the
+// cache key the helpers in app/utils add; download and stream URLs are built
+// there too so each path is written once. A literal /api/... URL ending in
+// one of these segments anywhere else is a hand-built copy. esquery regexes
+// cannot contain a slash, so the patterns spell it \x2F.
+const API_PREFIX = String.raw`^\x2Fapi\x2F`;
+const FILE_SEGMENT = String.raw`\x2F(cover|download|stream|page)([?\x2F]|$)`;
+const FILE_URL_MESSAGE =
+  "Build cover, page, download and stream URLs with the helpers in app/utils (coverUrl.ts, pageUrl.ts, downloadUrl.ts).";
+const literalFileUrls = [
+  {
+    selector: `TemplateLiteral:has(TemplateElement[value.raw=/${API_PREFIX}/]):has(TemplateElement[value.raw=/${FILE_SEGMENT}/])`,
+    message: FILE_URL_MESSAGE,
+  },
+  {
+    selector: `Literal[value=/${API_PREFIX}.*${FILE_SEGMENT}/]`,
+    message: FILE_URL_MESSAGE,
+  },
+  {
+    // "/api/books/" + id + "/cover", reported once on the outermost `+`.
+    selector: `BinaryExpression[operator="+"]:not(BinaryExpression > BinaryExpression):has(Literal[value=/${API_PREFIX}/]):has(Literal[value=/${FILE_SEGMENT}/])`,
+    message: FILE_URL_MESSAGE,
+  },
+];
+
+// A mutation fired with mutate() reports a rejection only through onError, so
+// one without it fails silently. Toast it with toastRequestError (see
+// "Request errors and retries" in app/AGENTS.md), or use mutateAsync in a
+// try/catch. The options must be an object literal passed straight to
+// mutate(), so an onError inside a nested call does not count, and options
+// held in a variable are flagged because the rule cannot see into them.
+const MUTATE_MESSAGE =
+  "Pass onError to mutate() and report the failure with toastRequestError, or await mutateAsync in a try/catch.";
+const MUTATE_CALL = 'CallExpression[callee.property.name="mutate"]';
+const mutateWithoutOnError = [
+  // No options at all.
+  { selector: `${MUTATE_CALL}[arguments.length<2]`, message: MUTATE_MESSAGE },
+  // Options without their own onError (one in a nested call does not count).
+  {
+    selector: `${MUTATE_CALL} > ObjectExpression:nth-child(2):not(:has(> Property[key.name="onError"]))`,
+    message: MUTATE_MESSAGE,
+  },
+  // Options the rule cannot see into.
+  {
+    selector: `${MUTATE_CALL} > .arguments:nth-child(2):not(ObjectExpression)`,
+    message: MUTATE_MESSAGE,
+  },
+];
+
 export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -82,6 +131,8 @@ export default tseslint.config(
         "error",
         literalPermissionCheck,
         imperativeQueries,
+        ...mutateWithoutOnError,
+        ...literalFileUrls,
       ],
       "no-restricted-imports": [
         "error",
@@ -108,11 +159,30 @@ export default tseslint.config(
   {
     // The block above skips app/hooks/queries for the query rules, and a later
     // no-restricted-syntax setting would replace its selectors, so the query
-    // hooks get the permission rule on its own.
+    // hooks list the rules that still apply to them.
     files: ["app/hooks/queries/**/*.{ts,tsx}"],
     ignores: ["app/**/*.test.{ts,tsx}"],
     rules: {
-      "no-restricted-syntax": ["error", literalPermissionCheck],
+      "no-restricted-syntax": [
+        "error",
+        literalPermissionCheck,
+        ...literalFileUrls,
+      ],
+    },
+  },
+  {
+    // app/utils holds the URL helpers, so it skips only the URL rule. This
+    // replaces the app block's no-restricted-syntax list and keeps its
+    // no-restricted-imports query ban.
+    files: ["app/utils/**/*.{ts,tsx}"],
+    ignores: ["app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        literalPermissionCheck,
+        imperativeQueries,
+        ...mutateWithoutOnError,
+      ],
     },
   },
   {

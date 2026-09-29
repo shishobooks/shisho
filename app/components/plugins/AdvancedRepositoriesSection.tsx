@@ -15,6 +15,7 @@ import {
   useSyncRepository,
 } from "@/hooks/queries/plugins";
 import { useCan } from "@/hooks/useCan";
+import { toastRequestError } from "@/libraries/api";
 
 export const AdvancedRepositoriesSection = () => {
   const canWrite = useCan("config:write");
@@ -42,6 +43,7 @@ export const AdvancedRepositoriesSection = () => {
     addRepository.mutate(
       { url: newUrl.trim(), scope: newScope.trim() },
       {
+        onError: (err) => toastRequestError(err, "Failed to add repository"),
         onSuccess: () => {
           setNewUrl("");
           setNewScope("");
@@ -97,6 +99,11 @@ export const AdvancedRepositoriesSection = () => {
                         syncRepository.mutate(
                           { scope: repo.scope },
                           {
+                            onError: (err) =>
+                              toastRequestError(
+                                err,
+                                "Failed to sync repository",
+                              ),
                             onSuccess: (res) => {
                               if (res.update_refresh_error) {
                                 toast.warning(
@@ -190,7 +197,11 @@ export const AdvancedRepositoriesSection = () => {
           if (removeTarget) {
             removeRepository.mutate(
               { scope: removeTarget },
-              { onSuccess: () => setRemoveTarget(null) },
+              {
+                onError: (err) =>
+                  toastRequestError(err, "Failed to remove repository"),
+                onSuccess: () => setRemoveTarget(null),
+              },
             );
           }
         }}

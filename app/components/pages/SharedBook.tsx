@@ -13,6 +13,8 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { ShishoAPIError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { SharedBookResponse } from "@/types";
+import { shareBookCoverUrl, shareFileCoverUrl } from "@/utils/coverUrl";
+import { shareFileDownloadUrl } from "@/utils/downloadUrl";
 import { formatDateTime } from "@/utils/format";
 
 // Builds the public endpoints the body uses in place of the authenticated
@@ -22,19 +24,15 @@ import { formatDateTime } from "@/utils/format";
 const shareLinkContext = (
   token: string,
   shared: SharedBookResponse,
-): ShareLinkContext => {
-  const base = `/api/share/${encodeURIComponent(token)}`;
-  return {
-    downloadUrl: (file) => `${base}/files/${file.id}/download`,
-    bookCoverUrl: (book) =>
-      book.cover_cache_key ? `${base}/cover?v=${book.cover_cache_key}` : null,
-    fileCoverUrl: (file) =>
-      file.file_role === "supplement"
-        ? null
-        : `${base}/files/${file.id}/cover?v=${encodeURIComponent(file.updated_at)}`,
-    coverAspectRatio: shared.cover_aspect_ratio,
-  };
-};
+): ShareLinkContext => ({
+  downloadUrl: (file) => shareFileDownloadUrl(token, file.id),
+  // An empty key means the book has no cover file to show.
+  bookCoverUrl: (book) =>
+    book.cover_cache_key ? shareBookCoverUrl(token, book) : null,
+  fileCoverUrl: (file) =>
+    file.file_role === "supplement" ? null : shareFileCoverUrl(token, file),
+  coverAspectRatio: shared.cover_aspect_ratio,
+});
 
 // The one page for every link that cannot be used: unknown, mistyped,
 // expired, revoked, or with sharing turned off (every 404 from the server).
