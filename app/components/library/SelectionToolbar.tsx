@@ -36,9 +36,9 @@ import { useBulkSetReview } from "@/hooks/queries/review";
 import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
 import {
-  ResourceBooks,
   type CreateListPayload,
   type FileType,
   type LibrarySummary,
@@ -55,10 +55,10 @@ interface SelectionToolbarProps {
 }
 
 export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
-  const { demoMode, canWrite } = useAuth();
+  const { demoMode } = useAuth();
   // Merge, delete, and review changes require Books Write. Downloads and
   // list membership are governed separately and stay available.
-  const canWriteBooks = canWrite(ResourceBooks);
+  const canWriteBooks = useCan("books:write");
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);

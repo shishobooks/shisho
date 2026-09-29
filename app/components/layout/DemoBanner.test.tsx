@@ -1,17 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/hooks/useAuth";
+import { setAuth } from "@/testing/auth";
 
 import DemoBanner from "./DemoBanner";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 describe("DemoBanner", () => {
   beforeEach(() => {
-    vi.mocked(useAuth).mockReturnValue({ demoMode: true } as never);
+    setAuth({ demoMode: true });
   });
 
   it("shows the Demo Mode restrictions and useful links", () => {
@@ -62,7 +60,7 @@ describe("DemoBanner", () => {
   });
 
   it("is hidden outside Demo Mode", () => {
-    vi.mocked(useAuth).mockReturnValue({ demoMode: false } as never);
+    setAuth();
 
     const { container } = render(<DemoBanner />);
 

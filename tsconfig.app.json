@@ -29,5 +29,5 @@
     }
   },
   "include": ["app"],
-  "exclude": ["app/**/*.test.ts", "app/**/*.test.tsx"]
+  "exclude": ["app/**/*.test.ts", "app/**/*.test.tsx", "app/testing"]
 }

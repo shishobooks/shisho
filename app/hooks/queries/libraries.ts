@@ -167,9 +167,10 @@ export const useLibraryLanguages = (
 };
 
 // The signed-in user's accessible libraries, without paths. Any signed-in
-// role may read it, so reader pages (the library picker, breadcrumbs, cover
-// aspect ratio, download preference, and the Merge and Move dialogs) use it
-// instead of the Libraries Read routes above.
+// role may read it, so reader pages (breadcrumbs, cover aspect ratio, download
+// preference, the Kobo sync scope, and the Merge and Move dialogs) use it
+// instead of the Libraries Read routes above. The navigation uses
+// useNavLibraries below.
 const fetchUserLibraries = ({ signal }: { signal: AbortSignal }) =>
   API.request<LibrarySummary[]>("GET", "/user/libraries", null, null, signal);
 
@@ -183,6 +184,20 @@ export const useUserLibraries = (
     ...options,
     queryKey: [QueryKey.UserLibraries],
     queryFn: fetchUserLibraries,
+  });
+};
+
+// The libraries the navigation offers to switch to: the library picker, the
+// mobile drawer, and the redirect from `/`. Every library page needs Books
+// Read, so without it this sends nothing and returns no libraries, even when
+// the Kobo sync scope in Security Settings has cached them.
+export const useNavLibraries = () => {
+  const canOpenLibraries = useRequires("books:read");
+  return useQuery<LibrarySummary[], ShishoAPIError>({
+    enabled: canOpenLibraries,
+    queryKey: [QueryKey.UserLibraries],
+    queryFn: fetchUserLibraries,
+    select: (libraries) => (canOpenLibraries ? libraries : []),
   });
 };
 

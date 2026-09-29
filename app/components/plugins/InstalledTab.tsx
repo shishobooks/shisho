@@ -11,7 +11,7 @@ import {
   useScanPlugins,
   useUpdatePluginVersion,
 } from "@/hooks/queries/plugins";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
 
@@ -22,8 +22,7 @@ import {
 import { PluginRow } from "./PluginRow";
 
 export const InstalledTab = () => {
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
+  const canWrite = useCan("config:write");
   const { data: plugins, error, isLoading } = usePluginsInstalled();
   const { data: available = [] } = usePluginsAvailable();
   const { data: repos = [] } = usePluginRepositories();

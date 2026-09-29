@@ -5,18 +5,15 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFileChapters } from "@/hooks/queries/chapters";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
 
 import FileChaptersTab from "./FileChaptersTab";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

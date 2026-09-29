@@ -4,17 +4,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import LibraryRedirect from "./LibraryRedirect";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/components/library/TopNav", () => ({
   default: () => <div data-testid="top-nav" />,
@@ -50,7 +44,7 @@ const requestedPaths = (request: ReturnType<typeof vi.spyOn>) =>
 describe("LibraryRedirect", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
   });
 
   it("opens the first accessible library for a role with Books Read, without Libraries Read", async () => {
@@ -65,7 +59,7 @@ describe("LibraryRedirect", () => {
   });
 
   it("sends a role with Libraries Read and no libraries to library settings", async () => {
-    auth.permissions = new Set(["books:read", "libraries:read"]);
+    setAuth({ permissions: ["books:read", "libraries:read"] });
     vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderRedirect();
@@ -84,11 +78,7 @@ describe("LibraryRedirect", () => {
   });
 
   it("sends a role without Books Read to lists without requesting libraries", async () => {
-    auth.permissions = new Set([
-      "shares:read",
-      "shares:write",
-      "libraries:read",
-    ]);
+    setAuth({ permissions: ["shares:read", "shares:write", "libraries:read"] });
     const request = vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderRedirect();

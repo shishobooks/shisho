@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { useMobileNav } from "@/contexts/MobileNav";
-import { useUserLibraries } from "@/hooks/queries/libraries";
+import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
@@ -51,15 +51,13 @@ const MobileDrawer = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { demoMode, user, logout, hasPermission } = useAuth();
+  const { demoMode, user, logout } = useAuth();
   const { isOpen, close } = useMobileNav();
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
-  // Library pages need Books Read, so a role without it gets no library
-  // entries to switch to. Lists stay in the picker for every role.
-  const canReadBooks = hasPermission("books", "read");
-  const librariesQuery = useUserLibraries({ enabled: canReadBooks });
-  const libraries = (canReadBooks && librariesQuery.data) || [];
+  // Empty for a role without Books Read, which every library page needs.
+  // Lists stay in the picker for every role.
+  const libraries = useNavLibraries().data ?? [];
   const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   const listsQuery = useListLists();

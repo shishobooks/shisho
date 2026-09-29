@@ -3,16 +3,11 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+
 import { useLibraryNavItems } from "./useLibraryNavItems";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const shownLabels = () => {
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -30,17 +25,17 @@ const shownLabels = () => {
 
 describe("useLibraryNavItems", () => {
   beforeEach(() => {
-    auth.permissions = new Set();
+    setAuth();
   });
 
   it("hides Series and People without their Read permissions", () => {
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
 
     expect(shownLabels()).toEqual(["Books", "Genres", "Tags", "Publishers"]);
   });
 
   it("shows Series and People with their Read permissions", () => {
-    auth.permissions = new Set(["books:read", "series:read", "people:read"]);
+    setAuth({ permissions: ["books:read", "series:read", "people:read"] });
 
     expect(shownLabels()).toEqual([
       "Books",
@@ -53,14 +48,12 @@ describe("useLibraryNavItems", () => {
   });
 
   it("shows library Settings only with Libraries Read and Write", () => {
-    auth.permissions = new Set(["books:read", "libraries:write"]);
+    setAuth({ permissions: ["books:read", "libraries:write"] });
     expect(shownLabels()).not.toContain("Settings");
 
-    auth.permissions = new Set([
-      "books:read",
-      "libraries:read",
-      "libraries:write",
-    ]);
+    setAuth({
+      permissions: ["books:read", "libraries:read", "libraries:write"],
+    });
     expect(shownLabels()).toContain("Settings");
   });
 });

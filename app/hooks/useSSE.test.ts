@@ -3,12 +3,10 @@ import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  AuthContext,
-  type AuthContextValue,
-} from "@/components/contexts/Auth/context";
+import { AuthContext } from "@/components/contexts/Auth/context";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
+import { authValue, setAuth } from "@/testing/auth";
 
 import { useSSE } from "./useSSE";
 
@@ -49,34 +47,12 @@ function createWrapper(
   queryClient: QueryClient,
   demoMode = false,
 ) {
-  const authValue: AuthContextValue = {
-    user: isAuthenticated
-      ? {
-          id: 1,
-          username: "test",
-          role_id: 1,
-          role_name: "admin",
-          permissions: [],
-          must_change_password: false,
-        }
-      : null,
-    isLoading: false,
-    isAuthenticated,
-    needsSetup: false,
-    demoMode,
-    login: vi.fn(),
-    logout: vi.fn(),
-    hasPermission: () => true,
-    canWrite: () => true,
-    hasLibraryAccess: () => true,
-    refetch: vi.fn(),
-    setAuthUser: vi.fn(),
-  };
+  setAuth({ demoMode, user: isAuthenticated ? { username: "test" } : null });
 
   return ({ children }: { children: ReactNode }) =>
     createElement(
       AuthContext.Provider,
-      { value: authValue },
+      { value: authValue() },
       createElement(QueryClientProvider, { client: queryClient }, children),
     );
 }

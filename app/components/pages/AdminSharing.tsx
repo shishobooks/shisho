@@ -8,7 +8,7 @@ import {
   useSharingSettings,
   useUpdateSharingSettings,
 } from "@/hooks/queries/sharing";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { UpdateSharingSettingsPayload } from "@/types";
@@ -65,9 +65,8 @@ const SettingRow = ({
 const AdminSharing = () => {
   usePageTitle("Sharing");
 
-  const { hasPermission } = useAuth();
-  const canEdit = hasPermission("config", "write");
-  const canViewUsers = hasPermission("users", "read");
+  const canEdit = useCan("config:write");
+  const canViewUsers = useCan("users:read");
   const settingsQuery = useSharingSettings();
   const updateMutation = useUpdateSharingSettings();
 

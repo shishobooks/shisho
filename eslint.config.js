@@ -5,6 +5,25 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+// Permission checks take a typed requirement through useCan or can (see
+// "Permission-gated controls" in app/AGENTS.md), so a typo fails to compile.
+// hasPermission takes plain strings, where a typo fails silently.
+const literalPermissionCheck = {
+  selector:
+    'CallExpression:matches([callee.name="hasPermission"], [callee.property.name="hasPermission"]):matches([arguments.0.type=/^(Literal|TemplateLiteral)$/], [arguments.1.type=/^(Literal|TemplateLiteral)$/])',
+  message:
+    'Use useCan("resource:operation") or can(...) from useAuth(), which type-check the permission.',
+};
+
+// The imperative forms of useQuery. A query started this way skips the
+// permission gate a query hook in app/hooks/queries applies.
+const imperativeQueries = {
+  selector:
+    "CallExpression[callee.property.name=/^(fetchQuery|prefetchQuery|ensureQueryData|fetchInfiniteQuery|prefetchInfiniteQuery|ensureInfiniteQueryData)$/]",
+  message:
+    "Fetch through a query hook in app/hooks/queries that gates on its route's permission (see app/AGENTS.md).",
+};
+
 export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -59,6 +78,11 @@ export default tseslint.config(
     files: ["app/**/*.{ts,tsx}"],
     ignores: ["app/hooks/queries/**", "app/**/*.test.{ts,tsx}"],
     rules: {
+      "no-restricted-syntax": [
+        "error",
+        literalPermissionCheck,
+        imperativeQueries,
+      ],
       "no-restricted-imports": [
         "error",
         {
@@ -79,6 +103,16 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    // The block above skips app/hooks/queries for the query rules, and a later
+    // no-restricted-syntax setting would replace its selectors, so the query
+    // hooks get the permission rule on its own.
+    files: ["app/hooks/queries/**/*.{ts,tsx}"],
+    ignores: ["app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": ["error", literalPermissionCheck],
     },
   },
   {

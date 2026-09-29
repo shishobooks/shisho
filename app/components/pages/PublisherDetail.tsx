@@ -26,11 +26,11 @@ import {
   useSetChildPublisher,
   useUpdatePublisher,
 } from "@/hooks/queries/publishers";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parsePageParam } from "@/libraries/pagination";
-import { ResourceBooks } from "@/types";
+import { writePermissionForEntity } from "@/utils/permissions";
 
 const PublisherDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -54,11 +54,10 @@ const PublisherDetail = () => {
 
   const updatePublisherMutation = useUpdatePublisher();
   const mergePublisherMutation = useMergePublisher();
-  const { canWrite } = useAuth();
   // Publisher edits go through the books route group and need Books Write.
   // ResourceDetail hides the buttons; the dialog this page owns is gated here
   // so it is not mounted for read-only users either.
-  const canWriteBooks = canWrite(ResourceBooks);
+  const canWriteBooks = useCan(writePermissionForEntity("publisher"));
   const setChildPublisherMutation = useSetChildPublisher();
   const deletePublisherMutation = useDeletePublisher();
 
@@ -68,14 +67,15 @@ const PublisherDetail = () => {
   });
 
   // Pre-fetch the publisher list as soon as library_id is available so the
-  // merge dialog opens instantly without a loading flash.
+  // merge dialog opens instantly without a loading flash. Only a role that
+  // can merge gets the dialog.
   const publishersListQuery = usePublishersList(
     {
       library_id: publisherQuery.data?.library_id,
       limit: 50,
       search: mergeSearch || undefined,
     },
-    { enabled: !!publisherQuery.data?.library_id },
+    { enabled: canWriteBooks && !!publisherQuery.data?.library_id },
   );
 
   const publisher = publisherQuery.data;

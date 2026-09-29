@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -13,7 +13,9 @@ import {
   vi,
 } from "vitest";
 
+import { setAuth } from "@/testing/auth";
 import type { Book, File, SharingSettingsResponse } from "@/types";
+import type { Permission } from "@/utils/permissions";
 
 import BookDetailBody, { type ShareLinkContext } from "./BookDetailBody";
 
@@ -28,7 +30,7 @@ afterEach(() => {
 
 // Full permissions by default, so every control the Share Link context hides
 // would otherwise be visible. Tests narrow the set to exercise one role.
-const ALL_PERMISSIONS = [
+const ALL_PERMISSIONS: Permission[] = [
   "books:read",
   "books:write",
   "config:read",
@@ -37,28 +39,20 @@ const ALL_PERMISSIONS = [
   "shares:read",
   "shares:write",
 ];
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
+// BookDetailBody.permissions.test.tsx checks which requests the real sharing
+// and plugin hooks send; these stand-ins only return data.
 const sharing = vi.hoisted(() => ({
   settings: { enabled: false, require_expiration: false } as
     SharingSettingsResponse | undefined,
-  options: [] as Array<{ enabled?: boolean } | undefined>,
 }));
 
 vi.mock("@/hooks/queries/sharing", () => ({
-  useSharingSettings: (options?: { enabled?: boolean }) => {
-    sharing.options.push(options);
-    return { data: options?.enabled === false ? undefined : sharing.settings };
-  },
+  useSharingSettings: (options?: { enabled?: boolean }) => ({
+    data: options?.enabled === false ? undefined : sharing.settings,
+  }),
 }));
 
 vi.mock("@/components/library/ShareLinkDialog", () => ({
@@ -84,9 +78,8 @@ vi.mock("@/components/library/ShareLinkDialog", () => ({
 }));
 
 beforeEach(() => {
-  auth.permissions = new Set(ALL_PERMISSIONS);
+  setAuth({ permissions: ALL_PERMISSIONS });
   sharing.settings = { enabled: false, require_expiration: false };
-  sharing.options.length = 0;
 });
 
 const { idle } = vi.hoisted(() => ({
@@ -99,15 +92,8 @@ vi.mock("@/hooks/queries/books", () => ({
   useResyncBook: idle,
   useResyncFile: idle,
 }));
-const { identifierTypesOptions } = vi.hoisted(() => ({
-  identifierTypesOptions: [] as Array<{ enabled?: boolean } | undefined>,
-}));
-
 vi.mock("@/hooks/queries/plugins", () => ({
-  usePluginIdentifierTypes: (options?: { enabled?: boolean }) => {
-    identifierTypesOptions.push(options);
-    return { data: [] };
-  },
+  usePluginIdentifierTypes: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/queries/review", () => ({
   useSetBookReview: idle,
@@ -254,24 +240,10 @@ describe("BookDetailBody in Share Link context", () => {
     expect(screen.queryByText("File Path")).not.toBeInTheDocument();
   });
 
-  it("makes no authenticated identifier types request", () => {
-    identifierTypesOptions.length = 0;
-    renderBody({ shareLink });
-
-    expect(identifierTypesOptions.length).toBeGreaterThan(0);
-    for (const options of identifierTypesOptions) {
-      expect(options?.enabled).toBe(false);
-    }
-  });
-
-  it("makes no sharing settings request and offers no Share entry", () => {
+  it("offers no Share entry", () => {
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody({ shareLink });
 
-    expect(sharing.options.length).toBeGreaterThan(0);
-    for (const options of sharing.options) {
-      expect(options?.enabled).toBe(false);
-    }
     expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
   });
 
@@ -371,6 +343,66 @@ describe("BookDetailBody in Share Link context", () => {
     expect(assign).toHaveBeenCalledWith("/api/share/tok/files/42/download");
   });
 
+  it.each([
+    [
+      "the API's message",
+      () =>
+        Response.json(
+          {
+            error: { code: "conversion_failed", message: "Conversion failed" },
+          },
+          { status: 500 },
+        ),
+      "Conversion failed",
+    ],
+    [
+      "the status for a proxy's error page",
+      () =>
+        new Response("<html>Bad gateway</html>", {
+          status: 502,
+          statusText: "Bad Gateway",
+        }),
+      "Request failed with status 502 (Bad Gateway)",
+    ],
+  ])("reports %s when a download fails", async (_, errorResponse, message) => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 500 }))
+        .mockResolvedValueOnce(errorResponse()),
+    );
+
+    renderBody({ shareLink });
+    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
+  it("reports nothing when the download is cancelled while reading the error", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const aborted = new ReadableStream({
+      start: (controller) =>
+        controller.error(new DOMException("cancelled", "AbortError")),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 500 }))
+        .mockResolvedValueOnce(new Response(aborted, { status: 500 })),
+    );
+
+    renderBody({ shareLink });
+    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("downloads supplements through the supplied download URL builder", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const fetchMock = vi.fn().mockResolvedValue(new Response(null));
@@ -423,7 +455,7 @@ describe("BookDetailBody without Share Link context", () => {
   });
 
   it("renders author and series names as text without People and Series Read", () => {
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
     renderBody();
 
     expect(screen.getByText("Ada Author").closest("a")).toBeNull();
@@ -482,7 +514,7 @@ describe("BookDetailBody Share entry", () => {
   });
 
   it("shows the menu with Share and Add to list for Shares Write without Books Write", async () => {
-    auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    setAuth({ permissions: ["books:read", "shares:read", "shares:write"] });
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
@@ -491,7 +523,7 @@ describe("BookDetailBody Share entry", () => {
 
   it("offers Share while sharing is disabled so links can be revoked", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    setAuth({ permissions: ["books:read", "shares:read", "shares:write"] });
     renderBody();
 
     expect(await menuItems()).toEqual(["Add to list", "Share"]);
@@ -509,7 +541,7 @@ describe("BookDetailBody Share entry", () => {
   });
 
   it("hides Share until the sharing settings have loaded", () => {
-    auth.permissions = new Set(["books:read", "shares:read", "shares:write"]);
+    setAuth({ permissions: ["books:read", "shares:read", "shares:write"] });
     sharing.settings = undefined;
     renderBody();
 
@@ -517,20 +549,17 @@ describe("BookDetailBody Share entry", () => {
     expect(screen.getByTestId("add-to-list")).toHaveTextContent("Add to list");
   });
 
-  it("hides Share and skips the settings request without the shares permission", () => {
-    auth.permissions = new Set(["books:read", "books:write"]);
+  it("hides Share without a shares permission", () => {
+    setAuth({ permissions: ["books:read", "books:write"] });
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    for (const options of sharing.options) {
-      expect(options?.enabled).toBe(false);
-    }
     expect(screen.queryByText("Share")).not.toBeInTheDocument();
   });
 
   it("opens the dialog with the form, the policy, and the settings link for Config Write", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    auth.permissions = new Set([...ALL_PERMISSIONS, "config:write"]);
+    setAuth({ permissions: [...ALL_PERMISSIONS, "config:write"] });
     sharing.settings = { enabled: true, require_expiration: true };
     renderBody();
 
@@ -550,13 +579,10 @@ describe("BookDetailBody Share entry", () => {
 
   it("offers Share with the form and the list for Shares Write without Shares Read", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    auth.permissions = new Set(["books:read", "shares:write"]);
+    setAuth({ permissions: ["books:read", "shares:write"] });
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    for (const options of sharing.options) {
-      expect(options?.enabled).toBe(true);
-    }
     await user.click(screen.getByLabelText("Book actions"));
     await user.click(screen.getByRole("menuitem", { name: "Share" }));
 
@@ -573,7 +599,7 @@ describe("BookDetailBody Share entry", () => {
 
   it("opens the dialog without the form for Shares Read only", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    auth.permissions = new Set(["books:read", "shares:read"]);
+    setAuth({ permissions: ["books:read", "shares:read"] });
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 

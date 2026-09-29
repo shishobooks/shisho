@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import ListDetail from "./ListDetail";
 
@@ -18,21 +19,7 @@ beforeAll(() => {
   })) as unknown as typeof window.matchMedia;
 });
 
-const auth = vi.hoisted(() => ({
-  permissions: new Set<string>(),
-  demoMode: false,
-}));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    user: { id: 1, username: "owner", library_access: null },
-    demoMode: auth.demoMode,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-    hasLibraryAccess: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/components/library/TopNav", () => ({ default: () => null }));
 
@@ -103,11 +90,10 @@ const bookCovers = () =>
 describe("ListDetail permission gating", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    auth.demoMode = false;
   });
 
   it("lets an owner without Users Read share through the user directory", async () => {
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(respond as typeof API.request);
@@ -125,8 +111,7 @@ describe("ListDetail permission gating", () => {
   });
 
   it("does not ask for the user directory in Demo Mode, where it is absent", async () => {
-    auth.permissions = new Set(["books:read"]);
-    auth.demoMode = true;
+    setAuth({ permissions: ["books:read"], demoMode: true });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(respond as typeof API.request);
@@ -145,7 +130,7 @@ describe("ListDetail permission gating", () => {
   });
 
   it("requests no books or covers for a role without Books Read", async () => {
-    auth.permissions = new Set(["shares:read"]);
+    setAuth({ permissions: ["shares:read"] });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(respond as typeof API.request);
@@ -160,7 +145,7 @@ describe("ListDetail permission gating", () => {
   });
 
   it("shows the books and their covers for a role with Books Read", async () => {
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
     vi.spyOn(API, "request").mockImplementation(respond as typeof API.request);
 
     renderList();

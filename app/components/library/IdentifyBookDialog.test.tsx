@@ -12,6 +12,7 @@ import {
 } from "vitest";
 
 import type { PluginSearchResponse } from "@/hooks/queries/plugins";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import {
   DataSourceManual,
   FileRoleMain,
@@ -23,13 +24,9 @@ import {
 import { IdentifyBookDialog } from "./IdentifyBookDialog";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite

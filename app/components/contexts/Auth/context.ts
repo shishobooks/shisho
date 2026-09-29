@@ -1,6 +1,7 @@
 import { createContext } from "react";
 
 import type { MeResponse } from "@/types";
+import type { Requirement } from "@/utils/permissions";
 
 // The authenticated user is exactly the GET /auth/me response shape. Alias the
 // generated type rather than restate it so it can never drift from the backend.
@@ -14,14 +15,13 @@ export interface AuthContextValue {
   demoMode: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  hasPermission: (resource: string, operation: string) => boolean;
   /**
-   * Shorthand for `hasPermission(resource, "write")`. Use it to gate mutating
-   * controls on the permission the backend route requires (see
-   * `writeResourceForEntity` in `@/utils/permissions` for metadata entities).
-   * Reflects role permissions only; Demo Mode never affects it.
+   * Whether the role meets `requirement`: `can("books:write")`, an array the
+   * role must hold all of, or `anyOf(...)`. Use it where a hook cannot run
+   * per check (after an early return, in a loop or callback); otherwise use
+   * `useCan`. Reflects role permissions only; Demo Mode never affects it.
    */
-  canWrite: (resource: string) => boolean;
+  can: (requirement: Requirement) => boolean;
   hasLibraryAccess: (libraryId: number) => boolean;
   refetch: () => Promise<void>;
   setAuthUser: (user: AuthUser) => void;

@@ -22,11 +22,12 @@ import {
 } from "@/components/ui/tooltip";
 import { useMobileNav } from "@/contexts/MobileNav";
 import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { cn } from "@/libraries/utils";
 
 const TopNav = () => {
   const { libraryId } = useParams();
-  const { demoMode, hasPermission } = useAuth();
+  const { demoMode } = useAuth();
   const { toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
@@ -35,11 +36,11 @@ const TopNav = () => {
 
   // GlobalSearch searches the current library and needs Books Read; without
   // either there is nothing for the mobile toggle to open.
-  const canSearch = Boolean(libraryId) && hasPermission("books", "read");
+  const canReadBooks = useCan("books:read");
+  const canSearch = Boolean(libraryId) && canReadBooks;
 
   // The button reads the latest scan (Jobs Read) and starts one (Jobs Write).
-  const canResync =
-    hasPermission("jobs", "read") && hasPermission("jobs", "write");
+  const canResync = useCan(["jobs:read", "jobs:write"]);
 
   return (
     <div className={TOP_NAV_WRAPPER}>

@@ -701,8 +701,11 @@ function KoboSetupDialog({
 }) {
   const [scopeType, setScopeType] = useState<"all" | "library" | "list">("all");
   const [scopeId, setScopeId] = useState("");
-  const { data: libraries } = useUserLibraries();
-  const { data: listsData } = useListLists();
+  // Every row mounts this dialog, so it loads the scope choices only while
+  // open. The scope is open to every role, so it reads all accessible
+  // libraries rather than the Books Read navigation list.
+  const { data: libraries } = useUserLibraries({ enabled: open });
+  const { data: listsData } = useListLists({}, { enabled: open });
   const clearKoboSync = useClearKoboSync();
 
   const handleResetSync = async () => {

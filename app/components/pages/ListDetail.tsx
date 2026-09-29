@@ -37,7 +37,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
@@ -71,8 +71,7 @@ const ListDetail = () => {
   const listId = id ? parseInt(id, 10) : undefined;
   // A list's books and their covers come from Books Read routes. A role
   // without it still sees the list and can manage it, but not its books.
-  const { hasPermission } = useAuth();
-  const canReadBooks = hasPermission("books", "read");
+  const canReadBooks = useCan("books:read");
 
   const userSettingsQuery = useUserSettings();
   const updateUserSettings = useUpdateUserSettings();

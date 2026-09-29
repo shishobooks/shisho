@@ -8,6 +8,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { setAuth } from "@/testing/auth";
 
 import UserSettings from "./UserSettings";
 
@@ -18,9 +19,9 @@ vi.mock("@/hooks/queries/settings", () => ({
 
 // TopNav (rendered inside UserSettings) calls useAuth and useMobileNav; mock
 // both so tests don't require a full AuthProvider / MobileNavProvider.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ hasPermission: () => false, user: null }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ user: null });
 
 vi.mock("@/contexts/MobileNav/useMobileNav", () => ({
   useMobileNav: () => ({

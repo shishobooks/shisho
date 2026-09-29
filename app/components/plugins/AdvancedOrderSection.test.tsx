@@ -3,18 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import { AdvancedOrderSection } from "./AdvancedOrderSection";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const renderSection = () => {
   const queryClient = new QueryClient({
@@ -33,7 +26,7 @@ describe("AdvancedOrderSection", () => {
   });
 
   it("explains that the order needs Books Read for a role with only Config Read", async () => {
-    auth.permissions = new Set(["config:read"]);
+    setAuth({ permissions: ["config:read"] });
     const request = vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderSection();
@@ -49,7 +42,7 @@ describe("AdvancedOrderSection", () => {
   });
 
   it("loads the order for a role with Books Read", async () => {
-    auth.permissions = new Set(["config:read", "books:read"]);
+    setAuth({ permissions: ["config:read", "books:read"] });
     const request = vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderSection();

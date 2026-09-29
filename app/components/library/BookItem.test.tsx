@@ -3,7 +3,9 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
 import { FileRoleMain, FileRoleSupplement, type Book } from "@/types";
+import type { Permission } from "@/utils/permissions";
 
 import BookItem from "./BookItem";
 
@@ -12,27 +14,17 @@ beforeAll(() => {
   globalThis.__APP_VERSION__ = "test";
 });
 
-// Mock mutation hooks — they require a running API
+// Mock mutation hooks, since they require a running API
 vi.mock("@/hooks/queries/books", () => ({
   useDeleteBook: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResyncBook: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-let canWriteBooks = true;
-let canReadPeople = true;
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    canWrite: (resource: string) => resource === "books" && canWriteBooks,
-    hasPermission: (resource: string, operation: string) =>
-      resource === "people" ? canReadPeople : operation === "read",
-  }),
-}));
+const READS: Permission[] = ["books:read", "series:read", "people:read"];
 
-beforeEach(() => {
-  canWriteBooks = true;
-  canReadPeople = true;
-});
+beforeEach(() => setAuth({ permissions: [...READS, "books:write"] }));
 
 function wrap(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -56,7 +48,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
   } as Book;
 }
 
-describe("BookItem — Series number badge", () => {
+describe("BookItem series number badge", () => {
   const seriesId = 42;
 
   it("shows badge when series_number is 0", () => {
@@ -231,14 +223,14 @@ describe("BookItem author links", () => {
   });
 
   it("renders an author as text for a role without People Read", () => {
-    canReadPeople = false;
+    setAuth({ permissions: ["books:read", "series:read", "books:write"] });
     render(wrap(<BookItem book={book} libraryId="1" />));
 
     expect(screen.getByText("Ada Author").closest("a")).toBeNull();
   });
 });
 
-describe("BookItem — Needs review badge", () => {
+describe("BookItem needs review badge", () => {
   it("shows badge when a main file has reviewed=false", () => {
     const book = makeBook({
       files: [
@@ -299,7 +291,7 @@ describe("BookItem write controls", () => {
   });
 
   it("hides the actions menu but keeps Add to list for a read-only user", () => {
-    canWriteBooks = false;
+    setAuth({ permissions: READS });
     render(wrap(<BookItem book={makeBook()} libraryId="1" />));
     expect(screen.getByTitle("Add to list")).toBeInTheDocument();
     expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();

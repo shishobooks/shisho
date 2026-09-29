@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import LibrarySettings from "./LibrarySettings";
 
@@ -13,18 +14,7 @@ beforeAll(() => {
   globalThis.__APP_VERSION__ = "test";
 });
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    user: { id: 1, library_access: null },
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-    hasLibraryAccess: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/hooks/useUnsavedChanges", () => ({
   useUnsavedChanges: () => ({
@@ -67,7 +57,7 @@ describe("LibrarySettings permission gating", () => {
   });
 
   it("does not request the library for a role without Libraries Read", async () => {
-    auth.permissions = new Set(["books:read", "libraries:write"]);
+    setAuth({ permissions: ["books:read", "libraries:write"] });
     const request = vi.spyOn(API, "request").mockResolvedValue({});
 
     renderSettings();
@@ -78,11 +68,9 @@ describe("LibrarySettings permission gating", () => {
   });
 
   it("requests the library for a role with Libraries Read and Write", async () => {
-    auth.permissions = new Set([
-      "books:read",
-      "libraries:read",
-      "libraries:write",
-    ]);
+    setAuth({
+      permissions: ["books:read", "libraries:read", "libraries:write"],
+    });
     const request = vi.spyOn(API, "request").mockResolvedValue({});
 
     renderSettings();

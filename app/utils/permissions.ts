@@ -1,44 +1,16 @@
 import type { EntityType } from "@/libraries/metadataEntity";
-import {
-  ResourceBooks,
-  ResourcePeople,
-  ResourceSeries,
-  type OperationRead,
-  type OperationWrite,
-  type ResourceConfig,
-  type ResourceJobs,
-  type ResourceLibraries,
-  type ResourceShares,
-  type ResourceUsers,
-} from "@/types";
+import type { OperationRead, OperationWrite } from "@/types";
+import type * as models from "@/types/generated/models";
+
+type Models = typeof models;
 
 /**
- * The permission resource whose Write operation the backend requires for
- * mutating a metadata entity. Genres, tags, and publishers are edited under
- * the books route group, so they require Books Write rather than a resource
- * of their own.
+ * Every permission resource, from the generated `Resource*` constants, so a
+ * resource added on the backend joins this type with no change here.
  */
-const WRITE_RESOURCE_BY_ENTITY: Record<EntityType, string> = {
-  genre: ResourceBooks,
-  tag: ResourceBooks,
-  publisher: ResourceBooks,
-  series: ResourceSeries,
-  person: ResourcePeople,
-};
-
-export function writeResourceForEntity(entityType: EntityType): string {
-  return WRITE_RESOURCE_BY_ENTITY[entityType];
-}
-
-type Resource =
-  | typeof ResourceBooks
-  | typeof ResourceConfig
-  | typeof ResourceJobs
-  | typeof ResourceLibraries
-  | typeof ResourcePeople
-  | typeof ResourceSeries
-  | typeof ResourceShares
-  | typeof ResourceUsers;
+type Resource = {
+  [K in keyof Models]: K extends `Resource${string}` ? Models[K] : never;
+}[keyof Models];
 
 type Operation = typeof OperationRead | typeof OperationWrite;
 
@@ -67,7 +39,27 @@ const holds = (hasPermission: HasPermission, permission: Permission) => {
   return hasPermission(resource, operation);
 };
 
-/** Whether a role with `hasPermission` meets `requirement`. */
+/**
+ * The permission the backend requires for mutating a metadata entity. Genres,
+ * tags, and publishers are edited under the books route group, so they
+ * require Books Write rather than a resource of their own.
+ */
+const WRITE_PERMISSION_BY_ENTITY: Record<EntityType, Permission> = {
+  genre: "books:write",
+  tag: "books:write",
+  publisher: "books:write",
+  series: "series:write",
+  person: "people:write",
+};
+
+export function writePermissionForEntity(entityType: EntityType): Permission {
+  return WRITE_PERMISSION_BY_ENTITY[entityType];
+}
+
+/**
+ * Whether a role with `hasPermission` meets `requirement`. Components use
+ * `useCan` or `can` from `useAuth()`, which are built on this.
+ */
 export const meetsRequirement = (
   hasPermission: HasPermission,
   requirement: Requirement,

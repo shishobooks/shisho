@@ -9,7 +9,7 @@ import PaginationFooter from "@/components/library/PaginationFooter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCreateJob, useJobs } from "@/hooks/queries/jobs";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
@@ -88,14 +88,13 @@ const AdminJobs = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parsePageParam(searchParams.get("page"));
 
-  const { hasPermission } = useAuth();
-  const { data, isLoading, error, refetch } = useJobs({
+  const { data, isLoading, error, refetch, isEnabled } = useJobs({
     limit: JOBS_PER_PAGE,
     offset: (currentPage - 1) * JOBS_PER_PAGE,
   });
   const createJobMutation = useCreateJob();
 
-  const canCreateJobs = hasPermission("jobs", "write");
+  const canCreateJobs = useCan("jobs:write");
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / JOBS_PER_PAGE);
 
@@ -145,7 +144,14 @@ const AdminJobs = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button onClick={() => refetch()} size="sm" variant="outline">
+          <Button
+            onClick={() => {
+              // refetch() runs even a disabled query, so respect its gate.
+              if (isEnabled) refetch();
+            }}
+            size="sm"
+            variant="outline"
+          >
             <RefreshCw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Refresh</span>
           </Button>

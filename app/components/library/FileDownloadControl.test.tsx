@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/hooks/useAuth";
+import { setAuth } from "@/testing/auth";
 import {
   DownloadFormatAsk,
   DownloadFormatOriginal,
@@ -12,9 +12,7 @@ import {
 
 import FileDownloadControl from "./FileDownloadControl";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 type Props = React.ComponentProps<typeof FileDownloadControl>;
 
@@ -55,7 +53,7 @@ const expectOnlyCalled = (props: Props, called: (typeof callbacks)[number]) => {
 
 describe("FileDownloadControl", () => {
   beforeEach(() => {
-    vi.mocked(useAuth).mockReturnValue({ demoMode: false } as never);
+    setAuth();
   });
 
   it("downloads the original file for a supplement", async () => {
@@ -152,7 +150,7 @@ describe("FileDownloadControl", () => {
     ["in-flight download", { isDownloading: true }],
     ["default download", {}],
   ])("renders nothing in Demo Mode (%s)", (_, overrides) => {
-    vi.mocked(useAuth).mockReturnValue({ demoMode: true } as never);
+    setAuth({ demoMode: true });
 
     const { container } = renderControl(overrides);
 

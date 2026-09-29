@@ -74,17 +74,12 @@ import {
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useSharingSettings } from "@/hooks/queries/sharing";
-import { useAuth } from "@/hooks/useAuth";
-import { toastRequestError } from "@/libraries/api";
+import { useCan } from "@/hooks/useCan";
+import { API, ShishoAPIError, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   DownloadFormatKepub,
   FileTypeCBZ,
-  ResourceBooks,
-  ResourceConfig,
-  ResourcePeople,
-  ResourceSeries,
-  ResourceShares,
   type Book,
   type CoverAspectRatio,
   type File,
@@ -107,6 +102,7 @@ import {
 } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { getIdentifierUrl } from "@/utils/identifiers";
+import { anyOf } from "@/utils/permissions";
 import { getReadingAction } from "@/utils/readingAction";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 import { supportsKepub } from "@/utils/supportsKepub";
@@ -236,9 +232,8 @@ const FileRow = ({
   onDeleteFile,
   isDeletingFile,
 }: FileRowProps) => {
-  const { hasPermission } = useAuth();
   // Narrator pages need People Read; without it the names are plain text.
-  const linkNarrators = !isShareLink && hasPermission(ResourcePeople, "read");
+  const linkNarrators = useCan("people:read") && !isShareLink;
   const showChevron = hasExpandableMetadata && !isSupplement;
   // fileLabel falls back to the type when the Share Link payload has no name.
   const displayName = fileLabel(file);
@@ -722,24 +717,23 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;
   const navigate = useNavigate();
-  const { canWrite, hasPermission } = useAuth();
   // Metadata, covers, chapters, review state, identify, rescan, merge, move,
   // and delete all require Books Write. List membership is governed by the
   // list's own permission and stays available to everyone.
-  const canWriteBooks = !isShareLink && canWrite(ResourceBooks);
-  // Shares Write creates links, and either shares operation lists them. The
-  // sharing settings endpoint needs a shares operation or Config Read, so
-  // only fetch it then.
-  const canWriteShares = !isShareLink && canWrite(ResourceShares);
+  const canWriteBooks = useCan("books:write") && !isShareLink;
+  // Shares Write creates links, and either shares operation lists them.
+  const canWriteShares = useCan("shares:write") && !isShareLink;
   const canListShares =
-    canWriteShares || (!isShareLink && hasPermission(ResourceShares, "read"));
+    useCan(anyOf("shares:read", "shares:write")) && !isShareLink;
+  // The sharing settings link in the Share dialog opens a Config Write page.
+  const canManageSharing = useCan("config:write");
   // Author and series pages need People Read and Series Read. Without them
   // the names render as plain text instead of links to an error page.
-  const linkPeople = !isShareLink && hasPermission(ResourcePeople, "read");
-  const linkSeries = !isShareLink && hasPermission(ResourceSeries, "read");
+  const linkPeople = useCan("people:read") && !isShareLink;
+  const linkSeries = useCan("series:read") && !isShareLink;
+  // The hook checks the endpoint's permissions itself.
   const { data: sharingSettings } = useSharingSettings({
-    enabled:
-      !isShareLink && (canListShares || hasPermission(ResourceConfig, "read")),
+    enabled: !isShareLink,
   });
   // Share stays offered while sharing is off: no link works then, but a
   // sharer can still revoke or delete one without an admin turning sharing
@@ -874,24 +868,25 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       });
 
       if (!headResponse.ok) {
-        // HEAD failed - make a GET request to get the error message (small JSON response)
+        // A HEAD response has no body, so GET the error message. checkStatus
+        // rejects with the API's message, or a status-based one when a proxy
+        // answered. A GET that succeeds after all is not read, since its body
+        // is the whole file.
         const errorResponse = await fetch(endpoint, {
           signal: abortController.signal,
         });
-        const contentType = errorResponse.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          // The API nests the message: { error: { code, message } }.
-          const error = await errorResponse.json();
-          setDownloadError({
-            fileId,
-            message: error.error?.message || "Failed to generate file",
-          });
-        } else {
-          setDownloadError({
-            fileId,
-            message: "Failed to download file",
-          });
+        let message = "Failed to download file";
+        if (!errorResponse.ok) {
+          try {
+            await API.checkStatus(errorResponse);
+          } catch (error) {
+            // A cancel while reading the body is an AbortError, which the
+            // outer catch ignores.
+            if (!(error instanceof ShishoAPIError)) throw error;
+            message = error.message;
+          }
         }
+        setDownloadError({ fileId, message });
         return;
       }
 
@@ -1740,7 +1735,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
           bookId={book.id}
           bookTitle={book.title}
           canList={canListShares}
-          canManageSharing={canWrite(ResourceConfig)}
+          canManageSharing={canManageSharing}
           canWrite={canWriteShares}
           onOpenChange={setShareDialogOpen}
           open={shareDialogOpen}

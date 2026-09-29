@@ -10,17 +10,15 @@ import { ShareLinkDialog } from "./ShareLinkDialog";
 
 const mocks = vi.hoisted(() => ({
   links: [] as ShareLinkResponse[],
-  listOptions: [] as Array<{ enabled?: boolean } | undefined>,
   create: vi.fn(),
   revoke: vi.fn(),
   remove: vi.fn(),
 }));
 
+// ShareLinkDialog.permissions.test.tsx checks which requests the real hooks
+// send.
 vi.mock("@/hooks/queries/sharing", () => ({
-  useBookShareLinks: (_bookId: number, options?: { enabled?: boolean }) => {
-    mocks.listOptions.push(options);
-    return { data: mocks.links, isLoading: false };
-  },
+  useBookShareLinks: () => ({ data: mocks.links, isLoading: false }),
   useCreateShareLink: () => ({ mutateAsync: mocks.create, isPending: false }),
   useRevokeShareLink: () => ({ mutateAsync: mocks.revoke, isPending: false }),
   useDeleteShareLink: () => ({ mutateAsync: mocks.remove, isPending: false }),
@@ -74,7 +72,6 @@ afterEach(() => {
 
 beforeEach(() => {
   mocks.links = [];
-  mocks.listOptions.length = 0;
   mocks.create.mockReset().mockResolvedValue(link({}));
   mocks.revoke.mockReset().mockResolvedValue(link({ state: "revoked" }));
   mocks.remove.mockReset().mockResolvedValue(undefined);
@@ -206,12 +203,9 @@ describe("ShareLinkDialog", () => {
     expect(screen.getByText("for Alice")).toBeInTheDocument();
   });
 
-  it("does not request the list without Shares Read", () => {
+  it("hides the list when the role cannot list links", () => {
     renderDialog({ canList: false });
 
-    for (const options of mocks.listOptions) {
-      expect(options?.enabled).toBe(false);
-    }
     expect(screen.queryByText("Links")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create link" }),

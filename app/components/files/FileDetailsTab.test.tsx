@@ -2,18 +2,15 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { type File } from "@/types";
 
 import FileDetailsTab from "./FileDetailsTab";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: undefined }),

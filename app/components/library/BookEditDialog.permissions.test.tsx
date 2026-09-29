@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 import { FileRoleMain, type Book } from "@/types";
 
 import { BookEditDialog } from "./BookEditDialog";
@@ -11,16 +12,7 @@ import { BookEditDialog } from "./BookEditDialog";
 // Uses the real query hooks, so the People and Series gating inside them is
 // what keeps the comboboxes quiet for a role without those permissions.
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const book = {
   id: 1,
@@ -62,7 +54,7 @@ const flush = () =>
 describe("BookEditDialog without People or Series Read", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    auth.permissions = new Set(["books:read", "books:write"]);
+    setAuth({ permissions: ["books:read", "books:write"] });
   });
 
   it("requests no people or series while typing, and still offers free text", async () => {
@@ -85,12 +77,9 @@ describe("BookEditDialog without People or Series Read", () => {
   });
 
   it("requests people and series for a role holding their Read permissions", async () => {
-    auth.permissions = new Set([
-      "books:read",
-      "books:write",
-      "people:read",
-      "series:read",
-    ]);
+    setAuth({
+      permissions: ["books:read", "books:write", "people:read", "series:read"],
+    });
     const request = vi
       .spyOn(API, "request")
       .mockResolvedValue({ items: [], total: 0 });

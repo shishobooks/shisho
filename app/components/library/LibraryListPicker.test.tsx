@@ -1,69 +1,60 @@
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useUserLibraries } from "@/hooks/queries/libraries";
-import { useListLists } from "@/hooks/queries/lists";
+import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import LibraryListPicker from "./LibraryListPicker";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
-
-vi.mock("@/hooks/queries/libraries", () => ({ useUserLibraries: vi.fn() }));
-vi.mock("@/hooks/queries/lists", () => ({ useListLists: vi.fn() }));
+const stubRequests = () =>
+  vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+    if (path === "/user/libraries") return [{ id: 1, name: "Fiction" }];
+    return { items: [], total: 0 };
+  });
 
 const renderPicker = () =>
   render(
-    <MemoryRouter initialEntries={["/libraries/1/books/7"]}>
-      <Routes>
-        <Route
-          element={<LibraryListPicker />}
-          path="/libraries/:libraryId/books/:id"
-        />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={["/libraries/1/books/7"]}>
+        <Routes>
+          <Route
+            element={<LibraryListPicker />}
+            path="/libraries/:libraryId/books/:id"
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 describe("LibraryListPicker", () => {
-  beforeEach(() => {
-    auth.permissions = new Set(["books:read"]);
-    vi.mocked(useUserLibraries).mockImplementation(
-      (options) =>
-        ({
-          data:
-            options?.enabled === false
-              ? undefined
-              : [{ id: 1, name: "Fiction" }],
-        }) as never,
-    );
-    vi.mocked(useListLists).mockReturnValue({
-      data: { items: [], total: 0 },
-    } as never);
-  });
+  beforeEach(() => setAuth({ permissions: ["books:read"] }));
 
-  it("shows the current library for a role with Books Read, without Libraries Read", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("shows the current library for a role with Books Read, without Libraries Read", async () => {
+    stubRequests();
     renderPicker();
 
-    expect(screen.getByRole("button", { name: /Fiction/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Fiction/ }),
+    ).toBeInTheDocument();
   });
 
-  it("renders nothing and requests no libraries for a role without Books Read", () => {
-    auth.permissions = new Set(["shares:read"]);
-    vi.mocked(useUserLibraries).mockClear();
+  it("renders nothing and requests no libraries for a role without Books Read", async () => {
+    setAuth({ permissions: ["shares:read"] });
+    const request = stubRequests();
     const { container } = renderPicker();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
     expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByText("Select Library")).not.toBeInTheDocument();
-    expect(useUserLibraries).toHaveBeenCalled();
-    for (const call of vi.mocked(useUserLibraries).mock.calls) {
-      expect(call[0]?.enabled).toBe(false);
-    }
+    expect(request.mock.calls.map((call) => call[1])).not.toContain(
+      "/user/libraries",
+    );
   });
 });

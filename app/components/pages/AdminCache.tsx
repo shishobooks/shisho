@@ -5,7 +5,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCaches, useClearCache } from "@/hooks/queries/cache";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { Info as CacheInfo } from "@/types/generated/cache";
@@ -24,8 +24,7 @@ const formatBytes = (bytes: number): string => {
 
 const AdminCache = () => {
   usePageTitle("Cache");
-  const { hasPermission } = useAuth();
-  const canClear = hasPermission("config", "write");
+  const canClear = useCan("config:write");
 
   const { data, isLoading, error } = useCaches();
   const clearMutation = useClearCache();

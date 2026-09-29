@@ -11,7 +11,7 @@ import {
 import { useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
-import { meetsRequirement, ROUTE_PERMISSIONS } from "@/utils/permissions";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 export type LibraryNavItem = {
   to: string;
@@ -25,15 +25,12 @@ export type LibraryNavItem = {
 export const useLibraryNavItems = (): LibraryNavItem[] | null => {
   const { libraryId } = useParams();
   const location = useLocation();
-  const { hasPermission } = useAuth();
+  const { can } = useAuth();
 
   if (!libraryId) return null;
 
   const basePath = `/libraries/${libraryId}`;
   // Each entry shows when the role passes its page's route guard.
-  const can = (
-    requirement: (typeof ROUTE_PERMISSIONS)[keyof typeof ROUTE_PERMISSIONS],
-  ) => meetsRequirement(hasPermission, requirement);
   const canReadBooks = can(ROUTE_PERMISSIONS.libraryBooks);
 
   const isBooksActive =

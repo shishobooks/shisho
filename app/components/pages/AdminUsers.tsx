@@ -7,7 +7,7 @@ import RoleDialog from "@/components/library/RoleDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRoles, useUsers } from "@/hooks/queries/users";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Role, User } from "@/types";
 import { sortRoles } from "@/utils/roles";
@@ -69,7 +69,6 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
 const AdminUsers = () => {
   usePageTitle("Users & Roles");
 
-  const { hasPermission } = useAuth();
   const {
     data: usersData,
     isLoading: usersLoading,
@@ -84,8 +83,8 @@ const AdminUsers = () => {
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
 
-  const canCreateUsers = hasPermission("users", "write");
-  const canManageRoles = hasPermission("users", "write");
+  // Creating users and managing roles both need Users Write.
+  const canWriteUsers = useCan("users:write");
 
   const handleOpenRoleDialog = (role?: Role) => {
     setSelectedRole(role ?? null);
@@ -135,7 +134,7 @@ const AdminUsers = () => {
               Manage user accounts and permissions.
             </p>
           </div>
-          {canCreateUsers && (
+          {canWriteUsers && (
             <div className="flex items-center gap-2 shrink-0">
               <Button asChild size="sm">
                 <Link to="/settings/users/create">
@@ -169,7 +168,7 @@ const AdminUsers = () => {
               Define roles with custom permissions.
             </p>
           </div>
-          {canManageRoles && (
+          {canWriteUsers && (
             <div className="flex items-center gap-2 shrink-0">
               <Button onClick={() => handleOpenRoleDialog()} size="sm">
                 <Plus className="h-4 w-4 sm:mr-2" />

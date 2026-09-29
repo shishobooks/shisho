@@ -18,15 +18,14 @@ import {
   useUpdatePlugin,
   useUpdatePluginVersion,
 } from "@/hooks/queries/plugins";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
+  const canWrite = useCan("config:write");
   const installedQuery = usePluginsInstalled();
   const availableQuery = usePluginsAvailable();
   const { data: repos = [] } = usePluginRepositories();

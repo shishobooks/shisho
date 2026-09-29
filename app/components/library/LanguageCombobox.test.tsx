@@ -5,17 +5,11 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import { LanguageCombobox } from "./LanguageCombobox";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const onChange = vi.fn();
 
@@ -53,7 +47,7 @@ describe("LanguageCombobox", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     onChange.mockClear();
-    auth.permissions = new Set(["books:read", "books:write"]);
+    setAuth({ permissions: ["books:read", "books:write"] });
   });
 
   it("suggests the library's own language tags for a role with Books Read, without Libraries Read", async () => {
@@ -70,7 +64,7 @@ describe("LanguageCombobox", () => {
   });
 
   it("requests no library languages for a role without Books Read and still accepts a typed tag", async () => {
-    auth.permissions = new Set(["books:write"]);
+    setAuth({ permissions: ["books:write"] });
     const request = vi.spyOn(API, "request").mockResolvedValue(["tlh"]);
     const user = userEvent.setup();
     renderCombobox();

@@ -16,11 +16,13 @@ import {
   useUpdateGenre,
 } from "@/hooks/queries/genres";
 import { useUserSettings } from "@/hooks/queries/settings";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
 import type { GallerySize } from "@/types";
+import { writePermissionForEntity } from "@/utils/permissions";
 
 const GenreDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -67,13 +69,15 @@ const GenreDetail = () => {
   // Fires as soon as library_id is available rather than waiting for the merge
   // dialog to open. The query is cheap (50 items, single index scan) and
   // pre-fetching means the dialog opens instantly without a loading flash.
+  // Only a role that can merge gets the dialog.
+  const canMerge = useCan(writePermissionForEntity("genre"));
   const genresListQuery = useGenresList(
     {
       library_id: genreQuery.data?.library_id,
       limit: 50,
       search: mergeSearch || undefined,
     },
-    { enabled: !!genreQuery.data?.library_id },
+    { enabled: canMerge && !!genreQuery.data?.library_id },
   );
 
   const genre = genreQuery.data;

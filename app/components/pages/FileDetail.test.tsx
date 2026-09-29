@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
+import { setAuth } from "@/testing/auth";
 
 import FileDetail from "./FileDetail";
 
@@ -22,19 +23,9 @@ vi.mock("@/hooks/queries/libraries", async () => {
   return { ...actual, useLibrary: vi.fn() };
 });
 
-let canWriteBooks = true;
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    canWrite: (resource: string) => resource === "books" && canWriteBooks,
-    hasPermission: (resource: string, operation: string) =>
-      resource === "books" && (operation === "read" || canWriteBooks),
-  }),
-}));
-
-beforeEach(() => {
-  canWriteBooks = true;
-});
+beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
 
 // useUnsavedChanges calls react-router's useBlocker, which requires a data
 // router. We don't exercise navigation blocking here, so stub it.
@@ -142,7 +133,7 @@ describe("FileDetail write controls", () => {
   });
 
   it("hides Edit and Delete but keeps the reading action for a read-only user", () => {
-    canWriteBooks = false;
+    setAuth({ permissions: ["books:read"] });
     renderForFileType("epub");
     expect(screen.getByRole("link", { name: /read/i })).toBeInTheDocument();
     expect(

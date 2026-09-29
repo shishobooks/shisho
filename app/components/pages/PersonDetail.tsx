@@ -22,11 +22,13 @@ import {
   useUpdatePerson,
 } from "@/hooks/queries/people";
 import { useUserSettings } from "@/hooks/queries/settings";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
 import type { GallerySize } from "@/types";
+import { writePermissionForEntity } from "@/utils/permissions";
 
 const PersonDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -83,13 +85,16 @@ const PersonDetail = () => {
     immediate: (v) => v === "",
   });
 
+  // Pre-fetch the merge candidates so the dialog opens without a loading
+  // flash. Only a role that can merge gets the dialog.
+  const canMerge = useCan(writePermissionForEntity("person"));
   const peopleListQuery = usePeopleList(
     {
       library_id: personQuery.data?.library_id,
       limit: 50,
       search: mergeSearch || undefined,
     },
-    { enabled: !!personQuery.data?.library_id },
+    { enabled: canMerge && !!personQuery.data?.library_id },
   );
 
   const person = personQuery.data;

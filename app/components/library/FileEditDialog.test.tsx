@@ -12,6 +12,7 @@ import {
 } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import {
   DataSourceManual,
   FileRoleMain,
@@ -61,9 +62,9 @@ vi.mock("@/hooks/queries/books", () => ({
 }));
 
 // LanguageCombobox reads the role's Libraries Read permission.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ hasPermission: () => true }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 vi.mock("@/hooks/queries/entity-search", () => ({
   usePeopleSearch: () => ({ data: [], isLoading: false }),

@@ -5,18 +5,15 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { queryClient } from "@/libraries/query-client";
+import { setAuth } from "@/testing/auth";
 import type { SharedBookResponse } from "@/types";
 
 import { shareRoutes } from "./shareRoutes";
 
 // A recipient has no session, so every permission check fails.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    canWrite: () => false,
-    hasPermission: () => false,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ user: null });
 
 const TOKEN = "q6Ch0Wd2mJ3n9Y1k8Xw4Zr5Tb7Lc0Vf2Hs6Pa3Ne1Mg";
 

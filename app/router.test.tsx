@@ -2,23 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+import type { Permission } from "@/utils/permissions";
+
 import { routes } from "./router";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    user: { id: 1, must_change_password: false, library_access: null },
-    isAuthenticated: true,
-    isLoading: false,
-    needsSetup: false,
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-    hasLibraryAccess: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 // Stand in for the layouts and pages so only the route guards run.
 vi.mock("@/components/pages/Root", () => ({ default: () => <Outlet /> }));
@@ -61,12 +50,12 @@ const renderAt = (path: string) => {
 
 describe("router permission guards", () => {
   beforeEach(() => {
-    auth.permissions = new Set();
+    setAuth();
   });
 
   describe("/settings index", () => {
     it("opens the first permitted settings page for a role without Config Read", async () => {
-      auth.permissions = new Set(["books:read", "libraries:read"]);
+      setAuth({ permissions: ["books:read", "libraries:read"] });
       const router = renderAt("/settings");
 
       expect(
@@ -76,7 +65,7 @@ describe("router permission guards", () => {
     });
 
     it("opens server settings for a role with Config Read", async () => {
-      auth.permissions = new Set(["config:read", "libraries:read"]);
+      setAuth({ permissions: ["config:read", "libraries:read"] });
       const router = renderAt("/settings");
 
       expect(
@@ -86,7 +75,7 @@ describe("router permission guards", () => {
     });
 
     it("denies access when no settings page is permitted", async () => {
-      auth.permissions = new Set(["books:read"]);
+      setAuth({ permissions: ["books:read"] });
       renderAt("/settings");
 
       expect(await screen.findByText("Access Denied")).toBeInTheDocument();
@@ -99,38 +88,36 @@ describe("router permission guards", () => {
       ["/libraries/1/genres", "genres list page"],
       ["/libraries/1/books/2", "book detail page"],
     ])("requires Books Read for %s", async (path, page) => {
-      auth.permissions = new Set(["shares:write"]);
+      setAuth({ permissions: ["shares:write"] });
       renderAt(path);
       expect(await screen.findByText("Access Denied")).toBeInTheDocument();
 
-      auth.permissions = new Set(["books:read"]);
+      setAuth({ permissions: ["books:read"] });
       renderAt(path);
       expect(await screen.findByText(page)).toBeInTheDocument();
     });
 
-    it.each([
+    it.each<[string, Permission, string]>([
       ["/libraries/1/series", "series:read", "series list page"],
       ["/libraries/1/people", "people:read", "people list page"],
     ])("requires its own Read permission for %s", async (path, perm, page) => {
-      auth.permissions = new Set(["books:read"]);
+      setAuth({ permissions: ["books:read"] });
       renderAt(path);
       expect(await screen.findByText("Access Denied")).toBeInTheDocument();
 
-      auth.permissions = new Set(["books:read", perm]);
+      setAuth({ permissions: ["books:read", perm] });
       renderAt(path);
       expect(await screen.findByText(page)).toBeInTheDocument();
     });
 
     it("requires Libraries Read and Write for library settings", async () => {
-      auth.permissions = new Set(["books:read", "libraries:write"]);
+      setAuth({ permissions: ["books:read", "libraries:write"] });
       renderAt("/libraries/1/settings");
       expect(await screen.findByText("Access Denied")).toBeInTheDocument();
 
-      auth.permissions = new Set([
-        "books:read",
-        "libraries:read",
-        "libraries:write",
-      ]);
+      setAuth({
+        permissions: ["books:read", "libraries:read", "libraries:write"],
+      });
       renderAt("/libraries/1/settings");
       expect(
         await screen.findByText("library settings page"),

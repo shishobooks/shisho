@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+
 import { SelectionToolbar } from "./SelectionToolbar";
 
 beforeAll(() => {
@@ -16,14 +18,9 @@ beforeAll(() => {
 const mockExitSelectionMode = vi.fn();
 const mockClearSelection = vi.fn();
 
-let canWriteBooks = true;
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    canWrite: (resource: string) => resource === "books" && canWriteBooks,
-  }),
-}));
+beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
 
 vi.mock("@/hooks/useBulkSelection", () => ({
   useBulkSelection: () => ({
@@ -148,7 +145,7 @@ function wrap(ui: React.ReactNode) {
 
 // ---- tests ----
 
-describe("SelectionToolbar — More popover bulk review actions", () => {
+describe("SelectionToolbar bulk review actions in the More popover", () => {
   it("renders the More button", () => {
     render(wrap(<SelectionToolbar />));
     expect(screen.getByRole("button", { name: /more/i })).toBeInTheDocument();
@@ -201,7 +198,7 @@ describe("SelectionToolbar — More popover bulk review actions", () => {
   });
 });
 
-describe("SelectionToolbar — Download file-type selection", () => {
+describe("SelectionToolbar download file-type selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -294,7 +291,7 @@ describe("SelectionToolbar — Download file-type selection", () => {
 
     const checkboxes = screen.getAllByRole("checkbox");
 
-    // Uncheck EPUB, M4B — keep only CBZ
+    // Uncheck EPUB and M4B to keep only CBZ
     await user.click(checkboxes[0]); // EPUB
     await user.click(checkboxes[1]); // M4B
 
@@ -319,11 +316,10 @@ describe("SelectionToolbar — Download file-type selection", () => {
 describe("SelectionToolbar read-only user", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    canWriteBooks = true;
   });
 
   it("keeps Add and Download but hides Merge, Delete, and review actions", async () => {
-    canWriteBooks = false;
+    setAuth({ permissions: ["books:read"] });
     const user = createUser();
     render(wrap(<SelectionToolbar library={{ id: 1 } as never} />));
 
@@ -355,7 +351,7 @@ describe("SelectionToolbar read-only user", () => {
   });
 
   it("still offers the lists the user can edit", async () => {
-    canWriteBooks = false;
+    setAuth({ permissions: ["books:read"] });
     const user = createUser();
     render(wrap(<SelectionToolbar />));
 

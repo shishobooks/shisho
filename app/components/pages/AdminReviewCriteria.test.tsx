@@ -4,6 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+import type { Permission } from "@/utils/permissions";
+
 import AdminReviewCriteria from "./AdminReviewCriteria";
 import { humanizeField } from "./review-criteria-utils";
 
@@ -12,22 +15,14 @@ beforeAll(() => {
   globalThis.__APP_VERSION__ = "test";
 });
 
-const ADMIN_PERMISSIONS = [
+const ADMIN_PERMISSIONS: Permission[] = [
   "config:read",
   "config:write",
   "jobs:read",
   "jobs:write",
 ];
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 // Mock useUnsavedChanges (uses react-router's useBlocker which requires a data router).
 vi.mock("@/hooks/useUnsavedChanges", () => ({
@@ -103,11 +98,11 @@ describe("AdminReviewCriteria", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCriteriaData.override_count = 0;
-    auth.permissions = new Set(ADMIN_PERMISSIONS);
+    setAuth({ permissions: ADMIN_PERMISSIONS });
   });
 
   it("shows a read-only view without Save or Recompute for Config Read alone", () => {
-    auth.permissions = new Set(["config:read"]);
+    setAuth({ permissions: ["config:read"] });
     wrap(<AdminReviewCriteria />);
 
     expect(screen.getByRole("checkbox", { name: "Authors" })).toBeDisabled();
@@ -116,7 +111,7 @@ describe("AdminReviewCriteria", () => {
   });
 
   it("hides Recompute without both jobs permissions", () => {
-    auth.permissions = new Set(["config:read", "config:write", "jobs:write"]);
+    setAuth({ permissions: ["config:read", "config:write", "jobs:write"] });
     wrap(<AdminReviewCriteria />);
 
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { API } from "@/libraries/api";
 import { queryClient } from "@/libraries/query-client";
 import type { StatusResponse } from "@/types";
+import { meetsRequirement, type Requirement } from "@/utils/permissions";
 
 import { AuthContext, type AuthUser } from "./context";
 
@@ -65,18 +66,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(null);
   }, []);
 
-  const hasPermission = useCallback(
-    (resource: string, operation: string) => {
-      if (!user) return false;
-      const permission = `${resource}:${operation}`;
-      return user.permissions.includes(permission);
-    },
+  const can = useCallback(
+    (requirement: Requirement) =>
+      meetsRequirement(
+        (resource, operation) =>
+          user?.permissions.includes(`${resource}:${operation}`) ?? false,
+        requirement,
+      ),
     [user],
-  );
-
-  const canWrite = useCallback(
-    (resource: string) => hasPermission(resource, "write"),
-    [hasPermission],
   );
 
   const hasLibraryAccess = useCallback(
@@ -118,8 +115,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         demoMode,
         login,
         logout,
-        hasPermission,
-        canWrite,
+        can,
         hasLibraryAccess,
         refetch,
         setAuthUser,

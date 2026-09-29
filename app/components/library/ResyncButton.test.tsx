@@ -5,16 +5,14 @@ import { MemoryRouter } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
+
 import { ResyncButton } from "./ResyncButton";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 afterEach(() => {
   toast.dismiss();

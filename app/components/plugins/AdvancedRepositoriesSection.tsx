@@ -14,11 +14,10 @@ import {
   useRemoveRepository,
   useSyncRepository,
 } from "@/hooks/queries/plugins";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 
 export const AdvancedRepositoriesSection = () => {
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
+  const canWrite = useCan("config:write");
   const { data: repos, isLoading, error } = usePluginRepositories();
   const addRepository = useAddRepository();
   const removeRepository = useRemoveRepository();

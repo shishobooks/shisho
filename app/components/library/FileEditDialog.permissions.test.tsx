@@ -3,6 +3,7 @@ import { act, render } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 import { FileRoleMain, FileTypeM4B, type File } from "@/types";
 
 import { FileEditDialog } from "./FileEditDialog";
@@ -15,16 +16,7 @@ beforeAll(() => {
   globalThis.__APP_VERSION__ = "test";
 });
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const file = {
   id: 1,
@@ -67,7 +59,7 @@ describe("FileEditDialog narrator suggestions", () => {
   });
 
   it("requests no people for a role without People Read", async () => {
-    auth.permissions = new Set(["books:read", "books:write"]);
+    setAuth({ permissions: ["books:read", "books:write"] });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(async (_method, path) =>
@@ -83,7 +75,7 @@ describe("FileEditDialog narrator suggestions", () => {
   });
 
   it("requests people for a role with People Read", async () => {
-    auth.permissions = new Set(["books:read", "books:write", "people:read"]);
+    setAuth({ permissions: ["books:read", "books:write", "people:read"] });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(async (_method, path) =>

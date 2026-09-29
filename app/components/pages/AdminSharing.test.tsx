@@ -4,13 +4,11 @@ import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/hooks/useAuth";
+import { setAuth } from "@/testing/auth";
 
 import AdminSharing from "./AdminSharing";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -32,24 +30,6 @@ vi.mock("@/hooks/queries/sharing", () => ({
   }),
 }));
 
-const mockAuth = (permissions: string[]) => {
-  vi.mocked(useAuth).mockReturnValue({
-    demoMode: false,
-    hasLibraryAccess: vi.fn(),
-    hasPermission: (resource: string, operation: string) =>
-      permissions.includes(`${resource}:${operation}`),
-    canWrite: vi.fn(),
-    isAuthenticated: true,
-    isLoading: false,
-    login: vi.fn(),
-    logout: vi.fn(),
-    needsSetup: false,
-    refetch: vi.fn(),
-    setAuthUser: vi.fn(),
-    user: null,
-  });
-};
-
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
@@ -67,7 +47,7 @@ describe("AdminSharing", () => {
     mockIsPending = false;
     mockSettings.enabled = false;
     mockSettings.require_expiration = false;
-    mockAuth(["config:read", "config:write", "users:read"]);
+    setAuth({ permissions: ["config:read", "config:write", "users:read"] });
   });
 
   it("shows both switches with their saved state and the reachability disclaimer", () => {
@@ -96,7 +76,7 @@ describe("AdminSharing", () => {
   });
 
   it("names Users as plain text when the user cannot open it", () => {
-    mockAuth(["config:read", "config:write"]);
+    setAuth({ permissions: ["config:read", "config:write"] });
     renderPage();
 
     expect(
@@ -190,7 +170,7 @@ describe("AdminSharing", () => {
   });
 
   it("shows the saved state as text without config write", () => {
-    mockAuth(["config:read"]);
+    setAuth({ permissions: ["config:read"] });
     mockSettings.enabled = true;
     renderPage();
 

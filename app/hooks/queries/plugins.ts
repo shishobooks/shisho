@@ -41,7 +41,7 @@ import { useRequires, type Requirement } from "./permissions";
 // Re-export generated types so consumers can import from this module.
 // PluginHookConfig is re-exported as PluginOrder for backward compatibility.
 // The wire types (AvailablePlugin, PluginSearchResult, ...) are generated
-// from Go via tygo and re-exported (aliased) from @/types — never hand-define
+// from Go via tygo and re-exported (aliased) from @/types. Never hand-define
 // them here (ADR 0004).
 export type {
   AvailablePlugin,
@@ -134,8 +134,11 @@ const pluginOrderQuery = (hookType: string, enabled: boolean) => ({
   },
 });
 
-export const usePluginOrder = (hookType: string) => {
-  const enabled = usePluginRouteEnabled("books:read");
+export const usePluginOrder = (
+  hookType: string,
+  options: { enabled?: boolean } = {},
+) => {
+  const enabled = usePluginRouteEnabled("books:read", options.enabled ?? true);
   return useQuery<PluginHookConfig[], ShishoAPIError>(
     pluginOrderQuery(hookType, enabled),
   );
@@ -260,14 +263,14 @@ export const useUninstallPlugin = () => {
         queryKey: [QueryKey.PluginIdentifierTypes],
       });
       // The backend removes the plugin from every hook's global order, so the
-      // AdvancedOrderSection list must refetch — otherwise it keeps showing
+      // AdvancedOrderSection list must refetch; otherwise it keeps showing
       // the now-uninstalled plugin until the user navigates away.
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginOrder],
       });
       // Library-scoped orders (LibraryPluginsTab) are keyed under
       // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
-      // only those — the shared "libraries" prefix is used by other hooks
+      // only those, since the shared "libraries" prefix is used by other hooks
       // too (books, settings) and blanket-invalidating it would trigger
       // unrelated refetches on every uninstall.
       queryClient.invalidateQueries({
@@ -298,7 +301,7 @@ export const useUpdatePlugin = () => {
     },
     // A failed enable still mutates server state (Malfunctioned status +
     // load_error get persisted), so the detail page needs PluginsInstalled
-    // refetched on error too — otherwise the error alert doesn't appear
+    // refetched on error too; otherwise the error alert doesn't appear
     // until manual reload.
     onError: () => {
       queryClient.invalidateQueries({
@@ -327,7 +330,7 @@ export const useUpdatePlugin = () => {
       });
       // Library-scoped orders (LibraryPluginsTab) are keyed under
       // ["libraries", libraryId, "plugins", "order", hookType]. Invalidate
-      // only those — the shared "libraries" prefix is used by other hooks
+      // only those, since the shared "libraries" prefix is used by other hooks
       // too (books, settings) and blanket-invalidating it would trigger
       // unrelated refetches on every enable/disable.
       queryClient.invalidateQueries({

@@ -8,22 +8,20 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useUserLibraries } from "@/hooks/queries/libraries";
+import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 
 const LibraryListPicker = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
   // Library pages need Books Read, so a role without it has no library to
   // switch to. Lists stay reachable from the user menu.
-  const canReadBooks = hasPermission("books", "read");
+  const canReadBooks = useCan("books:read");
 
   // Load the role's accessible libraries for the switcher
-  const librariesQuery = useUserLibraries({ enabled: canReadBooks });
-  const libraries = librariesQuery.data ?? [];
+  const libraries = useNavLibraries().data ?? [];
 
   // Load lists for sidebar navigation
   const listsQuery = useListLists();

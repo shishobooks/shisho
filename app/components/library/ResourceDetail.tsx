@@ -16,9 +16,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUserLibrary } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import type { DataSource } from "@/types";
-import { writeResourceForEntity } from "@/utils/permissions";
+import { writePermissionForEntity } from "@/utils/permissions";
 
 interface BreadcrumbItem {
   label: string;
@@ -109,9 +109,8 @@ export function ResourceDetail({
   onEditClick,
   children,
 }: ResourceDetailProps) {
-  const { canWrite } = useAuth();
   const libraryQuery = useUserLibrary(libraryId);
-  const canMutate = canWrite(writeResourceForEntity(entityType));
+  const canMutate = useCan(writePermissionForEntity(entityType));
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);

@@ -17,11 +17,6 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   useBookLists,
   useCreateList,
   useListLists,
@@ -51,13 +46,19 @@ export const AddToListDialog = ({
   // Store initial list IDs when dialog opens - used for hasChanges comparison
   const [initialListIds, setInitialListIds] = useState<Set<number>>(new Set());
 
-  const listsQuery = useListLists();
+  // BookItem mounts one of these per card, so nothing loads while closed.
+  const listsQuery = useListLists({}, { enabled: open });
   const bookListsQuery = useBookLists(bookId, { enabled: open });
   const updateBookListsMutation = useUpdateBookLists();
   const createListMutation = useCreateList();
 
+  // A viewer cannot change a list, so the dialog leaves it out rather than
+  // offer a toggle the server rejects. Saving keeps the book in those lists.
   const lists = useMemo(
-    () => listsQuery.data?.items ?? [],
+    () =>
+      (listsQuery.data?.items ?? []).filter(
+        (list) => list.permission !== "viewer",
+      ),
     [listsQuery.data?.items],
   );
   const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
@@ -108,9 +109,6 @@ export const AddToListDialog = ({
   }, [lists, search]);
 
   const handleToggle = (list: ListResponse) => {
-    // Viewer-only lists can't be toggled
-    if (list.permission === "viewer") return;
-
     setSelectedListIds((prev) => {
       const next = new Set(prev);
       if (next.has(list.id)) {
@@ -218,31 +216,25 @@ export const AddToListDialog = ({
                 <div className="p-2 space-y-1">
                   {filteredLists.map((list) => {
                     const isSelected = selectedListIds.has(list.id);
-                    const isViewerOnly = list.permission === "viewer";
 
-                    const listItem = (
+                    return (
                       <div
                         aria-checked={isSelected}
-                        aria-disabled={isViewerOnly}
-                        className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-accent text-left w-full cursor-pointer aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                        className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-accent text-left w-full cursor-pointer"
                         key={list.id}
-                        onClick={() => !isViewerOnly && handleToggle(list)}
+                        onClick={() => handleToggle(list)}
                         onKeyDown={(e) => {
-                          if (
-                            !isViewerOnly &&
-                            (e.key === "Enter" || e.key === " ")
-                          ) {
+                          if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
                             handleToggle(list);
                           }
                         }}
                         role="menuitemcheckbox"
-                        tabIndex={isViewerOnly ? -1 : 0}
+                        tabIndex={0}
                       >
                         <Checkbox
                           checked={isSelected}
                           className="pointer-events-none"
-                          disabled={isViewerOnly}
                           tabIndex={-1}
                         />
                         <div className="flex-1 min-w-0">
@@ -257,19 +249,6 @@ export const AddToListDialog = ({
                         </div>
                       </div>
                     );
-
-                    if (isViewerOnly) {
-                      return (
-                        <Tooltip key={list.id}>
-                          <TooltipTrigger asChild>{listItem}</TooltipTrigger>
-                          <TooltipContent>
-                            You can only view this list
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    }
-
-                    return listItem;
                   })}
                 </div>
               </ScrollArea>

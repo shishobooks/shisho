@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import { meetsRequirement, type Requirement } from "@/utils/permissions";
+import type { Requirement } from "@/utils/permissions";
 
 export { anyOf, type Permission, type Requirement } from "@/utils/permissions";
 
@@ -19,6 +19,5 @@ export function useRequires<E = boolean>(
   requirement: Requirement,
   enabled: E | true = true,
 ): E | boolean {
-  const { hasPermission } = useAuth();
-  return meetsRequirement(hasPermission, requirement) ? enabled : false;
+  return useAuth().can(requirement) ? enabled : false;
 }

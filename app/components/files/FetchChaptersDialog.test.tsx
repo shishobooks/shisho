@@ -4,18 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import type { ChapterInput } from "@/types";
 
 import FetchChaptersDialog from "./FetchChaptersDialog";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,7 +151,7 @@ describe("FetchChaptersDialog", () => {
       await user.type(input, "B0AAAATEST");
       await user.click(screen.getByRole("button", { name: /fetch chapters/i }));
 
-      // Wait for result stage — mock resolves in the microtask queue, so
+      // Wait for result stage. The mock resolves in the microtask queue, so
       // the loading spinner may be visible for only one tick and the DOM
       // lands in the result stage before our next assertion.
       await waitFor(() => {
@@ -206,11 +203,11 @@ describe("FetchChaptersDialog", () => {
     });
   });
 
-  describe("Apply titles only — chapter count mismatch", () => {
+  describe("Apply titles only with a chapter count mismatch", () => {
     it("disables 'Apply titles only' when chapter counts differ", async () => {
       const user = createUser();
 
-      // Audnexus returns 2 chapters; editedChapters has 2 — make them differ
+      // Audnexus returns 2 chapters; editedChapters has 2, so make them differ
       const mismatchedChapters: ChapterInput[] = [
         { title: "Only One", start_timestamp_ms: 0, children: [] },
       ];

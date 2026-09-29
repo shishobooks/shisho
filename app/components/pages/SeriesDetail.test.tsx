@@ -4,23 +4,22 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+import type { Permission } from "@/utils/permissions";
+
 import SeriesDetail from "./SeriesDetail";
 
-// Resources the signed-in user may write. Series mutations require Series
-// Write; Books Write alone must not unlock them.
-let writableResources: string[] = ["books", "series", "people"];
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    canWrite: (resource: string) => writableResources.includes(resource),
-    hasPermission: (resource: string, operation: string) =>
-      operation === "read" || writableResources.includes(resource),
+// Series mutations require Series Write; Books Write alone must not unlock
+// them.
+const READS: Permission[] = ["books:read", "series:read", "people:read"];
+
+beforeEach(() =>
+  setAuth({
+    permissions: [...READS, "books:write", "series:write", "people:write"],
   }),
-}));
-
-beforeEach(() => {
-  writableResources = ["books", "series", "people"];
-});
+);
 
 const { idle } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
@@ -88,7 +87,7 @@ describe("SeriesDetail write controls", () => {
   });
 
   it("hides them without Series Write, even when the user has Books Write", () => {
-    writableResources = ["books", "people"];
+    setAuth({ permissions: [...READS, "books:write", "people:write"] });
     renderPage();
     expect(
       screen.getByRole("heading", { level: 1, name: "Discworld" }),

@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { getLanguageName } from "@/constants/languages";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import {
   FileRoleMain,
   FileRoleSupplement,
@@ -43,8 +43,7 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
   const { libraryId } = useParams<{ libraryId: string }>();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
   // Narrator pages need People Read; without it the names are plain text.
-  const { hasPermission } = useAuth();
-  const linkNarrators = hasPermission("people", "read");
+  const linkNarrators = useCan("people:read");
 
   return (
     <div className="py-4 space-y-6">

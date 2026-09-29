@@ -45,13 +45,16 @@ const AddToListPopover = ({
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [mutatingListId, setMutatingListId] = useState<number | null>(null);
 
-  const listsQuery = useListLists();
+  const listsQuery = useListLists({}, { enabled: open });
   const bookListsQuery = useBookLists(bookId, { enabled: open });
   const addMutation = useAddBooksToList();
   const removeMutation = useRemoveBooksFromList();
   const createListMutation = useCreateList();
 
-  const lists = listsQuery.data?.items ?? [];
+  // A viewer cannot change a list, so the popover leaves it out rather than
+  // offer a toggle the server rejects.
+  const allLists = listsQuery.data?.items ?? [];
+  const lists = allLists.filter((list) => list.permission !== "viewer");
   const bookListIds = new Set(
     (bookListsQuery.data ?? []).map((list) => list.id),
   );
@@ -141,7 +144,7 @@ const AddToListPopover = ({
 
         {!isLoading && !hasLists && (
           <p className="text-sm text-muted-foreground px-3 py-3 text-center">
-            No lists yet
+            {allLists.length > 0 ? "No lists you can edit" : "No lists yet"}
           </p>
         )}
 
