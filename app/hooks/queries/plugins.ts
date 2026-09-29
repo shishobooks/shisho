@@ -13,6 +13,7 @@ import { QueryKey as PeopleQueryKey } from "@/hooks/queries/people";
 import { QueryKey as PublishersQueryKey } from "@/hooks/queries/publishers";
 import { QueryKey as SeriesQueryKey } from "@/hooks/queries/series";
 import { QueryKey as TagsQueryKey } from "@/hooks/queries/tags";
+import { useAuth } from "@/hooks/useAuth";
 import { API, type ShishoAPIError } from "@/libraries/api";
 import type {
   AddPluginRepositoryPayload,
@@ -34,6 +35,8 @@ import type {
   SyncRepositoryResponse,
   UpdatePluginPayload,
 } from "@/types";
+
+import { useRequires, type Requirement } from "./permissions";
 
 // Re-export generated types so consumers can import from this module.
 // PluginHookConfig is re-exported as PluginOrder for backward compatibility.
@@ -86,8 +89,20 @@ export enum QueryKey {
 
 // --- Queries ---
 
+// The server registers no plugin route in Demo Mode, so every plugin query
+// is off there as well as for a role without the route's permission.
+function usePluginRouteEnabled<E = boolean>(
+  requirement: Requirement,
+  enabled: E | true = true,
+): E | boolean {
+  const { demoMode } = useAuth();
+  const permitted = useRequires(requirement, enabled);
+  return demoMode ? false : permitted;
+}
+
 export const usePluginsInstalled = () => {
   return useQuery<Plugin[], ShishoAPIError>({
+    enabled: usePluginRouteEnabled("config:read"),
     queryKey: [QueryKey.PluginsInstalled],
     queryFn: ({ signal }) => {
       return API.request("GET", "/plugins/installed", null, null, signal);
@@ -97,6 +112,7 @@ export const usePluginsInstalled = () => {
 
 export const usePluginsAvailable = () => {
   return useQuery<AvailablePlugin[], ShishoAPIError>({
+    enabled: usePluginRouteEnabled("config:read"),
     queryKey: [QueryKey.PluginsAvailable],
     queryFn: ({ signal }) => {
       return API.request("GET", "/plugins/available", null, null, signal);
@@ -104,7 +120,8 @@ export const usePluginsAvailable = () => {
   });
 };
 
-const pluginOrderQuery = (hookType: string) => ({
+const pluginOrderQuery = (hookType: string, enabled: boolean) => ({
+  enabled,
   queryKey: [QueryKey.PluginOrder, hookType],
   queryFn: ({ signal }: { signal: AbortSignal }) => {
     return API.request<PluginHookConfig[]>(
@@ -118,20 +135,22 @@ const pluginOrderQuery = (hookType: string) => ({
 });
 
 export const usePluginOrder = (hookType: string) => {
+  const enabled = usePluginRouteEnabled("books:read");
   return useQuery<PluginHookConfig[], ShishoAPIError>(
-    pluginOrderQuery(hookType),
+    pluginOrderQuery(hookType, enabled),
   );
 };
 
 export const useAllPluginOrders = (hookTypes: string[]) => {
+  const enabled = usePluginRouteEnabled("books:read");
   return useQueries({
-    queries: hookTypes.map((ht) => pluginOrderQuery(ht)),
+    queries: hookTypes.map((ht) => pluginOrderQuery(ht, enabled)),
   });
 };
 
 export const usePluginConfig = (scope?: string, id?: string) => {
   return useQuery<PluginConfigResponse, ShishoAPIError>({
-    enabled: Boolean(scope && id),
+    enabled: usePluginRouteEnabled("config:read", Boolean(scope && id)),
     queryKey: [QueryKey.PluginConfig, scope, id],
     queryFn: ({ signal }) => {
       return API.request(
@@ -152,7 +171,10 @@ export const usePluginManifest = (
 ) => {
   return useQuery<unknown, ShishoAPIError>({
     queryKey: ["plugins", "manifest", scope, id],
-    enabled: !!scope && !!id && options.enabled !== false,
+    enabled: usePluginRouteEnabled(
+      "config:read",
+      !!scope && !!id && options.enabled !== false,
+    ),
     queryFn: ({ signal }) => {
       return API.request<unknown>(
         "GET",
@@ -167,6 +189,7 @@ export const usePluginManifest = (
 
 export const usePluginRepositories = () => {
   return useQuery<PluginRepository[], ShishoAPIError>({
+    enabled: usePluginRouteEnabled("config:read"),
     queryKey: [QueryKey.PluginRepositories],
     queryFn: ({ signal }) => {
       return API.request("GET", "/plugins/repositories", null, null, signal);
@@ -182,6 +205,7 @@ export const usePluginIdentifierTypes = (
 ) => {
   return useQuery<PluginIdentifierType[], ShishoAPIError>({
     ...options,
+    enabled: usePluginRouteEnabled("books:read", options.enabled ?? true),
     queryKey: [QueryKey.PluginIdentifierTypes],
     queryFn: ({ signal }) => {
       return API.request(
@@ -530,7 +554,7 @@ export const useLibraryPluginOrder = (
         signal,
       );
     },
-    enabled: !!libraryId,
+    enabled: usePluginRouteEnabled("libraries:read", !!libraryId),
   });
 };
 
@@ -629,7 +653,10 @@ export interface PluginSearchParams {
 // background refetches, whereas `isPlaceholderData` misses the latter two.
 export const usePluginSearch = (params: PluginSearchParams | null) => {
   return useQuery<PluginSearchResponse, ShishoAPIError>({
-    enabled: Boolean(params && params.query),
+    enabled: usePluginRouteEnabled(
+      "books:write",
+      Boolean(params && params.query),
+    ),
     queryKey: [QueryKey.PluginSearch, params],
     queryFn: ({ signal }) => {
       // params is non-null here because the query is disabled otherwise.

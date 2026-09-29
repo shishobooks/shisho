@@ -15,7 +15,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useMergeBooks } from "@/hooks/queries/books";
 import { toastRequestError } from "@/libraries/api";
-import type { Book, Library } from "@/types";
+import type { Book, LibrarySummary } from "@/types";
 
 import { BookSelectionList } from "./BookSelectionList";
 
@@ -23,7 +23,7 @@ interface MergeIntoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sourceBook: Book;
-  library: Library;
+  library: LibrarySummary;
   onSuccess?: (targetBook: Book) => void;
 }
 

@@ -7,14 +7,10 @@ import { API } from "@/libraries/api";
 
 import LibraryRedirect from "./LibraryRedirect";
 
-const auth = vi.hoisted(() => ({
-  permissions: new Set<string>(),
-  libraryAccess: null as number[] | null,
-}));
+const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
-    user: { library_access: auth.libraryAccess },
     hasPermission: (resource: string, operation: string) =>
       auth.permissions.has(`${resource}:${operation}`),
   }),
@@ -48,29 +44,29 @@ const renderRedirect = () => {
   );
 };
 
-const librariesRequests = (request: ReturnType<typeof vi.spyOn>) =>
-  request.mock.calls.filter((call: unknown[]) => call[1] === "/libraries");
+const requestedPaths = (request: ReturnType<typeof vi.spyOn>) =>
+  request.mock.calls.map((call: unknown[]) => call[1]);
 
 describe("LibraryRedirect", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    auth.permissions = new Set(["books:read", "libraries:read"]);
-    auth.libraryAccess = null;
+    auth.permissions = new Set(["books:read"]);
   });
 
-  it("redirects a role with Libraries Read to the first listed library", async () => {
+  it("opens the first accessible library for a role with Books Read, without Libraries Read", async () => {
     const request = vi
       .spyOn(API, "request")
-      .mockResolvedValue({ items: [{ id: 4, name: "Fiction" }], total: 1 });
+      .mockResolvedValue([{ id: 4, name: "Fiction" }]);
 
     renderRedirect();
 
     expect(await screen.findByText("library page")).toBeInTheDocument();
-    expect(librariesRequests(request)).toHaveLength(1);
+    expect(requestedPaths(request)).toEqual(["/user/libraries"]);
   });
 
   it("sends a role with Libraries Read and no libraries to library settings", async () => {
-    vi.spyOn(API, "request").mockResolvedValue({ items: [], total: 0 });
+    auth.permissions = new Set(["books:read", "libraries:read"]);
+    vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderRedirect();
 
@@ -79,48 +75,25 @@ describe("LibraryRedirect", () => {
     ).toBeInTheDocument();
   });
 
-  it("requests no libraries for a Books-Read-only role and opens its first accessible library", async () => {
-    auth.permissions = new Set(["books:read"]);
-    auth.libraryAccess = [7, 3];
-    const request = vi.spyOn(API, "request").mockResolvedValue({});
-
-    renderRedirect();
-
-    expect(await screen.findByText("library page")).toBeInTheDocument();
-    expect(librariesRequests(request)).toHaveLength(0);
-    expect(screen.queryByText("Error Loading Libraries")).toBeNull();
-  });
-
-  it("sends a role without Libraries Read and with access to all libraries to lists", async () => {
-    auth.permissions = new Set(["books:read"]);
-    auth.libraryAccess = null;
-    const request = vi.spyOn(API, "request").mockResolvedValue({});
+  it("sends a role without Libraries Read and no libraries to lists", async () => {
+    vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderRedirect();
 
     expect(await screen.findByText("lists page")).toBeInTheDocument();
-    expect(librariesRequests(request)).toHaveLength(0);
   });
 
-  it("sends a role without Libraries Read and with no library access to lists", async () => {
-    auth.permissions = new Set(["books:read"]);
-    auth.libraryAccess = [];
-    const request = vi.spyOn(API, "request").mockResolvedValue({});
+  it("sends a role without Books Read to lists without requesting libraries", async () => {
+    auth.permissions = new Set([
+      "shares:read",
+      "shares:write",
+      "libraries:read",
+    ]);
+    const request = vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderRedirect();
 
     expect(await screen.findByText("lists page")).toBeInTheDocument();
-    expect(librariesRequests(request)).toHaveLength(0);
-  });
-
-  it("sends a shares-only role to lists rather than a library it cannot browse", async () => {
-    auth.permissions = new Set(["shares:read", "shares:write"]);
-    auth.libraryAccess = [7];
-    const request = vi.spyOn(API, "request").mockResolvedValue({});
-
-    renderRedirect();
-
-    expect(await screen.findByText("lists page")).toBeInTheDocument();
-    expect(librariesRequests(request)).toHaveLength(0);
+    expect(requestedPaths(request)).toHaveLength(0);
   });
 });

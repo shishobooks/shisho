@@ -14,6 +14,7 @@ import type {
 } from "@/types/generated/genres";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { useRequires } from "./permissions";
 
 export enum QueryKey {
   ListGenres = "ListGenres",
@@ -32,6 +33,7 @@ export const useGenresList = (
 ) => {
   return useQuery<ListGenresData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.ListGenres, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/genres", null, query, signal);
@@ -47,8 +49,8 @@ export const useGenre = (
   > = {},
 ) => {
   return useQuery<GenreResponse, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(genreId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(genreId)),
     queryKey: [QueryKey.RetrieveGenre, genreId],
     queryFn: ({ signal }) => {
       return API.request("GET", `/genres/${genreId}`, null, null, signal);
@@ -70,8 +72,8 @@ export const useGenreBooks = (
   > = {},
 ) => {
   return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(genreId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(genreId)),
     queryKey: [QueryKey.GenreBooks, genreId, query],
     queryFn: ({ signal }) => {
       return API.request(

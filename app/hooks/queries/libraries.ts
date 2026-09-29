@@ -9,6 +9,7 @@ import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   CreateLibraryPayload,
   LibraryResponse,
+  LibrarySummary,
   ListLibrariesQuery,
   ListLibrariesResponse,
   UpdateLibraryPayload,
@@ -16,11 +17,13 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
+import { anyOf, useRequires } from "./permissions";
 
 export enum QueryKey {
   RetrieveLibrary = "RetrieveLibrary",
   ListLibraries = "ListLibraries",
   LibraryLanguages = "LibraryLanguages",
+  UserLibraries = "UserLibraries",
 }
 
 export const useLibrary = (
@@ -31,8 +34,8 @@ export const useLibrary = (
   > = {},
 ) => {
   return useQuery<LibraryResponse, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
     ...options,
+    enabled: useRequires("libraries:read", options.enabled ?? Boolean(id)),
     queryKey: [QueryKey.RetrieveLibrary, id],
     queryFn: ({ signal }) => {
       return API.request("GET", `/libraries/${id}`, null, null, signal);
@@ -49,6 +52,11 @@ export const useLibraries = (
 ) => {
   return useQuery<ListLibrariesResponse, ShishoAPIError>({
     ...options,
+    // Users Write lists libraries to assign access to a user.
+    enabled: useRequires(
+      anyOf("libraries:read", "users:write"),
+      options.enabled ?? true,
+    ),
     queryKey: [QueryKey.ListLibraries, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/libraries", null, query, signal);
@@ -73,6 +81,7 @@ export const useCreateLibrary = () => {
     },
     onSuccess: (data: LibraryResponse) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.UserLibraries] });
       queryClient.setQueryData(
         [QueryKey.RetrieveLibrary, String(data.id)],
         data,
@@ -99,6 +108,7 @@ export const useUpdateLibrary = () => {
     },
     onSuccess: (data: LibraryResponse) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.UserLibraries] });
       queryClient.setQueryData(
         [QueryKey.RetrieveLibrary, String(data.id)],
         data,
@@ -116,6 +126,7 @@ export const useDeleteLibrary = () => {
     },
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.UserLibraries] });
       queryClient.removeQueries({
         queryKey: [QueryKey.RetrieveLibrary, String(id)],
       });
@@ -139,10 +150,9 @@ export const useLibraryLanguages = (
   > = {},
 ) => {
   return useQuery<string[], ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(libraryId),
     staleTime: 5 * 60 * 1000, // Languages change infrequently; avoid refetching on every page visit
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(libraryId)),
     queryKey: [QueryKey.LibraryLanguages, libraryId],
     queryFn: ({ signal }) => {
       return API.request(
@@ -154,4 +164,38 @@ export const useLibraryLanguages = (
       );
     },
   });
+};
+
+// The signed-in user's accessible libraries, without paths. Any signed-in
+// role may read it, so reader pages (the library picker, breadcrumbs, cover
+// aspect ratio, download preference, and the Merge and Move dialogs) use it
+// instead of the Libraries Read routes above.
+const fetchUserLibraries = ({ signal }: { signal: AbortSignal }) =>
+  API.request<LibrarySummary[]>("GET", "/user/libraries", null, null, signal);
+
+export const useUserLibraries = (
+  options: Omit<
+    UseQueryOptions<LibrarySummary[], ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<LibrarySummary[], ShishoAPIError>({
+    ...options,
+    queryKey: [QueryKey.UserLibraries],
+    queryFn: fetchUserLibraries,
+  });
+};
+
+// One library from useUserLibraries. `data` is undefined while the list loads
+// and when the library is not in it.
+export const useUserLibrary = (id?: string | number) => {
+  const libraryId = Number(id);
+  return useQuery<LibrarySummary[], ShishoAPIError, LibrarySummary | undefined>(
+    {
+      queryKey: [QueryKey.UserLibraries],
+      queryFn: fetchUserLibraries,
+      enabled: Boolean(id),
+      select: (libraries) => libraries.find((l) => l.id === libraryId),
+    },
+  );
 };

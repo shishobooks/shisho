@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { getLanguageName } from "@/constants/languages";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
+import { useAuth } from "@/hooks/useAuth";
 import {
   FileRoleMain,
   FileRoleSupplement,
@@ -41,6 +42,9 @@ interface FileDetailsTabProps {
 const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
   const { libraryId } = useParams<{ libraryId: string }>();
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
+  // Narrator pages need People Read; without it the names are plain text.
+  const { hasPermission } = useAuth();
+  const linkNarrators = hasPermission("people", "read");
 
   return (
     <div className="py-4 space-y-6">
@@ -166,19 +170,25 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
           <div className="text-sm">
             <p className="font-semibold mb-2">Narrators</p>
             <div className="flex flex-wrap gap-2">
-              {file.narrators.map((narrator) => (
-                <Link
-                  key={narrator.id}
-                  to={`/libraries/${libraryId}/people/${narrator.person_id}`}
-                >
-                  <Badge
-                    className="cursor-pointer hover:bg-secondary/80"
-                    variant="secondary"
+              {file.narrators.map((narrator) =>
+                linkNarrators ? (
+                  <Link
+                    key={narrator.id}
+                    to={`/libraries/${libraryId}/people/${narrator.person_id}`}
                   >
+                    <Badge
+                      className="cursor-pointer hover:bg-secondary/80"
+                      variant="secondary"
+                    >
+                      {narrator.person?.name ?? "Unknown"}
+                    </Badge>
+                  </Link>
+                ) : (
+                  <Badge key={narrator.id} variant="secondary">
                     {narrator.person?.name ?? "Unknown"}
                   </Badge>
-                </Link>
-              ))}
+                ),
+              )}
             </div>
           </div>
         )}

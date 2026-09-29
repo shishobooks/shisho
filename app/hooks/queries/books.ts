@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
@@ -26,6 +27,7 @@ import type {
 import { QueryKey as GenresQueryKey } from "./genres";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as PeopleQueryKey } from "./people";
+import { useRequires } from "./permissions";
 import { QueryKey as PublishersQueryKey } from "./publishers";
 import { QueryKey as SearchQueryKey } from "./search";
 import { QueryKey as SeriesQueryKey } from "./series";
@@ -44,12 +46,25 @@ export const useBook = (
   > = {},
 ) => {
   return useQuery<Book, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(id)),
     queryKey: [QueryKey.RetrieveBook, id],
     queryFn: ({ signal }) => {
       return API.request("GET", `/books/${id}`, null, null, signal);
     },
+  });
+};
+
+// Several books at once, sharing the cache entries of useBook.
+export const useBooksByIds = (ids: number[], enabled: boolean = true) => {
+  const permitted = useRequires("books:read", enabled);
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: [QueryKey.RetrieveBook, String(id)],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        API.request<Book>("GET", `/books/${id}`, null, null, signal),
+      enabled: permitted,
+    })),
   });
 };
 
@@ -64,6 +79,7 @@ export const useBooks = (
 ) => {
   return useQuery<ListBooksData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.ListBooks, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/books", null, query, signal);

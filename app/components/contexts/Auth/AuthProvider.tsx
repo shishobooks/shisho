@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { API } from "@/libraries/api";
+import { queryClient } from "@/libraries/query-client";
 import type { StatusResponse } from "@/types";
 
 import { AuthContext, type AuthUser } from "./context";
@@ -47,6 +48,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       username,
       password,
     });
+    // Cached queries belong to whoever used this tab before (their
+    // accessible libraries, lists, and settings), so start empty.
+    queryClient.clear();
     setUser(userData);
     setNeedsSetup(false);
   }, []);
@@ -57,6 +61,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch {
       // Ignore logout errors
     }
+    queryClient.clear();
     setUser(null);
   }, []);
 
@@ -98,6 +103,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const setAuthUser = useCallback((userData: AuthUser) => {
+    queryClient.clear();
     setUser(userData);
     setNeedsSetup(false);
   }, []);

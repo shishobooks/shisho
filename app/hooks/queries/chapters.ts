@@ -8,6 +8,8 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { Chapter, ChapterInput, ChaptersResponse } from "@/types";
 
+import { useRequires } from "./permissions";
+
 export enum QueryKey {
   FileChapters = "FileChapters",
 }
@@ -20,8 +22,8 @@ export const useFileChapters = (
   > = {},
 ) => {
   return useQuery<Chapter[], ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(fileId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(fileId)),
     queryKey: [QueryKey.FileChapters, fileId],
     queryFn: async ({ signal }) => {
       const response: ChaptersResponse = await API.request(

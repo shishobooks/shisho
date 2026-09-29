@@ -6,6 +6,15 @@ import { type File } from "@/types";
 
 import FileDetailsTab from "./FileDetailsTab";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: undefined }),
 }));

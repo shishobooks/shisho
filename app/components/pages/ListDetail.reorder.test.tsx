@@ -69,11 +69,12 @@ const renderWithReorderFailure = (failure: Response) => {
       return Response.json({
         id: 1,
         username: "reader",
-        permissions: [],
+        permissions: ["books:read"],
         role_name: "viewer",
       });
     if (path === "/api/lists/5") return Response.json(list);
     if (path.endsWith("/shares")) return Response.json([]);
+    if (path === "/api/user/libraries") return Response.json([]);
     if (path === "/api/settings/user")
       return Response.json({ gallery_size: "m" });
     return Response.json({ items: [], total: 0 });

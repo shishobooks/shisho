@@ -8,7 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -17,14 +17,13 @@ const LibraryListPicker = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
-  // A role without Libraries Read cannot list libraries, so the switcher
-  // would only ever say "Select Library" over an empty menu. Lists stay
-  // reachable from the user menu.
-  const canReadLibraries = hasPermission("libraries", "read");
+  // Library pages need Books Read, so a role without it has no library to
+  // switch to. Lists stay reachable from the user menu.
+  const canReadBooks = hasPermission("books", "read");
 
-  // Load all libraries for the switcher
-  const librariesQuery = useLibraries({}, { enabled: canReadLibraries });
-  const libraries = librariesQuery.data?.items || [];
+  // Load the role's accessible libraries for the switcher
+  const librariesQuery = useUserLibraries({ enabled: canReadBooks });
+  const libraries = librariesQuery.data ?? [];
 
   // Load lists for sidebar navigation
   const listsQuery = useListLists();
@@ -46,7 +45,7 @@ const LibraryListPicker = () => {
     [navigate],
   );
 
-  if (!canReadLibraries) {
+  if (!canReadBooks) {
     return null;
   }
 

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 
 import LibraryListPicker from "./LibraryListPicker";
@@ -16,7 +16,7 @@ vi.mock("@/hooks/useAuth", () => ({
   }),
 }));
 
-vi.mock("@/hooks/queries/libraries", () => ({ useLibraries: vi.fn() }));
+vi.mock("@/hooks/queries/libraries", () => ({ useUserLibraries: vi.fn() }));
 vi.mock("@/hooks/queries/lists", () => ({ useListLists: vi.fn() }));
 
 const renderPicker = () =>
@@ -33,14 +33,14 @@ const renderPicker = () =>
 
 describe("LibraryListPicker", () => {
   beforeEach(() => {
-    auth.permissions = new Set(["books:read", "libraries:read"]);
-    vi.mocked(useLibraries).mockImplementation(
-      (_query, options) =>
+    auth.permissions = new Set(["books:read"]);
+    vi.mocked(useUserLibraries).mockImplementation(
+      (options) =>
         ({
           data:
             options?.enabled === false
               ? undefined
-              : { items: [{ id: 1, name: "Fiction" }], total: 1 },
+              : [{ id: 1, name: "Fiction" }],
         }) as never,
     );
     vi.mocked(useListLists).mockReturnValue({
@@ -48,22 +48,22 @@ describe("LibraryListPicker", () => {
     } as never);
   });
 
-  it("shows the current library for a role that can read libraries", () => {
+  it("shows the current library for a role with Books Read, without Libraries Read", () => {
     renderPicker();
 
     expect(screen.getByRole("button", { name: /Fiction/ })).toBeInTheDocument();
   });
 
-  it("renders nothing and requests no libraries for a role without Libraries Read", () => {
-    auth.permissions = new Set(["books:read"]);
-    vi.mocked(useLibraries).mockClear();
+  it("renders nothing and requests no libraries for a role without Books Read", () => {
+    auth.permissions = new Set(["shares:read"]);
+    vi.mocked(useUserLibraries).mockClear();
     const { container } = renderPicker();
 
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByText("Select Library")).not.toBeInTheDocument();
-    expect(useLibraries).toHaveBeenCalled();
-    for (const call of vi.mocked(useLibraries).mock.calls) {
-      expect(call[1]?.enabled).toBe(false);
+    expect(useUserLibraries).toHaveBeenCalled();
+    for (const call of vi.mocked(useUserLibraries).mock.calls) {
+      expect(call[0]?.enabled).toBe(false);
     }
   });
 });

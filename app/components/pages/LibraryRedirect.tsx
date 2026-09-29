@@ -2,24 +2,17 @@ import { Navigate } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 
 const LibraryRedirect = () => {
-  const { user, hasPermission } = useAuth();
-  const canReadLibraries = hasPermission("libraries", "read");
-  const librariesQuery = useLibraries({}, { enabled: canReadLibraries });
+  const { hasPermission } = useAuth();
+  // A library page needs Books Read, so a role without it lands on lists,
+  // which every signed-in user can use.
+  const canReadBooks = hasPermission("books", "read");
+  const librariesQuery = useUserLibraries({ enabled: canReadBooks });
 
-  if (!canReadLibraries) {
-    // Without Libraries Read the library list is a 403, so pick the landing
-    // page from the auth payload instead. A library page needs Books Read to
-    // show anything. library_access is null for all libraries and empty for
-    // none, and neither names an id to open, so those roles land on lists,
-    // which every signed-in user can use.
-    const accessibleIds = user?.library_access ?? [];
-    if (hasPermission("books", "read") && accessibleIds.length > 0) {
-      return <Navigate replace to={`/libraries/${accessibleIds[0]}`} />;
-    }
+  if (!canReadBooks) {
     return <Navigate replace to="/lists" />;
   }
 
@@ -52,11 +45,19 @@ const LibraryRedirect = () => {
     );
   }
 
-  const libraries = librariesQuery.data?.items || [];
+  const libraries = librariesQuery.data ?? [];
 
-  // If no libraries, redirect to settings/libraries to create one
+  // With no libraries, a role that can manage them goes to create one, and
+  // any other role lands on lists.
   if (libraries.length === 0) {
-    return <Navigate replace to="/settings/libraries" />;
+    return (
+      <Navigate
+        replace
+        to={
+          hasPermission("libraries", "read") ? "/settings/libraries" : "/lists"
+        }
+      />
+    );
   }
 
   // Redirect to the first library (user can switch via dropdown)

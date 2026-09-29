@@ -11,33 +11,45 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { Library } from "@/types";
+import { meetsRequirement, ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 interface LibraryRowProps {
   library: Library;
+  // Whether the role passes the route guards of the library's pages.
+  canOpen: boolean;
+  canConfigure: boolean;
 }
 
-const LibraryRow = ({ library }: LibraryRowProps) => (
+const LibraryRow = ({ library, canOpen, canConfigure }: LibraryRowProps) => (
   <div className="flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors gap-3">
     <div className="flex-1 min-w-0">
-      <Link
-        className="font-medium text-foreground hover:underline truncate block"
-        to={`/libraries/${library.id}`}
-      >
-        {library.name}
-      </Link>
+      {canOpen ? (
+        <Link
+          className="font-medium text-foreground hover:underline truncate block"
+          to={`/libraries/${library.id}`}
+        >
+          {library.name}
+        </Link>
+      ) : (
+        <span className="font-medium text-foreground truncate block">
+          {library.name}
+        </span>
+      )}
       <p className="text-sm text-muted-foreground mt-0.5 md:mt-1">
         {library.library_paths?.length || 0} path
         {library.library_paths?.length !== 1 ? "s" : ""}
       </p>
     </div>
-    <div className="flex items-center gap-2 shrink-0">
-      <Button asChild size="sm" variant="ghost">
-        <Link to={`/libraries/${library.id}/settings`}>
-          <Settings className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Settings</span>
-        </Link>
-      </Button>
-    </div>
+    {canConfigure && (
+      <div className="flex items-center gap-2 shrink-0">
+        <Button asChild size="sm" variant="ghost">
+          <Link to={`/libraries/${library.id}/settings`}>
+            <Settings className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
+          </Link>
+        </Button>
+      </div>
+    )}
   </div>
 );
 
@@ -53,6 +65,16 @@ const AdminLibraries = () => {
   const devLibraryPath = config?.dev_library_path;
 
   const canCreateLibraries = hasPermission("libraries", "write");
+  // The page needs only Libraries Read, but a library opens with Books Read
+  // and its settings need Libraries Read and Write.
+  const canOpenLibraries = meetsRequirement(
+    hasPermission,
+    ROUTE_PERMISSIONS.libraryBooks,
+  );
+  const canConfigureLibraries = meetsRequirement(
+    hasPermission,
+    ROUTE_PERMISSIONS.librarySettings,
+  );
 
   const handleCreateDefaultLibrary = useCallback(async () => {
     if (!devLibraryPath) {
@@ -68,7 +90,9 @@ const AdminLibraries = () => {
         },
       });
       toast.success("Default library created! Scanning for media...");
-      navigate(`/libraries/${library.id}`);
+      if (canOpenLibraries) {
+        navigate(`/libraries/${library.id}`);
+      }
     } catch (e) {
       let msg = "Something went wrong.";
       if (e instanceof Error) {
@@ -76,7 +100,7 @@ const AdminLibraries = () => {
       }
       toastRequestError(e, msg);
     }
-  }, [createLibraryMutation, navigate, devLibraryPath]);
+  }, [createLibraryMutation, navigate, devLibraryPath, canOpenLibraries]);
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -142,7 +166,12 @@ const AdminLibraries = () => {
       ) : (
         <div className="border border-border rounded-md divide-y divide-border">
           {libraries.map((library) => (
-            <LibraryRow key={library.id} library={library} />
+            <LibraryRow
+              canConfigure={canConfigureLibraries}
+              canOpen={canOpenLibraries}
+              key={library.id}
+              library={library}
+            />
           ))}
         </div>
       )}

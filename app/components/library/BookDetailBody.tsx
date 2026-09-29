@@ -82,11 +82,13 @@ import {
   FileTypeCBZ,
   ResourceBooks,
   ResourceConfig,
+  ResourcePeople,
+  ResourceSeries,
   ResourceShares,
   type Book,
   type CoverAspectRatio,
   type File,
-  type LibraryResponse,
+  type LibrarySummary,
   type PluginIdentifierType,
   type ResyncMode,
 } from "@/types";
@@ -234,6 +236,9 @@ const FileRow = ({
   onDeleteFile,
   isDeletingFile,
 }: FileRowProps) => {
+  const { hasPermission } = useAuth();
+  // Narrator pages need People Read; without it the names are plain text.
+  const linkNarrators = !isShareLink && hasPermission(ResourcePeople, "read");
   const showChevron = hasExpandableMetadata && !isSupplement;
   // fileLabel falls back to the type when the Share Link payload has no name.
   const displayName = fileLabel(file);
@@ -562,11 +567,11 @@ const FileRow = ({
             {file.narrators.map((narrator, index) => (
               <span className="text-xs min-w-0 break-words" key={narrator.id}>
                 <ResourceLink
-                  className={cn(!isShareLink && "hover:underline")}
+                  className={cn(linkNarrators && "hover:underline")}
                   to={
-                    isShareLink
-                      ? null
-                      : `/libraries/${libraryId}/people/${narrator.person_id}`
+                    linkNarrators
+                      ? `/libraries/${libraryId}/people/${narrator.person_id}`
+                      : null
                   }
                 >
                   {narrator.person?.name ?? "Unknown"}
@@ -704,7 +709,7 @@ interface BookDetailBodyProps {
    * The book's library, for the download format preference, the cover aspect
    * ratio, and the merge and move dialogs. Absent in Share Link context.
    */
-  library?: LibraryResponse;
+  library?: LibrarySummary;
   shareLink?: ShareLinkContext;
 }
 
@@ -728,6 +733,10 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const canWriteShares = !isShareLink && canWrite(ResourceShares);
   const canListShares =
     canWriteShares || (!isShareLink && hasPermission(ResourceShares, "read"));
+  // Author and series pages need People Read and Series Read. Without them
+  // the names render as plain text instead of links to an error page.
+  const linkPeople = !isShareLink && hasPermission(ResourcePeople, "read");
+  const linkSeries = !isShareLink && hasPermission(ResourceSeries, "read");
   const { data: sharingSettings } = useSharingSettings({
     enabled:
       !isShareLink && (canListShares || hasPermission(ResourceConfig, "read")),
@@ -1328,7 +1337,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                     <div className="flex flex-wrap gap-2">
                       {book.authors.map((author) => {
                         const roleLabel = getAuthorRoleLabel(author.role);
-                        const linked = !isShareLink && !!author.person;
+                        const linked = linkPeople && !!author.person;
                         const badge = (
                           <Badge
                             className={cn(
@@ -1372,13 +1381,13 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                       <ResourceLink
                         className={cn(
                           "text-sm font-medium",
-                          !isShareLink &&
+                          linkSeries &&
                             "text-primary hover:text-primary/80 hover:underline",
                         )}
                         to={
-                          isShareLink
-                            ? null
-                            : `/libraries/${libraryId}/series/${bs.series_id}`
+                          linkSeries
+                            ? `/libraries/${libraryId}/series/${bs.series_id}`
+                            : null
                         }
                       >
                         {bs.series?.name ?? "Unknown Series"}

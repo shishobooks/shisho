@@ -9,6 +9,15 @@ import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
 
 import FileChaptersTab from "./FileChaptersTab";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 

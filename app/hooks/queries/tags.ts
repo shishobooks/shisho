@@ -18,6 +18,7 @@ import type {
 } from "@/types/generated/tags";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { useRequires } from "./permissions";
 
 export enum QueryKey {
   ListTags = "ListTags",
@@ -36,6 +37,7 @@ export const useTagsList = (
 ) => {
   return useQuery<ListTagsData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.ListTags, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/tags", null, query, signal);
@@ -51,8 +53,8 @@ export const useTag = (
   > = {},
 ) => {
   return useQuery<TagResponse, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(tagId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(tagId)),
     queryKey: [QueryKey.RetrieveTag, tagId],
     queryFn: ({ signal }) => {
       return API.request("GET", `/tags/${tagId}`, null, null, signal);
@@ -74,8 +76,8 @@ export const useTagBooks = (
   > = {},
 ) => {
   return useQuery<ListTagBooksResponse, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(tagId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(tagId)),
     queryKey: [QueryKey.TagBooks, tagId, query],
     queryFn: ({ signal }) => {
       return API.request("GET", `/tags/${tagId}/books`, null, query, signal);

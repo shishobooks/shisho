@@ -12,6 +12,7 @@ import GlobalSearch from "@/components/library/GlobalSearch";
 import LibraryListPicker from "@/components/library/LibraryListPicker";
 import Logo from "@/components/library/Logo";
 import { ResyncButton } from "@/components/library/ResyncButton";
+import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -29,14 +30,16 @@ const TopNav = () => {
   const { toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
-  // Check if user has any admin permissions
-  const canAccessAdmin =
-    hasPermission("config", "read") ||
-    hasPermission("users", "read") ||
-    hasPermission("jobs", "read") ||
-    hasPermission("libraries", "read");
+  // The gear opens the first settings page the role may see.
+  const canAccessAdmin = useAdminNavItems().some((item) => item.show);
 
-  const canResync = hasPermission("jobs", "write");
+  // GlobalSearch searches the current library and needs Books Read; without
+  // either there is nothing for the mobile toggle to open.
+  const canSearch = Boolean(libraryId) && hasPermission("books", "read");
+
+  // The button reads the latest scan (Jobs Read) and starts one (Jobs Write).
+  const canResync =
+    hasPermission("jobs", "read") && hasPermission("jobs", "write");
 
   return (
     <div className={TOP_NAV_WRAPPER}>
@@ -77,19 +80,21 @@ const TopNav = () => {
           {/* Right section */}
           <div className="flex items-center gap-1 md:gap-4">
             {/* Mobile search toggle */}
-            <Button
-              aria-label={mobileSearchOpen ? "Close search" : "Open search"}
-              className="md:hidden h-9 w-9"
-              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-              size="icon"
-              variant="ghost"
-            >
-              {mobileSearchOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Search className="h-5 w-5" />
-              )}
-            </Button>
+            {canSearch && (
+              <Button
+                aria-label={mobileSearchOpen ? "Close search" : "Open search"}
+                className="md:hidden h-9 w-9"
+                onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+                size="icon"
+                variant="ghost"
+              >
+                {mobileSearchOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Search className="h-5 w-5" />
+                )}
+              </Button>
+            )}
 
             {/* Desktop search */}
             <div className="hidden md:block">

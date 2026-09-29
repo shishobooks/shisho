@@ -14,6 +14,7 @@ import type {
 } from "@/types/generated/people";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { useRequires } from "./permissions";
 import { QueryKey as SearchQueryKey } from "./search";
 
 export enum QueryKey {
@@ -34,6 +35,7 @@ export const usePeopleList = (
 ) => {
   return useQuery<ListPeopleData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("people:read", options.enabled ?? true),
     queryKey: [QueryKey.ListPeople, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/people", null, query, signal);
@@ -49,9 +51,8 @@ export const usePerson = (
   > = {},
 ) => {
   return useQuery<PersonResponse, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(personId),
     ...options,
+    enabled: useRequires("people:read", options.enabled ?? Boolean(personId)),
     queryKey: [QueryKey.RetrievePerson, personId],
     queryFn: ({ signal }) => {
       return API.request("GET", `/people/${personId}`, null, null, signal);
@@ -73,9 +74,8 @@ export const usePersonAuthoredBooks = (
   > = {},
 ) => {
   return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(personId),
     ...options,
+    enabled: useRequires("people:read", options.enabled ?? Boolean(personId)),
     queryKey: [QueryKey.PersonAuthoredBooks, personId, query],
     queryFn: ({ signal }) => {
       return API.request(
@@ -98,9 +98,8 @@ export const usePersonNarratedFiles = (
   > = {},
 ) => {
   return useQuery<ResourceListResponse<File>, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(personId),
     ...options,
+    enabled: useRequires("people:read", options.enabled ?? Boolean(personId)),
     queryKey: [QueryKey.PersonNarratedFiles, personId, query],
     queryFn: ({ signal }) => {
       return API.request(

@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { useAuth } from "@/hooks/useAuth";
+import { queryClient } from "@/libraries/query-client";
 
 import AuthProvider from "./AuthProvider";
 
@@ -106,4 +107,50 @@ describe("AuthProvider canWrite", () => {
     expect(await screen.findByText("books:false")).toBeInTheDocument();
     expect(screen.getByText("books-read:false")).toBeInTheDocument();
   });
+});
+
+describe("AuthProvider session changes", () => {
+  function SessionProbe() {
+    const { isLoading, login, logout } = useAuth();
+    if (isLoading) return <div>loading</div>;
+    return (
+      <>
+        <button onClick={() => void login("bea", "secret")}>Sign in</button>
+        <button onClick={() => void logout()}>Sign out</button>
+      </>
+    );
+  }
+
+  // Cached queries belong to the previous user, such as their accessible
+  // libraries, so the next user in the same tab must not see them.
+  it.each(["Sign in", "Sign out"])(
+    "clears cached queries on %s",
+    async (button) => {
+      stubAuth(null);
+      vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+        const path = String(input).split("?")[0];
+        if (path === "/api/auth/status")
+          return Response.json({ needs_setup: false, demo_mode: false });
+        if (path === "/api/auth/login")
+          return Response.json({ id: 2, username: "bea", permissions: [] });
+        if (path === "/api/auth/logout") return new Response(null);
+        return Response.json(
+          { error: { code: "unauthorized", message: "no" } },
+          { status: 401 },
+        );
+      });
+      queryClient.setQueryData(["UserLibraries"], [{ id: 1, name: "Old" }]);
+      render(
+        <AuthProvider>
+          <SessionProbe />
+        </AuthProvider>,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: button }));
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData(["UserLibraries"])).toBeUndefined(),
+      );
+    },
+  );
 });

@@ -3,6 +3,8 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { AudnexusChapter, AudnexusChaptersResponse } from "@/types";
 
+import { useRequires } from "./permissions";
+
 // Re-exported so existing importers (audnexusChapterUtils, FetchChaptersDialog)
 // can keep importing these from the hook module.
 export type { AudnexusChapter, AudnexusChaptersResponse };
@@ -23,9 +25,9 @@ export const useAudnexusChapters = (
   > = {},
 ) => {
   return useQuery<AudnexusChaptersResponse, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : false,
     retry: false,
     ...options,
+    enabled: useRequires("books:write", options.enabled ?? false),
     queryKey: [QueryKey.AudnexusChapters, asin],
     queryFn: async ({ signal }) => {
       if (!asin) {

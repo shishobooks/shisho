@@ -19,6 +19,7 @@ import type {
 } from "@/types/generated/publishers";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { useRequires } from "./permissions";
 
 export type ListPublishersData = ListPublishersResponse;
 
@@ -42,6 +43,7 @@ export const usePublishersList = (
 ) => {
   return useQuery<ListPublishersData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.ListPublishers, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/publishers", null, query, signal);
@@ -57,9 +59,8 @@ export const usePublisher = (
   > = {},
 ) => {
   return useQuery<PublisherResponse, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(publisherId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(publisherId)),
     queryKey: [QueryKey.RetrievePublisher, publisherId],
     queryFn: ({ signal }) => {
       return API.request(
@@ -87,9 +88,8 @@ export const usePublisherFiles = (
   > = {},
 ) => {
   return useQuery<ListPublisherFilesResponse, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(publisherId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(publisherId)),
     queryKey: [QueryKey.PublisherFiles, publisherId, query],
     queryFn: ({ signal }) => {
       return API.request(

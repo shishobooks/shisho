@@ -9,6 +9,15 @@ import type { Book } from "@/types";
 
 import { BookEditDialog } from "./BookEditDialog";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 const book: Book = {
   id: 1,
   library_id: 1,

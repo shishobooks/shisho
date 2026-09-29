@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
 import {
@@ -12,6 +12,15 @@ import {
 } from "@/types/generated/models";
 
 import { PluginDetailHero } from "./PluginDetailHero";
+
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
 
 const wrap = (ui: ReactNode) => (
   <QueryClientProvider

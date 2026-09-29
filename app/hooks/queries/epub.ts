@@ -2,6 +2,8 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
 import { ShishoAPIError } from "@/libraries/api";
 
+import { useRequires } from "./permissions";
+
 export enum QueryKey {
   EpubBlob = "EpubBlob",
 }
@@ -15,6 +17,7 @@ export const useEpubBlob = (
 ) => {
   return useQuery<Blob, ShishoAPIError>({
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.EpubBlob, fileId],
     // staleTime matches gcTime: Blobs are a few MB and add up across books.
     // We want a short cache window (~60s — long enough for tab-switch-back

@@ -21,6 +21,7 @@ import {
   useReviewCriteria,
   useUpdateReviewCriteria,
 } from "@/hooks/queries/review";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
@@ -111,6 +112,12 @@ const RecomputeDialog = ({
 
 const AdminReviewCriteria = () => {
   usePageTitle("Review Criteria");
+  const { hasPermission } = useAuth();
+  // The page opens with Config Read. Saving needs Config Write, and the
+  // recompute job needs both jobs permissions.
+  const canSave = hasPermission("config", "write");
+  const canRecompute =
+    hasPermission("jobs", "read") && hasPermission("jobs", "write");
   const criteriaQuery = useReviewCriteria();
   const updateMutation = useUpdateReviewCriteria();
   const createJobMutation = useCreateJob();
@@ -301,6 +308,7 @@ const AdminReviewCriteria = () => {
                 <div className="flex items-center space-x-2" key={field}>
                   <Checkbox
                     checked={bookFields.includes(field)}
+                    disabled={!canSave}
                     id={`book-field-${field}`}
                     onCheckedChange={(checked) =>
                       toggleField(
@@ -337,6 +345,7 @@ const AdminReviewCriteria = () => {
                 <div className="flex items-center space-x-2" key={field}>
                   <Checkbox
                     checked={audioFields.includes(field)}
+                    disabled={!canSave}
                     id={`audio-field-${field}`}
                     onCheckedChange={(checked) =>
                       toggleField(
@@ -360,60 +369,70 @@ const AdminReviewCriteria = () => {
         </div>
 
         {/* Save button */}
-        <div className="flex justify-end pt-6">
-          <Button
-            disabled={!hasChanges || updateMutation.isPending}
-            onClick={handleSave}
-          >
-            {updateMutation.isPending ? "Saving..." : "Save"}
-          </Button>
-        </div>
-
-        {/* Recompute now button */}
-        <div className="border-t border-border pt-4 mt-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">Recompute review state now</p>
-              <p className="text-xs text-muted-foreground">
-                Re-evaluate all books against the current criteria and update
-                their reviewed status.
-              </p>
-            </div>
+        {canSave && (
+          <div className="flex justify-end pt-6">
             <Button
-              className="shrink-0"
-              disabled={createJobMutation.isPending}
-              onClick={handleRecomputeNow}
-              variant="outline"
+              disabled={!hasChanges || updateMutation.isPending}
+              onClick={handleSave}
             >
-              {createJobMutation.isPending ? "Queuing..." : "Recompute now"}
+              {updateMutation.isPending ? "Saving..." : "Save"}
             </Button>
           </div>
-        </div>
+        )}
+
+        {/* Recompute now button */}
+        {canRecompute && (
+          <div className="border-t border-border pt-4 mt-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">
+                  Recompute review state now
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Re-evaluate all books against the current criteria and update
+                  their reviewed status.
+                </p>
+              </div>
+              <Button
+                className="shrink-0"
+                disabled={createJobMutation.isPending}
+                onClick={handleRecomputeNow}
+                variant="outline"
+              >
+                {createJobMutation.isPending ? "Queuing..." : "Recompute now"}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Save confirmation dialog (when overrides exist) */}
-      <RecomputeDialog
-        clearOverrides={clearOverrides}
-        isPending={updateMutation.isPending}
-        mainFileCount={main_file_count}
-        onCancel={() => setSaveDialogOpen(false)}
-        onClearOverridesChange={setClearOverrides}
-        onConfirm={handleSaveConfirm}
-        open={saveDialogOpen}
-        overrideCount={override_count}
-      />
+      {canSave && (
+        <RecomputeDialog
+          clearOverrides={clearOverrides}
+          isPending={updateMutation.isPending}
+          mainFileCount={main_file_count}
+          onCancel={() => setSaveDialogOpen(false)}
+          onClearOverridesChange={setClearOverrides}
+          onConfirm={handleSaveConfirm}
+          open={saveDialogOpen}
+          overrideCount={override_count}
+        />
+      )}
 
       {/* Recompute-now confirmation dialog (when overrides exist) */}
-      <RecomputeDialog
-        clearOverrides={clearOverrides}
-        isPending={createJobMutation.isPending}
-        mainFileCount={main_file_count}
-        onCancel={() => setRecomputeDialogOpen(false)}
-        onClearOverridesChange={setClearOverrides}
-        onConfirm={handleRecomputeConfirm}
-        open={recomputeDialogOpen}
-        overrideCount={override_count}
-      />
+      {canRecompute && (
+        <RecomputeDialog
+          clearOverrides={clearOverrides}
+          isPending={createJobMutation.isPending}
+          mainFileCount={main_file_count}
+          onCancel={() => setRecomputeDialogOpen(false)}
+          onClearOverridesChange={setClearOverrides}
+          onConfirm={handleRecomputeConfirm}
+          open={recomputeDialogOpen}
+          overrideCount={override_count}
+        />
+      )}
 
       <UnsavedChangesDialog
         onDiscard={proceedNavigation}

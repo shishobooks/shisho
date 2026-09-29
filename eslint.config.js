@@ -53,6 +53,35 @@ export default tseslint.config(
     },
   },
   {
+    // Queries live in app/hooks/queries, where each hook gates itself on its
+    // route's permission and hooks/queries/permissions.test.tsx checks it. A
+    // query written in a component would skip both. Tests may build queries.
+    files: ["app/**/*.{ts,tsx}"],
+    ignores: ["app/hooks/queries/**", "app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@tanstack/react-query",
+              importNames: [
+                "useQuery",
+                "useQueries",
+                "useInfiniteQuery",
+                "useSuspenseQuery",
+                "useSuspenseQueries",
+                "useSuspenseInfiniteQuery",
+              ],
+              message:
+                "Add a query hook in app/hooks/queries that gates on its route's permission (see app/AGENTS.md).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["*.js"],
     ignores: ["app/**", "website/**"],
     languageOptions: {

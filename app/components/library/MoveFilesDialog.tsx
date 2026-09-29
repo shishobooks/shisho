@@ -15,7 +15,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useMoveFiles } from "@/hooks/queries/books";
 import { toastRequestError } from "@/libraries/api";
-import type { Book, File, Library } from "@/types";
+import type { Book, File, LibrarySummary } from "@/types";
 
 import { BookSelectionList } from "./BookSelectionList";
 
@@ -24,7 +24,7 @@ interface MoveFilesDialogProps {
   onOpenChange: (open: boolean) => void;
   sourceBook: Book;
   selectedFiles: File[];
-  library: Library;
+  library: LibrarySummary;
   onSuccess?: (targetBook: Book) => void;
 }
 

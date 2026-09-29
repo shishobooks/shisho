@@ -11,6 +11,7 @@ import {
 import { useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
+import { meetsRequirement, ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 export type LibraryNavItem = {
   to: string;
@@ -29,6 +30,11 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
   if (!libraryId) return null;
 
   const basePath = `/libraries/${libraryId}`;
+  // Each entry shows when the role passes its page's route guard.
+  const can = (
+    requirement: (typeof ROUTE_PERMISSIONS)[keyof typeof ROUTE_PERMISSIONS],
+  ) => meetsRequirement(hasPermission, requirement);
+  const canReadBooks = can(ROUTE_PERMISSIONS.libraryBooks);
 
   const isBooksActive =
     location.pathname === basePath ||
@@ -46,42 +52,42 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       Icon: Book,
       label: "Books",
       isActive: isBooksActive,
-      show: true,
+      show: canReadBooks,
     },
     {
       to: `${basePath}/series`,
       Icon: Layers,
       label: "Series",
       isActive: location.pathname.startsWith(`${basePath}/series`),
-      show: true,
+      show: can(ROUTE_PERMISSIONS.librarySeries),
     },
     {
       to: `${basePath}/people`,
       Icon: Users,
       label: "People",
       isActive: location.pathname.startsWith(`${basePath}/people`),
-      show: true,
+      show: can(ROUTE_PERMISSIONS.libraryPeople),
     },
     {
       to: `${basePath}/genres`,
       Icon: Bookmark,
       label: "Genres",
       isActive: location.pathname.startsWith(`${basePath}/genres`),
-      show: true,
+      show: canReadBooks,
     },
     {
       to: `${basePath}/tags`,
       Icon: Tags,
       label: "Tags",
       isActive: location.pathname.startsWith(`${basePath}/tags`),
-      show: true,
+      show: canReadBooks,
     },
     {
       to: `${basePath}/publishers`,
       Icon: Building2,
       label: "Publishers",
       isActive: location.pathname.startsWith(`${basePath}/publishers`),
-      show: true,
+      show: canReadBooks,
     },
     {
       to: `${basePath}/settings`,
@@ -89,7 +95,7 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       label: "Settings",
       drawerLabel: "Library Settings",
       isActive: location.pathname.startsWith(`${basePath}/settings`),
-      show: hasPermission("libraries", "write"),
+      show: can(ROUTE_PERMISSIONS.librarySettings),
     },
   ];
 };

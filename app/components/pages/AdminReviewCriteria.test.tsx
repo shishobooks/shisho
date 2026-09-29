@@ -12,6 +12,23 @@ beforeAll(() => {
   globalThis.__APP_VERSION__ = "test";
 });
 
+const ADMIN_PERMISSIONS = [
+  "config:read",
+  "config:write",
+  "jobs:read",
+  "jobs:write",
+];
+
+const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
+
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    hasPermission: (resource: string, operation: string) =>
+      auth.permissions.has(`${resource}:${operation}`),
+    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
+  }),
+}));
+
 // Mock useUnsavedChanges (uses react-router's useBlocker which requires a data router).
 vi.mock("@/hooks/useUnsavedChanges", () => ({
   useUnsavedChanges: () => ({
@@ -86,6 +103,24 @@ describe("AdminReviewCriteria", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCriteriaData.override_count = 0;
+    auth.permissions = new Set(ADMIN_PERMISSIONS);
+  });
+
+  it("shows a read-only view without Save or Recompute for Config Read alone", () => {
+    auth.permissions = new Set(["config:read"]);
+    wrap(<AdminReviewCriteria />);
+
+    expect(screen.getByRole("checkbox", { name: "Authors" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recompute now" })).toBeNull();
+  });
+
+  it("hides Recompute without both jobs permissions", () => {
+    auth.permissions = new Set(["config:read", "config:write", "jobs:write"]);
+    wrap(<AdminReviewCriteria />);
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Recompute now" })).toBeNull();
   });
 
   it("renders checked checkboxes for current book_fields", () => {

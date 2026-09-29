@@ -10,13 +10,17 @@ import type {
 } from "@/types";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { anyOf, useRequires } from "./permissions";
 
 export enum QueryKey {
   ReviewCriteria = "ReviewCriteria",
 }
 
+// Book pages read the criteria to explain review state, and the settings page
+// edits them, so the route accepts Books Read or Config Read.
 export const useReviewCriteria = () =>
   useQuery<ReviewCriteriaResponse, ShishoAPIError>({
+    enabled: useRequires(anyOf("books:read", "config:read")),
     queryKey: [QueryKey.ReviewCriteria],
     queryFn: ({ signal }) =>
       API.request("GET", "/settings/review-criteria", null, null, signal),

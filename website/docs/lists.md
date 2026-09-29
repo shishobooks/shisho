@@ -58,7 +58,7 @@ The owner has full control, including deletion. Shares use these list-specific r
 | **Editor** | Yes | Yes | No | No |
 | **Manager** | Yes | Yes | Yes | Yes |
 
-The API lets the owner or a **Manager** of a list manage its sharing whatever their role, without the global Users Read permission, and offers every signed-in user a directory of active usernames to share with. The app still asks for Users Read before it lists people to share with; it enables sharing for other roles in a following release. Lists identify other users by username only: a list's owner, the people it is shared with, and who added each book never show an email address or role. A list can be shared only with an active user.
+The owner or a **Manager** of a list can manage its sharing whatever their role, without the global Users Read permission. The **Share** dialog lets them pick from every active username. In the [demo](./demo.md), the dialog shows a notice instead of the user picker. Lists identify other users by username only: a list's owner, the people it is shared with, and who added each book never show an email address or role. A list can be shared only with an active user.
 
 Shared lists record who added each book.
 

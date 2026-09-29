@@ -15,7 +15,7 @@ import {
   DEFAULT_GALLERY_SIZE,
   ITEMS_PER_PAGE_BY_SIZE,
 } from "@/constants/gallerySize";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import {
   useDeleteSeries,
   useMergeSeries,
@@ -51,10 +51,8 @@ const SeriesDetail = () => {
   const currentPage = parsePageParam(searchParams.get("page"));
   const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
 
-  const { canWrite, hasPermission } = useAuth();
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  const { canWrite } = useAuth();
+  const libraryQuery = useUserLibrary(libraryId);
   const seriesQuery = useSeries(seriesId);
   // Series edit, merge, and delete require Series Write on the backend.
   const canWriteSeries = canWrite(ResourceSeries);

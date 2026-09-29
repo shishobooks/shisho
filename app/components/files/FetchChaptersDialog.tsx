@@ -412,8 +412,9 @@ const FetchChaptersDialog = ({
 
   const handleRetry = () => {
     // Force a fresh network call rather than replaying a cached error from
-    // tanstack-query.
-    void query.refetch();
+    // tanstack-query. refetch() runs even a disabled query, so respect its
+    // permission gate.
+    if (query.isEnabled) void query.refetch();
   };
 
   const handleClose = () => {

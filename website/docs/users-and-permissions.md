@@ -43,10 +43,10 @@ Some library data is edited under a broader resource than its name suggests:
 
 Some reads follow the data they return rather than the page that shows it:
 
-- A list's books are book data, so reading them requires Books Read, even for the list's owner. Creating a list and renaming it need no role permission. The API also lets any owner or Manager of a list manage its sharing without Users Read; the app enables this in a following release. See [Lists](./lists.md#sharing).
+- A list's books are book data, so reading them requires Books Read, even for the list's owner. Creating a list and renaming it need no role permission. Any owner or Manager of a list can manage its sharing without Users Read. See [Lists](./lists.md#sharing).
 - Global search returns Series results only to roles with Series Read and People results only to roles with People Read. Books results need Books Read, like the rest of search.
 - The review criteria can be read with Books Read, for the review panel on book pages, or with Config Read, for **Settings > Review Criteria**. Changing them requires Config Write.
-- The plugin manager under **Settings > Plugins** can be viewed with Config Read. Installing, configuring, and removing plugins requires Config Write. See [Plugins](./plugins/overview.md).
+- The plugin manager under **Settings > Plugins** can be viewed with Config Read, though its plugin order also needs Books Read. Installing, configuring, and removing plugins requires Config Write. See [Plugins](./plugins/overview.md).
 
 Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role. Shares permissions and library access are all the server checks; they do not depend on Books Read. The **Share** entry lives on the book page, though, and opening a book page needs Books Read.
 
@@ -68,9 +68,19 @@ Each control follows the resource its request needs, not the page it appears on.
 
 Lists are independent of these role permissions. Any signed-in user can create a personal list and add books to a list they own or that has been shared with them with editor or manager access, even without Books Write. See [Lists](./lists.md).
 
-A role without Libraries Read cannot open library settings or the full library list. When such a user opens the home page, Shisho opens one of the libraries in their [library access](#library-access) list if the role has Books Read and the user is limited to specific libraries, and opens **Lists** otherwise.
+## What a Role Sees Without Read Permissions
 
-Without Libraries Read, the API still gives every signed-in user the name and display settings (cover aspect ratio, download format, and whether files are organized) of each library in their library access list, never those libraries' folders, and lets a role with Books Read load the languages used in a library it can access. The app uses these for the library picker, breadcrumbs, and language suggestions in a following release. A role with Users Write can list libraries without Libraries Read, so it can assign [library access](#library-access) when creating or editing a user.
+Shisho hides pages and links that a role cannot read, rather than showing an error. Opening such a page by its address shows **Access Denied**.
+
+- **Books Read.** Library pages, book and file pages, and search are unavailable, and the library picker is hidden. The home page opens **Lists**. A list still opens, but its books are hidden, since they are book data.
+- **Series Read.** The library navigation has no **Series** entry, series names on book pages are plain text, and search shows no series. The edit dialogs suggest no existing series, but you can still type a name.
+- **People Read.** The library navigation has no **People** entry, author and narrator names are plain text, and search shows no people. The edit dialogs suggest no existing authors or narrators, but you can still type a name.
+- **Libraries Read.** Library settings and **Settings > Libraries** are unavailable. Every signed-in user still gets the name and display settings (cover aspect ratio, download format, and whether files are organized) of each library in their [library access](#library-access) list, never its folders. The library picker, breadcrumbs, cover shapes, and the merge and move dialogs use these. A role with Users Write can list libraries without Libraries Read, so it can assign library access when creating or editing a user.
+- **Users Read.** **Settings > Users** is unavailable. List owners and Managers still pick whom to share a list with from a directory of usernames.
+- **Jobs Read.** **Settings > Jobs** is unavailable, and so are the library rescan button and **Recompute now** on **Settings > Review Criteria**, which also need Jobs Write.
+- **Config Read.** The server, review criteria, sharing, plugin, cache, and log settings pages are unavailable. With Config Read but not Config Write, the review criteria are shown without a **Save** button.
+
+The **Global Settings** button opens the first settings page the role can view, and is hidden when there is none. The home page opens the first library the user can access when the role has Books Read. With no libraries yet, it opens **Settings > Libraries** for a role with Libraries Read and **Lists** otherwise.
 
 ## Custom Roles
 

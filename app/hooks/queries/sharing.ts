@@ -14,14 +14,15 @@ import type {
   UpdateSharingSettingsPayload,
 } from "@/types";
 
+import { anyOf, useRequires } from "./permissions";
+
 export enum QueryKey {
   SharingSettings = "SharingSettings",
   BookShareLinks = "BookShareLinks",
   SharedBook = "SharedBook",
 }
 
-// The endpoint allows Shares Read or Config Read. Callers without either
-// pass `enabled: false` so the request is never made.
+// The endpoint allows either Shares permission or Config Read.
 export const useSharingSettings = (
   options: Omit<
     UseQueryOptions<SharingSettingsResponse, ShishoAPIError>,
@@ -30,6 +31,10 @@ export const useSharingSettings = (
 ) =>
   useQuery<SharingSettingsResponse, ShishoAPIError>({
     ...options,
+    enabled: useRequires(
+      anyOf("shares:read", "shares:write", "config:read"),
+      options.enabled ?? true,
+    ),
     queryKey: [QueryKey.SharingSettings],
     queryFn: ({ signal }) =>
       API.request("GET", "/settings/sharing", null, null, signal),
@@ -65,6 +70,10 @@ export const useBookShareLinks = (
   useQuery<ShareLinkResponse[], ShishoAPIError>({
     staleTime: 0,
     ...options,
+    enabled: useRequires(
+      anyOf("shares:read", "shares:write"),
+      options.enabled ?? true,
+    ),
     queryKey: [QueryKey.BookShareLinks, bookId],
     queryFn: ({ signal }) =>
       API.request("GET", `/books/${bookId}/share-links`, null, null, signal),
