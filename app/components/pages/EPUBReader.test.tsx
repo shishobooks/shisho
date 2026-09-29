@@ -78,6 +78,7 @@ describe("EPUBReader", () => {
       isLoading: false,
       isError: true,
       error: new Error("boom"),
+      isEnabled: true,
       refetch,
     } as never);
 

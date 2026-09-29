@@ -19,15 +19,19 @@ vi.mock("@/hooks/queries/books", () => ({
 }));
 
 let canWriteBooks = true;
+let canReadPeople = true;
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     canWrite: (resource: string) => resource === "books" && canWriteBooks,
+    hasPermission: (resource: string, operation: string) =>
+      resource === "people" ? canReadPeople : operation === "read",
   }),
 }));
 
 beforeEach(() => {
   canWriteBooks = true;
+  canReadPeople = true;
 });
 
 function wrap(ui: React.ReactNode) {
@@ -201,6 +205,36 @@ describe("BookItem — Series number badge", () => {
     const title = screen.getByText("Test Book");
     // The parent div that has leading-[1.6] is the closest ancestor with that class
     expect(title.closest("div")?.className).toContain("leading-[1.6]");
+  });
+});
+
+describe("BookItem author links", () => {
+  const book = makeBook({
+    authors: [
+      {
+        id: 1,
+        book_id: 1,
+        person_id: 7,
+        sort_order: 0,
+        person: { id: 7, name: "Ada Author" },
+      } as never,
+    ],
+  });
+
+  it("links an author to their page for a role with People Read", () => {
+    render(wrap(<BookItem book={book} libraryId="1" />));
+
+    expect(screen.getByText("Ada Author").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1/people/7",
+    );
+  });
+
+  it("renders an author as text for a role without People Read", () => {
+    canReadPeople = false;
+    render(wrap(<BookItem book={book} libraryId="1" />));
+
+    expect(screen.getByText("Ada Author").closest("a")).toBeNull();
   });
 });
 

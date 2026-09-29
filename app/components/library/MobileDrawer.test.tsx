@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useMobileNav } from "@/contexts/MobileNav";
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -18,7 +18,7 @@ vi.mock("@/contexts/MobileNav", () => ({
 }));
 
 vi.mock("@/hooks/queries/libraries", () => ({
-  useLibraries: vi.fn(),
+  useUserLibraries: vi.fn(),
 }));
 
 vi.mock("@/hooks/queries/lists", () => ({
@@ -49,7 +49,7 @@ beforeEach(() => {
         toggle: vi.fn(),
       }) as never,
   );
-  vi.mocked(useLibraries).mockReturnValue({ data: { items: [] } } as never);
+  vi.mocked(useUserLibraries).mockReturnValue({ data: [] } as never);
   vi.mocked(useListLists).mockReturnValue({ data: { items: [] } } as never);
 });
 
@@ -84,7 +84,7 @@ describe("MobileDrawer", () => {
   });
 
   it.each([
-    ["/settings", "Server"],
+    ["/settings/server", "Server"],
     ["/settings/sharing", "Sharing"],
     ["/settings/users/3", "Users"],
   ])("highlights exactly one item on %s", (path, expected) => {
@@ -95,8 +95,8 @@ describe("MobileDrawer", () => {
   });
 
   it("highlights Global Settings when no admin item matches the page", () => {
-    // A user who can manage users but not the server config sees no Server
-    // item, so /settings has no admin item to highlight.
+    // /settings has no page of its own (it redirects to the first permitted
+    // one), so no admin item matches it.
     vi.mocked(useAuth).mockReturnValue({
       demoMode: false,
       user: { username: "manager", role_name: "Manager" },
@@ -124,32 +124,39 @@ describe("MobileDrawer library picker", () => {
     } as never);
   });
 
-  it("offers the library picker to a role that can read libraries", () => {
-    vi.mocked(useLibraries).mockReturnValue({
-      data: { items: [{ id: 1, name: "Fiction" }] },
+  it("offers the role's libraries without Libraries Read", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      demoMode: false,
+      user: { username: "reader", role_name: "Reader" },
+      logout: vi.fn(),
+      hasPermission: (resource: string, operation: string) =>
+        resource === "books" && operation === "read",
+    } as never);
+    vi.mocked(useUserLibraries).mockReturnValue({
+      data: [{ id: 1, name: "Fiction" }],
     } as never);
     renderDrawer("/libraries/1/books/7");
 
     expect(within(getDrawer()).getByText("Fiction")).toBeInTheDocument();
   });
 
-  it("hides the library picker from a role without Libraries Read", () => {
+  it("leaves libraries out of the picker for a role without Books Read", () => {
     vi.mocked(useAuth).mockReturnValue({
       demoMode: false,
       user: { username: "reader", role_name: "Shares Only" },
       logout: vi.fn(),
       hasPermission: (resource: string, operation: string) =>
-        resource === "books" && operation === "read",
+        resource === "shares" && operation === "read",
     } as never);
-    vi.mocked(useLibraries).mockClear();
-    renderDrawer("/libraries/1/books/7");
+    vi.mocked(useUserLibraries).mockClear();
+    vi.mocked(useUserLibraries).mockReturnValue({
+      data: [{ id: 1, name: "Fiction" }],
+    } as never);
+    renderDrawer("/lists/3");
 
-    expect(
-      within(getDrawer()).queryByText("Select Library"),
-    ).not.toBeInTheDocument();
-    expect(useLibraries).toHaveBeenCalled();
-    for (const call of vi.mocked(useLibraries).mock.calls) {
-      expect(call[1]?.enabled).toBe(false);
+    expect(within(getDrawer()).queryByText("Fiction")).not.toBeInTheDocument();
+    for (const call of vi.mocked(useUserLibraries).mock.calls) {
+      expect(call[0]?.enabled).toBe(false);
     }
     // Lists stay reachable from the drawer's own nav item.
     expect(

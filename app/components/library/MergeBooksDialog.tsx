@@ -1,4 +1,3 @@
-import { useQueries } from "@tanstack/react-query";
 import { AlertTriangle, GitMerge, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -18,16 +17,16 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { QueryKey, useMergeBooks } from "@/hooks/queries/books";
-import { API, ShishoAPIError, toastRequestError } from "@/libraries/api";
+import { useBooksByIds, useMergeBooks } from "@/hooks/queries/books";
+import { ShishoAPIError, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import type { Book, Library } from "@/types";
+import type { Book, LibrarySummary } from "@/types";
 
 interface MergeBooksDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bookIds: number[];
-  library: Library;
+  library: LibrarySummary;
   onSuccess?: (targetBook: Book) => void;
 }
 
@@ -45,14 +44,7 @@ export function MergeBooksDialog({
   const mergeBooksMutation = useMergeBooks();
 
   // Fetch all books by ID
-  const bookQueries = useQueries({
-    queries: bookIds.map((id) => ({
-      queryKey: [QueryKey.RetrieveBook, String(id)],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        API.request<Book>("GET", `/books/${id}`, null, null, signal),
-      enabled: open,
-    })),
-  });
+  const bookQueries = useBooksByIds(bookIds, open);
 
   const isLoadingBooks = bookQueries.some((q) => q.isLoading);
   const bookQueryError = bookQueries.find((q) => q.error)?.error as

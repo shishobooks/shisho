@@ -32,6 +32,8 @@ const ALL_PERMISSIONS = [
   "books:read",
   "books:write",
   "config:read",
+  "people:read",
+  "series:read",
   "shares:read",
   "shares:write",
 ];
@@ -417,6 +419,18 @@ describe("BookDetailBody without Share Link context", () => {
     expect(screen.getByText("Favorite").closest("a")).toHaveAttribute(
       "href",
       "/libraries/1?tag_ids=6",
+    );
+  });
+
+  it("renders author and series names as text without People and Series Read", () => {
+    auth.permissions = new Set(["books:read"]);
+    renderBody();
+
+    expect(screen.getByText("Ada Author").closest("a")).toBeNull();
+    expect(screen.getByText("Great Series").closest("a")).toBeNull();
+    expect(screen.getByText("Fantasy").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1?genre_ids=4",
     );
   });
 

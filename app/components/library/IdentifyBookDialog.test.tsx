@@ -22,6 +22,15 @@ import {
 
 import { IdentifyBookDialog } from "./IdentifyBookDialog";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
   globalThis.__APP_VERSION__ = "test";

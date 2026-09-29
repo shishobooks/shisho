@@ -118,6 +118,15 @@ export const AdvancedOrderSection = () => {
     return plugin?.name ?? `${scope}/${pluginId}`;
   };
 
+  // The order routes are the Books Read lookups the identify dialog uses, so a
+  // role that opens this page with Config Read alone cannot load them.
+  if (!hasPermission("books", "read")) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Viewing the plugin order requires Books Read.
+      </p>
+    );
+  }
   if (isLoading) return <LoadingSpinner />;
   if (error) {
     return (

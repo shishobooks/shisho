@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Input } from "@/components/ui/input";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useGlobalSearch } from "@/hooks/queries/search";
 import { useAuth } from "@/hooks/useAuth";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -130,9 +130,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const resultRefs = useRef<(HTMLAnchorElement | null)[]>([]);
 
   const { hasPermission } = useAuth();
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  const libraryQuery = useUserLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
   // Library-level variant used for series (which don't have file types)
   const libraryVariant: "book" | "audiobook" = coverAspectRatio.startsWith(
@@ -433,7 +431,8 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     [handleResultClick, libraryId, selectedIndex],
   );
 
-  if (!libraryId) {
+  // Search reads Books Read routes, so a role without it gets no search box.
+  if (!libraryId || !hasPermission("books", "read")) {
     return null;
   }
 

@@ -7,6 +7,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ResyncButton } from "./ResyncButton";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 afterEach(() => {
   toast.dismiss();
   cleanup();

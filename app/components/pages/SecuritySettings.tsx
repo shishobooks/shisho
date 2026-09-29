@@ -35,7 +35,7 @@ import {
   useDeleteApiKey,
   useGenerateShortUrl,
 } from "@/hooks/queries/apiKeys";
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useResetPassword } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
@@ -701,14 +701,7 @@ function KoboSetupDialog({
 }) {
   const [scopeType, setScopeType] = useState<"all" | "library" | "list">("all");
   const [scopeId, setScopeId] = useState("");
-  // A role without Libraries Read cannot list libraries, so it can sync all
-  // libraries or a list but not pick one library.
-  const { hasPermission } = useAuth();
-  const canReadLibraries = hasPermission("libraries", "read");
-  const { data: librariesData } = useLibraries(
-    {},
-    { enabled: canReadLibraries },
-  );
+  const { data: libraries } = useUserLibraries();
   const { data: listsData } = useListLists();
   const clearKoboSync = useClearKoboSync();
 
@@ -775,22 +768,20 @@ function KoboSetupDialog({
               >
                 All Libraries
               </button>
-              {canReadLibraries && (
-                <button
-                  className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                    scopeType === "library"
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
-                  }`}
-                  onClick={() => {
-                    setScopeType("library");
-                    setScopeId("");
-                  }}
-                  type="button"
-                >
-                  Library
-                </button>
-              )}
+              <button
+                className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                  scopeType === "library"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+                onClick={() => {
+                  setScopeType("library");
+                  setScopeId("");
+                }}
+                type="button"
+              >
+                Library
+              </button>
               <button
                 className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer ${
                   scopeType === "list"
@@ -806,13 +797,13 @@ function KoboSetupDialog({
                 List
               </button>
             </div>
-            {scopeType === "library" && librariesData && (
+            {scopeType === "library" && libraries && (
               <Select onValueChange={setScopeId} value={scopeId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a library..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {librariesData.items.map((lib) => (
+                  {libraries.map((lib) => (
                     <SelectItem key={lib.id} value={String(lib.id)}>
                       {lib.name}
                     </SelectItem>

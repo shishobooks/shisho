@@ -14,6 +14,7 @@ import type {
 } from "@/types/generated/series";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { useRequires } from "./permissions";
 import { QueryKey as SearchQueryKey } from "./search";
 
 export enum QueryKey {
@@ -35,6 +36,7 @@ export const useSeriesList = (
 ) => {
   return useQuery<ListSeriesData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("series:read", options.enabled ?? true),
     queryKey: [QueryKey.ListSeries, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/series", null, query, signal);
@@ -50,9 +52,8 @@ export const useSeries = (
   > = {},
 ) => {
   return useQuery<SeriesResponse, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
+    enabled: useRequires("series:read", options.enabled ?? Boolean(seriesId)),
     queryKey: [QueryKey.RetrieveSeries, seriesId],
     queryFn: ({ signal }) => {
       return API.request("GET", `/series/${seriesId}`, null, null, signal);
@@ -74,9 +75,8 @@ export const useSeriesBooks = (
   > = {},
 ) => {
   return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
-    enabled:
-      options.enabled !== undefined ? options.enabled : Boolean(seriesId),
     ...options,
+    enabled: useRequires("series:read", options.enabled ?? Boolean(seriesId)),
     queryKey: [QueryKey.SeriesBooks, seriesId, query],
     queryFn: ({ signal }) => {
       return API.request(

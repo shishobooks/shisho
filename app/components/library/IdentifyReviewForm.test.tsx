@@ -336,6 +336,22 @@ describe("IdentifyReviewForm component", () => {
     expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
+  it("names the source plugin from the search result without listing installed plugins", async () => {
+    const { API } = await import("@/libraries/api");
+    const request = vi.mocked(API.request);
+    request.mockClear();
+
+    renderForm({ result: makeResult({ plugin_name: "Open Library" }) });
+
+    expect(
+      screen.getByText(/Review and apply metadata from Open Library/),
+    ).toBeInTheDocument();
+    await Promise.resolve();
+    expect(
+      request.mock.calls.filter((call) => call[1] === "/plugins/installed"),
+    ).toHaveLength(0);
+  });
+
   it("hides the Narrators field for non-M4B files", () => {
     renderForm({
       book: makeBook({ files: [makeFile({ file_type: FileTypeEPUB })] }),

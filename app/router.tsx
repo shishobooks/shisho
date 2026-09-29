@@ -1,4 +1,8 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import {
+  createBrowserRouter,
+  Navigate,
+  type RouteObject,
+} from "react-router-dom";
 
 import ProtectedRoute from "@/components/library/ProtectedRoute";
 import AdminCache from "@/components/pages/AdminCache";
@@ -34,14 +38,16 @@ import Root from "@/components/pages/Root";
 import SecuritySettings from "@/components/pages/SecuritySettings";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
+import SettingsIndexRedirect from "@/components/pages/SettingsIndexRedirect";
 import Setup from "@/components/pages/Setup";
 import { shareRoutes } from "@/components/pages/shareRoutes";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
 import UserSettings from "@/components/pages/UserSettings";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   // Public routes (no authentication required)
   {
     path: "/login",
@@ -68,19 +74,13 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: (
-              <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
-              >
-                <AdminSettings />
-              </ProtectedRoute>
-            ),
+            element: <SettingsIndexRedirect />,
           },
           {
             path: "server",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminSettings />
               </ProtectedRoute>
@@ -90,10 +90,7 @@ export const router = createBrowserRouter([
             path: "libraries",
             element: (
               <ProtectedRoute
-                requiredPermission={{
-                  resource: "libraries",
-                  operation: "read",
-                }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsLibraries}
               >
                 <AdminLibraries />
               </ProtectedRoute>
@@ -103,7 +100,7 @@ export const router = createBrowserRouter([
             path: "users",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "users", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsUsers}
               >
                 <AdminUsers />
               </ProtectedRoute>
@@ -113,7 +110,7 @@ export const router = createBrowserRouter([
             path: "users/create",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "users", operation: "write" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsCreateUser}
               >
                 <CreateUser />
               </ProtectedRoute>
@@ -123,7 +120,7 @@ export const router = createBrowserRouter([
             path: "users/:id",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "users", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsUsers}
               >
                 <UserDetail />
               </ProtectedRoute>
@@ -133,7 +130,7 @@ export const router = createBrowserRouter([
             path: "jobs",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "jobs", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsJobs}
               >
                 <AdminJobs />
               </ProtectedRoute>
@@ -143,7 +140,7 @@ export const router = createBrowserRouter([
             path: "jobs/:id",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "jobs", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsJobs}
               >
                 <JobDetail />
               </ProtectedRoute>
@@ -153,7 +150,7 @@ export const router = createBrowserRouter([
             path: "plugins",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminPlugins />
               </ProtectedRoute>
@@ -163,7 +160,7 @@ export const router = createBrowserRouter([
             path: "plugins/installed",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminPlugins />
               </ProtectedRoute>
@@ -173,7 +170,7 @@ export const router = createBrowserRouter([
             path: "plugins/discover",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminPlugins />
               </ProtectedRoute>
@@ -197,7 +194,7 @@ export const router = createBrowserRouter([
             path: "plugins/:scope/:id",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <PluginDetail />
               </ProtectedRoute>
@@ -207,7 +204,7 @@ export const router = createBrowserRouter([
             path: "cache",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminCache />
               </ProtectedRoute>
@@ -217,7 +214,7 @@ export const router = createBrowserRouter([
             path: "logs",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminLogs />
               </ProtectedRoute>
@@ -227,7 +224,7 @@ export const router = createBrowserRouter([
             path: "review-criteria",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminReviewCriteria />
               </ProtectedRoute>
@@ -237,7 +234,7 @@ export const router = createBrowserRouter([
             path: "sharing",
             element: (
               <ProtectedRoute
-                requiredPermission={{ resource: "config", operation: "read" }}
+                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
               >
                 <AdminSharing />
               </ProtectedRoute>
@@ -288,9 +285,7 @@ export const router = createBrowserRouter([
       {
         path: "libraries/create",
         element: (
-          <ProtectedRoute
-            requiredPermission={{ resource: "libraries", operation: "write" }}
-          >
+          <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.createLibrary}>
             <CreateLibrary />
           </ProtectedRoute>
         ),
@@ -298,7 +293,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <Home />
           </ProtectedRoute>
         ),
@@ -308,7 +306,7 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute
             checkLibraryAccess
-            requiredPermission={{ resource: "libraries", operation: "write" }}
+            requiredPermission={ROUTE_PERMISSIONS.librarySettings}
           >
             <LibrarySettings />
           </ProtectedRoute>
@@ -317,7 +315,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/books/:id",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <BookDetail />
           </ProtectedRoute>
         ),
@@ -325,7 +326,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/books/:bookId/files/:fileId/:tab?",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <FileDetail />
           </ProtectedRoute>
         ),
@@ -333,7 +337,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/books/:bookId/files/:fileId/read",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <FileReader />
           </ProtectedRoute>
         ),
@@ -341,7 +348,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/series",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.librarySeries}
+          >
             <SeriesList />
           </ProtectedRoute>
         ),
@@ -349,7 +359,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/series/:id",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.librarySeries}
+          >
             <SeriesDetail />
           </ProtectedRoute>
         ),
@@ -357,7 +370,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/people",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryPeople}
+          >
             <PersonList />
           </ProtectedRoute>
         ),
@@ -365,7 +381,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/people/:id",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryPeople}
+          >
             <PersonDetail />
           </ProtectedRoute>
         ),
@@ -373,7 +392,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/genres",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <GenresList />
           </ProtectedRoute>
         ),
@@ -381,7 +403,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/genres/:id",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <GenreDetail />
           </ProtectedRoute>
         ),
@@ -389,7 +414,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/tags",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <TagsList />
           </ProtectedRoute>
         ),
@@ -397,7 +425,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/tags/:id",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <TagDetail />
           </ProtectedRoute>
         ),
@@ -405,7 +436,10 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/publishers",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <PublishersList />
           </ProtectedRoute>
         ),
@@ -413,11 +447,16 @@ export const router = createBrowserRouter([
       {
         path: "libraries/:libraryId/publishers/:id",
         element: (
-          <ProtectedRoute checkLibraryAccess>
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryBooks}
+          >
             <PublisherDetail />
           </ProtectedRoute>
         ),
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);

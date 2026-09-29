@@ -26,7 +26,7 @@ import {
   useListShares,
   useUpdateShare,
 } from "@/hooks/queries/lists";
-import { useUsers } from "@/hooks/queries/users";
+import { useUserDirectory } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
 import {
@@ -70,17 +70,19 @@ export function ShareListDialog({
   const [selectedPermission, setSelectedPermission] =
     useState<ListPermission>(ListPermissionViewer);
 
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, demoMode } = useAuth();
   const listQuery = useList(listId, { enabled: open });
   const sharesQuery = useListShares(listId, { enabled: open });
-  const usersQuery = useUsers({}, { enabled: open });
+  // The directory lists every signed-in user's name. The server leaves it out
+  // of Demo Mode, where the picker is replaced by a notice.
+  const usersQuery = useUserDirectory({ enabled: open });
 
   const createShareMutation = useCreateShare();
   const updateShareMutation = useUpdateShare();
   const deleteShareMutation = useDeleteShare();
 
   const shares = sharesQuery.data ?? [];
-  const users = usersQuery.data?.items ?? [];
+  const users = usersQuery.data ?? [];
   const listOwnerId = listQuery.data?.user_id;
 
   // Filter out users who already have access (shares, owner, or self)
@@ -163,60 +165,66 @@ export function ShareListDialog({
           {/* Add New Share Section */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Add User</h3>
-            <div className="flex gap-2">
-              <Select
-                disabled={usersQuery.isLoading || availableUsers.length === 0}
-                onValueChange={setSelectedUserId}
-                value={selectedUserId}
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue
-                    placeholder={
-                      availableUsers.length === 0
-                        ? "No users available"
-                        : "Select user..."
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableUsers.map((user) => (
-                    <SelectItem key={user.id} value={String(user.id)}>
-                      {user.username}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {demoMode ? (
+              <p className="text-sm text-muted-foreground">
+                Sharing with other users is unavailable in the demo.
+              </p>
+            ) : (
+              <div className="flex gap-2">
+                <Select
+                  disabled={usersQuery.isLoading || availableUsers.length === 0}
+                  onValueChange={setSelectedUserId}
+                  value={selectedUserId}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue
+                      placeholder={
+                        availableUsers.length === 0
+                          ? "No users available"
+                          : "Select user..."
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableUsers.map((user) => (
+                      <SelectItem key={user.id} value={String(user.id)}>
+                        {user.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Select
-                onValueChange={(value) =>
-                  setSelectedPermission(value as ListPermission)
-                }
-                value={selectedPermission}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERMISSION_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Select
+                  onValueChange={(value) =>
+                    setSelectedPermission(value as ListPermission)
+                  }
+                  value={selectedPermission}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PERMISSION_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Button
-                disabled={!selectedUserId || isPending}
-                onClick={handleAddShare}
-                size="default"
-              >
-                {createShareMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Share"
-                )}
-              </Button>
-            </div>
+                <Button
+                  disabled={!selectedUserId || isPending}
+                  onClick={handleAddShare}
+                  size="default"
+                >
+                  {createShareMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Share"
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Current Shares Section */}

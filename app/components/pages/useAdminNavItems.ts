@@ -13,6 +13,7 @@ import {
 import { useLocation } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
+import { meetsRequirement, ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 export type AdminNavItem = {
   to: string;
@@ -26,19 +27,30 @@ export const useAdminNavItems = (): AdminNavItem[] => {
   const location = useLocation();
   const { hasPermission } = useAuth();
 
-  const canViewConfig = hasPermission("config", "read");
-  const canViewLibraries = hasPermission("libraries", "read");
-  const canViewUsers = hasPermission("users", "read");
-  const canViewJobs = hasPermission("jobs", "read");
+  // Each entry shows when the role passes its page's route guard.
+  const canViewConfig = meetsRequirement(
+    hasPermission,
+    ROUTE_PERMISSIONS.settingsConfig,
+  );
+  const canViewLibraries = meetsRequirement(
+    hasPermission,
+    ROUTE_PERMISSIONS.settingsLibraries,
+  );
+  const canViewUsers = meetsRequirement(
+    hasPermission,
+    ROUTE_PERMISSIONS.settingsUsers,
+  );
+  const canViewJobs = meetsRequirement(
+    hasPermission,
+    ROUTE_PERMISSIONS.settingsJobs,
+  );
 
   return [
     {
       to: "/settings/server",
       Icon: Cog,
       label: "Server",
-      isActive:
-        location.pathname === "/settings/server" ||
-        location.pathname === "/settings",
+      isActive: location.pathname === "/settings/server",
       show: canViewConfig,
     },
     {

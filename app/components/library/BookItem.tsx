@@ -44,6 +44,7 @@ import {
   AuthorRoleWriter,
   FileTypeCBZ,
   ResourceBooks,
+  ResourcePeople,
   type Book,
   type File,
   type GallerySize,
@@ -103,7 +104,9 @@ const BookItem = ({
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
-  const { canWrite } = useAuth();
+  const { canWrite, hasPermission } = useAuth();
+  // Author pages need People Read; without it the names are plain text.
+  const linkPeople = hasPermission(ResourcePeople, "read");
   // Rescan, identify, and delete all require Books Write on the backend.
   // Adding to a list is governed by the list's own permission, so it stays.
   const canWriteBooks = canWrite(ResourceBooks);
@@ -371,7 +374,7 @@ const BookItem = ({
             <div className="mt-1 text-xs line-clamp-2 text-muted-foreground">
               {uniqueAuthors.map((a, i) => (
                 <span key={a.personId}>
-                  {a.hasPerson ? (
+                  {a.hasPerson && linkPeople ? (
                     <Link
                       className={cn(
                         "hover:underline hover:text-foreground",

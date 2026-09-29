@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useBook, useDeleteFile } from "@/hooks/queries/books";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -37,7 +37,7 @@ const FileDetail = () => {
     tab?: string;
   }>();
   const navigate = useNavigate();
-  const { canWrite, hasPermission } = useAuth();
+  const { canWrite } = useAuth();
   // File metadata, cover, chapters, and deletion all require Books Write.
   const canWriteBooks = canWrite(ResourceBooks);
 
@@ -104,9 +104,7 @@ const FileDetail = () => {
     useUnsavedChanges(chaptersActionState.hasChanges);
 
   const bookQuery = useBook(bookId);
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  const libraryQuery = useUserLibrary(libraryId);
 
   // Handle file deletion
   const handleDeleteFile = async () => {

@@ -37,6 +37,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
@@ -68,6 +69,10 @@ const ListDetail = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const listId = id ? parseInt(id, 10) : undefined;
+  // A list's books and their covers come from Books Read routes. A role
+  // without it still sees the list and can manage it, but not its books.
+  const { hasPermission } = useAuth();
+  const canReadBooks = hasPermission("books", "read");
 
   const userSettingsQuery = useUserSettings();
   const updateUserSettings = useUpdateUserSettings();
@@ -288,7 +293,7 @@ const ListDetail = () => {
         </div>
 
         {/* Sort dropdown for unordered lists */}
-        {!list.is_ordered && bookCount > 0 && (
+        {!list.is_ordered && bookCount > 0 && canReadBooks && (
           <div className="mb-6 flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Sort by:</span>
             <Select
@@ -324,8 +329,14 @@ const ListDetail = () => {
           </div>
         )}
 
+        {bookCount > 0 && !canReadBooks && (
+          <div className="text-center py-8 text-muted-foreground">
+            Your role cannot view books, so the books in this list are hidden.
+          </div>
+        )}
+
         {/* Books in List */}
-        {bookCount > 0 && (
+        {bookCount > 0 && canReadBooks && (
           <section className="mb-10">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">

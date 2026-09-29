@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/popover";
 import { getLanguageName, LANGUAGES } from "@/constants/languages";
 import { useLibraryLanguages } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/libraries/utils";
 
 interface LanguageComboboxProps {
@@ -36,12 +35,10 @@ export function LanguageCombobox({
 }: LanguageComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { hasPermission } = useAuth();
-  // Without Libraries Read the languages endpoint is a 403. The curated list
-  // and custom tag entry still work, just without the library's own tags.
-  const { data: libraryLanguages } = useLibraryLanguages(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  // The languages route needs Books Read, which the hook checks. Without it
+  // the curated list and custom tag entry still work, just without the
+  // library's own tags.
+  const { data: libraryLanguages } = useLibraryLanguages(libraryId);
 
   const mergedLanguages = useMemo(() => {
     const curatedTags = new Set(LANGUAGES.map((l) => l.tag));

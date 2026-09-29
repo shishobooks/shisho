@@ -66,6 +66,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     isLoading,
     isError,
     error,
+    isEnabled,
     refetch,
   } = useEpubBlob(file.id);
 
@@ -302,7 +303,8 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         <Button
           onClick={() => {
             setLoadError(null);
-            refetch();
+            // refetch() runs even a disabled query, so respect its gate.
+            if (isEnabled) refetch();
           }}
           variant="default"
         >

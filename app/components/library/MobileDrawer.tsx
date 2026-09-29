@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { useMobileNav } from "@/contexts/MobileNav";
-import { useLibraries } from "@/hooks/queries/libraries";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
@@ -55,12 +55,11 @@ const MobileDrawer = () => {
   const { isOpen, close } = useMobileNav();
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
-  // A role without Libraries Read cannot list libraries; hide the picker
-  // rather than show "Select Library" over nothing. Lists keep their own
-  // nav item below.
-  const canReadLibraries = hasPermission("libraries", "read");
-  const librariesQuery = useLibraries({}, { enabled: canReadLibraries });
-  const libraries = librariesQuery.data?.items || [];
+  // Library pages need Books Read, so a role without it gets no library
+  // entries to switch to. Lists stay in the picker for every role.
+  const canReadBooks = hasPermission("books", "read");
+  const librariesQuery = useUserLibraries({ enabled: canReadBooks });
+  const libraries = (canReadBooks && librariesQuery.data) || [];
   const currentLibrary = libraries.find((lib) => lib.id === Number(libraryId));
 
   const listsQuery = useListLists();
@@ -136,12 +135,8 @@ const MobileDrawer = () => {
   const isAdminContext = location.pathname.startsWith("/settings");
   const visibleAdminItems = useAdminNavItems().filter((item) => item.show);
 
-  // Check if user has any admin permissions
-  const canAccessAdmin =
-    hasPermission("config", "read") ||
-    hasPermission("users", "read") ||
-    hasPermission("jobs", "read") ||
-    hasPermission("libraries", "read");
+  // Global Settings opens the first settings page the role may see.
+  const canAccessAdmin = visibleAdminItems.length > 0;
 
   return (
     <>
@@ -181,7 +176,7 @@ const MobileDrawer = () => {
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
           {/* Library/List Picker */}
-          {canReadLibraries && (libraries.length > 0 || lists.length > 0) && (
+          {(libraries.length > 0 || lists.length > 0) && (
             <div className="border-b border-border">
               <button
                 className="flex items-center justify-between w-full px-4 py-3.5 text-left hover:bg-muted transition-colors"

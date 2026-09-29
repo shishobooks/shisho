@@ -14,6 +14,8 @@ import type {
   ListJobsResponse,
 } from "@/types";
 
+import { useRequires } from "./permissions";
+
 export enum QueryKey {
   RetrieveJob = "RetrieveJob",
   ListJobs = "ListJobs",
@@ -23,6 +25,9 @@ export enum QueryKey {
 
 type ListJobsData = ListJobsResponse;
 
+// GET /jobs/:id needs no role permission: the handler serves any job to a
+// Jobs Read role and a bulk-download job to the user who created it. So the
+// hook does not require Jobs Read; its page (JobDetail) is guarded by it.
 export const useJob = (
   jobId?: string,
   options: Omit<
@@ -31,8 +36,8 @@ export const useJob = (
   > = {},
 ) => {
   return useQuery<Job, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(jobId),
     ...options,
+    enabled: options.enabled ?? Boolean(jobId),
     queryKey: [QueryKey.RetrieveJob, jobId],
     queryFn: ({ signal }) => {
       return API.request("GET", `/jobs/${jobId}`, null, null, signal);
@@ -49,6 +54,7 @@ export const useJobs = (
 ) => {
   return useQuery<ListJobsData, ShishoAPIError>({
     ...options,
+    enabled: useRequires("jobs:read", options.enabled ?? true),
     queryKey: [QueryKey.ListJobs, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/jobs", null, query, signal);
@@ -57,6 +63,7 @@ export const useJobs = (
 };
 
 export const useLatestScanJob = (libraryId: number | undefined) => {
+  const enabled = useRequires("jobs:read", libraryId !== undefined);
   return useQuery<ListJobsData, ShishoAPIError>({
     queryKey: [QueryKey.LatestScanJob, libraryId],
     queryFn: ({ signal }) => {
@@ -72,7 +79,7 @@ export const useLatestScanJob = (libraryId: number | undefined) => {
         signal,
       );
     },
-    enabled: libraryId !== undefined,
+    enabled,
   });
 };
 
@@ -94,11 +101,8 @@ export const useJobLogs = (
   > = {},
 ) => {
   return useQuery<ListJobLogsData, ShishoAPIError>({
-    enabled:
-      queryOptions.enabled !== undefined
-        ? queryOptions.enabled
-        : Boolean(jobId),
     ...queryOptions,
+    enabled: useRequires("jobs:read", queryOptions.enabled ?? Boolean(jobId)),
     queryKey: [QueryKey.ListJobLogs, jobId, options],
     queryFn: ({ signal }) => {
       const params: Record<string, string | string[]> = {};

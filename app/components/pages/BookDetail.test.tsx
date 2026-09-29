@@ -82,11 +82,10 @@ vi.mock("@/hooks/queries/books", () => ({
   useResyncBook: idle,
   useResyncFile: idle,
 }));
-// Honors enabled like react-query does: a disabled query has no data.
+// The accessible library list has not loaded (or lacks the library), so the
+// page must name the library from the book payload.
 vi.mock("@/hooks/queries/libraries", () => ({
-  useLibrary: (_id?: string, options?: { enabled?: boolean }) => ({
-    data: options?.enabled === false ? undefined : { id: 1, name: "Lib" },
-  }),
+  useUserLibrary: () => ({ data: undefined }),
 }));
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
@@ -190,9 +189,7 @@ describe("BookDetail write controls", () => {
 });
 
 describe("BookDetail library name", () => {
-  it("names the library from the book payload for a role without Libraries Read", () => {
-    // The mocked role holds books permissions only, so the library endpoint
-    // is off limits and the name must come from the book.
+  it("names the library from the book payload before the library list loads", () => {
     renderPage();
 
     expect(screen.getByTestId("breadcrumbs")).toHaveTextContent("Fiction");

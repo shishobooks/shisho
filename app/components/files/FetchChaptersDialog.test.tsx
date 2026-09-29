@@ -8,6 +8,15 @@ import type { ChapterInput } from "@/types";
 
 import FetchChaptersDialog from "./FetchChaptersDialog";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

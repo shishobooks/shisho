@@ -15,7 +15,7 @@ import {
 } from "@/components/library/MetadataMergeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useAuth } from "@/hooks/useAuth";
 import type { DataSource } from "@/types";
 import { writeResourceForEntity } from "@/utils/permissions";
@@ -109,10 +109,8 @@ export function ResourceDetail({
   onEditClick,
   children,
 }: ResourceDetailProps) {
-  const { canWrite, hasPermission } = useAuth();
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  const { canWrite } = useAuth();
+  const libraryQuery = useUserLibrary(libraryId);
   const canMutate = canWrite(writeResourceForEntity(entityType));
 
   const [editOpen, setEditOpen] = useState(false);

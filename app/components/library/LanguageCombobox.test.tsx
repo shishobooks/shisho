@@ -53,10 +53,10 @@ describe("LanguageCombobox", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     onChange.mockClear();
-    auth.permissions = new Set(["books:read", "books:write", "libraries:read"]);
+    auth.permissions = new Set(["books:read", "books:write"]);
   });
 
-  it("suggests the library's own language tags for a role with Libraries Read", async () => {
+  it("suggests the library's own language tags for a role with Books Read, without Libraries Read", async () => {
     const request = vi.spyOn(API, "request").mockResolvedValue(["tlh"]);
     const user = userEvent.setup();
     renderCombobox();
@@ -69,8 +69,8 @@ describe("LanguageCombobox", () => {
     expect(screen.queryByText(/Use custom tag/)).toBeNull();
   });
 
-  it("requests no library languages for a role without Libraries Read and still accepts a typed tag", async () => {
-    auth.permissions = new Set(["books:read", "books:write"]);
+  it("requests no library languages for a role without Books Read and still accepts a typed tag", async () => {
+    auth.permissions = new Set(["books:write"]);
     const request = vi.spyOn(API, "request").mockResolvedValue(["tlh"]);
     const user = userEvent.setup();
     renderCombobox();

@@ -10,6 +10,7 @@ import {
   type ListGenresData,
 } from "./genres";
 import { usePeopleList } from "./people";
+import { useRequires } from "./permissions";
 import { usePublishersList } from "./publishers";
 import { useSeriesList } from "./series";
 import {
@@ -181,6 +182,7 @@ export function useGenreItemCounts(
   libraryId: number | undefined,
   values: string[],
 ): Map<string, number> {
+  const enabled = useRequires("books:read", !!libraryId);
   const results = useQueries({
     queries: values.map((name) => ({
       queryKey: [
@@ -195,7 +197,7 @@ export function useGenreItemCounts(
           { library_id: libraryId, search: name, limit: 5 },
           signal,
         ),
-      enabled: !!libraryId,
+      enabled,
       staleTime: 5 * 60 * 1000,
     })),
   });
@@ -218,6 +220,7 @@ export function useTagItemCounts(
   libraryId: number | undefined,
   values: string[],
 ): Map<string, number> {
+  const enabled = useRequires("books:read", !!libraryId);
   const results = useQueries({
     queries: values.map((name) => ({
       queryKey: [
@@ -232,7 +235,7 @@ export function useTagItemCounts(
           { library_id: libraryId, search: name, limit: 5 },
           signal,
         ),
-      enabled: !!libraryId,
+      enabled,
       staleTime: 5 * 60 * 1000,
     })),
   });

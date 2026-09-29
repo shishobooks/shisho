@@ -41,7 +41,7 @@ import {
   ResourceBooks,
   type CreateListPayload,
   type FileType,
-  type Library,
+  type LibrarySummary,
   type ReviewOverride,
 } from "@/types";
 import {
@@ -51,7 +51,7 @@ import {
 import { formatFileSize } from "@/utils/format";
 
 interface SelectionToolbarProps {
-  library?: Library;
+  library?: LibrarySummary;
 }
 
 export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {

@@ -5,17 +5,13 @@ import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { useBook } from "@/hooks/queries/books";
-import { useLibrary } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
   const bookQuery = useBook(id);
-  const { hasPermission } = useAuth();
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  const libraryQuery = useUserLibrary(libraryId);
 
   usePageTitle(bookQuery.data?.title ?? "Book Details");
 

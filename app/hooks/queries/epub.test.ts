@@ -7,6 +7,15 @@ import { ShishoAPIError } from "@/libraries/api";
 
 import { useEpubBlob } from "./epub";
 
+// Query hooks check the role's permissions; this test grants them all.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    demoMode: false,
+    hasPermission: () => true,
+    canWrite: () => true,
+  }),
+}));
+
 const wrapper = ({ children }: { children: React.ReactNode }) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },

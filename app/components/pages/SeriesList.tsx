@@ -17,13 +17,12 @@ import {
   DEFAULT_GALLERY_SIZE,
   ITEMS_PER_PAGE_BY_SIZE,
 } from "@/constants/gallerySize";
-import { useLibrary } from "@/hooks/queries/libraries";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { useAuth } from "@/hooks/useAuth";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
@@ -207,10 +206,7 @@ const SeriesList = () => {
     );
   };
 
-  const { hasPermission } = useAuth();
-  const libraryQuery = useLibrary(libraryId, {
-    enabled: Boolean(libraryId) && hasPermission("libraries", "read"),
-  });
+  const libraryQuery = useUserLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
 
   const seriesQuery = useSeriesList(

@@ -46,7 +46,7 @@ vi.mock("@/hooks/queries/series", () => ({
   useDeleteSeries: idle,
 }));
 vi.mock("@/hooks/queries/libraries", () => ({
-  useLibrary: () => ({ data: { id: 1, name: "Lib" } }),
+  useUserLibrary: () => ({ data: { id: 1, name: "Lib" } }),
 }));
 vi.mock("@/hooks/queries/settings", () => ({
   useUserSettings: () => ({

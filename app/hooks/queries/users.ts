@@ -5,6 +5,7 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 
+import { useAuth } from "@/hooks/useAuth";
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   CreateRolePayload,
@@ -17,12 +18,17 @@ import type {
   UpdateRolePayload,
   UpdateUserPayload,
   User,
+  UserDirectoryEntry,
 } from "@/types";
+
+import { QueryKey as LibrariesQueryKey } from "./libraries";
+import { useRequires } from "./permissions";
 
 export enum QueryKey {
   RetrieveUser = "RetrieveUser",
   ListUsers = "ListUsers",
   ListRoles = "ListRoles",
+  UserDirectory = "UserDirectory",
 }
 
 export const useUser = (
@@ -33,8 +39,8 @@ export const useUser = (
   > = {},
 ) => {
   return useQuery<User, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(id),
     ...options,
+    enabled: useRequires("users:read", options.enabled ?? Boolean(id)),
     queryKey: [QueryKey.RetrieveUser, id],
     queryFn: ({ signal }) => {
       return API.request("GET", `/users/${id}`, null, null, signal);
@@ -51,9 +57,30 @@ export const useUsers = (
 ) => {
   return useQuery<ListUsersResponse, ShishoAPIError>({
     ...options,
+    enabled: useRequires("users:read", options.enabled ?? true),
     queryKey: [QueryKey.ListUsers, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/users", null, query, signal);
+    },
+  });
+};
+
+// Every active user's id and username, for picking whom to share a list with.
+// Any signed-in role may read it, but the server does not register the route
+// in Demo Mode, so the hook stays off there.
+export const useUserDirectory = (
+  options: Omit<
+    UseQueryOptions<UserDirectoryEntry[], ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  const { demoMode } = useAuth();
+  return useQuery<UserDirectoryEntry[], ShishoAPIError>({
+    ...options,
+    enabled: !demoMode && (options.enabled ?? true),
+    queryKey: [QueryKey.UserDirectory],
+    queryFn: ({ signal }) => {
+      return API.request("GET", "/users/directory", null, null, signal);
     },
   });
 };
@@ -67,6 +94,7 @@ export const useCreateUser = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListUsers] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.UserDirectory] });
     },
   });
 };
@@ -85,6 +113,11 @@ export const useUpdateUser = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListUsers] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.UserDirectory] });
+      // An admin may have changed their own library access.
+      queryClient.invalidateQueries({
+        queryKey: [LibrariesQueryKey.UserLibraries],
+      });
       queryClient.setQueryData([QueryKey.RetrieveUser, String(data.id)], data);
     },
   });
@@ -112,6 +145,7 @@ export const useDeactivateUser = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListUsers] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.UserDirectory] });
     },
   });
 };
@@ -126,6 +160,7 @@ export const useRoles = (
 ) => {
   return useQuery<ListRolesResponse, ShishoAPIError>({
     ...options,
+    enabled: useRequires("users:read", options.enabled ?? true),
     queryKey: [QueryKey.ListRoles],
     queryFn: ({ signal }) => {
       return API.request("GET", "/roles", null, null, signal);

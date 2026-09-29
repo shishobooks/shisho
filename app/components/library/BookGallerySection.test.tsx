@@ -29,7 +29,7 @@ beforeAll(() => {
 
 // Mock mutation hooks — they require a running API
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ canWrite: () => true }),
+  useAuth: () => ({ canWrite: () => true, hasPermission: () => true }),
 }));
 
 vi.mock("@/hooks/queries/books", () => ({

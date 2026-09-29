@@ -96,7 +96,8 @@ export function IdentifyBookDialog({
   const submitSearch = (params: PluginSearchParams) => {
     setSelectedResult(null);
     if (equal(params, submittedParams)) {
-      searchQuery.refetch();
+      // refetch() runs even a disabled query, so respect its permission gate.
+      if (searchQuery.isEnabled) searchQuery.refetch();
     } else {
       setSubmittedParams(params);
     }

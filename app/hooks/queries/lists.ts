@@ -24,6 +24,8 @@ import type {
   UpdateSharePayload,
 } from "@/types";
 
+import { useRequires } from "./permissions";
+
 export enum QueryKey {
   ListLists = "ListLists",
   RetrieveList = "RetrieveList",
@@ -81,8 +83,8 @@ export const useListBooks = (
   > = {},
 ) => {
   return useQuery<ListListBooksResponse, ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(listId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(listId)),
     queryKey: [QueryKey.ListBooks, listId, query],
     queryFn: ({ signal }) => {
       return API.request("GET", `/lists/${listId}/books`, null, query, signal);
@@ -130,8 +132,8 @@ export const useBookLists = (
   > = {},
 ) => {
   return useQuery<List[], ShishoAPIError>({
-    enabled: options.enabled !== undefined ? options.enabled : Boolean(bookId),
     ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(bookId)),
     queryKey: [QueryKey.BookLists, bookId],
     queryFn: ({ signal }) => {
       return API.request("GET", `/books/${bookId}/lists`, null, null, signal);

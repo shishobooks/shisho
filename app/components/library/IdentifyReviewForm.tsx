@@ -57,7 +57,6 @@ import {
 import {
   usePluginApply,
   usePluginIdentifierTypes,
-  usePluginsInstalled,
   type PluginApplyPayload,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
@@ -537,16 +536,9 @@ export function IdentifyReviewForm({
     return aliases.some((alias) => disabledFieldsRaw.has(alias));
   };
 
-  // Plugin display name for the source pill in the header. Falls back to
-  // the plugin id when the installed list hasn't loaded yet or doesn't
-  // match (e.g. the plugin was uninstalled mid-flow).
-  const { data: installedPlugins } = usePluginsInstalled();
-  const pluginDisplayName = useMemo(() => {
-    const match = installedPlugins?.find(
-      (p) => p.scope === result.plugin_scope && p.id === result.plugin_id,
-    );
-    return match?.name ?? result.plugin_id;
-  }, [installedPlugins, result.plugin_scope, result.plugin_id]);
+  // Plugin display name for the source pill in the header. The search result
+  // carries it, so an Editor needs no plugin management permission to see it.
+  const pluginDisplayName = result.plugin_name || result.plugin_id;
 
   const [filterMode, setFilterMode] = useState<"changed" | "all">("changed");
 

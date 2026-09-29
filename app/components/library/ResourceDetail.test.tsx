@@ -7,7 +7,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResourceDetail } from "./ResourceDetail";
 
 vi.mock("@/hooks/queries/libraries", () => ({
-  useLibrary: () => ({ data: { name: "My Library" } }),
+  useUserLibrary: () => ({ data: { name: "My Library" } }),
 }));
 
 // Resources the signed-in user may write. Defaults to everything; the

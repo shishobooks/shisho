@@ -3,6 +3,8 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { ListLogsResponse } from "@/types";
 
+import { useRequires } from "./permissions";
+
 export enum QueryKey {
   ListLogs = "ListLogs",
 }
@@ -25,6 +27,7 @@ export const useLogs = (
 ) => {
   return useQuery<ListLogsData, ShishoAPIError>({
     ...queryOptions,
+    enabled: useRequires("config:read", queryOptions.enabled ?? true),
     queryKey: [QueryKey.ListLogs, options],
     queryFn: ({ signal }) => {
       const params: Record<string, string> = {};
