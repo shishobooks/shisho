@@ -5,7 +5,7 @@ FROM golang:1.26.8-alpine AS typegen
 
 WORKDIR /app
 
-# Install tygo (pinned to same version as .mise.toml)
+# Install tygo (pinned to same version as mise.toml)
 RUN go install github.com/gzuidhof/tygo@v0.2.20
 
 # Copy Go modules for type generation

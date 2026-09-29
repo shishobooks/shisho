@@ -18,7 +18,7 @@ import type {
   UpdateRolePayload,
   UpdateUserPayload,
   User,
-  UserDirectoryEntry,
+  UserRef,
 } from "@/types";
 
 import { QueryKey as LibrariesQueryKey } from "./libraries";
@@ -70,12 +70,12 @@ export const useUsers = (
 // in Demo Mode, so the hook stays off there.
 export const useUserDirectory = (
   options: Omit<
-    UseQueryOptions<UserDirectoryEntry[], ShishoAPIError>,
+    UseQueryOptions<UserRef[], ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
   const { demoMode } = useAuth();
-  return useQuery<UserDirectoryEntry[], ShishoAPIError>({
+  return useQuery<UserRef[], ShishoAPIError>({
     ...options,
     enabled: !demoMode && (options.enabled ?? true),
     queryKey: [QueryKey.UserDirectory],

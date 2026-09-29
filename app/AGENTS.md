@@ -12,7 +12,7 @@ This file documents frontend patterns and conventions specific to Shisho.
 
 ## Design Tokens
 
-Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dark:bg-neutral-*`, `dark:text-violet-*`, `text-gray-*`, `bg-neutral-*`). The CSS variables in the theme already handle dark mode — manual `dark:` color overrides cause drift.
+Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dark:bg-neutral-*`, `dark:text-violet-*`, `text-gray-*`, `bg-neutral-*`). The CSS variables in the theme already handle dark mode; manual `dark:` color overrides cause drift.
 
 | Pattern | Classes |
 |---------|---------|
@@ -51,7 +51,7 @@ Use semantic color tokens exclusively. Never use hardcoded Tailwind colors (`dar
 
 **Never hand-define a type that has a Go counterpart.** Every API request and response shape is generated from a Go struct via tygo into `app/types/generated/` (re-exported from `@/types`). The frontend imports those types; it does not restate them. If a needed type is missing or wrong, fix the Go struct in the package's `types.go` and run `mise tygo`, do not write it in TypeScript. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`).
 
-- **Response types are `{Entity}Response`, list responses are `ResourceListResponse<{Entity}Response>`.** Query hooks type their return as the generated response type, not the bare model. A response struct embeds the model (TS `extends Genre`) and may reshape a relation: e.g. `GenreResponse` carries `aliases: string[]`, not the model `Genre`'s relation. Consume the response field directly (`genre.aliases`), never cast it (`as unknown as string[]`) and never call `.map((a) => a.name)` expecting relation objects. Reference: `useGenresList`/`useGenre`/`useUpdateGenre` in `app/hooks/queries/genres.ts` (typed `GenreResponse`), and `GenresList.tsx`/`GenreDetail.tsx` reading `aliases` as `string[]`. For a hierarchical entity with a distinct list vs detail shape, see publishers: `usePublishersList` is typed `ListPublishersResponse` (items are `PublisherListItem`), `usePublisher`/`useUpdatePublisher` are typed `PublisherResponse`; `PublishersList.tsx` reads `publisher.aliases` directly (no `.map((a) => a.name)`) and `PublisherDetail.tsx` reads `aliases`/`children`/`ancestors`/`descendant_ids` directly with no `as unknown as string[]` cast. Do not hand-define `PublisherDetail`/`PublisherListItem` in TS — import the generated types from `@/types`.
+- **Response types are `{Entity}Response`; list envelopes are the generated `List{Entities}Response`** (re-exported from `@/types`). Go names every list envelope `List{Entities}Response` (the root and `pkg/AGENTS.md` rule), and hooks type their return on it (users, roles, libraries, lists, list books, publishers, publisher files, tag books, jobs, job logs, logs). The list hooks in `genres.ts`, `series.ts`, `people.ts`, `tags.ts`, and `books.ts` still hand-type envelopes that have generated counterparts (`ResourceListResponse<...>`); they are pending migration to the generated `List{Entities}Response`, so do not copy them. `ResourceListResponse<T>` in `app/types/index.ts` stays only as the generic prop type for `ResourceList`, `BookGallerySection`, and `FileListSection`, which take any `{ items, total }` envelope. Query hooks type their return as the generated response type, not the bare model. A response struct embeds the model (TS `extends Genre`) and may reshape a relation: e.g. `GenreResponse` carries `aliases: string[]`, not the model `Genre`'s relation. Consume the response field directly (`genre.aliases`), never cast it (`as unknown as string[]`) and never call `.map((a) => a.name)` expecting relation objects. Reference: `useGenresList`/`useGenre`/`useUpdateGenre` in `app/hooks/queries/genres.ts` (typed `GenreResponse`), and `GenresList.tsx`/`GenreDetail.tsx` reading `aliases` as `string[]`. For a hierarchical entity with a distinct list vs detail shape, see publishers: `usePublishersList` is typed `ListPublishersResponse` (items are `PublisherListItem`), `usePublisher`/`useUpdatePublisher` are typed `PublisherResponse`; `PublishersList.tsx` reads `publisher.aliases` directly (no `.map((a) => a.name)`) and `PublisherDetail.tsx` reads `aliases`/`children`/`ancestors`/`descendant_ids` directly with no `as unknown as string[]` cast. Do not hand-define `PublisherDetail`/`PublisherListItem` in TS; import the generated types from `@/types`.
 
 - **Do not re-export the per-entity `List{Entities}Response` from the barrel when the entity's list uses the generic `ResourceListResponse<{Entity}Response>` envelope.** The Go handler returns a named `List{Entities}Response` struct (so it is not a `map[string]any`) and tygo emits a TS mirror as a side effect, but the frontend consumes `ResourceListResponse<{Entity}Response>` for the trivial `{ items, total }` envelope and never imports the concrete `List*Response`. Re-exporting the unused interface invites importing a type the convention says not to use. Only re-export a `List*Response` when its envelope genuinely differs from `{ items, total }` (e.g. `ListPublisherFilesResponse`, `ListTagBooksResponse`, `ListListsResponse`, `ListUsersResponse`) and a hook actually types its return on it.
 
@@ -426,7 +426,7 @@ Center and constrain cover images on mobile:
 
 ## Cover Image Caching
 
-API cover endpoints use `Cache-Control: private, max-age=31536000, immutable` — the browser caches the response forever. Freshness is driven by changing the URL via `?v=${cacheKey}`, where `cacheKey` is a backend-computed `cover_cache_key` field (format `"<fileId>-<updatedAt.Unix()>"`) that only changes when the actual cover changes. This is much better than the old `dataUpdatedAt` approach, which changed on every TanStack Query refetch and defeated caching.
+API cover endpoints use `Cache-Control: private, max-age=31536000, immutable`, so the browser caches the response forever. Freshness is driven by changing the URL via `?v=${cacheKey}`, where `cacheKey` is a backend-computed `cover_cache_key` field (format `"<fileId>-<updatedAt.Unix()>"`) that only changes when the actual cover changes. This is much better than the old `dataUpdatedAt` approach, which changed on every TanStack Query refetch and defeated caching.
 
 ### Cache key sources by endpoint
 
@@ -438,7 +438,7 @@ API cover endpoints use `Cache-Control: private, max-age=31536000, immutable` �
 
 ### Why URL-based busting is still required
 
-Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of available images") that is **separate from the HTTP cache**. When an `<img>` element's `src` matches a URL previously rendered in the session, the browser serves the cached decoded bitmap without hitting HTTP — even with `immutable`. Changing the `?v=` param changes the URL, forcing a new network fetch.
+Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of available images") that is **separate from the HTTP cache**. When an `<img>` element's `src` matches a URL previously rendered in the session, the browser serves the cached decoded bitmap without hitting HTTP, even with `immutable`. Changing the `?v=` param changes the URL, forcing a new network fetch.
 
 ### Rules
 
@@ -448,8 +448,8 @@ Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of
 
 ### Exceptions (no change needed)
 
-- `GlobalSearch.tsx` — keep `searchQuery.dataUpdatedAt` (search results don't include `cover_cache_key`, small number of covers)
-- `FileEditDialog.tsx` — keep `Date.now()` for immediate preview after cover mutation
+- `GlobalSearch.tsx`: keep `searchQuery.dataUpdatedAt` (search results don't include `cover_cache_key`, small number of covers)
+- `FileEditDialog.tsx`: keep `Date.now()` for immediate preview after cover mutation
 - `IdentifyReviewForm.tsx` — keep `file.updated_at`
 
 ### Checklist for new cover components
@@ -1108,11 +1108,11 @@ When using raw `<button>` elements outside of the Button component, always add `
 
 ## Sortable List Row Keys
 
-**Sortable lists (dnd-kit-backed `SortableList` and consumers like `SortableEntityList`, `FileChaptersTab`) MUST use stable client-side row keys that survive reorder/remove.** Index-based keys (`${index}`) and content-based keys (`${item.name}-${index}`) both change on every reorder, which confuses dnd-kit's drag tracking — the active drag's identity changes mid-gesture, causing flicker, dropped drags, or rows that mutate the wrong sibling after sorting.
+**Sortable lists (dnd-kit-backed `SortableList` and consumers like `SortableEntityList`, `FileChaptersTab`) MUST use stable client-side row keys that survive reorder/remove.** Index-based keys (`${index}`) and content-based keys (`${item.name}-${index}`) both change on every reorder, which confuses dnd-kit's drag tracking: the active drag's identity changes mid-gesture, causing flicker, dropped drags, or rows that mutate the wrong sibling after sorting.
 
 **Pattern:** Assign each row a stable id when it first enters the list (mount or append) and preserve it across reorder/remove. `FileChaptersTab` uses an `EditedChapter._editKey` field generated by a module-level monotonic counter (`nextEditKey()`); `SortableEntityList` uses the same counter pattern but stores the key in a `useRef<WeakMap<T, string>>` keyed by item reference (so callers don't need to inject a `_key` field on their own types).
 
-**Don't** rely on labels, indices, or any field that changes during normal editing as the sortable id. Use a server-side stable id (e.g., `chapter.id`) only when every row actually has one — newly-added rows that haven't been persisted yet need a client-side counter or WeakMap-tracked id.
+**Don't** rely on labels, indices, or any field that changes during normal editing as the sortable id. Use a server-side stable id (e.g., `chapter.id`) only when every row actually has one; newly-added rows that haven't been persisted yet need a client-side counter or WeakMap-tracked id.
 
 **Caller responsibility for `SortableEntityList`:** the WeakMap is keyed by item *reference*, so callers must pass stable item references across renders. `items={list.map((x) => ({ name: x }))}` re-creates the wrapper objects every render and defeats the WeakMap — each row gets a fresh key every render and dnd-kit sees a brand-new identity set. Either store the wrapped shape in `useState`, or wrap the `.map()` in a `useMemo` keyed on the source array. See `IdentifyReviewForm.tsx`'s `narratorItems` for the pattern.
 
@@ -1139,10 +1139,10 @@ The 300ms delay ensures cleanup runs after Radix's buggy unmount effects complet
 
 **Problem:** When a Radix `XxxTrigger asChild` wraps a custom React function component (instead of a direct `<Button>` or DOM element), the component must be a `forwardRef` that spreads incoming props onto the underlying button. Otherwise:
 
-- For **floating** primitives (`Popover`, `DropdownMenu`, `HoverCard`, `Tooltip` with positioning, `ContextMenu`): the popper has no DOM ref to anchor to, so Floating UI falls back to the document origin `(0, 0)` and the content renders **off-screen** (often above the viewport). The trigger's onClick still fires — the component appears to do nothing.
+- For **floating** primitives (`Popover`, `DropdownMenu`, `HoverCard`, `Tooltip` with positioning, `ContextMenu`): the popper has no DOM ref to anchor to, so Floating UI falls back to the document origin `(0, 0)` and the content renders **off-screen** (often above the viewport). The trigger's onClick still fires, but the component appears to do nothing.
 - For **non-floating** primitives (`Sheet`, `Drawer`, `Dialog`): the panel still renders correctly because it's positioned relative to the viewport, not the trigger. But focus management on close can't restore focus to the trigger, and screen reader / keyboard semantics suffer.
 
-This bug is **invisible in jsdom unit tests** — Radix's positioning math doesn't run there. Caught only in a real browser.
+This bug is **invisible in jsdom unit tests**: Radix's positioning math doesn't run there. Caught only in a real browser.
 
 **Required pattern for any custom component used as an asChild trigger:**
 
@@ -1161,9 +1161,9 @@ MyButton.displayName = "MyButton";
 ```
 
 Three things matter:
-1. `forwardRef` — receives the ref from Radix's Slot
-2. `ref={ref}` on the underlying `<Button>` — passes the ref to a DOM element (Button itself is forwardRef'd)
-3. `{...props}` — Radix's Slot adds `onClick`, `aria-expanded`, `aria-controls`, `data-state` etc. via `React.cloneElement`; these must reach the button
+1. `forwardRef`: receives the ref from Radix's Slot
+2. `ref={ref}` on the underlying `<Button>`: passes the ref to a DOM element (Button itself is forwardRef'd)
+3. `{...props}`: Radix's Slot adds `onClick`, `aria-expanded`, `aria-controls`, `data-state` etc. via `React.cloneElement`; these must reach the button
 
 Direct `<Button>` (the shadcn/ui primitive) is already forwardRef'd, so the common case `<PopoverTrigger asChild><Button>...</Button></PopoverTrigger>` works without ceremony. The footgun is when you wrap that Button in a custom presentational component (`SizeButton`, `SortButton`, `FilterButton`).
 

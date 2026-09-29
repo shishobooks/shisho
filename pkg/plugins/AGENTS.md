@@ -60,7 +60,7 @@ Conventions and gotchas specific to this surface:
   (`declaredFields`, `fieldSettings`, `imageUrl`, all of `ConfigField`,
   `Capabilities`, `PluginVersion`) keep their camelCase wire format. Server-added
   fields on the same responses use snake_case (`is_official`,
-  `confidence_threshold`). Do NOT snake_case the passthrough fields — that is a
+  `confidence_threshold`). Do NOT snake_case the passthrough fields: that is a
   breaking wire change.
 - **Naming**: the available-plugin HTTP response is `AvailablePluginResponse`;
   the similarly-named `AvailablePlugin` (repository.go) is the repository-index
@@ -223,7 +223,7 @@ Conventions and gotchas specific to this surface:
 
 The `packages/plugin-sdk/` directory contains a TypeScript type definitions package that plugin developers install for IDE autocompletion and type checking. It is the public API contract for plugin authors.
 
-**CRITICAL: The SDK must always be kept in sync with the Go implementation.** Any change to host APIs, hook contexts/return types, manifest schema, or metadata structures MUST be reflected in the corresponding `.d.ts` files. Breaking changes to the SDK should be avoided whenever possible — prefer additive changes (new optional fields) over removals or type changes.
+**CRITICAL: The SDK must always be kept in sync with the Go implementation.** Any change to host APIs, hook contexts/return types, manifest schema, or metadata structures MUST be reflected in the corresponding `.d.ts` files. Breaking changes to the SDK should be avoided whenever possible; prefer additive changes (new optional fields) over removals or type changes.
 
 ```
 packages/plugin-sdk/
@@ -429,9 +429,9 @@ metadataEnricher: {
 
 **Go invocation:** `Manager.RunMetadataSearch(ctx, rt, searchCtx, targetFilePath) → *SearchResponse`
 
-The `targetFilePath` argument is the absolute path of the file being enriched and, when non-empty, is added to the FSContext's **read-only** allowed-paths list (`SetReadOnlyAllowedPaths`) so the enricher can read exactly that file without declaring `fileAccess`. Writes to the target path are NOT granted — the read-only list is consulted only by `isReadAllowed`, not `isWriteAllowed`. A plugin that legitimately needs to modify files must declare `fileAccess: readwrite` in its manifest. Scope is file-only — sibling files in the same directory are not included. Pass `""` when there is no target file.
+The `targetFilePath` argument is the absolute path of the file being enriched and, when non-empty, is added to the FSContext's **read-only** allowed-paths list (`SetReadOnlyAllowedPaths`) so the enricher can read exactly that file without declaring `fileAccess`. Writes to the target path are NOT granted: the read-only list is consulted only by `isReadAllowed`, not `isWriteAllowed`. A plugin that legitimately needs to modify files must declare `fileAccess: readwrite` in its manifest. Scope is file-only; sibling files in the same directory are not included. Pass `""` when there is no target file.
 
-**Search results are `ParsedMetadata` directly** — `parseSearchResponse` in `hooks.go` populates `mediafile.ParsedMetadata` structs directly (no intermediate type). `releaseDate` strings are parsed inline in both `"2006-01-02"` and RFC3339 formats. `PluginScope` and `PluginID` are set on each result for server-side tracking. The HTTP handler wraps results in `EnrichSearchResult` (adds `DisabledFields`) for the frontend response only.
+**Search results are `ParsedMetadata` directly.** `parseSearchResponse` in `hooks.go` populates `mediafile.ParsedMetadata` structs directly (no intermediate type). `releaseDate` strings are parsed inline in both `"2006-01-02"` and RFC3339 formats. `PluginScope` and `PluginID` are set on each result for server-side tracking. The HTTP handler wraps results in `EnrichSearchResult` (adds `DisabledFields`) for the frontend response only.
 
 **Field filtering:** Search results are filtered before merging:
 - Fields not declared in manifest → stripped + warning logged
@@ -472,7 +472,7 @@ shisho.sleep(0)      // no-op
 // Throws on negative, NaN, or Infinity
 ```
 
-Synchronous delay used for exponential backoff between retries against rate-limited APIs (Goja has no `setTimeout` / Promise support). The sleep selects on both a timer and the current hook's `context.Context` (stashed on `Runtime.hookCtx` by `invokeHook`), so when the hook deadline fires the call unblocks immediately and the plugin throws — it does not hold `Runtime.mu` past the hook's timeout. `vm.Interrupt()` alone cannot cancel a native wait, which is why the ctx must also be threaded in.
+Synchronous delay used for exponential backoff between retries against rate-limited APIs (Goja has no `setTimeout` / Promise support). The sleep selects on both a timer and the current hook's `context.Context` (stashed on `Runtime.hookCtx` by `invokeHook`), so when the hook deadline fires the call unblocks immediately and the plugin throws. It does not hold `Runtime.mu` past the hook's timeout. `vm.Interrupt()` alone cannot cancel a native wait, which is why the ctx must also be threaded in.
 
 ### shisho.log
 
@@ -498,13 +498,13 @@ Mirrors the native `fetch()` Response API (synchronous since Goja has no Promise
 var resp = shisho.http.fetch(url, { method: "GET", headers: {}, body: "" });
 // Domain must be in manifest's httpAccess.domains
 
-resp.ok          // boolean — true if status is 2xx
-resp.status      // number — HTTP status code
-resp.statusText  // string — HTTP status text
-resp.headers     // Record<string, string> — response headers (lowercase keys)
-resp.text()      // string — response body as text
-resp.json()      // any — response body parsed as JSON (throws on invalid JSON)
-resp.arrayBuffer() // ArrayBuffer — response body as raw bytes
+resp.ok          // boolean: true if status is 2xx
+resp.status      // number: HTTP status code
+resp.statusText  // string: HTTP status text
+resp.headers     // Record<string, string>: response headers (lowercase keys)
+resp.text()      // string: response body as text
+resp.json()      // any: response body parsed as JSON (throws on invalid JSON)
+resp.arrayBuffer() // ArrayBuffer: response body as raw bytes
 ```
 
 **Domain patterns in `httpAccess.domains`:**
@@ -566,9 +566,9 @@ var node = shisho.xml.querySelector(root, "metadata > title")   // → XMLElemen
 var nodes = shisho.xml.querySelectorAll(root, "item")           // → XMLElement[]
 
 // XMLElement properties:
-node.tag          // string — element tag name
-node.namespace    // string — namespace URI
-node.text         // string — direct text content
+node.tag          // string: element tag name
+node.namespace    // string: namespace URI
+node.text         // string: direct text content
 node.attributes   // Record<string, string>
 node.children     // XMLElement[]
 ```
@@ -586,9 +586,9 @@ var section = shisho.html.querySelector(doc, "section")
 var links = shisho.html.querySelectorAll(section, "a")
 
 // HtmlElement properties:
-elem.tag          // string — element tag name
-elem.text         // string — recursive text content (all descendant text nodes)
-elem.innerHTML    // string — raw inner HTML of the element
+elem.tag          // string: element tag name
+elem.text         // string: recursive text content (all descendant text nodes)
+elem.innerHTML    // string: raw inner HTML of the element
 elem.attributes   // Record<string, string>
 elem.children     // HtmlElement[]
 ```
@@ -596,7 +596,7 @@ elem.children     // HtmlElement[]
 ### shisho.yaml
 
 ```javascript
-// No capability required — pure in-memory parser, no I/O.
+// No capability required: pure in-memory parser, no I/O.
 var doc = shisho.yaml.parse("title: My Book\npages: 100");
 doc.title  // "My Book"
 doc.pages  // 100
@@ -605,7 +605,7 @@ var out = shisho.yaml.stringify({ title: "My Book", pages: 100 });
 // "title: My Book\npages: 100\n"
 ```
 
-Backed by `gopkg.in/yaml.v3`, which does not instantiate arbitrary objects from custom tags (unlike PyYAML's full loader / Ruby's Psych), so parsing untrusted YAML cannot execute code. DoS risk from oversized or deeply-nested inputs is bounded by the plugin hook timeout — same class of risk as `shisho.xml`, `shisho.html`, and `resp.json()`.
+Backed by `gopkg.in/yaml.v3`, which does not instantiate arbitrary objects from custom tags (unlike PyYAML's full loader / Ruby's Psych), so parsing untrusted YAML cannot execute code. DoS risk from oversized or deeply-nested inputs is bounded by the plugin hook timeout, the same class of risk as `shisho.xml`, `shisho.html`, and `resp.json()`.
 
 ### shisho.ffmpeg
 
@@ -614,7 +614,7 @@ Backed by `gopkg.in/yaml.v3`, which does not instantiate arbitrary objects from 
 
 // Transcode files with FFmpeg
 var result = shisho.ffmpeg.transcode(["-i", input, "-c:a", "aac", output]);
-result.exitCode   // number — 0 = success
+result.exitCode   // number: 0 = success
 result.stdout     // string
 result.stderr     // string
 
@@ -623,13 +623,13 @@ var probe = shisho.ffmpeg.probe([filePath]);
 probe.format      // { filename, duration, bit_rate, tags, ... }
 probe.streams     // [{ codec_name, codec_type, sample_rate, channels, ... }]
 probe.chapters    // [{ id, start_time, end_time, tags, ... }]
-probe.stderr      // string — for debugging
-probe.parseError  // string — empty if JSON parsed successfully
+probe.stderr      // string: for debugging
+probe.parseError  // string: empty if JSON parsed successfully
 
 // Get FFmpeg version and configuration
 var ver = shisho.ffmpeg.version();
-ver.version       // string — e.g., "7.0"
-ver.configuration // string[] — e.g., ["--enable-libx264", "--enable-gpl"]
+ver.version       // string: e.g., "7.0"
+ver.configuration // string[]: e.g., ["--enable-libx264", "--enable-gpl"]
 ver.libraries     // { libavcodec: "60.31.102", ... }
 ```
 
@@ -641,7 +641,7 @@ var result = shisho.shell.exec("calibre-debug", ["-c", "print('hello')"]);
 // Command must be declared in manifest shellAccess.commands
 // Uses exec directly (no shell) to prevent injection
 
-result.exitCode   // number — 0 = success
+result.exitCode   // number: 0 = success
 result.stdout     // string
 result.stderr     // string
 ```
@@ -653,12 +653,12 @@ Each hook invocation creates an `FSContext` controlling access:
 | Path | Read | Write |
 |------|------|-------|
 | Plugin's own directory | Always | Always |
-| Hook-provided paths — RW (converter sourcePath/targetDir, parser filePath, generator destPath) | Always | Always |
-| Hook-provided paths — RO (enricher target `filePath`) | Always | **Never** |
+| Hook-provided paths, read-write (converter sourcePath/targetDir, parser filePath, generator destPath) | Always | Always |
+| Hook-provided paths, read-only (enricher target `filePath`) | Always | **Never** |
 | Temp directory (lazy-created) | Always | Always |
 | Anywhere else | Only if `fileAccess.level` is `"read"` or `"readwrite"` | Only if `"readwrite"` |
 
-**Enrichers** get the enrichment target file only in the read-only allowed-paths list (file-only scope, not the parent directory; reads allowed, writes denied). A plugin that needs to read sibling files — e.g., an `.opf` sidecar next to the book — must declare `fileAccess: read` in its manifest. A plugin that needs to modify the target file must declare `fileAccess: readwrite`.
+**Enrichers** get the enrichment target file only in the read-only allowed-paths list (file-only scope, not the parent directory; reads allowed, writes denied). A plugin that needs to read sibling files (e.g., an `.opf` sidecar next to the book) must declare `fileAccess: read` in its manifest. A plugin that needs to modify the target file must declare `fileAccess: readwrite`.
 
 **Known limitation (pre-existing, all hook types):** `isPathWithin` does not resolve symlinks, so a path containing a symlinked component is compared against the configured allowed paths literally. Tightening this would require `filepath.EvalSymlinks`, which fails for not-yet-existing write targets; handling both read and write paths cleanly needs care and is tracked separately.
 
@@ -671,12 +671,12 @@ Lower number = higher priority. Higher priority overwrites lower.
 | Priority | Source | Examples |
 |----------|--------|----------|
 | 0 | Manual | User edits |
-| 1 | Sidecar | OPF sidecar files |
+| 1 | Sidecar | `.metadata.json` sidecar files (`pkg/sidecar`) |
 | 2 | Plugin | `plugin:shisho/goodreads` |
-| 3 | File Metadata | `epub_metadata`, `cbz_metadata`, `m4b_metadata`, `pdf_metadata` |
+| 3 | File Metadata | `epub_metadata`, `cbz_metadata`, `m4b_metadata`, `pdf_metadata`, `existing_cover`, `file_metadata` |
 | 4 | Filepath | Parsed from file path |
 
-Plugin data sources use format `plugin:scope/id` (e.g., `plugin:shisho/goodreads-metadata`). The `models.PluginDataSource(scope, id)` helper creates these. Priority lookup uses prefix matching for `plugin:*` strings.
+The priorities are defined in `pkg/models/data-source.go`; see "Data Source Priority System" in `pkg/AGENTS.md`. Plugin data sources use format `plugin:scope/id` (e.g., `plugin:shisho/goodreads-metadata`). The `models.PluginDataSource(scope, id)` helper creates these. Priority lookup uses prefix matching for `plugin:*` strings.
 
 ## Manager Lifecycle
 
@@ -697,7 +697,7 @@ Plugin data sources use format `plugin:scope/id` (e.g., `plugin:shisho/goodreads
 
 - `Manager.mu` (RWMutex): protects `plugins` map
 - `Runtime.mu` (RWMutex): **Exclusive lock** for hook invocation, write lock for reload
-- Goja VMs are single-threaded — concurrent JS execution on the same VM corrupts internal state. All hook runners acquire an exclusive lock (`rt.mu.Lock()`) to ensure only one goroutine executes JS on a given runtime at a time. Different plugins (different runtimes) can run concurrently.
+- Goja VMs are single-threaded: concurrent JS execution on the same VM corrupts internal state. All hook runners acquire an exclusive lock (`rt.mu.Lock()`) to ensure only one goroutine executes JS on a given runtime at a time. Different plugins (different runtimes) can run concurrently.
 - Hot-reload: acquire write lock on old runtime → swap in new → release
 - **CRITICAL:** Never use `RLock` for hook invocations. The parallel scan worker pool will call hooks from multiple goroutines simultaneously, and goja cannot handle concurrent access.
 
@@ -708,8 +708,8 @@ In `pkg/worker/scan_unified.go`:
 1. **File discovery** - `RegisteredFileExtensions()` and `RegisteredConverterExtensions()` determine which files to scan
 2. **Input conversion** - For converter source types, `RunInputConverter()` converts to supported format
 3. **File parsing** - `GetParserForType(ext)` finds plugin parser; validates MIME if declared; `RunFileParser()` extracts metadata
-4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites filepath, preserves manual/sidecar)
-5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher", libraryID)` runs enrichers in order (only mode "enabled"; "manual_only" and "disabled" are skipped). Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), file identifiers (as `identifiers`), and a `file` object with read-only hints (`fileType`, `duration`, `pageCount`, `filesizeBytes`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). If the first result has a `Confidence` field set, it is checked against the effective threshold (`getEnrichmentConfidenceThreshold` returns the per-plugin override if set, otherwise the global `EnrichmentConfidenceThreshold` from config, defaulting to 0.85). Results below threshold are skipped with a warning. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
+4. **Metadata application** - Plugin metadata applied with priority 2 (overwrites file metadata and filepath, preserves manual and sidecar)
+5. **Enrichment** - After file parsing, `GetOrderedRuntimes(ctx, "metadataEnricher", libraryID)` runs enrichers in order (only mode "enabled"; "manual_only" and "disabled" are skipped). Each enricher's `search()` hook receives a flat context built from the book title (as `query`), first author name (as `author`), file identifiers (as `identifiers`), and a `file` object with read-only hints (`fileType`, `duration`, `pageCount`, `filesizeBytes`). The hook returns `SearchResponse` containing `[]ParsedMetadata` directly; the first result is used as-is (no conversion needed). If the first result has a `Confidence` field set, it is checked against the effective threshold (`getConfidenceThresholdFromCache` returns the per-plugin override loaded into the scan's threshold cache if set, otherwise the global `EnrichmentConfidenceThreshold` from config, defaulting to 0.85). Results below threshold are skipped with a warning. Uses a two-phase merge: enricher results merge into an empty `ParsedMetadata` (first non-empty wins among enrichers), then file-parsed metadata fills remaining gaps as fallback. This gives enrichers priority over file-embedded metadata per-field.
 
 ## Installation Flow
 
@@ -760,9 +760,9 @@ Repositories provide a `repository.json` manifest:
 | `library_plugin_field_settings` | `(library_id, scope, plugin_id, field)` | Per-library field overrides |
 
 **Plugin mode (three-state):**
-- `enabled` — Plugin runs during automated scans and is available for manual identification
-- `manual_only` — Plugin is skipped during automated scans but remains available for manual identification (metadata enrichers only)
-- `disabled` — Plugin is completely unavailable for this context
+- `enabled`: Plugin runs during automated scans and is available for manual identification
+- `manual_only`: Plugin is skipped during automated scans but remains available for manual identification (metadata enrichers only)
+- `disabled`: Plugin is completely unavailable for this context
 - Mode is stored in both `plugin_hook_configs` (global) and `library_plugin_hook_configs` (per-library)
 - `GetOrderedRuntimes` returns only `enabled` plugins; `GetManualRuntimes` returns `enabled` + `manual_only`
 
@@ -773,48 +773,53 @@ Repositories provide a `repository.json` manifest:
 
 ## API Endpoints
 
-Everything under `/plugins` requires `config:write` except the identify routes (`POST /plugins/search`, `POST /plugins/apply`: `books:write`, via `RegisterIdentifyRoutes`) and the read-only lookups (`GET /plugins/identifier-types`, `GET /plugins/order/:hookType`: `books:read`, via `RegisterLookupRoutes`). Book and file pages call the identifier types lookup for every role and the identify dialog calls the order lookup, so never move them back into the management `RegisterRoutes`.
+The server mounts the plugin routes as four `/plugins` groups by permission plus the per-library routes on the `/libraries` group, and none of them in Demo Mode (`pkg/server/server.go`). Each group's permission is stated in `pkg/AGENTS.md`: the `books`, `config`, and `libraries` rows of the Permission Resources table and Best Practice 7. This list only maps each route to its registrar in `routes.go`.
 
-**Lookups (`books:read`):**
+**Identify (`RegisterIdentifyRoutes`):**
+- `POST /plugins/search` - Search enrichers for a book
+- `POST /plugins/apply` - Apply a chosen result
+
+**Lookups (`RegisterLookupRoutes`):**
 - `GET /plugins/identifier-types` - Identifier types registered by installed plugins (not filtered by enabled status; rows go away on uninstall)
 - `GET /plugins/order/:hookType` - Get the global order for a hook type
 
-**Installation:**
+**Management reads (`RegisterReadRoutes`):**
 - `GET /plugins/installed` - List installed
-- `POST /plugins/installed` - Install
-- `DELETE /plugins/installed/:scope/:id` - Uninstall
-- `PATCH /plugins/installed/:scope/:id` - Enable/disable
-- `POST /plugins/installed/:scope/:id/update` - Update version (hot-reload)
-- `GET /plugins/installed/:scope/:id/config` - Get config schema + values + declaredFields + fieldSettings
-- `POST /plugins/scan` - Scan local/ directory
-
-**Field Settings:**
+- `GET /plugins/installed/:scope/:id/config` - Get config schema + values (secrets masked) + declaredFields + fieldSettings
 - `GET /plugins/installed/:scope/:id/fields` - Get global field settings
-- `PUT /plugins/installed/:scope/:id/fields` - Set global field settings
-- `GET /libraries/:libraryId/plugins/:scope/:id/fields` - Get per-library field settings
-- `PUT /libraries/:libraryId/plugins/:scope/:id/fields` - Set per-library field settings
-- `DELETE /libraries/:libraryId/plugins/:scope/:id/fields` - Reset to global defaults
-
-**Repositories:**
-- `GET /plugins/repositories` - List
-- `POST /plugins/repositories` - Add
-- `DELETE /plugins/repositories/:scope` - Remove (non-official)
-- `POST /plugins/repositories/:scope/sync` - Sync manifest
-
-**Available:**
+- `GET /plugins/installed/:scope/:id/manifest` - Get the installed manifest
+- `GET /plugins/installed/:scope/:id/image` - Get the plugin's image
+- `GET /plugins/repositories` - List repositories
 - `GET /plugins/available` - From enabled repos
 - `GET /plugins/available/:scope/:id` - Details
 
-**Ordering:**
+**Management mutations (`RegisterRoutes`):**
+- `POST /plugins/installed` - Install
+- `POST /plugins/scan` - Scan local/ directory
+- `DELETE /plugins/installed/:scope/:id` - Uninstall
+- `PATCH /plugins/installed/:scope/:id` - Enable/disable, auto-update, config values, confidence threshold
+- `PUT /plugins/installed/:scope/:id/fields` - Set global field settings
+- `POST /plugins/installed/:scope/:id/reload` - Hot-reload an active plugin
+- `POST /plugins/installed/:scope/:id/update` - Update version (hot-reload)
 - `PUT /plugins/order/:hookType` - Set order (read it through the lookup above)
+- `POST /plugins/repositories` - Add repository
+- `DELETE /plugins/repositories/:scope` - Remove (non-official)
+- `POST /plugins/repositories/:scope/sync` - Sync manifest
+
+**Per-library (`RegisterLibraryRoutes`, on the `/libraries` group):**
+- `GET /libraries/:id/plugins/order/:hookType` - Get the library's order
+- `PUT /libraries/:id/plugins/order/:hookType` - Set the library's order
+- `DELETE /libraries/:id/plugins/order/:hookType` - Reset one hook type to global
+- `DELETE /libraries/:id/plugins/order` - Reset every hook type to global
+- `GET /libraries/:id/plugins/:scope/:pluginId/fields` - Get per-library field settings
+- `PUT /libraries/:id/plugins/:scope/:pluginId/fields` - Set per-library field settings
+- `DELETE /libraries/:id/plugins/:scope/:pluginId/fields` - Reset to global defaults
 
 ## Frontend Hooks (app/hooks/queries/plugins.ts)
 
-**Queries:** `usePluginsInstalled()`, `usePluginsAvailable()`, `usePluginOrder(hookType)`, `usePluginIdentifierTypes()`, `usePluginConfig(scope, id)`, `usePluginRepositories()`
+Every query and mutation hook for the routes above is exported from `app/hooks/queries/plugins.ts`; read that file for the current list rather than keeping a copy here. Its query hooks are gated by `usePluginRouteEnabled` (see "Query hooks gate their own permissions" in `app/AGENTS.md`).
 
-**Mutations:** `useInstallPlugin()`, `useUninstallPlugin()`, `useUpdatePlugin()`, `useUpdatePluginVersion()`, `useSetPluginOrder()`, `useSavePluginConfig()`, `useSavePluginFieldSettings()`, `useScanPlugins()`, `useSyncRepository()`, `useAddRepository()`, `useRemoveRepository()`
-
-**Note:** `usePluginConfig` returns `declaredFields` and `fieldSettings` for enrichers, displayed in `PluginConfigDialog`.
+**Note:** `usePluginConfig` returns `declaredFields` and `fieldSettings` for enrichers, displayed in `PluginConfigForm` (`app/components/plugins/PluginConfigForm.tsx`, rendered by `PluginDetail`).
 
 **Types:** all wire types consumed by these hooks (`AvailablePlugin`,
 `PluginVersion`, `PluginCapabilities`, `ConfigField`, `ConfigSchema`,
@@ -835,6 +840,8 @@ meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 - `simple-enricher/`, `multi-hook/` - Multi-capability examples
 - `undeclared-hook/`, `missing-mainjs/`, `invalid-js/` - Error case fixtures
 
+**`t.Parallel()` in this package:** tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, while tests that share a plugin manager or runtime instance should not.
+
 **Key test patterns:**
 - Use `installTestPlugin()` to create minimal plugins inline
 - Verify metadata fields individually after `RunFileParser()`
@@ -850,8 +857,8 @@ meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 2. Add call in `hostapi.go`'s `InjectHostAPIs()`
 3. Add manifest capability type if needed (in `manifest.go`)
 4. Add tests in `hostapi_newapi_test.go`
-5. **Update `packages/plugin-sdk/host-api.d.ts`** — add the new interface and include it in `ShishoHostAPI`
-6. **Update `packages/plugin-sdk/testing/index.ts`** — `createMockShisho` returns a `ShishoHostAPI`, so any new required field must be provided (either as a working mock impl or a `notImplemented()` stub). Missing this breaks `tsc --noEmit` for every plugin author who upgrades the SDK.
+5. **Update `packages/plugin-sdk/host-api.d.ts`**: add the new interface and include it in `ShishoHostAPI`
+6. **Update `packages/plugin-sdk/testing/index.ts`**: `createMockShisho` returns a `ShishoHostAPI`, so any new required field must be provided (either as a working mock impl or a `notImplemented()` stub). Missing this breaks `tsc --noEmit` for every plugin author who upgrades the SDK.
 7. **Update `website/docs/plugins/host-api-reference.md`** with the public contract, example, capability requirement, and relevant gotchas
 8. If a new manifest capability was added, update `packages/plugin-sdk/manifest.d.ts`
 
@@ -864,7 +871,7 @@ meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 5. Create `RunNewHook()` method on Manager
 6. Add result parsing function
 7. Integrate in scan pipeline or relevant service
-8. **Update `packages/plugin-sdk/hooks.d.ts`** — add context/result interfaces and include the hook in `ShishoPlugin`
+8. **Update `packages/plugin-sdk/hooks.d.ts`**: add context/result interfaces and include the hook in `ShishoPlugin`
 9. **Update `packages/plugin-sdk/manifest.d.ts`** if a new capability type was added
 
 ### Modifying ParsedMetadata or related structs

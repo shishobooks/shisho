@@ -20,8 +20,8 @@ Concurrent calls to `renderPage` are serialized by the pdfium pool's `MaxTotal: 
 
 DPI and JPEG quality are configurable via server config:
 
-- `config.PDFRenderDPI` — controls render resolution (higher = sharper, slower)
-- `config.PDFRenderQuality` — controls JPEG compression quality (1–100)
+- `config.PDFRenderDPI`: controls render resolution (higher = sharper, slower)
+- `config.PDFRenderQuality`: controls JPEG compression quality (1–100)
 
 ## Key Functions
 
@@ -56,6 +56,6 @@ This package mirrors the same pattern as `pkg/cbzpages`: a `Cache` struct with `
 
 ## Related Files
 
-- `pkg/pdfpages/cache.go` — Cache implementation
-- `pkg/pdf/cover.go` — pdfium pool initialization (`MaxTotal: 1`)
-- `pkg/cbzpages/cache.go` — CBZ page cache (same pattern)
+- `pkg/pdfpages/cache.go`: Cache implementation
+- `pkg/pdf/cover.go`: pdfium pool initialization (`MaxTotal: 1`)
+- `pkg/cbzpages/cache.go`: CBZ page cache (same pattern)

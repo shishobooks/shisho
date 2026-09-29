@@ -194,16 +194,16 @@ Before copying, the writer calculates the rebuilt `moov` size and the final chap
 
 Regression coverage is in `writer_streaming_test.go`. It runs `M4BGenerator.Generate` with a valid M4B whose final `mdat` is expanded sparsely to 64 MiB, then asserts that total allocation remains below 8 MiB. Restoring whole-file buffering therefore makes the test fail without adding a large fixture to the repository. It also verifies cancellation after copy progress preserves an existing destination and removes partial output. Request-level coverage for both GET and HEAD is in `handlers_download_m4b_test.go`.
 
-**Chunk-offset patching on moov resize (faststart layout) — CRITICAL.**
+**Chunk-offset patching on moov resize (faststart layout): CRITICAL.**
 Rewriting metadata rebuilds the `moov` box, which almost always changes its size
 (adding cover art grows it by hundreds of KB). When the source file is laid out
-**faststart** (`moov` before `mdat` — the layout Audible and Apple Books export,
+**faststart** (`moov` before `mdat`, the layout Audible and Apple Books export,
 and what ffmpeg produces with `-movflags +faststart`), growing `moov` shifts
 `mdat` (and every box after `moov`) down by the size delta. The `stco`/`co64`
 chunk-offset tables inside `moov`'s sample tables hold **absolute file offsets**
 into `mdat`, so `rewriteToFile` (`writer.go`) shifts every `stco`/`co64`
 entry by that same delta. Without this, the offsets keep pointing at the old
-positions — now inside the resized `moov` — and the AAC decoder reads metadata as
+positions (now inside the resized `moov`) and the AAC decoder reads metadata as
 audio (`channel element ... is not allocated`), so Apple Books / Bound refuse to
 play while lenient players may limp along.
 
@@ -391,14 +391,7 @@ case DataTypeUTF8, DataTypeGenre:  // Both types contain UTF-8
 **Fallback to Filename:**
 If no authors in metadata, extracts from filename using `[author names]` pattern.
 
-**Metadata Priority:**
-```
-Priority 0: Manual
-Priority 1: Sidecar
-Priority 2: Existing Cover
-Priority 3: M4B Metadata
-Priority 4: Filepath
-```
+**Metadata Priority:** M4B metadata and an existing cover (`existing_cover`) are both file-derived sources at priority 3, below Manual (0), Sidecar (1), and Plugin (2), and above Filepath (4). See "Data Source Priority System" in `pkg/AGENTS.md` (defined in `pkg/models/data-source.go`).
 
 ## Sidecar Handling
 
@@ -594,4 +587,4 @@ const handleAudioPlay = (timestampMs: number) => {
 
 ## External chapter source
 
-For user-initiated chapter enrichment on M4B files, see `pkg/audnexus/` — a single-endpoint integration that fetches chapter titles and timestamps from Audible via the Audnexus public API. The M4B chapter edit UI exposes a "Fetch from Audible" button that stages the fetched data into the edit form without persisting until the user clicks Save.
+For user-initiated chapter enrichment on M4B files, see `pkg/audnexus/`, a single-endpoint integration that fetches chapter titles and timestamps from Audible via the Audnexus public API. The M4B chapter edit UI exposes a "Fetch from Audible" button that stages the fetched data into the edit form without persisting until the user clicks Save.

@@ -8,14 +8,6 @@ type ListUsersResponse struct {
 	Total int            `json:"total"`
 }
 
-// UserDirectoryEntry is one active user in GET /users/directory, which any
-// signed-in user may read to pick whom to share a list with. It carries only
-// the id and username: never an email address, role, or library access.
-type UserDirectoryEntry struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-}
-
 // CreateUserPayload represents the request body for creating a user.
 type CreateUserPayload struct {
 	Username             string  `json:"username" validate:"required,min=3,max=50"`

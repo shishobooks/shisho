@@ -14,7 +14,7 @@ Subdirectory AGENTS.md files are loaded automatically when working on files in t
 
 **When `mise tygo` prints "skipping, outputs are up-to-date", this is NORMAL.** It means the generated types are already up-to-date (mise checks source/output timestamps). Do not treat this as an error. The user often has `mise start` running in another session which runs tygo automatically via air, but you should still run `mise tygo` yourself (especially in worktrees where `mise start` may not be running).
 
-**Keep AGENTS.md files up to date.** Subdirectory `AGENTS.md` files document patterns, conventions, and gotchas for each area of the codebase. When you make changes that affect what's documented — adding new patterns, changing APIs, renaming fields, adding new conventions — update the relevant `AGENTS.md` to reflect the new state. Outdated documentation is worse than no documentation.
+**Keep AGENTS.md files up to date.** Subdirectory `AGENTS.md` files document patterns, conventions, and gotchas for each area of the codebase. When you make changes that affect what's documented, such as adding new patterns, changing APIs, renaming fields, or adding new conventions, update the relevant `AGENTS.md` to reflect the new state. Outdated documentation is worse than no documentation.
 
 - **Domain-specific** (patterns, gotchas, conventions for a specific area) → Update or add to the relevant `AGENTS.md` in the subdirectory (e.g., `pkg/epub/AGENTS.md`)
 - **Project-wide** (general conventions, critical gotchas, workflow rules) → Update or add to this file (AGENTS.md)
@@ -38,6 +38,7 @@ Project-specific conventions are documented in `AGENTS.md` files within each sub
 | `pkg/pdf/AGENTS.md` | PDF format: info dict metadata, pdfcpu thread safety |
 | `pkg/pdfpages/AGENTS.md` | PDF page cache: render/cache PDF pages as JPEG, thread safety, config |
 | `pkg/events/AGENTS.md` | SSE: event broker, streaming handler, event types |
+| `pkg/audnexus/AGENTS.md` | Audnexus chapter lookup: cached HTTP client, typed error codes, the M4B chapter route |
 | `website/AGENTS.md` | Docs site: Docusaurus, versioning, deployment |
 | `e2e/AGENTS.md` | E2E testing: Playwright, per-browser isolation, fixtures |
 | `tools/gotestsplit/AGENTS.md` | Timing-aware Go test sharding: cache strategy, picking shard count, recalibration playbook |
@@ -54,46 +55,19 @@ These workflow-based skills (in `.claude/skills/`) are invoked on demand:
 
 ## Critical Gotchas
 
-These are common mistakes that cause bugs. They're documented in detail in the skills but are easy to miss.
+These are common mistakes that cause bugs. Most are summarized here in a line and documented in detail in `pkg/AGENTS.md`, `app/AGENTS.md`, or `pkg/plugins/AGENTS.md`; the self password reset rule lives only here.
 
 ### Backend
 
-**Request binding must use structs** — The custom binder (`pkg/binder/`) uses mold and validator, which only work with structs. Never bind directly to a slice/array:
-```go
-// ❌ WRONG - causes nil pointer crash
-var entries []orderEntry
-c.Bind(&entries)
+**Request binding must use structs.** The custom binder uses mold and validator, which only work with structs, so never bind directly to a slice or array. See "Request binding must use structs" under API Conventions in `pkg/AGENTS.md`.
 
-// ✅ CORRECT - wrap in struct
-type payload struct { Order []orderEntry `json:"order"` }
-var p payload
-c.Bind(&p)
-```
+**`CoverImageFilename` stores the filename only**, never a full path; use `filepath.Base()` when updating it. See "Cover Image System" in `pkg/AGENTS.md`.
 
-**CoverImageFilename stores filename only** — `file.CoverImageFilename` stores just the filename (e.g., `book.cbz.cover.jpg`), NOT the full path. The full path is constructed at runtime. Always use `filepath.Base()` when updating:
-```go
-// ❌ WRONG - stores full path, breaks cover serving
-file.CoverImageFilename = &fullPath
+**JSON field naming is `snake_case`**, except the plugin manifest and repository-index passthrough fields. See "API Conventions" in `pkg/AGENTS.md`.
 
-// ✅ CORRECT - stores filename only
-filename := filepath.Base(fullPath)
-file.CoverImageFilename = &filename
-```
+**API types are generated from Go via tygo: no anonymous responses and no hand-written TS.** Go is the single source of truth for every request and response shape. The rules (named structs in `types.go`, embedding with `tstype:",extends"`, `{Entity}Response`/`List{Entities}Response`/`{Entity}ListItem` naming, the bare-model and two-tier collection rules) live under API Conventions in `pkg/AGENTS.md`; frontend consumption is under API Integration in `app/AGENTS.md`. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`) for the rationale and its amendments.
 
-**JSON field naming is snake_case** — All JSON request/response payloads use `snake_case` (e.g., `created_at`, not `createdAt`). Go struct tags: `json:"snake_case_name"`. Exception: plugin manifest and repository-index passthrough fields keep their camelCase wire format (see the Plugin API surface amendment in ADR 0004).
-
-**API types are generated from Go via tygo (no anonymous responses, no hand-written TS).** Go is the single source of truth for every request and response shape. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`) for the rationale. The rules:
-- Every request and response payload is a named, exported Go struct in the package's `types.go`. No handler returns an anonymous struct, `echo.Map`, or `map[string]any`. A response that conveys nothing the client cannot already derive returns `204 No Content` instead of a body.
-- Response structs reuse the model by embedding it with `tstype:",extends"` rather than re-listing fields. Embed by VALUE (`models.Genre`), not pointer (`*models.Genre`); a pointer embed generates `extends Partial<Genre>`. This requires a `frontmatter` import of the model in the package's `tygo.yaml` entry, plus a `type_mappings` entry mapping the package-qualified selector to the bare name (e.g. `models.Genre: "Genre"`) so the generated `extends` matches the import.
-- When a response reshapes a model relation (e.g. returns `aliases` as `[]string` instead of the model's `GenreAlias[]`), exclude the model's relation field from generation with `tstype:"-"` so the response's field is the only one and `extends` does not collide. Only safe when no consumer reads that relation as objects.
-- Naming: single-resource is `{Entity}Response`; list endpoints return a `List{Entities}Response` envelope shaped `{ items, total }`; a list-item shape that genuinely differs from the single-resource shape is `{Entity}ListItem`.
-- **Bare-model rule**: a single-resource endpoint returns the bare generated model when the response adds nothing to it. An `{Entity}Response` wrapper is required only when the response reshapes or extends the model (computed fields, flattened relations). This is existing practice in books, files, users, and roles; bare-model returns there are not violations, and passthrough wrappers like `UserResponse`/`RoleResponse` are explicitly not wanted.
-- **Two-tier collection rule**: paginated list endpoints return the `{ items, total }` envelope; unpaginated full-collection endpoints return a bare array of a named type. Existing practice: book lists, list shares, list templates, library languages.
-- The frontend never hand-defines a type that has a Go counterpart. If a type is missing, add or fix the Go struct and run `mise tygo`, do not write it in TypeScript.
-
-The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the reference implementation. See `pkg/AGENTS.md` (backend mechanics) and `app/AGENTS.md` (frontend consumption).
-
-**Self password reset route must not require users permissions** — `/users/:id/reset-password` should only require authentication. The handler enforces that self-reset is allowed and resetting another user requires `users:write`. Adding `users:read`/`users:write` middleware to the route breaks self-service password changes for roles like Viewer, including forced password reset flows.
+**Self password reset route must not require users permissions.** `/users/:id/reset-password` should only require authentication. The handler enforces that self-reset is allowed and resetting another user requires `users:write`. Adding `users:read`/`users:write` middleware to the route breaks self-service password changes for roles like Viewer, including forced password reset flows.
 
 ### Frontend
 
@@ -108,7 +82,7 @@ The Genres slice (`pkg/genres/`, `GenreResponse`/`ListGenresResponse`) is the re
 
 ### Plugins
 
-**SDK must stay in sync with Go** — When modifying plugin-related Go types (`pkg/plugins/`, `pkg/mediafile/mediafile.go`), the TypeScript SDK in `packages/plugin-sdk/` MUST be updated to match. Breaking changes to the SDK should be avoided.
+**SDK must stay in sync with Go.** When modifying plugin-related Go types (`pkg/plugins/`, `pkg/mediafile/mediafile.go`), the TypeScript SDK in `packages/plugin-sdk/` MUST be updated to match. Breaking changes to the SDK should be avoided. See "Plugin SDK" in `pkg/plugins/AGENTS.md`.
 
 ## Development Commands
 
@@ -199,8 +173,8 @@ For detailed architecture information, see:
   - Migrations → also `mise db:rollback && mise db:migrate`
   - App E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
   - Documentation theme flows → `mise e2e:docs`
-- **Run the full `mise check:quiet` once when the feature/fix is done, before pushing or opening a PR.** Concurrent runs from different worktrees serialize automatically via `flock` (install with `brew install flock` on macOS; built in on Linux), so you don't need to coordinate with other agents — just kick it off and it'll wait its turn if another is in flight. Avoid plain `mise check` — its parallel verbose output is hard to follow and tempts you to re-run it.
-- **Keep docs up to date.** When making any user-facing change — new feature, changed behavior, new/changed config option, new API endpoint, modified UI — the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too** — if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
+- **Run the full `mise check:quiet` once when the feature/fix is done, before pushing or opening a PR.** Concurrent runs from different worktrees serialize automatically via `flock` (install with `brew install flock` on macOS; built in on Linux), so you don't need to coordinate with other agents. Just kick it off and it'll wait its turn if another is in flight. Avoid plain `mise check`: its parallel verbose output is hard to follow and tempts you to re-run it.
+- **Keep docs up to date.** When making any user-facing change (new feature, changed behavior, new/changed config option, new API endpoint, modified UI), the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too:** if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
   - New or changed config options → `website/docs/configuration.md`
   - Plugin system changes → `website/docs/plugins/`
   - Metadata, resource, or relationship changes → `website/docs/metadata.md`
@@ -209,13 +183,18 @@ For detailed architecture information, see:
   - Supplement discovery changes → `website/docs/supplement-files.md`
   - Format support changes → `website/docs/supported-formats.md`
   - New pages should cross-link to related pages (and vice versa)
-- **If a new field is added to `pkg/config/config.go`**, both `shisho.example.yaml` AND `website/docs/configuration.md` MUST be updated with the new field. These files must always be a complete reference of all server config options. Exception: `environment` is test-only and should not be included.
+- **If a new field is added to `config.Config` in `pkg/config/config.go`**, update all three of these in the same change:
+  - `shisho.example.yaml`: the field, its env var name, default value, and a description.
+  - `website/docs/configuration.md`: the same reference for users.
+  - `app/components/pages/AdminSettings.tsx`: the Server Settings page shows every non-secret config field.
+
+  The yaml file and the docs page must always be a complete reference of all server config options. Exception: `environment` is test-only, so it is left out of `shisho.example.yaml` and `configuration.md` (the Server Settings page still shows it).
 
 ## Tool Versions
 
-All tool versions are managed by mise via `.mise.toml`. When updating versions, update these locations:
+All tool versions are managed by mise via `mise.toml`. When updating versions, update these locations:
 
-- `.mise.toml` - Single source of truth for Go, Node, pnpm, air, tygo, golangci-lint
+- `mise.toml` - Single source of truth for Go, Node, pnpm, air, tygo, golangci-lint
 - `Dockerfile` - The `golang:X.X.X-alpine` and `node:X.X.X-alpine` images, and tygo version in `go install` (Docker doesn't use mise)
 - `package.json` - `@types/node` version (run `pnpm install` after)
 - `package.json` - `packageManager` field for pnpm (used by Docker via corepack)
@@ -224,7 +203,7 @@ All tool versions are managed by mise via `.mise.toml`. When updating versions, 
 
 - Go tests use standard testing package with testify assertions
 - Tests should use `TZ=America/Chicago CI=true` environment
-- **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests that use shared global state (e.g., shared database connections, global singletons) cannot be parallelized. In `pkg/plugins`, tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, while tests that share a plugin manager or runtime instance should not. In `pkg/config`, tests mutate global config state and should not be parallelized.
+- **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests that use shared global state (e.g., shared database connections, global singletons) cannot be parallelized. `pkg/plugins/AGENTS.md` records which plugin tests can run in parallel. In `pkg/config`, tests mutate global config state and should not be parallelized.
 - Frontend uses the same linting rules as backend for consistency
 - Database migrations tested via `mise db:rollback && mise db:migrate`
 - Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
@@ -233,7 +212,7 @@ All tool versions are managed by mise via `.mise.toml`. When updating versions, 
   2. **Green:** Write the minimal implementation to make the test pass. Run the test and confirm it **passes**.
   3. **Refactor:** Clean up the implementation if needed, re-running tests to ensure they still pass.
 
-  Skipping the Red step means you can't be sure the test is valid — it might pass regardless of the fix.
+  Skipping the Red step means you can't be sure the test is valid: it might pass regardless of the fix.
 
 ## Git Conventions
 
@@ -275,19 +254,19 @@ Each commit should be in the format of `[{Category}] {Change description}`
 
 ## Database Best Practices
 
-- **Migrations must only be marked applied after success** — Always construct Bun migrators through `pkg/migrations.NewMigrator`, not `migrate.NewMigrator` directly. The helper enables `migrate.WithMarkAppliedOnSuccess(true)`. Without it, Bun records a migration before running its body; a failed DDL/data migration can leave the DB half-mutated while future startups skip the migration as already applied.
+- **Migrations must only be marked applied after success.** Always construct Bun migrators through `pkg/migrations.NewMigrator`, not `migrate.NewMigrator` directly. The helper enables `migrate.WithMarkAppliedOnSuccess(true)`. Without it, Bun records a migration before running its body; a failed DDL/data migration can leave the DB half-mutated while future startups skip the migration as already applied.
 - **Column `DEFAULT`s never apply when Bun inserts a zero `time.Time` into a field without `nullzero`.** Bun writes the zero value (`0001-01-01 00:00:00`) instead of omitting the column, so `DEFAULT CURRENT_TIMESTAMP` in the migration does nothing. Every insert must set `CreatedAt`/`UpdatedAt` explicitly (the convention is `now := time.Now()` in the service's create method, see `CreateSeries` in `pkg/series/service.go`), or the field must be tagged `bun:",nullzero,notnull,default:current_timestamp"`. The same applies to updates: listing `updated_at` in `Column(...)` writes whatever the struct holds, so set `UpdatedAt = time.Now()` first or it writes back the stale value.
 - **Always consider indexes** when modifying database schema or query patterns
-- **SQLite table-rebuild migrations must recreate all indexes** — When recreating a table to drop/change columns, list every existing index for that table and recreate it on the replacement table. Dropping the old table drops its indexes too.
+- **SQLite table-rebuild migrations must recreate all indexes.** When recreating a table to drop/change columns, list every existing index for that table and recreate it on the replacement table. Dropping the old table drops its indexes too.
 - **Table rebuilds must turn foreign keys off first, outside the transaction.** With `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent runs an implicit DELETE that fires `ON DELETE CASCADE` into every child table and wipes their rows. The pragma is a no-op inside a transaction, so pin one connection, switch it off before BEGIN, and restore it afterwards. The helpers in `pkg/migrations/rebuild.go` do this (`20260928110000_rebuild_files_users_library_paths.go` shows the usage): `withForeignKeysOff` handles the pragma and transaction, and `rebuildTableInTx` copies rows by explicit column list, recreates every index and trigger read from `sqlite_master`, and restores the `sqlite_sequence` high-water mark so deleted AUTOINCREMENT ids are not reused. Reuse them for new rebuilds, finishing with `checkForeignKeys` on the rebuilt tables before commit. Do not copy `recreateTable` from `20260406100000`, which predates these rules.
 - For deletion queries, ensure indexes exist on the WHERE clause columns
 - For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`). The index's leading column must be the foreign key: a composite index that leads with another column (like `ux_user_library_settings (user_id, library_id)` for `library_id`) does not count. Without one, every lookup of children by parent and every `ON DELETE` action on the parent scans the child table. This includes each `*_aliases` parent column, which the search reindex reads once per Book.
 - **Case-insensitive name lookups use `name = ? COLLATE NOCASE`, never `LOWER(name) = LOWER(?)`.** Resource and alias tables carry a `(name COLLATE NOCASE, library_id)` unique index, and only a `COLLATE NOCASE` comparison can search it; wrapping the column in `LOWER()` scans the alias table or every row in the library. Both forms fold ASCII letters only, so matching is unchanged. Keep the `library_id = ?` condition where the lookup is library-scoped, so it uses both index columns. Lookups narrowed by parent id instead, like removing one resource's alias, correctly have none.
 - Composite indexes should match query patterns (column order matters)
 - **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
-- **Table names must be plural** — All database tables use plural names (e.g., `plugins`, `plugin_configs`, `plugin_hook_configs`). When creating new tables or referencing existing ones in raw SQL, always use the plural form.
-- **Foreign key enforcement is enabled** — `PRAGMA foreign_keys=ON` is set in production. Test DB helpers must also enable this pragma.
-- **All FK constraints must specify ON DELETE behavior** — Use `ON DELETE CASCADE` for child rows that have no meaning without the parent (e.g., `files.book_id`, `authors.book_id`). Use `ON DELETE SET NULL` for nullable references where the child should survive (e.g., `jobs.library_id`, `files.publisher_id`). Never leave a FK without an explicit ON DELETE action.
+- **Table names must be plural.** All database tables use plural names (e.g., `plugins`, `plugin_configs`, `plugin_hook_configs`). When creating new tables or referencing existing ones in raw SQL, always use the plural form.
+- **Foreign key enforcement is enabled.** `PRAGMA foreign_keys=ON` is set in production. Test DB helpers must also enable this pragma.
+- **All FK constraints must specify ON DELETE behavior.** Use `ON DELETE CASCADE` for child rows that have no meaning without the parent (e.g., `files.book_id`, `authors.book_id`). Use `ON DELETE SET NULL` for nullable references where the child should survive (e.g., `jobs.library_id`, `files.publisher_id`). Never leave a FK without an explicit ON DELETE action.
 - **CASCADE does not clean up FTS indexes**: When deleting books/series/persons/etc., their FTS entries (`books_fts`, `series_fts`, `persons_fts`) are NOT automatically removed by CASCADE, and the CASCADE also drops the links that say which other rows copied the deleted entity (a deleted Book's `book_series` rows). Collect the affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it. FTS rows are keyed by `rowid` equal to the entity id, so never insert FTS rows outside the search service without setting `rowid` (see "Search Index (FTS)" in `pkg/AGENTS.md`).
 
 ## Agent skills
