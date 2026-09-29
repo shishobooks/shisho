@@ -1,6 +1,7 @@
 package opds
 
 import (
+	"context"
 	"encoding/xml"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -36,8 +38,8 @@ type handler struct {
 	settingsService *settings.Service
 }
 
-// resolveSort resolves the stored user-library sort preference for the
-// current request, falling back to sortspec.BuiltinDefault when no
+// resolveSort resolves user's stored sort preference for libraryID,
+// falling back to sortspec.BuiltinDefault when no
 // preference exists. OPDS is read-only; there's no explicit ?sort=
 // input, so we pass explicit=nil to ResolveForLibrary.
 //
@@ -47,12 +49,8 @@ type handler struct {
 // tracing requests) and insulates OPDS from a future change to the
 // service's default. Returning the resolved slice directly also lets
 // callers log or cache it without re-resolving.
-func (h *handler) resolveSort(c echo.Context, libraryID int) []sortspec.SortLevel {
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return sortspec.BuiltinDefault()
-	}
-	resolved := sortspec.ResolveForLibrary(c.Request().Context(), h.settingsService, user.ID, libraryID, nil)
+func (h *handler) resolveSort(ctx context.Context, user *models.User, libraryID int) []sortspec.SortLevel {
+	resolved := sortspec.ResolveForLibrary(ctx, h.settingsService, user.ID, libraryID, nil)
 	if resolved == nil {
 		return sortspec.BuiltinDefault()
 	}
@@ -126,22 +124,15 @@ func validateFileTypes(types string) error {
 	return nil
 }
 
-// checkLibraryAccess checks if the user has access to the specified library.
-func checkLibraryAccess(c echo.Context, libraryID int) error {
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(libraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+// accessibleLibraryIDs returns the library IDs the Basic Auth user can
+// access, or nil for all of them. With no user in context it returns 401
+// rather than nil, which the feed queries would read as every library.
+func accessibleLibraryIDs(c echo.Context) ([]int, error) {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return nil, err
 	}
-	return nil
-}
-
-// getUserAccessibleLibraryIDs returns the library IDs the user can access, or nil for all.
-func getUserAccessibleLibraryIDs(c echo.Context) []int {
-	if user, ok := c.Get("user").(*models.User); ok {
-		return user.GetAccessibleLibraryIDs()
-	}
-	return nil
+	return user.GetAccessibleLibraryIDs(), nil
 }
 
 // catalog handles the root catalog feed (lists libraries).
@@ -154,7 +145,10 @@ func (h *handler) catalog(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	libraryIDs := getUserAccessibleLibraryIDs(c)
+	libraryIDs, err := accessibleLibraryIDs(c)
+	if err != nil {
+		return err
+	}
 	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, libraryIDs)
 	if err != nil {
 		return errors.WithStack(err)
@@ -177,7 +171,7 @@ func (h *handler) libraryCatalog(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -204,13 +198,17 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, fileTypes, libraryID, limit, offset, sort)
 	if err != nil {
@@ -234,7 +232,7 @@ func (h *handler) librarySeriesList(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -263,7 +261,7 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -274,7 +272,11 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset, sort)
 	if err != nil {
@@ -298,7 +300,7 @@ func (h *handler) libraryAuthorsList(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -327,7 +329,7 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -338,7 +340,11 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset, sort)
 	if err != nil {
@@ -362,7 +368,7 @@ func (h *handler) librarySearch(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -373,7 +379,11 @@ func (h *handler) librarySearch(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, fileTypes, libraryID, query, limit, offset, sort)
 	if err != nil {
@@ -396,7 +406,7 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -419,7 +429,10 @@ func (h *handler) catalogKepub(c echo.Context) error {
 	}
 
 	baseURL := getBaseURLKepub(c)
-	libraryIDs := getUserAccessibleLibraryIDs(c)
+	libraryIDs, err := accessibleLibraryIDs(c)
+	if err != nil {
+		return err
+	}
 	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, libraryIDs)
 	if err != nil {
 		return errors.WithStack(err)
@@ -442,7 +455,7 @@ func (h *handler) libraryCatalogKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -469,13 +482,17 @@ func (h *handler) libraryAllBooksKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibraryAllBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, limit, offset, sort)
 	if err != nil {
@@ -499,7 +516,7 @@ func (h *handler) librarySeriesListKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -528,7 +545,7 @@ func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -539,7 +556,11 @@ func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibrarySeriesBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset, sort)
 	if err != nil {
@@ -563,7 +584,7 @@ func (h *handler) libraryAuthorsListKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -592,7 +613,7 @@ func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -603,7 +624,11 @@ func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibraryAuthorBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset, sort)
 	if err != nil {
@@ -627,7 +652,7 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -638,7 +663,11 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURLKepub(c)
-	sort := h.resolveSort(c, libraryID)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
 	feed, err := h.opdsService.BuildLibrarySearchFeedKepub(ctx, baseURL, fileTypes, libraryID, query, limit, offset, sort)
 	if err != nil {
@@ -661,7 +690,7 @@ func (h *handler) libraryOpenSearchKepub(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	if err := checkLibraryAccess(c, libraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
@@ -692,7 +721,7 @@ func (h *handler) download(c echo.Context) error {
 	}
 
 	// Check library access
-	if err := checkLibraryAccess(c, file.LibraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
 		return err
 	}
 
@@ -766,7 +795,7 @@ func (h *handler) downloadKepub(c echo.Context) error {
 	}
 
 	// Check library access
-	if err := checkLibraryAccess(c, file.LibraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
 		return err
 	}
 
@@ -848,7 +877,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if err := checkLibraryAccess(c, book.LibraryID); err != nil {
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
 		return err
 	}
 

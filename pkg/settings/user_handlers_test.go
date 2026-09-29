@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestUpdateUserSettings_RejectsBadEpubFontSize(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err := h.updateUserSettings(c)
 	require.Error(t, err)
@@ -59,7 +60,7 @@ func TestUpdateUserSettings_AcceptsValidEpubPayload(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.updateUserSettings(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -88,7 +89,7 @@ func TestUpdateUserSettings_EmptyBodyIsNoop(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.updateUserSettings(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -120,7 +121,7 @@ func TestUpdateUserSettings_AcceptsSingleFieldPayload(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.updateUserSettings(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -148,7 +149,7 @@ func TestUpdateUserSettings_AcceptsValidGallerySize(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.updateUserSettings(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -171,7 +172,7 @@ func TestUpdateUserSettings_RejectsInvalidGallerySize(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err := h.updateUserSettings(c)
 	require.Error(t, err)
@@ -192,7 +193,7 @@ func TestUpdateUserSettings_AcceptsValidPlaybackSpeeds(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.Set("user", user)
+		auth.SetUser(c, user)
 
 		require.NoError(t, h.updateUserSettings(c), "speed %s should be accepted", speed)
 		assert.Equal(t, http.StatusOK, rec.Code)
@@ -221,7 +222,7 @@ func TestUpdateUserSettings_RejectsInvalidPlaybackSpeeds(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.Set("user", user)
+		auth.SetUser(c, user)
 
 		err := h.updateUserSettings(c)
 		require.Error(t, err, "speed %s should be rejected", speed)
@@ -240,7 +241,7 @@ func TestGetUserSettings_DefaultsToNormalPlaybackSpeed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/settings/user", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.getUserSettings(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -261,7 +262,7 @@ func TestGetUserSettings_DefaultsToMediumGallerySize(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/settings/user", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.getUserSettings(c))
 	assert.Equal(t, http.StatusOK, rec.Code)

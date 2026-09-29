@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -99,10 +100,8 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(publisher.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, publisher.LibraryID); err != nil {
+		return err
 	}
 
 	response, err := h.buildPublisherResponse(ctx, publisher)
@@ -129,11 +128,12 @@ func (h *handler) list(c echo.Context) error {
 		ExcludeIDs: params.ExcludeIDs,
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			opts.LibraryIDs = libraryIDs
-		}
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+		opts.LibraryIDs = libraryIDs
 	}
 
 	publishers, total, err := h.publisherService.ListPublishersWithTotal(ctx, opts)
@@ -202,10 +202,8 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(publisher.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, publisher.LibraryID); err != nil {
+		return err
 	}
 
 	// The rename commits before SyncAliases runs, so the reindex is deferred
@@ -330,10 +328,8 @@ func (h *handler) files(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(publisher.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, publisher.LibraryID); err != nil {
+		return err
 	}
 
 	files, total, err := h.publisherService.GetFilesPaginated(ctx, id, params.Limit, params.Offset)
@@ -372,7 +368,10 @@ func (h *handler) merge(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	user, _ := c.Get("user").(*models.User)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
 	if err := merge.CheckPreconditions(user, "publisher",
 		merge.Side{ID: publisher.ID, LibraryID: publisher.LibraryID},
 		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
@@ -411,10 +410,8 @@ func (h *handler) setChild(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(parent.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, parent.LibraryID); err != nil {
+		return err
 	}
 
 	// SetParent validates same-library, cycle detection, and sets the parent
@@ -442,10 +439,8 @@ func (h *handler) deletePublisher(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(publisher.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, publisher.LibraryID); err != nil {
+		return err
 	}
 
 	affectedBookIDs, err := h.publisherService.DeletePublisher(ctx, id)

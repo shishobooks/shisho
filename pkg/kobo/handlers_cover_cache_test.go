@@ -79,9 +79,10 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 
 	// Use a resized request (w=100 h=150)
 	imageID := fmt.Sprintf("shisho-%d", file.ID)
-	req := withKeyOwner(httptest.NewRequest(http.MethodGet, "/", nil))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	withKeyOwner(c)
 	c.SetParamNames("imageId", "w", "h")
 	c.SetParamValues(imageID, "100", "150")
 
@@ -152,9 +153,10 @@ func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	imageID := fmt.Sprintf("shisho-%d", file.ID)
 
 	// First GET.
-	req1 := withKeyOwner(httptest.NewRequest(http.MethodGet, "/", nil))
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	withKeyOwner(c1)
 	c1.SetParamNames("imageId", "w", "h")
 	c1.SetParamValues(imageID, "100", "150")
 	require.NoError(t, h.handleCover(c1))
@@ -162,10 +164,11 @@ func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	require.NotEmpty(t, lastModified)
 
 	// Second GET with If-Modified-Since.
-	req2 := withKeyOwner(httptest.NewRequest(http.MethodGet, "/", nil))
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req2.Header.Set("If-Modified-Since", lastModified)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	withKeyOwner(c2)
 	c2.SetParamNames("imageId", "w", "h")
 	c2.SetParamValues(imageID, "100", "150")
 	require.NoError(t, h.handleCover(c2))
@@ -234,9 +237,10 @@ func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 	imageID := fmt.Sprintf("shisho-%d", file.ID)
 
 	// First GET to get Last-Modified from the valid cover.
-	req1 := withKeyOwner(httptest.NewRequest(http.MethodGet, "/", nil))
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	withKeyOwner(c1)
 	c1.SetParamNames("imageId", "w", "h")
 	c1.SetParamValues(imageID, "100", "150")
 	require.NoError(t, h.handleCover(c1))
@@ -256,10 +260,11 @@ func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 	// Second GET with If-Modified-Since matching the original mtime.
 	// If the handler tried to decode/resize the garbage bytes it would return
 	// an error. Getting 304 proves the decode path was skipped.
-	req2 := withKeyOwner(httptest.NewRequest(http.MethodGet, "/", nil))
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req2.Header.Set("If-Modified-Since", lastModified)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	withKeyOwner(c2)
 	c2.SetParamNames("imageId", "w", "h")
 	c2.SetParamValues(imageID, "100", "150")
 	require.NoError(t, h.handleCover(c2))
@@ -269,9 +274,10 @@ func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 
 	// Sanity-check: confirm the garbage file would indeed cause an error if the
 	// resize path were taken (i.e. without If-Modified-Since).
-	req3 := withKeyOwner(httptest.NewRequest(http.MethodGet, "/", nil))
+	req3 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec3 := httptest.NewRecorder()
 	c3 := e.NewContext(req3, rec3)
+	withKeyOwner(c3)
 	c3.SetParamNames("imageId", "w", "h")
 	c3.SetParamValues(imageID, "100", "150")
 	err3 := h.handleCover(c3)

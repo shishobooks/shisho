@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -146,16 +147,13 @@ func (h *handler) resetPassword(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check if this is a self-reset
-	currentUserID, _ := c.Get("user_id").(int)
-	isSelf := currentUserID == id
+	currentUser, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	isSelf := currentUser.ID == id
 
 	if isSelf {
-		currentUser, ok := c.Get("user").(*models.User)
-		if !ok {
-			return errcodes.Unauthorized("Authentication required")
-		}
-
 		// Users in forced-reset flow can set a new password without re-entering
 		// their temporary password. This is intentional: the admin has already
 		// authenticated the user out-of-band by giving them temporary credentials,
@@ -175,15 +173,9 @@ func (h *handler) resetPassword(c echo.Context) error {
 				return errcodes.ValidationError("Current password is incorrect")
 			}
 		}
-	} else {
+	} else if !currentUser.HasPermission(models.ResourceUsers, models.OperationWrite) {
 		// Non-self reset requires users:write permission
-		currentUser, ok := c.Get("user").(*models.User)
-		if !ok {
-			return errcodes.Unauthorized("Authentication required")
-		}
-		if !currentUser.HasPermission(models.ResourceUsers, models.OperationWrite) {
-			return errcodes.Forbidden("You don't have permission to reset other users' passwords")
-		}
+		return errcodes.Forbidden("You don't have permission to reset other users' passwords")
 	}
 
 	requirePasswordReset := false
@@ -208,8 +200,11 @@ func (h *handler) deactivate(c echo.Context) error {
 	}
 
 	// Prevent deactivating yourself
-	currentUserID, _ := c.Get("user_id").(int)
-	if currentUserID == id {
+	currentUser, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	if currentUser.ID == id {
 		return errcodes.ValidationError("You cannot deactivate your own account")
 	}
 

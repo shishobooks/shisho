@@ -89,7 +89,7 @@ func TestGetBookFileType_UsesFirstMainFile(t *testing.T) {
 func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -176,11 +176,10 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	withKey(c, t, db, apiKey)
 	c.SetParamNames("apiKey", "bookId")
 	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
 
@@ -209,7 +208,7 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 func TestDownload_SingleFileStillWorks(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -272,11 +271,10 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	withKey(c, t, db, apiKey)
 	c.SetParamNames("apiKey", "bookId")
 	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
 
@@ -296,7 +294,7 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -370,12 +368,11 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; U; Android 2.0; Kobo Touch)")
-	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	withKey(c, t, db, apiKey)
 	c.SetParamNames("apiKey", "bookId")
 	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
 
@@ -395,7 +392,7 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 func TestDownload_ShowsFileNames(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -473,11 +470,10 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	withKey(c, t, db, apiKey)
 	c.SetParamNames("apiKey", "bookId")
 	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
 

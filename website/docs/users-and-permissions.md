@@ -72,7 +72,7 @@ Lists are independent of these role permissions. Any signed-in user can create a
 
 Shisho hides pages and links that a role cannot read, rather than showing an error. Opening such a page by its address shows **Access Denied**.
 
-- **Books Read.** Library pages, book and file pages, and search are unavailable, and the library picker is hidden. The home page opens **Lists**. A list still opens, but its books are hidden, since they are book data.
+- **Books Read.** Library pages, book and file pages, and search are unavailable, and the library picker is hidden. The [OPDS Catalog](./opds.md), [Kobo Sync](./kobo-sync.md), and [eReader Browser](./ereader-browser.md) refuse the user too. The home page opens **Lists**. A list still opens, but its books are hidden, since they are book data.
 - **Series Read.** The library navigation has no **Series** entry, series names on book pages are plain text, and search shows no series. The edit dialogs suggest no existing series, but you can still type a name.
 - **People Read.** The library navigation has no **People** entry, author and narrator names are plain text, and search shows no people. The edit dialogs suggest no existing authors or narrators, but you can still type a name.
 - **Libraries Read.** Library settings and **Settings > Libraries** are unavailable. Every signed-in user still gets the name and display settings (cover aspect ratio, download format, and whether files are organized) of each library in their [library access](#library-access) list, never its folders. The library picker, breadcrumbs, cover shapes, and the merge and move dialogs use these. A role with Users Write can list libraries without Libraries Read, so it can assign library access when creating or editing a user.
@@ -138,7 +138,7 @@ A user with Users Write permission can open another account under **Settings > U
 ## Deactivate Users
 
 :::warning[Verify the Account Before Deactivation]
-Deactivation immediately prevents that user from logging in. It does not delete the account, but Shisho currently has no reactivation control. You cannot deactivate your own account.
+Deactivation immediately prevents that user from logging in. An [OPDS](./opds.md) client that signed in during the last minute may keep working for up to a minute, because OPDS remembers a successful sign-in for that long. It does not delete the account, but Shisho currently has no reactivation control. You cannot deactivate your own account.
 :::
 
 A user with Users Write permission can select another active account and choose **Deactivate User**. The account and its historical records remain stored.
@@ -149,4 +149,4 @@ Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-workin
 
 Shisho uses one server-wide session duration with a fixed default of 30 days. There is no per-user duration or remember-me setting. Administrators can change the global `SESSION_DURATION_DAYS` setting; existing tokens remain governed by how they were issued. See [Configuration](./configuration.md#authentication).
 
-The [OPDS Catalog](./opds.md) also supports HTTP Basic Auth for clients that do not use Shisho's browser session. OPDS catalog contents follow the user's library access.
+The [OPDS Catalog](./opds.md) also supports HTTP Basic Auth for clients that do not use Shisho's browser session. OPDS requires Books Read, and catalog contents follow the user's library access.

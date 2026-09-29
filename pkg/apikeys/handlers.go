@@ -6,8 +6,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	pkgerrors "github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/models"
 )
 
 type handler struct {
@@ -18,18 +18,9 @@ func newHandler(service *Service) *handler {
 	return &handler{service: service}
 }
 
-// getUserFromContext retrieves the authenticated user from Echo context.
-func getUserFromContext(c echo.Context) (*models.User, error) {
-	user, ok := c.Get("user").(*models.User)
-	if !ok || user == nil {
-		return nil, errcodes.Unauthorized("Authentication required")
-	}
-	return user, nil
-}
-
 // List returns all API keys for the current user.
 func (h *handler) List(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -49,7 +40,7 @@ type CreateRequest struct {
 
 // Create creates a new API key for the current user.
 func (h *handler) Create(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -81,7 +72,7 @@ type UpdateNameRequest struct {
 
 // UpdateName updates an API key's name.
 func (h *handler) UpdateName(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -116,7 +107,7 @@ func (h *handler) UpdateName(c echo.Context) error {
 
 // Delete deletes an API key.
 func (h *handler) Delete(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -139,7 +130,7 @@ func (h *handler) Delete(c echo.Context) error {
 
 // AddPermission adds a permission to an API key.
 func (h *handler) AddPermission(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -163,7 +154,7 @@ func (h *handler) AddPermission(c echo.Context) error {
 
 // RemovePermission removes a permission from an API key.
 func (h *handler) RemovePermission(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -187,7 +178,7 @@ func (h *handler) RemovePermission(c echo.Context) error {
 
 // GenerateShortURL creates a temporary short URL for an API key.
 func (h *handler) GenerateShortURL(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -210,7 +201,7 @@ func (h *handler) GenerateShortURL(c echo.Context) error {
 
 // ClearKoboSync clears Kobo sync history for an API key, forcing a fresh sync.
 func (h *handler) ClearKoboSync(c echo.Context) error {
-	user, err := getUserFromContext(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}

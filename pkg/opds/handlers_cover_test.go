@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -83,7 +84,7 @@ func newCoverRequest(t *testing.T, h *handler, bookID int, user *models.User) (*
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(bookID))
 	if user != nil {
-		c.Set("user", user)
+		auth.SetUser(c, user)
 	}
 	return rec, h.bookCover(c)
 }

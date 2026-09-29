@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -63,10 +64,8 @@ func (h *handler) retrieve(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, person.LibraryID); err != nil {
+		return err
 	}
 
 	// Get counts
@@ -107,12 +106,13 @@ func (h *handler) list(c echo.Context) error {
 		Search:    params.Search,
 	}
 
-	// Filter by user's library access if user is in context
-	if user, ok := c.Get("user").(*models.User); ok {
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			opts.LibraryIDs = libraryIDs
-		}
+	// Filter by the user's library access
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+		opts.LibraryIDs = libraryIDs
 	}
 
 	people, total, err := h.personService.ListPeopleWithTotal(ctx, opts)
@@ -160,10 +160,8 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, person.LibraryID); err != nil {
+		return err
 	}
 
 	// The name and aliases are copied into persons_fts, into books_fts for
@@ -319,10 +317,8 @@ func (h *handler) authoredBooks(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, person.LibraryID); err != nil {
+		return err
 	}
 
 	books, total, err := h.personService.GetAuthoredBooksPaginated(ctx, id, params.Limit, params.Offset)
@@ -356,10 +352,8 @@ func (h *handler) narratedFiles(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, person.LibraryID); err != nil {
+		return err
 	}
 
 	files, total, err := h.personService.GetNarratedFilesPaginated(ctx, id, params.Limit, params.Offset)
@@ -398,7 +392,10 @@ func (h *handler) merge(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	user, _ := c.Get("user").(*models.User)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
 	if err := merge.CheckPreconditions(user, "person",
 		merge.Side{ID: person.ID, LibraryID: person.LibraryID},
 		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
@@ -437,10 +434,8 @@ func (h *handler) deletePerson(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(person.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, person.LibraryID); err != nil {
+		return err
 	}
 
 	// The books the person authors or narrates list their name, and so do

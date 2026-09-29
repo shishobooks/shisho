@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -50,7 +51,7 @@ func TestDownload_ExpiredZipReturnsDownloadFileNotFound(t *testing.T) {
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(job.ID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err = h.download(c)
 

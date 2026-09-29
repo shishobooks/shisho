@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -193,12 +194,11 @@ func insertScopeFile(ctx context.Context, t *testing.T, db *bun.DB, book *models
 	return file
 }
 
-// withKeyOwner puts an all-libraries key owner in the request context, as
-// APIKeyAuth does, for tests that call a handler directly. With no scope in
-// context the handlers use the "all" scope.
-func withKeyOwner(req *http.Request) *http.Request {
-	owner := &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{}}}
-	return req.WithContext(context.WithValue(req.Context(), contextKeyUser, owner))
+// withKeyOwner stores an all-libraries key owner in c, as APIKeyAuth does,
+// for tests that call a handler directly. With no scope in context the
+// handlers use the "all" scope.
+func withKeyOwner(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{}}})
 }
 
 func assertFileNotFound(t *testing.T, rec *httptest.ResponseRecorder, method string) {

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/segmentio/encoding/json"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/events"
@@ -34,9 +35,9 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// A bulk download packages files the user could already download one at a
@@ -95,7 +96,7 @@ func (h *handler) create(c echo.Context) error {
 		CreatedByUserID: &user.ID,
 	}
 
-	err := h.jobService.CreateJob(ctx, job)
+	err = h.jobService.CreateJob(ctx, job)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -116,9 +117,9 @@ func (h *handler) create(c echo.Context) error {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
@@ -170,9 +171,9 @@ func (h *handler) download(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Verify the user has books:read permission
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 	if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
 		return errcodes.Forbidden("Downloading requires the books:read permission.")

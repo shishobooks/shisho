@@ -207,6 +207,7 @@ func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/series?limit=10&offset=0", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	require.NoError(t, h.list(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -295,6 +296,7 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(series1.ID))
 
@@ -331,6 +333,7 @@ func TestSeriesCover_SetsCacheControlImmutable(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(seriesID))
 
@@ -364,6 +367,7 @@ func TestSeriesCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	setAllAccessUser(c1)
 	c1.SetParamNames("id")
 	c1.SetParamValues(strconv.Itoa(seriesID))
 	require.NoError(t, h.seriesCover(c1))
@@ -375,6 +379,7 @@ func TestSeriesCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req2.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	setAllAccessUser(c2)
 	c2.SetParamNames("id")
 	c2.SetParamValues(strconv.Itoa(seriesID))
 	require.NoError(t, h.seriesCover(c2))
@@ -403,6 +408,7 @@ func TestSeriesCover_Returns200WhenIfNoneMatchMismatches(t *testing.T) {
 	req.Header.Set("If-None-Match", `"stale-etag"`)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(seriesID))
 	require.NoError(t, h.seriesCover(c))
@@ -493,6 +499,7 @@ func TestSeriesCover_FirstBookChangeInvalidatesEtagEvenWhenNewCoverMtimeIsOlder(
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	setAllAccessUser(c1)
 	c1.SetParamNames("id")
 	c1.SetParamValues(strconv.Itoa(seriesID))
 	require.NoError(t, h.seriesCover(c1))
@@ -513,6 +520,7 @@ func TestSeriesCover_FirstBookChangeInvalidatesEtagEvenWhenNewCoverMtimeIsOlder(
 	req2.Header.Set("If-None-Match", etagA)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	setAllAccessUser(c2)
 	c2.SetParamNames("id")
 	c2.SetParamValues(strconv.Itoa(seriesID))
 	require.NoError(t, h.seriesCover(c2))
@@ -566,6 +574,7 @@ func TestSeriesCover_MissingCover_ReturnsSeriesCoverNotFound(t *testing.T) {
 
 			rec := httptest.NewRecorder()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+			setAllAccessUser(c)
 			c.SetParamNames("id")
 			c.SetParamValues(strconv.Itoa(seriesID))
 			if err := h.seriesCover(c); err != nil {

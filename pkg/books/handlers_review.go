@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -27,10 +28,8 @@ func (h *handler) setFileReview(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 	// Supplements never participate in review state — reject overrides
 	// rather than silently persisting orphan rows.
@@ -70,10 +69,8 @@ func (h *handler) setBookReview(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	criteria, err := review.Load(ctx, h.appSettingsService)
@@ -104,7 +101,10 @@ func (h *handler) bulkSetReview(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	user, _ := c.Get("user").(*models.User)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
 
 	criteria, err := review.Load(ctx, h.appSettingsService)
 	if err != nil {
@@ -117,7 +117,7 @@ func (h *handler) bulkSetReview(c echo.Context) error {
 		if err != nil {
 			continue // silently skip missing books
 		}
-		if user != nil && !user.HasLibraryAccess(book.LibraryID) {
+		if !user.HasLibraryAccess(book.LibraryID) {
 			continue
 		}
 		for _, f := range book.Files {

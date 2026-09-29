@@ -33,6 +33,7 @@ func newListTestContext(t *testing.T, db *bun.DB) (*handler, echo.Context, *http
 	req := httptest.NewRequest(http.MethodGet, "/libraries", nil)
 	rr := httptest.NewRecorder()
 	c := e.NewContext(req, rr)
+	setAllAccessUser(c)
 
 	h := &handler{libraryService: NewService(db)}
 	return h, c, rr
@@ -79,8 +80,7 @@ func newDeleteTestServer(t *testing.T, db *bun.DB, user *models.User) (*echo.Ech
 	stubAuth := func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if user != nil {
-				c.Set("user", user)
-				c.Set("user_id", user.ID)
+				auth.SetUser(c, user)
 			}
 			return next(c)
 		}
@@ -211,4 +211,28 @@ func TestDeleteLibraryHandler_RequiresLibraryAccess(t *testing.T) {
 	e.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusForbidden, rr.Code)
+}
+
+// setAllAccessUser stands in for the Authenticate middleware in handler tests
+// that call a handler directly: a user with access to every library. The user
+// is not in the database and has no Role, so a test that checks permissions
+// or writes rows referencing the user must load a real one instead.
+func setAllAccessUser(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
+}
+
+// The library list reached with no user in context rejects the request with
+// 401. Before, it left the library filter nil, which lists every library.
+// The route is registered without the Authenticate middleware.
+func TestList_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	_ = seedLibraryWithContent(context.Background(), t, db, "Alpha")
+
+	e := echo.New()
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET("/libraries", (&handler{libraryService: NewService(db)}).list)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/libraries", nil))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }

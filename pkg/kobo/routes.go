@@ -13,20 +13,20 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	apiKeyService := apikeys.NewService(db)
 	syncService := NewService(db)
 
-	mw := NewMiddleware(apiKeyService)
+	mw := apikeys.NewMiddleware(apiKeyService)
 	h := newHandler(syncService, bookService, downloadCache)
 
 	// Kobo routes with scope-based URL structure
 	// "all" scope: /kobo/:apiKey/all/v1/...
-	koboAll := e.Group("/kobo/:apiKey/all", mw.APIKeyAuth(), mw.ScopeParser("all"))
+	koboAll := e.Group("/kobo/:apiKey/all", mw.APIKeyAuth(apikeys.PermissionKoboSync), ScopeParser("all"))
 	registerKoboEndpoints(koboAll, h)
 
 	// "library" scope: /kobo/:apiKey/library/:scopeId/v1/...
-	koboLibrary := e.Group("/kobo/:apiKey/library/:scopeId", mw.APIKeyAuth(), mw.ScopeParser("library"))
+	koboLibrary := e.Group("/kobo/:apiKey/library/:scopeId", mw.APIKeyAuth(apikeys.PermissionKoboSync), ScopeParser("library"))
 	registerKoboEndpoints(koboLibrary, h)
 
 	// "list" scope: /kobo/:apiKey/list/:scopeId/v1/...
-	koboList := e.Group("/kobo/:apiKey/list/:scopeId", mw.APIKeyAuth(), mw.ScopeParser("list"))
+	koboList := e.Group("/kobo/:apiKey/list/:scopeId", mw.APIKeyAuth(apikeys.PermissionKoboSync), ScopeParser("list"))
 	registerKoboEndpoints(koboList, h)
 }
 

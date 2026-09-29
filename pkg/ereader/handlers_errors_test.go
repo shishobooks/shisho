@@ -51,9 +51,8 @@ func TestEReaderHandlers_NonNumericIDReturnsNotFound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			req = req.WithContext(context.WithValue(req.Context(), contextKeyAPIKey, &apikeys.APIKey{Key: "key"}))
-			c := echo.New().NewContext(req, httptest.NewRecorder())
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+			apikeys.SetKey(c, &apikeys.APIKey{Key: "key"})
 			var names, values []string
 			for i := 0; i < len(tt.params); i += 2 {
 				names = append(names, tt.params[i])
@@ -71,7 +70,7 @@ func TestEReaderHandlers_NonNumericIDReturnsNotFound(t *testing.T) {
 // download page reports as a missing File rather than a doubled "not found".
 func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 
 	var roleID int
@@ -97,8 +96,8 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 
 	h := &handler{bookService: books.NewService(db)}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(keyContext(ctx, t, db, apiKey))
 	c := echo.New().NewContext(req, httptest.NewRecorder())
+	withKey(c, t, db, apiKey)
 	c.SetParamNames("apiKey", "bookId")
 	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
 
@@ -108,7 +107,7 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 // An unknown or expired short code returns the errcodes 404 body.
 func TestResolveShortURL_UnknownCodeReturnsErrcodesNotFound(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
 	c.SetParamNames("shortCode")
 	c.SetParamValues("nope")

@@ -142,6 +142,26 @@ func Unauthorized(msg string) error {
 	}
 }
 
+// AuthenticationRequired returns the 401 for a request that reaches an
+// authenticated route or handler without an authenticated user.
+func AuthenticationRequired() error {
+	return &Error{
+		http.StatusUnauthorized,
+		"Authentication required",
+		"unauthorized",
+	}
+}
+
+// UserInactive returns the 401 for an authenticated identity (a session, or
+// an API key's owner) whose user no longer exists or has been deactivated.
+func UserInactive() error {
+	return &Error{
+		http.StatusUnauthorized,
+		"User not found or inactive",
+		"unauthorized",
+	}
+}
+
 // BadGateway returns a 502 error with the given message.
 func BadGateway(msg string) error {
 	return &Error{

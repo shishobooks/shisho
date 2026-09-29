@@ -403,7 +403,7 @@ func TestRequirePermission_Message(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/jobs", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", &models.User{
+	SetUser(c, &models.User{
 		Role: &models.Role{Name: models.RoleViewer},
 	})
 
@@ -440,7 +440,7 @@ func TestRequireAnyPermission(t *testing.T) {
 			t.Parallel()
 			e := echo.New()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/settings/sharing", nil), httptest.NewRecorder())
-			c.Set("user", &models.User{Role: &models.Role{Permissions: tt.permissions}})
+			SetUser(c, &models.User{Role: &models.Role{Permissions: tt.permissions}})
 
 			m := &Middleware{}
 			called := false

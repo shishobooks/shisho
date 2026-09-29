@@ -3,14 +3,18 @@ package series
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -92,6 +96,7 @@ func TestSeriesList_ResponseEnvelopeAndAliasesSerializeAsStringArray(t *testing.
 	req := httptest.NewRequest(http.MethodGet, "/series?limit=10&offset=0", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	require.NoError(t, h.list(c))
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -141,6 +146,7 @@ func TestSeriesRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(seriesID))
 
@@ -161,4 +167,28 @@ func TestSeriesRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Aliases, &aliasStrings),
 		"aliases must unmarshal into []string, proving it is a JSON array of strings")
 	assert.ElementsMatch(t, []string{"Final Empire", "Era 1"}, aliasStrings)
+}
+
+// setAllAccessUser stands in for the Authenticate middleware in handler tests
+// that call a handler directly: a user with access to every library. The user
+// is not in the database and has no Role, so a test that checks permissions
+// or writes rows referencing the user must load a real one instead.
+func setAllAccessUser(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
+}
+
+// A handler reached with no user in context rejects the request with 401
+// instead of skipping the library access check. The route is registered
+// without the Authenticate middleware.
+func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	db := setupSeriesTestDB(t)
+	seriesID := seedSeriesWithAliases(context.Background(), t, db)
+
+	e := newTestEchoSeries(t)
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET("/series/:id", newSeriesHandler(db).retrieve)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/series/%d", seriesID), nil))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }

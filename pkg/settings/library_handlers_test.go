@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -35,7 +36,7 @@ func buildGetRequest(t *testing.T, e *echo.Echo, user *models.User, libraryID in
 	c := e.NewContext(req, rec)
 	c.SetParamNames("library_id")
 	c.SetParamValues(strconv.Itoa(libraryID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	return c, rec
 }
 
@@ -47,7 +48,7 @@ func buildPutRequest(t *testing.T, e *echo.Echo, user *models.User, libraryID in
 	c := e.NewContext(req, rec)
 	c.SetParamNames("library_id")
 	c.SetParamValues(strconv.Itoa(libraryID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	return c, rec
 }
 

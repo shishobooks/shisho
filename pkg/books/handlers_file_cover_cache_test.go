@@ -87,6 +87,7 @@ func TestFileCover_SetsCacheControlImmutable(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(fileID))
 
@@ -112,6 +113,7 @@ func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	setAllAccessUser(c1)
 	c1.SetParamNames("id")
 	c1.SetParamValues(strconv.Itoa(fileID))
 	require.NoError(t, h.fileCover(c1))
@@ -123,6 +125,7 @@ func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	req2.Header.Set("If-Modified-Since", lastModified)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	setAllAccessUser(c2)
 	c2.SetParamNames("id")
 	c2.SetParamValues(strconv.Itoa(fileID))
 	require.NoError(t, h.fileCover(c2))

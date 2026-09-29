@@ -6,6 +6,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
 )
@@ -22,10 +23,13 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 		settingsService: settings.NewService(db),
 	}
 
+	// Every OPDS route requires Basic Auth and books:read, the permission
+	// Kobo and eReader keys require of their owners too.
+	requireBooksRead := authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead)
+
 	// OPDS 1.2 routes with file type parameter
 	// File types can be: epub, cbz, m4b, or combinations like epub+cbz
-	// All OPDS routes require Basic Auth
-	v1 := e.Group("/opds/v1", authMiddleware.BasicAuth)
+	v1 := e.Group("/opds/v1", authMiddleware.BasicAuth, requireBooksRead)
 
 	// Root catalog - lists libraries
 	v1.GET("/:types/catalog", h.catalog)
@@ -48,7 +52,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 
 	// KePub routes - same structure but downloads as KePub format
 	// These routes generate feeds with KePub download links for EPUB and CBZ files
-	v1Kepub := e.Group("/opds/v1/kepub", authMiddleware.BasicAuth)
+	v1Kepub := e.Group("/opds/v1/kepub", authMiddleware.BasicAuth, requireBooksRead)
 
 	v1Kepub.GET("/:types/catalog", h.catalogKepub)
 	v1Kepub.GET("/:types/libraries/:libraryID", h.libraryCatalogKepub)
@@ -61,11 +65,11 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 	v1Kepub.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearchKepub)
 
 	// File downloads (version-agnostic, shared across OPDS versions).
-	// Also requires Basic Auth. HEAD is registered alongside GET so OPDS
+	// Also requires Basic Auth and books:read. HEAD is registered alongside GET so OPDS
 	// clients (e.g., KOReader's "Use server filenames" mode) can read the
 	// Content-Disposition filename without fetching the body.
-	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth)
-	e.HEAD("/opds/download/:id", h.download, authMiddleware.BasicAuth)
-	e.GET("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
-	e.HEAD("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth)
+	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth, requireBooksRead)
+	e.HEAD("/opds/download/:id", h.download, authMiddleware.BasicAuth, requireBooksRead)
+	e.GET("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth, requireBooksRead)
+	e.HEAD("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth, requireBooksRead)
 }

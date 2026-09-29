@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -323,26 +324,16 @@ func (s *Service) RemovePermission(ctx context.Context, userID int, keyID string
 // AuthenticateOwner loads the user who owns apiKey, with Role,
 // Role.Permissions and LibraryAccess, and checks that the owner may still use
 // the key. A missing or deactivated owner returns 401, and an owner whose role
-// lacks books:read returns 403. Every API key middleware calls this so a key
-// never outlives its owner's access, and stores the returned user in context
-// for handlers to reuse.
+// lacks books:read returns 403. Middleware.APIKeyAuth calls this so a key
+// never outlives its owner's access, and stores the returned user with
+// auth.SetUser for handlers to reuse. The eReader short URL calls it too.
 func (s *Service) AuthenticateOwner(ctx context.Context, apiKey *APIKey) (*models.User, error) {
-	user := new(models.User)
-	err := s.db.NewSelect().
-		Model(user).
-		Relation("Role").
-		Relation("Role.Permissions").
-		Relation("LibraryAccess").
-		Where("u.id = ?", apiKey.UserID).
-		Scan(ctx)
+	user, err := auth.LoadUser(ctx, s.db, auth.LoadUserOptions{ID: &apiKey.UserID})
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errcodes.Unauthorized("User not found or inactive")
+		return nil, errcodes.UserInactive()
 	}
 	if err != nil {
 		return nil, err
-	}
-	if !user.IsActive {
-		return nil, errcodes.Unauthorized("User not found or inactive")
 	}
 	if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
 		return nil, errcodes.Forbidden("You don't have permission to read books")

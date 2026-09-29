@@ -33,7 +33,7 @@ Use `NewJobEvent()` to build job events consistently across callers (worker, HTT
 
 ## Permissions
 
-The stream is shared, so the handler subscribes each connection with a filter built by `eventFilterFor(user)` from the user that `Authenticate` stores on the Echo context (`c.Get("user")`, role and permissions loaded):
+The stream is shared, so the handler subscribes each connection with a filter built by `eventFilterFor(user)` from the user that `Authenticate` stores on the Echo context (read with `auth.RequireUser`, role and permissions loaded; the stream returns 401 before writing headers when there is none):
 
 - `log.entry` goes only to users with Config Read, the permission `GET /api/logs` requires. Log lines include request logs for other users and job output, so never broadcast them.
 - Every other event (`job.*`, `bulk_download.progress`) goes to every authenticated user. Bulk download creators without Jobs Read rely on this to see their job complete (#523). These payloads carry ids, status, type, library id, and progress counts only. Never put log text or other permission-gated data in them.

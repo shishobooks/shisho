@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -107,7 +108,7 @@ func TestDownload_SetsCacheControlNoStore(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(job.ID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.download(c))
 

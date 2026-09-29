@@ -79,9 +79,9 @@ Covers are off by default. Leave them off on slow devices or networks to reduce 
 
 ### Books or Libraries Are Missing
 
-**Symptom:** The browser opens, but an expected library or book is absent.
+**Symptom:** The browser opens, but an expected library or book is absent, or a saved book, cover, or download link returns **not found**.
 
-**Likely cause:** The owning user lacks library access, a file-type filter is active, or the expected file is a supplement.
+**Likely cause:** The owning user lacks library access, a file-type filter is active, or the expected file is a supplement. A book or file in a library the user cannot access returns **not found**, the same as one that does not exist, so the URL does not reveal whether it exists.
 
 **Verify:** Check the user's library access, clear the filter, and confirm the book has a main file.
 

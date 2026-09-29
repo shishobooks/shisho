@@ -7,7 +7,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +27,7 @@ func TestStream_NonFlushingWriterReturnsInternalError(t *testing.T) {
 	h := &handler{broker: NewBroker()}
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	c := echo.New().NewContext(req, nonFlushingWriter{httptest.NewRecorder()})
+	auth.SetUser(c, &models.User{})
 
 	err := h.stream(c)
 

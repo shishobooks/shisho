@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -84,7 +85,7 @@ func TestHandlerDeactivate_Returns204NoContent(t *testing.T) {
 	c.SetPath("/users/:id")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(target.ID))
-	c.Set("user_id", admin.ID)
+	auth.SetUser(c, admin)
 
 	require.NoError(t, h.deactivate(c))
 	assert.Equal(t, http.StatusNoContent, rr.Code)
@@ -115,8 +116,7 @@ func TestHandlerResetPassword_Returns204NoContent(t *testing.T) {
 	c.SetPath("/users/:id/reset-password")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(user.ID))
-	c.Set("user_id", user.ID)
-	c.Set("user", &models.User{ID: user.ID, MustChangePassword: true})
+	auth.SetUser(c, &models.User{ID: user.ID, MustChangePassword: true})
 
 	require.NoError(t, h.resetPassword(c))
 	assert.Equal(t, http.StatusNoContent, rr.Code)
@@ -158,8 +158,7 @@ func TestHandlerResetPassword_SelfForcedReset_DoesNotRequireCurrentPassword(t *t
 	c.SetPath("/users/:id/reset-password")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(user.ID))
-	c.Set("user_id", user.ID)
-	c.Set("user", &models.User{ID: user.ID, MustChangePassword: true})
+	auth.SetUser(c, &models.User{ID: user.ID, MustChangePassword: true})
 
 	err = h.resetPassword(c)
 	require.NoError(t, err)
@@ -193,8 +192,7 @@ func TestHandlerResetPassword_SelfNormal_RequiresCurrentPassword(t *testing.T) {
 	c.SetPath("/users/:id/reset-password")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(user.ID))
-	c.Set("user_id", user.ID)
-	c.Set("user", &models.User{ID: user.ID, MustChangePassword: false})
+	auth.SetUser(c, &models.User{ID: user.ID, MustChangePassword: false})
 
 	err = h.resetPassword(c)
 	require.Error(t, err)
@@ -239,12 +237,11 @@ func TestHandlerResetPassword_AdminResetsOtherUser_WithRequirePasswordReset(t *t
 	c.SetPath("/users/:id/reset-password")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(targetUser.ID))
-	c.Set("user_id", adminUser.ID)
 
 	// Retrieve the full admin user so HasPermission works (needs Role.Permissions loaded)
 	fullAdminUser, err := h.userService.Retrieve(ctx, adminUser.ID)
 	require.NoError(t, err)
-	c.Set("user", fullAdminUser)
+	auth.SetUser(c, fullAdminUser)
 
 	err = h.resetPassword(c)
 	require.NoError(t, err)
@@ -292,11 +289,10 @@ func TestHandlerResetPassword_NonAdminCannotResetOtherUser(t *testing.T) {
 	c.SetPath("/users/:id/reset-password")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(targetUser.ID))
-	c.Set("user_id", attackerUser.ID)
 
 	fullAttackerUser, err := h.userService.Retrieve(ctx, attackerUser.ID)
 	require.NoError(t, err)
-	c.Set("user", fullAttackerUser)
+	auth.SetUser(c, fullAttackerUser)
 
 	err = h.resetPassword(c)
 	require.Error(t, err)
@@ -330,8 +326,7 @@ func TestHandlerResetPassword_SelfResetIgnoresRequirePasswordResetParam(t *testi
 	c.SetPath("/users/:id/reset-password")
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(user.ID))
-	c.Set("user_id", user.ID)
-	c.Set("user", &models.User{ID: user.ID, MustChangePassword: true})
+	auth.SetUser(c, &models.User{ID: user.ID, MustChangePassword: true})
 
 	err = h.resetPassword(c)
 	require.NoError(t, err)

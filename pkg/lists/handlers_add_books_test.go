@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -59,7 +60,7 @@ func (f *addBooksFixture) addBooks(t *testing.T, bookIDs ...int) error {
 	c := f.e.NewContext(req, httptest.NewRecorder())
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(f.list.ID))
-	c.Set("user", f.user)
+	auth.SetUser(c, f.user)
 	return f.h.addBooks(c)
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
@@ -82,7 +83,7 @@ func TestListHandler_ExplicitSortWins(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID)+"&sort=title:asc", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -125,7 +126,7 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 
@@ -159,7 +160,7 @@ func TestListHandler_InvalidSortReturns400(t *testing.T) {
 	)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err := h.list(c)
 	require.Error(t, err)
@@ -196,7 +197,7 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/books", nil) // no library_id
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 
@@ -230,7 +231,7 @@ func TestListHandler_ResponseEnvelope(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -293,7 +294,7 @@ func TestListHandler_IncludesCoverCacheKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -332,7 +333,7 @@ func TestListHandler_CoverCacheKeyEmptyWhenNoCover(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 

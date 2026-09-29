@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ func callPersonUpdate(t *testing.T, h *handler, user *models.User, id int, body 
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(id))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	return h.update(c)
 }
 

@@ -6,8 +6,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
@@ -19,9 +19,9 @@ type libraryHandler struct {
 func (h *libraryHandler) getLibrarySettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("Authentication required")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	libraryID, err := strconv.Atoi(c.Param("library_id"))
@@ -48,9 +48,9 @@ func (h *libraryHandler) getLibrarySettings(c echo.Context) error {
 func (h *libraryHandler) updateLibrarySettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("Authentication required")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	libraryID, err := strconv.Atoi(c.Param("library_id"))

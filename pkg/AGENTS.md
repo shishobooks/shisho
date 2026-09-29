@@ -54,7 +54,7 @@ A Share Link grants anonymous access to one Book (see `CONTEXT.md`). The package
 - **Management** (`RegisterBookRoutes`) mounts on its own `/books` group that only authenticates, not the Books Read books group, because a role may hold only `shares` operations. `GET /api/books/:id/share-links` requires `shares:read` or `shares:write` (a sharer must be able to copy the links they make) and `POST` requires `shares:write`; both check the book's library access in the handler. The list is a bare array of `ShareLinkResponse` (the model plus a derived `state`, a `paused_reason` on an active link its creator has paused, and `created_by_username`). Create refuses with `403` while sharing is off, `422` for a missing `expires_at` when expiration is required, and `422` for a past one. The server takes an absolute timestamp and knows nothing about the client's presets. `POST /api/books/:id/share-links/:linkId/revoke` (returns the `ShareLinkResponse`) and `DELETE /api/books/:id/share-links/:linkId` (`204`) also require `shares:write` and library access, and return `404` for a link on another book. They work while sharing is off: only create checks the switch, so an admin never has to turn sharing back on, and so briefly restore every link, just to pull one that leaked (`TestShareLinks_RevokeAndDeleteWorkWhileSharingDisabled`). Revoke stamps `revoked_at` once and never clears it, so revoking again is a no-op; delete removes the row in any state.
 - **Public** (`RegisterPublicRoutes`) is `/api/share/:token` with the book, book cover, file cover, and file download (GET and HEAD). It is unauthenticated and unregistered in Demo Mode.
 
-**Public handlers resolve through the token and never mount authenticated handlers.** The books download and cover handlers only check library access when a user is in context, so mounting them on an unauthenticated route would serve any file. Every public endpoint calls `publicHandler.resolve` first, and any future public route must do the same. `resolve` returns `errcodes.NotFound("Share Link")` for every failure (malformed token, sharing off, unknown token, revoked or expired, paused because the creator is deactivated or cannot reach the book's library) so a recipient cannot tell the cases apart; a file outside the link's book is `NotFound("File")`, the same status and code. A deleted creator or book cascades the row away. The pause check is `models.ShareLink.PausedReason(libraryID)`, and the management responses report the same value as `paused_reason`, so the dialog and the resolver cannot disagree; any service query whose link reaches either must load `CreatedByUser.LibraryAccess`. The creator checks are evaluated on every request, so restoring the creator's library access (or reactivating them, which only the API can do) brings the link back, as turning sharing back on does. Add new refusal rules to `resolve`, not to individual handlers.
+**Public handlers resolve through the token and never mount authenticated handlers.** The books download and cover handlers need an authenticated user (`auth.RequireLibraryAccessFor`), so on an unauthenticated route they would 401 every recipient, and they would skip `resolve`'s refusal rules. Every public endpoint calls `publicHandler.resolve` first, and any future public route must do the same. `resolve` returns `errcodes.NotFound("Share Link")` for every failure (malformed token, sharing off, unknown token, revoked or expired, paused because the creator is deactivated or cannot reach the book's library) so a recipient cannot tell the cases apart; a file outside the link's book is `NotFound("File")`, the same status and code. A deleted creator or book cascades the row away. The pause check is `models.ShareLink.PausedReason(libraryID)`, and the management responses report the same value as `paused_reason`, so the dialog and the resolver cannot disagree; any service query whose link reaches either must load `CreatedByUser.LibraryAccess`. The creator checks are evaluated on every request, so restoring the creator's library access (or reactivating them, which only the API can do) brings the link back, as turning sharing back on does. Add new refusal rules to `resolve`, not to individual handlers.
 
 - The token is 32 bytes from `crypto/rand`, unpadded base64url (43 characters), with no prefix. `wellFormedToken` rejects other shapes before any query.
 - State is derived by `models.ShareLink.State(now)`, never stored: revoked if `revoked_at` is set, otherwise expired once `expires_at` is at or before now, otherwise active.
@@ -270,7 +270,7 @@ The app uses Role-Based Access Control (RBAC) with two layers:
 | Resource | Description | Used For |
 |----------|-------------|----------|
 | `libraries` | Library management | Create/update libraries, filesystem operations. `read` covers the libraries family except the list (also open to `users:write`) and per-library languages (`books:read`) |
-| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers, search, and a list's books. `read` also covers the review criteria (or `config:read`), identifier types, hook order, and library languages lookups; `write` covers plugin Identify (search and apply) and the Audnexus chapter lookup |
+| `books` | Book/file operations | Books, files, covers, chapters, genres, tags, publishers, search, and a list's books. `read` also covers the OPDS catalog (`pkg/opds/routes.go` mounts it after `BasicAuth`), the review criteria (or `config:read`), identifier types, hook order, and library languages lookups; `write` covers plugin Identify (search and apply) and the Audnexus chapter lookup |
 | `people` | Author/narrator management | Update/delete/merge people. There is no create route (`pkg/people/routes.go`) |
 | `series` | Series management | Update/delete/merge series |
 | `users` | User administration | Create users, manage roles, reset passwords. `write` also lists libraries (`GET /api/libraries`) to assign access. List sharing and `GET /api/users/directory` need no users permission |
@@ -325,11 +325,11 @@ g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("id"))
 
 #### Handler-Level Permission Checks
 
-For inline permission checks (e.g., when feature depends on multiple permissions):
+Handlers never read the user from the context themselves. `auth.RequireUser(c)` returns the user that `Authenticate`, `BasicAuth`, or `apikeys.Middleware.APIKeyAuth` stored (with `auth.SetUser`), or a 401 when there is none, so a route registered without its middleware fails closed. For inline permission checks (e.g., when a feature depends on multiple permissions):
 ```go
-user, ok := c.Get("user").(*models.User)
-if !ok {
-    return errcodes.Unauthorized("User not found in context")
+user, err := auth.RequireUser(c)
+if err != nil {
+    return err
 }
 if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
     return errcodes.Forbidden("You need users:read permission for this action")
@@ -340,15 +340,20 @@ if !user.HasPermission(models.ResourceUsers, models.OperationRead) {
 
 #### Handler-Level Library Access Checks
 
-When library ID comes from fetched data (not URL param):
+When the library ID comes from fetched data (not a URL param), call `auth.RequireLibraryAccessFor`, which returns 401 with no user and 403 without access:
 ```go
-file, _ := h.bookService.RetrieveFile(ctx, opts)
-if user, ok := c.Get("user").(*models.User); ok {
-    if !user.HasLibraryAccess(file.LibraryID) {
-        return errcodes.Forbidden("You don't have access to this library")
-    }
+file, err := h.bookService.RetrieveFile(ctx, opts)
+if err != nil {
+    return errors.WithStack(err)
+}
+if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+    return err
 }
 ```
+
+A list endpoint filters by `user.GetAccessibleLibraryIDs()` on the user from `auth.RequireUser`, never on an optional user: with no user the filter would be nil, which the queries read as every library. `merge.CheckPreconditions` returns 401 for a nil user for the same reason. Do not write `if user, ok := c.Get("user").(*models.User); ok { ... }`; it skips the check when no user is set. golangci-lint's `forbidigo` rule rejects any `echo.Context` `Get` or `Set` outside `pkg/auth`, `pkg/apikeys`, `pkg/binder`, and the request ID middleware, tests included, so tests set the user with `auth.SetUser`.
+
+Every user is loaded by `auth.LoadUser` (Role, Role.Permissions, and LibraryAccess; active users only unless `IncludeInactive`), which login, session and Basic Auth, `apikeys.Service.AuthenticateOwner`, and `users.Service.Retrieve` share. A missing or deactivated user on an authenticating path is `errcodes.UserInactive()`.
 
 #### Best Practices
 
@@ -360,8 +365,8 @@ if user, ok := c.Get("user").(*models.User); ok {
 6. **Both frontend and backend checks required** - Backend for security, frontend for UX
 7. **Read-only lookups used on shared pages must not inherit an admin group's permission** - A GET called by pages that every role can open (for example `GET /api/plugins/identifier-types`, rendered on book and file pages, and `GET /api/plugins/order/:hookType`, read by the identify dialog) belongs in its own group with the read permission its consumers hold (`books:read` here). Registering it inside the `config:write` plugin management group returns 403 to editors and viewers, and the frontend fails silently.
 8. **Bulk download does not need Jobs permissions** - The `/api/jobs` group only authenticates. `GET /api/jobs` and `GET /api/jobs/:id/logs` require `jobs:read` per route. `POST /api/jobs` requires `jobs:read` and `jobs:write` in the handler, except `bulk_download`, which requires `books:read` plus library access to every existing requested file and stores only `file_ids` and `estimated_size_bytes` with no `library_id`. `GET /api/jobs/:id` and `/:id/download` allow `jobs:read` or the job's creator (`jobs.created_by_user_id`) for a `bulk_download` job (`canReadJob`), and return 404 otherwise so job IDs cannot be probed. Do not re-add a group-level `jobs:read` middleware; it breaks bulk download for editors and viewers.
-9. **Device routes (Kobo, eReader, OPDS) that load an entity by id must re-check scope and library access** - The id in the URL is attacker-chosen, so check it against the same rules the route uses to list entities. `kobo.Service.FileInScope` is the reference: it reuses `scopedFilesQuery`, the query behind the sync, and returns `(bool, error)` saying whether the key syncs the file. The handlers' `requireFileInScope` (`pkg/kobo/handlers.go`) turns `false` into `errcodes.NotFound("File")` (never 403, never the Kobo store proxy), so the download, cover, and metadata routes can only serve files the key syncs. An entity nested under a library path (a series under `/libraries/:id/series/:id`) must belong to that library, or 404. Do not copy the web handlers' `if user, ok := c.Get("user")...` shape into key-authenticated routes, because it fails open when no user is set.
-10. **API key middleware loads the key's owner** - Kobo and eReader `APIKeyAuth` call `apikeys.Service.AuthenticateOwner`, which loads the owner with `Role`, `Role.Permissions`, and `LibraryAccess`, returns 401 for a missing or deactivated owner and 403 without `books:read`, and stores the owner in the request context (`kobo.GetUserFromContext`, `ereader.GetUserFromContext`). Handlers reuse that user instead of re-querying it, and treat a missing one as 401. The eReader `/e/:shortCode` redirect also calls `AuthenticateOwner` before revealing the key URL. A new API key middleware must do the same.
+9. **Device routes (Kobo, eReader, OPDS) that load an entity by id must re-check scope and library access** - The id in the URL is attacker-chosen, so check it against the same rules the route uses to list entities. `kobo.Service.FileInScope` is the reference: it reuses `scopedFilesQuery`, the query behind the sync, and returns `(bool, error)` saying whether the key syncs the file. The handlers' `requireFileInScope` (`pkg/kobo/handlers.go`) turns `false` into `errcodes.NotFound("File")` (never 403, never the Kobo store proxy), so the download, cover, and metadata routes can only serve files the key syncs. An entity nested under a library path (a series under `/libraries/:id/series/:id`) must belong to that library, or 404. A book or file id outside the owner's access is a 404 on eReader too (`requireEntityAccess` in `pkg/ereader/handlers.go`); library paths stay 403 through `auth.RequireLibraryAccessFor`. Never read the user with an optional `c.Get("user")`, because it fails open when no user is set.
+10. **API key middleware loads the key's owner** - Kobo and eReader mount one middleware, `apikeys.Middleware.APIKeyAuth(permission)`, which calls `apikeys.Service.AuthenticateOwner`. That loads the owner with `Role`, `Role.Permissions`, and `LibraryAccess`, returns 401 for a missing or deactivated owner and 403 without `books:read`, and stores the owner with `auth.SetUser` and the key for `apikeys.RequireKey`. Handlers read the owner with `auth.RequireUser` instead of re-querying it, which returns 401 when it is missing. The eReader `/e/:shortCode` redirect also calls `AuthenticateOwner` before revealing the key URL. A new key-authenticated route family mounts the same middleware rather than writing its own.
 
 #### Permission Check Flow
 

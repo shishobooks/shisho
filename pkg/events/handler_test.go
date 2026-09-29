@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,7 @@ func TestSSEHandler_StreamsEvents(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	auth.SetUser(c, &models.User{})
 
 	// Run handler in goroutine (it blocks until client disconnects)
 	done := make(chan error, 1)
@@ -88,6 +91,7 @@ func TestSSEHandler_ReturnsOnBrokerClose(t *testing.T) {
 	// the handler observes broker shutdown independently of the client.
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	auth.SetUser(c, &models.User{})
 
 	done := make(chan error, 1)
 	go func() {
@@ -135,4 +139,20 @@ func TestEventFilterFor(t *testing.T) {
 			assert.True(t, allow(jobEvent), "job events stay broadcast")
 		})
 	}
+}
+
+// The stream refuses a request with no authenticated user before it writes
+// any headers, rather than streaming with a filter built from a nil user.
+func TestStream_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	h := &handler{broker: NewBroker()}
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/events", nil), rec)
+
+	err := h.stream(c)
+
+	var ecErr *errcodes.Error
+	require.ErrorAs(t, err, &ecErr)
+	assert.Equal(t, http.StatusUnauthorized, ecErr.HTTPCode)
+	assert.False(t, c.Response().Committed, "no headers are written before the check")
 }

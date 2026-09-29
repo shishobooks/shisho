@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +27,7 @@ func TestLibrarySettingsHandlers_InvalidLibraryIDReturnsNotFound(t *testing.T) {
 				req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{}`))
 				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 				c := echo.New().NewContext(req, httptest.NewRecorder())
-				c.Set("user", &models.User{})
+				auth.SetUser(c, &models.User{})
 				c.SetParamNames("library_id")
 				c.SetParamValues(id)
 

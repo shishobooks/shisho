@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -50,12 +51,8 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	}
 
 	// Library access check
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
-	}
-	if !user.HasLibraryAccess(book.LibraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	// Resolve target file. When the caller doesn't pin a specific FileID,
