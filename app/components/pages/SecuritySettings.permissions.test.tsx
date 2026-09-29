@@ -16,17 +16,17 @@ vi.mock("@/components/library/TopNav", () => ({ default: () => null }));
 
 const koboKey = (id: string): APIKey => ({
   id,
-  userId: 1,
+  user_id: 1,
   name: `Kobo ${id}`,
   key: `key-${id}`,
-  createdAt: "2026-01-01T00:00:00Z",
-  updatedAt: "2026-01-01T00:00:00Z",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
   permissions: [
     {
       id: `p-${id}`,
-      apiKeyId: id,
+      api_key_id: id,
       permission: PermissionKoboSync,
-      createdAt: "2026-01-01T00:00:00Z",
+      created_at: "2026-01-01T00:00:00Z",
     },
   ],
 });
