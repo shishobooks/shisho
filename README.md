@@ -17,7 +17,7 @@ Want to see it before installing? The [Public Demo](https://demo.shishobooks.com
 
 ## Why Shisho?
 
-There is no single self-hosted solution that treats ebooks, audiobooks, and comics as equal parts of one library. Tools such as Audiobookshelf and Komga are excellent for particular media, while Calibre and its web frontends focus primarily on ebooks. Shisho grew from wanting a "Jellyfin for books" that could manage supported formats together instead of treating some of them as secondary.
+There is no single self-hosted solution that treats ebooks, audiobooks, and comics as equal parts of one library. Audiobook servers and comic servers are excellent for their own media, while ebook managers and their web frontends focus primarily on ebooks. Shisho grew from wanting a self-hosted media server for books that could manage supported formats together instead of treating some of them as secondary.
 
 The goal is a unified library with metadata extraction and editing, optional plugin-based enrichment, manual identification when automation is wrong, Kobo and phone access, and user management for sharing a collection with friends and family.
 

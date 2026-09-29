@@ -120,7 +120,7 @@ Terminate HTTPS at a trusted reverse proxy and proxy to Shisho's container port 
 
 Shisho accepts `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Prefix`, and `X-Forwarded-For` only when the direct TCP peer is loopback, link-local, an RFC 1918 IPv4 address, or an IPv6 unique-local address in `fc00::/7`. It strips these headers from public-address peers. Trust depends on the direct connection, not an address claimed in `X-Forwarded-For`. Connect a remote proxy over a private network if its public address would otherwise reach Shisho directly.
 
-Shisho currently must be served from the origin root, such as `https://books.example.com/`. Deploying it below a path prefix such as `https://example.com/shisho/` is not supported.
+Shisho must be served from the origin root, such as `https://books.example.com/`. Deploying it below a path prefix such as `https://example.com/shisho/` is not supported.
 
 The reverse proxy must pass all of these public route families without rewriting them to the frontend:
 

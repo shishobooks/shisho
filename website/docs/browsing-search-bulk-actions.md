@@ -4,7 +4,7 @@ Shisho provides library-scoped search, gallery controls, and selection tools for
 
 ## Search
 
-The global search field in the header is scoped to the current library. It searches **Books**, **Series**, and **People**, then groups matching results by resource type. Series results appear only for roles with Series Read, and People results only for roles with People Read. Switch libraries before searching if the item belongs elsewhere.
+The global search field in the header is scoped to the current library. It searches **Books**, **Series**, and **People**, then groups matching results by resource type. Search requires Books Read. Series results appear only for roles with Series Read, and People results only for roles with People Read. Switch libraries before searching if the item belongs elsewhere.
 
 The search field in the library gallery searches books only. Use it with **Filter** to narrow the gallery without searching series or people.
 
@@ -26,11 +26,13 @@ Open **Sort** to build a multi-level sort. Add levels, choose ascending or desce
 
 A sort in the page URL is temporary and can be bookmarked or shared. **Save as my default for this library** stores the current sort for the current user and library. Each user can therefore choose a different default for every library.
 
-The saved default also controls book ordering in that library's [OPDS](./opds.md) feed and [eReader Browser](./ereader-browser.md). A temporary browser URL sort does not change those views.
+Without a saved default, books sort by **Date added** with the newest first.
+
+The saved default also controls book ordering in that library's [OPDS](./opds.md) feed and [eReader Browser](./ereader-browser.md), which use the same fallback. A temporary browser URL sort does not change those views.
 
 ## Gallery Size
 
-Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is available on the library home, the series list, and list detail pages. It is not a per-library setting.
+Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is available on the library home, the series list, list detail pages, and the book sections of series, person, genre, and tag pages. It is not a per-library setting.
 
 **Save as my default everywhere** stores one global gallery-size preference for the current user. A size in the page URL temporarily overrides that preference on the current page.
 

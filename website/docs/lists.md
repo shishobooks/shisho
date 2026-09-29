@@ -4,10 +4,10 @@ Lists are virtual collections of books from one or more libraries. Use them for 
 
 ## Creating Lists and Using Templates
 
-Create a list from **Lists**. Set its name, optional description, and mode:
+Create a list from **Lists**. Set its name and optional description, and choose whether it is ordered:
 
-- **Ordered** lists have a manual sequence.
-- **Unordered** lists use an automatic sort.
+- With **Ordered list** selected, the list has a manual sequence.
+- With **Ordered list** clear, the list uses an automatic sort. This page calls these unordered lists.
 
 Built-in templates provide a quick starting point:
 
@@ -20,22 +20,22 @@ If creating or editing a list fails, an error notification appears and the dialo
 
 ## Adding Books
 
-Add books using either current workflow:
+Add books in either of these ways:
 
-- On a book detail page, choose **Add to List**.
-- In a library gallery, click **Select**, select one or more books, then choose **Add** and **Add to List**.
+- On a book detail page, choose **Add to list**.
+- In a library gallery, click **Select**, select one or more books, then choose **Add** and pick a list.
 
-The list detail page does not currently provide an add-books picker. A list can contain books from different libraries, subject to each viewer's library access.
+The list detail page has no add-books picker. A list can contain books from different libraries, subject to each viewer's library access.
 
 ## Sorting and Reordering
 
-Ordered lists default to manual order. Drag and drop is available only on page 1 when all list items fit on that page. If the list spans pages, the current interface does not provide cross-page drag reordering or a **Move to Position** command.
+Ordered lists default to manual order. Drag and drop is available only on page 1 when all list items fit on that page. If the list spans pages, you cannot drag books between pages or move a book to a numbered position.
 
 Unordered lists can sort by:
 
-- **Recently added** or **Oldest added**
-- **Title A–Z** or **Title Z–A**
-- **Author A–Z** or **Author Z–A**
+- **Recently Added** or **Oldest Added**
+- **Title (A-Z)** or **Title (Z-A)**
+- **Author (A-Z)** or **Author (Z-A)**
 
 Save the chosen sort as the list default when you want other visits to open in that order.
 
@@ -44,7 +44,7 @@ Save the chosen sort as the list default when you want other visits to open in t
 You can convert an existing list at any time:
 
 - Switching to ordered assigns positions by when books were added, oldest first, and changes the sort to manual.
-- Switching to unordered clears manual positions and changes the sort to recently added.
+- Switching to unordered clears manual positions and changes the sort to **Recently Added**.
 
 Conversion changes ordering behavior, not list membership.
 
@@ -63,6 +63,12 @@ The owner or a **Manager** of a list can manage its sharing whatever their role,
 Shared lists record who added each book.
 
 List sharing only reaches users who sign in to Shisho, and it never grants library access. To send one book to someone without an account or without access to its library, use a [Share Link](./sharing.md) instead.
+
+## Permissions
+
+Lists follow their own sharing roles rather than role permissions. Any signed-in user can create a list, and the owner or a **Manager** can rename it. Adding books to a list you own, or to one shared with you as **Editor** or **Manager**, does not need Books Write.
+
+The one exception is Books Read. A list's books are book data, so seeing them requires Books Read, even for the list's owner. Without it, a list still opens but its books are hidden.
 
 ## Library Access Filtering
 

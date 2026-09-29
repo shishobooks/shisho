@@ -9,19 +9,19 @@ Go to **Settings > Plugins**. The page has two tabs:
 - **Installed** lists plugins already on this Shisho server, their versions, capabilities, status, source repository, and available updates.
 - **Discover** fetches the current indexes from configured repositories. Use search, capability, and source filters to find a plugin.
 
-Viewing this page, including installed plugins, their settings, and the Discover tab, requires the **Config: Read** permission. Installing, updating, configuring, reordering, and removing plugins, and managing repositories, require **Config: Write**. Manual book identification requires **Books: Write** and access to the relevant library.
+Viewing this page, including installed plugins, their settings, and the Discover tab, requires the Config Read permission. The **Order** view under **Advanced plugin settings** also needs Books Read, because the identify dialog on book pages reads the same order. Installing, updating, configuring, reordering, and removing plugins, and managing repositories, require Config Write. Manual book identification requires Books Write and access to the relevant library.
 
 ## Install a Plugin
 
 1. Open **Discover**.
 2. Select a plugin to review its description, version history, compatibility, homepage, and declared capabilities.
 3. Select **Install**.
-4. Review the capabilities in the **Install Plugin?** dialog, then select **Install Plugin**.
+4. Review the capabilities in the **Install \{name\}?** dialog, where `{name}` is the plugin's name, then select **Install Plugin**.
 
 An incompatible plugin version cannot be installed. A repository can provide several versions, but Shisho installs the first compatible version listed in its index.
 
 :::warning[Install only plugins you trust]
-A plugin executes code on the Shisho server. The sandbox limits access, but capabilities can grant network access, broad filesystem access, FFmpeg access, or specific executable commands. The installation dialog shows capabilities supplied by the repository publisher; Shisho does not currently verify that this preview matches the downloaded plugin manifest. A SHA256 checksum confirms that the downloaded bytes match the repository index, not that the code, publisher, or preview is trustworthy. Review the publisher, homepage, source, and requested capabilities before installing.
+A plugin executes code on the Shisho server. The sandbox limits access, but capabilities can grant network access, broad filesystem access, FFmpeg access, or specific executable commands. The installation dialog shows capabilities supplied by the repository publisher; Shisho does not verify that this preview matches the downloaded plugin manifest. A SHA256 checksum confirms that the downloaded bytes match the repository index, not that the code, publisher, or preview is trustworthy. Review the publisher, homepage, source, and requested capabilities before installing.
 :::
 
 ## Understand Statuses

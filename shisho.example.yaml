@@ -61,7 +61,8 @@ server_port: 3689
 # =============================================================================
 
 # Present a prepared library without allowing API edits, even by admins.
-# Disables background work, plugins, integrations, and explicit downloads.
+# Disables background work, plugins, and integrations, and hides the original,
+# KePub, supplement, and bulk download controls.
 # Reading and audio streaming remain available. Set up users and media first.
 # Env: DEMO_MODE
 # Default: false
@@ -139,6 +140,7 @@ plugin_data_dir: /config/plugins/data
 # below this threshold are skipped. Range: 0.0 - 1.0 (0.85 = 85%).
 # Per-plugin thresholds can override this in plugin settings.
 # Env: ENRICHMENT_CONFIDENCE_THRESHOLD
+# Default: 0.85
 enrichment_confidence_threshold: 0.85
 
 # =============================================================================
@@ -214,7 +216,7 @@ pdf_supplement_filenames:
 
 # REQUIRED: Secret key for signing JWT tokens
 # Use a long, random string (at least 32 characters recommended)
-# Generate one with: openssl rand -base64 32
+# Generate one with: openssl rand -hex 32
 # Env: JWT_SECRET
 jwt_secret: your-secret-key-here-change-me
 

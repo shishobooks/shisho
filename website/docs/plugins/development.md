@@ -109,27 +109,9 @@ See [Testing Plugins](./testing.md) for the unit and integration test sequence.
 
 ## Test in Shisho
 
-The local development location is:
-
-```text
-{pluginDir}/local/{id}/
-  manifest.json
-  main.js
-```
-
-`pluginDir` is controlled by `plugin_dir`; see [Configuration](../configuration.md). For the example, copy `dist/manifest.json` and `dist/main.js` to `{pluginDir}/local/example-parser/`.
-
-1. Go to **Settings > Plugins > Installed**.
-2. Select **Scan for Local Plugins**.
-3. Open the discovered plugin and turn on **Enabled**.
-4. Add or scan a file with the declared extension in a test library.
-5. Check the resulting metadata, job logs, and application logs.
-
-A newly scanned local plugin starts disabled. **Reload plugin from disk** appears only when the plugin has scope `local`, is active, and the current user has **Config: Write**. Rebuild and recopy your files, then use that action to load changes. If the plugin is disabled, enable it instead. Reload also rereads the manifest name, version, and description.
+For the example, copy `dist/manifest.json` and `dist/main.js` to `{pluginDir}/local/example-parser/`, then add or scan a file with the declared extension in a test library. [Test the Built Artifact in Shisho](./testing.md#test-the-built-artifact-in-shisho) covers the local plugin location, scanning, enabling, and reloading after changes.
 
 Use `shisho.log.debug`, `info`, `warn`, and `error` for diagnostic messages. Logs include the plugin scope and ID. Keep secrets out of messages.
-
-Unit tests cannot prove that a bundle works in Shisho. Always perform at least one real-runtime test for hook loading, host API behavior, declared capabilities, filesystem access, generated output, and any bundled dependency.
 
 ## Expand the Plugin
 

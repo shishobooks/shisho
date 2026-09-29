@@ -43,10 +43,10 @@ Some library data is edited under a broader resource than its name suggests:
 
 Some reads follow the data they return rather than the page that shows it:
 
-- A list's books are book data, so reading them requires Books Read, even for the list's owner. Creating a list and renaming it need no role permission. Any owner or Manager of a list can manage its sharing without Users Read. See [Lists](./lists.md#sharing).
-- Global search returns Series results only to roles with Series Read and People results only to roles with People Read. Books results need Books Read, like the rest of search.
+- A list's books need Books Read, like other book data. See [Lists](./lists.md#permissions) for what lists allow without role permissions.
+- Global search results follow the permission for each result type. See [Search](./browsing-search-bulk-actions.md#search).
 - The review criteria can be read with Books Read, for the review panel on book pages, or with Config Read, for **Settings > Review Criteria**. Changing them requires Config Write.
-- The plugin manager under **Settings > Plugins** can be viewed with Config Read, though its plugin order also needs Books Read. Installing, configuring, and removing plugins requires Config Write. See [Plugins](./plugins/overview.md).
+- The plugin order under **Settings > Plugins** needs Books Read as well as Config Read. See [Plugins](./plugins/overview.md#open-the-plugin-manager) for the plugin manager's other permissions.
 
 Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role. Shares permissions and library access are all the server checks; they do not depend on Books Read. The **Share** entry lives on the book page, though, and opening a book page needs Books Read.
 
@@ -66,17 +66,17 @@ With the built-in **viewer** role, or any role without Books Write, Series Write
 
 Each control follows the resource its request needs, not the page it appears on. A role with Books Write but not Series Write sees the edit controls on book, genre, tag, and publisher pages and not on series pages.
 
-Lists are independent of these role permissions. Any signed-in user can create a personal list and add books to a list they own or that has been shared with them with editor or manager access, even without Books Write. See [Lists](./lists.md).
+Lists use their own sharing roles, so **Add to list** does not need Books Write. See [Lists](./lists.md#permissions).
 
 ## What a Role Sees Without Read Permissions
 
 Shisho hides pages and links that a role cannot read, rather than showing an error. Opening such a page by its address shows **Access Denied**.
 
-- **Books Read.** Library pages, book and file pages, and search are unavailable, and the library picker is hidden. The [OPDS Catalog](./opds.md), [Kobo Sync](./kobo-sync.md), and [eReader Browser](./ereader-browser.md) refuse the user too. The home page opens **Lists**. A list still opens, but its books are hidden, since they are book data.
+- **Books Read.** Library pages, book and file pages, and search are unavailable, and the library picker is hidden. The [OPDS Catalog](./opds.md), [Kobo Sync](./kobo-sync.md), and [eReader Browser](./ereader-browser.md) refuse the user too. The home page opens **Lists**, where a list's books are hidden. See [Lists](./lists.md#permissions).
 - **Series Read.** The library navigation has no **Series** entry, series names on book pages are plain text, and search shows no series. The edit dialogs suggest no existing series, but you can still type a name.
 - **People Read.** The library navigation has no **People** entry, author and narrator names are plain text, and search shows no people. The edit dialogs suggest no existing authors or narrators, but you can still type a name.
 - **Libraries Read.** Library settings and **Settings > Libraries** are unavailable. Every signed-in user still gets the name and display settings (cover aspect ratio, download format, and whether files are organized) of each library in their [library access](#library-access) list, never its folders. The library picker, breadcrumbs, cover shapes, and the merge and move dialogs use these. A role with Users Write can list libraries without Libraries Read, so it can assign library access when creating or editing a user.
-- **Users Read.** **Settings > Users** is unavailable. List owners and Managers still pick whom to share a list with from a directory of usernames.
+- **Users Read.** **Settings > Users** is unavailable. [List sharing](./lists.md#sharing) still works.
 - **Jobs Read.** **Settings > Jobs** is unavailable, and so are the library rescan button and **Recompute now** on **Settings > Review Criteria**, which also need Jobs Write.
 - **Config Read.** The server, review criteria, sharing, plugin, cache, and log settings pages are unavailable. With Config Read but not Config Write, the review criteria are shown without a **Save** button.
 
@@ -138,12 +138,12 @@ A user with Users Write permission can open another account under **Settings > U
 ## Deactivate Users
 
 :::warning[Verify the Account Before Deactivation]
-Deactivation immediately prevents that user from logging in. An [OPDS](./opds.md) client that signed in during the last minute may keep working for up to a minute, because OPDS remembers a successful sign-in for that long. It does not delete the account, but Shisho currently has no reactivation control. You cannot deactivate your own account.
+Deactivation immediately prevents that user from logging in. An [OPDS](./opds.md) client that signed in during the last minute may keep working for up to a minute, because OPDS remembers a successful sign-in for that long. It does not delete the account, but the web interface has no control to reactivate it. You cannot deactivate your own account.
 :::
 
 A user with Users Write permission can select another active account and choose **Deactivate User**. The account and its historical records remain stored.
 
-Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can revoke or delete them. It disables the user's API keys too, so their [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs stop working, the same as when their role loses Books Read.
+Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can revoke or delete them. It disables the user's API keys too, so their [Kobo Sync](./kobo-sync.md#how-long-the-url-works) and [eReader Browser](./ereader-browser.md#how-long-the-url-works) URLs stop working.
 
 ## Sessions
 

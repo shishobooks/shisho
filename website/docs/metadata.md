@@ -126,7 +126,7 @@ Use the gallery's **Review state** filter to work through the queue. Bulk select
 
 ## Fetch Chapters from Audible
 
-For an M4B file with an Audible ASIN, a user with `books:write` can open chapter editing and choose **Fetch from Audible**. Shisho sends the ASIN to [Audnexus](https://audnex.us), an external service that provides Audible chapter data.
+For an M4B file with an Audible ASIN, a user whose role has Books Write can open chapter editing and choose **Fetch from Audible**. Shisho sends the ASIN to [Audnexus](https://audnex.us), an external service that provides Audible chapter data.
 
 The dialog compares the Audible runtime and chapter count with the local file. It can account for a removed Audible intro, but you should verify the detected offset. A substantial duration difference often indicates a different edition, and imported timestamps may not align.
 

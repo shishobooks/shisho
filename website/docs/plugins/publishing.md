@@ -29,7 +29,7 @@ The artifact must satisfy these contracts:
 - Every hook and permission is declared accurately.
 
 :::warning[Verify Repository and Artifact Identity]
-Shisho currently verifies the ZIP host, checksum, and manifest syntax, but it does not reject every mismatch between the repository entry and the artifact's manifest ID or version. Publishers must verify those values themselves. A mismatch can install a plugin under inconsistent identity or version data.
+Shisho verifies the ZIP host, checksum, and manifest syntax, but it does not reject every mismatch between the repository entry and the artifact's manifest ID or version. Publishers must verify those values themselves. A mismatch can install a plugin under inconsistent identity or version data.
 :::
 
 See [Manifest and Hooks Reference](./manifest-hooks-reference.md) and [Host API Reference](./host-api-reference.md).

@@ -14,7 +14,7 @@ The complete TypeScript contract is in [`host-api.d.ts`](https://github.com/shis
 | `ffmpeg` | `ffmpegAccess` |
 | `shell` | `shellAccess` with the command in `commands` |
 
-The installation dialog shows capabilities supplied by the repository publisher. Shisho does not currently verify that this preview matches the downloaded plugin manifest, so administrators must still trust the publisher and review the plugin source. Plugin authors should declare only what the plugin needs in both places.
+The installation dialog shows capabilities supplied by the repository publisher. Shisho does not verify that this preview matches the downloaded plugin manifest, so administrators must still trust the publisher and review the plugin source. Plugin authors should declare only what the plugin needs in both places.
 
 ## Persistent Data Directory
 
