@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +51,7 @@ func TestGetPage_MissingSourceOnDisk_Returns404(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			library, book := setupTestLibraryAndBook(t, db)
 			filePath := filepath.Join(t.TempDir(), "book."+tt.fileType)
 			if tt.fileType == models.FileTypeCBZ {
@@ -81,7 +82,7 @@ func TestGetPage_MissingSourceOnDisk_Returns404(t *testing.T) {
 func TestGetPage_SetsPrivateCacheControl(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	filePath := filepath.Join(t.TempDir(), "book.cbz")
 	createTestCBZWithPages(t, filePath, 5)
@@ -113,7 +114,7 @@ func TestFileCover_MissingCoverOnDisk_ReturnsErrcodesNotFound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			ctx := context.Background()
 			fileID := seedBookWithFileCover(ctx, t, db)
 

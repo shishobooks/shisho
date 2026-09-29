@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,7 @@ func callPersonUpdate(t *testing.T, h *handler, user *models.User, id int, body 
 // instead of tripping ux_persons_name_library_id.
 func TestUpdatePerson_RenameToExistingName(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	seedPersonWithAuthoredBooks(t, db, lib, "Brandon Sanderson", []string{"Mistborn"})
@@ -52,7 +53,7 @@ func TestUpdatePerson_RenameToExistingName(t *testing.T) {
 // Changing only the case of a Person's own name is not a collision.
 func TestUpdatePerson_RenameCaseOnly_Succeeds(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	person := seedPersonWithAuthoredBooks(t, db, lib, "Robert Jordan", []string{"The Eye of the World"})

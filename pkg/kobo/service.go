@@ -350,15 +350,6 @@ func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, sco
 	return q, false, nil
 }
 
-// ClearAllSyncPoints deletes all sync points for an API key, forcing a fresh sync.
-func (svc *Service) ClearAllSyncPoints(ctx context.Context, apiKeyID string) error {
-	_, err := svc.db.NewDelete().
-		Model((*SyncPoint)(nil)).
-		Where("api_key_id = ?", apiKeyID).
-		Exec(ctx)
-	return errors.WithStack(err)
-}
-
 // CleanupOldSyncPoints removes completed sync points older than the most recent one per API key.
 // This prevents the database from growing unbounded.
 func (svc *Service) CleanupOldSyncPoints(ctx context.Context, apiKeyID string) error {

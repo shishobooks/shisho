@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -60,7 +61,7 @@ func ptrFloat64(v float64) *float64 { return &v }
 
 func TestGetFirstBookInSeriesByID_PrefersWholeNumberOverPrequel(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db) // creates library + a throwaway book
@@ -92,7 +93,7 @@ func TestGetFirstBookInSeriesByID_PrefersWholeNumberOverPrequel(t *testing.T) {
 
 func TestGetFirstBookInSeriesByID_PrefersSingleNumberOverOmnibus(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db)
@@ -124,7 +125,7 @@ func TestGetFirstBookInSeriesByID_PrefersSingleNumberOverOmnibus(t *testing.T) {
 
 func TestGetFirstBooksFilesForSeries_PrefersSingleNumberOverOmnibus(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db)
@@ -153,7 +154,7 @@ func TestGetFirstBooksFilesForSeries_PrefersSingleNumberOverOmnibus(t *testing.T
 
 func TestGetFirstBookInSeriesByID_UsesRangeEndpointTieBreaker(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db)
@@ -186,7 +187,7 @@ func TestGetFirstBookInSeriesByID_UsesRangeEndpointTieBreaker(t *testing.T) {
 
 func TestGetFirstBookInSeriesByID_FallsBackToFractionalWhenNoWholeNumbers(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db)
@@ -217,7 +218,7 @@ func TestGetFirstBookInSeriesByID_FallsBackToFractionalWhenNoWholeNumbers(t *tes
 
 func TestGetFirstBookInSeriesByID_PicksLowestWholeNumber(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db)
@@ -249,7 +250,7 @@ func TestGetFirstBookInSeriesByID_PicksLowestWholeNumber(t *testing.T) {
 
 func TestGetFirstBookInSeriesByID_NullSeriesNumberTreatedAsFractional(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _ := setupTestLibraryAndBook(t, db)

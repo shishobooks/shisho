@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -39,7 +40,7 @@ var aliasTablePattern = regexp.MustCompile(`\b(person|series|genre|tag|publisher
 // than scan the alias table or build a temporary automatic index.
 func TestIndexing_AliasLookupsUseParentIndex(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := createFTSEntities(t, db)
 	svc := NewService(db)

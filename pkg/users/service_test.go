@@ -2,46 +2,15 @@ package users
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	// Shared-cache in-memory DSN (keyed on the test name) so every pooled
-	// connection sees the same DB. A bare ":memory:" gives each connection its
-	// own empty database, which breaks handler tests that issue queries on a
-	// different connection than the one that ran migrations.
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func getRoleIDByName(ctx context.Context, t *testing.T, db *bun.DB, roleName string) int {
 	t.Helper()
@@ -59,7 +28,7 @@ func getRoleIDByName(ctx context.Context, t *testing.T, db *bun.DB, roleName str
 func TestServiceCreate_SetsMustChangePassword(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -78,7 +47,7 @@ func TestServiceCreate_SetsMustChangePassword(t *testing.T) {
 func TestServiceResetPassword_UpdatesMustChangePassword(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -116,7 +85,7 @@ func TestServiceResetPassword_UpdatesMustChangePassword(t *testing.T) {
 func TestServiceCreate_SetsTimestamps(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -152,7 +121,7 @@ func backdateUser(ctx context.Context, t *testing.T, db *bun.DB, userID int) tim
 func TestServiceUpdate_BumpsUpdatedAt(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -181,7 +150,7 @@ func TestServiceUpdate_BumpsUpdatedAt(t *testing.T) {
 func TestServiceUpdate_LibraryAccessOnly_BumpsUpdatedAt(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

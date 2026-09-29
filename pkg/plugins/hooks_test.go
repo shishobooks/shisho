@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ import (
 func setupHooksTestManager(t *testing.T, testdata, pluginID string) (*Manager, *Runtime) {
 	t.Helper()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -84,7 +85,7 @@ func TestRunInputConverter_Success(t *testing.T) {
 
 func TestRunInputConverter_Failure(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -234,7 +235,7 @@ func TestRunFileParser_AllFields(t *testing.T) {
 
 func TestRunFileParser_MinimalFields(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -482,7 +483,7 @@ func TestRunMetadataSearch_NewFields(t *testing.T) {
 func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -568,7 +569,7 @@ func TestRunMetadataSearch_NoNewFields(t *testing.T) {
 func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -683,7 +684,7 @@ func TestRunMetadataSearch_TargetFilePathScopedAccess(t *testing.T) {
 func TestSearchMetadataCarriesAllFields(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -795,7 +796,7 @@ func TestRunFingerprint_NoHook(t *testing.T) {
 func installCancelTestPlugin(t *testing.T, pluginID, parseBody string) (*Manager, *Runtime) {
 	t.Helper()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -848,7 +849,7 @@ func installCancelTestPlugin(t *testing.T, pluginID, parseBody string) (*Manager
 func installCancelTestEnricher(t *testing.T, pluginID, searchBody string) (*Manager, *Runtime) {
 	t.Helper()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 

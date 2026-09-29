@@ -2,11 +2,11 @@ package plugins
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
 func (h *handler) getFieldSettings(c echo.Context) error {
@@ -83,9 +83,9 @@ func (h *handler) setFieldSettings(c echo.Context) error {
 func (h *handler) getLibraryFieldSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")
@@ -116,9 +116,9 @@ func (h *handler) getLibraryFieldSettings(c echo.Context) error {
 func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")
@@ -167,9 +167,9 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 func (h *handler) resetLibraryFieldSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")

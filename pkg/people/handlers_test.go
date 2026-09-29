@@ -2,7 +2,6 @@ package people
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,41 +16,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// setupHandlerTestDB creates an in-memory SQLite database using a named memory
-// URI so that Bun's ScanAndCount (which opens a second connection for the COUNT
-// query) sees the same database. Plain ":memory:" gives each connection its own
-// private database, which causes "no such table" errors from ScanAndCount.
-func setupHandlerTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -178,7 +149,7 @@ func seedPersonWithNarratedFiles(t *testing.T, db *bun.DB, lib *models.Library, 
 
 func TestAuthoredBooks_DefaultPagination(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -219,7 +190,7 @@ func TestAuthoredBooks_DefaultPagination(t *testing.T) {
 
 func TestAuthoredBooks_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -254,7 +225,7 @@ func TestAuthoredBooks_ExplicitLimitOffset(t *testing.T) {
 
 func TestAuthoredBooks_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -282,7 +253,7 @@ func TestAuthoredBooks_ResponseShape(t *testing.T) {
 
 func TestNarratedFiles_DefaultPagination(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -323,7 +294,7 @@ func TestNarratedFiles_DefaultPagination(t *testing.T) {
 
 func TestNarratedFiles_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -358,7 +329,7 @@ func TestNarratedFiles_ExplicitLimitOffset(t *testing.T) {
 
 func TestNarratedFiles_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -386,7 +357,7 @@ func TestNarratedFiles_ResponseShape(t *testing.T) {
 
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -428,7 +399,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 
 func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
@@ -511,7 +482,7 @@ func userWithLibraryAccess(libraryID int) *models.User {
 // a user cannot pull a Person out of a Library they cannot see.
 func TestMerge_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	visible := createTestLibrary(t, db)
 	hidden := createTestLibrary(t, db)
@@ -531,7 +502,7 @@ func TestMerge_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 // when the user can access both.
 func TestMerge_SourceInOtherLibrary_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	first := createTestLibrary(t, db)
 	second := createTestLibrary(t, db)
@@ -552,7 +523,7 @@ func TestMerge_SourceInOtherLibrary_Rejected(t *testing.T) {
 // leaves the Person in place.
 func TestMerge_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	person := seedPersonWithAuthoredBooks(t, db, lib, "Only Person", []string{"Only Book"})
@@ -570,7 +541,7 @@ func TestMerge_SelfMerge_Rejected(t *testing.T) {
 // succeeding, and leaves the target in place.
 func TestMerge_MissingSource_NotFound(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	target := seedPersonWithAuthoredBooks(t, db, lib, "Target Person", []string{"Target Book"})
@@ -606,7 +577,7 @@ func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path strin
 // instead of skipping the library access check.
 func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	person := seedPersonWithAuthoredBooks(t, db, createTestLibrary(t, db), "Author", nil)
 
 	code := serveWithoutUser(newTestEcho(t), "/people/:id", newTestHandler(db).retrieve, fmt.Sprintf("/people/%d", person.ID))

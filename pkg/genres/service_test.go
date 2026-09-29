@@ -2,39 +2,15 @@ package genres
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 	t.Helper()
@@ -50,7 +26,7 @@ func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 
 func TestFindOrCreateGenre_PrimaryNameMatch(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -70,7 +46,7 @@ func TestFindOrCreateGenre_PrimaryNameMatch(t *testing.T) {
 
 func TestFindOrCreateGenre_PrimaryNameMatch_CaseInsensitive(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -88,7 +64,7 @@ func TestFindOrCreateGenre_PrimaryNameMatch_CaseInsensitive(t *testing.T) {
 
 func TestFindOrCreateGenre_AliasMatch(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -114,7 +90,7 @@ func TestFindOrCreateGenre_AliasMatch(t *testing.T) {
 
 func TestFindOrCreateGenre_AliasMatch_CaseInsensitive(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -138,7 +114,7 @@ func TestFindOrCreateGenre_AliasMatch_CaseInsensitive(t *testing.T) {
 
 func TestFindOrCreateGenre_NoMatch_CreatesNew(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -158,7 +134,7 @@ func TestFindOrCreateGenre_NoMatch_CreatesNew(t *testing.T) {
 
 func TestFindOrCreateGenre_AliasMatch_LibraryScoped(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

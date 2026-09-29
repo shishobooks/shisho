@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ type resourceDeleteFixture struct {
 
 func newResourceDeleteFixture(t *testing.T) *resourceDeleteFixture {
 	t.Helper()
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, downloadcache.NewCache(t.TempDir(), 1<<30), nil, nil, nil)
 	require.NoError(t, err)

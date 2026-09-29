@@ -44,11 +44,7 @@ type koboScopeFixture struct {
 func newKoboScopeFixture(t *testing.T) *koboScopeFixture {
 	t.Helper()
 	ctx := context.Background()
-	db := setupTestDB(t)
-	// Requests touch the database from more than one goroutine (the API key
-	// middleware updates last_accessed_at in the background). Each extra
-	// connection to ":memory:" would open an empty database, so pin one.
-	db.SetMaxOpenConns(1)
+	db := newSyncPointTestDB(t)
 	f := &koboScopeFixture{db: db}
 
 	f.libA = insertScopeLibrary(ctx, t, db, "Library A")

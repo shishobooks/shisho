@@ -2,50 +2,21 @@ package search
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 // allSections searches every GlobalSearch section.
 var allSections = GlobalSearchSections{Series: true, People: true}
 
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	// Each connection to ":memory:" is its own database. Match production's
-	// single connection so every query, including ones issued from query
-	// hooks, sees the same data.
-	sqldb.SetMaxOpenConns(1)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
-
 func TestGlobalSearch_ReturnsFileTypes(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library
@@ -97,7 +68,7 @@ func TestGlobalSearch_ReturnsFileTypes(t *testing.T) {
 
 func TestGlobalSearch_ReturnsMultipleFileTypes(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library
@@ -161,7 +132,7 @@ func TestGlobalSearch_ReturnsMultipleFileTypes(t *testing.T) {
 
 func TestSearchBooksByIdentifier_ReturnsAuthors(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library
@@ -237,7 +208,7 @@ func TestSearchBooksByIdentifier_ReturnsAuthors(t *testing.T) {
 
 func TestGlobalSearch_DeduplicatesAuthorNames(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library
@@ -325,7 +296,7 @@ func TestGlobalSearch_DeduplicatesAuthorNames(t *testing.T) {
 
 func TestSearchBooksByIdentifier_DeduplicatesAuthorNames(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library
@@ -411,7 +382,7 @@ func TestSearchBooksByIdentifier_DeduplicatesAuthorNames(t *testing.T) {
 
 func TestRebuildAllIndexes_DeduplicatesAuthorNames(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library
@@ -504,7 +475,7 @@ func insertAlias(t *testing.T, db *bun.DB, table, fkColumn string, resourceID, l
 
 func TestIndexGenre_IncludesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -534,7 +505,7 @@ func TestIndexGenre_IncludesAliases(t *testing.T) {
 
 func TestIndexTag_IncludesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -563,7 +534,7 @@ func TestIndexTag_IncludesAliases(t *testing.T) {
 
 func TestIndexPerson_IncludesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -588,7 +559,7 @@ func TestIndexPerson_IncludesAliases(t *testing.T) {
 
 func TestIndexSeries_IncludesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -613,7 +584,7 @@ func TestIndexSeries_IncludesAliases(t *testing.T) {
 
 func TestIndexBook_IncludesAuthorAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -659,7 +630,7 @@ func TestIndexBook_IncludesAuthorAliases(t *testing.T) {
 
 func TestIndexBook_IncludesNarratorAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -704,7 +675,7 @@ func TestIndexBook_IncludesNarratorAliases(t *testing.T) {
 
 func TestIndexBook_IncludesSeriesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -749,7 +720,7 @@ func TestIndexBook_IncludesSeriesAliases(t *testing.T) {
 
 func TestIndexBook_ExcludesGenreAndTagAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -785,7 +756,7 @@ func TestIndexBook_ExcludesGenreAndTagAliases(t *testing.T) {
 
 func TestIndexPublisher_IncludesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
@@ -814,7 +785,7 @@ func TestIndexPublisher_IncludesAliases(t *testing.T) {
 
 func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{Name: "Lib", CoverAspectRatio: "book"}

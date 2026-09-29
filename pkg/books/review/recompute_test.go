@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRecomputeForFile_Incomplete_SetsFalse(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	library := &models.Library{Name: "L", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
@@ -41,7 +42,7 @@ func TestRecomputeForFile_Incomplete_SetsFalse(t *testing.T) {
 func TestRecomputeForFile_OverrideReviewed_ShortCircuits(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	library := &models.Library{Name: "L", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
@@ -74,7 +75,7 @@ func TestRecomputeForFile_OverrideReviewed_ShortCircuits(t *testing.T) {
 func TestRecomputeForFile_Supplement_SetsNull(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	library := &models.Library{Name: "L", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
@@ -104,7 +105,7 @@ func TestRecomputeForFile_Supplement_SetsNull(t *testing.T) {
 func TestSetOverride_RoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	library := &models.Library{Name: "L", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(library).Exec(ctx)

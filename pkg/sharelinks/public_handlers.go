@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -92,9 +91,9 @@ func (h *publicHandler) resolveFile(c echo.Context) (*models.ShareLink, *models.
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	fileID, err := strconv.Atoi(c.Param("fileId"))
+	fileID, err := httputil.ParamID(c, "fileId", "File")
 	if err != nil {
-		return nil, nil, nil, errcodes.NotFound("File")
+		return nil, nil, nil, err
 	}
 	for _, f := range book.Files {
 		if f.ID == fileID {

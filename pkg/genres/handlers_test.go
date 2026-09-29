@@ -3,7 +3,6 @@ package genres
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,37 +16,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupHandlerTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -98,7 +73,7 @@ func patchGenre(t *testing.T, h *handler, genreID int, payload UpdateGenrePayloa
 
 func TestUpdateGenre_RenameWithoutAliasesDoesNotAutoAdd(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(t, db)
@@ -118,7 +93,7 @@ func TestUpdateGenre_RenameWithoutAliasesDoesNotAutoAdd(t *testing.T) {
 
 func TestUpdateGenre_RenameWithAliasesIncludingOldName(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(t, db)
@@ -139,7 +114,7 @@ func TestUpdateGenre_RenameWithAliasesIncludingOldName(t *testing.T) {
 
 func TestUpdateGenre_RenameWithAliasesPreservesExisting(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(t, db)
@@ -167,7 +142,7 @@ func TestUpdateGenre_RenameWithAliasesPreservesExisting(t *testing.T) {
 
 func TestUpdateGenre_SequentialRenames_FrontendSendsAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(t, db)
@@ -221,7 +196,7 @@ func seedGenreWithBooks(t *testing.T, db *bun.DB, lib *models.Library, genreName
 
 func TestBooks_DefaultPagination(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
 	// Seed one more book than the default limit so the test pins the
@@ -258,7 +233,7 @@ func TestBooks_DefaultPagination(t *testing.T) {
 
 func TestBooks_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
 	genre := seedGenreWithBooks(t, db, lib, "Fiction", []string{"Alpha", "Beta", "Charlie", "Delta", "Echo"})
@@ -290,7 +265,7 @@ func TestBooks_ExplicitLimitOffset(t *testing.T) {
 
 func TestBooks_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
 	_ = seedGenreWithBooks(t, db, lib, "Empty Genre", nil)
@@ -319,7 +294,7 @@ func TestBooks_ResponseShape(t *testing.T) {
 
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
 	_ = seedGenreWithBooks(t, db, lib, "Fiction", []string{"Book1"})
@@ -347,7 +322,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 
 func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
@@ -405,7 +380,7 @@ func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 
 func TestUpdateGenre_RenameBackToOriginalName_FrontendSendsAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(t, db)
@@ -452,7 +427,7 @@ func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path strin
 // instead of skipping the library access check.
 func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	genre := seedGenreWithBooks(t, db, createTestLibrary(t, db), "Fiction", nil)
 
 	code := serveWithoutUser(newTestEcho(t), "/genres/:id", newTestHandler(t, db).retrieve, fmt.Sprintf("/genres/%d", genre.ID))

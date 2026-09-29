@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -20,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/chapters"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
@@ -32,6 +32,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/pdf"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 )
@@ -1184,7 +1185,7 @@ func (w *Worker) scanFileCore(
 				if err != nil {
 					logWarn("failed to find/create series", logger.Data{"name": metadata.Series, "error": err.Error()})
 				} else {
-					seriesNumber, seriesNumberEnd, seriesNumberUnit := externalSeriesNumberGroup(
+					seriesNumber, seriesNumberEnd, seriesNumberUnit := seriesnum.Group(
 						metadata.SeriesNumber, metadata.SeriesNumberEnd, metadata.SeriesNumberUnit,
 					)
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
@@ -1249,7 +1250,7 @@ func (w *Worker) scanFileCore(
 						logWarn("failed to find/create series", logger.Data{"name": sidecarSeries.Name, "error": err.Error()})
 						continue
 					}
-					seriesNumber, seriesNumberEnd, seriesNumberUnit := externalSeriesNumberGroup(
+					seriesNumber, seriesNumberEnd, seriesNumberUnit := seriesnum.Group(
 						sidecarSeries.Number, sidecarSeries.NumberEnd, sidecarSeries.Unit,
 					)
 					relUpdates.BookSeries = append(relUpdates.BookSeries, &models.BookSeries{
@@ -3522,23 +3523,6 @@ func mergeFileParserFallback(target, fileParsed *mediafile.ParsedMetadata, fileT
 	}
 }
 
-func externalSeriesNumberGroup(start, end *float64, unit *string) (*float64, *float64, *string) {
-	if !validSeriesNumberGroup(start, end, unit) {
-		return nil, nil, nil
-	}
-	return start, end, unit
-}
-
-func validSeriesNumberGroup(start, end *float64, unit *string) bool {
-	if start == nil || math.IsNaN(*start) || math.IsInf(*start, 0) {
-		return false
-	}
-	if end != nil && (math.IsNaN(*end) || math.IsInf(*end, 0) || *end <= *start) {
-		return false
-	}
-	return unit == nil || *unit == models.SeriesNumberUnitVolume || *unit == models.SeriesNumberUnitChapter
-}
-
 // mergeEnrichedMetadata applies fields from enrichment result to the target
 // only if the target field is currently empty/zero. Tracks which source
 // provided each field in target.FieldDataSources.
@@ -3571,7 +3555,7 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		// group from one source only, and discard malformed external groups.
 		target.SeriesNumberEnd = nil
 		target.SeriesNumberUnit = nil
-		if validSeriesNumberGroup(enrichment.SeriesNumber, enrichment.SeriesNumberEnd, enrichment.SeriesNumberUnit) {
+		if seriesnum.ValidGroup(enrichment.SeriesNumber, enrichment.SeriesNumberEnd, enrichment.SeriesNumberUnit) {
 			target.SeriesNumber = enrichment.SeriesNumber
 			target.SeriesNumberEnd = enrichment.SeriesNumberEnd
 			target.SeriesNumberUnit = enrichment.SeriesNumberUnit
@@ -4280,7 +4264,7 @@ func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file
 
 	// Delete cover from disk before clearing cover columns
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+		coverPath := covers.FileCoverPath(file)
 		_ = os.Remove(coverPath)
 	}
 

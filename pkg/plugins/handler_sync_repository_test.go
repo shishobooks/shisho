@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ import (
 //
 // Mutates global AllowedFetchHosts — not safe for t.Parallel().
 func TestSyncRepository_RefreshesUpdateAvailableVersion(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	installer := NewInstaller(t.TempDir())
 	mgr := NewManager(service, t.TempDir(), "")
@@ -109,7 +110,7 @@ func TestSyncRepository_RefreshesUpdateAvailableVersion(t *testing.T) {
 //
 // Mutates global AllowedFetchHosts — not safe for t.Parallel().
 func TestSyncRepository_UsesFetchedManifestForRefresh(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	installer := NewInstaller(t.TempDir())
 	mgr := NewManager(service, t.TempDir(), "")

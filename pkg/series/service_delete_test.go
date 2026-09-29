@@ -6,6 +6,7 @@ import (
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -72,7 +73,7 @@ func retrieveSeriesBook(t *testing.T, db *bun.DB, bookID int) (*models.Book, []i
 // instead of re-creating the Series from a sidecar or the file (ADR 0006).
 func TestDeleteSeries_StampsManualSeriesSourceOnEveryMemberBook(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -126,7 +127,7 @@ func TestDeleteSeries_StampsManualSeriesSourceOnEveryMemberBook(t *testing.T) {
 // A Series with no member Books deletes cleanly and touches no Book.
 func TestDeleteSeries_Unused_TouchesNoBooks(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -147,9 +148,9 @@ func TestDeleteSeries_Unused_TouchesNoBooks(t *testing.T) {
 
 // Merging re-points memberships at the target. It is not a clear, so the
 // Books keep their existing source.
-func TestMergeSeries_KeepsBookSources(t *testing.T) {
+func TestMergeSeriesService_KeepsBookSources(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -159,7 +160,7 @@ func TestMergeSeries_KeepsBookSources(t *testing.T) {
 	pluginSource := testgen.StringPtr("plugin:test/enricher")
 	bookID := createSeriesBook(t, db, lib, pluginSource, source.ID)
 
-	_, err := svc.MergeSeries(ctx, target.ID, source.ID)
+	err := svc.MergeSeries(ctx, target.ID, source.ID)
 	require.NoError(t, err)
 
 	book, seriesIDs := retrieveSeriesBook(t, db, bookID)

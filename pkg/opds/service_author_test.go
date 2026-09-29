@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -118,7 +119,7 @@ func seedAuthorTestData(t *testing.T, db *bun.DB) authorTestSeeds {
 func TestListBooksByAuthor_HonorsSort(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	seeds := seedAuthorTestData(t, db)
 
 	svc := NewService(db, books.NewService(db))
@@ -145,7 +146,7 @@ func TestListBooksByAuthor_HonorsSort(t *testing.T) {
 func TestListBooksByAuthor_RespectsLimitOffset(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	seeds := seedAuthorTestData(t, db)
 
 	svc := NewService(db, books.NewService(db))
@@ -187,7 +188,7 @@ func TestListBooksByAuthor_RespectsLimitOffset(t *testing.T) {
 func TestListBooksByAuthor_UnknownAuthor(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	seeds := seedAuthorTestData(t, db)
 
 	svc := NewService(db, books.NewService(db))

@@ -2,13 +2,13 @@ package chapters
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
@@ -22,9 +22,9 @@ type handler struct {
 func (h *handler) list(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	fileID, err := strconv.Atoi(c.Param("id"))
+	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Verify file exists and check access
@@ -48,9 +48,9 @@ func (h *handler) list(c echo.Context) error {
 func (h *handler) replace(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	fileID, err := strconv.Atoi(c.Param("id"))
+	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Bind payload

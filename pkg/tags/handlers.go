@@ -1,9 +1,7 @@
 package tags
 
 import (
-	"context"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -11,31 +9,25 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/search"
 )
-
-// BookReviewRecomputer refreshes files.reviewed for every file of each book,
-// loading the review criteria once. *books.Service satisfies it. pkg/books
-// imports pkg/tags, so the handler takes this interface to avoid an import
-// cycle.
-type BookReviewRecomputer interface {
-	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
-}
 
 type handler struct {
 	tagService       *Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
-	reviewRecomputer BookReviewRecomputer
+	reviewRecomputer review.BookReviewRecomputer
 }
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Tag")
 	if err != nil {
-		return errcodes.NotFound("Tag")
+		return err
 	}
 
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
@@ -104,9 +96,9 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Tag")
 	if err != nil {
-		return errcodes.NotFound("Tag")
+		return err
 	}
 
 	params := UpdateTagPayload{}
@@ -182,9 +174,9 @@ func (h *handler) update(c echo.Context) error {
 
 func (h *handler) books(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Tag")
 	if err != nil {
-		return errcodes.NotFound("Tag")
+		return err
 	}
 
 	params := SubResourceQuery{}
@@ -215,9 +207,9 @@ func (h *handler) books(c echo.Context) error {
 
 func (h *handler) merge(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Tag")
 	if err != nil {
-		return errcodes.NotFound("Tag")
+		return err
 	}
 
 	params := MergeTagsPayload{}
@@ -264,9 +256,9 @@ func (h *handler) merge(c echo.Context) error {
 
 func (h *handler) deleteTag(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Tag")
 	if err != nil {
-		return errcodes.NotFound("Tag")
+		return err
 	}
 
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{

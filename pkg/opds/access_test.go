@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -62,7 +63,7 @@ func serveOPDS(t *testing.T, db *bun.DB, username, method, path string) *httptes
 // rule Kobo and eReader keys follow.
 func TestOPDS_RoleWithoutBooksRead_Returns403(t *testing.T) {
 	t.Parallel()
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	newOPDSUser(t, db, "nobooks")
 
 	// Every route family, including each download route and method. File 1
@@ -81,7 +82,7 @@ func TestOPDS_RoleWithoutBooksRead_Returns403(t *testing.T) {
 
 func TestOPDS_RoleWithBooksRead_Returns200(t *testing.T) {
 	t.Parallel()
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	newOPDSUser(t, db, "reader", models.Permission{Resource: models.ResourceBooks, Operation: models.OperationRead})
 
 	assert.Equal(t, http.StatusOK, serveOPDS(t, db, "reader", http.MethodGet, "/opds/v1/epub/catalog").Code)
@@ -92,7 +93,7 @@ func TestOPDS_RoleWithBooksRead_Returns200(t *testing.T) {
 // The routes are registered without BasicAuth.
 func TestOPDSHandlers_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)

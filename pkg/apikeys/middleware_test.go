@@ -9,13 +9,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMiddleware_ApiKeyAuth(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	apiKeyService := NewService(db)
 	mw := NewMiddleware(apiKeyService)
 	ctx := context.Background()
@@ -74,7 +75,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 
 	t.Run("key without required permission", func(t *testing.T) {
 		// Create a fresh DB for this subtest to avoid race conditions
-		subDB := newTestDB(t)
+		subDB := testdb.New(t)
 		subAPIKeyService := NewService(subDB)
 		subCtx := context.Background()
 
@@ -134,7 +135,7 @@ func TestRequireKey_NoKey_Returns401(t *testing.T) {
 // Each route family words the 403 for a key without its permission.
 func TestMiddleware_APIKeyAuth_PermissionDeniedMessage(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash, role_id) VALUES (1, 'testuser', 'hash', 1)`)

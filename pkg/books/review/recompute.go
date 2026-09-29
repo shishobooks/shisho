@@ -9,6 +9,14 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// BookReviewRecomputer refreshes files.reviewed for every file of each book,
+// loading the review criteria once. *books.Service satisfies it. pkg/books
+// imports the genres, tags, people, and publishers packages, so their handlers
+// take this interface instead of *books.Service to avoid an import cycle.
+type BookReviewRecomputer interface {
+	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
+}
+
 // RecomputeForFile reloads the file (with relations needed by completeness),
 // computes its `reviewed` value, and persists. Override-set rows short-circuit.
 // Supplements get reviewed=NULL.

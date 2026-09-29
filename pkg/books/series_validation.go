@@ -2,16 +2,15 @@ package books
 
 import (
 	"errors"
-	"math"
+
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
-var (
-	errSeriesNumberEndWithoutStart = errors.New("series number end requires a start")
-	errSeriesNumberNotFinite       = errors.New("series number must be finite")
-	errSeriesNumberEndNotFinite    = errors.New("series number end must be finite")
-	errSeriesNumberEndBeforeStart  = errors.New("series number end must not be less than the start")
-)
+var errSeriesNumberEndWithoutStart = errors.New("series number end requires a start")
 
+// validateSeriesInputs normalizes and checks the series groups of a book
+// update. A unit without a number is cleared, and an end equal to the start
+// collapses to a single number, before seriesnum.ValidateGroup checks the rest.
 func validateSeriesInputs(inputs []SeriesInput) error {
 	for i := range inputs {
 		input := &inputs[i]
@@ -22,25 +21,12 @@ func validateSeriesInputs(inputs []SeriesInput) error {
 			input.SeriesNumberUnit = nil
 			continue
 		}
-		if !isFiniteSeriesNumber(*input.Number) {
-			return errSeriesNumberNotFinite
-		}
-		if input.NumberEnd == nil {
-			continue
-		}
-		if !isFiniteSeriesNumber(*input.NumberEnd) {
-			return errSeriesNumberEndNotFinite
-		}
-		if *input.NumberEnd < *input.Number {
-			return errSeriesNumberEndBeforeStart
-		}
-		if *input.NumberEnd == *input.Number {
+		if input.NumberEnd != nil && *input.NumberEnd == *input.Number {
 			input.NumberEnd = nil
+		}
+		if err := seriesnum.ValidateGroup(*input.Number, input.NumberEnd, input.SeriesNumberUnit); err != nil {
+			return err
 		}
 	}
 	return nil
-}
-
-func isFiniteSeriesNumber(value float64) bool {
-	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

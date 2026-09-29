@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -63,7 +64,7 @@ func seedUserWithLibAccess(t *testing.T, db *bun.DB, username string, lib *model
 func TestListHandler_ExplicitSortWins(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "Library A")
 	user := seedUserWithLibAccess(t, db, "alice", lib)
 
@@ -107,7 +108,7 @@ func TestListHandler_ExplicitSortWins(t *testing.T) {
 func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "Library B")
 	user := seedUserWithLibAccess(t, db, "bob", lib)
 
@@ -146,7 +147,7 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 func TestListHandler_InvalidSortReturns400(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "Library C")
 	user := seedUserWithLibAccess(t, db, "carol", lib)
 
@@ -172,7 +173,7 @@ func TestListHandler_InvalidSortReturns400(t *testing.T) {
 func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "Library D")
 	user := seedUserWithLibAccess(t, db, "dave", lib)
 
@@ -219,7 +220,7 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 func TestListHandler_ResponseEnvelope(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "EnvelopeLib")
 	user := seedUserWithLibAccess(t, db, "grace", lib)
 
@@ -281,7 +282,7 @@ func seedFile(t *testing.T, db *bun.DB, book *models.Book, fileType string, hasC
 func TestListHandler_IncludesCoverCacheKey(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "CoverLib")
 	user := seedUserWithLibAccess(t, db, "eve", lib)
 
@@ -320,7 +321,7 @@ func TestListHandler_IncludesCoverCacheKey(t *testing.T) {
 func TestListHandler_CoverCacheKeyEmptyWhenNoCover(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	lib := seedLibrary(t, db, "NoCoverLib")
 	user := seedUserWithLibAccess(t, db, "frank", lib)
 

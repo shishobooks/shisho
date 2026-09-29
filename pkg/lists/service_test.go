@@ -2,45 +2,14 @@ package lists
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"testing"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	// Use a shared-cache in-memory DSN keyed by the test name so every pooled
-	// connection sees the same database (a plain ":memory:" gives each
-	// connection its own empty DB, which breaks queries that span connections,
-	// e.g. transactions).
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func createTestUser(t *testing.T, db *bun.DB, username string) *models.User {
 	t.Helper()
@@ -84,7 +53,7 @@ func createTestBook(t *testing.T, db *bun.DB, libraryID int, title string) *mode
 
 func TestService_CreateList(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -137,9 +106,9 @@ func TestService_CreateList(t *testing.T) {
 	})
 }
 
-func TestService_ListLists(t *testing.T) {
+func TestService_ListListsWithTotal(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -186,7 +155,7 @@ func TestService_ListLists(t *testing.T) {
 
 func TestService_Pagination(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -233,7 +202,7 @@ func TestService_Pagination(t *testing.T) {
 
 func TestService_Permissions(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -355,7 +324,7 @@ func TestService_Permissions(t *testing.T) {
 
 func TestService_RetrieveList(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -385,7 +354,7 @@ func TestService_RetrieveList(t *testing.T) {
 
 func TestService_UpdateList(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -415,7 +384,7 @@ func TestService_UpdateList(t *testing.T) {
 
 func TestService_DeleteList(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -438,7 +407,7 @@ func TestService_DeleteList(t *testing.T) {
 
 func TestService_Shares(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -502,7 +471,7 @@ func TestService_Shares(t *testing.T) {
 
 func TestService_SwitchListOrdering(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -663,7 +632,7 @@ func TestService_SwitchListOrdering(t *testing.T) {
 
 func TestService_ListBooks_SortByAuthor(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
-	"github.com/uptrace/bun/migrate"
 )
 
 const rebuildFKMigrationName = "20260928110000"
@@ -33,34 +30,11 @@ type rebuildSnapshot struct {
 	sequences     map[string]int
 }
 
-func openRebuildTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	// One connection, as in production, so every statement sees the same
-	// in-memory database and the same PRAGMA state.
-	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-	return db
-}
-
 // migrateBeforeRebuild applies every registered migration that sorts before
 // the rebuild.
 func migrateBeforeRebuild(ctx context.Context, t *testing.T, db *bun.DB) {
 	t.Helper()
-	set := migrate.NewMigrations()
-	for _, m := range Migrations.Sorted() {
-		if m.Name < rebuildFKMigrationName {
-			set.Add(m)
-		}
-	}
-	migrator := newMigrator(db, set)
-	require.NoError(t, migrator.Init(ctx))
-	_, err := migrator.Migrate(ctx)
-	require.NoError(t, err)
+	migrateToBefore(ctx, t, db, rebuildFKMigrationName)
 }
 
 func seedRebuildRows(ctx context.Context, t *testing.T, db *bun.DB) {
@@ -211,7 +185,7 @@ func assertRebuiltSchema(ctx context.Context, t *testing.T, db *bun.DB, before r
 func TestRebuildFilesUsersLibraryPaths(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := openRebuildTestDB(t)
+	db := openMigrationTestDB(t)
 
 	migrateBeforeRebuild(ctx, t, db)
 	seedRebuildRows(ctx, t, db)
@@ -270,7 +244,7 @@ func TestRebuildFilesUsersLibraryPaths(t *testing.T) {
 func TestRebuildFilesUsersLibraryPathsKeepsForeignKeySetting(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := openRebuildTestDB(t)
+	db := openMigrationTestDB(t)
 	migrateBeforeRebuild(ctx, t, db)
 	_, err := db.ExecContext(ctx, "PRAGMA foreign_keys = OFF")
 	require.NoError(t, err)
@@ -314,7 +288,7 @@ func TestRebuildFilesUsersLibraryPathsRollsBackOnFailure(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			db := openRebuildTestDB(t)
+			db := openMigrationTestDB(t)
 			migrateBeforeRebuild(ctx, t, db)
 			seedRebuildRows(ctx, t, db)
 			_, err := db.ExecContext(ctx, "PRAGMA foreign_keys = OFF")
@@ -357,7 +331,7 @@ func TestRebuildFilesUsersLibraryPathsRollsBackOnFailure(t *testing.T) {
 func TestRebuildFilesUsersLibraryPathsRepairsOrphans(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := openRebuildTestDB(t)
+	db := openMigrationTestDB(t)
 	migrateBeforeRebuild(ctx, t, db)
 	seedRebuildRows(ctx, t, db)
 

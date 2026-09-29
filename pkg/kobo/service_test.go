@@ -6,36 +6,19 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
-func setupTestDB(t *testing.T) *bun.DB {
+// newSyncPointTestDB returns testdb.New with the API key the sync point
+// tests reference.
+func newSyncPointTestDB(t *testing.T) *bun.DB {
 	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
+	db := testdb.New(t)
 	// Insert a test API key that all sync point tests reference
 	insertTestAPIKey(t, db, "api-key-1")
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
 	return db
 }
 
@@ -67,7 +50,7 @@ func insertTestAPIKey(t *testing.T, db *bun.DB, keyID string) {
 
 func TestCreateSyncPoint(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -99,7 +82,7 @@ func TestCreateSyncPoint(t *testing.T) {
 
 func TestCreateSyncPoint_Empty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -114,7 +97,7 @@ func TestCreateSyncPoint_Empty(t *testing.T) {
 
 func TestGetSyncPointByID_RejectsOtherTenant(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	insertTestAPIKey(t, db, "api-key-2")
 	ctx := context.Background()
 	svc := NewService(db)
@@ -142,7 +125,7 @@ func TestGetSyncPointByID_RejectsOtherTenant(t *testing.T) {
 
 func TestMarkSyncPointCompleted(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -166,7 +149,7 @@ func TestMarkSyncPointCompleted(t *testing.T) {
 
 func TestDetectChanges_FirstSync(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -195,7 +178,7 @@ func TestDetectChanges_FirstSync(t *testing.T) {
 
 func TestDetectChanges_AddedBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -226,7 +209,7 @@ func TestDetectChanges_AddedBooks(t *testing.T) {
 
 func TestDetectChanges_RemovedBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -257,7 +240,7 @@ func TestDetectChanges_RemovedBooks(t *testing.T) {
 
 func TestDetectChanges_ChangedBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -287,7 +270,7 @@ func TestDetectChanges_ChangedBooks(t *testing.T) {
 
 func TestDetectChanges_MetadataChange(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -364,7 +347,7 @@ func TestScopedFilesFromSnapshot_RoundTrip(t *testing.T) {
 
 func TestCleanupOldSyncPoints_SkipsInProgress(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -390,7 +373,7 @@ func TestCleanupOldSyncPoints_SkipsInProgress(t *testing.T) {
 
 func TestCleanupOldSyncPoints(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

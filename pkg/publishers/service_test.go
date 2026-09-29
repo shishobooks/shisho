@@ -2,42 +2,18 @@ package publishers
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/shishobooks/shisho/internal/testgen"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 	t.Helper()
@@ -53,7 +29,7 @@ func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 
 func TestFindOrCreatePublisher_PrimaryNameMatch(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -70,7 +46,7 @@ func TestFindOrCreatePublisher_PrimaryNameMatch(t *testing.T) {
 
 func TestFindOrCreatePublisher_AliasMatch(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -94,7 +70,7 @@ func TestFindOrCreatePublisher_AliasMatch(t *testing.T) {
 
 func TestFindOrCreatePublisher_NoMatch_CreatesNew(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -108,7 +84,7 @@ func TestFindOrCreatePublisher_NoMatch_CreatesNew(t *testing.T) {
 
 func TestSetParent_Success(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -134,7 +110,7 @@ func TestSetParent_Success(t *testing.T) {
 
 func TestSetParent_ClearParent(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -159,7 +135,7 @@ func TestSetParent_ClearParent(t *testing.T) {
 
 func TestSetParent_DirectCycleRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -185,7 +161,7 @@ func TestSetParent_DirectCycleRejected(t *testing.T) {
 
 func TestSetParent_DeeperCycleRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -218,7 +194,7 @@ func TestSetParent_DeeperCycleRejected(t *testing.T) {
 
 func TestSetParent_SelfReferenceRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -235,7 +211,7 @@ func TestSetParent_SelfReferenceRejected(t *testing.T) {
 
 func TestGetAncestors_ReturnsOrderedChain(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -263,7 +239,7 @@ func TestGetAncestors_ReturnsOrderedChain(t *testing.T) {
 
 func TestGetAncestors_RootReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -280,7 +256,7 @@ func TestGetAncestors_RootReturnsEmpty(t *testing.T) {
 
 func TestGetDescendantIDs_ReturnsAllDescendants(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -312,7 +288,7 @@ func TestGetDescendantIDs_ReturnsAllDescendants(t *testing.T) {
 
 func TestGetDescendantIDs_LeafReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -329,7 +305,7 @@ func TestGetDescendantIDs_LeafReturnsEmpty(t *testing.T) {
 
 func TestListPublishers_ExcludeIDs(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -358,7 +334,7 @@ func TestListPublishers_ExcludeIDs(t *testing.T) {
 
 func TestMergePublishers_TargetIsChildOfSource_NoSelfReference(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -404,7 +380,7 @@ func TestMergePublishers_TargetIsChildOfSource_NoSelfReference(t *testing.T) {
 
 func TestCleanupOrphanedPublishers_PreservesParents(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -442,7 +418,7 @@ func TestCleanupOrphanedPublishers_PreservesParents(t *testing.T) {
 
 func TestSetParent_CrossLibraryRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -473,7 +449,7 @@ func TestSetParent_CrossLibraryRejected(t *testing.T) {
 
 func TestSetParent_ZeroParentIDRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -492,7 +468,7 @@ func TestSetParent_ZeroParentIDRejected(t *testing.T) {
 
 func TestSetParent_NegativeParentIDRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -511,7 +487,7 @@ func TestSetParent_NegativeParentIDRejected(t *testing.T) {
 
 func TestValidateNoCycle_NonExistentParentReturnsError(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -534,7 +510,7 @@ func createTestFile(t *testing.T, db *bun.DB, lib *models.Library, publisherID i
 
 func TestGetFileCount_IncludesDescendantFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -576,7 +552,7 @@ func TestGetFileCount_IncludesDescendantFiles(t *testing.T) {
 
 func TestGetFilesPaginated_IncludesDescendantFiles(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -610,7 +586,7 @@ func TestGetFilesPaginated_IncludesDescendantFiles(t *testing.T) {
 
 func TestGetFilesPaginated_PaginatesCorrectlyWithDescendants(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -645,7 +621,7 @@ func TestGetFilesPaginated_PaginatesCorrectlyWithDescendants(t *testing.T) {
 
 func TestGetFiles_IncludesDescendantFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -676,7 +652,7 @@ func TestGetFiles_IncludesDescendantFiles(t *testing.T) {
 
 func TestListPublishers_SearchMatchesAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 	searchSvc := search.NewService(db)
@@ -741,7 +717,7 @@ func createFilesForPublisher(t *testing.T, db *bun.DB, lib *models.Library, publ
 
 func TestGetChildren_ReturnsDirectChildrenWithFileCount(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -781,7 +757,7 @@ func TestGetChildren_ReturnsDirectChildrenWithFileCount(t *testing.T) {
 
 func TestGetChildren_NoChildren(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -798,7 +774,7 @@ func TestGetChildren_NoChildren(t *testing.T) {
 
 func TestGetDescendantFileCount_CountsAllDescendantFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -837,7 +813,7 @@ func TestGetDescendantFileCount_CountsAllDescendantFiles(t *testing.T) {
 
 func TestGetDescendantPublisherCount_CountsAllDescendantPublishers(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -916,7 +892,7 @@ func retrieveTestFile(t *testing.T, db *bun.DB, fileID int) *models.File {
 // pointed at it gets a protected manual empty slot, whatever its prior source.
 func TestDeletePublisher_StampsManualEmptySlotOnEveryDirectFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -982,7 +958,7 @@ func TestDeletePublisher_StampsManualEmptySlotOnEveryDirectFile(t *testing.T) {
 // child or unrelated Publisher are not affected.
 func TestDeletePublisher_ReturnsAffectedBookIDs(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -1019,7 +995,7 @@ func TestDeletePublisher_ReturnsAffectedBookIDs(t *testing.T) {
 // keep their populated value and their existing source.
 func TestMergePublishers_KeepsFileSources(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

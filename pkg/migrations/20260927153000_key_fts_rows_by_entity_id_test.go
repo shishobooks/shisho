@@ -2,15 +2,10 @@ package migrations
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
-	"github.com/uptrace/bun/migrate"
 )
 
 const keyFTSRowsMigrationName = "20260927153000"
@@ -23,30 +18,10 @@ const keyFTSRowsMigrationName = "20260927153000"
 func TestKeyFTSRowsByEntityID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	_, err = db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
+	db := openMigrationTestDB(t)
 
 	// Bring the schema up to the migration just before this one.
-	previous := migrate.NewMigrations()
-	target := migrate.NewMigrations()
-	for _, migration := range Migrations.Sorted() {
-		switch {
-		case migration.Name < keyFTSRowsMigrationName:
-			previous.Add(migration)
-		case migration.Name == keyFTSRowsMigrationName:
-			target.Add(migration)
-		}
-	}
-	require.Len(t, target.Sorted(), 1, "migration %s should be registered", keyFTSRowsMigrationName)
-	previousMigrator := newMigrator(db, previous)
-	require.NoError(t, previousMigrator.Init(ctx))
-	_, err = previousMigrator.Migrate(ctx)
-	require.NoError(t, err)
+	migrator := migrateToBefore(ctx, t, db, keyFTSRowsMigrationName)
 
 	// Entity ids are deliberately out of step with the order the old FTS rows
 	// were inserted in, so their auto-assigned rowids do not match.
@@ -136,8 +111,7 @@ func TestKeyFTSRowsByEntityID(t *testing.T) {
 		assert.Equal(t, []int{70}, matches("series_fts", "series_id", "Mid*"))
 	}
 
-	migrator := newMigrator(db, target)
-	_, err = migrator.Migrate(ctx)
+	_, err := migrator.Migrate(ctx)
 	require.NoError(t, err)
 	assertRebuilt()
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -36,7 +37,7 @@ func backdateRole(ctx context.Context, t *testing.T, db *bun.DB, roleID int) tim
 func TestServiceCreate_SetsTimestamps(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	role, err := svc.Create(context.Background(), "Custom", []PermissionInput{
@@ -51,7 +52,7 @@ func TestServiceCreate_SetsTimestamps(t *testing.T) {
 func TestServiceUpdate_Rename_BumpsUpdatedAt(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -71,7 +72,7 @@ func TestServiceUpdate_Rename_BumpsUpdatedAt(t *testing.T) {
 func TestServiceUpdate_PermissionsOnly_BumpsUpdatedAt(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -94,7 +95,7 @@ func TestServiceUpdate_PermissionsOnly_BumpsUpdatedAt(t *testing.T) {
 func TestServiceDelete_RoleAssignedToUsers(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

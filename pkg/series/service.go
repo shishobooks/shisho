@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -152,19 +153,15 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 		SortName:       sortname.ForTitle(name),
 		SortNameSource: models.DataSourceFilepath,
 	}
+	// Another request may have created the same series between the lookup
+	// and the insert; fetch that row instead.
 	err = svc.CreateSeries(ctx, series)
-	if err != nil {
-		// Handle race condition: if another goroutine created the same series
-		// between our retrieve and create, retry the retrieve
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return svc.RetrieveSeries(ctx, RetrieveSeriesOptions{
-				Name:      &name,
-				LibraryID: &libraryID,
-			})
-		}
-		return nil, err
-	}
-	return series, nil
+	return database.RetrieveOnUniqueViolation(series, err, func() (*models.Series, error) {
+		return svc.RetrieveSeries(ctx, RetrieveSeriesOptions{
+			Name:      &name,
+			LibraryID: &libraryID,
+		})
+	})
 }
 
 func (svc *Service) ListSeries(ctx context.Context, opts ListSeriesOptions) ([]*models.Series, error) {
@@ -296,32 +293,22 @@ func (svc *Service) DeleteSeries(ctx context.Context, seriesID int) ([]int, erro
 }
 
 // MergeSeries merges sourceSeries into targetSeries (moves all books,
-// deletes source). Returns the IDs of the source's books.
+// deletes source).
 //
 // A Series cannot be merged into itself. Where a Book is in both Series, the
 // target's row stays and the source's is dropped, so the merge never violates
 // ux_book_series_book_series. When the target's row has no number, it takes
 // the source's number, end, and unit together, since a number group always
 // comes from one place.
-func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]int, error) {
+func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) error {
 	if targetID == sourceID {
-		return nil, merge.SelfMergeError("series")
+		return merge.SelfMergeError("series")
 	}
 
-	var movedBookIDs []int
-	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		err := tx.NewSelect().
-			Model((*models.BookSeries)(nil)).
-			ColumnExpr("DISTINCT bs.book_id").
-			Where("bs.series_id = ?", sourceID).
-			Scan(ctx, &movedBookIDs)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		// For a Book in both Series, fill an unnumbered target row from the
 		// source row before the source row goes.
-		_, err = tx.NewRaw(`
+		_, err := tx.NewRaw(`
 			UPDATE book_series
 			SET series_number = s.series_number,
 				series_number_end = s.series_number_end,
@@ -368,10 +355,6 @@ func (svc *Service) MergeSeries(ctx context.Context, targetID, sourceID int) ([]
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return movedBookIDs, nil
 }
 
 // GetSeriesBookCount returns the number of books in a series.

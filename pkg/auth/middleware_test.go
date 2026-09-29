@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -11,36 +10,12 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupMiddlewareDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func createUserWithPasswordResetRequired(ctx context.Context, t *testing.T, db *bun.DB) *models.User {
 	t.Helper()
@@ -75,7 +50,7 @@ func createUserWithPasswordResetRequired(ctx context.Context, t *testing.T, db *
 func TestMiddlewareAuthenticate_BlocksWhenPasswordResetIsRequired(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
@@ -107,7 +82,7 @@ func TestMiddlewareAuthenticate_BlocksWhenPasswordResetIsRequired(t *testing.T) 
 func TestMiddlewareAuthenticate_AllowsSelfPasswordResetWhenRequired(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
@@ -137,7 +112,7 @@ func TestMiddlewareAuthenticate_AllowsSelfPasswordResetWhenRequired(t *testing.T
 func TestMiddlewareAuthenticate_BlocksCrossUserPasswordReset(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
@@ -172,7 +147,7 @@ func TestMiddlewareAuthenticate_BlocksCrossUserPasswordReset(t *testing.T) {
 func TestMiddlewareBasicAuth_CachesSuccessfulAuth(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
@@ -228,7 +203,7 @@ func TestMiddlewareBasicAuth_CachesSuccessfulAuth(t *testing.T) {
 func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	middleware.basicAuthCache = newBasicAuthCache(100 * time.Millisecond)
@@ -288,7 +263,7 @@ func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
 func TestMiddlewareBasicAuth_DoesNotCacheFailedAuth(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()
@@ -345,7 +320,7 @@ func TestMiddlewareBasicAuth_DoesNotCacheFailedAuth(t *testing.T) {
 func TestMiddlewareBasicAuth_RejectsWhenMustChangePassword(t *testing.T) {
 	t.Parallel()
 
-	db := setupMiddlewareDB(t)
+	db := testdb.New(t)
 	authService := NewService(db, "test-secret", 30*24*time.Hour)
 	middleware := NewMiddleware(authService)
 	ctx := context.Background()

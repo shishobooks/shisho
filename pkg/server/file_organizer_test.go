@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -12,15 +11,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 // testContext holds all the dependencies needed for testing the file organizer.
@@ -40,25 +37,7 @@ type testContext struct {
 func newTestContext(t *testing.T) *testContext {
 	t.Helper()
 
-	// Create in-memory SQLite database
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	if err != nil {
-		t.Fatalf("failed to open in-memory database: %v", err)
-	}
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	if err != nil {
-		t.Fatalf("failed to enable foreign keys: %v", err)
-	}
-
-	// Run migrations
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	if err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
+	db := testdb.New(t)
 
 	// Create services
 	bookService := books.NewService(db)
@@ -92,10 +71,6 @@ func newTestContext(t *testing.T) *testContext {
 		personService:  personService,
 		fileOrganizer:  fo,
 	}
-
-	t.Cleanup(func() {
-		db.Close()
-	})
 
 	return tc
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 func TestMoveFilesToBook_WithOrganizeFileStructure(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directories
@@ -124,7 +125,7 @@ func TestMoveFilesToBook_WithOrganizeFileStructure(t *testing.T) {
 func TestMoveFilesToBook_TargetBookHasSyntheticPath_CreatesDirAndMoves(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	tmpDir := t.TempDir()
@@ -220,7 +221,7 @@ func TestMoveFilesToBook_TargetBookHasSyntheticPath_CreatesDirAndMoves(t *testin
 func TestMoveFilesToBook_MoveFailure_CleansUpCreatedDestDirs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	tmpDir := t.TempDir()
@@ -308,7 +309,7 @@ func TestMoveFilesToBook_MoveFailure_CleansUpCreatedDestDirs(t *testing.T) {
 func TestMoveFilesToBook_WithoutOrganizeFileStructure_NoPhysicalMove(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directories
@@ -401,7 +402,7 @@ func TestMoveFilesToBook_WithoutOrganizeFileStructure_NoPhysicalMove(t *testing.
 func TestMoveFilesToBook_WithOrganizeFileStructure_HandlesDuplicateFilename(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directories
@@ -526,7 +527,7 @@ func TestMoveFilesToBook_WithOrganizeFileStructure_HandlesDuplicateFilename(t *t
 func TestMoveFilesToBook_MovesAssociatedFilesAndCleansUpDirectory(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directories
@@ -672,7 +673,7 @@ func TestMoveFilesToBook_MovesAssociatedFilesAndCleansUpDirectory(t *testing.T) 
 func TestMoveFilesToBook_MovesSupplementFiles(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directory structure
@@ -828,7 +829,7 @@ func ptrString(s string) *string {
 func TestMoveFilesToBook_CreateNewBook_WithOrganizeFileStructure_GeneratesUniqueDirectory(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directory structure
@@ -955,7 +956,7 @@ func TestMoveFilesToBook_CreateNewBook_WithOrganizeFileStructure_GeneratesUnique
 func TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_ReturnsError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create temp directory

@@ -6,13 +6,14 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDownloadOriginalFile_SetsCacheControlNoStore(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	epubPath := createTestEPUBFile(t)
 	file := setupTestFile(t, db, book, "epub", epubPath)
@@ -28,7 +29,7 @@ func TestDownloadOriginalFile_SetsCacheControlNoStore(t *testing.T) {
 
 func TestStreamFile_SetsCacheControlNoStore(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
 	file := setupTestFile(t, db, book, "m4b", m4bPath)
@@ -44,7 +45,7 @@ func TestStreamFile_SetsCacheControlNoStore(t *testing.T) {
 
 func TestStreamFile_RangeRequest_SetsCacheControlNoStore(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
 	file := setupTestFile(t, db, book, "m4b", m4bPath)

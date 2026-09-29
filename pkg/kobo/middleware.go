@@ -2,11 +2,10 @@ package kobo
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
 type contextKey string
@@ -25,15 +24,15 @@ func ScopeParser(scopeType string) echo.MiddlewareFunc {
 
 			switch scopeType {
 			case "library":
-				id, err := strconv.Atoi(c.Param("scopeId"))
+				id, err := httputil.ParamID(c, "scopeId", "Library")
 				if err != nil {
-					return errcodes.NotFound("Library")
+					return err
 				}
 				scope.LibraryID = &id
 			case "list":
-				id, err := strconv.Atoi(c.Param("scopeId"))
+				id, err := httputil.ParamID(c, "scopeId", "List")
 				if err != nil {
-					return errcodes.NotFound("List")
+					return err
 				}
 				scope.ListID = &id
 			}

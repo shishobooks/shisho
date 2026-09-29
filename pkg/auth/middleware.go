@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
 // Middleware provides authentication middleware.
@@ -123,14 +124,13 @@ func (m *Middleware) RequireAnyPermission(permissions ...Permission) echo.Middle
 func (m *Middleware) RequireLibraryAccess(paramName string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			libraryIDStr := c.Param(paramName)
-			if libraryIDStr == "" {
+			if c.Param(paramName) == "" {
 				return next(c)
 			}
 
-			libraryID, err := strconv.Atoi(libraryIDStr)
+			libraryID, err := httputil.ParamID(c, paramName, "Library")
 			if err != nil {
-				return errcodes.NotFound("Library")
+				return err
 			}
 
 			if err := RequireLibraryAccessFor(c, libraryID); err != nil {

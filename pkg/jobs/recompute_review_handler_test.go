@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func newValidator() *validator.Validate {
 // recompute_review job and persists it with the correct type and status.
 func TestCreateJob_RecomputeReview(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

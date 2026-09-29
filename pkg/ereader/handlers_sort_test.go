@@ -2,39 +2,18 @@ package ereader
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/books"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// setupEReaderDB creates an in-memory SQLite DB with migrations applied.
-// MaxOpenConns=1 pins the pool to the migrated connection so subsequent
-// queries don't land on a sibling connection with no schema.
-func setupEReaderDB(t *testing.T) *bun.DB {
-	t.Helper()
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-	t.Cleanup(func() { db.Close() })
-	return db
-}
 
 // These tests verify the sortspec resolver + books service integration at
 // the seam the eReader handler uses internally, not the HTTP handler
@@ -54,7 +33,7 @@ func setupEReaderDB(t *testing.T) *bun.DB {
 func TestStoredSortFlowsThroughBooksService(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 
 	// Seed a library with two books distinguishable by created_at.
 	lib := &models.Library{
@@ -136,7 +115,7 @@ func TestStoredSortFlowsThroughBooksService(t *testing.T) {
 func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	lib := &models.Library{
 		Name:                     "Books",
 		CoverAspectRatio:         "book",
@@ -168,7 +147,7 @@ func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 func TestHandlerResolveSort_NilApiKeyFallsBackToBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	settingsSvc := settings.NewService(db)
 	h := newHandler(nil, nil, nil, nil, nil, settingsSvc)
 
@@ -185,7 +164,7 @@ func TestHandlerResolveSort_NilApiKeyFallsBackToBuiltinDefault(t *testing.T) {
 func TestNoStoredSortResolvesToNil(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	lib := &models.Library{
 		Name:                     "Books",
 		CoverAspectRatio:         "book",
@@ -216,7 +195,7 @@ func TestNoStoredSortResolvesToNil(t *testing.T) {
 func TestAuthorBooks_PersonIDAndSortFlow(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := &models.Library{

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -86,7 +87,7 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
 		// Resolve via the file's parent dir — book.Filepath may be a synthetic
 		// organized-folder path that doesn't exist on disk for root-level files.
-		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+		coverPath := covers.FileCoverPath(file)
 		newCoverData, err = os.ReadFile(coverPath)
 		if err == nil {
 			if file.CoverMimeType != nil {

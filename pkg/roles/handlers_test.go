@@ -2,9 +2,7 @@ package roles
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,35 +11,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	// Shared-cache in-memory DSN so every pooled connection sees the same DB
-	// (a bare ":memory:" gives each connection its own empty database).
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { db.Close() })
-
-	return db
-}
 
 func newRolesEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -57,7 +30,7 @@ func newRolesEcho(t *testing.T) *echo.Echo {
 func TestHandlerList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{roleService: NewService(db)}
 
 	e := newRolesEcho(t)
@@ -83,7 +56,7 @@ func TestHandlerList_ResponseUsesItemsKey(t *testing.T) {
 func TestHandlerDelete_Returns204NoContent(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{roleService: NewService(db)}
 	ctx := context.Background()
 

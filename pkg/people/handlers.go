@@ -3,14 +3,15 @@ package people
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -33,27 +34,19 @@ type FileOrganizer interface {
 	GetLibraryOrganizeSetting(ctx context.Context, libraryID int) (bool, error)
 }
 
-// BookReviewRecomputer refreshes files.reviewed for every file of each book,
-// loading the review criteria once. *books.Service satisfies it. pkg/books
-// imports pkg/people, so the handler takes this interface to avoid an import
-// cycle.
-type BookReviewRecomputer interface {
-	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
-}
-
 type handler struct {
 	personService    *Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
-	reviewRecomputer BookReviewRecomputer
+	reviewRecomputer review.BookReviewRecomputer
 	fileOrganizer    FileOrganizer // optional, can be nil if not configured
 }
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Person")
 	if err != nil {
-		return errcodes.NotFound("Person")
+		return err
 	}
 
 	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
@@ -141,9 +134,9 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Person")
 	if err != nil {
-		return errcodes.NotFound("Person")
+		return err
 	}
 
 	params := UpdatePersonPayload{}
@@ -298,9 +291,9 @@ func (h *handler) update(c echo.Context) error {
 
 func (h *handler) authoredBooks(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Person")
 	if err != nil {
-		return errcodes.NotFound("Person")
+		return err
 	}
 
 	params := SubResourceQuery{}
@@ -333,9 +326,9 @@ func (h *handler) authoredBooks(c echo.Context) error {
 
 func (h *handler) narratedFiles(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Person")
 	if err != nil {
-		return errcodes.NotFound("Person")
+		return err
 	}
 
 	params := SubResourceQuery{}
@@ -368,9 +361,9 @@ func (h *handler) narratedFiles(c echo.Context) error {
 
 func (h *handler) merge(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Person")
 	if err != nil {
-		return errcodes.NotFound("Person")
+		return err
 	}
 
 	params := MergePeoplePayload{}
@@ -411,7 +404,7 @@ func (h *handler) merge(c echo.Context) error {
 	defer h.searchService.ReindexAffected(ctx, affected)
 
 	// Merge source person into target (this) person
-	if _, err := h.personService.MergePeople(ctx, id, params.SourceID); err != nil {
+	if err := h.personService.MergePeople(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -420,9 +413,9 @@ func (h *handler) merge(c echo.Context) error {
 
 func (h *handler) deletePerson(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Person")
 	if err != nil {
-		return errcodes.NotFound("Person")
+		return err
 	}
 
 	// Fetch the person to check library access

@@ -119,9 +119,9 @@ func equalOptionalString(a, b *string) bool {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
@@ -238,9 +238,9 @@ func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	// Bind params.
@@ -739,9 +739,9 @@ func (h *handler) updateFile(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Bind params.
@@ -810,7 +810,7 @@ func (h *handler) updateFile(c echo.Context) error {
 			// alongside the file for both root-level and directory-backed
 			// books, so filepath.Dir(file.Filepath) is always correct.
 			if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-				coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+				coverPath := covers.FileCoverPath(file)
 				if err := os.Remove(coverPath); err != nil && !os.IsNotExist(err) {
 					log.Warn("failed to delete cover image on downgrade", logger.Data{
 						"error":   err.Error(),
@@ -1428,9 +1428,9 @@ func removeColumn(cols []string, target string) []string {
 
 func (h *handler) fileCover(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
@@ -1464,9 +1464,9 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Get the uploaded file
@@ -1607,9 +1607,9 @@ func getExtensionFromMimeType(mimeType string) string {
 
 func (h *handler) bookCover(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
@@ -1639,9 +1639,9 @@ func (h *handler) bookCover(c echo.Context) error {
 func (h *handler) downloadFile(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Fetch the file with its book
@@ -1713,9 +1713,9 @@ func (h *handler) downloadFile(c echo.Context) error {
 func (h *handler) downloadOriginalFile(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Fetch the file
@@ -1748,9 +1748,9 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 func (h *handler) downloadKepubFile(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Fetch the file with its book
@@ -1816,9 +1816,9 @@ func (h *handler) resyncFile(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Bind params
@@ -1868,9 +1868,9 @@ func (h *handler) resyncBook(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	// Bind params
@@ -1918,9 +1918,9 @@ func (h *handler) resyncBook(c echo.Context) error {
 func (h *handler) getPage(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	fileID, err := strconv.Atoi(c.Param("id"))
+	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	pageNum, err := strconv.Atoi(c.Param("pageNum"))
@@ -1984,9 +1984,9 @@ func (h *handler) getPage(c echo.Context) error {
 func (h *handler) streamFile(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	fileID, err := strconv.Atoi(c.Param("id"))
+	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Retrieve file
@@ -2083,9 +2083,9 @@ func (h *handler) serveRangeRequest(c echo.Context, filePath, rangeHeader string
 func (h *handler) bookLists(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	user, err := auth.RequireUser(c)
@@ -2113,9 +2113,9 @@ func (h *handler) bookLists(c echo.Context) error {
 func (h *handler) updateBookLists(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	user, err := auth.RequireUser(c)
@@ -2158,9 +2158,9 @@ func (h *handler) moveFiles(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Parse book ID from URL param
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	// Get source book to determine library
@@ -2357,9 +2357,9 @@ func (h *handler) deleteBook(c echo.Context) error {
 	log := logger.FromContext(ctx)
 
 	// Parse book ID
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	// Load book to get library ID
@@ -2403,9 +2403,9 @@ func (h *handler) deleteFile(c echo.Context) error {
 	log := logger.FromContext(ctx)
 
 	// Parse file ID
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	// Load file to get library ID and book ID
@@ -2537,9 +2537,9 @@ func (h *handler) deleteBooks(c echo.Context) error {
 }
 
 func (h *handler) listLibraryLanguages(c echo.Context) error {
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	languages, err := h.bookService.DistinctFileLanguages(c.Request().Context(), libraryID)

@@ -2,12 +2,11 @@ package libraries
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
-	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -89,9 +88,9 @@ func (h *handler) create(c echo.Context) error {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	library, err := h.libraryService.RetrieveLibrary(ctx, RetrieveLibraryOptions{
@@ -170,9 +169,9 @@ func (h *handler) listForUser(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	// Bind params.
@@ -241,9 +240,9 @@ func (h *handler) update(c echo.Context) error {
 
 func (h *handler) delete(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := h.libraryService.DeleteLibrary(ctx, id); err != nil {

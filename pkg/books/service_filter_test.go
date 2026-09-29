@@ -8,6 +8,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -55,7 +56,7 @@ func seedAuthor(t *testing.T, db *bun.DB, book *models.Book, person *models.Pers
 func TestListBooks_PersonIDFilter(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 
@@ -95,7 +96,7 @@ func TestListBooks_PersonIDFilter(t *testing.T) {
 func TestListBooks_PersonIDFilter_ScopesToLibrary(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	libA := seedLibrary(t, db, "LibA")
 	libB := seedLibrary(t, db, "LibB")
@@ -126,7 +127,7 @@ func TestListBooks_ReviewedFilter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "L")
 

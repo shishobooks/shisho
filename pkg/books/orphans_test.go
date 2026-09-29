@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/tags"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ import (
 func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -95,7 +96,7 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 // ones alone.
 func TestCleanupOrphanedEntities_DeletesOrphansAndTheirFTSRows(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	searchSvc := search.NewService(db)
 	library, book := setupTestLibraryAndBook(t, db)

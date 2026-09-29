@@ -299,12 +299,3 @@ func (s *Service) Deactivate(ctx context.Context, userID int) error {
 	}
 	return nil
 }
-
-// CountUsers returns the total number of users.
-func (s *Service) CountUsers(ctx context.Context) (int, error) {
-	count, err := s.db.NewSelect().Model((*models.User)(nil)).Count(ctx)
-	if err != nil {
-		return 0, errors.WithStack(err)
-	}
-	return count, nil
-}

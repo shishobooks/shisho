@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -66,7 +67,7 @@ func tagBookCount(t *testing.T, db *bun.DB, id int) int {
 
 func TestMergeTags_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	tag := createMergeTag(t, db, lib, "Cozy")
@@ -81,7 +82,7 @@ func TestMergeTags_SelfMerge_Rejected(t *testing.T) {
 
 func TestMergeTagsService_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := createTestLibrary(t, db)
 	tag := createMergeTag(t, db, lib, "Cozy")
@@ -95,7 +96,7 @@ func TestMergeTagsService_SelfMerge_Rejected(t *testing.T) {
 
 func TestMergeTag_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	visible := createTestLibrary(t, db)
 	hidden := createTestLibrary(t, db)
@@ -109,7 +110,7 @@ func TestMergeTag_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 
 func TestMergeTag_SourceInOtherLibrary_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	first := createTestLibrary(t, db)
 	second := createTestLibrary(t, db)
@@ -124,7 +125,7 @@ func TestMergeTag_SourceInOtherLibrary_Rejected(t *testing.T) {
 
 func TestMergeTag_MissingSource_NotFound(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	target := createMergeTag(t, db, lib, "Target")

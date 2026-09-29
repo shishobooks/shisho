@@ -3,7 +3,6 @@ package chapters
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -18,35 +17,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -64,7 +39,7 @@ func TestReplaceChapters_TriggersReviewRecompute(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	// Seed library, book, and an M4B file (chapters only apply to audio_fields)
 	library := &models.Library{
@@ -228,7 +203,7 @@ func TestValidateChapters_StartPage(t *testing.T) {
 func TestList_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	library := &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
 	_, err := db.NewInsert().Model(library).Exec(ctx)

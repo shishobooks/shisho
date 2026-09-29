@@ -2,14 +2,10 @@ package appsettings
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 type sampleConfig struct {
@@ -17,33 +13,11 @@ type sampleConfig struct {
 	AudioFields []string `json:"audio_fields"`
 }
 
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
-
 func TestGetSetJSON_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	want := sampleConfig{
@@ -63,7 +37,7 @@ func TestGetJSON_Missing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	var got sampleConfig
@@ -76,7 +50,7 @@ func TestSetJSON_Overwrite(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	require.NoError(t, svc.SetJSON(ctx, "k", sampleConfig{BookFields: []string{"a"}}))

@@ -1,10 +1,8 @@
 package plugins
 
 import (
-	"math"
-
 	"github.com/dop251/goja"
-	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
 
 func parsePluginSeriesNumberGroup(obj *goja.Object) (*float64, *float64, *string) {
@@ -14,7 +12,7 @@ func parsePluginSeriesNumberGroup(obj *goja.Object) (*float64, *float64, *string
 	if !startValid || !endValid || !unitValid {
 		return nil, nil, nil
 	}
-	return normalizePluginSeriesNumberGroup(start, end, unit)
+	return seriesnum.Group(start, end, unit)
 }
 
 func optionalJSFloat(value goja.Value) (*float64, bool) {
@@ -76,19 +74,6 @@ func optionalStringField(fields map[string]any, key string) (*string, bool) {
 	return &converted, true
 }
 
-func normalizePluginSeriesNumberGroup(start, end *float64, unit *string) (*float64, *float64, *string) {
-	if start == nil || math.IsNaN(*start) || math.IsInf(*start, 0) {
-		return nil, nil, nil
-	}
-	if end != nil && (math.IsNaN(*end) || math.IsInf(*end, 0) || *end <= *start) {
-		return nil, nil, nil
-	}
-	if unit != nil && *unit != models.SeriesNumberUnitVolume && *unit != models.SeriesNumberUnitChapter {
-		return nil, nil, nil
-	}
-	return start, end, unit
-}
-
 // strictSeriesNumberGroupFromFields is seriesNumberGroupFromFields for the
 // Identify apply path. It reports false for a group that is present but
 // malformed (wrong types, non-finite values, end not after start, unknown
@@ -101,7 +86,7 @@ func strictSeriesNumberGroupFromFields(fields map[string]any) (*float64, *float6
 		return nil, nil, nil, false
 	}
 	present := start != nil || end != nil || unit != nil
-	start, end, unit = normalizePluginSeriesNumberGroup(start, end, unit)
+	start, end, unit = seriesnum.Group(start, end, unit)
 	if present && start == nil {
 		return nil, nil, nil, false
 	}

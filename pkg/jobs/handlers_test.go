@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +19,7 @@ import (
 func TestList_ResponseUsesItemsTotalEnvelope(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Seed two jobs.

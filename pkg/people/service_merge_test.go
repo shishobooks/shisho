@@ -7,6 +7,7 @@ import (
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -44,7 +45,7 @@ func bookAuthorRows(t *testing.T, db *bun.DB, bookID int) []authorRow {
 // keeps the target's.
 func TestMergePeople_SharedBookSameRole_DropsSourceRow(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -56,10 +57,8 @@ func TestMergePeople_SharedBookSameRole_DropsSourceRow(t *testing.T) {
 	insertAuthor(t, db, bookID, target.ID, 1, writer)
 	insertAuthor(t, db, bookID, source.ID, 2, writer)
 
-	movedBookIDs, err := svc.MergePeople(ctx, target.ID, source.ID)
-	require.NoError(t, err)
+	require.NoError(t, svc.MergePeople(ctx, target.ID, source.ID))
 
-	assert.Equal(t, []int{bookID}, movedBookIDs)
 	assert.Equal(t, []authorRow{{PersonID: target.ID, Role: writer}}, bookAuthorRows(t, db, bookID))
 }
 
@@ -68,7 +67,7 @@ func TestMergePeople_SharedBookSameRole_DropsSourceRow(t *testing.T) {
 // still drops the source's row so the Book does not list the target twice.
 func TestMergePeople_SharedBookGenericRole_DropsSourceRow(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -77,7 +76,7 @@ func TestMergePeople_SharedBookGenericRole_DropsSourceRow(t *testing.T) {
 	target := createNamedPerson(t, svc, lib, "Target Person")
 	bookID := createAuthoredBook(t, db, lib, personDeletePluginSource, target.ID, source.ID)
 
-	_, err := svc.MergePeople(ctx, target.ID, source.ID)
+	err := svc.MergePeople(ctx, target.ID, source.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, []authorRow{{PersonID: target.ID}}, bookAuthorRows(t, db, bookID))
@@ -87,7 +86,7 @@ func TestMergePeople_SharedBookGenericRole_DropsSourceRow(t *testing.T) {
 // the merge re-points it and the Book keeps both roles.
 func TestMergePeople_SharedBookDifferentRole_RepointsSourceRow(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -100,7 +99,7 @@ func TestMergePeople_SharedBookDifferentRole_RepointsSourceRow(t *testing.T) {
 	insertAuthor(t, db, bookID, target.ID, 1, writer)
 	insertAuthor(t, db, bookID, source.ID, 2, penciller)
 
-	_, err := svc.MergePeople(ctx, target.ID, source.ID)
+	err := svc.MergePeople(ctx, target.ID, source.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, []authorRow{
@@ -114,7 +113,7 @@ func TestMergePeople_SharedBookDifferentRole_RepointsSourceRow(t *testing.T) {
 // source's row and keeps the target's.
 func TestMergePeople_SharedNarratedFile_DropsSourceRow(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -123,7 +122,7 @@ func TestMergePeople_SharedNarratedFile_DropsSourceRow(t *testing.T) {
 	target := createNamedPerson(t, svc, lib, "Target Person")
 	fileID := createNarratedFile(t, db, lib, nil, target.ID, source.ID)
 
-	_, err := svc.MergePeople(ctx, target.ID, source.ID)
+	err := svc.MergePeople(ctx, target.ID, source.ID)
 	require.NoError(t, err)
 
 	_, personIDs := retrieveNarratedFile(t, db, fileID)
@@ -134,7 +133,7 @@ func TestMergePeople_SharedNarratedFile_DropsSourceRow(t *testing.T) {
 // delete it, so the merge rejects it before touching anything.
 func TestMergePeople_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -142,7 +141,7 @@ func TestMergePeople_SelfMerge_Rejected(t *testing.T) {
 	person := createNamedPerson(t, svc, lib, "Only Person")
 	bookID := createAuthoredBook(t, db, lib, personDeletePluginSource, person.ID)
 
-	_, err := svc.MergePeople(ctx, person.ID, person.ID)
+	err := svc.MergePeople(ctx, person.ID, person.ID)
 	var codeErr *errcodes.Error
 	require.ErrorAs(t, err, &codeErr)
 	assert.Equal(t, "validation_error", codeErr.Code)

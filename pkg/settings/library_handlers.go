@@ -2,12 +2,12 @@ package settings
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
@@ -24,9 +24,9 @@ func (h *libraryHandler) getLibrarySettings(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("library_id"))
-	if err != nil || libraryID < 1 {
-		return errcodes.NotFound("Library")
+	libraryID, err := httputil.ParamID(c, "library_id", "Library")
+	if err != nil {
+		return err
 	}
 
 	if !user.HasLibraryAccess(libraryID) {
@@ -53,9 +53,9 @@ func (h *libraryHandler) updateLibrarySettings(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("library_id"))
-	if err != nil || libraryID < 1 {
-		return errcodes.NotFound("Library")
+	libraryID, err := httputil.ParamID(c, "library_id", "Library")
+	if err != nil {
+		return err
 	}
 
 	if !user.HasLibraryAccess(libraryID) {

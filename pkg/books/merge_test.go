@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -81,7 +82,7 @@ func setupTestBookWithFile(t *testing.T, db *bun.DB, library *models.Library, ti
 
 func TestMoveFilesToBook_Basic(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Setup: library without organize file structure (simpler test)
@@ -143,7 +144,7 @@ func TestMoveFilesToBook_Basic(t *testing.T) {
 
 func TestMoveFilesToBook_SourceBookDeleted(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Setup: library without organize file structure
@@ -179,7 +180,7 @@ func TestMoveFilesToBook_SourceBookDeleted(t *testing.T) {
 
 func TestMoveFilesToBook_CreateNewBook(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Setup: library without organize file structure
@@ -287,7 +288,7 @@ func TestMoveFilesToBook_CreateNewBook(t *testing.T) {
 
 func TestMoveFilesToBook_CreateNewBook_UsesFileMetadataName(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Setup: library without organize file structure
@@ -353,7 +354,7 @@ func TestMoveFilesToBook_CreateNewBook_UsesFileMetadataName(t *testing.T) {
 func TestMoveFilesToBook_DifferentLibraries(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	// Create two libraries
@@ -393,7 +394,7 @@ func TestMoveFilesToBook_DifferentLibraries(t *testing.T) {
 func TestMoveFilesToBook_MoveToSameBook(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	library := setupTestLibrary(t, db)
@@ -414,7 +415,7 @@ func TestMoveFilesToBook_MoveToSameBook(t *testing.T) {
 func TestMoveFilesToBook_FileNotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	library := setupTestLibrary(t, db)
@@ -433,7 +434,7 @@ func TestMoveFilesToBook_FileNotFound(t *testing.T) {
 func TestMoveFilesToBook_NoFilesSelected(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	_, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
@@ -450,7 +451,7 @@ func TestMoveFilesToBook_RecomputesReviewedForBothBooks(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 
 	// Configure criteria: only "authors" required so we have a clear signal
 	appSettingsSvc := appsettings.NewService(db)

@@ -18,10 +18,6 @@ type key int
 
 const ctxKey key = 0
 
-func WithLogging(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ctxKey, true)
-}
-
 type logQueryHook struct {
 	log logger.Logger
 }

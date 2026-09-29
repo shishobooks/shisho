@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +71,7 @@ func TestEReaderHandlers_NonNumericIDReturnsNotFound(t *testing.T) {
 // download page reports as a missing File rather than a doubled "not found".
 func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	t.Parallel()
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	var roleID int
@@ -107,7 +108,7 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 // An unknown or expired short code returns the errcodes 404 body.
 func TestResolveShortURL_UnknownCodeReturnsErrcodesNotFound(t *testing.T) {
 	t.Parallel()
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
 	c.SetParamNames("shortCode")
 	c.SetParamValues("nope")

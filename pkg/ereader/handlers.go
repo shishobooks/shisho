@@ -167,9 +167,9 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
 
-	libraryIDInt, err := strconv.Atoi(libraryID)
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
@@ -217,9 +217,9 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 		return err
 	}
 
-	libraryIDInt, err := strconv.Atoi(libraryID)
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
@@ -263,14 +263,14 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
 
-	libraryIDInt, err := strconv.Atoi(libraryID)
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
-	seriesIDInt, err := strconv.Atoi(seriesID)
+	seriesIDInt, err := httputil.ParamID(c, "seriesId", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
@@ -331,9 +331,9 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 		return err
 	}
 
-	libraryIDInt, err := strconv.Atoi(libraryID)
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
@@ -377,14 +377,14 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
 
-	libraryIDInt, err := strconv.Atoi(libraryID)
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
-	authorIDInt, err := strconv.Atoi(authorID)
+	authorIDInt, err := httputil.ParamID(c, "authorId", "Author")
 	if err != nil {
-		return errcodes.NotFound("Author")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
@@ -458,9 +458,9 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
 
-	libraryIDInt, err := strconv.Atoi(libraryID)
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
@@ -508,7 +508,6 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 // Download handles book downloads with Kobo detection for KePub conversion.
 func (h *handler) Download(c echo.Context) error {
 	ctx := c.Request().Context()
-	bookID := c.Param("bookId")
 	baseURL := h.baseURL(c)
 	_, err := apikeys.RequireKey(c)
 	if err != nil {
@@ -519,9 +518,9 @@ func (h *handler) Download(c echo.Context) error {
 	coversParam := c.QueryParam("covers")
 	showCover := coversParam == "on"
 
-	bookIDInt, err := strconv.Atoi(bookID)
+	bookIDInt, err := httputil.ParamID(c, "bookId", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	// Get book details
@@ -598,15 +597,14 @@ func (h *handler) Download(c echo.Context) error {
 // Cover serves a book cover image.
 func (h *handler) Cover(c echo.Context) error {
 	ctx := c.Request().Context()
-	bookID := c.Param("bookId")
 	_, err := apikeys.RequireKey(c)
 	if err != nil {
 		return err
 	}
 
-	bookIDInt, err := strconv.Atoi(bookID)
+	bookIDInt, err := httputil.ParamID(c, "bookId", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	// Get book details
@@ -644,9 +642,9 @@ func (h *handler) DownloadFile(c echo.Context) error {
 		return err
 	}
 
-	fileID, err := strconv.Atoi(c.Param("fileId"))
+	fileID, err := httputil.ParamID(c, "fileId", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
@@ -717,9 +715,9 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 		return err
 	}
 
-	fileID, err := strconv.Atoi(c.Param("fileId"))
+	fileID, err := httputil.ParamID(c, "fileId", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{

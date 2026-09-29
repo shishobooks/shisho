@@ -2,7 +2,6 @@ package filegen
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,28 +9,13 @@ import (
 
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newM4BGeneratorTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-	sqldb, err := sql.Open(sqliteshim.ShimName, filepath.Join(t.TempDir(), "test.sqlite"))
-	require.NoError(t, err)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-	return db
-}
 
 func TestM4BGenerator_SupportedType(t *testing.T) {
 	t.Parallel()
@@ -201,7 +185,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 			Duration: 1.0,
 		})
 		destPath := filepath.Join(dir, "dest.m4b")
-		db := newM4BGeneratorTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		library := &models.Library{Name: "Test", CoverAspectRatio: models.CoverAspectRatioBook}
 		_, err := db.NewInsert().Model(library).Exec(ctx)

@@ -3,7 +3,6 @@ package testutils
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -16,39 +15,12 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// newTestDB creates an in-memory SQLite DB with all migrations applied,
-// matching the pattern used by pkg/apikeys/service_test.go.
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior.
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 	t.Parallel()
@@ -106,7 +78,7 @@ func TestFixtureZipIsDeterministicAndMatchesInfo(t *testing.T) {
 func TestSeedPluginWritesDBRow(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	tmp := t.TempDir()
 	installer := plugins.NewInstaller(tmp)
@@ -143,7 +115,7 @@ func TestSeedPluginWritesDBRow(t *testing.T) {
 func TestDeleteAllPluginsWipesStateAndDisk(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	tmp := t.TempDir()
 	// Seed a fake plugin dir.

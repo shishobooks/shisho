@@ -11,13 +11,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUpdateUserSettings_RejectsBadEpubFontSize(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "alice")
 
 	e := newTestEcho(t)
@@ -43,7 +44,7 @@ func TestUpdateUserSettings_RejectsBadEpubFontSize(t *testing.T) {
 
 func TestUpdateUserSettings_AcceptsValidEpubPayload(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "bob")
 
 	e := newTestEcho(t)
@@ -79,7 +80,7 @@ func TestUpdateUserSettings_AcceptsValidEpubPayload(t *testing.T) {
 // field".
 func TestUpdateUserSettings_EmptyBodyIsNoop(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "erin")
 
 	e := newTestEcho(t)
@@ -109,7 +110,7 @@ func TestUpdateUserSettings_EmptyBodyIsNoop(t *testing.T) {
 // and leaves unrelated settings at their existing values.
 func TestUpdateUserSettings_AcceptsSingleFieldPayload(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "dave")
 
 	e := newTestEcho(t)
@@ -138,7 +139,7 @@ func TestUpdateUserSettings_AcceptsSingleFieldPayload(t *testing.T) {
 
 func TestUpdateUserSettings_AcceptsValidGallerySize(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "gally-valid")
 
 	e := newTestEcho(t)
@@ -161,7 +162,7 @@ func TestUpdateUserSettings_AcceptsValidGallerySize(t *testing.T) {
 
 func TestUpdateUserSettings_RejectsInvalidGallerySize(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "gally-bad")
 
 	e := newTestEcho(t)
@@ -181,7 +182,7 @@ func TestUpdateUserSettings_RejectsInvalidGallerySize(t *testing.T) {
 
 func TestUpdateUserSettings_AcceptsValidPlaybackSpeeds(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "speedy-valid")
 
 	e := newTestEcho(t)
@@ -208,7 +209,7 @@ func TestUpdateUserSettings_AcceptsValidPlaybackSpeeds(t *testing.T) {
 
 func TestUpdateUserSettings_RejectsInvalidPlaybackSpeeds(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "speedy-bad")
 
 	e := newTestEcho(t)
@@ -232,7 +233,7 @@ func TestUpdateUserSettings_RejectsInvalidPlaybackSpeeds(t *testing.T) {
 
 func TestGetUserSettings_DefaultsToNormalPlaybackSpeed(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "speedy-default")
 
 	e := newTestEcho(t)
@@ -253,7 +254,7 @@ func TestGetUserSettings_DefaultsToNormalPlaybackSpeed(t *testing.T) {
 
 func TestGetUserSettings_DefaultsToMediumGallerySize(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "gally-default")
 
 	e := newTestEcho(t)

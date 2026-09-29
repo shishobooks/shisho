@@ -23,6 +23,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -67,7 +68,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	t.Parallel()
 	t.Run("sets cover page and extracts cover image", func(t *testing.T) {
 		t.Parallel()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
@@ -159,7 +160,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 	t.Run("returns 400 for invalid page number", func(t *testing.T) {
 		t.Parallel()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
@@ -233,7 +234,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 	t.Run("returns 400 for negative page number", func(t *testing.T) {
 		t.Parallel()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
@@ -307,7 +308,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 	t.Run("accepts PDF file type", func(t *testing.T) {
 		t.Parallel()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
@@ -377,7 +378,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 	t.Run("returns 400 for file without pages", func(t *testing.T) {
 		t.Parallel()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
@@ -449,7 +450,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	})
 
 	t.Run("returns 404 for non-existent file", func(t *testing.T) {
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
 		bookService := NewService(db)
@@ -476,7 +477,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 	})
 
 	t.Run("returns 400 for file with no page count", func(t *testing.T) {
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
@@ -554,7 +555,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 func TestUploadFileCover_RejectsFileWithCoverPage(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := NewService(db)
@@ -638,7 +639,7 @@ func TestUploadFileCover_RejectsFileWithCoverPage(t *testing.T) {
 func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := NewService(db)
@@ -718,7 +719,7 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 // a rejected or failed replacement.
 func newUploadCoverFixture(t *testing.T) (db *bun.DB, e *echo.Echo, user *models.User, file *models.File, prevPath string, prevBytes []byte) {
 	t.Helper()
-	db = setupTestDB(t)
+	db = testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()

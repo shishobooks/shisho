@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -87,7 +88,7 @@ func seedSeriesWithAliases(ctx context.Context, t *testing.T, db *bun.DB) int {
 func TestSeriesList_ResponseEnvelopeAndAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	seedSeriesWithAliases(ctx, t, db)
 
@@ -137,7 +138,7 @@ func TestSeriesList_ResponseEnvelopeAndAliasesSerializeAsStringArray(t *testing.
 func TestSeriesRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	seriesID := seedSeriesWithAliases(ctx, t, db)
 
@@ -182,7 +183,7 @@ func setAllAccessUser(c echo.Context) {
 // without the Authenticate middleware.
 func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	seriesID := seedSeriesWithAliases(context.Background(), t, db)
 
 	e := newTestEchoSeries(t)

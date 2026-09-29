@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ type routePermissionsFixture struct {
 
 func newRoutePermissionsFixture(t *testing.T) *routePermissionsFixture {
 	t.Helper()
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
 	cfg.PluginDir = t.TempDir()
 	pluginSvc := plugins.NewService(db)

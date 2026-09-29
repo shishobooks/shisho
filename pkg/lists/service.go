@@ -95,11 +95,6 @@ type ListListsOptions struct {
 	includeTotal bool
 }
 
-func (svc *Service) ListLists(ctx context.Context, opts ListListsOptions) ([]*models.List, error) {
-	lists, _, err := svc.listListsWithTotal(ctx, opts)
-	return lists, errors.WithStack(err)
-}
-
 func (svc *Service) ListListsWithTotal(ctx context.Context, opts ListListsOptions) ([]*models.List, int, error) {
 	opts.includeTotal = true
 	return svc.listListsWithTotal(ctx, opts)

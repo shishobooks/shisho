@@ -2,40 +2,15 @@ package plugins
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys for cascade behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) *models.Plugin {
 	t.Helper()
@@ -54,7 +29,7 @@ func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) *models.Plugin
 
 func TestService_InstallAndRetrievePlugin(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -86,7 +61,7 @@ func TestService_InstallAndRetrievePlugin(t *testing.T) {
 
 func TestService_ListPlugins(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -109,7 +84,7 @@ func TestService_ListPlugins(t *testing.T) {
 
 func TestService_ListPlugins_Empty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -123,7 +98,7 @@ func TestService_ListPlugins_Empty(t *testing.T) {
 
 func TestService_UpdatePlugin(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -146,7 +121,7 @@ func TestService_UpdatePlugin(t *testing.T) {
 
 func TestService_UninstallPlugin(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -186,7 +161,7 @@ func TestService_UninstallPlugin(t *testing.T) {
 
 func TestService_GetConfig_MasksSecrets(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -225,7 +200,7 @@ func TestService_GetConfig_MasksSecrets(t *testing.T) {
 
 func TestService_SetConfig_Upsert(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -252,7 +227,7 @@ func TestService_SetConfig_Upsert(t *testing.T) {
 
 func TestService_GetConfigRaw(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -275,7 +250,7 @@ func TestService_GetConfigRaw(t *testing.T) {
 
 func TestService_GetOrder_SetOrder(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -325,7 +300,7 @@ func TestService_GetOrder_SetOrder(t *testing.T) {
 
 func TestService_AppendToOrder(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -360,7 +335,7 @@ func TestService_AppendToOrder(t *testing.T) {
 
 func TestService_ListRepositories(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -376,7 +351,7 @@ func TestService_ListRepositories(t *testing.T) {
 
 func TestService_AddAndRemoveRepository(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -418,7 +393,7 @@ func TestService_AddAndRemoveRepository(t *testing.T) {
 
 func TestService_UpsertIdentifierTypes(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -497,7 +472,7 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 
 func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -535,7 +510,7 @@ func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
 
 func TestService_GetFieldSettings_EmptyByDefault(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -549,7 +524,7 @@ func TestService_GetFieldSettings_EmptyByDefault(t *testing.T) {
 
 func TestService_SetFieldSetting_DisableField(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -567,7 +542,7 @@ func TestService_SetFieldSetting_DisableField(t *testing.T) {
 
 func TestService_SetFieldSetting_EnableFieldRemovesRow(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -588,7 +563,7 @@ func TestService_SetFieldSetting_EnableFieldRemovesRow(t *testing.T) {
 
 func TestService_SetFieldSetting_MultipleFields(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -624,7 +599,7 @@ func TestService_SetFieldSetting_MultipleFields(t *testing.T) {
 
 func TestService_GetLibraryFieldSettings_EmptyByDefault(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -638,7 +613,7 @@ func TestService_GetLibraryFieldSettings_EmptyByDefault(t *testing.T) {
 
 func TestService_SetLibraryFieldSetting_Override(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -667,7 +642,7 @@ func TestService_SetLibraryFieldSetting_Override(t *testing.T) {
 
 func TestService_ResetLibraryFieldSettings(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -691,7 +666,7 @@ func TestService_ResetLibraryFieldSettings(t *testing.T) {
 
 func TestService_GetEffectiveFieldSettings_GlobalOnly(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -714,7 +689,7 @@ func TestService_GetEffectiveFieldSettings_GlobalOnly(t *testing.T) {
 
 func TestService_GetEffectiveFieldSettings_LibraryOverridesGlobal(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -744,7 +719,7 @@ func TestService_GetEffectiveFieldSettings_LibraryOverridesGlobal(t *testing.T) 
 
 func TestService_GetEffectiveFieldSettings_OnlyDeclaredFields(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -770,7 +745,7 @@ func TestService_GetEffectiveFieldSettings_OnlyDeclaredFields(t *testing.T) {
 
 func TestService_GetEffectiveFieldSettings_EmptyDeclaredFields(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -788,7 +763,7 @@ func TestService_GetEffectiveFieldSettings_EmptyDeclaredFields(t *testing.T) {
 
 func TestService_SetOrder_WithMode(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -815,7 +790,7 @@ func TestService_SetOrder_WithMode(t *testing.T) {
 
 func TestService_GetOrder_Empty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -827,7 +802,7 @@ func TestService_GetOrder_Empty(t *testing.T) {
 
 func TestService_ListRepositories_Empty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -847,7 +822,7 @@ func TestService_ListRepositories_Empty(t *testing.T) {
 
 func TestService_ListIdentifierTypes_Empty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

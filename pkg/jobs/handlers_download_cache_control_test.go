@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ import (
 func TestDownload_SetsCacheControlNoStore(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library and a file for the library-access check.

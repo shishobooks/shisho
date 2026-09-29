@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -128,19 +129,15 @@ func (svc *Service) FindOrCreatePerson(ctx context.Context, name string, library
 		SortName:       sortname.ForPerson(name),
 		SortNameSource: models.DataSourceFilepath,
 	}
+	// Another request may have created the same person between the lookup
+	// and the insert; fetch that row instead.
 	err = svc.CreatePerson(ctx, person)
-	if err != nil {
-		// Handle race condition: if another goroutine created the same person
-		// between our retrieve and create, retry the retrieve
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return svc.RetrievePerson(ctx, RetrievePersonOptions{
-				Name:      &name,
-				LibraryID: &libraryID,
-			})
-		}
-		return nil, err
-	}
-	return person, nil
+	return database.RetrieveOnUniqueViolation(person, err, func() (*models.Person, error) {
+		return svc.RetrievePerson(ctx, RetrievePersonOptions{
+			Name:      &name,
+			LibraryID: &libraryID,
+		})
+	})
 }
 
 func (svc *Service) ListPeople(ctx context.Context, opts ListPeopleOptions) ([]*models.Person, error) {
@@ -412,32 +409,23 @@ func personBookIDs(ctx context.Context, db bun.IDB, personID int) ([]int, error)
 }
 
 // MergePeople merges sourcePerson into targetPerson (moves all associations,
-// transfers aliases, deletes source). It returns the IDs of the books the
-// source authored plus the books that own a file the source narrated, each
-// once.
+// transfers aliases, deletes source).
 //
 // A Person cannot be merged into itself. Where the source and the target
 // already author the same Book in the same role, or narrate the same File,
 // the source's row is dropped instead of re-pointed, so the merge never
 // violates ux_authors_book_person_role or ux_narrators_file_person and never
 // lists the target twice.
-func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) ([]int, error) {
+func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) error {
 	if targetID == sourceID {
-		return nil, merge.SelfMergeError("person")
+		return merge.SelfMergeError("person")
 	}
 
-	var movedBookIDs []int
-	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		var err error
-		movedBookIDs, err = personBookIDs(ctx, tx, sourceID)
-		if err != nil {
-			return err
-		}
-
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		// Drop the source's author rows that duplicate one of the target's.
 		// IS compares NULL roles as equal; the unique index does not, so a
 		// generic author would otherwise be listed twice.
-		_, err = tx.NewDelete().
+		_, err := tx.NewDelete().
 			Model((*models.Author)(nil)).
 			Where("a.person_id = ?", sourceID).
 			Where("EXISTS (SELECT 1 FROM authors AS t WHERE t.person_id = ? AND t.book_id = a.book_id AND t.role IS a.role)", targetID).
@@ -487,10 +475,6 @@ func (svc *Service) MergePeople(ctx context.Context, targetID, sourceID int) ([]
 			Exec(ctx)
 		return errors.WithStack(err)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return movedBookIDs, nil
 }
 
 // CleanupOrphanedPeople deletes people with no authors or narrators and

@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,7 +75,7 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			library, book := setupTestLibraryAndBook(t, db)
 			path := filepath.Join(book.Filepath, "book."+tt.fileType)
 			require.NoError(t, os.WriteFile(path, []byte("content"), 0o644))

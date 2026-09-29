@@ -24,7 +24,7 @@ func TestHandleDownload_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := newSyncPointTestDB(t)
 			ctx := context.Background()
 
 			lib := &models.Library{

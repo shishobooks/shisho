@@ -90,4 +90,66 @@ func TestParseRangeRejectsNonFiniteNumericValues(t *testing.T) {
 	}
 }
 
+func TestValidateGroup(t *testing.T) {
+	t.Parallel()
+
+	volume := "volume"
+	chapter := "chapter"
+	issue := "issue"
+	tests := []struct {
+		name    string
+		start   float64
+		end     *float64
+		unit    *string
+		wantErr error
+	}{
+		{name: "single", start: 1},
+		{name: "range", start: 1, end: float64Ptr(3)},
+		{name: "volume unit", start: 1, unit: &volume},
+		{name: "chapter unit", start: 1.5, end: float64Ptr(2), unit: &chapter},
+		{name: "infinite start", start: math.Inf(1), wantErr: ErrStartNotFinite},
+		{name: "nan start", start: math.NaN(), wantErr: ErrStartNotFinite},
+		{name: "nan end", start: 1, end: float64Ptr(math.NaN()), wantErr: ErrEndNotFinite},
+		{name: "infinite end", start: 1, end: float64Ptr(math.Inf(1)), wantErr: ErrEndNotFinite},
+		{name: "equal end", start: 2, end: float64Ptr(2), wantErr: ErrEndNotAfterStart},
+		{name: "end before start", start: 3, end: float64Ptr(2), wantErr: ErrEndNotAfterStart},
+		{name: "unknown unit", start: 1, unit: &issue, wantErr: ErrUnknownUnit},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.ErrorIs(t, ValidateGroup(tt.start, tt.end, tt.unit), tt.wantErr)
+		})
+	}
+}
+
+func TestGroup(t *testing.T) {
+	t.Parallel()
+
+	volume := "volume"
+	issue := "issue"
+
+	start, end, unit := Group(float64Ptr(1), float64Ptr(3), &volume)
+	require.NotNil(t, start)
+	require.NotNil(t, end)
+	require.NotNil(t, unit)
+	assert.InDelta(t, 1, *start, 0.000001)
+	assert.InDelta(t, 3, *end, 0.000001)
+	assert.Equal(t, "volume", *unit)
+
+	for name, group := range map[string][3]any{
+		"missing start": {(*float64)(nil), float64Ptr(2), (*string)(nil)},
+		"unit only":     {(*float64)(nil), (*float64)(nil), &volume},
+		"bad unit":      {float64Ptr(1), (*float64)(nil), &issue},
+		"reversed":      {float64Ptr(3), float64Ptr(1), (*string)(nil)},
+	} {
+		start, end, unit := Group(group[0].(*float64), group[1].(*float64), group[2].(*string))
+		assert.Nil(t, start, name)
+		assert.Nil(t, end, name)
+		assert.Nil(t, unit, name)
+		assert.False(t, ValidGroup(group[0].(*float64), group[1].(*float64), group[2].(*string)), name)
+	}
+}
+
 func float64Ptr(v float64) *float64 { return &v }

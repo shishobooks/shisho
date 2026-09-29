@@ -2,38 +2,17 @@ package opds
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/books"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// setupOPDSDB creates an in-memory SQLite DB with migrations applied.
-// MaxOpenConns=1 pins the pool to the migrated connection so subsequent
-// queries don't land on a sibling connection with no schema.
-func setupOPDSDB(t *testing.T) *bun.DB {
-	t.Helper()
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-	t.Cleanup(func() { db.Close() })
-	return db
-}
 
 func mustParseSortSpec(t *testing.T, s string) []sortspec.SortLevel {
 	t.Helper()
@@ -51,7 +30,7 @@ func mustParseSortSpec(t *testing.T, s string) []sortspec.SortLevel {
 func TestLibraryAllBooksFeed_HonorsStoredSort(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 
 	lib := &models.Library{
 		Name:                     "Library A",
@@ -137,7 +116,7 @@ func TestLibraryAllBooksFeed_HonorsStoredSort(t *testing.T) {
 func TestLibraryAllBooksFeed_NilSortUsesBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 
 	lib := &models.Library{
 		Name:                     "Library B",
@@ -203,7 +182,7 @@ func TestLibraryAllBooksFeed_NilSortUsesBuiltinDefault(t *testing.T) {
 func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	user := &models.User{Username: "alice", PasswordHash: "x", RoleID: 1, IsActive: true}
 	_, err := db.NewInsert().Model(user).Exec(context.Background())
 	require.NoError(t, err)

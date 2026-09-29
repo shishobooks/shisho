@@ -21,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ import (
 // route used it.
 func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 	t.Parallel()
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
 	injectedDir := t.TempDir()
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil,
@@ -73,9 +74,9 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 // showing up in the installed list proves the route used it.
 func TestListInstalledPlugins_UsesPluginServiceFromServerNew(t *testing.T) {
 	t.Parallel()
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
-	otherDB := newPermissionTestDB(t)
+	otherDB := testdb.New(t)
 	injected := plugins.NewService(otherDB)
 	require.NoError(t, injected.InstallPlugin(t.Context(), &models.Plugin{
 		Scope: "test", ID: "injected", Name: "Injected", Version: "1.0.0", InstalledAt: time.Now(),
