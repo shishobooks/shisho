@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -305,7 +306,11 @@ func (svc *Service) GetBooksPaginated(ctx context.Context, genreID, limit, offse
 }
 
 // MergeGenres merges sourceGenre into targetGenre (moves all associations, deletes source).
+// A Genre cannot be merged into itself.
 func (svc *Service) MergeGenres(ctx context.Context, targetID, sourceID int) error {
+	if targetID == sourceID {
+		return merge.SelfMergeError("genre")
+	}
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		// Get all book_ids from source that aren't already in target
 		// to avoid unique constraint violations

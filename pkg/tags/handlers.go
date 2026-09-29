@@ -11,6 +11,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
@@ -229,30 +230,35 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Fetch both sides, so a missing target or source is a 404, then run the
+	// shared merge checks.
 	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
 		ID: &id,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(tag.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
-	}
-
-	err = h.tagService.MergeTags(ctx, id, params.SourceID)
+	source, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
+		ID: &params.SourceID,
+	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	log := logger.FromContext(ctx)
-	if err := h.searchService.DeleteFromTagIndex(ctx, params.SourceID); err != nil {
-		log.Warn("failed to remove merged tag from search index", logger.Data{"tag_id": params.SourceID, "error": err.Error()})
+	user, _ := c.Get("user").(*models.User)
+	if err := merge.CheckPreconditions(user, "tag",
+		merge.Side{ID: tag.ID, LibraryID: tag.LibraryID},
+		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
+	); err != nil {
+		return err
 	}
-	if err := h.searchService.IndexTag(ctx, tag); err != nil {
-		log.Warn("failed to re-index target tag after merge", logger.Data{"tag_id": tag.ID, "error": err.Error()})
+
+	// The target's tags_fts row gains the source name as an alias, and the
+	// reindex drops the deleted source's row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{TagIDs: []int{id, params.SourceID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
+	if err := h.tagService.MergeTags(ctx, id, params.SourceID); err != nil {
+		return errors.WithStack(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)

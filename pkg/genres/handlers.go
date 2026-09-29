@@ -11,6 +11,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
@@ -241,34 +242,35 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the target genre to check library access
+	// Fetch both sides, so a missing target or source is a 404, then run the
+	// shared merge checks.
 	genre, err := h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{
 		ID: &id,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(genre.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
-	}
-
-	// Merge source genre into target (this) genre
-	err = h.genreService.MergeGenres(ctx, id, params.SourceID)
+	source, err := h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{
+		ID: &params.SourceID,
+	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Remove the merged (source) genre from FTS index and re-index the target
-	log := logger.FromContext(ctx)
-	if err := h.searchService.DeleteFromGenreIndex(ctx, params.SourceID); err != nil {
-		log.Warn("failed to remove merged genre from search index", logger.Data{"genre_id": params.SourceID, "error": err.Error()})
+	user, _ := c.Get("user").(*models.User)
+	if err := merge.CheckPreconditions(user, "genre",
+		merge.Side{ID: genre.ID, LibraryID: genre.LibraryID},
+		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
+	); err != nil {
+		return err
 	}
-	if err := h.searchService.IndexGenre(ctx, genre); err != nil {
-		log.Warn("failed to re-index target genre after merge", logger.Data{"genre_id": genre.ID, "error": err.Error()})
+
+	// The target's genres_fts row gains the source name as an alias, and the
+	// reindex drops the deleted source's row.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{GenreIDs: []int{id, params.SourceID}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
+	if err := h.genreService.MergeGenres(ctx, id, params.SourceID); err != nil {
+		return errors.WithStack(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)

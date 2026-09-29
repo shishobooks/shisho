@@ -381,8 +381,17 @@ func (h *handler) update(c echo.Context) error {
 			return errors.WithStack(err)
 		}
 
-		// Create new author associations
-		for i, authorInput := range params.Authors {
+		// Create new author associations. A Person is listed once per role:
+		// the unique index treats NULL roles as distinct, so it would not
+		// stop a second generic row for the same Person.
+		type authorKey struct {
+			personID int
+			role     string
+		}
+		seenAuthors := make(map[authorKey]bool, len(params.Authors))
+		// sortOrder counts stored rows, so a skipped entry leaves no gap.
+		sortOrder := 0
+		for _, authorInput := range params.Authors {
 			if authorInput.Name == "" {
 				continue
 			}
@@ -391,15 +400,27 @@ func (h *handler) update(c echo.Context) error {
 				log.Error("failed to find/create person", logger.Data{"author": authorInput.Name, "error": err.Error()})
 				continue
 			}
+			// A nil role and an empty-string role share one key, so both
+			// count as the generic author entry.
+			key := authorKey{personID: person.ID}
+			if authorInput.Role != nil {
+				key.role = *authorInput.Role
+			}
+			if seenAuthors[key] {
+				continue
+			}
+			seenAuthors[key] = true
 			author := &models.Author{
 				BookID:    book.ID,
 				PersonID:  person.ID,
-				SortOrder: i + 1,
+				SortOrder: sortOrder + 1,
 				Role:      authorInput.Role,
 			}
 			if err := h.bookService.CreateAuthor(ctx, author); err != nil {
 				log.Error("failed to create author", logger.Data{"book_id": book.ID, "person_id": person.ID, "error": err.Error()})
+				continue
 			}
+			sortOrder++
 		}
 	}
 
@@ -2249,11 +2270,22 @@ func (h *handler) moveFiles(c echo.Context) error {
 // mergeBooks merges multiple books into a single target book.
 func (h *handler) mergeBooks(c echo.Context) error {
 	ctx := c.Request().Context()
+	log := logger.FromContext(ctx)
 
 	// Bind payload
 	params := MergeBooksPayload{}
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
+	}
+
+	// A source listed twice would collect its files twice, and the file move
+	// would then report them as missing.
+	seenSources := make(map[int]bool, len(params.SourceBookIDs))
+	for _, sourceBookID := range params.SourceBookIDs {
+		if seenSources[sourceBookID] {
+			return errcodes.ValidationError(fmt.Sprintf("Source book %d is listed more than once", sourceBookID))
+		}
+		seenSources[sourceBookID] = true
 	}
 
 	// Get target book to determine library
@@ -2317,6 +2349,12 @@ func (h *handler) mergeBooks(c echo.Context) error {
 	})
 	if err != nil {
 		return errcodes.ValidationError(err.Error())
+	}
+
+	// The deleted sources' People, Genres, Tags, Series, and Publishers may
+	// be used nowhere else now, as after a Book delete.
+	if len(result.DeletedBookIDs) > 0 {
+		CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
 	}
 
 	// Return MergeBooksResponse

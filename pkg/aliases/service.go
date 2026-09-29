@@ -131,17 +131,21 @@ func (svc *Service) RemoveAllAliases(ctx context.Context, cfg ResourceConfig, re
 }
 
 // TransferAliasesOnMerge reassigns the source resource's aliases to the target
-// and adds the source's primary name as a new alias of the target. Duplicates
-// (case-insensitive match against the target's primary name or existing aliases)
-// are silently left for CASCADE to clean up when the source is deleted.
-// Accepts bun.IDB so it works inside a transaction.
+// and adds the source's primary name as a new alias of the target, owned by the
+// target's Library. Duplicates (case-insensitive match against the target's
+// primary name or existing aliases) are silently left for CASCADE to clean up
+// when the source is deleted. When the source's name is already an alias of a
+// third resource in the target's Library, that alias stays where it is and the
+// target does not get it, since the alias table allows each name once per
+// Library. Accepts bun.IDB so it works inside a transaction.
 func TransferAliasesOnMerge(ctx context.Context, db bun.IDB, cfg ResourceConfig, sourceID, targetID int) error {
 	var targetName string
+	var targetLibraryID int
 	err := db.NewSelect().
 		TableExpr(cfg.ResourceTable).
-		Column("name").
+		Column("name", "library_id").
 		Where("id = ?", targetID).
-		Scan(ctx, &targetName)
+		Scan(ctx, &targetName, &targetLibraryID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -187,24 +191,40 @@ func TransferAliasesOnMerge(ctx context.Context, db bun.IDB, cfg ResourceConfig,
 	}
 
 	var sourceName string
-	var sourceLibraryID int
 	err = db.NewSelect().
 		TableExpr(cfg.ResourceTable).
-		Column("name", "library_id").
+		Column("name").
 		Where("id = ?", sourceID).
-		Scan(ctx, &sourceName, &sourceLibraryID)
+		Scan(ctx, &sourceName)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	if !existing[strings.ToLower(sourceName)] {
-		_, err = db.NewRaw(
-			"INSERT INTO "+cfg.AliasTable+" (created_at, "+cfg.ResourceFK+", name, library_id) VALUES (?, ?, ?, ?)",
-			time.Now(), targetID, sourceName, sourceLibraryID,
-		).Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
+	if existing[strings.ToLower(sourceName)] {
+		return nil
+	}
+
+	// A third resource may already hold the name as an alias. The source's
+	// own aliases were moved above, so any remaining match belongs to
+	// another resource.
+	taken, err := db.NewSelect().
+		TableExpr(cfg.AliasTable).
+		Where("name = ? COLLATE NOCASE AND library_id = ?", sourceName, targetLibraryID).
+		Where(cfg.ResourceFK+" != ?", sourceID).
+		Exists(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if taken {
+		return nil
+	}
+
+	_, err = db.NewRaw(
+		"INSERT INTO "+cfg.AliasTable+" (created_at, "+cfg.ResourceFK+", name, library_id) VALUES (?, ?, ?, ?)",
+		time.Now(), targetID, sourceName, targetLibraryID,
+	).Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
 	return nil

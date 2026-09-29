@@ -40,7 +40,7 @@ During a scan, identifiers from metadata enrichers and identifiers embedded in t
 
 People, series, genres, tags, and publishers can have aliases. Name lookups use aliases to resolve variants to one canonical resource. Renaming a resource can preserve its old name as an alias.
 
-Merging these resources moves their relationships to the target, adds the source name and aliases to the target, and removes the source resource. This is different from [merging books](./managing-books-and-files.md#merging-books), which keeps the target book metadata and moves source files without combining source book metadata.
+Merging these resources moves their relationships to the target, adds the source name and aliases to the target, and removes the source resource. Both resources must be in the same library, and a resource cannot be merged into itself. When a book is in both series of a series merge, it keeps the target's series number, or takes the source's number when the target has none. Renaming a genre, tag, or publisher to the name of another one merges the two. Renaming a series or person to the name of another one is rejected instead; merge them to combine them. This is different from [merging books](./managing-books-and-files.md#merging-books), which keeps the target book metadata and moves source files without combining source book metadata.
 
 ## Deleting Resources
 

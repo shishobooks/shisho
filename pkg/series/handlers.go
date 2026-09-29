@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -155,6 +156,19 @@ func (h *handler) update(c echo.Context) error {
 	opts := UpdateSeriesOptions{Columns: []string{}}
 
 	if params.Name != nil && *params.Name != series.Name {
+		// A rename onto another Series' name is rejected rather than merged,
+		// so combining two Series stays an explicit merge.
+		existing, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+			Name:      params.Name,
+			LibraryID: &series.LibraryID,
+		})
+		if err == nil && existing.ID != id {
+			return errcodes.ValidationError("A series with this name already exists. Merge the two series instead.")
+		}
+		if err != nil && !errors.Is(err, errcodes.NotFound("Series")) {
+			return errors.WithStack(err)
+		}
+
 		series.Name = *params.Name
 		series.NameSource = models.DataSourceManual
 		opts.Columns = append(opts.Columns, "name", "name_source")
@@ -317,19 +331,26 @@ func (h *handler) merge(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Fetch the target series to check library access
+	// Fetch both sides, so a missing target or source is a 404, then run the
+	// shared merge checks.
 	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
 		ID: &id,
 	})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(series.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	source, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
+		ID: &params.SourceID,
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	user, _ := c.Get("user").(*models.User)
+	if err := merge.CheckPreconditions(user, "series",
+		merge.Side{ID: series.ID, LibraryID: series.LibraryID},
+		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
+	); err != nil {
+		return err
 	}
 
 	// Every book of both series lists the target name and the source name,
