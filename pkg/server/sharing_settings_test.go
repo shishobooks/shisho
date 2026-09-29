@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ func newSharingSettingsFixture(t *testing.T, demoMode bool) *sharingSettingsFixt
 	t.Helper()
 	ctx := context.Background()
 
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
 	cfg.DemoMode = demoMode
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, nil, nil, nil, nil)

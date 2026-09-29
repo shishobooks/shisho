@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -13,7 +14,7 @@ import (
 
 func TestDeleteFilesByIDs(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -147,7 +148,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 
 func TestDeleteFilesByIDs_EmptySlice(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -162,7 +163,7 @@ func TestDeleteFilesByIDs_EmptySlice(t *testing.T) {
 
 func TestDeleteBooksByIDs(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -415,7 +416,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 
 func TestDeleteBooksByIDs_EmptySlice(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -430,7 +431,7 @@ func TestDeleteBooksByIDs_EmptySlice(t *testing.T) {
 
 func TestDeleteFile_DeletesChapters(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -499,7 +500,7 @@ func TestDeleteFile_DeletesChapters(t *testing.T) {
 
 func TestDeleteBook_DeletesChapters(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

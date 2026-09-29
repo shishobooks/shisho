@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +90,7 @@ func TestGetBookFileType_UsesFirstMainFile(t *testing.T) {
 func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -208,7 +209,7 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 func TestDownload_SingleFileStillWorks(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -294,7 +295,7 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -392,7 +393,7 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 func TestDownload_ShowsFileNames(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 

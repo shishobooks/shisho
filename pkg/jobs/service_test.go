@@ -2,16 +2,13 @@ package jobs
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
@@ -22,36 +19,9 @@ func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
 	return lib
 }
 
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	// A bare :memory: DSN gives each pooled connection its own empty database, so
-	// data written on one connection is invisible to the next. Pin the pool to a
-	// single connection (matching pkg/database for :memory:) so multi-step tests
-	// that write then read see a consistent database.
-	sqldb.SetMaxOpenConns(1)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
-
 func TestHasActiveJob_NilLibraryID_NoJobs(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -62,7 +32,7 @@ func TestHasActiveJob_NilLibraryID_NoJobs(t *testing.T) {
 
 func TestHasActiveJob_NilLibraryID_PendingJob(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -82,7 +52,7 @@ func TestHasActiveJob_NilLibraryID_PendingJob(t *testing.T) {
 
 func TestHasActiveJob_NilLibraryID_InProgressJob(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -102,7 +72,7 @@ func TestHasActiveJob_NilLibraryID_InProgressJob(t *testing.T) {
 
 func TestHasActiveJob_NilLibraryID_CompletedJob(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -122,7 +92,7 @@ func TestHasActiveJob_NilLibraryID_CompletedJob(t *testing.T) {
 
 func TestHasActiveJob_NilLibraryID_DifferentType(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -148,7 +118,7 @@ func TestHasActiveJob_NilLibraryID_DifferentType(t *testing.T) {
 
 func TestHasActiveJob_NilLibraryID_MultipleJobs(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -177,7 +147,7 @@ func TestHasActiveJob_NilLibraryID_MultipleJobs(t *testing.T) {
 
 func TestHasActiveJob_WithLibraryID_NoJobs(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -189,7 +159,7 @@ func TestHasActiveJob_WithLibraryID_NoJobs(t *testing.T) {
 
 func TestHasActiveJob_WithLibraryID_MatchingLibrary(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -211,7 +181,7 @@ func TestHasActiveJob_WithLibraryID_MatchingLibrary(t *testing.T) {
 
 func TestHasActiveJob_WithLibraryID_DifferentLibrary(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -236,7 +206,7 @@ func TestHasActiveJob_WithLibraryID_DifferentLibrary(t *testing.T) {
 
 func TestHasActiveJob_WithLibraryID_GlobalJobBlocks(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -260,7 +230,7 @@ func TestHasActiveJob_WithLibraryID_GlobalJobBlocks(t *testing.T) {
 
 func TestHasActiveJob_NilLibraryID_ChecksAny(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -283,7 +253,7 @@ func TestHasActiveJob_NilLibraryID_ChecksAny(t *testing.T) {
 
 func TestListJobs_FilterByType(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -314,7 +284,7 @@ func TestListJobs_FilterByType(t *testing.T) {
 
 func TestListJobs_FilterByLibraryIDOrGlobal(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

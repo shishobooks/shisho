@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ import (
 func TestHandlerList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -61,7 +62,7 @@ func TestHandlerList_ResponseUsesItemsKey(t *testing.T) {
 func TestHandlerDeactivate_Returns204NoContent(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -99,7 +100,7 @@ func TestHandlerDeactivate_Returns204NoContent(t *testing.T) {
 func TestHandlerResetPassword_Returns204NoContent(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -141,7 +142,7 @@ func newUsersTestContext(t *testing.T, payload, path string) (echo.Context, *htt
 func TestHandlerResetPassword_SelfForcedReset_DoesNotRequireCurrentPassword(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -176,7 +177,7 @@ func TestHandlerResetPassword_SelfForcedReset_DoesNotRequireCurrentPassword(t *t
 func TestHandlerResetPassword_SelfNormal_RequiresCurrentPassword(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -206,7 +207,7 @@ func TestHandlerResetPassword_SelfNormal_RequiresCurrentPassword(t *testing.T) {
 func TestHandlerResetPassword_AdminResetsOtherUser_WithRequirePasswordReset(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -261,7 +262,7 @@ func TestHandlerResetPassword_AdminResetsOtherUser_WithRequirePasswordReset(t *t
 func TestHandlerResetPassword_NonAdminCannotResetOtherUser(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 
@@ -305,7 +306,7 @@ func TestHandlerResetPassword_NonAdminCannotResetOtherUser(t *testing.T) {
 func TestHandlerResetPassword_SelfResetIgnoresRequirePasswordResetParam(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	h := &handler{userService: NewService(db)}
 	ctx := context.Background()
 

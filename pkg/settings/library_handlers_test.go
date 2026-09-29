@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -71,7 +72,7 @@ func seedLibraryAccess(t *testing.T, db *bun.DB, user *models.User, libraryID in
 func TestGetLibrarySettings_NoRow(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	h := &libraryHandler{settingsService: svc}
 
@@ -93,7 +94,7 @@ func TestGetLibrarySettings_NoRow(t *testing.T) {
 func TestGetLibrarySettings_Forbidden(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	h := &libraryHandler{settingsService: svc}
 
@@ -118,7 +119,7 @@ func TestGetLibrarySettings_Forbidden(t *testing.T) {
 func TestUpdateLibrarySettings_PersistsSpec(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	h := &libraryHandler{settingsService: svc}
 
@@ -142,7 +143,7 @@ func TestUpdateLibrarySettings_PersistsSpec(t *testing.T) {
 func TestUpdateLibrarySettings_RejectsInvalidSpec(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	h := &libraryHandler{settingsService: svc}
 
@@ -161,7 +162,7 @@ func TestUpdateLibrarySettings_RejectsInvalidSpec(t *testing.T) {
 func TestUpdateLibrarySettings_AcceptsNullClear(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	h := &libraryHandler{settingsService: svc}
 

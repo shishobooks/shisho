@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -30,7 +31,7 @@ func ftsRowIDs(t *testing.T, db *bun.DB, table string) []int {
 
 func TestReindexAffected_ExpandsPeopleToBooksAndSeries(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
@@ -48,7 +49,7 @@ func TestReindexAffected_ExpandsPeopleToBooksAndSeries(t *testing.T) {
 
 func TestReindexAffected_ExpandsSeriesToBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
@@ -63,7 +64,7 @@ func TestReindexAffected_ExpandsSeriesToBooks(t *testing.T) {
 
 func TestReindexAffected_OwnRowsOnlyForGenresTagsPublishers(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
@@ -81,7 +82,7 @@ func TestReindexAffected_OwnRowsOnlyForGenresTagsPublishers(t *testing.T) {
 // before the delete still reach the Series that held it.
 func TestCollectAffected_KeepsSeriesOfDeletedBook(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
@@ -107,7 +108,7 @@ func TestCollectAffected_KeepsSeriesOfDeletedBook(t *testing.T) {
 // that no longer exist.
 func TestReindexAffected_ReadsIDsAddedAfterCollect(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
@@ -126,7 +127,7 @@ func TestReindexAffected_ReadsIDsAddedAfterCollect(t *testing.T) {
 // context must not stop it.
 func TestReindexAffected_IgnoresCancellation(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
 	clearFTS(t, db)

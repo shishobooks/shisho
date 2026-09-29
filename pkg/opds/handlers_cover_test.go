@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ import (
 func setupCoverTest(t *testing.T) (*handler, int, int, []byte) {
 	t.Helper()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 
 	dir := t.TempDir()
 	bookPath := filepath.Join(dir, "book.epub")
@@ -146,7 +147,7 @@ func TestBookCover_ForbiddenWithoutLibraryAccess(t *testing.T) {
 func TestBookCover_NotFoundWhenBookHasNoCover(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := &models.Library{

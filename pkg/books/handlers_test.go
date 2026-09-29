@@ -2,7 +2,6 @@ package books
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,37 +26,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func setUserInContext(c echo.Context, user *models.User) {
 	auth.SetUser(c, user)
@@ -335,7 +310,7 @@ func newUpdateTitleRequest(bookID int, newTitle string) *http.Request {
 
 func TestStreamFile_M4B_ReturnsAudioMp4ContentType(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
 	file := setupTestFile(t, db, book, models.FileTypeM4B, m4bPath)
@@ -352,7 +327,7 @@ func TestStreamFile_M4B_ReturnsAudioMp4ContentType(t *testing.T) {
 
 func TestStreamFile_NonM4BFile_Returns404(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	epubPath := createTestEPUBFile(t)
 	file := setupTestFile(t, db, book, models.FileTypeEPUB, epubPath)
@@ -368,7 +343,7 @@ func TestStreamFile_NonM4BFile_Returns404(t *testing.T) {
 
 func TestStreamFile_NonExistentFile_Returns404(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, _ := setupTestLibraryAndBook(t, db)
 	user := setupTestUser(t, db, library.ID, true)
 
@@ -382,7 +357,7 @@ func TestStreamFile_NonExistentFile_Returns404(t *testing.T) {
 
 func TestStreamFile_UnauthorizedLibraryAccess_Returns403(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
 	file := setupTestFile(t, db, book, models.FileTypeM4B, m4bPath)
@@ -399,7 +374,7 @@ func TestStreamFile_UnauthorizedLibraryAccess_Returns403(t *testing.T) {
 
 func TestStreamFile_WithoutRangeHeader_Returns200AndFullFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	fileSize := 1000
 	m4bPath := createTestM4BFile(t, fileSize)
@@ -417,7 +392,7 @@ func TestStreamFile_WithoutRangeHeader_Returns200AndFullFile(t *testing.T) {
 
 func TestStreamFile_WithRangeHeader_Returns206PartialContent(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	fileSize := 5000
 	m4bPath := createTestM4BFile(t, fileSize)
@@ -442,7 +417,7 @@ func TestStreamFile_WithRangeHeader_Returns206PartialContent(t *testing.T) {
 
 func TestStreamFile_RangeHeader_VerifyReturnedBytesMatchExpected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	fileSize := 5000
 	m4bPath := createTestM4BFile(t, fileSize)
@@ -470,7 +445,7 @@ func TestStreamFile_RangeHeader_VerifyReturnedBytesMatchExpected(t *testing.T) {
 
 func TestStreamFile_AcceptRangesHeader_IsPresent(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	m4bPath := createTestM4BFile(t, 1000)
 	file := setupTestFile(t, db, book, models.FileTypeM4B, m4bPath)
@@ -486,7 +461,7 @@ func TestStreamFile_AcceptRangesHeader_IsPresent(t *testing.T) {
 
 func TestStreamFile_CBZFile_Returns404(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 
 	// Create a CBZ file
@@ -508,7 +483,7 @@ func TestStreamFile_CBZFile_Returns404(t *testing.T) {
 
 func TestStreamFile_InvalidFileID_Returns404(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, _ := setupTestLibraryAndBook(t, db)
 	user := setupTestUser(t, db, library.ID, true)
 
@@ -522,7 +497,7 @@ func TestStreamFile_InvalidFileID_Returns404(t *testing.T) {
 
 func TestDeleteBook_DeletesBookAndFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for files
@@ -606,7 +581,7 @@ func TestDeleteBook_DeletesBookAndFiles(t *testing.T) {
 
 func TestDeleteFile_DeletesFileAndKeepsBook(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for files
@@ -697,7 +672,7 @@ func TestDeleteFile_DeletesFileAndKeepsBook(t *testing.T) {
 
 func TestListBooks_FiltersByIDs(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory
@@ -773,7 +748,7 @@ func TestListBooks_FiltersByIDs(t *testing.T) {
 
 func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create library and temp directory for files
@@ -883,7 +858,7 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 	// or a root-level file, since the cover dir resolution differs.
 	runDowngrade := func(t *testing.T, makeBook func(t *testing.T, libraryID int) (book *models.Book, bookDir string, filePath string)) {
 		t.Helper()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 
 		library := &models.Library{
@@ -1033,7 +1008,7 @@ func TestServeCover_RootLevelFile_SyntheticBookPath_ServesCoverFromFileDir(t *te
 
 	runServe := func(t *testing.T, fetchURL func(bookID, fileID int) string) {
 		t.Helper()
-		db := setupTestDB(t)
+		db := testdb.New(t)
 		ctx := context.Background()
 
 		library := &models.Library{
@@ -1120,7 +1095,7 @@ func TestServeCover_RootLevelFile_SyntheticBookPath_ServesCoverFromFileDir(t *te
 func TestUpdateFile_Narrators_RootLevelM4B_OrganizesFileAndSyncsBookPath(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
@@ -1202,7 +1177,7 @@ func TestUpdateFile_Narrators_RootLevelM4B_OrganizesFileAndSyncsBookPath(t *test
 func TestUpdateFile_NarratorsAndName_DirectoryBacked_UsesNewNarratorsInFilename(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
@@ -1277,7 +1252,7 @@ func TestUpdateFile_NarratorsAndName_DirectoryBacked_UsesNewNarratorsInFilename(
 func TestUpdateFile_Name_RootLevelFile_OrganizesWithNewName(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
@@ -1347,7 +1322,7 @@ func TestUpdateFile_Name_RootLevelFile_OrganizesWithNewName(t *testing.T) {
 func TestUpdateFile_Name_RootLevelFile_OrganizeFailure_RevertsDBState(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
@@ -1428,7 +1403,7 @@ func TestUpdateFile_Name_RootLevelFile_OrganizeFailure_RevertsDBState(t *testing
 func TestUpdateFile_Name_DirectoryBacked_RenameFailure_RevertsDBState(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
@@ -1504,7 +1479,7 @@ func TestUpdateFile_Name_DirectoryBacked_RenameFailure_RevertsDBState(t *testing
 func TestUploadFileCover_RootLevelFile_SyntheticBookPath_WritesNextToFile(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
@@ -1569,7 +1544,7 @@ func TestUploadFileCover_RootLevelFile_SyntheticBookPath_WritesNextToFile(t *tes
 func TestUpdateBook_Title_UpdatesMainFileName_WhenMatchesOldTitle(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	matchingName := "Foo"
@@ -1594,7 +1569,7 @@ func TestUpdateBook_Title_UpdatesMainFileName_WhenMatchesOldTitle(t *testing.T) 
 func TestUpdateBook_Title_UpdatesNilFileName_ToNewTitle(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, file := seedBookAndFile(t, db, "Foo", nil, nil, models.FileRoleMain)
@@ -1617,7 +1592,7 @@ func TestUpdateBook_Title_UpdatesNilFileName_ToNewTitle(t *testing.T) {
 func TestUpdateBook_Title_UpdatesEmptyFileName_ToNewTitle(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	emptyName := ""
@@ -1640,7 +1615,7 @@ func TestUpdateBook_Title_UpdatesEmptyFileName_ToNewTitle(t *testing.T) {
 func TestUpdateBook_Title_MatchesWithTrimAndCasefold(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	fileName := "  foo bar  "
@@ -1663,7 +1638,7 @@ func TestUpdateBook_Title_MatchesWithTrimAndCasefold(t *testing.T) {
 func TestUpdateBook_Title_PreservesCustomFileName_WhenDiffers(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	customName := "Baz"
@@ -1688,7 +1663,7 @@ func TestUpdateBook_Title_PreservesCustomFileName_WhenDiffers(t *testing.T) {
 func TestUpdateBook_Title_DoesNotTouchSupplementFileName(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	matchingName := "Foo"
@@ -1713,7 +1688,7 @@ func TestUpdateBook_Title_DoesNotTouchSupplementFileName(t *testing.T) {
 func TestUpdateBook_Title_MultipleMainFiles_IndependentlyChecked(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -1780,7 +1755,7 @@ func TestUpdateBook_Title_MultipleMainFiles_IndependentlyChecked(t *testing.T) {
 func TestUpdateBook_Title_Unchanged_DoesNotTouchFileName(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// file.Name intentionally set to a differently-cased variant of the title
@@ -1809,7 +1784,7 @@ func TestUpdateBook_Title_Unchanged_DoesNotTouchFileName(t *testing.T) {
 func TestUpdateBook_Title_EmptyString_Returns422(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 
 	matchingName := "Foo"
 	filepathSource := models.DataSourceFilepath
@@ -1825,7 +1800,7 @@ func TestUpdateBook_Title_EmptyString_Returns422(t *testing.T) {
 func TestUpdateBook_Title_WhitespaceOnly_Returns422(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 
 	matchingName := "Foo"
 	filepathSource := models.DataSourceFilepath
@@ -1841,7 +1816,7 @@ func TestUpdateBook_Title_WhitespaceOnly_Returns422(t *testing.T) {
 func TestUpdateBook_Title_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	matchingName := "Foo"
@@ -1869,7 +1844,7 @@ func TestUpdateBook_Title_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T)
 func TestUpdateFile_Name_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, _, file := seedBookAndFile(t, db, "Foo", nil, nil, models.FileRoleMain)
@@ -1893,7 +1868,7 @@ func TestUpdateFile_Name_LeadingTrailingWhitespace_TrimmedOnStore(t *testing.T) 
 
 func TestUpdateFile_RejectsDuplicateIdentifierTypes(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -1927,7 +1902,7 @@ func TestUpdateFile_RejectsDuplicateIdentifierTypes(t *testing.T) {
 
 func TestUpdateFile_PreservesSourceForUnchangedIdentifiers(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -1966,7 +1941,7 @@ func TestUpdateFile_PreservesSourceForUnchangedIdentifiers(t *testing.T) {
 
 func TestUpdateFile_AssignsManualSourceWhenIdentifierValueChanges(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -2023,7 +1998,7 @@ func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			ctx := context.Background()
 			svc := NewService(db)
 
@@ -2054,7 +2029,7 @@ func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
 
 func TestUpdateFile_TrimsIdentifierTypeAndValue(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book := setupTestLibraryAndBook(t, db)
@@ -2080,7 +2055,7 @@ func TestUpdateFile_TrimsIdentifierTypeAndValue(t *testing.T) {
 
 func TestUpdateFile_RejectsDuplicateTypesAfterTrim(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book := setupTestLibraryAndBook(t, db)
@@ -2105,7 +2080,7 @@ func TestUpdateFile_RejectsDuplicateTypesAfterTrim(t *testing.T) {
 
 func TestUpdateFile_IsPreferredCover_SetsAndClearsSiblings(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book := setupTestLibraryAndBook(t, db)
@@ -2181,7 +2156,7 @@ func TestUpdateFile_IsPreferredCover_SetsAndClearsSiblings(t *testing.T) {
 
 func TestUpdateFile_IsPreferredCover_RejectsFileWithNoCover(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 
 	library, book := setupTestLibraryAndBook(t, db)
 	dir := t.TempDir()
@@ -2214,7 +2189,7 @@ func TestUpdateFile_IsPreferredCover_RejectsFileWithNoCover(t *testing.T) {
 
 func TestUpdateFile_IsPreferredCover_DifferentCategoriesIndependent(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book := setupTestLibraryAndBook(t, db)
@@ -2276,7 +2251,7 @@ func TestUpdateFile_IsPreferredCover_DifferentCategoriesIndependent(t *testing.T
 
 func TestUpdateFile_IsPreferredCover_ClearingPreferred(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book := setupTestLibraryAndBook(t, db)
@@ -2318,7 +2293,7 @@ func TestUpdateFile_IsPreferredCover_ClearingPreferred(t *testing.T) {
 func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	libraryDir := t.TempDir()
 	oldBookDir := filepath.Join(libraryDir, "Saga v001-003")
@@ -2391,7 +2366,7 @@ func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 
 func TestUpdateBook_SeriesNumberRange_PersistsAndReturnsEnd(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
@@ -2426,7 +2401,7 @@ func TestUpdateBook_SeriesNumberRange_PersistsAndReturnsEnd(t *testing.T) {
 
 func TestUpdateBook_SeriesNumberRange_RejectsInvalidRangeBeforePersistence(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
@@ -2446,7 +2421,7 @@ func TestUpdateBook_SeriesNumberRange_RejectsInvalidRangeBeforePersistence(t *te
 
 func TestUpdateBook_SeriesNumberUnit_StoresChapterUnit(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, _ := seedBookAndFile(t, db, "One Piece", nil, nil, models.FileRoleMain)
@@ -2468,7 +2443,7 @@ func TestUpdateBook_SeriesNumberUnit_StoresChapterUnit(t *testing.T) {
 
 func TestUpdateBook_SeriesNumberUnit_StoresVolumeUnit(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, _ := seedBookAndFile(t, db, "Naruto", nil, nil, models.FileRoleMain)
@@ -2490,7 +2465,7 @@ func TestUpdateBook_SeriesNumberUnit_StoresVolumeUnit(t *testing.T) {
 
 func TestUpdateBook_SeriesNumberUnit_RejectsBogusUnit(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, _ := seedBookAndFile(t, db, "Naruto", nil, nil, models.FileRoleMain)
@@ -2515,7 +2490,7 @@ func TestUpdateBook_SeriesNumberUnit_RejectsBogusUnit(t *testing.T) {
 // replaceable, since it no longer reads the Series name's source as a proxy.
 func TestUpdateBook_Series_StampsManualMembershipSource(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book, _ := seedBookAndFile(t, db, "Collected Stories", nil, nil, models.FileRoleMain)
@@ -2544,7 +2519,7 @@ func TestUpdateBook_Series_StampsManualMembershipSource(t *testing.T) {
 // predates normalization never matched and lost its source on every save.
 func TestUpdateFile_PreservesSourceForUnnormalizedStoredIdentifier(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library, book := setupTestLibraryAndBook(t, db)
@@ -2588,7 +2563,7 @@ func setAllAccessUser(c echo.Context) {
 // without the Authenticate middleware.
 func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	book := seedBook(t, db, seedLibrary(t, db, "Library"), "Title", "Title", time.Now())
 	h := &handler{bookService: NewService(db), libraryService: libraries.NewService(db)}
 

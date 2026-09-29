@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +17,7 @@ import (
 func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 
 	e := echo.New()
 	RegisterRoutes(e, db, nil, books.NewService(db))

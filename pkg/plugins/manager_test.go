@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func createInlinePlugin(t *testing.T, pluginDir, scope, id, manifestJSON, mainJS
 func setupTestManager(t *testing.T, plugins ...struct{ scope, id, testdata string }) (*Manager, *Service) {
 	t.Helper()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 
 	pluginDir := t.TempDir()
@@ -110,7 +111,7 @@ func TestManager_LoadAll_Disabled(t *testing.T) {
 func TestManager_LoadAll_LoadError(t *testing.T) {
 	t.Parallel()
 	// Create a manager with no plugin files (pointing to non-existent dir)
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 	mgr := NewManager(service, pluginDir, "")
@@ -283,7 +284,7 @@ func TestManager_RegisteredFileExtensions(t *testing.T) {
 func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
 	t.Parallel()
 	// Create a plugin that declares reserved extensions in fileParser.types
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -409,7 +410,7 @@ func TestManager_GetParserForType(t *testing.T) {
 
 func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -472,7 +473,7 @@ func TestManager_GetOrderedRuntimes_WithLibrary(t *testing.T) {
 
 func TestManager_GetOrderedRuntimes_GlobalDisabledExcluded(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -530,7 +531,7 @@ func TestManager_LoadAll_VersionIncompatible_SetsNotSupported(t *testing.T) {
 	version.Version = "1.0.0"
 	defer func() { version.Version = origVersion }()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -575,7 +576,7 @@ func TestManager_LoadPlugin_VersionIncompatible(t *testing.T) {
 	version.Version = "1.0.0"
 	defer func() { version.Version = origVersion }()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -661,7 +662,7 @@ func TestManager_LoadPlugin_NoMinVersion(t *testing.T) {
 
 func TestManager_GetManualRuntimes(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -719,7 +720,7 @@ func TestManager_GetManualRuntimes(t *testing.T) {
 
 func TestManager_GetOrderedRuntimes_GlobalModeFiltering(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

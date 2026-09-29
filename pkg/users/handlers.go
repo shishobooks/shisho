@@ -2,12 +2,12 @@ package users
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -34,9 +34,9 @@ func (h *handler) create(c echo.Context) error {
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "User")
 	if err != nil {
-		return errcodes.NotFound("User")
+		return err
 	}
 
 	user, err := h.userService.Retrieve(ctx, id)
@@ -78,9 +78,9 @@ func (h *handler) directory(c echo.Context) error {
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "User")
 	if err != nil {
-		return errcodes.NotFound("User")
+		return err
 	}
 
 	params := UpdateUserPayload{}
@@ -137,9 +137,9 @@ func (h *handler) update(c echo.Context) error {
 func (h *handler) resetPassword(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "User")
 	if err != nil {
-		return errcodes.NotFound("User")
+		return err
 	}
 
 	params := ResetPasswordPayload{}
@@ -194,9 +194,9 @@ func (h *handler) resetPassword(c echo.Context) error {
 func (h *handler) deactivate(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "User")
 	if err != nil {
-		return errcodes.NotFound("User")
+		return err
 	}
 
 	// Prevent deactivating yourself

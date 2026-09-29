@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,7 +108,7 @@ func sortedJSONKeys(t *testing.T, raw json.RawMessage) []string {
 func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	mgr := installShapeEnricher(t, service)
 
@@ -196,7 +197,7 @@ func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 func TestGetConfig_ResponseWireShape(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	mgr := installShapeEnricher(t, service)
 	h := &handler{service: service, manager: mgr}

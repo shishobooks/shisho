@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 )
 
 func TestBookCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := NewService(db)
@@ -53,7 +54,7 @@ func TestBookCover_SetsCacheControlImmutable(t *testing.T) {
 func TestBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := NewService(db)

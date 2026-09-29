@@ -17,6 +17,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 )
 
 // seedBookWithFileCover creates a library, book, and file with a real cover
@@ -77,7 +78,7 @@ func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 func TestFileCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	h := &handler{bookService: NewService(db)}
@@ -102,7 +103,7 @@ func TestFileCover_SetsCacheControlImmutable(t *testing.T) {
 func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	h := &handler{bookService: NewService(db)}

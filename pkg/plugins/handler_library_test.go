@@ -10,13 +10,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := t.Context()
 
@@ -56,7 +57,7 @@ func TestLibraryPluginOrder_GetDefault(t *testing.T) {
 
 func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := t.Context()
 
@@ -109,7 +110,7 @@ func TestLibraryPluginOrder_SetAndGet(t *testing.T) {
 
 func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := t.Context()
 
@@ -147,7 +148,7 @@ func TestLibraryPluginOrder_ResetHookType(t *testing.T) {
 
 func TestLibraryPluginOrder_ResetAll(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := t.Context()
 

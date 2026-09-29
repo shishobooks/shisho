@@ -8,6 +8,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ import (
 func TestOrganizeBookFiles_RootLevel_CleansUpStaleBookFolderAfterTitleChange(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	libDir := t.TempDir()
@@ -145,7 +146,7 @@ func TestOrganizeBookFiles_RootLevel_CleansUpStaleBookFolderAfterTitleChange(t *
 func TestOrganizeBookFiles_RootLevel_PreservesUserFilesInStaleFolder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	libDir := t.TempDir()
@@ -237,7 +238,7 @@ func TestOrganizeBookFiles_RootLevel_PreservesUserFilesInStaleFolder(t *testing.
 func TestOrganizeBookFiles_DirectoryBased_WritesFreshSidecarAfterFolderRename(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	libDir := t.TempDir()
@@ -333,7 +334,7 @@ func TestOrganizeBookFiles_DirectoryBased_WritesFreshSidecarAfterFolderRename(t 
 func TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 
 	libDir := t.TempDir()

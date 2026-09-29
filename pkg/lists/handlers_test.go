@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -31,7 +32,7 @@ func newTestHandler(db *bun.DB) *handler {
 
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	user := createTestUser(t, db, "owner")
 	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
@@ -67,7 +68,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 
 func TestRetrieve_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	user := createTestUser(t, db, "owner")
 	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
@@ -106,7 +107,7 @@ func TestRetrieve_ResponseShape(t *testing.T) {
 
 func TestListBooks_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	user := createTestUser(t, db, "owner")
 	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
@@ -148,7 +149,7 @@ func TestListBooks_ResponseUsesItemsKey(t *testing.T) {
 
 func TestCheckVisibility_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	e := newTestEcho(t)
 	// No role permissions: sharing checks only the caller's permission on
 	// the list.

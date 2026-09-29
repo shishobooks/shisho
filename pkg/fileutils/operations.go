@@ -128,13 +128,6 @@ func RenameOrganizedFileOnly(currentPath string, opts OrganizedNameOptions) (str
 	return renameOrganizedFileInternal(currentPath, opts, true)
 }
 
-// RenameOrganizedFileForSupplement is an alias for RenameOrganizedFileOnly for backwards compatibility.
-//
-// Deprecated: Use RenameOrganizedFileOnly instead.
-func RenameOrganizedFileForSupplement(currentPath string, opts OrganizedNameOptions) (string, error) {
-	return RenameOrganizedFileOnly(currentPath, opts)
-}
-
 // renameOrganizedFileInternal is the internal implementation of file renaming.
 // skipBookSidecar controls whether to skip renaming the book sidecar file.
 func renameOrganizedFileInternal(currentPath string, opts OrganizedNameOptions, skipBookSidecar bool) (string, error) {

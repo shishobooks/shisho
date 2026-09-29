@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -114,7 +115,7 @@ func retrieveNarratedFile(t *testing.T, db *bun.DB, fileID int) (*models.File, [
 // (ADR 0006).
 func TestDeletePerson_StampsManualSourceOnEveryAffectedBookAndFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -197,7 +198,7 @@ func TestDeletePerson_StampsManualSourceOnEveryAffectedBookAndFile(t *testing.T)
 // Book or File.
 func TestDeletePerson_Unused_TouchesNothing(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -224,7 +225,7 @@ func TestDeletePerson_Unused_TouchesNothing(t *testing.T) {
 // caller recomputes and re-indexes it once.
 func TestDeletePerson_ReturnsEachAffectedBookOnce(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -255,7 +256,7 @@ func TestDeletePerson_ReturnsEachAffectedBookOnce(t *testing.T) {
 // so Books and Files keep their existing sources.
 func TestMergePeople_KeepsBookAndFileSources(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -265,7 +266,7 @@ func TestMergePeople_KeepsBookAndFileSources(t *testing.T) {
 	bookID := createAuthoredBook(t, db, lib, personDeletePluginSource, source.ID)
 	fileID := createNarratedFile(t, db, lib, testgen.StringPtr(models.DataSourceM4BMetadata), source.ID)
 
-	_, err := svc.MergePeople(ctx, target.ID, source.ID)
+	err := svc.MergePeople(ctx, target.ID, source.ID)
 	require.NoError(t, err)
 
 	book, personIDs := retrieveAuthoredBook(t, db, bookID)
@@ -277,12 +278,12 @@ func TestMergePeople_KeepsBookAndFileSources(t *testing.T) {
 	assert.Equal(t, testgen.StringPtr(models.DataSourceM4BMetadata), file.NarratorSource)
 }
 
-// MergePeople returns each Book the source authored or owns a File it
-// narrated, once, so the handler can re-index them. Books that only the
-// target touches are not returned.
-func TestMergePeople_ReturnsEachMovedBookOnce(t *testing.T) {
+// personBookIDs returns each Book the person authored or owns a File it
+// narrated, once. DeletePerson returns these so the handler can recompute
+// Reviewed. Books that only another person touches are not returned.
+func TestPersonBookIDs_ReturnsEachBookOnce(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -305,7 +306,7 @@ func TestMergePeople_ReturnsEachMovedBookOnce(t *testing.T) {
 	narratedOnly, _ := retrieveNarratedFile(t, db, createNarratedFile(t, db, lib, nil, source.ID))
 	createAuthoredBook(t, db, lib, personDeletePluginSource, target.ID)
 
-	movedBookIDs, err := svc.MergePeople(ctx, target.ID, source.ID)
+	bookIDs, err := personBookIDs(ctx, db, source.ID)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []int{authoredBookID, narratedOnly.BookID}, movedBookIDs)
+	assert.ElementsMatch(t, []int{authoredBookID, narratedOnly.BookID}, bookIDs)
 }

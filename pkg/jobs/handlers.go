@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -122,9 +121,9 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Job")
 	if err != nil {
-		return errcodes.NotFound("Job")
+		return err
 	}
 
 	job, err := h.jobService.RetrieveJob(ctx, RetrieveJobOptions{
@@ -179,9 +178,9 @@ func (h *handler) download(c echo.Context) error {
 		return errcodes.Forbidden("Downloading requires the books:read permission.")
 	}
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Job")
 	if err != nil {
-		return errcodes.NotFound("Job")
+		return err
 	}
 
 	job, err := h.jobService.RetrieveJob(ctx, RetrieveJobOptions{

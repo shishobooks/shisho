@@ -166,9 +166,9 @@ func (h *handler) libraryCatalog(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -193,9 +193,9 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -227,9 +227,9 @@ func (h *handler) librarySeriesList(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -256,18 +256,18 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
-	seriesID, err := strconv.Atoi(c.Param("seriesID"))
+	seriesID, err := httputil.ParamID(c, "seriesID", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	limit, offset := getPaginationParams(c)
@@ -295,9 +295,9 @@ func (h *handler) libraryAuthorsList(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -324,9 +324,9 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -363,9 +363,9 @@ func (h *handler) librarySearch(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -401,9 +401,9 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -450,9 +450,9 @@ func (h *handler) libraryCatalogKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -477,9 +477,9 @@ func (h *handler) libraryAllBooksKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -511,9 +511,9 @@ func (h *handler) librarySeriesListKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -540,18 +540,18 @@ func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
 		return err
 	}
 
-	seriesID, err := strconv.Atoi(c.Param("seriesID"))
+	seriesID, err := httputil.ParamID(c, "seriesID", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	limit, offset := getPaginationParams(c)
@@ -579,9 +579,9 @@ func (h *handler) libraryAuthorsListKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -608,9 +608,9 @@ func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -647,9 +647,9 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -685,9 +685,9 @@ func (h *handler) libraryOpenSearchKepub(c echo.Context) error {
 		return err
 	}
 
-	libraryID, err := strconv.Atoi(c.Param("libraryID"))
+	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
@@ -708,9 +708,9 @@ func (h *handler) download(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	fileID, err := strconv.Atoi(c.Param("id"))
+	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
@@ -782,9 +782,9 @@ func (h *handler) downloadKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	fileID, err := strconv.Atoi(c.Param("id"))
+	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
@@ -867,9 +867,9 @@ func (h *handler) downloadKepub(c echo.Context) error {
 func (h *handler) bookCover(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &id})

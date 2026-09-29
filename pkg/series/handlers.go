@@ -2,7 +2,6 @@ package series
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -11,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -28,9 +28,9 @@ type handler struct {
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	series, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
@@ -121,9 +121,9 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	params := UpdateSeriesPayload{}
@@ -228,9 +228,9 @@ func (h *handler) update(c echo.Context) error {
 
 func (h *handler) seriesBooks(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	params := SubResourceQuery{}
@@ -275,9 +275,9 @@ func (h *handler) seriesBooks(c echo.Context) error {
 
 func (h *handler) seriesCover(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	// Fetch the series to check library access
@@ -315,9 +315,9 @@ func (h *handler) seriesCover(c echo.Context) error {
 
 func (h *handler) merge(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	params := MergeSeriesPayload{}
@@ -357,7 +357,7 @@ func (h *handler) merge(c echo.Context) error {
 	defer h.searchService.ReindexAffected(ctx, affected)
 
 	// Merge source series into target (this) series
-	if _, err := h.seriesService.MergeSeries(ctx, id, params.SourceID); err != nil {
+	if err := h.seriesService.MergeSeries(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -366,9 +366,9 @@ func (h *handler) merge(c echo.Context) error {
 
 func (h *handler) deleteSeries(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Series")
 	if err != nil {
-		return errcodes.NotFound("Series")
+		return err
 	}
 
 	// Fetch the series to check library access

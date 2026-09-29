@@ -202,6 +202,7 @@ All tool versions are managed by mise via `mise.toml`. When updating versions, u
 ## Testing Strategy
 
 - Go tests use standard testing package with testify assertions
+- **Tests get their database from `testdb.New(t)`** (`pkg/testutils/testdb`): an in-memory database migrated to the latest schema, with foreign keys on, pinned to one connection as in production, and closed when the test ends. Do not copy a `setupTestDB` into a package. It lives outside `pkg/testutils` because `pkg/testutils` imports auth, apikeys, plugins, and search, whose own tests could not import it. Migration tests that need an older schema, and the worker tests that share a cache-mode database across goroutines, open their own.
 - Tests should use `TZ=America/Chicago CI=true` environment
 - **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests that use shared global state (e.g., shared database connections, global singletons) cannot be parallelized. `pkg/plugins/AGENTS.md` records which plugin tests can run in parallel. In `pkg/config`, tests mutate global config state and should not be parallelized.
 - Frontend uses the same linting rules as backend for consistency
@@ -265,7 +266,7 @@ Each commit should be in the format of `[{Category}] {Change description}`
 - Composite indexes should match query patterns (column order matters)
 - **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
 - **Table names must be plural.** All database tables use plural names (e.g., `plugins`, `plugin_configs`, `plugin_hook_configs`). When creating new tables or referencing existing ones in raw SQL, always use the plural form.
-- **Foreign key enforcement is enabled.** `PRAGMA foreign_keys=ON` is set in production. Test DB helpers must also enable this pragma.
+- **Foreign key enforcement is enabled.** `PRAGMA foreign_keys=ON` is set in production. Tests get their database from `testdb.New(t)` (`pkg/testutils/testdb`), which enables it; a test that opens its own database must enable it too.
 - **All FK constraints must specify ON DELETE behavior.** Use `ON DELETE CASCADE` for child rows that have no meaning without the parent (e.g., `files.book_id`, `authors.book_id`). Use `ON DELETE SET NULL` for nullable references where the child should survive (e.g., `jobs.library_id`, `files.publisher_id`). Never leave a FK without an explicit ON DELETE action.
 - **CASCADE does not clean up FTS indexes**: When deleting books/series/persons/etc., their FTS entries (`books_fts`, `series_fts`, `persons_fts`) are NOT automatically removed by CASCADE, and the CASCADE also drops the links that say which other rows copied the deleted entity (a deleted Book's `book_series` rows). Collect the affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it. FTS rows are keyed by `rowid` equal to the entity id, so never insert FTS rows outside the search service without setting `rowid` (see "Search Index (FTS)" in `pkg/AGENTS.md`).
 

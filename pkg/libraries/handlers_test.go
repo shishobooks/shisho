@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -42,7 +43,7 @@ func newListTestContext(t *testing.T, db *bun.DB) (*handler, echo.Context, *http
 func TestListLibrariesHandler_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	_ = seedLibraryWithContent(ctx, t, db, "Alpha")
@@ -134,7 +135,7 @@ func seedUser(ctx context.Context, t *testing.T, db *bun.DB, roleName string, al
 func TestDeleteLibraryHandler_HappyPath(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	admin := seedUser(ctx, t, db, models.RoleAdmin, true)
@@ -158,7 +159,7 @@ func TestDeleteLibraryHandler_HappyPath(t *testing.T) {
 func TestDeleteLibraryHandler_NotFound(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	admin := seedUser(ctx, t, db, models.RoleAdmin, true)
@@ -174,7 +175,7 @@ func TestDeleteLibraryHandler_NotFound(t *testing.T) {
 func TestDeleteLibraryHandler_RequiresWritePermission(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	viewer := seedUser(ctx, t, db, models.RoleViewer, true)
@@ -198,7 +199,7 @@ func TestDeleteLibraryHandler_RequiresWritePermission(t *testing.T) {
 func TestDeleteLibraryHandler_RequiresLibraryAccess(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	editor := seedUser(ctx, t, db, models.RoleEditor, false) // no library access
@@ -226,7 +227,7 @@ func setAllAccessUser(c echo.Context) {
 // The route is registered without the Authenticate middleware.
 func TestList_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	_ = seedLibraryWithContent(context.Background(), t, db, "Alpha")
 
 	e := echo.New()

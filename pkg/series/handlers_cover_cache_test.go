@@ -2,7 +2,6 @@ package series
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -21,13 +20,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 func newTestEchoSeries(t *testing.T) *echo.Echo {
@@ -40,28 +37,6 @@ func newTestEchoSeries(t *testing.T) *echo.Echo {
 	// exercise the same status codes and envelope as the real server.
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	return e
-}
-
-func setupSeriesTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	sqldb.SetMaxOpenConns(1)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
 }
 
 // seedSeriesWithCover creates a library, series, book, book_series join row,
@@ -142,7 +117,7 @@ func seedSeriesWithCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -231,7 +206,7 @@ func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
 func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -319,7 +294,7 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 func TestSeriesCover_SetsCacheControlImmutable(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	h := &handler{
@@ -352,7 +327,7 @@ func TestSeriesCover_SetsCacheControlImmutable(t *testing.T) {
 func TestSeriesCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	h := &handler{
@@ -393,7 +368,7 @@ func TestSeriesCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 func TestSeriesCover_Returns200WhenIfNoneMatchMismatches(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	h := &handler{
@@ -426,7 +401,7 @@ func TestSeriesCover_Returns200WhenIfNoneMatchMismatches(t *testing.T) {
 func TestSeriesCover_FirstBookChangeInvalidatesEtagEvenWhenNewCoverMtimeIsOlder(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 	h := &handler{
@@ -551,7 +526,7 @@ func TestSeriesCover_MissingCover_ReturnsSeriesCoverNotFound(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			db := setupSeriesTestDB(t)
+			db := testdb.New(t)
 			ctx := context.Background()
 			e := newTestEchoSeries(t)
 			h := &handler{

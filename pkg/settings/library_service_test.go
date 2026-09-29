@@ -2,34 +2,14 @@ package settings
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { db.Close() })
-	return db
-}
 
 func createTestUser(t *testing.T, db *bun.DB, username string) *models.User { //nolint:unparam // username is parameterized for flexibility
 	t.Helper()
@@ -59,7 +39,7 @@ func createTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library { 
 func TestGetLibrarySettings_ReturnsNilWhenMissing(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	user := createTestUser(t, db, "alice")
 	lib := createTestLibrary(t, db, "Books")
@@ -72,7 +52,7 @@ func TestGetLibrarySettings_ReturnsNilWhenMissing(t *testing.T) {
 func TestUpsertLibrarySort_InsertsThenUpdates(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	user := createTestUser(t, db, "alice")
 	lib := createTestLibrary(t, db, "Books")
@@ -105,7 +85,7 @@ func TestUpsertLibrarySort_InsertsThenUpdates(t *testing.T) {
 func TestUpsertLibrarySort_ClearsWithNil(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	user := createTestUser(t, db, "alice")
 	lib := createTestLibrary(t, db, "Books")
@@ -122,7 +102,7 @@ func TestUpsertLibrarySort_ClearsWithNil(t *testing.T) {
 func TestUserDelete_CascadesSettings(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	user := createTestUser(t, db, "alice")
 	lib := createTestLibrary(t, db, "Books")

@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -24,7 +25,7 @@ import (
 func TestSetFileReview_SetsOverride(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Seed library, book, and file
@@ -98,7 +99,7 @@ func TestSetFileReview_SetsOverride(t *testing.T) {
 func TestSetFileReview_ClearsOverride(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Seed library, book, and file
@@ -178,7 +179,7 @@ func TestSetFileReview_ClearsOverride(t *testing.T) {
 func TestSetFileReview_RejectsSupplement(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -243,7 +244,7 @@ func TestSetFileReview_RejectsSupplement(t *testing.T) {
 func TestSetBookReview_CascadesToAllFiles(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -311,7 +312,7 @@ func TestSetBookReview_CascadesToAllFiles(t *testing.T) {
 func TestBulkSetReview_AppliesToAllSpecifiedBooks(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -388,7 +389,7 @@ func TestBulkSetReview_AppliesToAllSpecifiedBooks(t *testing.T) {
 func TestUpdateBook_AddingGenre_FlipsReviewedToTrue(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Seed a book that satisfies the default review criteria EXCEPT genres:

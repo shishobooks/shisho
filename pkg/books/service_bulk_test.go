@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestService_BulkCreateAuthors(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -61,7 +62,7 @@ func TestService_BulkCreateAuthors(t *testing.T) {
 
 func TestService_BulkCreateNarrators(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -123,7 +124,7 @@ func TestService_BulkCreateNarrators(t *testing.T) {
 
 func TestService_BulkCreateBookGenres(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -166,7 +167,7 @@ func TestService_BulkCreateBookGenres(t *testing.T) {
 
 func TestService_BulkCreateBookTags(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -209,7 +210,7 @@ func TestService_BulkCreateBookTags(t *testing.T) {
 
 func TestService_BulkCreateBookSeries(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -264,7 +265,7 @@ func TestService_BulkCreateBookSeries(t *testing.T) {
 
 func TestService_BulkCreate_EmptySlice(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -287,7 +288,7 @@ func TestService_BulkCreate_EmptySlice(t *testing.T) {
 
 func TestService_BulkCreate_NilSlice(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

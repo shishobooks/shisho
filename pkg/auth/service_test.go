@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 func TestServiceCreateFirstAdmin_SetsTimestamps(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db, "test-jwt-secret", 30*24*time.Hour)
 
 	user, err := svc.CreateFirstAdmin(context.Background(), "admin", nil, "securepassword123")

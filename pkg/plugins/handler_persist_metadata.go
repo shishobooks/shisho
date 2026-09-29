@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/htmlutil"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -346,7 +347,7 @@ func coverImageExists(file *models.File) bool {
 	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
 		return false
 	}
-	_, err := os.Stat(filepath.Join(filepath.Dir(file.Filepath), filepath.Base(*file.CoverImageFilename)))
+	_, err := os.Stat(covers.FileCoverPath(file))
 	return err == nil
 }
 

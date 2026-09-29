@@ -3,7 +3,6 @@ package sharelinks
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -11,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -31,9 +31,9 @@ type bookAccess struct {
 // requireBookAccess resolves the book in the path after checking that it
 // exists and the user can reach its library.
 func (h *handler) requireBookAccess(c echo.Context) (bookAccess, error) {
-	bookID, err := strconv.Atoi(c.Param("id"))
+	bookID, err := httputil.ParamID(c, "id", "Book")
 	if err != nil {
-		return bookAccess{}, errcodes.NotFound("Book")
+		return bookAccess{}, err
 	}
 	user, err := auth.RequireUser(c)
 	if err != nil {
@@ -117,9 +117,9 @@ func (h *handler) requireWritableLink(c echo.Context) (*models.ShareLink, bookAc
 	if err != nil {
 		return nil, access, err
 	}
-	linkID, err := strconv.Atoi(c.Param("linkId"))
+	linkID, err := httputil.ParamID(c, "linkId", "Share Link")
 	if err != nil {
-		return nil, access, errcodes.NotFound("Share Link")
+		return nil, access, err
 	}
 	link, err := h.service.RetrieveForBook(ctx, access.bookID, linkID)
 	return link, access, err

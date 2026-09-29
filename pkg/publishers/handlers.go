@@ -3,7 +3,6 @@ package publishers
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -11,25 +10,19 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
-// BookReviewRecomputer refreshes files.reviewed for every file of each book,
-// loading the review criteria once. *books.Service satisfies it. pkg/books
-// imports pkg/publishers, so the handler takes this interface to avoid an
-// import cycle.
-type BookReviewRecomputer interface {
-	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
-}
-
 type handler struct {
 	publisherService *Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
-	reviewRecomputer BookReviewRecomputer
+	reviewRecomputer review.BookReviewRecomputer
 }
 
 // buildPublisherResponse assembles the full single-publisher API response
@@ -88,9 +81,9 @@ func (h *handler) buildPublisherResponse(ctx context.Context, publisher *models.
 
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Publisher")
 	if err != nil {
-		return errcodes.NotFound("Publisher")
+		return err
 	}
 
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{
@@ -185,9 +178,9 @@ func (h *handler) list(c echo.Context) error {
 
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Publisher")
 	if err != nil {
-		return errcodes.NotFound("Publisher")
+		return err
 	}
 
 	params := UpdatePublisherPayload{}
@@ -311,9 +304,9 @@ func (h *handler) update(c echo.Context) error {
 
 func (h *handler) files(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Publisher")
 	if err != nil {
-		return errcodes.NotFound("Publisher")
+		return err
 	}
 
 	params := SubResourceQuery{}
@@ -344,9 +337,9 @@ func (h *handler) files(c echo.Context) error {
 
 func (h *handler) merge(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Publisher")
 	if err != nil {
-		return errcodes.NotFound("Publisher")
+		return err
 	}
 
 	params := MergePublishersPayload{}
@@ -393,9 +386,9 @@ func (h *handler) merge(c echo.Context) error {
 
 func (h *handler) setChild(c echo.Context) error {
 	ctx := c.Request().Context()
-	parentID, err := strconv.Atoi(c.Param("id"))
+	parentID, err := httputil.ParamID(c, "id", "Publisher")
 	if err != nil {
-		return errcodes.NotFound("Publisher")
+		return err
 	}
 
 	params := SetChildPayload{}
@@ -427,9 +420,9 @@ func (h *handler) setChild(c echo.Context) error {
 
 func (h *handler) deletePublisher(c echo.Context) error {
 	ctx := c.Request().Context()
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Publisher")
 	if err != nil {
-		return errcodes.NotFound("Publisher")
+		return err
 	}
 
 	publisher, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{

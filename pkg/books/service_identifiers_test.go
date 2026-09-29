@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestService_BulkCreateFileIdentifiers_DedupesByType(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -45,7 +46,7 @@ func TestService_BulkCreateFileIdentifiers_DedupesByType(t *testing.T) {
 
 func TestService_BulkCreateFileIdentifiers_NoDuplicates(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -68,7 +69,7 @@ func TestService_BulkCreateFileIdentifiers_NoDuplicates(t *testing.T) {
 
 func TestService_BulkCreateFileIdentifiers_EmptySliceIsNoop(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -81,7 +82,7 @@ func TestService_BulkCreateFileIdentifiers_EmptySliceIsNoop(t *testing.T) {
 
 func TestService_BulkCreateFileIdentifiers_TrimsType(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -107,7 +108,7 @@ func TestService_BulkCreateFileIdentifiers_TrimsType(t *testing.T) {
 
 func TestService_BulkCreateFileIdentifiers_SetsTimestamps(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

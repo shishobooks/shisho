@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -48,7 +49,7 @@ func newReviewCriteriaHandler(t *testing.T, db *bun.DB) *reviewCriteriaHandler {
 func TestGetReviewCriteria_ReturnsDefault(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newReviewCriteriaHandler(t, db)
 
 	e := newTestEcho(t)
@@ -77,7 +78,7 @@ func TestGetReviewCriteria_ReturnsDefault(t *testing.T) {
 func TestPutReviewCriteria_PersistsAndEnqueuesJob(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newReviewCriteriaHandler(t, db)
 
 	body := `{"book_fields":["authors","cover"],"audio_fields":["narrators"],"clear_overrides":true}`
@@ -119,7 +120,7 @@ func TestPutReviewCriteria_PersistsAndEnqueuesJob(t *testing.T) {
 func TestPutReviewCriteria_RejectsInvalidField(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newReviewCriteriaHandler(t, db)
 
 	// "narrators" is an audio-only field, not valid in book_fields

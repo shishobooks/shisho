@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -153,7 +154,7 @@ func ftsSnapshot(t *testing.T, db *bun.DB) map[string]map[int]map[string]string 
 // meaning depending on whether an edit or a scan wrote the row last.
 func TestIndexMethods_MatchRebuildAllIndexes(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)
@@ -213,7 +214,7 @@ func loadBookForIndex(t *testing.T, db *bun.DB, id int) *models.Book {
 // searches that land mid-rebuild find nothing.
 func TestRebuildAllIndexes_FailureKeepsPreviousIndex(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	f := createFTSFixture(t, db)
 	svc := NewService(db)

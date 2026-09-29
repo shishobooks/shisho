@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetUserSettings_ReturnsEpubDefaults(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "alice")
 	svc := NewService(db)
 
@@ -24,7 +25,7 @@ func TestGetUserSettings_ReturnsEpubDefaults(t *testing.T) {
 
 func TestUpdateUserSettings_PersistsEpubFields(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "bob")
 	svc := NewService(db)
 
@@ -60,7 +61,7 @@ func TestUpdateUserSettings_PersistsEpubFields(t *testing.T) {
 
 func TestGetUserSettings_DefaultsPlaybackSpeedToNormal(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "frank")
 	svc := NewService(db)
 
@@ -71,7 +72,7 @@ func TestGetUserSettings_DefaultsPlaybackSpeedToNormal(t *testing.T) {
 
 func TestUpdateUserSettings_PersistsPlaybackSpeed(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "grace")
 	svc := NewService(db)
 
@@ -96,7 +97,7 @@ func TestUpdateUserSettings_PersistsPlaybackSpeed(t *testing.T) {
 // defaults.
 func TestUpdateUserSettings_PartialUpdateDoesNotClobber(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	user := createTestUser(t, db, "carol")
 	svc := NewService(db)
 

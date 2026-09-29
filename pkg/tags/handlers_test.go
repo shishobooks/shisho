@@ -2,7 +2,6 @@ package tags
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,41 +15,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// setupHandlerTestDB creates an in-memory SQLite database using a named memory
-// URI so that Bun's ScanAndCount (which opens a second connection for the COUNT
-// query) sees the same database. Plain ":memory:" gives each connection its own
-// private database, which causes "no such table" errors from ScanAndCount.
-func setupHandlerTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -107,7 +78,7 @@ func seedTagWithBooks(t *testing.T, db *bun.DB, lib *models.Library, tagName str
 
 func TestBooks_DefaultPagination(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -148,7 +119,7 @@ func TestBooks_DefaultPagination(t *testing.T) {
 
 func TestBooks_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -183,7 +154,7 @@ func TestBooks_ExplicitLimitOffset(t *testing.T) {
 
 func TestBooks_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -211,7 +182,7 @@ func TestBooks_ResponseShape(t *testing.T) {
 
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -248,7 +219,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 
 func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := newTestEcho(t)
 	lib := createTestLibrary(t, db)
@@ -326,7 +297,7 @@ func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path strin
 // instead of skipping the library access check.
 func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	tag := seedTagWithBooks(t, db, createTestLibrary(t, db), "Favorites", nil)
 
 	code := serveWithoutUser(newTestEcho(t), "/tags/:id", newTestHandler(db).retrieve, fmt.Sprintf("/tags/%d", tag.ID))

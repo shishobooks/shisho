@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -73,7 +74,7 @@ func publisherParent(t *testing.T, db *bun.DB, id int) *int {
 
 func TestMergePublishers_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	publisher := createMergePublisher(t, db, lib, "Tor", nil)
@@ -92,7 +93,7 @@ func TestMergePublishers_SelfMerge_Rejected(t *testing.T) {
 
 func TestMergePublishersService_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := createTestLibrary(t, db)
 	publisher := createMergePublisher(t, db, lib, "Tor", nil)
@@ -106,7 +107,7 @@ func TestMergePublishersService_SelfMerge_Rejected(t *testing.T) {
 
 func TestMergePublisher_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	visible := createTestLibrary(t, db)
 	hidden := createTestLibrary(t, db)
@@ -120,7 +121,7 @@ func TestMergePublisher_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 
 func TestMergePublisher_SourceInOtherLibrary_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	first := createTestLibrary(t, db)
 	second := createTestLibrary(t, db)
@@ -135,7 +136,7 @@ func TestMergePublisher_SourceInOtherLibrary_Rejected(t *testing.T) {
 
 func TestMergePublisher_MissingSource_NotFound(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(db)
 	lib := createTestLibrary(t, db)
 	target := createMergePublisher(t, db, lib, "Target", nil)
@@ -151,7 +152,7 @@ func TestMergePublisher_MissingSource_NotFound(t *testing.T) {
 // the target's child.
 func TestMergePublishers_TargetIsGrandchildOfSource_NoCycle(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 	lib := createTestLibrary(t, db)
@@ -182,7 +183,7 @@ func TestMergePublishers_TargetIsGrandchildOfSource_NoCycle(t *testing.T) {
 // than its own parent.
 func TestMergePublishers_TargetBelowSourceInCycle_BecomesRoot(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 	lib := createTestLibrary(t, db)

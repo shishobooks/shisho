@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -114,19 +115,15 @@ func (svc *Service) FindOrCreatePublisher(ctx context.Context, name string, libr
 		LibraryID: libraryID,
 		Name:      name,
 	}
+	// Another request may have created the same publisher between the lookup
+	// and the insert; fetch that row instead.
 	err = svc.CreatePublisher(ctx, publisher)
-	if err != nil {
-		// Handle race condition: if another goroutine created the same publisher
-		// between our retrieve and create, retry the retrieve
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return svc.RetrievePublisher(ctx, RetrievePublisherOptions{
-				Name:      &name,
-				LibraryID: &libraryID,
-			})
-		}
-		return nil, err
-	}
-	return publisher, nil
+	return database.RetrieveOnUniqueViolation(publisher, err, func() (*models.Publisher, error) {
+		return svc.RetrievePublisher(ctx, RetrievePublisherOptions{
+			Name:      &name,
+			LibraryID: &libraryID,
+		})
+	})
 }
 
 func (svc *Service) ListPublishers(ctx context.Context, opts ListPublishersOptions) ([]*models.Publisher, error) {

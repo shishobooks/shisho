@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestDownloadHandlers_MissingFileOnDisk_MessageSaysNotFoundOnce(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			library, book := setupTestLibraryAndBook(t, db)
 			var filePath string
 			if tt.fileType == "m4b" {

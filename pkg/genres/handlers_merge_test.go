@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -68,7 +69,7 @@ func genreBookCount(t *testing.T, db *bun.DB, id int) int {
 
 func TestMergeGenres_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(t, db)
 	lib := createTestLibrary(t, db)
 	genre := createMergeGenre(t, db, lib, "Fantasy")
@@ -83,7 +84,7 @@ func TestMergeGenres_SelfMerge_Rejected(t *testing.T) {
 
 func TestMergeGenresService_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := createTestLibrary(t, db)
 	genre := createMergeGenre(t, db, lib, "Fantasy")
@@ -97,7 +98,7 @@ func TestMergeGenresService_SelfMerge_Rejected(t *testing.T) {
 
 func TestMergeGenre_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(t, db)
 	visible := createTestLibrary(t, db)
 	hidden := createTestLibrary(t, db)
@@ -111,7 +112,7 @@ func TestMergeGenre_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 
 func TestMergeGenre_SourceInOtherLibrary_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(t, db)
 	first := createTestLibrary(t, db)
 	second := createTestLibrary(t, db)
@@ -126,7 +127,7 @@ func TestMergeGenre_SourceInOtherLibrary_Rejected(t *testing.T) {
 
 func TestMergeGenre_MissingSource_NotFound(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	h := newTestHandler(t, db)
 	lib := createTestLibrary(t, db)
 	target := createMergeGenre(t, db, lib, "Target")
@@ -140,7 +141,7 @@ func TestMergeGenre_MissingSource_NotFound(t *testing.T) {
 // tripping ux_genre_aliases_name_library_id. The third Genre keeps the alias.
 func TestMergeGenres_SourceNameIsAnotherGenresAlias(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 	lib := createTestLibrary(t, db)

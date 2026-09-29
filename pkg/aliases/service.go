@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/uptrace/bun"
 )
@@ -105,7 +106,7 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 		time.Now(), resourceID, name, libraryID,
 	).Exec(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
+		if database.IsUniqueViolation(err) {
 			return errcodes.ValidationError("Alias conflicts with an existing alias")
 		}
 		return errors.WithStack(err)

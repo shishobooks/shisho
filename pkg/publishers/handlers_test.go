@@ -2,7 +2,6 @@ package publishers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,41 +16,13 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// setupHandlerTestDB creates an in-memory SQLite database using a named memory
-// URI so that Bun's ScanAndCount (which opens a second connection for the COUNT
-// query) sees the same database. Plain ":memory:" gives each connection its own
-// private database, which causes "no such table" errors from ScanAndCount.
-func setupHandlerTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func newTestEcho(t *testing.T) *echo.Echo {
 	t.Helper()
@@ -116,7 +87,7 @@ func seedPublisherWithFiles(t *testing.T, db *bun.DB, lib *models.Library, pubNa
 
 func TestBuildPublisherResponse_FullHierarchy(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -219,7 +190,7 @@ func TestBuildPublisherResponse_FullHierarchy(t *testing.T) {
 
 func TestFiles_DefaultPagination(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -260,7 +231,7 @@ func TestFiles_DefaultPagination(t *testing.T) {
 
 func TestFiles_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -295,7 +266,7 @@ func TestFiles_ExplicitLimitOffset(t *testing.T) {
 
 func TestFiles_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -323,7 +294,7 @@ func TestFiles_ResponseShape(t *testing.T) {
 
 func TestRetrieve_IncludesAncestorsAndDescendants(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -379,7 +350,7 @@ func TestRetrieve_IncludesAncestorsAndDescendants(t *testing.T) {
 
 func TestUpdate_SetParent(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -415,7 +386,7 @@ func TestUpdate_SetParent(t *testing.T) {
 
 func TestUpdate_ClearParent(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -450,7 +421,7 @@ func TestUpdate_ClearParent(t *testing.T) {
 
 func TestUpdate_CycleRejected(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -481,7 +452,7 @@ func TestUpdate_CycleRejected(t *testing.T) {
 
 func TestList_ResponseUsesItemsKey(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 
@@ -518,7 +489,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 
 func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -573,7 +544,7 @@ func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 
 func TestRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -611,7 +582,7 @@ func TestRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 
 func TestFiles_IncludesDescendantPublisherFiles(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -677,7 +648,7 @@ func TestFiles_IncludesDescendantPublisherFiles(t *testing.T) {
 
 func TestRetrieve_FileCountIncludesDescendants(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -737,7 +708,7 @@ func TestRetrieve_FileCountIncludesDescendants(t *testing.T) {
 
 func TestSetChild_Success(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -773,7 +744,7 @@ func TestSetChild_Success(t *testing.T) {
 
 func TestSetChild_CycleRejected(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -805,7 +776,7 @@ func TestSetChild_CycleRejected(t *testing.T) {
 
 func TestSetChild_SamePublisherRejected(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -831,7 +802,7 @@ func TestSetChild_SamePublisherRejected(t *testing.T) {
 
 func TestSetChild_LibraryAccessEnforced(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -864,7 +835,7 @@ func TestSetChild_LibraryAccessEnforced(t *testing.T) {
 
 func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -908,7 +879,7 @@ func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 
 func TestRetrieve_IncludesChildrenAndDescendantFileCount(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -1050,7 +1021,7 @@ func TestRetrieve_IncludesChildrenAndDescendantFileCount(t *testing.T) {
 
 func TestList_IncludesHierarchyCounts(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -1148,7 +1119,7 @@ func TestList_IncludesHierarchyCounts(t *testing.T) {
 
 func TestUpdate_SetParentByName_CreatesNewPublisher(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -1185,7 +1156,7 @@ func TestUpdate_SetParentByName_CreatesNewPublisher(t *testing.T) {
 
 func TestUpdate_SetParentByName_ReusesExistingPublisher(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -1222,7 +1193,7 @@ func TestUpdate_SetParentByName_ReusesExistingPublisher(t *testing.T) {
 
 func TestUpdate_SetParentByName_RejectsSelfReference(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	lib := createTestLibrary(t, db)
 	h := newTestHandler(db)
 	ctx := context.Background()
@@ -1270,7 +1241,7 @@ func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path strin
 // instead of skipping the library access check.
 func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
-	db := setupHandlerTestDB(t)
+	db := testdb.New(t)
 	publisher := seedPublisherWithFiles(t, db, createTestLibrary(t, db), "Publisher", nil)
 
 	code := serveWithoutUser(newTestEcho(t), "/publishers/:id", newTestHandler(db).retrieve, fmt.Sprintf("/publishers/%d", publisher.ID))

@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
@@ -14,7 +15,7 @@ import (
 // reviewRecomputer is required; pass a books service with app settings
 // attached, or the delete handler's review recompute does nothing.
 // fileOrganizer is optional and can be nil if file organization on person name change is not needed.
-func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer BookReviewRecomputer, fileOrganizer FileOrganizer) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer review.BookReviewRecomputer, fileOrganizer FileOrganizer) {
 	personService := NewService(db)
 	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)

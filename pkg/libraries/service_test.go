@@ -2,44 +2,16 @@ package libraries
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	// Shared-cache in-memory DSN (keyed on the test name) so every pooled
-	// connection sees the same DB. A bare ":memory:" gives each connection its
-	// own empty database, which breaks handler tests that issue queries on a
-	// different connection than the one that ran migrations.
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { db.Close() })
-
-	return db
-}
 
 // seedLibraryWithContent creates a library with one book, one file, one series,
 // one person, one genre, one tag, one publisher, and corresponding FTS entries. Returns the
@@ -171,7 +143,7 @@ func seedLibraryWithContent(ctx context.Context, t *testing.T, db *bun.DB, name 
 func TestDeleteLibrary_RemovesRowAndCascades(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -217,7 +189,7 @@ func TestDeleteLibrary_RemovesRowAndCascades(t *testing.T) {
 func TestDeleteLibrary_CascadesFilesThroughLibraryID(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -239,7 +211,7 @@ func TestDeleteLibrary_CascadesFilesThroughLibraryID(t *testing.T) {
 func TestDeleteLibrary_PurgesFTS(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -259,7 +231,7 @@ func TestDeleteLibrary_PurgesFTS(t *testing.T) {
 func TestDeleteLibrary_CancelsActiveJobs(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -313,7 +285,7 @@ func TestDeleteLibrary_CancelsActiveJobs(t *testing.T) {
 func TestDeleteLibrary_NotFound(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -328,7 +300,7 @@ func TestDeleteLibrary_NotFound(t *testing.T) {
 func TestDeleteLibrary_Atomicity(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -366,7 +338,7 @@ func TestDeleteLibrary_Atomicity(t *testing.T) {
 func TestCreateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -388,7 +360,7 @@ func TestCreateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 func TestUpdateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -415,7 +387,7 @@ func TestUpdateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 // list is empty. Only a nil filter lists every library.
 func TestListLibraries_EmptyLibraryIDsListsNothing(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	for _, name := range []string{"Alpha", "Beta"} {
 		require.NoError(t, svc.CreateLibrary(t.Context(), &models.Library{
@@ -443,7 +415,7 @@ func TestListLibraries_EmptyLibraryIDsListsNothing(t *testing.T) {
 // return paths.
 func TestListLibraries_WithoutPathsSkipsPaths(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	require.NoError(t, svc.CreateLibrary(t.Context(), &models.Library{
 		Name:             "Alpha",

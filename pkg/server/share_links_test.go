@@ -20,6 +20,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sharelinks"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,7 @@ func newShareLinksFixture(t *testing.T) *shareLinksFixture {
 	t.Helper()
 	ctx := context.Background()
 
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
 	dlCache := downloadcache.NewCache(t.TempDir(), 1<<30)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, dlCache, nil, nil, nil)
@@ -558,7 +559,7 @@ func TestShareLinks_UnavailableLinksShareOneResponse(t *testing.T) {
 
 func TestShareLinks_ManagementRejectedInDemoMode(t *testing.T) {
 	t.Parallel()
-	db := newPermissionTestDB(t)
+	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
 	cfg.DemoMode = true
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, nil, nil, nil, nil)

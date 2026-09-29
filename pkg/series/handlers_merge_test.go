@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -71,47 +72,68 @@ func seriesExists(t *testing.T, db *bun.DB, id int) bool {
 	return count == 1
 }
 
-// A Book in both Series keeps one row, the target's, and the target row
-// takes the source's number group when it has none of its own.
-func TestMergeSeries_SharedBook_DropsSourceRow(t *testing.T) {
+// sharedBookRows returns the book_series rows of bookID.
+func sharedBookRows(t *testing.T, db *bun.DB, bookID int) []*models.BookSeries {
+	t.Helper()
+	var rows []*models.BookSeries
+	require.NoError(t, db.NewSelect().Model(&rows).Where("bs.book_id = ?", bookID).Scan(context.Background()))
+	return rows
+}
+
+// A Book in both Series keeps one row, the target's. Without dropping the
+// source's row first, re-pointing it violates ux_book_series_book_series and
+// the merge fails.
+func TestMergeSeriesService_SharedBook_DropsSourceRow(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 	lib := createSeriesDeleteLibrary(t, db)
 	source := createNamedSeries(t, svc, lib, "Source")
 	target := createNamedSeries(t, svc, lib, "Target")
 	shared := createSeriesBook(t, db, lib, nil, source.ID, target.ID)
-	moved := createSeriesBook(t, db, lib, nil, source.ID)
+
+	require.NoError(t, svc.MergeSeries(ctx, target.ID, source.ID))
+
+	rows := sharedBookRows(t, db, shared)
+	require.Len(t, rows, 1, "the shared Book keeps one membership")
+	assert.Equal(t, target.ID, rows[0].SeriesID)
+}
+
+// A shared Book whose target row has no number takes the source row's number,
+// end, and unit together before the source row goes.
+func TestMergeSeriesService_SharedBook_FillsUnnumberedTarget(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := NewService(db)
+	lib := createSeriesDeleteLibrary(t, db)
+	source := createNamedSeries(t, svc, lib, "Source")
+	target := createNamedSeries(t, svc, lib, "Target")
+	shared := createSeriesBook(t, db, lib, nil, source.ID, target.ID)
 	number, end, unit := 3.0, 4.0, models.SeriesNumberUnitVolume
 	_, err := db.NewUpdate().Model((*models.BookSeries)(nil)).
 		Set("series_number = ?, series_number_end = ?, series_number_unit = ?", number, end, unit).
 		Where("book_id = ? AND series_id = ?", shared, source.ID).Exec(ctx)
 	require.NoError(t, err)
 
-	_, err = svc.MergeSeries(ctx, target.ID, source.ID)
-	require.NoError(t, err)
+	require.NoError(t, svc.MergeSeries(ctx, target.ID, source.ID))
 
-	var rows []*models.BookSeries
-	require.NoError(t, db.NewSelect().Model(&rows).Where("bs.book_id = ?", shared).Scan(ctx))
-	require.Len(t, rows, 1, "the shared Book keeps one membership")
-	assert.Equal(t, target.ID, rows[0].SeriesID)
+	rows := sharedBookRows(t, db, shared)
+	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].SeriesNumber)
 	assert.InDelta(t, number, *rows[0].SeriesNumber, 0)
 	require.NotNil(t, rows[0].SeriesNumberEnd)
 	assert.InDelta(t, end, *rows[0].SeriesNumberEnd, 0)
 	require.NotNil(t, rows[0].SeriesNumberUnit)
 	assert.Equal(t, unit, *rows[0].SeriesNumberUnit)
-
-	_, seriesIDs := retrieveSeriesBook(t, db, moved)
-	assert.Equal(t, []int{target.ID}, seriesIDs, "a Book only in the source moves to the target")
-	assert.False(t, seriesExists(t, db, source.ID))
 }
 
-// The target's own number wins over the source's for a shared Book.
-func TestMergeSeries_SharedBook_KeepsTargetNumber(t *testing.T) {
+// The target's own number wins over the source's for a shared Book, so the
+// fill only touches a target row with no number.
+func TestMergeSeriesService_SharedBook_KeepsTargetNumber(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 	lib := createSeriesDeleteLibrary(t, db)
@@ -123,19 +145,36 @@ func TestMergeSeries_SharedBook_KeepsTargetNumber(t *testing.T) {
 	_, err = db.NewUpdate().Model((*models.BookSeries)(nil)).Set("series_number = 2").Where("book_id = ? AND series_id = ?", shared, target.ID).Exec(ctx)
 	require.NoError(t, err)
 
-	_, err = svc.MergeSeries(ctx, target.ID, source.ID)
-	require.NoError(t, err)
+	require.NoError(t, svc.MergeSeries(ctx, target.ID, source.ID))
 
-	var rows []*models.BookSeries
-	require.NoError(t, db.NewSelect().Model(&rows).Where("bs.book_id = ?", shared).Scan(ctx))
+	rows := sharedBookRows(t, db, shared)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].SeriesNumber)
 	assert.InDelta(t, 2.0, *rows[0].SeriesNumber, 0)
 }
 
+// A Book only in the source moves to the target, and the source is deleted.
+// Without the move, deleting the source cascades the Book's membership away.
+func TestMergeSeriesService_MovesSourceOnlyBook(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := NewService(db)
+	lib := createSeriesDeleteLibrary(t, db)
+	source := createNamedSeries(t, svc, lib, "Source")
+	target := createNamedSeries(t, svc, lib, "Target")
+	moved := createSeriesBook(t, db, lib, nil, source.ID)
+
+	require.NoError(t, svc.MergeSeries(ctx, target.ID, source.ID))
+
+	_, seriesIDs := retrieveSeriesBook(t, db, moved)
+	assert.Equal(t, []int{target.ID}, seriesIDs)
+	assert.False(t, seriesExists(t, db, source.ID))
+}
+
 func TestMergeSeries_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	h := newMergeTestHandler(db)
 	lib := createSeriesDeleteLibrary(t, db)
 	series := createNamedSeries(t, h.seriesService, lib, "Only")
@@ -153,19 +192,19 @@ func TestMergeSeries_SelfMerge_Rejected(t *testing.T) {
 // handler's checks.
 func TestMergeSeriesService_SelfMerge_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := createSeriesDeleteLibrary(t, db)
 	series := createNamedSeries(t, svc, lib, "Only")
 
-	_, err := svc.MergeSeries(context.Background(), series.ID, series.ID)
+	err := svc.MergeSeries(context.Background(), series.ID, series.ID)
 	requireSeriesErr(t, err, http.StatusUnprocessableEntity)
 	assert.True(t, seriesExists(t, db, series.ID))
 }
 
 func TestMergeSeries_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	h := newMergeTestHandler(db)
 	visible := createSeriesDeleteLibrary(t, db)
 	hidden := createSeriesDeleteLibrary(t, db)
@@ -179,7 +218,7 @@ func TestMergeSeries_SourceInInaccessibleLibrary_Forbidden(t *testing.T) {
 
 func TestMergeSeries_SourceInOtherLibrary_Rejected(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	h := newMergeTestHandler(db)
 	first := createSeriesDeleteLibrary(t, db)
 	second := createSeriesDeleteLibrary(t, db)
@@ -194,7 +233,7 @@ func TestMergeSeries_SourceInOtherLibrary_Rejected(t *testing.T) {
 
 func TestMergeSeries_MissingSource_NotFound(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	h := newMergeTestHandler(db)
 	lib := createSeriesDeleteLibrary(t, db)
 	target := createNamedSeries(t, h.seriesService, lib, "Target")
@@ -208,7 +247,7 @@ func TestMergeSeries_MissingSource_NotFound(t *testing.T) {
 // instead of tripping ux_series_name_library_id.
 func TestUpdateSeries_RenameToExistingName(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	h := newMergeTestHandler(db)
 	lib := createSeriesDeleteLibrary(t, db)
 	createNamedSeries(t, h.seriesService, lib, "Stormlight")
@@ -225,7 +264,7 @@ func TestUpdateSeries_RenameToExistingName(t *testing.T) {
 // Changing only the case of a Series' own name is not a collision.
 func TestUpdateSeries_RenameCaseOnly_Succeeds(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	h := newMergeTestHandler(db)
 	lib := createSeriesDeleteLibrary(t, db)
 	series := createNamedSeries(t, h.seriesService, lib, "Mistborn")

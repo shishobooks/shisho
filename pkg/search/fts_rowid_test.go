@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -112,7 +113,7 @@ func assertFTSRowidsMatchIDs(t *testing.T, db *bun.DB, e *ftsEntities) {
 
 func TestIndexMethods_KeyFTSRowsByEntityID(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := createFTSEntities(t, db)
 	svc := NewService(db)
@@ -135,7 +136,7 @@ func TestIndexMethods_KeyFTSRowsByEntityID(t *testing.T) {
 
 func TestReindexBookByID_KeysFTSRowByBookID(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := createFTSEntities(t, db)
 	svc := NewService(db)
@@ -157,7 +158,7 @@ func TestReindexBookByID_KeysFTSRowByBookID(t *testing.T) {
 
 func TestRebuildAllIndexes_KeysFTSRowsByEntityID(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := createFTSEntities(t, db)
 	svc := NewService(db)
@@ -206,7 +207,7 @@ func (r *ftsDeleteRecorder) AfterQuery(_ context.Context, event *bun.QueryEvent)
 // as book_id leaves idxStr empty, which is a full scan.
 func TestDeleteFromIndex_UsesRowidLookup(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := createFTSEntities(t, db)
 	svc := NewService(db)
@@ -268,7 +269,7 @@ func (r *ftsRaceInjector) AfterQuery(ctx context.Context, event *bun.QueryEvent)
 // replace that row rather than fail on the rowid conflict.
 func TestIndexMethods_ReplaceRowWrittenConcurrently(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := createFTSEntities(t, db)
 	svc := NewService(db)

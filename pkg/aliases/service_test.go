@@ -2,39 +2,15 @@ package aliases
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 	t.Helper()
@@ -61,7 +37,7 @@ func createTestGenre(t *testing.T, db *bun.DB, name string, libraryID int) *mode
 
 func TestAddAlias(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -78,7 +54,7 @@ func TestAddAlias(t *testing.T) {
 
 func TestAddAlias_RejectsEmpty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -92,7 +68,7 @@ func TestAddAlias_RejectsEmpty(t *testing.T) {
 
 func TestAddAlias_RejectsDuplicatePrimaryName(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -106,7 +82,7 @@ func TestAddAlias_RejectsDuplicatePrimaryName(t *testing.T) {
 
 func TestAddAlias_RejectsConflictWithOtherPrimaryName(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -121,7 +97,7 @@ func TestAddAlias_RejectsConflictWithOtherPrimaryName(t *testing.T) {
 
 func TestAddAlias_RejectsConflictWithExistingAlias(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -140,7 +116,7 @@ func TestAddAlias_RejectsConflictWithExistingAlias(t *testing.T) {
 
 func TestRemoveAlias(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -160,7 +136,7 @@ func TestRemoveAlias(t *testing.T) {
 
 func TestRemoveAlias_CaseInsensitive(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -179,7 +155,7 @@ func TestRemoveAlias_CaseInsensitive(t *testing.T) {
 
 func TestListAliases_Empty(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -194,7 +170,7 @@ func TestListAliases_Empty(t *testing.T) {
 
 func TestSyncAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -218,7 +194,7 @@ func TestSyncAliases(t *testing.T) {
 
 func TestSyncAliases_RejectsConflict(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -233,7 +209,7 @@ func TestSyncAliases_RejectsConflict(t *testing.T) {
 
 func TestAddAlias_CascadeDeletesOnParentRemoval(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -254,7 +230,7 @@ func TestAddAlias_CascadeDeletesOnParentRemoval(t *testing.T) {
 
 func TestAddAlias_DifferentLibrariesAllowed(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -280,7 +256,7 @@ func TestAddAlias_DifferentLibrariesAllowed(t *testing.T) {
 
 func TestTransferAliasesOnMerge_SourceNameBecomesAlias(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := createTestLibrary(t, db)
@@ -298,7 +274,7 @@ func TestTransferAliasesOnMerge_SourceNameBecomesAlias(t *testing.T) {
 
 func TestTransferAliasesOnMerge_TransfersSourceAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -320,7 +296,7 @@ func TestTransferAliasesOnMerge_TransfersSourceAliases(t *testing.T) {
 
 func TestTransferAliasesOnMerge_PreservesExistingTargetAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -340,7 +316,7 @@ func TestTransferAliasesOnMerge_PreservesExistingTargetAliases(t *testing.T) {
 
 func TestTransferAliasesOnMerge_CascadeCleansUpRemainingSourceAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -365,7 +341,7 @@ func TestTransferAliasesOnMerge_CascadeCleansUpRemainingSourceAliases(t *testing
 
 func TestTransferAliasesOnMerge_NoAliases(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := createTestLibrary(t, db)
@@ -384,7 +360,7 @@ func TestTransferAliasesOnMerge_NoAliases(t *testing.T) {
 
 func TestSyncAliases_DuplicatesInDesiredList(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -402,7 +378,7 @@ func TestSyncAliases_DuplicatesInDesiredList(t *testing.T) {
 
 func TestSyncAliases_DuplicatesInDesiredListCaseInsensitive(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -421,7 +397,7 @@ func TestSyncAliases_DuplicatesInDesiredListCaseInsensitive(t *testing.T) {
 
 func TestAddAlias_ReturnsValidationError(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -441,7 +417,7 @@ func TestAddAlias_ReturnsValidationError(t *testing.T) {
 // where it is instead of tripping the alias table's unique index.
 func TestTransferAliasesOnMerge_SourceNameIsAnotherResourcesAlias_Skipped(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := createTestLibrary(t, db)
@@ -466,7 +442,7 @@ func TestTransferAliasesOnMerge_SourceNameIsAnotherResourcesAlias_Skipped(t *tes
 // owns the alias from then on.
 func TestTransferAliasesOnMerge_InsertsUnderTargetLibrary(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	targetLib := createTestLibrary(t, db)

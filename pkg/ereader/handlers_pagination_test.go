@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +48,7 @@ func TestParsePageParam(t *testing.T) {
 func TestListBooksPaginated_NoFilter(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := &models.Library{
@@ -106,7 +107,7 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 func TestListBooksPaginated_TypeFilter(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	lib := &models.Library{

@@ -128,7 +128,7 @@ func (fo *fileOrganizer) RenameNarratedFile(ctx context.Context, fileID int) (st
 	}
 
 	// Rename the file
-	// Use RenameOrganizedFileForSupplement to avoid renaming the book sidecar.
+	// Use RenameOrganizedFileOnly to avoid renaming the book sidecar.
 	// Narrator changes are file-level, not book-level.
 	newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
 	if err != nil {

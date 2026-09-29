@@ -11,17 +11,15 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/genres"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/tags"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 // queryRecorder captures every query except the EXPLAIN queries the test
@@ -61,15 +59,7 @@ func (r *queryRecorder) take() []string {
 func TestNameLookups_CaseInsensitiveUsingNameIndex(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	_, err = db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-	_, err = migrations.BringUpToDate(ctx, db)
-	require.NoError(t, err)
+	db := testdb.New(t)
 
 	insert := func(model any) {
 		t.Helper()
@@ -235,7 +225,7 @@ func TestNameLookups_CaseInsensitiveUsingNameIndex(t *testing.T) {
 	// Alias conflict checks match other resources' names and aliases
 	// case-insensitively, through the same indexes.
 	recorder.take()
-	err = aliasesSvc.AddAlias(ctx, aliases.GenreConfig, fantasy.ID, "science FICTION", lib.ID)
+	err := aliasesSvc.AddAlias(ctx, aliases.GenreConfig, fantasy.ID, "science FICTION", lib.ID)
 	require.Error(t, err)
 	assert.Equal(t, errcodes.ValidationError("Alias conflicts with an existing name"), err)
 	assert.Contains(t, explainAll(ctx, t, db, recorder.take()),

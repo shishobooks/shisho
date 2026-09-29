@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ import (
 func TestPluginLifecycle(t *testing.T) {
 	t.Parallel()
 	// 1. Set up infrastructure: in-memory DB, service, plugin directory
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -322,7 +323,7 @@ func TestPluginLifecycle(t *testing.T) {
 // from within JavaScript hooks via shisho.config.get/getAll.
 func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -416,7 +417,7 @@ func TestPluginLifecycle_ConfigIntegration(t *testing.T) {
 // and properly skips disabled ones.
 func TestPluginLifecycle_LoadAll(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
@@ -495,7 +496,7 @@ func TestPluginLifecycle_LoadAll(t *testing.T) {
 // TestPluginLifecycle_ReloadPlugin verifies hot-reload swaps the runtime.
 func TestPluginLifecycle_ReloadPlugin(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	service := NewService(db)
 	pluginDir := t.TempDir()
 

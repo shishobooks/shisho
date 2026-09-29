@@ -2,13 +2,13 @@ package books
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 )
@@ -24,9 +24,9 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
-		return errcodes.NotFound("File")
+		return err
 	}
 
 	var payload updateFileCoverPagePayload

@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,7 @@ import (
 func TestCreateUserSetsTimestamps(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	db := newTestDB(t)
+	db := testdb.New(t)
 
 	e := echo.New()
 	RegisterRoutes(e.Group("/api"), db, nil, nil, "")
@@ -49,7 +50,7 @@ func TestCreateUserSetsTimestamps(t *testing.T) {
 // wipe cannot delete a file another browser's test is downloading.
 func TestCreateBookWithEpubOnDiskUsesTheServersOwnDirectory(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ownRoot := filepath.Join(t.TempDir(), "own")
 	otherRoot := filepath.Join(t.TempDir(), "other")
 	require.NoError(t, os.MkdirAll(otherRoot, 0o755))

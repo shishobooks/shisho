@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -52,7 +53,7 @@ func readBooksFTSSeriesNames(ctx context.Context, t *testing.T, db *bun.DB, book
 func TestDeleteSeries_RemovesBookSeriesAndFlipsReviewed(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -144,7 +145,7 @@ func TestDeleteSeries_RemovesBookSeriesAndFlipsReviewed(t *testing.T) {
 func TestDeleteSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -229,7 +230,7 @@ func TestDeleteSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 func TestMergeSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -324,7 +325,7 @@ func TestMergeSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 func TestDeleteSeries_HardDeletesRowAndFTS(t *testing.T) {
 	t.Parallel()
 
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	library := &models.Library{
@@ -403,7 +404,7 @@ func TestDeleteSeries_HardDeletesRowAndFTS(t *testing.T) {
 
 func TestFindOrCreateSeries_PrimaryNameMatch(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -431,7 +432,7 @@ func TestFindOrCreateSeries_PrimaryNameMatch(t *testing.T) {
 
 func TestFindOrCreateSeries_AliasMatch(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -466,7 +467,7 @@ func TestFindOrCreateSeries_AliasMatch(t *testing.T) {
 
 func TestFindOrCreateSeries_NoMatch_CreatesNew(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

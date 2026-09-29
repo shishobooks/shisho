@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -60,7 +61,7 @@ func setupTestServerWithScanner(t *testing.T, db *bun.DB, scanner Scanner) *echo
 
 func TestResyncBook_InvalidModeRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
 
@@ -77,7 +78,7 @@ func TestResyncBook_InvalidModeRejected(t *testing.T) {
 
 func TestResyncFile_InvalidModeRejected(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	library, book := setupTestLibraryAndBook(t, db)
 	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
 	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
@@ -112,7 +113,7 @@ func TestResyncBook_ValidModesReachScanner(t *testing.T) {
 	for _, tt := range resyncModeCases {
 		t.Run(tt.mode, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			library, book := setupTestLibraryAndBook(t, db)
 			user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
 
@@ -139,7 +140,7 @@ func TestResyncFile_ValidModesReachScanner(t *testing.T) {
 	for _, tt := range resyncModeCases {
 		t.Run(tt.mode, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			library, book := setupTestLibraryAndBook(t, db)
 			file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
 			user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))

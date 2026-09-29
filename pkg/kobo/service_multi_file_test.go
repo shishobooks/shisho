@@ -17,7 +17,7 @@ import (
 func setupScopedFilesTest(t *testing.T) (context.Context, *books.Service, *Service, *models.Library, *models.User) {
 	t.Helper()
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	bookSvc := books.NewService(db)
 	koboSvc := NewService(db)
 

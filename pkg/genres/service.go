@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -112,19 +113,15 @@ func (svc *Service) FindOrCreateGenre(ctx context.Context, name string, libraryI
 		LibraryID: libraryID,
 		Name:      name,
 	}
+	// Another request may have created the same genre between the lookup
+	// and the insert; fetch that row instead.
 	err = svc.CreateGenre(ctx, genre)
-	if err != nil {
-		// Handle race condition: if another goroutine created the same genre
-		// between our retrieve and create, retry the retrieve
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return svc.RetrieveGenre(ctx, RetrieveGenreOptions{
-				Name:      &name,
-				LibraryID: &libraryID,
-			})
-		}
-		return nil, err
-	}
-	return genre, nil
+	return database.RetrieveOnUniqueViolation(genre, err, func() (*models.Genre, error) {
+		return svc.RetrieveGenre(ctx, RetrieveGenreOptions{
+			Name:      &name,
+			LibraryID: &libraryID,
+		})
+	})
 }
 
 func (svc *Service) ListGenres(ctx context.Context, opts ListGenresOptions) ([]*models.Genre, error) {

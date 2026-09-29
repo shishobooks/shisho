@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -82,7 +83,7 @@ func getSeriesBooks(t *testing.T, h *handler, seriesID int, query string) *httpt
 
 func TestSeriesBooks_ResponseShape(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	seriesID := seedSeriesWithBooks(t, db, nil)
 	h := newSeriesHandler(db)
 
@@ -101,7 +102,7 @@ func TestSeriesBooks_ResponseShape(t *testing.T) {
 
 func TestSeriesBooks_DefaultPagination(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	// Seed one more book than the default limit so the test pins the
 	// default-limit=24 contract instead of passing for any bind default.
 	titles := make([]string, 25)
@@ -127,7 +128,7 @@ func TestSeriesBooks_DefaultPagination(t *testing.T) {
 
 func TestSeriesBooks_OmnibusOrderingMatrix(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	titles := []string{
 		"Single One Beta", "Omnibus Long", "Single Two", "Omnibus Short",
@@ -181,7 +182,7 @@ func float64Pointer(value float64) *float64 { return &value }
 
 func TestSeriesBooks_ExplicitLimitOffset(t *testing.T) {
 	t.Parallel()
-	db := setupSeriesTestDB(t)
+	db := testdb.New(t)
 	seriesID := seedSeriesWithBooks(t, db, []string{"Alpha", "Beta", "Charlie", "Delta", "Echo"})
 	h := newSeriesHandler(db)
 

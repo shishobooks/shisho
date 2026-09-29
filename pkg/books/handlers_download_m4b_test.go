@@ -8,6 +8,7 @@ import (
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ func TestDownloadFile_GeneratesM4BForGetAndHead(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
-			db := setupTestDB(t)
+			db := testdb.New(t)
 			library, book := setupTestLibraryAndBook(t, db)
 			srcPath := testgen.GenerateM4B(t, t.TempDir(), "source.m4b", testgen.M4BOptions{
 				Title:     "Source Title",

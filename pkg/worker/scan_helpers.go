@@ -4,6 +4,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/seriesnum"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
@@ -171,7 +172,7 @@ func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*mo
 
 	// A partially present or invalid external group must never mutate storage.
 	groupPresent := incoming.SeriesNumber != nil || incoming.SeriesNumberEnd != nil || incoming.SeriesNumberUnit != nil
-	if groupPresent && !validSeriesNumberGroup(incoming.SeriesNumber, incoming.SeriesNumberEnd, incoming.SeriesNumberUnit) {
+	if groupPresent && !seriesnum.ValidGroup(incoming.SeriesNumber, incoming.SeriesNumberEnd, incoming.SeriesNumberUnit) {
 		return false
 	}
 	current := existing[0]
@@ -199,7 +200,7 @@ func shouldApplySeriesSidecar(incoming []sidecar.SeriesMetadata, existing []*mod
 	}
 	for _, membership := range incoming {
 		groupPresent := membership.Number != nil || membership.NumberEnd != nil || membership.Unit != nil
-		if groupPresent && !validSeriesNumberGroup(membership.Number, membership.NumberEnd, membership.Unit) {
+		if groupPresent && !seriesnum.ValidGroup(membership.Number, membership.NumberEnd, membership.Unit) {
 			return false
 		}
 	}

@@ -2,11 +2,10 @@ package joblogs
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/jobs"
 )
 
@@ -18,9 +17,9 @@ type handler struct {
 func (h *handler) listLogs(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	jobID, err := strconv.Atoi(c.Param("id"))
+	jobID, err := httputil.ParamID(c, "id", "Job")
 	if err != nil {
-		return errcodes.NotFound("Job")
+		return err
 	}
 
 	// Verify job exists. The job itself is fetched separately by the client via

@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -29,7 +30,7 @@ type addBooksFixture struct {
 
 func newAddBooksFixture(t *testing.T) *addBooksFixture {
 	t.Helper()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	libA := createTestLibrary(t, db, "Library A")
 	libB := createTestLibrary(t, db, "Library B")
 	user := createTestUser(t, db, "owner")

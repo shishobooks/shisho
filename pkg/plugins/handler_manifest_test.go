@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,7 +57,7 @@ func TestHandler_GetManifest_PathTraversal(t *testing.T) {
 
 func TestHandler_GetManifest_ReturnsFileContents(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)
@@ -84,7 +85,7 @@ func TestHandler_GetManifest_ReturnsFileContents(t *testing.T) {
 
 func TestHandler_GetManifest_Returns404WhenPluginNotInDB(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)
@@ -107,7 +108,7 @@ func TestHandler_GetManifest_Returns404WhenPluginNotInDB(t *testing.T) {
 
 func TestHandler_GetManifest_Returns404WhenFileMissing(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	pluginDir := t.TempDir()
 	installer := NewInstaller(pluginDir)

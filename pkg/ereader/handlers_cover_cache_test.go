@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ import (
 func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -126,7 +127,7 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	t.Parallel()
 
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
 

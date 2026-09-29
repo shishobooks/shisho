@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -15,7 +16,7 @@ import (
 
 func TestRetrieveBook_LoadsChaptersForEachFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library and book
@@ -64,7 +65,7 @@ func TestRetrieveBook_LoadsChaptersForEachFile(t *testing.T) {
 
 func TestRetrieveBook_LoadsNestedChaptersViaChildren(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library and book
@@ -155,7 +156,7 @@ func TestRetrieveBook_LoadsNestedChaptersViaChildren(t *testing.T) {
 
 func TestRetrieveBookByFilePath_LoadsChaptersForEachFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library and book
@@ -205,7 +206,7 @@ func TestRetrieveBookByFilePath_LoadsChaptersForEachFile(t *testing.T) {
 
 func TestRetrieveBookByFilePath_LoadsNestedChapters(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create a library and book
@@ -302,7 +303,7 @@ func ptrInt64(v int64) *int64 {
 
 func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for files
@@ -396,7 +397,7 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 // filepath.Dir(file.Filepath) which is stat-race-free.
 func TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -454,7 +455,7 @@ func TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing(t *testing.T)
 
 func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for library
@@ -541,7 +542,7 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 
 func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for files
@@ -629,7 +630,7 @@ func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 
 func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for files
@@ -693,7 +694,7 @@ func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
 
 func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for the book
@@ -762,7 +763,7 @@ func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
 
 func TestDeleteFileAndCleanup_CleansUpCoverAndSidecarFiles(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for the book
@@ -843,7 +844,7 @@ func TestDeleteFileAndCleanup_CleansUpCoverAndSidecarFiles(t *testing.T) {
 
 func TestDeleteFileAndCleanup_FileNotFound(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create library (needed as parameter)
@@ -865,7 +866,7 @@ func TestDeleteFileAndCleanup_FileNotFound(t *testing.T) {
 
 func TestDeleteBooksAndFiles_DeletesMultipleBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	// Create temp directory for files
@@ -957,7 +958,7 @@ func TestDeleteBooksAndFiles_DeletesMultipleBooks(t *testing.T) {
 
 func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -1051,7 +1052,7 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 
 func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -1143,7 +1144,7 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 
 func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -1237,7 +1238,7 @@ func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *te
 
 func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -1345,7 +1346,7 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 
 func TestListAllFilesForLibrary_IncludesSupplements(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

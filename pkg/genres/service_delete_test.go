@@ -6,6 +6,7 @@ import (
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -54,7 +55,7 @@ func retrieveGenreBook(t *testing.T, db *bun.DB, bookID int) (*models.Book, []in
 // (ADR 0006).
 func TestDeleteGenre_StampsManualGenreSourceOnEveryAffectedBook(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -111,7 +112,7 @@ func TestDeleteGenre_StampsManualGenreSourceOnEveryAffectedBook(t *testing.T) {
 // A Genre that no Book carries deletes cleanly and touches no Book.
 func TestDeleteGenre_Unused_TouchesNoBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -136,7 +137,7 @@ func TestDeleteGenre_Unused_TouchesNoBooks(t *testing.T) {
 // keep their existing source.
 func TestMergeGenres_KeepsBookSources(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := NewService(db)
 

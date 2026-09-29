@@ -13,6 +13,8 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
+	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/identifiers"
@@ -1462,17 +1464,15 @@ func (svc *Service) FindOrCreateSeries(ctx context.Context, name string, library
 		Model(series).
 		Returning("*").
 		Exec(ctx)
-	if err != nil {
-		// Another request created the same series between lookup and insert.
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			existing := &models.Series{}
-			if retryErr := svc.db.NewSelect().Model(existing).Where("s.name = ? COLLATE NOCASE AND s.library_id = ?", name, libraryID).Scan(ctx); retryErr == nil {
-				return existing, nil
-			}
+	// Another request may have created the same series between the lookup and
+	// the insert; fetch that row instead.
+	return database.RetrieveOnUniqueViolation(series, errors.WithStack(err), func() (*models.Series, error) {
+		existing := &models.Series{}
+		if err := svc.db.NewSelect().Model(existing).Where("s.name = ? COLLATE NOCASE AND s.library_id = ?", name, libraryID).Scan(ctx); err != nil {
+			return nil, errors.WithStack(err)
 		}
-		return nil, errors.WithStack(err)
-	}
-	return series, nil
+		return existing, nil
+	})
 }
 
 // raiseSeriesNameSource lowers name_source's priority number to nameSource
@@ -1873,7 +1873,7 @@ func deleteFileFromDisk(file *models.File) error {
 	// filepath.Dir(file.Filepath) is always the cover dir regardless of
 	// whether the main file exists on disk.
 	if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
-		coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+		coverPath := covers.FileCoverPath(file)
 		_ = os.Remove(coverPath)
 	}
 

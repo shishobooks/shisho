@@ -2,44 +2,18 @@ package apikeys
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func TestService_Create(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -61,7 +35,7 @@ func TestService_Create(t *testing.T) {
 
 func TestService_List(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -86,7 +60,7 @@ func TestService_List(t *testing.T) {
 
 func TestService_GetByKey(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -108,7 +82,7 @@ func TestService_GetByKey(t *testing.T) {
 
 func TestService_GetByKey_NotFound(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -119,7 +93,7 @@ func TestService_GetByKey_NotFound(t *testing.T) {
 
 func TestService_Delete(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -143,7 +117,7 @@ func TestService_Delete(t *testing.T) {
 
 func TestService_Delete_WrongUser(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -162,7 +136,7 @@ func TestService_Delete_WrongUser(t *testing.T) {
 
 func TestService_UpdateName(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -184,7 +158,7 @@ func TestService_UpdateName(t *testing.T) {
 
 func TestService_AddPermission(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -205,7 +179,7 @@ func TestService_AddPermission(t *testing.T) {
 
 func TestService_AddPermission_Duplicate(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -220,13 +194,21 @@ func TestService_AddPermission_Duplicate(t *testing.T) {
 	// Add permission twice
 	_, err = svc.AddPermission(ctx, 1, created.ID, PermissionEReaderBrowser)
 	require.NoError(t, err)
-	_, err = svc.AddPermission(ctx, 1, created.ID, PermissionEReaderBrowser)
+	key, err := svc.AddPermission(ctx, 1, created.ID, PermissionEReaderBrowser)
 	require.NoError(t, err) // Should succeed without error (idempotent)
+
+	count, err := db.NewSelect().
+		Model((*APIKeyPermission)(nil)).
+		Where("api_key_id = ? AND permission = ?", created.ID, PermissionEReaderBrowser).
+		Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "adding the same permission twice stores one row")
+	assert.Len(t, key.Permissions, 1)
 }
 
 func TestService_RemovePermission(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -249,7 +231,7 @@ func TestService_RemovePermission(t *testing.T) {
 
 func TestService_GenerateShortURL(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -275,7 +257,7 @@ func TestService_GenerateShortURL(t *testing.T) {
 
 func TestService_ResolveShortCode(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -301,7 +283,7 @@ func TestService_ResolveShortCode(t *testing.T) {
 
 func TestService_ResolveShortCode_Expired(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 
@@ -332,7 +314,7 @@ func TestService_ResolveShortCode_Expired(t *testing.T) {
 
 func TestService_TouchLastAccessed(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	ctx := context.Background()
 

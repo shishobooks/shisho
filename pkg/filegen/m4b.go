@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
@@ -243,7 +244,7 @@ func (g *M4BGenerator) loadCover(file *models.File, meta *mp4.Metadata) error {
 	}
 	// Resolve via the file's parent dir — book.Filepath may be a synthetic
 	// organized-folder path that doesn't exist on disk for root-level files.
-	coverPath := filepath.Join(filepath.Dir(file.Filepath), *file.CoverImageFilename)
+	coverPath := covers.FileCoverPath(file)
 
 	data, err := os.ReadFile(coverPath)
 	if err != nil {

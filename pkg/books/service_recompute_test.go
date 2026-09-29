@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -55,7 +56,7 @@ func fileReviewed(ctx context.Context, t *testing.T, db *bun.DB, fileID int) boo
 // alone.
 func TestRecomputeReviewedForBooks_RecomputesOnlyListedBooks(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	lib := &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)

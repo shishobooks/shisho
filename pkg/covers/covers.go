@@ -124,7 +124,7 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cach
 		return errcodes.NotFound(resource)
 	}
 
-	coverPath := filepath.Join(filepath.Dir(coverFile.Filepath), *coverFile.CoverImageFilename)
+	coverPath := FileCoverPath(coverFile)
 	// Stat first so a cover file deleted from disk surfaces as a typed 404
 	// (matching the no-filename branch above) instead of bubbling up as
 	// echo.HTTPError's generic "Not Found".

@@ -2,41 +2,15 @@ package fingerprints_test
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/fingerprints"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-// newTestDB opens an in-memory SQLite database with all migrations applied.
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior.
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 // insertTestLibrary creates a library row and returns it.
 func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
@@ -87,7 +61,7 @@ func insertTestFile(t *testing.T, db *bun.DB, book *models.Book) *models.File {
 // TestInsert_NewFingerprint verifies that Insert stores a fingerprint row.
 func TestInsert_NewFingerprint(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -107,7 +81,7 @@ func TestInsert_NewFingerprint(t *testing.T) {
 // (file_id, algorithm) pair does not error and does not create a duplicate row.
 func TestInsert_Idempotent(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -133,7 +107,7 @@ func TestInsert_Idempotent(t *testing.T) {
 // stale fingerprint have to call DeleteForFile first.
 func TestInsert_ConflictDoesNotOverwrite(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -155,7 +129,7 @@ func TestInsert_ConflictDoesNotOverwrite(t *testing.T) {
 // TestFindFilesByHash_FindsMatch verifies that a file can be looked up by hash.
 func TestFindFilesByHash_FindsMatch(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -177,7 +151,7 @@ func TestFindFilesByHash_FindsMatch(t *testing.T) {
 // are not returned even if they have the same hash.
 func TestFindFilesByHash_DifferentLibrary(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -201,7 +175,7 @@ func TestFindFilesByHash_DifferentLibrary(t *testing.T) {
 // no file matches the hash.
 func TestFindFilesByHash_UnknownHash(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -216,7 +190,7 @@ func TestFindFilesByHash_UnknownHash(t *testing.T) {
 // the specified file and leaves other files' fingerprints intact.
 func TestDeleteForFile(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -257,7 +231,7 @@ func TestDeleteForFile(t *testing.T) {
 // TestCountForFile verifies CountForFile returns the correct tally.
 func TestCountForFile(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -289,7 +263,7 @@ func TestCountForFile(t *testing.T) {
 // algorithm fingerprint are returned.
 func TestListFilesMissingAlgorithm(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -323,7 +297,7 @@ func TestListFilesMissingAlgorithm(t *testing.T) {
 // files already have the algorithm.
 func TestListFilesMissingAlgorithm_AllPresent(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -343,7 +317,7 @@ func TestListFilesMissingAlgorithm_AllPresent(t *testing.T) {
 // specific file+algorithm and excludes rows for other algorithms.
 func TestListForFile(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 
@@ -368,7 +342,7 @@ func TestListForFile(t *testing.T) {
 // fingerprints exist for the requested file+algorithm.
 func TestListForFile_Empty(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 	svc := fingerprints.NewService(db)
 

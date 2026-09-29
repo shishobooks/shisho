@@ -2,41 +2,16 @@ package books
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func setupBooksTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	// :memory: SQLite is per-connection — multiple connections each have
-	// their own (empty) database. Pinning to a single connection ensures
-	// the migrated schema is visible to every operation in the test.
-	sqldb.SetMaxOpenConns(1)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { db.Close() })
-	return db
-}
 
 func seedLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
 	t.Helper()
@@ -72,7 +47,7 @@ func seedBook(t *testing.T, db *bun.DB, lib *models.Library, title, sortTitle st
 func TestListBooks_SortByTitleAsc(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 
@@ -96,7 +71,7 @@ func TestListBooks_SortByTitleAsc(t *testing.T) {
 func TestListBooks_SortByPrimarySeriesPlacesOmnibusesAfterSingles(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 	ctx := context.Background()
@@ -139,7 +114,7 @@ func TestListBooks_SortByPrimarySeriesPlacesOmnibusesAfterSingles(t *testing.T) 
 func TestListBooks_SortByDateAddedDesc(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 
@@ -166,7 +141,7 @@ func TestListBooks_SortByDateAddedDesc(t *testing.T) {
 func TestListBooks_SortByTiesFallsBackToID(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 
@@ -204,7 +179,7 @@ func TestListBooks_SortByTiesFallsBackToID(t *testing.T) {
 func TestListBooks_NilSortUsesBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
-	db := setupBooksTestDB(t)
+	db := testdb.New(t)
 	svc := NewService(db)
 	lib := seedLibrary(t, db, "Books")
 

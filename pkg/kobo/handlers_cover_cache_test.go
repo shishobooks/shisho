@@ -21,7 +21,7 @@ import (
 func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := books.NewService(db)
@@ -97,7 +97,7 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := books.NewService(db)
@@ -181,7 +181,7 @@ func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 	t.Parallel()
 
-	db := setupTestDB(t)
+	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	e := echo.New()
 	bookService := books.NewService(db)

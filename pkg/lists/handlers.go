@@ -3,13 +3,13 @@ package lists
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -78,9 +78,9 @@ func (h *handler) effectivePermission(ctx context.Context, listID, ownerID, user
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	user, err := auth.RequireUser(c)
@@ -150,9 +150,9 @@ func (h *handler) create(c echo.Context) error {
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := UpdateListPayload{}
@@ -215,9 +215,9 @@ func (h *handler) update(c echo.Context) error {
 func (h *handler) delete(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	user, err := auth.RequireUser(c)
@@ -247,9 +247,9 @@ func (h *handler) delete(c echo.Context) error {
 func (h *handler) listBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := ListBooksQuery{}
@@ -313,9 +313,9 @@ func (h *handler) listBooks(c echo.Context) error {
 func (h *handler) addBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := AddBooksPayload{}
@@ -369,9 +369,9 @@ func (h *handler) addBooks(c echo.Context) error {
 func (h *handler) removeBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := RemoveBooksPayload{}
@@ -407,9 +407,9 @@ func (h *handler) removeBooks(c echo.Context) error {
 func (h *handler) reorderBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := ReorderBooksPayload{}
@@ -447,9 +447,9 @@ func (h *handler) reorderBooks(c echo.Context) error {
 func (h *handler) listShares(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	user, err := auth.RequireUser(c)
@@ -477,9 +477,9 @@ func (h *handler) listShares(c echo.Context) error {
 func (h *handler) createShare(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := CreateSharePayload{}
@@ -550,14 +550,14 @@ func (h *handler) createShare(c echo.Context) error {
 func (h *handler) updateShare(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
-	shareID, err := strconv.Atoi(c.Param("shareId"))
+	shareID, err := httputil.ParamID(c, "shareId", "Share")
 	if err != nil {
-		return errcodes.NotFound("Share")
+		return err
 	}
 
 	params := UpdateSharePayload{}
@@ -590,14 +590,14 @@ func (h *handler) updateShare(c echo.Context) error {
 func (h *handler) deleteShare(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
-	shareID, err := strconv.Atoi(c.Param("shareId"))
+	shareID, err := httputil.ParamID(c, "shareId", "Share")
 	if err != nil {
-		return errcodes.NotFound("Share")
+		return err
 	}
 
 	user, err := auth.RequireUser(c)
@@ -625,9 +625,9 @@ func (h *handler) deleteShare(c echo.Context) error {
 func (h *handler) checkVisibility(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
 	params := CheckVisibilityQuery{}
@@ -730,14 +730,14 @@ func (h *handler) templates(c echo.Context) error {
 func (h *handler) moveBookPosition(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	listID, err := strconv.Atoi(c.Param("id"))
+	listID, err := httputil.ParamID(c, "id", "List")
 	if err != nil {
-		return errcodes.NotFound("List")
+		return err
 	}
 
-	bookID, err := strconv.Atoi(c.Param("bookId"))
+	bookID, err := httputil.ParamID(c, "bookId", "Book")
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return err
 	}
 
 	params := MoveBookPositionPayload{}

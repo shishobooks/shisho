@@ -46,9 +46,6 @@ func (s *Service) RetrievePlugin(ctx context.Context, scope, id string) (*models
 		Where("id = ?", id).
 		Scan(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errors.WithStack(err)
-		}
 		return nil, errors.WithStack(err)
 	}
 	return plugin, nil

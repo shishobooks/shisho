@@ -3,11 +3,11 @@ package plugins
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -66,9 +66,9 @@ func (h *handler) setOrder(c echo.Context) error {
 func (h *handler) getLibraryOrder(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 	hookType := c.Param("hookType")
 
@@ -124,9 +124,9 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 func (h *handler) setLibraryOrder(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 	hookType := c.Param("hookType")
 
@@ -161,9 +161,9 @@ func (h *handler) setLibraryOrder(c echo.Context) error {
 func (h *handler) resetLibraryOrder(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 	hookType := c.Param("hookType")
 
@@ -177,9 +177,9 @@ func (h *handler) resetLibraryOrder(c echo.Context) error {
 func (h *handler) resetAllLibraryOrders(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	libraryID, err := strconv.Atoi(c.Param("id"))
+	libraryID, err := httputil.ParamID(c, "id", "Library")
 	if err != nil {
-		return errcodes.NotFound("Library")
+		return err
 	}
 
 	if err := h.service.ResetAllLibraryOrders(ctx, libraryID); err != nil {

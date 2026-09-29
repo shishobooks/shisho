@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -112,19 +113,15 @@ func (svc *Service) FindOrCreateTag(ctx context.Context, name string, libraryID 
 		LibraryID: libraryID,
 		Name:      name,
 	}
+	// Another request may have created the same tag between the lookup
+	// and the insert; fetch that row instead.
 	err = svc.CreateTag(ctx, tag)
-	if err != nil {
-		// Handle race condition: if another goroutine created the same tag
-		// between our retrieve and create, retry the retrieve
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return svc.RetrieveTag(ctx, RetrieveTagOptions{
-				Name:      &name,
-				LibraryID: &libraryID,
-			})
-		}
-		return nil, err
-	}
-	return tag, nil
+	return database.RetrieveOnUniqueViolation(tag, err, func() (*models.Tag, error) {
+		return svc.RetrieveTag(ctx, RetrieveTagOptions{
+			Name:      &name,
+			LibraryID: &libraryID,
+		})
+	})
 }
 
 func (svc *Service) ListTags(ctx context.Context, opts ListTagsOptions) ([]*models.Tag, error) {

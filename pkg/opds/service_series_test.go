@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ import (
 // series feeds share the check.
 func TestOPDSLibrarySeriesBooks_SeriesFromOtherLibrary_Returns404(t *testing.T) {
 	t.Parallel()
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	var libs [2]*models.Library
@@ -78,7 +79,7 @@ func TestOPDSLibrarySeriesBooks_SeriesFromOtherLibrary_Returns404(t *testing.T) 
 // another library, through the full handler path.
 func TestOPDSLibrarySeriesBooksHandlers_SeriesFromOtherLibrary_Returns404(t *testing.T) {
 	t.Parallel()
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	ctx := context.Background()
 
 	var libs [2]*models.Library

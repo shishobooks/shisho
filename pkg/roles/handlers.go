@@ -2,11 +2,10 @@ package roles
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
 type handler struct {
@@ -32,9 +31,9 @@ func (h *handler) create(c echo.Context) error {
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Role")
 	if err != nil {
-		return errcodes.NotFound("Role")
+		return err
 	}
 
 	role, err := h.roleService.Retrieve(ctx, id)
@@ -66,9 +65,9 @@ func (h *handler) list(c echo.Context) error {
 func (h *handler) update(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Role")
 	if err != nil {
-		return errcodes.NotFound("Role")
+		return err
 	}
 
 	params := UpdateRolePayload{}
@@ -92,9 +91,9 @@ func (h *handler) update(c echo.Context) error {
 func (h *handler) delete(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "Role")
 	if err != nil {
-		return errcodes.NotFound("Role")
+		return err
 	}
 
 	err = h.roleService.Delete(ctx, id)

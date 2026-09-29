@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ import (
 // is a validation_error rather than a snake-cased copy of a message.
 func TestSeedingRoutes_ReturnErrcodesBodies(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	e := echo.New()
 	b, err := binder.New()
 	require.NoError(t, err)
@@ -62,7 +63,7 @@ func TestSeedingRoutes_ReturnErrcodesBodies(t *testing.T) {
 // errcodes error, which the handler returns unchanged.
 func TestSeedingRoutes_MalformedBodyReturnsBinderError(t *testing.T) {
 	t.Parallel()
-	db := newTestDB(t)
+	db := testdb.New(t)
 	e := echo.New()
 	b, err := binder.New()
 	require.NoError(t, err)

@@ -9,6 +9,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +21,7 @@ import (
 func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	t.Parallel()
 
-	db := setupOPDSDB(t)
+	db := testdb.New(t)
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
 
 	e := echo.New()

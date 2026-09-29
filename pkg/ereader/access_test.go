@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -35,7 +36,7 @@ type eReaderAccessFixture struct {
 func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 	t.Helper()
 	ctx := context.Background()
-	db := setupEReaderDB(t)
+	db := testdb.New(t)
 	f := &eReaderAccessFixture{db: db}
 
 	for _, lib := range []**models.Library{&f.libA, &f.libB} {
