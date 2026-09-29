@@ -420,25 +420,41 @@ func (svc *Service) CleanupOrphanedPublishers(ctx context.Context) ([]int, error
 	return deletedIDs, nil
 }
 
+// SetParent and ValidateNoCycle return these for a parent the hierarchy
+// cannot accept, which the handlers render as a 422. A publisher that does
+// not exist is errcodes.NotFound instead.
+var (
+	ErrInvalidParent      = errors.New("invalid parent: parent_id must be a positive integer")
+	ErrParentOtherLibrary = errors.New("parent publisher must be in the same library")
+	ErrParentCycle        = errors.New("cannot set parent: would create a cycle")
+)
+
 // SetParent sets or clears the parent of a publisher. If parentID is non-nil,
 // it validates that setting the parent would not create a cycle.
 func (svc *Service) SetParent(ctx context.Context, publisherID int, parentID *int) error {
 	if parentID != nil {
 		if *parentID <= 0 {
-			return errors.New("invalid parent: parent_id must be a positive integer")
+			return ErrInvalidParent
 		}
 
-		// Verify parent is in the same library as the child
+		// Verify parent is in the same library as the child. Each side names
+		// itself when it is missing, so the caller can tell which one it was.
 		child, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &publisherID})
+		if errors.Is(err, errcodes.NotFound("Publisher")) {
+			return errcodes.NotFound("Child publisher")
+		}
 		if err != nil {
 			return err
 		}
 		parent, err := svc.RetrievePublisher(ctx, RetrievePublisherOptions{ID: parentID})
+		if errors.Is(err, errcodes.NotFound("Publisher")) {
+			return errcodes.NotFound("Parent publisher")
+		}
 		if err != nil {
 			return err
 		}
 		if child.LibraryID != parent.LibraryID {
-			return errors.New("parent publisher must be in the same library")
+			return ErrParentOtherLibrary
 		}
 
 		if err := svc.ValidateNoCycle(ctx, publisherID, *parentID); err != nil {
@@ -460,7 +476,7 @@ func (svc *Service) SetParent(ctx context.Context, publisherID int, parentID *in
 // rejects self-references (publisherID == proposedParentID).
 func (svc *Service) ValidateNoCycle(ctx context.Context, publisherID, proposedParentID int) error {
 	if publisherID == proposedParentID {
-		return errors.New("cannot set parent: would create a cycle")
+		return ErrParentCycle
 	}
 
 	// Walk up from proposedParentID to check for cycles
@@ -469,7 +485,7 @@ func (svc *Service) ValidateNoCycle(ctx context.Context, publisherID, proposedPa
 
 	for {
 		if visited[currentID] {
-			return errors.New("cannot set parent: would create a cycle")
+			return ErrParentCycle
 		}
 		visited[currentID] = true
 
@@ -481,7 +497,7 @@ func (svc *Service) ValidateNoCycle(ctx context.Context, publisherID, proposedPa
 			Scan(ctx, &parentID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return errors.New("parent publisher not found")
+				return errcodes.NotFound("Parent publisher")
 			}
 			return errors.WithStack(err)
 		}

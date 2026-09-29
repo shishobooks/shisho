@@ -48,7 +48,7 @@ func (h *handler) createUser(c echo.Context) error {
 	}
 
 	if req.Username == "" || req.Password == "" {
-		return errcodes.BadRequest("Username and password are required.")
+		return errcodes.ValidationError("Username and password are required.")
 	}
 
 	// Get admin role
@@ -157,7 +157,7 @@ func (h *handler) createLibrary(c echo.Context) error {
 	}
 
 	if req.Name == "" {
-		return errcodes.BadRequest("Name is required.")
+		return errcodes.ValidationError("Name is required.")
 	}
 
 	now := time.Now()
@@ -220,7 +220,7 @@ func (h *handler) createBook(c echo.Context) error {
 	}
 
 	if req.LibraryID == 0 || req.Title == "" {
-		return errcodes.BadRequest("libraryId and title are required.")
+		return errcodes.ValidationError("libraryId and title are required.")
 	}
 
 	now := time.Now()
@@ -236,7 +236,7 @@ func (h *handler) createBook(c echo.Context) error {
 	}
 	if req.WithEpubOnDisk {
 		if fileType != models.FileTypeEPUB {
-			return errcodes.BadRequest("withEpubOnDisk requires fileType epub")
+			return errcodes.ValidationError("withEpubOnDisk requires fileType epub")
 		}
 		base, err := tempEPUBPath(h.epubRoot, req.Title)
 		if err != nil {
@@ -353,7 +353,7 @@ func (h *handler) createPerson(c echo.Context) error {
 	}
 
 	if req.LibraryID == 0 || req.Name == "" {
-		return errcodes.BadRequest("libraryId and name are required.")
+		return errcodes.ValidationError("libraryId and name are required.")
 	}
 
 	now := time.Now()
@@ -400,7 +400,7 @@ func (h *handler) createSeries(c echo.Context) error {
 	}
 
 	if req.LibraryID == 0 || req.Name == "" {
-		return errcodes.BadRequest("libraryId and name are required.")
+		return errcodes.ValidationError("libraryId and name are required.")
 	}
 
 	now := time.Now()
@@ -456,7 +456,7 @@ func (h *handler) createAPIKey(c echo.Context) error {
 	}
 
 	if req.UserID == 0 || req.Name == "" {
-		return errcodes.BadRequest("userId and name are required.")
+		return errcodes.ValidationError("userId and name are required.")
 	}
 
 	now := time.Now()

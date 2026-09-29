@@ -31,17 +31,17 @@ vi.mock("@/hooks/useAuth", () => ({
 
 const apiKey = (id: string, permission: string): APIKey => ({
   id,
-  userId: 1,
+  user_id: 1,
   name: `Device ${id}`,
   key: `key-${id}`,
-  createdAt: "2026-01-01T00:00:00Z",
-  updatedAt: "2026-01-01T00:00:00Z",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
   permissions: [
     {
       id: `p-${id}`,
-      apiKeyId: id,
+      api_key_id: id,
       permission,
-      createdAt: "2026-01-01T00:00:00Z",
+      created_at: "2026-01-01T00:00:00Z",
     },
   ],
 });
@@ -66,7 +66,7 @@ vi.mock("@/hooks/queries/apiKeys", () => ({
   useDeleteApiKey: () => mutation(),
   useGenerateShortUrl: () => ({
     isPending: false,
-    mutateAsync: vi.fn().mockResolvedValue({ shortCode: "abc123" }),
+    mutateAsync: vi.fn().mockResolvedValue({ short_code: "abc123" }),
   }),
 }));
 

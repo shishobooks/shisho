@@ -195,14 +195,16 @@ that fit none of those names. They are recorded here so the ADR matches what
    model when the response adds nothing to it. An `{Entity}Response` wrapper
    is required only when the response reshapes or extends the model (computed
    fields like `book_count`, flattened relations like `aliases []string`).
-   Books, files, users, and roles return bare models; passthrough wrappers
-   such as `UserResponse` or `RoleResponse` are not wanted.
+   Books, files, libraries, users, roles, and API keys return bare models;
+   passthrough wrappers such as `UserResponse`, `RoleResponse`, or
+   `LibraryResponse` are not wanted.
 
 2. **Two-tier collection rule.** Paginated list endpoints return the
    `{ items, total }` envelope of point 3. Unpaginated endpoints that return a
    whole collection return a bare array of a named type instead. Book lists,
    list shares, list templates, library languages, the caller's libraries,
-   and the user directory work this way.
+   the user directory, a file's chapters, the caches, and the caller's API
+   keys work this way.
 
 3. **Named projections.** Some routes are open to every signed-in user, so
    their payload must hold only what any role may see. Their types are reduced

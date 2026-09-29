@@ -116,7 +116,7 @@ func (h *handler) seedPlugin(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	if req.Scope == "" || req.ID == "" {
-		return errcodes.BadRequest("scope and id are required.")
+		return errcodes.ValidationError("scope and id are required.")
 	}
 	if h.installer == nil {
 		return errors.New("plugin installer not configured")

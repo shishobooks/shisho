@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/auth"
-	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -26,28 +25,20 @@ func (h *handler) searchMetadata(c echo.Context) error {
 
 	var payload PluginSearchPayload
 	if err := c.Bind(&payload); err != nil {
-		return errcodes.ValidationError(err.Error())
+		return errors.WithStack(err)
 	}
 
-	// Look up the book with relations first (needed for library access check and libraryID)
-	var book *models.Book
-	var err error
-	if h.enrich != nil {
-		book, err = h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
-	} else if h.db != nil {
-		var b models.Book
-		err = h.db.NewSelect().Model(&b).
-			Where("b.id = ?", payload.BookID).
-			Relation("Files").
-			Scan(ctx)
-		if err == nil {
-			book = &b
-		}
-	} else {
-		return errcodes.BadRequest("search dependencies not available")
+	// Only RegisterIdentifyRoutes registers this handler, and it always sets
+	// the enrich dependencies, so their absence is a server fault.
+	if h.enrich == nil {
+		return errors.New("search dependencies not available")
 	}
-	if err != nil || book == nil {
-		return errcodes.NotFound("Book")
+
+	// Look up the book with relations first (needed for library access check
+	// and libraryID). The store returns a 404 for a missing book.
+	book, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
 	// Check library access

@@ -20,6 +20,7 @@ export {
   type ResyncPayload,
   type SeriesInput,
   type UpdateBookPayload,
+  type UpdateFileCoverPagePayload,
   type UpdateFilePayload,
 } from "./generated/books";
 export * from "./generated/filesystem";
@@ -140,7 +141,6 @@ export {
   type ListResponsePermission,
   type ListListsResponse,
   type ListListBooksResponse,
-  type RetrieveListResponse,
   type CheckVisibilityResponse,
   type ListTemplate,
 } from "./generated/lists";

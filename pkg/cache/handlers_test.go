@@ -59,16 +59,16 @@ func TestList_ReturnsAllThreeCaches(t *testing.T) {
 	require.NoError(t, h.list(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp ListResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Caches, 3)
+	var resp []Info
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "the cache list is a bare array")
+	require.Len(t, resp, 3)
 
-	ids := []string{resp.Caches[0].ID, resp.Caches[1].ID, resp.Caches[2].ID}
+	ids := []string{resp[0].ID, resp[1].ID, resp[2].ID}
 	assert.Contains(t, ids, "downloads")
 	assert.Contains(t, ids, "cbz_pages")
 	assert.Contains(t, ids, "pdf_pages")
 
-	for _, ci := range resp.Caches {
+	for _, ci := range resp {
 		switch ci.ID {
 		case "downloads":
 			assert.Equal(t, int64(100), ci.SizeBytes)

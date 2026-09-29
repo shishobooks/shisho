@@ -3,10 +3,12 @@ package publishers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -156,7 +158,7 @@ func TestSetParent_DirectCycleRejected(t *testing.T) {
 	// B -> A would create cycle
 	err = svc.SetParent(ctx, pubB.ID, &pubA.ID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cycle")
+	assert.ErrorIs(t, err, ErrParentCycle)
 }
 
 func TestSetParent_DeeperCycleRejected(t *testing.T) {
@@ -189,7 +191,7 @@ func TestSetParent_DeeperCycleRejected(t *testing.T) {
 	// C -> A would create cycle A->B->C->A
 	err = svc.SetParent(ctx, pubC.ID, &pubA.ID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cycle")
+	assert.ErrorIs(t, err, ErrParentCycle)
 }
 
 func TestSetParent_SelfReferenceRejected(t *testing.T) {
@@ -206,7 +208,7 @@ func TestSetParent_SelfReferenceRejected(t *testing.T) {
 
 	err = svc.SetParent(ctx, pub.ID, &pub.ID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cycle")
+	assert.ErrorIs(t, err, ErrParentCycle)
 }
 
 func TestGetAncestors_ReturnsOrderedChain(t *testing.T) {
@@ -444,7 +446,7 @@ func TestSetParent_CrossLibraryRejected(t *testing.T) {
 	// Attempt to set parent from a different library
 	err = svc.SetParent(ctx, child.ID, &parent.ID)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "same library")
+	assert.ErrorIs(t, err, ErrParentOtherLibrary)
 }
 
 func TestSetParent_ZeroParentIDRejected(t *testing.T) {
@@ -463,7 +465,7 @@ func TestSetParent_ZeroParentIDRejected(t *testing.T) {
 	zero := 0
 	err = svc.SetParent(ctx, pub.ID, &zero)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid parent")
+	assert.ErrorIs(t, err, ErrInvalidParent)
 }
 
 func TestSetParent_NegativeParentIDRejected(t *testing.T) {
@@ -482,7 +484,7 @@ func TestSetParent_NegativeParentIDRejected(t *testing.T) {
 	neg := -1
 	err = svc.SetParent(ctx, pub.ID, &neg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid parent")
+	assert.ErrorIs(t, err, ErrInvalidParent)
 }
 
 func TestValidateNoCycle_NonExistentParentReturnsError(t *testing.T) {
@@ -500,7 +502,9 @@ func TestValidateNoCycle_NonExistentParentReturnsError(t *testing.T) {
 	// proposedParentID that doesn't exist
 	err = svc.ValidateNoCycle(ctx, pub.ID, 99999)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parent publisher not found")
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode)
 }
 
 func createTestFile(t *testing.T, db *bun.DB, lib *models.Library, publisherID int, filepath string) {

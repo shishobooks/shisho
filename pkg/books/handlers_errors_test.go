@@ -38,8 +38,9 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, status int
 	assert.Equal(t, status, body.Error.StatusCode)
 }
 
-// The file update validation errors go through errcodes, so their wire code
-// is bad_request rather than a snake-cased copy of the message.
+// The file update errors go through errcodes, so their wire code is a fixed
+// code rather than a snake-cased copy of the message. A payload value that
+// fails validation is a 422; a request the file's state cannot honor is a 400.
 func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +49,8 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 		fileType string
 		role     string
 		body     string
+		status   int
+		code     string
 		message  string
 	}{
 		{
@@ -55,6 +58,8 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 			fileType: "txt",
 			role:     models.FileRoleSupplement,
 			body:     `{"file_role":"main"}`,
+			status:   http.StatusBadRequest,
+			code:     "bad_request",
 			message:  "Cannot upgrade to main file: file type 'txt' is not supported as a main file.",
 		},
 		{
@@ -62,6 +67,8 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 			fileType: models.FileTypeEPUB,
 			role:     models.FileRoleMain,
 			body:     `{"language":"!!"}`,
+			status:   http.StatusUnprocessableEntity,
+			code:     "validation_error",
 			message:  "Invalid language tag: !!",
 		},
 		{
@@ -69,6 +76,8 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 			fileType: models.FileTypeEPUB,
 			role:     models.FileRoleMain,
 			body:     `{"is_preferred_cover":true}`,
+			status:   http.StatusBadRequest,
+			code:     "bad_request",
 			message:  "Cannot set preferred cover: file has no cover image.",
 		},
 	}
@@ -91,7 +100,7 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
 
-			assertErrorResponse(t, rr, http.StatusBadRequest, "bad_request", tt.message)
+			assertErrorResponse(t, rr, tt.status, tt.code, tt.message)
 		})
 	}
 }

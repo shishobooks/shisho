@@ -249,7 +249,7 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	if err := validateSeriesInputs(params.Series); err != nil {
-		return errcodes.BadRequest(err.Error())
+		return errcodes.ValidationError(err.Error())
 	}
 
 	// Fetch the book.
@@ -1056,7 +1056,7 @@ func (h *handler) updateFile(c echo.Context) error {
 			} else {
 				normalized := mediafile.NormalizeLanguage(*params.Language)
 				if normalized == nil {
-					return errcodes.BadRequest("Invalid language tag: " + *params.Language)
+					return errcodes.ValidationError("Invalid language tag: " + *params.Language)
 				}
 				file.Language = normalized
 				file.LanguageSource = strPtr(models.DataSourceManual)
@@ -2201,8 +2201,12 @@ func (h *handler) moveFiles(c echo.Context) error {
 		targetBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
 			ID: params.TargetBookID,
 		})
-		if err != nil {
+		var codeErr *errcodes.Error
+		if errors.As(err, &codeErr) && codeErr.HTTPCode == http.StatusNotFound {
 			return errcodes.NotFound("Target book")
+		}
+		if err != nil {
+			return errors.WithStack(err)
 		}
 		if targetBook.LibraryID != sourceBook.LibraryID {
 			return errcodes.ValidationError("Target book must be in the same library")
@@ -2227,7 +2231,7 @@ func (h *handler) moveFiles(c echo.Context) error {
 		IgnoredPatterns: h.config.SupplementExcludePatterns,
 	})
 	if err != nil {
-		return errcodes.ValidationError(err.Error())
+		return moveFilesError(err)
 	}
 	if result.TargetBook != nil {
 		affected.BookIDs = append(affected.BookIDs, result.TargetBook.ID)
@@ -2239,6 +2243,16 @@ func (h *handler) moveFiles(c echo.Context) error {
 		FilesMoved:        result.FilesMoved,
 		SourceBookDeleted: result.SourceBookDeleted,
 	})
+}
+
+// moveFilesError renders a MoveFilesToBook failure. A request it cannot carry
+// out is a 422; a missing target book keeps its 404, and anything else is a
+// 500.
+func moveFilesError(err error) error {
+	if errors.Is(err, ErrNoFilesToMove) || errors.Is(err, ErrFilesNotInLibrary) {
+		return errcodes.ValidationError(err.Error())
+	}
+	return errors.WithStack(err)
 }
 
 // mergeBooks merges multiple books into a single target book.
@@ -2321,7 +2335,7 @@ func (h *handler) mergeBooks(c echo.Context) error {
 		IgnoredPatterns: h.config.SupplementExcludePatterns,
 	})
 	if err != nil {
-		return errcodes.ValidationError(err.Error())
+		return moveFilesError(err)
 	}
 
 	// The deleted sources' People, Genres, Tags, Series, and Publishers may
@@ -2478,7 +2492,7 @@ func (h *handler) deleteBooks(c echo.Context) error {
 
 	var req DeleteBooksPayload
 	if err := c.Bind(&req); err != nil {
-		return errcodes.ValidationError("Invalid request body")
+		return errors.WithStack(err)
 	}
 
 	if len(req.BookIDs) == 0 {

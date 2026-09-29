@@ -98,7 +98,7 @@ func TestRetrieve_ResponseShape(t *testing.T) {
 		assert.Truef(t, ok, "retrieve response must have %q key", key)
 	}
 
-	var resp RetrieveListResponse
+	var resp ListResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "My List", resp.Name)
 	assert.Equal(t, 0, resp.BookCount)

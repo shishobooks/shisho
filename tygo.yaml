@@ -10,7 +10,6 @@ type_mappings:
   models.Tag: "Tag"
   models.Series: "Series"
   models.Person: "Person"
-  models.Library: "Library"
   models.List: "List"
   models.ShareLink: "ShareLink"
   # A model returned by name (not embedded, not field-level `tstype`-overridden)
@@ -122,10 +121,9 @@ packages:
     output_path: "app/types/generated/apikeys.ts"
     include_files:
       - model.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/chapters"
     output_path: "app/types/generated/chapters.ts"
-    frontmatter: |
-      import { Chapter } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/audnexus"
@@ -153,7 +151,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/cache"
     output_path: "app/types/generated/cache.ts"
     include_files:
-      - handlers.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/mediafile"
     output_path: "app/types/generated/mediafile.ts"
     frontmatter: |

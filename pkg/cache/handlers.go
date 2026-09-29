@@ -30,27 +30,6 @@ func NewHandler(downloads, cbzPages, pdfPages Provider) *Handler {
 	}
 }
 
-// Info describes a single cache in the list response.
-// The type name avoids stuttering (cache.Info instead of cache.CacheInfo).
-type Info struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	SizeBytes   int64  `json:"size_bytes"`
-	FileCount   int    `json:"file_count"`
-}
-
-// ListResponse is returned from GET /cache.
-type ListResponse struct {
-	Caches []Info `json:"caches"`
-}
-
-// ClearResponse is returned from POST /cache/:id/clear.
-type ClearResponse struct {
-	ClearedBytes int64 `json:"cleared_bytes"`
-	ClearedFiles int   `json:"cleared_files"`
-}
-
 type cacheEntry struct {
 	id          string
 	name        string
@@ -83,13 +62,13 @@ func (h *Handler) entries() []cacheEntry {
 
 func (h *Handler) list(c echo.Context) error {
 	entries := h.entries()
-	resp := ListResponse{Caches: make([]Info, 0, len(entries))}
+	resp := make([]Info, 0, len(entries))
 	for _, e := range entries {
 		bytes, count, err := e.provider.SizeBytes()
 		if err != nil {
 			return errors.Wrapf(err, "failed to compute size for %s", e.id)
 		}
-		resp.Caches = append(resp.Caches, Info{
+		resp = append(resp, Info{
 			ID:          e.id,
 			Name:        e.name,
 			Description: e.description,

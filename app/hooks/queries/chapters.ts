@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Chapter, ChapterInput, ChaptersResponse } from "@/types";
+import type { Chapter, ChapterInput, ReplaceChaptersPayload } from "@/types";
 
 import { useRequires } from "./permissions";
 
@@ -25,15 +25,14 @@ export const useFileChapters = (
     ...options,
     enabled: useRequires("books:read", options.enabled ?? Boolean(fileId)),
     queryKey: [QueryKey.FileChapters, fileId],
-    queryFn: async ({ signal }) => {
-      const response: ChaptersResponse = await API.request(
+    queryFn: ({ signal }) => {
+      return API.request(
         "GET",
         `/books/files/${fileId}/chapters`,
         null,
         null,
         signal,
       );
-      return response.chapters;
     },
   });
 };
@@ -50,14 +49,14 @@ export const useUpdateFileChapters = (fileId: number) => {
     ShishoAPIError,
     UpdateFileChaptersMutationVariables
   >({
-    mutationFn: async ({ chapters }) => {
-      const response: ChaptersResponse = await API.request(
+    mutationFn: ({ chapters }) => {
+      const payload: ReplaceChaptersPayload = { chapters };
+      return API.request(
         "PUT",
         `/books/files/${fileId}/chapters`,
-        { chapters },
+        payload,
         null,
       );
-      return response.chapters;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

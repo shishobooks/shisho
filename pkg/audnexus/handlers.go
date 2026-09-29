@@ -53,7 +53,7 @@ func mapServiceError(err error) error {
 	status := http.StatusBadGateway
 	switch e.Code {
 	case ErrCodeInvalidASIN:
-		status = http.StatusBadRequest
+		status = http.StatusUnprocessableEntity
 	case ErrCodeNotFound:
 		status = http.StatusNotFound
 	case ErrCodeTimeout:

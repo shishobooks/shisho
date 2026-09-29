@@ -1,18 +1,19 @@
 package tags
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/merge"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
@@ -21,6 +22,21 @@ type handler struct {
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+}
+
+// buildTagResponse adds the book count and the flat alias list to a tag.
+// retrieve, list, and update all use it, so a failed lookup fails the request
+// instead of rendering a zero count or no aliases.
+func (h *handler) buildTagResponse(ctx context.Context, tag *models.Tag) (TagResponse, error) {
+	bookCount, err := h.tagService.GetBookCount(ctx, tag.ID)
+	if err != nil {
+		return TagResponse{}, errors.WithStack(err)
+	}
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.TagConfig, tag.ID)
+	if err != nil {
+		return TagResponse{}, errors.WithStack(err)
+	}
+	return TagResponse{Tag: *tag, BookCount: bookCount, Aliases: aliasList}, nil
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -42,14 +58,10 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 
-	bookCount, err := h.tagService.GetBookCount(ctx, id)
+	response, err := h.buildTagResponse(ctx, tag)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
-
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, id)
-
-	response := TagResponse{Tag: *tag, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -84,9 +96,10 @@ func (h *handler) list(c echo.Context) error {
 
 	result := make([]TagResponse, len(tags))
 	for i, t := range tags {
-		bookCount, _ := h.tagService.GetBookCount(ctx, t.ID)
-		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, t.ID)
-		result[i] = TagResponse{Tag: *t, BookCount: bookCount, Aliases: aliasList}
+		result[i], err = h.buildTagResponse(ctx, t)
+		if err != nil {
+			return err
+		}
 	}
 
 	response := ListTagsResponse{Items: result, Total: total}
@@ -140,9 +153,10 @@ func (h *handler) update(c echo.Context) error {
 				return errors.WithStack(err)
 			}
 
-			bookCount, _ := h.tagService.GetBookCount(ctx, existing.ID)
-			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, existing.ID)
-			response := TagResponse{Tag: *existing, BookCount: bookCount, Aliases: aliasList}
+			response, err := h.buildTagResponse(ctx, existing)
+			if err != nil {
+				return err
+			}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -165,9 +179,10 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	bookCount, _ := h.tagService.GetBookCount(ctx, id)
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.TagConfig, id)
-	response := TagResponse{Tag: *tag, BookCount: bookCount, Aliases: aliasList}
+	response, err := h.buildTagResponse(ctx, tag)
+	if err != nil {
+		return err
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -272,23 +287,20 @@ func (h *handler) deleteTag(c echo.Context) error {
 		return err
 	}
 
+	// The reindex drops the deleted tag's tags_fts row. books_fts has no
+	// tag column, so the affected Books need no reindex.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{TagIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	affectedBookIDs, err := h.tagService.DeleteTag(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log := logger.FromContext(ctx)
-
 	// Removing the join rows can flip the books' Reviewed completeness state
 	// (e.g. when `tags` is a required field), so recompute it for every
-	// affected book. Unlike deleteSeries there is no books_fts re-index:
-	// books_fts has no tag column. Add ReindexBookByID here if it gains one.
+	// affected book.
 	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
-
-	// Remove the deleted tag itself from the tag FTS index.
-	if err := h.searchService.DeleteFromTagIndex(ctx, id); err != nil {
-		log.Warn("failed to remove tag from search index", logger.Data{"tag_id": id, "error": err.Error()})
-	}
 
 	return c.NoContent(http.StatusNoContent)
 }

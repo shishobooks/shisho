@@ -1,18 +1,19 @@
 package genres
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/merge"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
@@ -21,6 +22,21 @@ type handler struct {
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+}
+
+// buildGenreResponse adds the book count and the flat alias list to a genre.
+// retrieve, list, and update all use it, so a failed lookup fails the request
+// instead of rendering a zero count or no aliases.
+func (h *handler) buildGenreResponse(ctx context.Context, genre *models.Genre) (GenreResponse, error) {
+	bookCount, err := h.genreService.GetBookCount(ctx, genre.ID)
+	if err != nil {
+		return GenreResponse{}, errors.WithStack(err)
+	}
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.GenreConfig, genre.ID)
+	if err != nil {
+		return GenreResponse{}, errors.WithStack(err)
+	}
+	return GenreResponse{Genre: *genre, BookCount: bookCount, Aliases: aliasList}, nil
 }
 
 func (h *handler) retrieve(c echo.Context) error {
@@ -42,15 +58,10 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 
-	// Get book count
-	bookCount, err := h.genreService.GetBookCount(ctx, id)
+	response, err := h.buildGenreResponse(ctx, genre)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
-
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, id)
-
-	response := GenreResponse{Genre: *genre, BookCount: bookCount, Aliases: aliasList}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -84,12 +95,12 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with book counts and aliases
 	result := make([]GenreResponse, len(genres))
 	for i, g := range genres {
-		bookCount, _ := h.genreService.GetBookCount(ctx, g.ID)
-		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, g.ID)
-		result[i] = GenreResponse{Genre: *g, BookCount: bookCount, Aliases: aliasList}
+		result[i], err = h.buildGenreResponse(ctx, g)
+		if err != nil {
+			return err
+		}
 	}
 
 	response := ListGenresResponse{Items: result, Total: total}
@@ -148,9 +159,10 @@ func (h *handler) update(c echo.Context) error {
 			}
 
 			// Return the target genre
-			bookCount, _ := h.genreService.GetBookCount(ctx, existing.ID)
-			aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, existing.ID)
-			response := GenreResponse{Genre: *existing, BookCount: bookCount, Aliases: aliasList}
+			response, err := h.buildGenreResponse(ctx, existing)
+			if err != nil {
+				return err
+			}
 			return errors.WithStack(c.JSON(http.StatusOK, response))
 		}
 
@@ -175,9 +187,10 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	bookCount, _ := h.genreService.GetBookCount(ctx, id)
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.GenreConfig, id)
-	response := GenreResponse{Genre: *genre, BookCount: bookCount, Aliases: aliasList}
+	response, err := h.buildGenreResponse(ctx, genre)
+	if err != nil {
+		return err
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -286,23 +299,20 @@ func (h *handler) deleteGenre(c echo.Context) error {
 		return err
 	}
 
+	// The reindex drops the deleted genre's genres_fts row. books_fts has no
+	// genre column, so the affected Books need no reindex.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{GenreIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	affectedBookIDs, err := h.genreService.DeleteGenre(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log := logger.FromContext(ctx)
-
 	// Removing the join rows can flip the books' Reviewed completeness state
 	// (e.g. when `genres` is a required field), so recompute it for every
-	// affected book. Unlike deleteSeries there is no books_fts re-index:
-	// books_fts has no genre column. Add ReindexBookByID here if it gains one.
+	// affected book.
 	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
-
-	// Remove the deleted genre itself from the genre FTS index.
-	if err := h.searchService.DeleteFromGenreIndex(ctx, id); err != nil {
-		log.Warn("failed to remove genre from search index", logger.Data{"genre_id": id, "error": err.Error()})
-	}
 
 	return c.NoContent(http.StatusNoContent)
 }

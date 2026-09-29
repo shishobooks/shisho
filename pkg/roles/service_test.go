@@ -125,3 +125,27 @@ func TestServiceDelete_RoleAssignedToUsers(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, svc.Delete(ctx, role.ID))
 }
+
+// Retrieve returns 404 only when the role does not exist. Any other failure,
+// here a missing permissions table, is a server fault.
+func TestServiceRetrieve_OnlyMissingRowIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	_, err := svc.Retrieve(ctx, 999999)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode)
+
+	var roleID int
+	require.NoError(t, db.NewRaw("SELECT id FROM roles WHERE name = ?", models.RoleAdmin).Scan(ctx, &roleID))
+	_, err = db.ExecContext(ctx, "DROP TABLE permissions")
+	require.NoError(t, err)
+
+	_, err = svc.Retrieve(ctx, roleID)
+	require.Error(t, err)
+	assert.NotErrorAs(t, err, &codeErr, "a database fault must not render as a client error")
+}

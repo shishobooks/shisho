@@ -2,13 +2,6 @@ package libraries
 
 import "github.com/shishobooks/shisho/pkg/models"
 
-// LibraryResponse is the single-library API response. It embeds the Library
-// model by value so tygo emits `extends Library`; the wire format is identical
-// to returning the bare model.
-type LibraryResponse struct {
-	models.Library `tstype:",extends"`
-}
-
 // ListLibrariesResponse is the list-endpoint envelope.
 type ListLibrariesResponse struct {
 	Items []*models.Library `json:"items" tstype:"Library[]"`

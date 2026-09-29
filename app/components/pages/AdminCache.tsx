@@ -76,7 +76,7 @@ const AdminCache = () => {
       </div>
 
       <div className="grid gap-6">
-        {data.caches.map((cache) => {
+        {data.map((cache) => {
           const isClearing =
             clearMutation.isPending && clearMutation.variables === cache.id;
           return (

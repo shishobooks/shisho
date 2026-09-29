@@ -67,7 +67,7 @@ func (h *handler) setFieldSettings(c echo.Context) error {
 	}
 	for field := range payload.Fields {
 		if !declared[field] {
-			return errcodes.BadRequest("Unknown field: " + field)
+			return errcodes.ValidationError("Unknown field: " + field)
 		}
 	}
 
@@ -151,7 +151,7 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 	}
 	for field := range payload.Fields {
 		if !declared[field] {
-			return errcodes.BadRequest("Unknown field: " + field)
+			return errcodes.ValidationError("Unknown field: " + field)
 		}
 	}
 

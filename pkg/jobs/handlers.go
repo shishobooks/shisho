@@ -50,14 +50,14 @@ func (h *handler) create(c echo.Context) error {
 		// Validate file_ids by marshaling the data and checking the field.
 		dataBytes, err := json.Marshal(params.Data)
 		if err != nil {
-			return errcodes.BadRequest("Invalid bulk download data")
+			return errcodes.ValidationError("Invalid bulk download data")
 		}
 		var bulkData models.JobBulkDownloadData
 		if err := json.Unmarshal(dataBytes, &bulkData); err != nil {
-			return errcodes.BadRequest("Invalid bulk download data")
+			return errcodes.ValidationError("Invalid bulk download data")
 		}
 		if len(bulkData.FileIDs) == 0 {
-			return errcodes.BadRequest("No file IDs provided for bulk download")
+			return errcodes.ValidationError("No file IDs provided for bulk download")
 		}
 		if err := h.checkFileLibraryAccess(ctx, user, bulkData.FileIDs); err != nil {
 			return err

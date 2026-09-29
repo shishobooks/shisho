@@ -15,11 +15,11 @@ import type {
   ListListBooksResponse,
   ListListsQuery,
   ListListsResponse,
+  ListResponse,
   ListShare,
   ListTemplate,
   RemoveBooksPayload,
   ReorderBooksPayload,
-  RetrieveListResponse,
   UpdateListPayload,
   UpdateSharePayload,
 } from "@/types";
@@ -60,11 +60,11 @@ export const useListLists = (
 export const useList = (
   listId?: number,
   options: Omit<
-    UseQueryOptions<RetrieveListResponse, ShishoAPIError>,
+    UseQueryOptions<ListResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<RetrieveListResponse, ShishoAPIError>({
+  return useQuery<ListResponse, ShishoAPIError>({
     enabled: options.enabled !== undefined ? options.enabled : Boolean(listId),
     ...options,
     queryKey: [QueryKey.RetrieveList, listId],

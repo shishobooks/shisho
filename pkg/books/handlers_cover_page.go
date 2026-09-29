@@ -13,11 +13,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/sidecar"
 )
 
-// updateFileCoverPagePayload is the request body for setting a cover page.
-type updateFileCoverPagePayload struct {
-	Page int `json:"page"` // 0-indexed page number
-}
-
 // updateFileCoverPage handles PUT /files/:id/cover-page
 // Sets the cover page for a page-based file (CBZ, PDF) and extracts it as an external cover image.
 func (h *handler) updateFileCoverPage(c echo.Context) error {
@@ -29,9 +24,9 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		return err
 	}
 
-	var payload updateFileCoverPagePayload
+	var payload UpdateFileCoverPagePayload
 	if err := c.Bind(&payload); err != nil {
-		return errcodes.ValidationError("Invalid request body")
+		return errors.WithStack(err)
 	}
 
 	// Fetch the file with book relation

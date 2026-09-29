@@ -384,9 +384,9 @@ function EReaderKeyRow({ apiKey }: { apiKey: APIKey }) {
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{apiKey.name}</p>
           <p className="text-xs text-muted-foreground">
-            Added {formatDateTime(apiKey.createdAt)}
-            {apiKey.lastAccessedAt &&
-              ` · Last used ${formatDateTime(apiKey.lastAccessedAt)}`}
+            Added {formatDateTime(apiKey.created_at)}
+            {apiKey.last_accessed_at &&
+              ` · Last used ${formatDateTime(apiKey.last_accessed_at)}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -451,7 +451,7 @@ function EReaderSetupDialog({
 
   const handleCopy = async () => {
     if (shortUrl) {
-      const url = `${window.location.origin}/e/${shortUrl.shortCode}`;
+      const url = `${window.location.origin}/e/${shortUrl.short_code}`;
       if (await copyText(url)) {
         toast.success("Copied to clipboard");
       } else {
@@ -478,7 +478,7 @@ function EReaderSetupDialog({
               <Input
                 className="font-mono"
                 readOnly
-                value={`${window.location.origin}/e/${shortUrl.shortCode}`}
+                value={`${window.location.origin}/e/${shortUrl.short_code}`}
               />
               <Button
                 aria-label="Copy setup URL"
@@ -649,9 +649,9 @@ function KoboKeyRow({ apiKey }: { apiKey: APIKey }) {
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{apiKey.name}</p>
           <p className="text-xs text-muted-foreground">
-            Added {formatDateTime(apiKey.createdAt)}
-            {apiKey.lastAccessedAt &&
-              ` · Last synced ${formatDateTime(apiKey.lastAccessedAt)}`}
+            Added {formatDateTime(apiKey.created_at)}
+            {apiKey.last_accessed_at &&
+              ` · Last synced ${formatDateTime(apiKey.last_accessed_at)}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

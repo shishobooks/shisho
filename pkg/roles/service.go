@@ -2,6 +2,7 @@ package roles
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/pkg/errors"
@@ -125,8 +126,11 @@ func (s *Service) Retrieve(ctx context.Context, id int) (*models.Role, error) {
 		Relation("Permissions").
 		Where("r.id = ?", id).
 		Scan(ctx)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errcodes.NotFound("Role")
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 	return role, nil
 }

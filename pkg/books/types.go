@@ -176,3 +176,9 @@ type ResyncFileResponse struct {
 type ResyncBookResponse struct {
 	BookDeleted bool `json:"book_deleted"`
 }
+
+// UpdateFileCoverPagePayload is the request body for PUT
+// /books/files/:id/cover-page, which sets a page-based file's cover page.
+type UpdateFileCoverPagePayload struct {
+	Page int `json:"page"` // 0-indexed page number
+}

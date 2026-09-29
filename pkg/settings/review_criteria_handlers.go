@@ -63,7 +63,7 @@ func (h *reviewCriteriaHandler) putReviewCriteria(c echo.Context) error {
 
 	criteria := review.Criteria{BookFields: payload.BookFields, AudioFields: payload.AudioFields}
 	if err := review.Validate(criteria); err != nil {
-		return errcodes.BadRequest(err.Error())
+		return errcodes.ValidationError(err.Error())
 	}
 
 	ctx := c.Request().Context()

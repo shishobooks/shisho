@@ -286,7 +286,7 @@ func TestUpdateFile_RejectedAfterNarratorsCommitReindexes(t *testing.T) {
 
 	status := f.requestStatus(http.MethodPost, fmt.Sprintf("/api/books/files/%d", seeded.fileID), `{"narrators":["Cordelia Fairweather"],"language":"!!not a language!!"}`)
 
-	require.Equal(t, http.StatusBadRequest, status, "the invalid language is rejected")
+	require.Equal(t, http.StatusUnprocessableEntity, status, "the invalid language is rejected")
 	var narratorNames []string
 	require.NoError(t, f.db.NewSelect().Model((*models.Narrator)(nil)).ColumnExpr("p.name").
 		Join("JOIN persons AS p ON p.id = n.person_id").Where("n.file_id = ?", seeded.fileID).Scan(f.ctx, &narratorNames))
