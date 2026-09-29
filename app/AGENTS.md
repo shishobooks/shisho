@@ -84,33 +84,50 @@ Preferences stay browser-local in Demo Mode. User settings use the `shisho-demo-
 
 ### Permission-gated controls
 
-`useAuth()` exposes `canWrite(resource)`, shorthand for `hasPermission(resource, "write")`. Every control that fires a mutating request must be hidden when the user lacks the permission the backend route requires. Gate on the route's resource, not the page's display type:
+Check permissions with `useCan(requirement)` from `@/hooks/useCan`, which takes the same typed `Requirement` as `useRequires`: `useCan("books:write")`, `useCan(["jobs:read", "jobs:write"])` for all of a list, or `useCan(anyOf("shares:read", "shares:write"))`. Where a hook cannot run once per check (after an early return, in a loop or callback, or for a requirement passed as a prop), use `can` from `useAuth()`, as `ProtectedRoute` and `useLibraryNavItems` do. Both are built on `meetsRequirement`, so a misspelled permission fails to compile. `useAuth()` exposes no untyped `hasPermission` or `canWrite`, and ESLint rejects any `hasPermission(...)` call with string literals (`app/eslint-rules.test.ts` pins that rule and the query rule below). Call `useCan` before any early return, and put it first in a `&&` chain (`useCan("people:read") && !isShareLink`) so it runs on every render.
 
-| Control | Resource |
-|---------|----------|
-| Book and file metadata, covers, chapters, review state, Identify, rescan, merge, move, delete | `books` |
-| Genre, tag, and publisher edit/merge/delete/set-child | `books` |
-| Series edit/merge/delete | `series` |
-| Person edit/merge/delete | `people` |
-| Library settings and scans | `libraries` / `jobs` (already gated) |
+Every control that fires a mutating request must be hidden when the user lacks the permission the backend route requires. Gate on the route's permission, not the page's display type:
 
-Use `writeResourceForEntity(entityType)` from `@/utils/permissions` for the metadata entity mapping; `ResourceDetail` applies it itself, so the genre, tag, and person pages need no extra gating. `PublisherDetail` owns its own edit dialog (via `onEditClick`) and gates that dialog on `ResourceBooks`; `SeriesDetail` has its own header and gates on `ResourceSeries` directly.
+| Control | Permission |
+|---------|------------|
+| Book and file metadata, covers, chapters, review state, Identify, rescan, merge, move, delete | `books:write` |
+| Genre, tag, and publisher edit/merge/delete/set-child | `books:write` |
+| Series edit/merge/delete | `series:write` |
+| Person edit/merge/delete | `people:write` |
+| Library settings and scans | `libraries:write`, or `jobs:read` and `jobs:write` (already gated) |
 
-Do not gate on `canWrite`:
+Use `writePermissionForEntity(entityType)` from `@/utils/permissions` for the metadata entity mapping; `ResourceDetail` applies it itself, so the genre, tag, and person pages need no extra gating of their buttons. `PublisherDetail` owns its own edit dialog (via `onEditClick`) and gates that dialog on the same mapping; `SeriesDetail` has its own header and gates on `series:write` directly. Each detail page also fetches its merge dialog's candidate list only for a role that can merge.
 
-- **List membership.** Add to list, create list, and the per-list actions follow the list's own `permission` field (owner/manager/editor/viewer), never Books Write.
+Do not gate on a write permission:
+
+- **List membership.** Add to list, create list, and the per-list actions follow the list's own `permission` field (owner/manager/editor/viewer), never Books Write. `AddToListPopover`, `AddToListDialog`, and the `SelectionToolbar` add menu leave out lists the user can only view; saving from the dialog keeps the book in those lists.
 - **Selection mode and downloads.** Selection stays available for lists and downloads; only merge, delete, and review actions inside `SelectionToolbar` are hidden.
-- **Demo Mode.** `canWrite` reflects role permissions only. Role-based hiding still applies in Demo Mode; Demo Mode hides only the extra controls listed above, and any other control the role can use relies on the backend rejection plus toast.
+- **Demo Mode.** `useCan` and `can` reflect role permissions only. Role-based hiding still applies in Demo Mode; Demo Mode hides only the extra controls listed above, and any other control the role can use relies on the backend rejection plus toast.
 
 Hide the whole control rather than disabling it, and skip mounting the mutation dialogs behind it (`{canWriteBooks && <RescanDialog … />}`). `ReviewPanel` takes `readOnly` to show the reviewed state as a label with no switch. `FileChaptersTab` takes a required `canEdit` that suppresses every view-mode entry into editing: the empty-state Add Chapter and Fetch from Audible buttons, and the clickable uncovered-pages banner (rendered as a plain notice instead).
 
-**Action menus gate each entry, not the menu.** The Book Detail action menu is built from entry groups where every entry carries its own `visible` flag, computed from the permission its backend route requires. The menu renders when at least one entry is visible, and separators appear only between non-empty groups. Do not wrap the whole menu in a single `canWrite` check: a user can hold one entry's permission without another's (the Share entry needs a `shares` permission, not `books:write`). Add to list has no permission of its own, so it joins the menu whenever another entry puts the menu on screen and is otherwise a standalone button.
+**Action menus gate each entry, not the menu.** The Book Detail action menu is built from entry groups where every entry carries its own `visible` flag, computed from the permission its backend route requires. The menu renders when at least one entry is visible, and separators appear only between non-empty groups. Do not wrap the whole menu in a single `books:write` check: a user can hold one entry's permission without another's (the Share entry needs a `shares` permission, not `books:write`). Add to list has no permission of its own, so it joins the menu whenever another entry puts the menu on screen and is otherwise a standalone button.
 
-**Roles without Libraries Read.** Reader pages never call the Libraries Read routes. `useUserLibraries()` (`GET /user/libraries`, authenticated only) returns the signed-in user's accessible libraries as `LibrarySummary` rows (id, name, cover aspect ratio, download preference, organize flag, no paths), and `useUserLibrary(libraryId)` selects one from the same cache. The library picker, `MobileDrawer`, breadcrumbs, cover aspect ratio, KePub preference, the Kobo sync scope, and the Merge and Move dialogs (`BookDetailBody`, `SelectionToolbar`, `MergeBooksDialog`, `MergeIntoDialog`, `MoveFilesDialog` take `LibrarySummary`) all read it. `useLibrary`/`useLibraries` are for settings pages only: `LibrarySettings` (route needs `libraries:read` and `libraries:write`), `AdminLibraries`, and user access assignment in `CreateUser`/`UserDetail` (`GET /libraries` also accepts `users:write`, so a `users:read`-only role sees an empty picker). `LibraryRedirect` sends a role with Books Read to its first accessible library, a role with no libraries to `/settings/libraries` when it holds Libraries Read and to `/lists` otherwise, and a role without Books Read to `/lists`. `LibraryListPicker` renders nothing and `MobileDrawer` lists no libraries without Books Read, since every library page needs it. `LibraryBreadcrumbs` shows `libraryName`, or a "Library" placeholder while it loads; pages that hold a book pass `libraryQuery.data?.name ?? book.library?.name`. `LanguageCombobox` relies on `useLibraryLanguages` (Books Read) and still offers the curated languages and custom tags without it. `ShareListDialog` picks users from `useUserDirectory()` (`GET /users/directory`, authenticated only); the server does not register that route in Demo Mode, so the hook is off there and the dialog shows a notice instead of the picker.
+**Roles without Libraries Read.** Reader pages never call the Libraries Read routes. `useUserLibraries()` (`GET /user/libraries`, authenticated only) returns the signed-in user's accessible libraries as `LibrarySummary` rows (id, name, cover aspect ratio, download preference, organize flag, no paths), and `useUserLibrary(libraryId)` selects one from the same cache. Breadcrumbs, cover aspect ratio, KePub preference, the Kobo sync scope, and the Merge and Move dialogs (`BookDetailBody`, `SelectionToolbar`, `MergeBooksDialog`, `MergeIntoDialog`, `MoveFilesDialog` take `LibrarySummary`) all read it. `useLibrary`/`useLibraries` are for settings pages only: `LibrarySettings` (route needs `libraries:read` and `libraries:write`), `AdminLibraries`, and user access assignment in `CreateUser`/`UserDetail` (`GET /libraries` also accepts `users:write`, so a `users:read`-only role sees an empty picker). `LibraryRedirect` sends a role with Books Read to its first accessible library, a role with no libraries to `/settings/libraries` when it holds Libraries Read and to `/lists` otherwise, and a role without Books Read to `/lists`. The library picker, `MobileDrawer`, and `LibraryRedirect` read `useNavLibraries()` instead: the same cache, gated on Books Read because every library page needs it, and empty without it even when the Kobo sync scope has filled the cache. `LibraryListPicker` renders nothing and `MobileDrawer` lists no libraries without Books Read. The Kobo sync scope keeps `useUserLibraries()` so it works for every role. `LibraryBreadcrumbs` shows `libraryName`, or a "Library" placeholder while it loads; pages that hold a book pass `libraryQuery.data?.name ?? book.library?.name`. `LanguageCombobox` relies on `useLibraryLanguages` (Books Read) and still offers the curated languages and custom tags without it. `ShareListDialog` picks users from `useUserDirectory()` (`GET /users/directory`, authenticated only); the server does not register that route in Demo Mode, so the hook is off there and the dialog shows a notice instead of the picker.
 
 **Pages and links a role cannot read.** Library routes in `router.tsx` pass `requiredPermission` to `ProtectedRoute` (an array means all of them): `books:read` for Home, book, file, reader, genre, tag, and publisher pages, plus `series:read` or `people:read` for series and people pages. `useLibraryNavItems` hides each entry its route would deny. `/settings` has no page of its own: `SettingsIndexRedirect` opens the first visible `useAdminNavItems` entry, and the gear in `TopNav` and `MobileDrawer` shows only when one is visible. Names that link to a series or person page render as plain text without `series:read` or `people:read` (`BookDetailBody`, `BookItem`, `FileDetailsTab`). `GlobalSearch` renders nothing without Books Read. `ListDetail` hides a list's books, sort, and covers without Books Read, since `/lists/:id/books` and covers are book data. `ResyncButton` needs `jobs:read` and `jobs:write`; `AdminReviewCriteria` hides Save without `config:write` and Recompute without both jobs permissions. `TopNav`'s mobile search toggle needs a library and Books Read. The plugin order in the Advanced plugin settings reads Books Read routes, so `AdvancedOrderSection` shows a notice to a Config Read role without Books Read. Route guards and the navigation hooks share `ROUTE_PERMISSIONS` from `@/utils/permissions`, so a nav entry cannot lead to Access Denied. `AdminLibraries` links a library's name only for Books Read, shows its Settings button only for `ROUTE_PERMISSIONS.librarySettings`, and opens a newly created default library only for Books Read.
 
-Components and query hooks that call `useAuth()` throw outside `AuthProvider`. Tests for those components mock `@/hooks/useAuth` with `canWrite` and `hasPermission` stubs (see `BookItem.test.tsx`, `ResourceDetail.test.tsx`); a `let` flag toggled per test is the pattern for read-only renders. Typed `AuthContextValue` stubs (`useSSE.test.ts`, `Login.test.tsx`) must include `canWrite`.
+Components and query hooks that call `useAuth()` throw outside `AuthProvider`. Their tests replace the module with the shared mock in `app/testing/auth.ts` and set the role per test with `setAuth`:
+
+```ts
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
+
+it("hides Edit for a read-only role", () => {
+  setAuth({ permissions: ["books:read"] });
+  // ...
+});
+```
+
+`setAuth` also takes `demoMode` and `user` (`null` for signed out), and resets anything left out. State lives in the module for the whole test file, so a file whose tests need different roles calls `setAuth` in `beforeEach`; a file with one role may call it once at module scope. `ALL_PERMISSIONS` grants every permission, derived from the generated `Resource*` constants. `app/testing/` imports vitest, so `tsconfig.app.json` excludes it from the production build and `tsconfig.test.json` type-checks it; keep test-only code there. A test that renders a real `AuthContext.Provider` passes it `authValue()` (see `useSSE.test.ts`). Do not hand-write a `useAuth` mock.
+
+**Test file suffixes.** `X.test.tsx` usually mocks the query modules a component uses. `X.permissions.test.tsx` renders it with the real query hooks and a spied `API.request`, and asserts which requests fire for a role or state, such as a closed dialog (`SecuritySettings.permissions.test.tsx`, `BookDetailBody.permissions.test.tsx`). One file may cover a family of pages that share a behavior: `MetadataDetail.permissions.test.tsx` checks the merge candidate list on every metadata detail page. Assert that no request fires rather than which `enabled` value a caller passed: the hook owns the permission gate, so a test that pins the caller's `enabled` pins a duplicate check.
 
 ### Query hooks gate their own permissions
 
@@ -127,9 +144,13 @@ return useQuery<Book, ShishoAPIError>({
 
 Plugin routes are also absent in Demo Mode, so `plugins.ts` wraps the check in `usePluginRouteEnabled`, which is off in Demo Mode too. `useUserDirectory` is authenticated only and off in Demo Mode for the same reason.
 
-`hooks/queries/permissions.test.tsx` enforces the rule. `QUERY_HOOKS` records each query hook's expected requirement (the backend route's permission) and arguments that enable it. The test renders every exported query hook in `hooks/queries/` (mutation hooks are recognized by `mutate` and skipped) and checks that it sends a request with exactly its required permissions (each alternative alone for `anyOf`), sends nothing with every permission except a required one, requests only authenticated-only paths with no permissions (`/auth/*`, `/settings/user`, `/lists`, `/lists/:id`, `/lists/:id/shares`, `/lists/templates`, `/user/api-keys`, `/user/libraries`, `/users/directory`, `/jobs/:id`, `/settings/libraries/:id`, `/events`, and the anonymous `/share/:token`), and in Demo Mode requests no route the server leaves unregistered there. A new query hook fails until you add it to `QUERY_HOOKS`, and then until its gate matches the recorded requirement. `GET /jobs/:id` also serves a bulk-download job to its creator, so `useJob` is not gated and `JobDetail`'s route requires Jobs Read instead. Query hooks call `useAuth()`, so a test that renders one needs an `AuthProvider` or a `@/hooks/useAuth` mock with `hasPermission` and `demoMode`.
+`hooks/queries/permissions.test.tsx` enforces the rule. `QUERY_HOOKS` records each query hook's expected requirement (the backend route's permission) and arguments that enable it. The test renders every exported query hook in `hooks/queries/` (mutation hooks are recognized by `mutate` and skipped) and checks that it sends a request with exactly its required permissions (each alternative alone for `anyOf`), sends nothing with every permission except a required one, requests only authenticated-only paths with no permissions (`/auth/*`, `/settings/user`, `/lists`, `/lists/:id`, `/lists/:id/shares`, `/lists/templates`, `/user/api-keys`, `/user/libraries`, `/users/directory`, `/jobs/:id`, `/settings/libraries/:id`, `/events`, and the anonymous `/share/:token`), and in Demo Mode requests no route the server leaves unregistered there. A new query hook fails until you add it to `QUERY_HOOKS`, and then until its gate matches the recorded requirement. `GET /jobs/:id` also serves a bulk-download job to its creator, so `useJob` is not gated and `JobDetail`'s route requires Jobs Read instead. Query hooks call `useAuth()`, so a test that renders one needs an `AuthProvider` or the shared `@/testing/auth` mock.
 
-ESLint forbids importing `useQuery`, `useQueries`, and the other query hooks from `@tanstack/react-query` outside `app/hooks/queries` (tests excepted), so every query goes through a gated hook (`MergeBooksDialog` uses `useBooksByIds`). `refetch()` runs a query even while it is disabled, so a component that calls it by hand checks the result's `isEnabled` first (`IdentifyBookDialog`, `FetchChaptersDialog`, `EPUBReader`).
+ESLint forbids importing `useQuery`, `useQueries`, and the other query hooks from `@tanstack/react-query` outside `app/hooks/queries` (tests excepted), and calling `fetchQuery`, `prefetchQuery`, `ensureQueryData`, or their infinite forms there, so every query goes through a gated hook (`MergeBooksDialog` uses `useBooksByIds`). `refetch()` runs a query even while it is disabled, so a component that calls it by hand checks the result's `isEnabled` first (`AdminJobs`, `IdentifyBookDialog`, `FetchChaptersDialog`, `EPUBReader`).
+
+Callers pass `enabled` only for their own state, never for a permission the hook already checks: `useSharingSettings({ enabled: !isShareLink })`, not a restated `anyOf`. A query behind a dialog passes `enabled: open`, so a closed dialog sends nothing; this matters most where a list mounts one dialog per row or card (`AddToListDialog` in `BookItem`, `KoboSetupDialog` in Security Settings).
+
+`AuthProvider` and `Setup` call the `/auth/*` routes through `API.request` directly. They own the session state, and those routes need no permission, so there are no auth query hooks.
 
 `AuthProvider` clears the shared query cache on login, logout, and `setAuthUser`, so the next user in a tab never sees the previous user's cached data, such as their accessible libraries.
 
@@ -151,7 +172,7 @@ New controls added to the body must decide how they behave in Share Link context
 
 ### Share Links (sharer and recipient)
 
-- **Share entry.** `BookDetailBody` fetches the sharing settings only when the user holds a `shares` operation or `config:read` (the endpoint's permissions), and shows **Share** once the settings have loaded whenever the user holds either `shares` operation, even while sharing is off, so a sharer can revoke or delete a link without an admin turning sharing back on. Either one puts the action menu on screen, with Add to list beside Share. `ShareLinkDialog` takes `sharingEnabled`: while false it shows a notice in place of the new-link form, disables every copy button (no link works), and reworded revoke and delete confirmations, but keeps Revoke and Delete. The notice names Settings > Sharing, and links there (closing the dialog) when `canManageSharing`, which Book Detail sets from `config:write`, the permission the page needs. With sharing on it shows the new-link form for `shares:write` (`canWrite`), each row's Revoke and Delete actions for `shares:write`, and the list for either operation (the list endpoint accepts both, so a sharer can always copy what they create). Every row shows opens, downloads, and last used. An active link with a `paused_reason` shows a muted **paused** badge and the reason, and cannot be copied. Revoke is offered on active links, paused ones included; Delete on every link. Both confirm through a `ConfirmDialog` rendered beside the `FormDialog`, not inside it, as `RoleDialog` does. The expiration presets are client-side; the dialog sends an absolute `expires_at`. The copy button builds `${window.location.origin}/share/<token>` and copies through `copyText` (`app/utils/clipboard.ts`), which falls back to `execCommand` because `navigator.clipboard` does not exist over plain HTTP on a LAN.
+- **Share entry.** `useSharingSettings` fetches the sharing settings only for a role holding a `shares` operation or `config:read` (the endpoint's permissions), and `BookDetailBody` shows **Share** once the settings have loaded whenever the user holds either `shares` operation, even while sharing is off, so a sharer can revoke or delete a link without an admin turning sharing back on. Either one puts the action menu on screen, with Add to list beside Share. `ShareLinkDialog` takes `sharingEnabled`: while false it shows a notice in place of the new-link form, disables every copy button (no link works), and reworded revoke and delete confirmations, but keeps Revoke and Delete. The notice names Settings > Sharing, and links there (closing the dialog) when `canManageSharing`, which Book Detail sets from `config:write`, the permission the page needs. With sharing on it shows the new-link form for `shares:write` (its `canWrite` prop), each row's Revoke and Delete actions for `shares:write`, and the list for either operation (the list endpoint accepts both, so a sharer can always copy what they create). Every row shows opens, downloads, and last used. An active link with a `paused_reason` shows a muted **paused** badge and the reason, and cannot be copied. Revoke is offered on active links, paused ones included; Delete on every link. Both confirm through a `ConfirmDialog` rendered beside the `FormDialog`, not inside it, as `RoleDialog` does. The expiration presets are client-side; the dialog sends an absolute `expires_at`. The copy button builds `${window.location.origin}/share/<token>` and copies through `copyText` (`app/utils/clipboard.ts`), which falls back to `execCommand` because `navigator.clipboard` does not exist over plain HTTP on a LAN.
 - **Recipient route.** `shareRoutes` (`app/components/pages/shareRoutes.ts`) mounts `SharedBook.tsx` at `/share/:token` plus a `/share/*` splat, so a truncated link shows the unavailable page instead of the router's error page. They are top-level public routes beside `/login` and `/setup`, outside `Root` and `ProtectedRoute`: no login redirect, no nav, no demo banner. It renders its own `<Toaster />` for download toasts, and a `ShareNotice` strip under the header (styled like the Demo Mode banner) saying who shared the book and when the link expires. It still sits inside `AuthProvider` (the body calls `useAuth`), which makes an anonymous `/auth/status` and `/auth/me` call. `useSSE` skips any `/share/` path, so the event stream never opens there, even for a signed-in user. A 404 renders the single `ShareUnavailable` page; any other failure is retried once and then shows a Try again page, since the link may still be fine.
 - The share payload blanks cover filenames, so `SharedBook` keys the book cover off `cover_cache_key` and requests a cover for every main file; a missing file cover 404s and falls back to the placeholder.
 
@@ -450,7 +471,7 @@ Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of
 
 - `GlobalSearch.tsx`: keep `searchQuery.dataUpdatedAt` (search results don't include `cover_cache_key`, small number of covers)
 - `FileEditDialog.tsx`: keep `Date.now()` for immediate preview after cover mutation
-- `IdentifyReviewForm.tsx` — keep `file.updated_at`
+- `IdentifyReviewForm.tsx`: keep `new Date(file.updated_at).getTime()`
 
 ### Checklist for new cover components
 
@@ -973,27 +994,31 @@ Even though these pages don't use Gallery, they should still:
 
 All metadata detail pages (Series, Person, Genre, Tag) follow a consistent structure:
 
-**Header Section:**
+**Header Section:** the mutating buttons render only for a role that can write the entity (see "Permission-gated controls"), and the dialogs behind them mount only then.
 ```tsx
+const canMutate = useCan(writePermissionForEntity(entityType));
+
 <div className="mb-6 md:mb-8">
   <div className="flex items-start justify-between gap-4 mb-2">
     <h1 className="text-2xl font-semibold min-w-0 break-words">{name}</h1>
-    <div className="flex gap-2 shrink-0">
-      <Button onClick={() => setEditOpen(true)} size="sm" variant="outline">
-        <Edit className="h-4 w-4 mr-2" />
-        Edit
-      </Button>
-      <Button onClick={() => setMergeOpen(true)} size="sm" variant="outline">
-        <GitMerge className="h-4 w-4 mr-2" />
-        Merge
-      </Button>
-      {canDelete && (
-        <Button onClick={() => setDeleteOpen(true)} size="sm" variant="outline">
-          <Trash2 className="h-4 w-4 mr-2" />
-          Delete
+    {canMutate && (
+      <div className="flex gap-2 shrink-0">
+        <Button onClick={() => setEditOpen(true)} size="sm" variant="outline">
+          <Edit className="h-4 w-4 mr-2" />
+          Edit
         </Button>
-      )}
-    </div>
+        <Button onClick={() => setMergeOpen(true)} size="sm" variant="outline">
+          <GitMerge className="h-4 w-4 mr-2" />
+          Merge
+        </Button>
+        {canDelete && (
+          <Button onClick={() => setDeleteOpen(true)} size="sm" variant="outline">
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </Button>
+        )}
+      </div>
+    )}
   </div>
   {/* Optional: Sort name if different */}
   {sortName !== name && (
@@ -1114,7 +1139,7 @@ When using raw `<button>` elements outside of the Button component, always add `
 
 **Don't** rely on labels, indices, or any field that changes during normal editing as the sortable id. Use a server-side stable id (e.g., `chapter.id`) only when every row actually has one; newly-added rows that haven't been persisted yet need a client-side counter or WeakMap-tracked id.
 
-**Caller responsibility for `SortableEntityList`:** the WeakMap is keyed by item *reference*, so callers must pass stable item references across renders. `items={list.map((x) => ({ name: x }))}` re-creates the wrapper objects every render and defeats the WeakMap — each row gets a fresh key every render and dnd-kit sees a brand-new identity set. Either store the wrapped shape in `useState`, or wrap the `.map()` in a `useMemo` keyed on the source array. See `IdentifyReviewForm.tsx`'s `narratorItems` for the pattern.
+**Caller responsibility for `SortableEntityList`:** the WeakMap is keyed by item *reference*, so callers must pass stable item references across renders. `items={list.map((x) => ({ name: x }))}` re-creates the wrapper objects every render and defeats the WeakMap: each row gets a fresh key every render and dnd-kit sees a brand-new identity set. Either store the wrapped shape in `useState`, or wrap the `.map()` in a `useMemo` keyed on the source array. See `IdentifyReviewForm.tsx`'s `narratorItems` for the pattern.
 
 ## Known Radix UI Issues
 
@@ -1139,7 +1164,7 @@ The 300ms delay ensures cleanup runs after Radix's buggy unmount effects complet
 
 **Problem:** When a Radix `XxxTrigger asChild` wraps a custom React function component (instead of a direct `<Button>` or DOM element), the component must be a `forwardRef` that spreads incoming props onto the underlying button. Otherwise:
 
-- For **floating** primitives (`Popover`, `DropdownMenu`, `HoverCard`, `Tooltip` with positioning, `ContextMenu`): the popper has no DOM ref to anchor to, so Floating UI falls back to the document origin `(0, 0)` and the content renders **off-screen** (often above the viewport). The trigger's onClick still fires, but the component appears to do nothing.
+- For **floating** primitives (`Popover`, `DropdownMenu`, `HoverCard`, `Tooltip` with positioning, `ContextMenu`): the popper has no DOM ref to anchor to, so Floating UI falls back to the document origin `(0, 0)` and the content renders **off-screen** (often above the viewport). The trigger's onClick still fires, so the component appears to do nothing.
 - For **non-floating** primitives (`Sheet`, `Drawer`, `Dialog`): the panel still renders correctly because it's positioned relative to the viewport, not the trigger. But focus management on close can't restore focus to the trigger, and screen reader / keyboard semantics suffer.
 
 This bug is **invisible in jsdom unit tests**: Radix's positioning math doesn't run there. Caught only in a real browser.

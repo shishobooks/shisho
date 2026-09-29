@@ -16,11 +16,13 @@ import {
   useTagsList,
   useUpdateTag,
 } from "@/hooks/queries/tags";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
 import type { GallerySize } from "@/types";
+import { writePermissionForEntity } from "@/utils/permissions";
 
 const TagDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -67,13 +69,15 @@ const TagDetail = () => {
   // Fires as soon as library_id is available rather than waiting for the merge
   // dialog to open. The query is cheap (50 items, single index scan) and
   // pre-fetching means the dialog opens instantly without a loading flash.
+  // Only a role that can merge gets the dialog.
+  const canMerge = useCan(writePermissionForEntity("tag"));
   const tagsListQuery = useTagsList(
     {
       library_id: tagQuery.data?.library_id,
       limit: 50,
       search: mergeSearch || undefined,
     },
-    { enabled: !!tagQuery.data?.library_id },
+    { enabled: canMerge && !!tagQuery.data?.library_id },
   );
 
   const tag = tagQuery.data;

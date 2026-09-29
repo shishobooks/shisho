@@ -9,14 +9,13 @@ import { TabUpdatePill } from "@/components/plugins/TabUpdatePill";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePluginsInstalled } from "@/hooks/queries/plugins";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const AdminPlugins = () => {
   usePageTitle("Plugins");
 
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
+  const canWrite = useCan("config:write");
 
   const location = useLocation();
   const navigate = useNavigate();

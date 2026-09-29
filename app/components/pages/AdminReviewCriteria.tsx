@@ -21,7 +21,7 @@ import {
   useReviewCriteria,
   useUpdateReviewCriteria,
 } from "@/hooks/queries/review";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
@@ -112,12 +112,10 @@ const RecomputeDialog = ({
 
 const AdminReviewCriteria = () => {
   usePageTitle("Review Criteria");
-  const { hasPermission } = useAuth();
   // The page opens with Config Read. Saving needs Config Write, and the
   // recompute job needs both jobs permissions.
-  const canSave = hasPermission("config", "write");
-  const canRecompute =
-    hasPermission("jobs", "read") && hasPermission("jobs", "write");
+  const canSave = useCan("config:write");
+  const canRecompute = useCan(["jobs:read", "jobs:write"]);
   const criteriaQuery = useReviewCriteria();
   const updateMutation = useUpdateReviewCriteria();
   const createJobMutation = useCreateJob();

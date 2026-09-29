@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 import type { LibrarySettingsResponse, UserSettingsResponse } from "@/types";
 
 import {
@@ -19,9 +20,9 @@ import {
   useUserSettings,
 } from "./settings";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ demoMode: true }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ demoMode: true });
 
 const userDefaults: UserSettingsResponse = {
   fit_mode: "fit-width",

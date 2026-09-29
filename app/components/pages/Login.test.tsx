@@ -2,13 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/hooks/useAuth";
+import { setAuth } from "@/testing/auth";
 
 import Login from "./Login";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const renderLogin = () =>
   render(
@@ -19,20 +17,7 @@ const renderLogin = () =>
 
 describe("Login Demo Mode", () => {
   beforeEach(() => {
-    vi.mocked(useAuth).mockReturnValue({
-      demoMode: true,
-      hasLibraryAccess: vi.fn(),
-      hasPermission: vi.fn(),
-      canWrite: vi.fn(),
-      isAuthenticated: false,
-      isLoading: false,
-      login: vi.fn(),
-      logout: vi.fn(),
-      needsSetup: false,
-      refetch: vi.fn(),
-      setAuthUser: vi.fn(),
-      user: null,
-    });
+    setAuth({ demoMode: true, user: null });
   });
 
   it("shows the demo notice and pre-fills the shared credentials", () => {
@@ -48,10 +33,7 @@ describe("Login Demo Mode", () => {
   });
 
   it("does not show or pre-fill demo details outside Demo Mode", () => {
-    vi.mocked(useAuth).mockReturnValue({
-      ...vi.mocked(useAuth)(),
-      demoMode: false,
-    });
+    setAuth({ user: null });
 
     renderLogin();
 

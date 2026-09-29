@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
 import {
   PermissionEReaderBrowser,
   PermissionKoboSync,
@@ -21,13 +22,9 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/components/library/TopNav", () => ({ default: () => null }));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    user: { must_change_password: false },
-    refetch: vi.fn(),
-    hasPermission: () => false,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth();
 
 const apiKey = (id: string, permission: string): APIKey => ({
   id,

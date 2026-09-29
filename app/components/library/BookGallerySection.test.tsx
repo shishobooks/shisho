@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import type { Book, ResourceListResponse } from "@/types";
 
 import { BookGallerySection } from "./BookGallerySection";
@@ -28,9 +29,9 @@ beforeAll(() => {
 });
 
 // Mock mutation hooks — they require a running API
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ canWrite: () => true, hasPermission: () => true }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 vi.mock("@/hooks/queries/books", () => ({
   useDeleteBook: () => ({ mutateAsync: vi.fn(), isPending: false }),

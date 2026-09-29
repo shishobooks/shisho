@@ -1,31 +1,30 @@
-import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { useMobileNav } from "@/contexts/MobileNav";
-import { useUserLibraries } from "@/hooks/queries/libraries";
-import { useListLists } from "@/hooks/queries/lists";
-import { useAuth } from "@/hooks/useAuth";
+import { API } from "@/libraries/api";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 
 import MobileDrawer from "./MobileDrawer";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/contexts/MobileNav", () => ({
   useMobileNav: vi.fn(),
 }));
 
-vi.mock("@/hooks/queries/libraries", () => ({
-  useUserLibraries: vi.fn(),
-}));
-
-vi.mock("@/hooks/queries/lists", () => ({
-  useListLists: vi.fn(),
-}));
-
 let isOpen = false;
+const server = { libraries: [] as unknown[], lists: [] as unknown[] };
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -34,12 +33,12 @@ beforeAll(() => {
 
 beforeEach(() => {
   isOpen = false;
-  vi.mocked(useAuth).mockReturnValue({
-    demoMode: false,
+  server.libraries = [];
+  server.lists = [];
+  setAuth({
+    permissions: ALL_PERMISSIONS,
     user: { username: "admin", role_name: "Admin" },
-    logout: vi.fn(),
-    hasPermission: () => true,
-  } as never);
+  });
   vi.mocked(useMobileNav).mockImplementation(
     () =>
       ({
@@ -49,16 +48,30 @@ beforeEach(() => {
         toggle: vi.fn(),
       }) as never,
   );
-  vi.mocked(useUserLibraries).mockReturnValue({ data: [] } as never);
-  vi.mocked(useListLists).mockReturnValue({ data: { items: [] } } as never);
 });
 
-const renderDrawer = (path: string) =>
+afterEach(() => vi.restoreAllMocks());
+
+const stubRequests = () =>
+  vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+    if (path === "/user/libraries") return server.libraries;
+    if (path === "/lists") {
+      return { items: server.lists, total: server.lists.length };
+    }
+    return {};
+  });
+
+const renderDrawer = (path: string, queryClient = new QueryClient()) => {
+  const request = stubRequests();
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <MobileDrawer />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[path]}>
+        <MobileDrawer />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
+  return request;
+};
 
 const getDrawer = () =>
   screen.getByRole("complementary", { name: "Mobile navigation" });
@@ -97,12 +110,10 @@ describe("MobileDrawer", () => {
   it("highlights Global Settings when no admin item matches the page", () => {
     // /settings has no page of its own (it redirects to the first permitted
     // one), so no admin item matches it.
-    vi.mocked(useAuth).mockReturnValue({
-      demoMode: false,
+    setAuth({
+      permissions: ["users:read", "users:write"],
       user: { username: "manager", role_name: "Manager" },
-      logout: vi.fn(),
-      hasPermission: (resource: string) => resource === "users",
-    } as never);
+    });
     isOpen = true;
     renderDrawer("/settings");
 
@@ -119,45 +130,37 @@ describe("MobileDrawer", () => {
 
 describe("MobileDrawer library picker", () => {
   beforeEach(() => {
-    vi.mocked(useListLists).mockReturnValue({
-      data: { items: [{ id: 3, name: "To Read", book_count: 2 }] },
-    } as never);
+    server.lists = [{ id: 3, name: "To Read", book_count: 2 }];
   });
 
-  it("offers the role's libraries without Libraries Read", () => {
-    vi.mocked(useAuth).mockReturnValue({
-      demoMode: false,
+  it("offers the role's libraries without Libraries Read", async () => {
+    setAuth({
+      permissions: ["books:read"],
       user: { username: "reader", role_name: "Reader" },
-      logout: vi.fn(),
-      hasPermission: (resource: string, operation: string) =>
-        resource === "books" && operation === "read",
-    } as never);
-    vi.mocked(useUserLibraries).mockReturnValue({
-      data: [{ id: 1, name: "Fiction" }],
-    } as never);
+    });
+    server.libraries = [{ id: 1, name: "Fiction" }];
     renderDrawer("/libraries/1/books/7");
 
-    expect(within(getDrawer()).getByText("Fiction")).toBeInTheDocument();
+    expect(await within(getDrawer()).findByText("Fiction")).toBeInTheDocument();
   });
 
-  it("leaves libraries out of the picker for a role without Books Read", () => {
-    vi.mocked(useAuth).mockReturnValue({
-      demoMode: false,
+  it("requests no libraries and shows none for a role without Books Read", async () => {
+    setAuth({
+      permissions: ["shares:read"],
       user: { username: "reader", role_name: "Shares Only" },
-      logout: vi.fn(),
-      hasPermission: (resource: string, operation: string) =>
-        resource === "shares" && operation === "read",
-    } as never);
-    vi.mocked(useUserLibraries).mockClear();
-    vi.mocked(useUserLibraries).mockReturnValue({
-      data: [{ id: 1, name: "Fiction" }],
-    } as never);
-    renderDrawer("/lists/3");
+    });
+    // The Kobo sync scope in Security Settings fills the same cache.
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["UserLibraries"], [{ id: 1, name: "Fiction" }]);
+    const request = renderDrawer("/lists/3", queryClient);
 
+    await waitFor(() =>
+      expect(request.mock.calls.map((call) => call[1])).toContain("/lists"),
+    );
+    expect(request.mock.calls.map((call) => call[1])).not.toContain(
+      "/user/libraries",
+    );
     expect(within(getDrawer()).queryByText("Fiction")).not.toBeInTheDocument();
-    for (const call of vi.mocked(useUserLibraries).mock.calls) {
-      expect(call[0]?.enabled).toBe(false);
-    }
     // Lists stay reachable from the drawer's own nav item.
     expect(
       within(getDrawer()).getByRole("link", { name: "Lists" }),

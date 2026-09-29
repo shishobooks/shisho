@@ -5,10 +5,11 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
+import type { Permission } from "@/utils/permissions";
 
 import AdminLibraries from "./AdminLibraries";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
 const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock("react-router-dom", async () => ({
@@ -18,13 +19,7 @@ vi.mock("react-router-dom", async () => ({
   useNavigate: () => navigate,
 }));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const renderPage = () => {
   const queryClient = new QueryClient({
@@ -49,7 +44,7 @@ describe("AdminLibraries", () => {
   });
 
   it("does not request the server config for a role without Config Read", async () => {
-    auth.permissions = new Set(["libraries:read"]);
+    setAuth({ permissions: ["libraries:read"] });
     const request = vi.spyOn(API, "request").mockResolvedValue({
       items: [{ id: 1, name: "Fiction", library_paths: [] }],
       total: 1,
@@ -63,7 +58,7 @@ describe("AdminLibraries", () => {
   });
 
   it("requests the server config for a role with Config Read", async () => {
-    auth.permissions = new Set(["libraries:read", "config:read"]);
+    setAuth({ permissions: ["libraries:read", "config:read"] });
     const request = vi.spyOn(API, "request").mockResolvedValue({
       items: [],
       total: 0,
@@ -83,7 +78,7 @@ describe("AdminLibraries", () => {
     };
 
     it("shows the Settings button only with Libraries Read and Write", async () => {
-      auth.permissions = new Set(["libraries:read", "books:read"]);
+      setAuth({ permissions: ["libraries:read", "books:read"] });
       vi.spyOn(API, "request").mockResolvedValue(fiction);
       const { unmount } = renderPage();
 
@@ -91,11 +86,9 @@ describe("AdminLibraries", () => {
       expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
       unmount();
 
-      auth.permissions = new Set([
-        "libraries:read",
-        "libraries:write",
-        "books:read",
-      ]);
+      setAuth({
+        permissions: ["libraries:read", "libraries:write", "books:read"],
+      });
       renderPage();
 
       expect(
@@ -104,7 +97,7 @@ describe("AdminLibraries", () => {
     });
 
     it("links the library name only with Books Read", async () => {
-      auth.permissions = new Set(["libraries:read"]);
+      setAuth({ permissions: ["libraries:read"] });
       vi.spyOn(API, "request").mockResolvedValue(fiction);
       const { unmount } = renderPage();
 
@@ -112,7 +105,7 @@ describe("AdminLibraries", () => {
       expect(screen.getByText("Fiction").closest("a")).toBeNull();
       unmount();
 
-      auth.permissions = new Set(["libraries:read", "books:read"]);
+      setAuth({ permissions: ["libraries:read", "books:read"] });
       renderPage();
 
       expect((await screen.findByText("Fiction")).closest("a")).toHaveAttribute(
@@ -121,7 +114,7 @@ describe("AdminLibraries", () => {
       );
     });
 
-    it.each([
+    it.each<[Permission[], boolean]>([
       [["libraries:read", "libraries:write", "config:read"], false],
       [
         ["libraries:read", "libraries:write", "config:read", "books:read"],
@@ -130,7 +123,7 @@ describe("AdminLibraries", () => {
     ])(
       "after creating the default library with %j, opens it: %s",
       async (permissions, opensLibrary) => {
-        auth.permissions = new Set(permissions);
+        setAuth({ permissions });
         vi.spyOn(API, "request").mockImplementation(async (method, path) => {
           if (method === "POST" && path === "/libraries")
             return { id: 9, name: "Main" };

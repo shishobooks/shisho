@@ -4,17 +4,14 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 
 import { useEpubBlob } from "./epub";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
   const client = new QueryClient({
@@ -53,14 +50,36 @@ describe("useEpubBlob", () => {
     expect(result.current.data).toBeInstanceOf(Blob);
   });
 
-  it("surfaces fetch errors", async () => {
-    fetchSpy.mockResolvedValue(new Response("nope", { status: 500 }));
+  it("surfaces the API's error", async () => {
+    fetchSpy.mockResolvedValue(
+      Response.json(
+        { error: { code: "not_found", message: "File not found" } },
+        { status: 404 },
+      ),
+    );
 
     const { result } = renderHook(() => useEpubBlob(42), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error).toBeInstanceOf(ShishoAPIError);
-    expect(result.current.error?.status).toBe(500);
-    expect(result.current.error?.code).toBe("epub_download_failed");
+    expect(result.current.error?.status).toBe(404);
+    expect(result.current.error?.code).toBe("not_found");
+    expect(result.current.error?.message).toBe("File not found");
+  });
+
+  it("reports a proxy's error page by its status", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response("<html>Bad gateway</html>", {
+        status: 502,
+        statusText: "Bad Gateway",
+      }),
+    );
+
+    const { result } = renderHook(() => useEpubBlob(42), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error?.message).toBe(
+      "Request failed with status 502 (Bad Gateway)",
+    );
   });
 });

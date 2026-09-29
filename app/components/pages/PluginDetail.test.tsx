@@ -3,12 +3,14 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
+
 import { PluginDetail } from "./PluginDetail";
 
 // Mock the auth hook used by PluginDetail.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ hasPermission: () => true }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 // Mock useUnsavedChanges (uses react-router's useBlocker which requires a data router).
 vi.mock("@/hooks/useUnsavedChanges", () => ({

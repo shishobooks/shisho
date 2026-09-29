@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import AdminPlugins from "./AdminPlugins";
 
@@ -12,16 +13,7 @@ beforeAll(() => {
   globalThis.__APP_VERSION__ = "test";
 });
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const installed = {
   scope: "local",
@@ -36,7 +28,7 @@ const installed = {
 describe("AdminPlugins with Config Read only", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    auth.permissions = new Set(["config:read"]);
+    setAuth({ permissions: ["config:read"] });
   });
 
   it("lists installed plugins without management controls", async () => {

@@ -23,7 +23,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
@@ -38,8 +37,6 @@ const LibrarySettings = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
   const libraryQuery = useLibrary(libraryId);
   const updateLibraryMutation = useUpdateLibrary();
-  const { hasPermission } = useAuth();
-  const canDeleteLibrary = hasPermission("libraries", "write");
 
   usePageTitle(
     libraryQuery.data?.name
@@ -429,7 +426,7 @@ const LibrarySettings = () => {
         </div>
       </div>
 
-      {canDeleteLibrary && libraryQuery.data && (
+      {libraryQuery.data && (
         <>
           <section className="max-w-2xl mt-8 space-y-3 rounded-md border border-destructive/40 p-4 md:p-6">
             <h2 className="text-lg font-semibold text-destructive">

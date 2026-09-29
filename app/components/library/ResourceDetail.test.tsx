@@ -4,29 +4,28 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+import type { Permission } from "@/utils/permissions";
+
 import { ResourceDetail } from "./ResourceDetail";
 
 vi.mock("@/hooks/queries/libraries", () => ({
   useUserLibrary: () => ({ data: { name: "My Library" } }),
 }));
 
-// Resources the signed-in user may write. Defaults to everything; the
-// read-only tests narrow it.
-let writableResources: string[] = ["books", "series", "people"];
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    canWrite: (resource: string) => writableResources.includes(resource),
-    hasPermission: (resource: string, operation: string) =>
-      operation === "read" || writableResources.includes(resource),
-  }),
-}));
+// A role that reads every metadata page and writes the given resources. It
+// writes everything by default; the read-only tests narrow it.
+const WRITES: Permission[] = ["books:write", "series:write", "people:write"];
+const allowWrites = (...writes: Permission[]) =>
+  setAuth({
+    permissions: ["books:read", "series:read", "people:read", ...writes],
+  });
 
-beforeEach(() => {
-  writableResources = ["books", "series", "people"];
-});
+beforeEach(() => allowWrites(...WRITES));
 
-// LibraryLayout pulls in TopNav which requires AuthProvider — mock it to
+// LibraryLayout pulls in TopNav which requires AuthProvider, so mock it to
 // render children directly so ResourceDetail tests focus on header/dialog logic.
 vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: React.ReactNode }) => (
@@ -258,7 +257,7 @@ describe("ResourceDetail", () => {
 
   describe("read-only user", () => {
     it("hides Edit, Merge, and Delete but keeps the heading and content", () => {
-      writableResources = [];
+      allowWrites();
       render(
         wrap(
           <ResourceDetail {...defaultProps}>
@@ -284,32 +283,25 @@ describe("ResourceDetail", () => {
     // Genres, tags, and publishers are mutated under the books routes, so
     // Books Write is what unlocks them, not a resource of their own.
     it.each([
-      ["genre", "books"],
-      ["tag", "books"],
-      ["publisher", "books"],
-      ["person", "people"],
-    ] as const)(
-      "shows %s controls only with %s write permission",
-      (entityType, resource) => {
-        writableResources = ["books", "series", "people"].filter(
-          (r) => r !== resource,
-        );
-        const { unmount } = render(
-          wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
-        );
-        expect(
-          screen.queryByRole("button", { name: /Edit/ }),
-        ).not.toBeInTheDocument();
-        unmount();
+      ["genre", "books:write"],
+      ["tag", "books:write"],
+      ["publisher", "books:write"],
+      ["person", "people:write"],
+    ] as const)("shows %s controls only with %s", (entityType, permission) => {
+      allowWrites(...WRITES.filter((p) => p !== permission));
+      const { unmount } = render(
+        wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
+      );
+      expect(
+        screen.queryByRole("button", { name: /Edit/ }),
+      ).not.toBeInTheDocument();
+      unmount();
 
-        writableResources = [resource];
-        render(
-          wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
-        );
-        expect(
-          screen.getByRole("button", { name: /Edit/ }),
-        ).toBeInTheDocument();
-      },
-    );
+      allowWrites(permission);
+      render(
+        wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
+      );
+      expect(screen.getByRole("button", { name: /Edit/ })).toBeInTheDocument();
+    });
   });
 });

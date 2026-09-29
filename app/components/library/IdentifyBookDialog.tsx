@@ -71,8 +71,12 @@ export function IdentifyBookDialog({
   const [submittedParams, setSubmittedParams] =
     useState<PluginSearchParams | null>(null);
   const searchQuery = usePluginSearch(submittedParams);
-  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
-  const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher);
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes({
+    enabled: open,
+  });
+  const { data: enricherPlugins } = usePluginOrder(PluginHookMetadataEnricher, {
+    enabled: open,
+  });
   const hasEnricherPlugins = (enricherPlugins?.length ?? 0) > 0;
   const inputRef = useRef<HTMLInputElement>(null);
   const queryUserTouched = useRef(false);
@@ -436,6 +440,9 @@ export function IdentifyBookDialog({
                 )}
 
                 {searchQuery.isSuccess &&
+                  // The enricher list loads alongside the automatic search,
+                  // so wait for it before saying none are installed.
+                  enricherPlugins !== undefined &&
                   results.length === 0 &&
                   pluginErrors.length === 0 &&
                   (() => {

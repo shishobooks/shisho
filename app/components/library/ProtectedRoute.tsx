@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
-import { meetsRequirement, type Requirement } from "@/utils/permissions";
+import type { Requirement } from "@/utils/permissions";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -37,7 +37,7 @@ const ProtectedRoute = ({
     isLoading,
     needsSetup,
     demoMode,
-    hasPermission,
+    can,
     hasLibraryAccess,
     user,
   } = useAuth();
@@ -88,10 +88,7 @@ const ProtectedRoute = ({
   }
 
   // Check permission if required
-  if (
-    requiredPermission &&
-    !meetsRequirement(hasPermission, requiredPermission)
-  ) {
+  if (requiredPermission && !can(requiredPermission)) {
     return <AccessDenied />;
   }
 

@@ -18,11 +18,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useUserLibrary } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
-import { ResourceBooks, type File } from "@/types";
+import type { File } from "@/types";
 import { fileLabel } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
 
@@ -37,9 +37,8 @@ const FileDetail = () => {
     tab?: string;
   }>();
   const navigate = useNavigate();
-  const { canWrite } = useAuth();
   // File metadata, cover, chapters, and deletion all require Books Write.
-  const canWriteBooks = canWrite(ResourceBooks);
+  const canWriteBooks = useCan("books:write");
 
   // Derive active tab from URL param, defaulting to "details"
   const activeTab: TabValue = validTabs.includes(tab as TabValue)

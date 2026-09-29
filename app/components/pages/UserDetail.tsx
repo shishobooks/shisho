@@ -29,6 +29,7 @@ import {
   useUser,
 } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
@@ -37,7 +38,8 @@ import { sortRoles } from "@/utils/roles";
 const UserDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user: currentUser, hasPermission } = useAuth();
+  const { user: currentUser } = useAuth();
+  const canWrite = useCan("users:write");
 
   const { data: user, isLoading, error } = useUser(id);
 
@@ -71,7 +73,6 @@ const UserDetail = () => {
     selectedLibraries: number[];
   } | null>(null);
 
-  const canWrite = hasPermission("users", "write");
   const isSelf = currentUser?.id === Number(id);
 
   // Reset initialization state when user id changes

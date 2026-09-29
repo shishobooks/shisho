@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AvailablePlugin } from "@/hooks/queries/plugins";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import {
   PluginStatusActive,
   PluginStatusMalfunctioned,
@@ -14,13 +15,9 @@ import {
 import { PluginDetailHero } from "./PluginDetailHero";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 const wrap = (ui: ReactNode) => (
   <QueryClientProvider

@@ -159,7 +159,7 @@ export function ShareLinkDialog({
   }, [open]);
   const hasChanges = label.trim() !== "" || preset !== DEFAULT_PRESET;
 
-  const linksQuery = useBookShareLinks(bookId, { enabled: open && canList });
+  const linksQuery = useBookShareLinks(bookId, { enabled: open });
   const createMutation = useCreateShareLink();
   const revokeMutation = useRevokeShareLink();
   const deleteMutation = useDeleteShareLink();

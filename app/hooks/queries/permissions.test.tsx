@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { anyOf, type Permission, type Requirement } from "@/utils/permissions";
 
 // Every query hook in this directory must gate its request on the permission
@@ -25,39 +26,7 @@ import { anyOf, type Permission, type Requirement } from "@/utils/permissions";
 // gates itself on the recorded requirement. Mutation hooks are recognized by
 // their `mutate` function and skipped, since they send nothing on render.
 
-const auth = vi.hoisted(() => ({
-  permissions: new Set<string>(),
-  demoMode: false,
-}));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    user: {
-      id: 1,
-      username: "reader",
-      permissions: [...auth.permissions],
-      library_access: null,
-    },
-    isAuthenticated: true,
-    isLoading: false,
-    demoMode: auth.demoMode,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-    hasLibraryAccess: () => true,
-  }),
-}));
-
-const ALL_PERMISSIONS = [
-  "libraries",
-  "books",
-  "series",
-  "people",
-  "users",
-  "jobs",
-  "config",
-  "shares",
-].flatMap((resource) => [`${resource}:read`, `${resource}:write`]);
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 // Paths any signed-in user may request, so a hook may call them without a
 // permission. /jobs/:id serves a Jobs Read role or the creator of a
@@ -112,8 +81,6 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useApiKeys: authenticated([]),
   // audnexus
   useAudnexusChapters: requires("books:write", ["B000000000", on]),
-  // auth
-  useAuthStatus: authenticated([on]),
   // books
   useBook: requires("books:read", ["1", on]),
   useBooks: requires("books:read", [{}, on]),
@@ -152,6 +119,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useLibraries: requires(anyOf("libraries:read", "users:write"), [{}, on]),
   useLibraryLanguages: requires("books:read", [1, on]),
   useUserLibraries: authenticated([on]),
+  useNavLibraries: requires("books:read", []),
   useUserLibrary: authenticated(["1"]),
   // librarySettings
   useLibrarySettings: authenticated([1, on]),
@@ -311,8 +279,7 @@ const gatedCases = cases.filter(([, { requires: r }]) => r !== null);
 
 describe("query hook permission gating", () => {
   beforeEach(() => {
-    auth.permissions = new Set();
-    auth.demoMode = false;
+    setAuth();
   });
 
   afterEach(() => {
@@ -335,7 +302,7 @@ describe("query hook permission gating", () => {
     "%s requests its route with exactly its required permissions",
     async (name, { requires: requirement, args }) => {
       for (const permissions of sufficientSets(requirement)) {
-        auth.permissions = new Set(permissions);
+        setAuth({ permissions });
 
         const paths = await requestedPaths(hookNamed(name), args);
 
@@ -351,9 +318,9 @@ describe("query hook permission gating", () => {
     "%s sends nothing without its required permission",
     async (name, { requires: requirement, args }) => {
       for (const withheld of withheldSets(requirement as Requirement)) {
-        auth.permissions = new Set(
-          ALL_PERMISSIONS.filter((p) => !withheld.includes(p as Permission)),
-        );
+        setAuth({
+          permissions: ALL_PERMISSIONS.filter((p) => !withheld.includes(p)),
+        });
 
         const paths = await requestedPaths(hookNamed(name), args);
 
@@ -380,8 +347,7 @@ describe("query hook permission gating", () => {
   it.each(cases)(
     "%s sends no request to a route Demo Mode does not register",
     async (name, { args }) => {
-      auth.permissions = new Set(ALL_PERMISSIONS);
-      auth.demoMode = true;
+      setAuth({ permissions: ALL_PERMISSIONS, demoMode: true });
 
       const paths = await requestedPaths(hookNamed(name), args);
 

@@ -2,19 +2,15 @@ import { renderHook } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/hooks/useAuth";
+import { setAuth } from "@/testing/auth";
+import type { Permission } from "@/utils/permissions";
 
 import { useAdminNavItems } from "./useAdminNavItems";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-const sharingItem = (permissions: string[]) => {
-  vi.mocked(useAuth).mockReturnValue({
-    hasPermission: (resource: string, operation: string) =>
-      permissions.includes(`${resource}:${operation}`),
-  } as ReturnType<typeof useAuth>);
+const sharingItem = (permissions: Permission[]) => {
+  setAuth({ permissions });
   const { result } = renderHook(() => useAdminNavItems(), {
     wrapper: ({ children }) => (
       <MemoryRouter initialEntries={["/settings/sharing"]}>

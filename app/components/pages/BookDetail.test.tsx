@@ -4,30 +4,21 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuth } from "@/testing/auth";
+
 import BookDetail from "./BookDetail";
 
 beforeAll(() => {
   vi.stubGlobal("__APP_VERSION__", "test");
 });
 
-let canWriteBooks = true;
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    canWrite: (resource: string) => resource === "books" && canWriteBooks,
-    hasPermission: (resource: string, operation: string) =>
-      resource === "books" && (operation === "read" || canWriteBooks),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/hooks/queries/sharing", () => ({
   useSharingSettings: () => ({ data: undefined }),
 }));
 
-beforeEach(() => {
-  canWriteBooks = true;
-});
+beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
 
 const { book } = vi.hoisted(() => {
   const files = [
@@ -155,7 +146,7 @@ describe("BookDetail write controls", () => {
   });
 
   it("hides every Books Write control for a read-only user but keeps Add to list, reading, and downloads", () => {
-    canWriteBooks = false;
+    setAuth({ permissions: ["books:read"] });
     renderPage();
 
     expect(

@@ -7,11 +7,11 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { useConfig } from "@/hooks/queries/config";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { Library } from "@/types";
-import { meetsRequirement, ROUTE_PERMISSIONS } from "@/utils/permissions";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 interface LibraryRowProps {
   library: Library;
@@ -57,24 +57,17 @@ const AdminLibraries = () => {
   usePageTitle("Libraries");
 
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
   const { data, isLoading, error } = useLibraries({});
   const { data: config } = useConfig();
   const createLibraryMutation = useCreateLibrary();
   const isDevelopment = import.meta.env.DEV;
   const devLibraryPath = config?.dev_library_path;
 
-  const canCreateLibraries = hasPermission("libraries", "write");
+  const canCreateLibraries = useCan(ROUTE_PERMISSIONS.createLibrary);
   // The page needs only Libraries Read, but a library opens with Books Read
   // and its settings need Libraries Read and Write.
-  const canOpenLibraries = meetsRequirement(
-    hasPermission,
-    ROUTE_PERMISSIONS.libraryBooks,
-  );
-  const canConfigureLibraries = meetsRequirement(
-    hasPermission,
-    ROUTE_PERMISSIONS.librarySettings,
-  );
+  const canOpenLibraries = useCan(ROUTE_PERMISSIONS.libraryBooks);
+  const canConfigureLibraries = useCan(ROUTE_PERMISSIONS.librarySettings);
 
   const handleCreateDefaultLibrary = useCallback(async () => {
     if (!devLibraryPath) {

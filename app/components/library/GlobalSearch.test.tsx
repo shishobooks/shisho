@@ -5,18 +5,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import GlobalSearch from "./GlobalSearch";
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const renderSearch = () => {
   const queryClient = new QueryClient({
@@ -47,7 +40,7 @@ describe("GlobalSearch", () => {
   });
 
   it("offers no search to a role without Books Read", async () => {
-    auth.permissions = new Set(["shares:write"]);
+    setAuth({ permissions: ["shares:write"] });
     const request = vi.spyOn(API, "request").mockResolvedValue([]);
 
     renderSearch();
@@ -58,7 +51,7 @@ describe("GlobalSearch", () => {
   });
 
   it("searches the library for a role with Books Read", async () => {
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(async (_method, path) =>

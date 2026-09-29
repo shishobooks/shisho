@@ -35,7 +35,7 @@ import {
   DEFAULT_GALLERY_SIZE,
 } from "@/constants/gallerySize";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
@@ -43,8 +43,6 @@ import {
   AuthorRolePenciller,
   AuthorRoleWriter,
   FileTypeCBZ,
-  ResourceBooks,
-  ResourcePeople,
   type Book,
   type File,
   type GallerySize,
@@ -104,12 +102,11 @@ const BookItem = ({
   gallerySize = DEFAULT_GALLERY_SIZE,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
-  const { canWrite, hasPermission } = useAuth();
   // Author pages need People Read; without it the names are plain text.
-  const linkPeople = hasPermission(ResourcePeople, "read");
+  const linkPeople = useCan("people:read");
   // Rescan, identify, and delete all require Books Write on the backend.
   // Adding to a list is governed by the list's own permission, so it stays.
-  const canWriteBooks = canWrite(ResourceBooks);
+  const canWriteBooks = useCan("books:write");
 
   // Find the series number and unit for the specific series context (if provided)
   const seriesEntry = seriesId

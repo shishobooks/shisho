@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 
 import { useRequires } from "./permissions";
 
@@ -30,13 +30,9 @@ export const useEpubBlob = (
       const response = await fetch(`/api/books/files/${fileId}/download`, {
         signal,
       });
-      if (!response.ok) {
-        throw new ShishoAPIError(
-          `Failed to fetch EPUB: ${response.status} ${response.statusText}`,
-          "epub_download_failed",
-          response.status,
-        );
-      }
+      // checkStatus rejects with the API's error; the body is a file
+      // otherwise, so only a failure goes through it.
+      if (!response.ok) await API.checkStatus(response);
       return response.blob();
     },
   });

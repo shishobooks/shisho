@@ -2,15 +2,15 @@ import { Navigate } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import TopNav from "@/components/library/TopNav";
-import { useUserLibraries } from "@/hooks/queries/libraries";
-import { useAuth } from "@/hooks/useAuth";
+import { useNavLibraries } from "@/hooks/queries/libraries";
+import { useCan } from "@/hooks/useCan";
 
 const LibraryRedirect = () => {
-  const { hasPermission } = useAuth();
   // A library page needs Books Read, so a role without it lands on lists,
   // which every signed-in user can use.
-  const canReadBooks = hasPermission("books", "read");
-  const librariesQuery = useUserLibraries({ enabled: canReadBooks });
+  const canReadBooks = useCan("books:read");
+  const canReadLibraries = useCan("libraries:read");
+  const librariesQuery = useNavLibraries();
 
   if (!canReadBooks) {
     return <Navigate replace to="/lists" />;
@@ -53,9 +53,7 @@ const LibraryRedirect = () => {
     return (
       <Navigate
         replace
-        to={
-          hasPermission("libraries", "read") ? "/settings/libraries" : "/lists"
-        }
+        to={canReadLibraries ? "/settings/libraries" : "/lists"}
       />
     );
   }

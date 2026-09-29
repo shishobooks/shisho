@@ -25,12 +25,12 @@ import {
   useUpdateSeries,
 } from "@/hooks/queries/series";
 import { useUserSettings } from "@/hooks/queries/settings";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parseGallerySize } from "@/libraries/gallerySize";
 import { parsePageParam } from "@/libraries/pagination";
-import { ResourceSeries, type GallerySize } from "@/types";
+import type { GallerySize } from "@/types";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -51,11 +51,10 @@ const SeriesDetail = () => {
   const currentPage = parsePageParam(searchParams.get("page"));
   const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
 
-  const { canWrite } = useAuth();
   const libraryQuery = useUserLibrary(libraryId);
   const seriesQuery = useSeries(seriesId);
   // Series edit, merge, and delete require Series Write on the backend.
-  const canWriteSeries = canWrite(ResourceSeries);
+  const canWriteSeries = useCan("series:write");
 
   usePageTitle(seriesQuery.data?.name ?? "Series");
   const seriesBooksQuery = useSeriesBooks(

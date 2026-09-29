@@ -5,13 +5,11 @@ import { MemoryRouter } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/hooks/useAuth";
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 
 import AdminSharing from "./AdminSharing";
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: vi.fn(),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 afterEach(() => {
   toast.dismiss();
@@ -28,9 +26,7 @@ describe("saving a sharing switch through the API", () => {
     "shows one toast on HTTP %s and keeps the saved value",
     async (status, code, message) => {
       vi.stubGlobal("__APP_VERSION__", "test");
-      vi.mocked(useAuth).mockReturnValue({
-        hasPermission: () => true,
-      } as unknown as ReturnType<typeof useAuth>);
+      setAuth({ permissions: ALL_PERMISSIONS });
       vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
         if (init?.method === "PUT") {
           return Response.json({ error: { code, message } }, { status });

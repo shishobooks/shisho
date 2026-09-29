@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
-import { useAuth } from "@/hooks/useAuth";
-import { meetsRequirement, ROUTE_PERMISSIONS } from "@/utils/permissions";
+import { useCan } from "@/hooks/useCan";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 export type AdminNavItem = {
   to: string;
@@ -25,25 +25,12 @@ export type AdminNavItem = {
 
 export const useAdminNavItems = (): AdminNavItem[] => {
   const location = useLocation();
-  const { hasPermission } = useAuth();
 
   // Each entry shows when the role passes its page's route guard.
-  const canViewConfig = meetsRequirement(
-    hasPermission,
-    ROUTE_PERMISSIONS.settingsConfig,
-  );
-  const canViewLibraries = meetsRequirement(
-    hasPermission,
-    ROUTE_PERMISSIONS.settingsLibraries,
-  );
-  const canViewUsers = meetsRequirement(
-    hasPermission,
-    ROUTE_PERMISSIONS.settingsUsers,
-  );
-  const canViewJobs = meetsRequirement(
-    hasPermission,
-    ROUTE_PERMISSIONS.settingsJobs,
-  );
+  const canViewConfig = useCan(ROUTE_PERMISSIONS.settingsConfig);
+  const canViewLibraries = useCan(ROUTE_PERMISSIONS.settingsLibraries);
+  const canViewUsers = useCan(ROUTE_PERMISSIONS.settingsUsers);
+  const canViewJobs = useCan(ROUTE_PERMISSIONS.settingsJobs);
 
   return [
     {

@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import Home from "./Home";
 
@@ -18,18 +19,7 @@ beforeAll(() => {
   })) as unknown as typeof window.matchMedia;
 });
 
-const auth = vi.hoisted(() => ({ permissions: new Set<string>() }));
-
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    user: { id: 1, library_access: null },
-    demoMode: false,
-    hasPermission: (resource: string, operation: string) =>
-      auth.permissions.has(`${resource}:${operation}`),
-    canWrite: (resource: string) => auth.permissions.has(`${resource}:write`),
-    hasLibraryAccess: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/components/library/SelectionToolbar", () => ({
   SelectionToolbar: () => null,
@@ -68,7 +58,7 @@ describe("Home permission gating", () => {
   });
 
   it("requests no books, genres, or tags for a role without Books Read", async () => {
-    auth.permissions = new Set(["shares:write"]);
+    setAuth({ permissions: ["shares:write"] });
     const request = vi
       .spyOn(API, "request")
       .mockResolvedValue({ items: [], total: 0 });
@@ -83,7 +73,7 @@ describe("Home permission gating", () => {
   });
 
   it("requests books for a role with Books Read", async () => {
-    auth.permissions = new Set(["books:read"]);
+    setAuth({ permissions: ["books:read"] });
     const request = vi
       .spyOn(API, "request")
       .mockImplementation(async (_method, path) =>

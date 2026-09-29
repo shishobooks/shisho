@@ -22,7 +22,7 @@ import {
   type PluginMode,
   type PluginOrder,
 } from "@/hooks/queries/plugins";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
@@ -34,8 +34,8 @@ const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
 ];
 
 export const AdvancedOrderSection = () => {
-  const { hasPermission } = useAuth();
-  const canWrite = hasPermission("config", "write");
+  const canWrite = useCan("config:write");
+  const canReadBooks = useCan("books:read");
   const [selectedHookType, setSelectedHookType] =
     useState<PluginHookType>("metadataEnricher");
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
@@ -120,7 +120,7 @@ export const AdvancedOrderSection = () => {
 
   // The order routes are the Books Read lookups the identify dialog uses, so a
   // role that opens this page with Config Read alone cannot load them.
-  if (!hasPermission("books", "read")) {
+  if (!canReadBooks) {
     return (
       <p className="text-sm text-muted-foreground">
         Viewing the plugin order requires Books Read.

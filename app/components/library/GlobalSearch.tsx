@@ -6,7 +6,7 @@ import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Input } from "@/components/ui/input";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useGlobalSearch } from "@/hooks/queries/search";
-import { useAuth } from "@/hooks/useAuth";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 import type {
@@ -129,7 +129,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLAnchorElement | null)[]>([]);
 
-  const { hasPermission } = useAuth();
+  const canReadBooks = useCan("books:read");
   const libraryQuery = useUserLibrary(libraryId);
   const coverAspectRatio = libraryQuery.data?.cover_aspect_ratio ?? "book";
   // Library-level variant used for series (which don't have file types)
@@ -432,7 +432,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   );
 
   // Search reads Books Read routes, so a role without it gets no search box.
-  if (!libraryId || !hasPermission("books", "read")) {
+  if (!libraryId || !canReadBooks) {
     return null;
   }
 

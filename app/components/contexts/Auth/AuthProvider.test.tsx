@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { useAuth } from "@/hooks/useAuth";
 import { queryClient } from "@/libraries/query-client";
+import { anyOf } from "@/utils/permissions";
 
 import AuthProvider from "./AuthProvider";
 
@@ -32,20 +33,22 @@ function stubAuth(me: Record<string, unknown> | null, demoMode = false) {
 }
 
 function Probe() {
-  const { isLoading, canWrite, hasPermission } = useAuth();
+  const { isLoading, can } = useAuth();
   if (isLoading) return <div>loading</div>;
   return (
     <ul>
-      <li>books:{String(canWrite("books"))}</li>
-      <li>series:{String(canWrite("series"))}</li>
-      <li>people:{String(canWrite("people"))}</li>
-      <li>books-read:{String(hasPermission("books", "read"))}</li>
+      <li>books:{String(can("books:write"))}</li>
+      <li>series:{String(can("series:write"))}</li>
+      <li>people:{String(can("people:write"))}</li>
+      <li>books-read:{String(can("books:read"))}</li>
+      <li>jobs:{String(can(["jobs:read", "jobs:write"]))}</li>
+      <li>shares:{String(can(anyOf("shares:read", "shares:write")))}</li>
     </ul>
   );
 }
 
-describe("AuthProvider canWrite", () => {
-  it("is true only for resources whose write permission the user holds", async () => {
+describe("AuthProvider can", () => {
+  it("is true only for the permissions the user holds", async () => {
     stubAuth({
       id: 1,
       username: "ed",
@@ -61,6 +64,22 @@ describe("AuthProvider canWrite", () => {
     expect(screen.getByText("series:false")).toBeInTheDocument();
     expect(screen.getByText("people:false")).toBeInTheDocument();
     expect(screen.getByText("books-read:true")).toBeInTheDocument();
+  });
+
+  it("needs every permission of a list and any one of anyOf", async () => {
+    stubAuth({
+      id: 4,
+      username: "ops",
+      role_name: "operator",
+      permissions: ["jobs:read", "shares:write"],
+    });
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("jobs:false")).toBeInTheDocument();
+    expect(screen.getByText("shares:true")).toBeInTheDocument();
   });
 
   it("is false for a read-only user", async () => {

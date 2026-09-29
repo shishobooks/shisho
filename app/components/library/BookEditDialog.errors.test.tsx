@@ -5,18 +5,15 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import type { Book } from "@/types";
 
 import { BookEditDialog } from "./BookEditDialog";
 
 // Query hooks check the role's permissions; this test grants them all.
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    demoMode: false,
-    hasPermission: () => true,
-    canWrite: () => true,
-  }),
-}));
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+setAuth({ permissions: ALL_PERMISSIONS });
 
 const book: Book = {
   id: 1,
