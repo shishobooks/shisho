@@ -42,6 +42,31 @@ type handler struct {
 	fileOrganizer    FileOrganizer // optional, can be nil if not configured
 }
 
+// buildPersonResponse adds the authored book count, the narrated file count,
+// and the flat alias list to a person. retrieve, list, and update all use it,
+// so a failed lookup fails the request instead of rendering a zero count or
+// no aliases.
+func (h *handler) buildPersonResponse(ctx context.Context, person *models.Person) (PersonResponse, error) {
+	authoredCount, err := h.personService.GetAuthoredBookCount(ctx, person.ID)
+	if err != nil {
+		return PersonResponse{}, errors.WithStack(err)
+	}
+	narratedCount, err := h.personService.GetNarratedFileCount(ctx, person.ID)
+	if err != nil {
+		return PersonResponse{}, errors.WithStack(err)
+	}
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.PersonConfig, person.ID)
+	if err != nil {
+		return PersonResponse{}, errors.WithStack(err)
+	}
+	return PersonResponse{
+		Person:            *person,
+		AuthoredBookCount: authoredCount,
+		NarratedFileCount: narratedCount,
+		Aliases:           aliasList,
+	}, nil
+}
+
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := httputil.ParamID(c, "id", "Person")
@@ -61,24 +86,9 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 
-	// Get counts
-	authoredCount, err := h.personService.GetAuthoredBookCount(ctx, id)
+	response, err := h.buildPersonResponse(ctx, person)
 	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	narratedCount, err := h.personService.GetNarratedFileCount(ctx, id)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, id)
-
-	response := PersonResponse{
-		Person:            *person,
-		AuthoredBookCount: authoredCount,
-		NarratedFileCount: narratedCount,
-		Aliases:           aliasList,
+		return err
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
@@ -113,17 +123,11 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with counts and aliases
 	result := make([]PersonResponse, len(people))
 	for i, p := range people {
-		authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, p.ID)
-		narratedCount, _ := h.personService.GetNarratedFileCount(ctx, p.ID)
-		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, p.ID)
-		result[i] = PersonResponse{
-			Person:            *p,
-			AuthoredBookCount: authoredCount,
-			NarratedFileCount: narratedCount,
-			Aliases:           aliasList,
+		result[i], err = h.buildPersonResponse(ctx, p)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -274,16 +278,9 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	// Get counts
-	authoredCount, _ := h.personService.GetAuthoredBookCount(ctx, id)
-	narratedCount, _ := h.personService.GetNarratedFileCount(ctx, id)
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PersonConfig, id)
-
-	response := PersonResponse{
-		Person:            *person,
-		AuthoredBookCount: authoredCount,
-		NarratedFileCount: narratedCount,
-		Aliases:           aliasList,
+	response, err := h.buildPersonResponse(ctx, person)
+	if err != nil {
+		return err
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))

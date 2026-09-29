@@ -25,6 +25,16 @@ type handler struct {
 	reviewRecomputer review.BookReviewRecomputer
 }
 
+// setParentError renders a SetParent failure. A parent the hierarchy cannot
+// accept is a 422; a publisher that does not exist keeps its 404, and any
+// other failure is a 500.
+func setParentError(err error) error {
+	if errors.Is(err, ErrInvalidParent) || errors.Is(err, ErrParentOtherLibrary) || errors.Is(err, ErrParentCycle) {
+		return errcodes.ValidationError(err.Error())
+	}
+	return errors.WithStack(err)
+}
+
 // buildPublisherResponse assembles the full single-publisher API response
 // (PublisherResponse) for the given publisher: rolled-up file counts, aliases
 // as a flat []string, the ancestor chain, descendant ids, and flattened direct
@@ -38,7 +48,10 @@ func (h *handler) buildPublisherResponse(ctx context.Context, publisher *models.
 		return PublisherResponse{}, errors.WithStack(err)
 	}
 
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, id)
+	if err != nil {
+		return PublisherResponse{}, errors.WithStack(err)
+	}
 
 	ancestors, err := h.publisherService.GetAncestors(ctx, id)
 	if err != nil {
@@ -76,6 +89,57 @@ func (h *handler) buildPublisherResponse(ctx context.Context, publisher *models.
 		Ancestors:           ancestorList,
 		DescendantIDs:       descendantIDs,
 		Children:            childList,
+	}, nil
+}
+
+// buildPublisherListItem assembles one row of the publisher list: the file
+// counts, the descendant counts, the parent's name, and the flat alias list.
+// pageNames maps the ids of the publishers on the current page to their names,
+// so a parent on the same page needs no lookup. A failed lookup fails the
+// request instead of rendering a zero count or no aliases.
+func (h *handler) buildPublisherListItem(ctx context.Context, p *models.Publisher, pageNames map[int]string) (PublisherListItem, error) {
+	fileCount, err := h.publisherService.GetFileCount(ctx, p.ID)
+	if err != nil {
+		return PublisherListItem{}, errors.WithStack(err)
+	}
+	descendantIDs, err := h.publisherService.GetDescendantIDs(ctx, p.ID)
+	if err != nil {
+		return PublisherListItem{}, errors.WithStack(err)
+	}
+	descendantFileCount, err := h.publisherService.GetFileCountForPublisherIDs(ctx, descendantIDs)
+	if err != nil {
+		return PublisherListItem{}, errors.WithStack(err)
+	}
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, p.ID)
+	if err != nil {
+		return PublisherListItem{}, errors.WithStack(err)
+	}
+
+	var parentName *string
+	if p.ParentID != nil {
+		if name, ok := pageNames[*p.ParentID]; ok {
+			parentName = &name
+		} else {
+			// The parent is not on the current page, so look it up. A
+			// dangling parent_id leaves the name empty rather than failing
+			// the whole page with a 404.
+			parent, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: p.ParentID})
+			if err != nil && !errors.Is(err, errcodes.NotFound("Publisher")) {
+				return PublisherListItem{}, errors.WithStack(err)
+			}
+			if err == nil {
+				parentName = &parent.Name
+			}
+		}
+	}
+
+	return PublisherListItem{
+		Publisher:                *p,
+		FileCount:                fileCount,
+		DescendantFileCount:      descendantFileCount,
+		DescendantPublisherCount: len(descendantIDs),
+		ParentName:               parentName,
+		Aliases:                  aliasList,
 	}, nil
 }
 
@@ -142,32 +206,9 @@ func (h *handler) list(c echo.Context) error {
 
 	result := make([]PublisherListItem, len(publishers))
 	for i, p := range publishers {
-		fileCount, _ := h.publisherService.GetFileCount(ctx, p.ID)
-		descendantIDs, _ := h.publisherService.GetDescendantIDs(ctx, p.ID)
-		descendantFileCount, _ := h.publisherService.GetFileCountForPublisherIDs(ctx, descendantIDs)
-		descendantPublisherCount := len(descendantIDs)
-		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.PublisherConfig, p.ID)
-
-		var parentName *string
-		if p.ParentID != nil {
-			if name, ok := publisherNameMap[*p.ParentID]; ok {
-				parentName = &name
-			} else {
-				// Parent might not be in the current page; look it up
-				parent, err := h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: p.ParentID})
-				if err == nil {
-					parentName = &parent.Name
-				}
-			}
-		}
-
-		result[i] = PublisherListItem{
-			Publisher:                *p,
-			FileCount:                fileCount,
-			DescendantFileCount:      descendantFileCount,
-			DescendantPublisherCount: descendantPublisherCount,
-			ParentName:               parentName,
-			Aliases:                  aliasList,
+		result[i], err = h.buildPublisherListItem(ctx, p, publisherNameMap)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -215,10 +256,7 @@ func (h *handler) update(c echo.Context) error {
 		resolvedParentID = params.ParentID.Value
 		parentWasSet = true
 		if err := h.publisherService.SetParent(ctx, id, params.ParentID.Value); err != nil {
-			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
-				return errcodes.ValidationError(err.Error())
-			}
-			return errors.WithStack(err)
+			return setParentError(err)
 		}
 	} else if params.ParentName != nil {
 		// Resolve parent by name: find or create a publisher with the given name
@@ -232,10 +270,7 @@ func (h *handler) update(c echo.Context) error {
 		// Index the parent publisher in case it was just created
 		affected.PublisherIDs = append(affected.PublisherIDs, parentPublisher.ID)
 		if err := h.publisherService.SetParent(ctx, id, &parentPublisher.ID); err != nil {
-			if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
-				return errcodes.ValidationError(err.Error())
-			}
-			return errors.WithStack(err)
+			return setParentError(err)
 		}
 	}
 
@@ -267,7 +302,10 @@ func (h *handler) update(c echo.Context) error {
 			}
 
 			// Re-retrieve to pick up parent_id change
-			existing, _ = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
+			existing, err = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
+			if err != nil {
+				return errors.WithStack(err)
+			}
 			response, err := h.buildPublisherResponse(ctx, existing)
 			if err != nil {
 				return err
@@ -409,10 +447,7 @@ func (h *handler) setChild(c echo.Context) error {
 
 	// SetParent validates same-library, cycle detection, and sets the parent
 	if err := h.publisherService.SetParent(ctx, params.ChildID, &parentID); err != nil {
-		if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "invalid parent") || strings.Contains(err.Error(), "same library") || strings.Contains(err.Error(), "not found") {
-			return errcodes.ValidationError(err.Error())
-		}
-		return errors.WithStack(err)
+		return setParentError(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -436,24 +471,20 @@ func (h *handler) deletePublisher(c echo.Context) error {
 		return err
 	}
 
+	// The reindex drops the deleted publisher's publishers_fts row. books_fts
+	// has no publisher column, so the affected Books need no reindex.
+	affected := h.searchService.CollectAffected(ctx, search.Affected{PublisherIDs: []int{id}})
+	defer h.searchService.ReindexAffected(ctx, affected)
+
 	affectedBookIDs, err := h.publisherService.DeletePublisher(ctx, id)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	log := logger.FromContext(ctx)
-
 	// Clearing publisher_id can flip the books' Reviewed completeness state
 	// (when `publisher` is a required field), so recompute it for every
-	// affected book. Unlike deleteSeries there is no books_fts re-index:
-	// books_fts has no publisher column. Add ReindexBookByID here if it gains
-	// one.
+	// affected book.
 	h.reviewRecomputer.RecomputeReviewedForBooks(ctx, affectedBookIDs)
-
-	// Remove the deleted publisher itself from the publisher FTS index.
-	if err := h.searchService.DeleteFromPublisherIndex(ctx, id); err != nil {
-		log.Warn("failed to remove publisher from search index", logger.Data{"publisher_id": id, "error": err.Error()})
-	}
 
 	return c.NoContent(http.StatusNoContent)
 }

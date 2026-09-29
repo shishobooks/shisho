@@ -21,6 +21,7 @@ import type {
   MoveFilesResponse,
   ResourceListResponse,
   UpdateBookPayload,
+  UpdateFileCoverPagePayload,
   UpdateFilePayload,
 } from "@/types";
 
@@ -191,12 +192,8 @@ export const useSetFileCoverPage = () => {
 
   return useMutation<File, ShishoAPIError, SetFileCoverPageVariables>({
     mutationFn: ({ id, page }) => {
-      return API.request(
-        "PUT",
-        `/books/files/${id}/cover-page`,
-        { page },
-        null,
-      );
+      const payload: UpdateFileCoverPagePayload = { page };
+      return API.request("PUT", `/books/files/${id}/cover-page`, payload, null);
     },
     onSuccess: () => {
       // Invalidate book queries to refresh file/cover data

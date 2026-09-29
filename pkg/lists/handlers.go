@@ -41,22 +41,32 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Augment with book counts
 	result := make([]ListResponse, len(lists))
-	libraryIDs := user.GetAccessibleLibraryIDs()
-
 	for i, l := range lists {
-		count, _ := h.listsService.GetListBookCount(ctx, l.ID, libraryIDs)
-		result[i] = ListResponse{
-			List:       *l,
-			BookCount:  count,
-			Permission: h.effectivePermission(ctx, l.ID, l.UserID, user.ID),
+		result[i], err = h.buildListResponse(ctx, l, user)
+		if err != nil {
+			return err
 		}
 	}
 
 	response := ListListsResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+// buildListResponse adds the count of the list's books the user can see and
+// the user's effective permission to a list. The list and retrieve routes
+// share it, so both return the same ListResponse.
+func (h *handler) buildListResponse(ctx context.Context, list *models.List, user *models.User) (ListResponse, error) {
+	bookCount, err := h.listsService.GetListBookCount(ctx, list.ID, user.GetAccessibleLibraryIDs())
+	if err != nil {
+		return ListResponse{}, errors.WithStack(err)
+	}
+	return ListResponse{
+		List:       *list,
+		BookCount:  bookCount,
+		Permission: h.effectivePermission(ctx, list.ID, list.UserID, user.ID),
+	}, nil
 }
 
 // effectivePermission returns the requesting user's effective permission on a
@@ -102,14 +112,9 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Get book count
-	libraryIDs := user.GetAccessibleLibraryIDs()
-	bookCount, _ := h.listsService.GetListBookCount(ctx, id, libraryIDs)
-
-	response := RetrieveListResponse{
-		List:       *list,
-		BookCount:  bookCount,
-		Permission: h.effectivePermission(ctx, id, list.UserID, user.ID),
+	response, err := h.buildListResponse(ctx, list, user)
+	if err != nil {
+		return err
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))

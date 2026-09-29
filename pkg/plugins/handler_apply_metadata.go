@@ -21,7 +21,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 
 	var payload PluginApplyPayload
 	if err := c.Bind(&payload); err != nil {
-		return errcodes.ValidationError(err.Error())
+		return errors.WithStack(err)
 	}
 
 	if err := validateSourceIntents(&payload); err != nil {
@@ -47,7 +47,7 @@ func (h *handler) applyMetadata(c echo.Context) error {
 	// Look up book with all relations
 	book, err := h.enrich.bookStore.RetrieveBook(ctx, payload.BookID)
 	if err != nil {
-		return errcodes.NotFound("Book")
+		return errors.WithStack(err)
 	}
 
 	// Library access check

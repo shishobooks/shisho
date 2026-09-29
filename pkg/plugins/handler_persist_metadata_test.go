@@ -41,6 +41,7 @@ type stubBookStoreForPersist struct {
 	updatedBookColumns     [][]string
 	updatedFileColumns     [][]string
 	updateFileErr          error
+	retrieveErr            error
 }
 
 func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, columns []string) error {
@@ -49,6 +50,9 @@ func (s *stubBookStoreForPersist) UpdateBook(_ context.Context, _ *models.Book, 
 }
 
 func (s *stubBookStoreForPersist) RetrieveBook(_ context.Context, _ int) (*models.Book, error) {
+	if s.retrieveErr != nil {
+		return nil, s.retrieveErr
+	}
 	return s.book, nil
 }
 

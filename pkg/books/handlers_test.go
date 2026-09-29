@@ -2412,7 +2412,7 @@ func TestUpdateBook_SeriesNumberRange_RejectsInvalidRangeBeforePersistence(t *te
 	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(book.ID), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := executeRequestWithUser(t, e, req, user)
-	require.Equal(t, http.StatusBadRequest, rr.Code, "response body: %s", rr.Body.String())
+	require.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
 
 	count, err := db.NewSelect().Model((*models.BookSeries)(nil)).Where("book_id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)

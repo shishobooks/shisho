@@ -1,7 +1,12 @@
 import QueryString from "qs";
 import { toast } from "sonner";
 
-import type { APIKey, APIKeyShortURL } from "@/types/generated/apikeys";
+import type {
+  APIKey,
+  APIKeyShortURL,
+  CreateAPIKeyPayload,
+  UpdateAPIKeyNamePayload,
+} from "@/types/generated/apikeys";
 
 export class ShishoAPIError extends Error {
   // The Shisho error code. Undefined when the response did not carry a
@@ -158,11 +163,13 @@ class ShishoAPI {
   }
 
   createApiKey(name: string): Promise<APIKey> {
-    return this.request("POST", "/user/api-keys", { name });
+    const payload: CreateAPIKeyPayload = { name };
+    return this.request("POST", "/user/api-keys", payload);
   }
 
   updateApiKeyName(id: string, name: string): Promise<APIKey> {
-    return this.request("PATCH", `/user/api-keys/${id}`, { name });
+    const payload: UpdateAPIKeyNamePayload = { name };
+    return this.request("PATCH", `/user/api-keys/${id}`, payload);
   }
 
   deleteApiKey(id: string): Promise<void> {

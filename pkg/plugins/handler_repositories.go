@@ -44,7 +44,7 @@ func (h *handler) addRepository(c echo.Context) error {
 
 	if !isValidRepoURL(payload.URL) {
 		return &errcodes.Error{
-			HTTPCode: http.StatusBadRequest,
+			HTTPCode: http.StatusUnprocessableEntity,
 			Message:  "Invalid repository URL. Only GitHub raw content URLs are allowed (https://raw.githubusercontent.com/...).",
 			Code:     "invalid_repo_url",
 		}

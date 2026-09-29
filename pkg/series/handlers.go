@@ -1,6 +1,7 @@
 package series
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -26,6 +27,21 @@ type handler struct {
 	searchService  *search.Service
 }
 
+// buildSeriesResponse adds the book count and the flat alias list to a series.
+// retrieve, list, and update all use it, so a failed lookup fails the request
+// instead of rendering a zero count or no aliases.
+func (h *handler) buildSeriesResponse(ctx context.Context, series *models.Series) (SeriesResponse, error) {
+	bookCount, err := h.seriesService.GetSeriesBookCount(ctx, series.ID)
+	if err != nil {
+		return SeriesResponse{}, errors.WithStack(err)
+	}
+	aliasList, err := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, series.ID)
+	if err != nil {
+		return SeriesResponse{}, errors.WithStack(err)
+	}
+	return SeriesResponse{Series: *series, BookCount: bookCount, Aliases: aliasList}, nil
+}
+
 func (h *handler) retrieve(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := httputil.ParamID(c, "id", "Series")
@@ -45,22 +61,20 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 
-	// Get book count
-	bookCount, err := h.seriesService.GetSeriesBookCount(ctx, id)
+	seriesFiles, err := h.bookService.GetFirstBooksFilesForSeries(ctx, []int{id})
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, id)
-
-	seriesFiles, _ := h.bookService.GetFirstBooksFilesForSeries(ctx, []int{id})
 	aspectRatio := ""
 	if series.Library != nil {
 		aspectRatio = series.Library.CoverAspectRatio
 	}
 	series.CoverCacheKey = covers.CacheKey(seriesFiles[id], aspectRatio)
 
-	response := SeriesResponse{Series: *series, BookCount: bookCount, Aliases: aliasList}
+	response, err := h.buildSeriesResponse(ctx, series)
+	if err != nil {
+		return err
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -99,19 +113,23 @@ func (h *handler) list(c echo.Context) error {
 	for i, s := range seriesList {
 		seriesIDs[i] = s.ID
 	}
-	seriesFiles, _ := h.bookService.GetFirstBooksFilesForSeries(ctx, seriesIDs)
+	seriesFiles, err := h.bookService.GetFirstBooksFilesForSeries(ctx, seriesIDs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 
 	// Augment with book counts, aliases, and cover cache keys.
 	result := make([]SeriesResponse, len(seriesList))
 	for i, s := range seriesList {
-		count, _ := h.seriesService.GetSeriesBookCount(ctx, s.ID)
-		aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, s.ID)
 		aspectRatio := ""
 		if s.Library != nil {
 			aspectRatio = s.Library.CoverAspectRatio
 		}
 		s.CoverCacheKey = covers.CacheKey(seriesFiles[s.ID], aspectRatio)
-		result[i] = SeriesResponse{Series: *s, BookCount: count, Aliases: aliasList}
+		result[i], err = h.buildSeriesResponse(ctx, s)
+		if err != nil {
+			return err
+		}
 	}
 
 	response := ListSeriesResponse{Items: result, Total: total}
@@ -217,11 +235,10 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Get book count
-	bookCount, _ := h.seriesService.GetSeriesBookCount(ctx, id)
-	aliasList, _ := h.aliasService.ListAliases(ctx, aliases.SeriesConfig, id)
-
-	response := SeriesResponse{Series: *series, BookCount: bookCount, Aliases: aliasList}
+	response, err := h.buildSeriesResponse(ctx, series)
+	if err != nil {
+		return err
+	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }

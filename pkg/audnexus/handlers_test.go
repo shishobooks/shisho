@@ -54,7 +54,7 @@ func TestHandler_GetChapters_InvalidASIN(t *testing.T) {
 	_, _, err := invokeHandler(t, h, "short")
 	require.Error(t, err)
 	ec := asErrcodesError(t, err)
-	assert.Equal(t, http.StatusBadRequest, ec.HTTPCode)
+	assert.Equal(t, http.StatusUnprocessableEntity, ec.HTTPCode)
 }
 
 func TestHandler_GetChapters_NotFound(t *testing.T) {
@@ -97,7 +97,7 @@ func TestMapServiceError_PreservesAudnexusCode(t *testing.T) {
 		wantCode string
 		wantHTTP int
 	}{
-		{"invalid_asin", newErr(ErrCodeInvalidASIN, "x"), "invalid_asin", http.StatusBadRequest},
+		{"invalid_asin", newErr(ErrCodeInvalidASIN, "x"), "invalid_asin", http.StatusUnprocessableEntity},
 		{"not_found", newErr(ErrCodeNotFound, "x"), "not_found", http.StatusNotFound},
 		{"timeout", newErr(ErrCodeTimeout, "x"), "timeout", http.StatusGatewayTimeout},
 		{"upstream_error", newErr(ErrCodeUpstreamError, "x"), "upstream_error", http.StatusBadGateway},

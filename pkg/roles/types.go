@@ -28,6 +28,6 @@ type UpdateRolePayload struct {
 
 // ListRolesQuery represents the query parameters for listing roles.
 type ListRolesQuery struct {
-	Limit  int `query:"limit" json:"limit,omitempty" default:"50"`
-	Offset int `query:"offset" json:"offset,omitempty" default:"0"`
+	Limit  int `query:"limit" json:"limit,omitempty" default:"50" validate:"min=1,max=100"`
+	Offset int `query:"offset" json:"offset,omitempty" default:"0" validate:"min=0"`
 }

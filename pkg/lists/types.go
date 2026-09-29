@@ -11,7 +11,8 @@ const (
 )
 
 // ListResponse is a single list augmented with the requesting user's effective
-// permission and the list's book count. It embeds the List model by value so
+// permission and the list's book count. The list route returns it per item
+// and the retrieve route returns it alone. It embeds the List model by value so
 // tygo emits `extends List` and the wire format stays byte-identical.
 type ListResponse struct {
 	models.List `tstype:",extends"`
@@ -23,14 +24,6 @@ type ListResponse struct {
 type ListListsResponse struct {
 	Items []ListResponse `json:"items"`
 	Total int            `json:"total"`
-}
-
-// RetrieveListResponse is the single-list API response. It mirrors ListResponse:
-// the List model fields are flattened in, plus book_count and permission.
-type RetrieveListResponse struct {
-	models.List `tstype:",extends"`
-	BookCount   int    `json:"book_count"`
-	Permission  string `json:"permission" tstype:"ListResponsePermission"`
 }
 
 // ListListBooksResponse is the books-in-list envelope. Items are ListBook rows

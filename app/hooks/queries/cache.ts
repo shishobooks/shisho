@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { ClearResponse, ListResponse } from "@/types/generated/cache";
+import type { ClearResponse, Info } from "@/types/generated/cache";
 
 import { useRequires } from "./permissions";
 
@@ -10,7 +10,7 @@ export enum QueryKey {
 }
 
 export const useCaches = () => {
-  return useQuery<ListResponse, ShishoAPIError>({
+  return useQuery<Info[], ShishoAPIError>({
     enabled: useRequires("config:read"),
     queryKey: [QueryKey.ListCaches],
     queryFn: ({ signal }) => {

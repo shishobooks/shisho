@@ -8,7 +8,7 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   CreateLibraryPayload,
-  LibraryResponse,
+  Library,
   LibrarySummary,
   ListLibrariesQuery,
   ListLibrariesResponse,
@@ -29,11 +29,11 @@ export enum QueryKey {
 export const useLibrary = (
   id?: string,
   options: Omit<
-    UseQueryOptions<LibraryResponse, ShishoAPIError>,
+    UseQueryOptions<Library, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<LibraryResponse, ShishoAPIError>({
+  return useQuery<Library, ShishoAPIError>({
     ...options,
     enabled: useRequires("libraries:read", options.enabled ?? Boolean(id)),
     queryKey: [QueryKey.RetrieveLibrary, id],
@@ -71,15 +71,11 @@ interface CreateLibraryMutationVariables {
 export const useCreateLibrary = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<
-    LibraryResponse,
-    ShishoAPIError,
-    CreateLibraryMutationVariables
-  >({
+  return useMutation<Library, ShishoAPIError, CreateLibraryMutationVariables>({
     mutationFn: ({ payload }) => {
       return API.request("POST", "/libraries", payload, null);
     },
-    onSuccess: (data: LibraryResponse) => {
+    onSuccess: (data: Library) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.UserLibraries] });
       queryClient.setQueryData(
@@ -98,15 +94,11 @@ interface UpdateLibraryMutationVariables {
 export const useUpdateLibrary = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<
-    LibraryResponse,
-    ShishoAPIError,
-    UpdateLibraryMutationVariables
-  >({
+  return useMutation<Library, ShishoAPIError, UpdateLibraryMutationVariables>({
     mutationFn: ({ id, payload }) => {
       return API.request("POST", `/libraries/${id}`, payload, null);
     },
-    onSuccess: (data: LibraryResponse) => {
+    onSuccess: (data: Library) => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLibraries] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.UserLibraries] });
       queryClient.setQueryData(

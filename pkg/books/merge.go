@@ -68,6 +68,13 @@ func firstNonExistentAncestor(dir string) string {
 	}
 }
 
+// MoveFilesToBook returns these for a request it cannot carry out, which the
+// handlers render as a 422. Any other error is a server fault.
+var (
+	ErrNoFilesToMove     = errors.New("no files specified to move")
+	ErrFilesNotInLibrary = errors.New("some files not found or not in the specified library")
+)
+
 // MoveFilesToBook moves files from their current books to a target book.
 // If TargetBookID is nil, a new book is created from the first file's directory.
 // This method handles physical file relocation when the library has OrganizeFileStructure enabled.
@@ -75,7 +82,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 	log := logger.FromContext(ctx)
 
 	if len(opts.FileIDs) == 0 {
-		return nil, errors.New("no files specified to move")
+		return nil, ErrNoFilesToMove
 	}
 
 	result := &MoveFilesResult{
@@ -93,7 +100,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 		return nil, errors.WithStack(err)
 	}
 	if len(files) != len(opts.FileIDs) {
-		return nil, errors.New("some files not found or not in the specified library")
+		return nil, ErrFilesNotInLibrary
 	}
 
 	// Fetch library to check OrganizeFileStructure

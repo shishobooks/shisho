@@ -42,7 +42,7 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, ChaptersResponse{Chapters: chapters}))
+	return errors.WithStack(c.JSON(http.StatusOK, chapters))
 }
 
 func (h *handler) replace(c echo.Context) error {
@@ -98,7 +98,7 @@ func (h *handler) replace(c echo.Context) error {
 		_ = sidecar.WriteFileSidecarWithChapters(fileWithRelations, updatedChapters)
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, ChaptersResponse{Chapters: updatedChapters}))
+	return errors.WithStack(c.JSON(http.StatusOK, updatedChapters))
 }
 
 // validateChapters validates chapter data against file constraints.

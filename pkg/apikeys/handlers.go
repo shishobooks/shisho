@@ -33,11 +33,6 @@ func (h *handler) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, keys)
 }
 
-// CreateRequest is the payload for creating an API key.
-type CreateRequest struct {
-	Name string `json:"name"`
-}
-
 // Create creates a new API key for the current user.
 func (h *handler) Create(c echo.Context) error {
 	user, err := auth.RequireUser(c)
@@ -45,7 +40,7 @@ func (h *handler) Create(c echo.Context) error {
 		return err
 	}
 
-	var req CreateRequest
+	var req CreateAPIKeyPayload
 	if err := c.Bind(&req); err != nil {
 		return pkgerrors.WithStack(err)
 	}
@@ -65,11 +60,6 @@ func (h *handler) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, apiKey)
 }
 
-// UpdateNameRequest is the payload for updating an API key's name.
-type UpdateNameRequest struct {
-	Name string `json:"name"`
-}
-
 // UpdateName updates an API key's name.
 func (h *handler) UpdateName(c echo.Context) error {
 	user, err := auth.RequireUser(c)
@@ -82,7 +72,7 @@ func (h *handler) UpdateName(c echo.Context) error {
 		return errcodes.ValidationError("Key ID required")
 	}
 
-	var req UpdateNameRequest
+	var req UpdateAPIKeyNamePayload
 	if err := c.Bind(&req); err != nil {
 		return pkgerrors.WithStack(err)
 	}
