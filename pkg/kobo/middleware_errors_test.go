@@ -15,7 +15,6 @@ import (
 // parser returns that resource's 404, the same as an ID with no row.
 func TestScopeParser_NonNumericScopeIDReturnsNotFound(t *testing.T) {
 	t.Parallel()
-	m := NewMiddleware(nil)
 
 	for scopeType, resource := range map[string]string{"library": "Library", "list": "List"} {
 		t.Run(scopeType, func(t *testing.T) {
@@ -24,7 +23,7 @@ func TestScopeParser_NonNumericScopeIDReturnsNotFound(t *testing.T) {
 			c.SetParamNames("scopeId")
 			c.SetParamValues("abc")
 
-			err := m.ScopeParser(scopeType)(func(echo.Context) error { return nil })(c)
+			err := ScopeParser(scopeType)(func(echo.Context) error { return nil })(c)
 
 			var ecErr *errcodes.Error
 			require.ErrorAs(t, err, &ecErr, "want an errcodes error, got %T: %v", err, err)

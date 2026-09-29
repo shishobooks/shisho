@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
@@ -193,6 +194,7 @@ func TestAuthoredBooks_DefaultPagination(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(person.ID))
 
@@ -227,6 +229,7 @@ func TestAuthoredBooks_ExplicitLimitOffset(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?limit=2&offset=1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(person.ID))
 
@@ -261,6 +264,7 @@ func TestAuthoredBooks_ResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(person.ID))
 
@@ -294,6 +298,7 @@ func TestNarratedFiles_DefaultPagination(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(person.ID))
 
@@ -328,6 +333,7 @@ func TestNarratedFiles_ExplicitLimitOffset(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?limit=2&offset=1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(person.ID))
 
@@ -362,6 +368,7 @@ func TestNarratedFiles_ResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(person.ID))
 
@@ -399,6 +406,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err := h.list(c)
 	require.NoError(t, err)
@@ -439,6 +447,7 @@ func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err = h.list(c)
 	require.NoError(t, err)
@@ -488,7 +497,7 @@ func callMerge(t *testing.T, h *handler, user *models.User, targetID, sourceID i
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(targetID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	return h.merge(c)
 }
 
@@ -573,4 +582,33 @@ func TestMerge_MissingSource_NotFound(t *testing.T) {
 
 	_, err = h.personService.RetrievePerson(context.Background(), RetrievePersonOptions{ID: &target.ID})
 	require.NoError(t, err, "the target Person still exists")
+}
+
+// setAllAccessUser stands in for the Authenticate middleware in handler tests
+// that call a handler directly: a user with access to every library. The user
+// is not in the database and has no Role, so a test that checks permissions
+// or writes rows referencing the user must load a real one instead.
+func setAllAccessUser(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
+}
+
+// serveWithoutUser serves GET path through a router that registers the
+// handler without the Authenticate middleware, so no user is in context.
+func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path string) int {
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET(route, h)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec.Code
+}
+
+// A handler reached with no user in context rejects the request with 401
+// instead of skipping the library access check.
+func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	person := seedPersonWithAuthoredBooks(t, db, createTestLibrary(t, db), "Author", nil)
+
+	code := serveWithoutUser(newTestEcho(t), "/people/:id", newTestHandler(db).retrieve, fmt.Sprintf("/people/%d", person.ID))
+	assert.Equal(t, http.StatusUnauthorized, code)
 }

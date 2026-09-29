@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -60,15 +61,19 @@ func (h *handler) baseURL(c echo.Context) string {
 	return "/ereader/key/" + apiKey
 }
 
-// getUserLibraryIDs returns the library IDs the key's owner can access, or nil
-// for all libraries. The owner is loaded once by APIKeyAuth; a request without
-// one is rejected rather than treated as unrestricted.
-func (h *handler) getUserLibraryIDs(c echo.Context) ([]int, error) {
-	user := GetUserFromContext(c.Request().Context())
-	if user == nil {
-		return nil, errcodes.Unauthorized("User not found or inactive")
+// requireEntityAccess returns resource's 404 when the key's owner cannot
+// access libraryID, the same response as an id with no row. It matches the
+// Kobo per-file rule, so a key cannot probe for books or files outside its
+// owner's libraries. Library paths use auth.RequireLibraryAccessFor instead.
+func requireEntityAccess(c echo.Context, libraryID int, resource string) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
-	return user.GetAccessibleLibraryIDs(), nil
+	if !user.HasLibraryAccess(libraryID) {
+		return errcodes.NotFound(resource)
+	}
+	return nil
 }
 
 // resolveSort returns the stored user-library sort preference for the
@@ -97,20 +102,19 @@ func (h *handler) resolveSort(ctx context.Context, apiKey *apikeys.APIKey, libra
 // Libraries lists all libraries the user has access to.
 func (h *handler) Libraries(c echo.Context) error {
 	ctx := c.Request().Context()
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
-	}
-
-	// Get user's accessible library IDs
-	libraryIDs, err := h.getUserLibraryIDs(c)
+	_, err := apikeys.RequireKey(c)
 	if err != nil {
 		return err
 	}
 
-	// List libraries
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+
+	// List the libraries the key's owner can access
 	libs, err := h.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{
-		LibraryIDs: libraryIDs,
+		LibraryIDs: user.GetAccessibleLibraryIDs(),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -152,9 +156,9 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	apiKey, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	// Parse query params
@@ -168,13 +172,8 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, libraryIDInt) {
-		return errcodes.Forbidden("Access to this library is denied")
 	}
 
 	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
@@ -213,9 +212,9 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	_, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
@@ -223,13 +222,8 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, libraryIDInt) {
-		return errcodes.Forbidden("Access to this library is denied")
 	}
 
 	// Get series for this library
@@ -258,9 +252,9 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	libraryID := c.Param("libraryId")
 	seriesID := c.Param("seriesId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	apiKey, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	// Parse query and filter params
@@ -279,13 +273,8 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		return errcodes.NotFound("Series")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, libraryIDInt) {
-		return errcodes.Forbidden("Access to this library is denied")
 	}
 
 	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
@@ -337,9 +326,9 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	_, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	libraryIDInt, err := strconv.Atoi(libraryID)
@@ -347,13 +336,8 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, libraryIDInt) {
-		return errcodes.Forbidden("Access to this library is denied")
 	}
 
 	// Get authors for this library (people with books in this library)
@@ -382,9 +366,9 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	libraryID := c.Param("libraryId")
 	authorID := c.Param("authorId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	apiKey, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	// Parse query and filter params
@@ -403,13 +387,8 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return errcodes.NotFound("Author")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, libraryIDInt) {
-		return errcodes.Forbidden("Access to this library is denied")
 	}
 
 	// Get author info, scoped to the library param so a person ID from a
@@ -468,9 +447,9 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	apiKey, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	query := c.QueryParam("q")
@@ -484,13 +463,8 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		return errcodes.NotFound("Library")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, libraryIDInt) {
-		return errcodes.Forbidden("Access to this library is denied")
 	}
 
 	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
@@ -536,9 +510,9 @@ func (h *handler) Download(c echo.Context) error {
 	ctx := c.Request().Context()
 	bookID := c.Param("bookId")
 	baseURL := h.baseURL(c)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	_, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	// Parse cover toggle
@@ -561,13 +535,8 @@ func (h *handler) Download(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := requireEntityAccess(c, book.LibraryID, "Book"); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, book.LibraryID) {
-		return errcodes.Forbidden("Access to this book is denied")
 	}
 
 	// Collect main files (exclude supplements)
@@ -630,9 +599,9 @@ func (h *handler) Download(c echo.Context) error {
 func (h *handler) Cover(c echo.Context) error {
 	ctx := c.Request().Context()
 	bookID := c.Param("bookId")
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	_, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	bookIDInt, err := strconv.Atoi(bookID)
@@ -651,13 +620,8 @@ func (h *handler) Cover(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := requireEntityAccess(c, book.LibraryID, "Book"); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, book.LibraryID) {
-		return errcodes.Forbidden("Access to this book is denied")
 	}
 
 	// Get the library to determine cover aspect ratio preference
@@ -675,9 +639,9 @@ func (h *handler) Cover(c echo.Context) error {
 func (h *handler) DownloadFile(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	_, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	fileID, err := strconv.Atoi(c.Param("fileId"))
@@ -692,13 +656,8 @@ func (h *handler) DownloadFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := requireEntityAccess(c, file.LibraryID, "File"); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, file.LibraryID) {
-		return errcodes.Forbidden("Access to this file is denied")
 	}
 
 	// Check if source file exists
@@ -753,9 +712,9 @@ func (h *handler) DownloadFile(c echo.Context) error {
 func (h *handler) DownloadFileKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	_, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
 
 	fileID, err := strconv.Atoi(c.Param("fileId"))
@@ -770,13 +729,8 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Check library access
-	libraryIDs, err := h.getUserLibraryIDs(c)
-	if err != nil {
+	if err := requireEntityAccess(c, file.LibraryID, "File"); err != nil {
 		return err
-	}
-	if libraryIDs != nil && !containsInt(libraryIDs, file.LibraryID) {
-		return errcodes.Forbidden("Access to this file is denied")
 	}
 
 	// Check if source file exists
@@ -983,15 +937,6 @@ func getBookCoverURL(baseURL string, book *models.Book) string {
 func hasBookCover(book *models.Book) bool {
 	for _, f := range book.Files {
 		if f.CoverImageFilename != nil && *f.CoverImageFilename != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func containsInt(slice []int, val int) bool {
-	for _, v := range slice {
-		if v == val {
 			return true
 		}
 	}

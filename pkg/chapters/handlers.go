@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -32,10 +33,8 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	chapters, err := h.chapterService.ListChapters(ctx, fileID)
@@ -66,10 +65,8 @@ func (h *handler) replace(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Validate chapters based on file type

@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -32,9 +33,9 @@ func newUserSettingsResponse(settings *models.UserSettings) UserSettingsResponse
 func (h *handler) getUserSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("Authentication required")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	settings, err := h.settingsService.GetUserSettings(ctx, user.ID)
@@ -48,9 +49,9 @@ func (h *handler) getUserSettings(c echo.Context) error {
 func (h *handler) updateUserSettings(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("Authentication required")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	var payload UserSettingsPayload

@@ -10,6 +10,7 @@ linters:
     - err113
     - errcheck
     - exhaustive
+    - forbidigo
     - gocheckcompilerdirectives
     - gocritic
     - godot
@@ -34,6 +35,16 @@ linters:
     - unused
     - whitespace
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        # The authenticated user lives under one echo context key that only
+        # pkg/auth reads and writes. A handler that reads it directly can skip
+        # the check when no user is set, so it uses auth.RequireUser,
+        # auth.RequireLibraryAccessFor, and auth.SetUser (tests) instead.
+        - pattern: ^echo\.Context\.(Get|Set)$
+          pkg: ^github\.com/labstack/echo/v4$
+          msg: use auth.RequireUser, auth.RequireLibraryAccessFor or auth.SetUser (apikeys.RequireKey for the API key) instead of reading or writing echo context values
     gocritic:
       disabled-checks:
         - appendAssign
@@ -63,6 +74,13 @@ linters:
       - linters:
           - revive
         text: avoid package names that conflict with Go standard library package names
+      # These packages own the echo context values they read and write.
+      - linters:
+          - forbidigo
+        path: ^pkg/(auth|apikeys|binder)/
+      - linters:
+          - forbidigo
+        path: ^pkg/server/http_middleware\.go$
       # Ignore a bunch of linters for test files.
       - linters:
           - err113

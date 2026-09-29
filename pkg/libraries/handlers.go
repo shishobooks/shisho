@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -117,11 +118,13 @@ func (h *handler) list(c echo.Context) error {
 		Offset: &params.Offset,
 	}
 
-	// Filter by user's library access if user is in context. A user with
-	// no library access gets an empty (non-nil) list, which lists nothing.
-	if user, ok := c.Get("user").(*models.User); ok {
-		opts.LibraryIDs = user.GetAccessibleLibraryIDs()
+	// Filter by the user's library access. A user with no library access
+	// gets an empty (non-nil) list, which lists nothing.
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
+	opts.LibraryIDs = user.GetAccessibleLibraryIDs()
 
 	libraries, total, err := h.libraryService.ListLibrariesWithTotal(ctx, opts)
 	if err != nil {
@@ -139,9 +142,9 @@ func (h *handler) list(c echo.Context) error {
 func (h *handler) listForUser(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("Authentication required")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	libraries, err := h.libraryService.ListLibraries(ctx, ListLibrariesOptions{

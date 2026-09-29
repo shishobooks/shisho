@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -40,10 +41,8 @@ func (h *handler) retrieve(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(series.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, series.LibraryID); err != nil {
+		return err
 	}
 
 	// Get book count
@@ -81,12 +80,13 @@ func (h *handler) list(c echo.Context) error {
 		Search:    params.Search,
 	}
 
-	// Filter by user's library access if user is in context
-	if user, ok := c.Get("user").(*models.User); ok {
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			opts.LibraryIDs = libraryIDs
-		}
+	// Filter by the user's library access
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+		opts.LibraryIDs = libraryIDs
 	}
 
 	seriesList, total, err := h.seriesService.ListSeriesWithTotal(ctx, opts)
@@ -140,10 +140,8 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(series.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, series.LibraryID); err != nil {
+		return err
 	}
 
 	// The name and aliases are copied into series_fts and into books_fts for
@@ -249,10 +247,8 @@ func (h *handler) seriesBooks(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(series.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, series.LibraryID); err != nil {
+		return err
 	}
 
 	booksList, total, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
@@ -293,10 +289,8 @@ func (h *handler) seriesCover(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(series.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, series.LibraryID); err != nil {
+		return err
 	}
 
 	// Get the library to determine cover aspect ratio preference
@@ -345,7 +339,10 @@ func (h *handler) merge(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	user, _ := c.Get("user").(*models.User)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
 	if err := merge.CheckPreconditions(user, "series",
 		merge.Side{ID: series.ID, LibraryID: series.LibraryID},
 		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
@@ -383,10 +380,8 @@ func (h *handler) deleteSeries(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(series.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, series.LibraryID); err != nil {
+		return err
 	}
 
 	// The member books' books_fts rows list the series name. The delete

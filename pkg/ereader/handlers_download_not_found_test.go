@@ -36,7 +36,7 @@ func TestDownloadFileHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			db := newTestDB(t)
+			db := setupEReaderDB(t)
 			ctx := context.Background()
 
 			var roleID int
@@ -85,8 +85,8 @@ func TestDownloadFileHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T
 
 			e := echo.New()
 			req := httptest.NewRequest(tt.method, "/", nil)
-			req = req.WithContext(keyContext(ctx, t, db, apiKey))
 			c := e.NewContext(req, httptest.NewRecorder())
+			withKey(c, t, db, apiKey)
 			c.SetParamNames("apiKey", "fileId")
 			c.SetParamValues(apiKey.Key, strconv.Itoa(file.ID))
 

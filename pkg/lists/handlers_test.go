@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +43,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.list(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -78,7 +79,7 @@ func TestRetrieve_ResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(list.ID))
 
@@ -120,7 +121,7 @@ func TestListBooks_ResponseUsesItemsKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(list.ID))
 
@@ -161,7 +162,7 @@ func TestCheckVisibility_ResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?user_id=1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(list.ID))
 

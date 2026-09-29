@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -12,9 +13,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/books/review"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -137,7 +140,7 @@ func TestReplaceChapters_TriggersReviewRecompute(t *testing.T) {
 		IsActive:      true,
 		LibraryAccess: []*models.UserLibraryAccess{{UserID: 0, LibraryID: &library.ID}},
 	}
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.replace(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -217,4 +220,46 @@ func TestValidateChapters_StartPage(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
+}
+
+// A handler reached with no user in context rejects the request with 401
+// instead of skipping the library access check. The route is registered
+// without the Authenticate middleware.
+func TestList_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	library := &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Audiobook",
+		Filepath:        t.TempDir(),
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Audiobook",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeM4B,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/tmp/audiobook.m4b",
+		FilesizeBytes: 1,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	h := &handler{chapterService: NewService(db), bookService: books.NewService(db)}
+	e := newTestEcho(t)
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET("/books/files/:id/chapters", h.list)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/books/files/%d/chapters", file.ID), nil))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -51,17 +52,12 @@ func (s *Service) CountUsers(ctx context.Context) (int, error) {
 
 // Authenticate validates credentials and returns the user if valid.
 func (s *Service) Authenticate(ctx context.Context, username, password string) (*models.User, error) {
-	user := &models.User{}
-	err := s.db.NewSelect().
-		Model(user).
-		Relation("Role").
-		Relation("Role.Permissions").
-		Relation("LibraryAccess").
-		Where("u.username = ? COLLATE NOCASE", username).
-		Where("u.is_active = ?", true).
-		Scan(ctx)
-	if err != nil {
+	user, err := LoadUser(ctx, s.db, LoadUserOptions{Username: &username})
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errcodes.Unauthorized("Invalid username or password")
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
@@ -114,21 +110,9 @@ func (s *Service) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return claims, nil
 }
 
-// GetUserByID retrieves a user by ID with relations.
+// GetUserByID retrieves an active user by ID with relations.
 func (s *Service) GetUserByID(ctx context.Context, id int) (*models.User, error) {
-	user := &models.User{}
-	err := s.db.NewSelect().
-		Model(user).
-		Relation("Role").
-		Relation("Role.Permissions").
-		Relation("LibraryAccess").
-		Where("u.id = ?", id).
-		Where("u.is_active = ?", true).
-		Scan(ctx)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return user, nil
+	return LoadUser(ctx, s.db, LoadUserOptions{ID: &id})
 }
 
 // CreateFirstAdmin creates the first admin user during setup.

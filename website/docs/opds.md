@@ -34,7 +34,9 @@ In a KePub catalog, EPUB and CBZ files are converted to KePub. M4B and PDF files
 
 OPDS uses HTTP Basic Authentication. Add the catalog with the same Shisho username and password used for the web interface. Use HTTPS whenever the catalog is reachable outside a trusted local network.
 
-The root catalog lists only libraries the authenticated user can access. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md).
+The user's role needs Books Read. Without it, every catalog feed, cover, and download returns `403 Forbidden`, the same rule [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs follow.
+
+The root catalog lists only libraries the authenticated user can access. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client.
 
 ## Catalog Structure
 

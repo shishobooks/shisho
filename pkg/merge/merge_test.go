@@ -30,7 +30,8 @@ func TestCheckPreconditions(t *testing.T) {
 		status int // 0 means no error
 	}{
 		{"valid", userWithAccess(1), Side{ID: 1, LibraryID: 1}, Side{ID: 2, LibraryID: 1}, 0},
-		{"no user skips access checks", nil, Side{ID: 1, LibraryID: 1}, Side{ID: 2, LibraryID: 1}, 0},
+		{"no user is unauthorized", nil, Side{ID: 1, LibraryID: 1}, Side{ID: 2, LibraryID: 1}, http.StatusUnauthorized},
+		{"no user self-merge is unauthorized", nil, Side{ID: 1, LibraryID: 1}, Side{ID: 1, LibraryID: 1}, http.StatusUnauthorized},
 		{"self", userWithAccess(1), Side{ID: 1, LibraryID: 1}, Side{ID: 1, LibraryID: 1}, http.StatusUnprocessableEntity},
 		{"target inaccessible", userWithAccess(2), Side{ID: 1, LibraryID: 1}, Side{ID: 2, LibraryID: 2}, http.StatusForbidden},
 		{"source inaccessible", userWithAccess(1), Side{ID: 1, LibraryID: 1}, Side{ID: 2, LibraryID: 2}, http.StatusForbidden},

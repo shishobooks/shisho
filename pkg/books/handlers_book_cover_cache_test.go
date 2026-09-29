@@ -33,6 +33,7 @@ func TestBookCover_SetsCacheControlImmutable(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(file.BookID))
 
@@ -67,6 +68,7 @@ func TestBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	setAllAccessUser(c1)
 	c1.SetParamNames("id")
 	c1.SetParamValues(strconv.Itoa(file.BookID))
 	require.NoError(t, h.bookCover(c1))
@@ -78,6 +80,7 @@ func TestBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req2.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	setAllAccessUser(c2)
 	c2.SetParamNames("id")
 	c2.SetParamValues(strconv.Itoa(file.BookID))
 	require.NoError(t, h.bookCover(c2))

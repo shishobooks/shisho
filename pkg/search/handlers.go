@@ -5,7 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -22,9 +22,9 @@ func (h *handler) globalSearch(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("Authentication required")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check library access

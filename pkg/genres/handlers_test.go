@@ -14,7 +14,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -83,6 +85,7 @@ func patchGenre(t *testing.T, h *handler, genreID int, payload UpdateGenrePayloa
 
 	e := newTestEcho(t)
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(genreID))
 
@@ -233,6 +236,7 @@ func TestBooks_DefaultPagination(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(genre.ID))
 
@@ -263,6 +267,7 @@ func TestBooks_ExplicitLimitOffset(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?limit=2&offset=1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(genre.ID))
 
@@ -294,6 +299,7 @@ func TestBooks_ResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
@@ -322,6 +328,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err := h.list(c)
 	require.NoError(t, err)
@@ -358,6 +365,7 @@ func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err = h.list(c)
 	require.NoError(t, err)
@@ -420,4 +428,33 @@ func TestUpdateGenre_RenameBackToOriginalName_FrontendSendsAliases(t *testing.T)
 	require.NoError(t, err)
 	assert.Contains(t, aliasList, "Sci-Fi", "previous name should be an alias")
 	assert.NotContains(t, aliasList, "Science Fiction", "alias matching new primary name should be removed")
+}
+
+// setAllAccessUser stands in for the Authenticate middleware in handler tests
+// that call a handler directly: a user with access to every library. The user
+// is not in the database and has no Role, so a test that checks permissions
+// or writes rows referencing the user must load a real one instead.
+func setAllAccessUser(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
+}
+
+// serveWithoutUser serves GET path through a router that registers the
+// handler without the Authenticate middleware, so no user is in context.
+func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path string) int {
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET(route, h)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec.Code
+}
+
+// A handler reached with no user in context rejects the request with 401
+// instead of skipping the library access check.
+func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	genre := seedGenreWithBooks(t, db, createTestLibrary(t, db), "Fiction", nil)
+
+	code := serveWithoutUser(newTestEcho(t), "/genres/:id", newTestHandler(t, db).retrieve, fmt.Sprintf("/genres/%d", genre.ID))
+	assert.Equal(t, http.StatusUnauthorized, code)
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func callGenreMerge(t *testing.T, h *handler, user *models.User, targetID, sourc
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(targetID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 	return h.merge(c)
 }
 

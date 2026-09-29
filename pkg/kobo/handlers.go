@@ -19,6 +19,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -91,13 +93,13 @@ func (h *handler) handleAuth(c echo.Context) error {
 func (h *handler) handleSync(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
-	apiKey := GetAPIKeyFromContext(ctx)
-	if apiKey == nil {
-		return errcodes.Unauthorized("API key not found")
+	apiKey, err := apikeys.RequireKey(c)
+	if err != nil {
+		return err
 	}
-	user := GetUserFromContext(ctx)
-	if user == nil {
-		return errcodes.Unauthorized("User not found or inactive")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 	scope := GetScopeFromContext(ctx)
 
@@ -240,10 +242,11 @@ func (h *handler) resolveSyncPoint(
 // requireFileInScope returns a 404 for a file outside the key's sync scope,
 // the same response as a file that does not exist, so a key cannot probe or
 // fetch files it does not sync. Kobo routes never return 403 for this.
-func (h *handler) requireFileInScope(ctx context.Context, fileID int) error {
-	user := GetUserFromContext(ctx)
-	if user == nil {
-		return errcodes.Unauthorized("User not found or inactive")
+func (h *handler) requireFileInScope(c echo.Context, fileID int) error {
+	ctx := c.Request().Context()
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 	inScope, err := h.service.FileInScope(ctx, user, GetScopeFromContext(ctx), fileID)
 	if err != nil {
@@ -266,7 +269,7 @@ func (h *handler) handleDownload(c echo.Context) error {
 	if !ok {
 		return proxyToKoboStore(c)
 	}
-	if err := h.requireFileInScope(ctx, fileID); err != nil {
+	if err := h.requireFileInScope(c, fileID); err != nil {
 		return err
 	}
 
@@ -324,7 +327,7 @@ func (h *handler) handleCover(c echo.Context) error {
 	if !ok {
 		return proxyToKoboStore(c)
 	}
-	if err := h.requireFileInScope(ctx, fileID); err != nil {
+	if err := h.requireFileInScope(c, fileID); err != nil {
 		return err
 	}
 
@@ -409,7 +412,7 @@ func (h *handler) handleMetadata(c echo.Context) error {
 	if !ok {
 		return proxyToKoboStore(c)
 	}
-	if err := h.requireFileInScope(ctx, fileID); err != nil {
+	if err := h.requireFileInScope(c, fileID); err != nil {
 		return err
 	}
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
@@ -98,7 +99,7 @@ func newIdentifyApplyServer(t *testing.T, tc *testContext) *echo.Echo {
 	store := books.NewPluginMetadataStore(tc.bookService)
 	g := e.Group("/plugins", func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			c.Set("user", &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
+			auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
 			return next(c)
 		}
 	})

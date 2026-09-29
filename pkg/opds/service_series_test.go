@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -115,7 +116,7 @@ func TestOPDSLibrarySeriesBooksHandlers_SeriesFromOtherLibrary_Returns404(t *tes
 		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 		c.SetParamNames("types", "libraryID", "seriesID")
 		c.SetParamValues(models.FileTypeEPUB, strconv.Itoa(libraryID), strconv.Itoa(s.ID))
-		c.Set("user", user)
+		auth.SetUser(c, user)
 		return rec, fn(c)
 	}
 

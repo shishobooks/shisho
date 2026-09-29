@@ -19,16 +19,20 @@ type Side struct {
 // Handlers retrieve both sides first, so a missing target or source is a 404
 // from the retrieve, and then call this before the merge:
 //
+//   - 401 when user is nil, so a handler reached without an authenticated
+//     user fails closed instead of skipping the access check.
 //   - 403 when the user cannot access the target's or the source's Library.
 //     The merge deletes the source, so both sides need access.
 //   - 422 when source and target are the same resource. A self-merge would
 //     delete the target and every link to it.
 //   - 422 when source and target belong to different Libraries.
 //
-// kind is the lowercase singular resource name used in the messages. A nil
-// user skips the access check, as handlers do when no user is in the context.
+// kind is the lowercase singular resource name used in the messages.
 func CheckPreconditions(user *models.User, kind string, target, source Side) error {
-	if user != nil && (!user.HasLibraryAccess(target.LibraryID) || !user.HasLibraryAccess(source.LibraryID)) {
+	if user == nil {
+		return errcodes.AuthenticationRequired()
+	}
+	if !user.HasLibraryAccess(target.LibraryID) || !user.HasLibraryAccess(source.LibraryID) {
 		return errcodes.Forbidden("You don't have access to this library")
 	}
 	if target.ID == source.ID {

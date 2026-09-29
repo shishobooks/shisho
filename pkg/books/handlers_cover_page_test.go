@@ -131,6 +131,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -222,6 +223,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -295,6 +297,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -359,6 +362,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -436,6 +440,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -462,6 +467,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues("99999")
 
@@ -533,6 +539,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		setAllAccessUser(c)
 		c.SetParamNames("id")
 		c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -616,6 +623,7 @@ func TestUploadFileCover_RejectsFileWithCoverPage(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(file.ID))
 
@@ -696,6 +704,7 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(file.ID))
 

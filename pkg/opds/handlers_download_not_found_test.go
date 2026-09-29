@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -83,7 +84,7 @@ func TestDownloadHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			c := e.NewContext(req, httptest.NewRecorder())
 			c.SetParamNames("id")
 			c.SetParamValues(strconv.Itoa(file.ID))
-			c.Set("user", user)
+			auth.SetUser(c, user)
 
 			if tt.kepub {
 				err = h.downloadKepub(c)

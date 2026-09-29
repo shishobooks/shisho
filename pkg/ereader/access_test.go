@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -68,14 +70,14 @@ func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 	return f
 }
 
-// keyContext returns ctx with apiKey and its owner, loaded from the database,
-// as APIKeyAuth stores them. Tests that call a handler directly use it.
-func keyContext(ctx context.Context, t *testing.T, db *bun.DB, apiKey *apikeys.APIKey) context.Context {
+// withKey stores apiKey and its owner, loaded from the database, in c as
+// APIKeyAuth does. Tests that call a handler directly use it.
+func withKey(c echo.Context, t *testing.T, db *bun.DB, apiKey *apikeys.APIKey) {
 	t.Helper()
-	owner, err := apikeys.NewService(db).AuthenticateOwner(ctx, apiKey)
+	owner, err := apikeys.NewService(db).AuthenticateOwner(context.Background(), apiKey)
 	require.NoError(t, err)
-	ctx = context.WithValue(ctx, contextKeyAPIKey, apiKey)
-	return context.WithValue(ctx, contextKeyUser, owner)
+	apikeys.SetKey(c, apiKey)
+	auth.SetUser(c, owner)
 }
 
 func (f *eReaderAccessFixture) serve(path string) *httptest.ResponseRecorder {
@@ -158,4 +160,54 @@ func TestResolveShortURL_InactiveOwner_Returns401(t *testing.T) {
 	rec := serveShort()
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Empty(t, rec.Header().Get(echo.HeaderLocation), "the key URL must not be revealed")
+}
+
+// A file, or a book, in a library the key's owner cannot access is not found,
+// the same rule Kobo applies to its per-file routes, so the id does not leak
+// whether it exists.
+func TestEReaderDownload_FileOutsideAccess_Returns404(t *testing.T) {
+	t.Parallel()
+	f := newEReaderAccessFixture(t)
+	ctx := context.Background()
+
+	// Narrow the owner to library A.
+	_, err := f.db.NewUpdate().Model((*models.UserLibraryAccess)(nil)).Set("library_id = ?", f.libA.ID).Where("user_id = ?", f.user.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	book := &models.Book{
+		LibraryID:       f.libB.ID,
+		Title:           "Secret Book",
+		Filepath:        dir,
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Secret Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+	}
+	_, err = f.db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+	file := &models.File{
+		LibraryID:     f.libB.ID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filepath.Join(dir, "secret.epub"),
+		FilesizeBytes: 1,
+	}
+	_, err = f.db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	for _, path := range []string{
+		fmt.Sprintf("/file/%d", file.ID),
+		fmt.Sprintf("/file/%d/kepub", file.ID),
+		fmt.Sprintf("/download/%d", book.ID),
+		fmt.Sprintf("/cover/%d", book.ID),
+	} {
+		rec := f.serve(path)
+		assert.Equal(t, http.StatusNotFound, rec.Code, path)
+		assert.NotContains(t, rec.Body.String(), "Secret Book", path)
+	}
+
+	// A library path outside the owner's access stays a 403.
+	assert.Equal(t, http.StatusForbidden, f.serve(fmt.Sprintf("/libraries/%d/all", f.libB.ID)).Code)
 }

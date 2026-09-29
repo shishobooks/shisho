@@ -10,9 +10,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
-	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 )
 
@@ -46,10 +46,8 @@ func (h *handler) retrieve(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(genre.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, genre.LibraryID); err != nil {
+		return err
 	}
 
 	// Get book count
@@ -80,12 +78,13 @@ func (h *handler) list(c echo.Context) error {
 		Search:    params.Search,
 	}
 
-	// Filter by user's library access if user is in context
-	if user, ok := c.Get("user").(*models.User); ok {
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			opts.LibraryIDs = libraryIDs
-		}
+	// Filter by the user's library access
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+		opts.LibraryIDs = libraryIDs
 	}
 
 	genres, total, err := h.genreService.ListGenresWithTotal(ctx, opts)
@@ -127,10 +126,8 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(genre.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, genre.LibraryID); err != nil {
+		return err
 	}
 
 	// The rename commits before SyncAliases runs, so the reindex is deferred
@@ -214,10 +211,8 @@ func (h *handler) books(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(genre.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, genre.LibraryID); err != nil {
+		return err
 	}
 
 	books, total, err := h.genreService.GetBooksPaginated(ctx, id, params.Limit, params.Offset)
@@ -256,7 +251,10 @@ func (h *handler) merge(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	user, _ := c.Get("user").(*models.User)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
 	if err := merge.CheckPreconditions(user, "genre",
 		merge.Side{ID: genre.ID, LibraryID: genre.LibraryID},
 		merge.Side{ID: source.ID, LibraryID: source.LibraryID},
@@ -292,10 +290,8 @@ func (h *handler) deleteGenre(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(genre.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, genre.LibraryID); err != nil {
+		return err
 	}
 
 	affectedBookIDs, err := h.genreService.DeleteGenre(ctx, id)

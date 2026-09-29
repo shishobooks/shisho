@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"encoding/base64"
 	"net/http"
 	"strconv"
@@ -9,16 +8,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/models"
-)
-
-// Context keys for storing user data.
-type contextKey string
-
-const (
-	ContextKeyUserID   contextKey = "user_id"
-	ContextKeyUsername contextKey = "username"
-	ContextKeyUser     contextKey = "user"
 )
 
 // Middleware provides authentication middleware.
@@ -44,7 +33,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		cookie, err := c.Cookie(CookieName)
 		if err != nil || cookie.Value == "" {
-			return errcodes.Unauthorized("Authentication required")
+			return errcodes.AuthenticationRequired()
 		}
 
 		claims, err := m.authService.ValidateToken(cookie.Value)
@@ -55,41 +44,15 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 		// Verify user still exists and is active
 		user, err := m.authService.GetUserByID(ctx, claims.UserID)
 		if err != nil {
-			return errcodes.Unauthorized("User not found or inactive")
+			return errcodes.UserInactive()
 		}
 
 		if user.MustChangePassword && !isSelfPasswordResetRequest(c, user.ID) {
 			return errcodes.PasswordResetRequired()
 		}
 
-		// Store user info in context
-		c.Set("user_id", user.ID)
-		c.Set("username", user.Username)
-		c.Set("user", user)
+		SetUser(c, user)
 
-		return next(c)
-	}
-}
-
-// AuthenticateOptional extracts user info if available but doesn't require authentication.
-// If a valid token is present, it verifies the user is still active.
-func (m *Middleware) AuthenticateOptional(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		ctx := c.Request().Context()
-
-		cookie, err := c.Cookie(CookieName)
-		if err == nil && cookie.Value != "" {
-			claims, err := m.authService.ValidateToken(cookie.Value)
-			if err == nil {
-				// Verify user still exists and is active
-				user, err := m.authService.GetUserByID(ctx, claims.UserID)
-				if err == nil {
-					c.Set("user_id", user.ID)
-					c.Set("username", user.Username)
-					c.Set("user", user)
-				}
-			}
-		}
 		return next(c)
 	}
 }
@@ -99,9 +62,9 @@ func (m *Middleware) AuthenticateOptional(next echo.HandlerFunc) echo.HandlerFun
 func (m *Middleware) RequirePermission(resource, operation string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			user, ok := c.Get("user").(*models.User)
-			if !ok {
-				return errcodes.Unauthorized("Authentication required")
+			user, err := RequireUser(c)
+			if err != nil {
+				return err
 			}
 
 			if !user.HasPermission(resource, operation) {
@@ -138,9 +101,9 @@ func (m *Middleware) RequireAnyPermission(permissions ...Permission) echo.Middle
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			user, ok := c.Get("user").(*models.User)
-			if !ok {
-				return errcodes.Unauthorized("Authentication required")
+			user, err := RequireUser(c)
+			if err != nil {
+				return err
 			}
 
 			for _, p := range permissions {
@@ -170,13 +133,8 @@ func (m *Middleware) RequireLibraryAccess(paramName string) echo.MiddlewareFunc 
 				return errcodes.NotFound("Library")
 			}
 
-			user, ok := c.Get("user").(*models.User)
-			if !ok {
-				return errcodes.Unauthorized("Authentication required")
-			}
-
-			if !user.HasLibraryAccess(libraryID) {
-				return errcodes.Forbidden("You don't have access to this library")
+			if err := RequireLibraryAccessFor(c, libraryID); err != nil {
+				return err
 			}
 
 			return next(c)
@@ -230,10 +188,7 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 			return respondBasicAuthRequired(c)
 		}
 
-		// Store user info in context
-		c.Set("user_id", user.ID)
-		c.Set("username", user.Username)
-		c.Set("user", user)
+		SetUser(c, user)
 
 		return next(c)
 	}
@@ -263,16 +218,4 @@ func isSelfPasswordResetRequest(c echo.Context, userID int) bool {
 func respondBasicAuthRequired(c echo.Context) error {
 	c.Response().Header().Set("WWW-Authenticate", `Basic realm="Shisho OPDS"`)
 	return c.String(http.StatusUnauthorized, "Unauthorized")
-}
-
-// GetUserFromContext retrieves the user from the context.
-func GetUserFromContext(ctx context.Context) *models.User {
-	user, _ := ctx.Value(ContextKeyUser).(*models.User)
-	return user
-}
-
-// GetUserIDFromContext retrieves the user ID from the Echo context.
-func GetUserIDFromContext(c echo.Context) (int, bool) {
-	userID, ok := c.Get("user_id").(int)
-	return userID, ok
 }

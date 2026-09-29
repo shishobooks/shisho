@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +80,7 @@ func TestSetFileReview_SetsOverride(t *testing.T) {
 
 	// Create user with library access
 	user := setupTestUser(t, db, library.ID, true)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err = h.setFileReview(c)
 	require.NoError(t, err)
@@ -160,7 +161,7 @@ func TestSetFileReview_ClearsOverride(t *testing.T) {
 
 	// Create user with library access
 	user := setupTestUser(t, db, library.ID, true)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err = h.setFileReview(c)
 	require.NoError(t, err)
@@ -227,7 +228,7 @@ func TestSetFileReview_RejectsSupplement(t *testing.T) {
 	c.SetParamValues(strconv.Itoa(supplement.ID))
 
 	user := setupTestUser(t, db, library.ID, true)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err = h.setFileReview(c)
 	require.Error(t, err, "expected supplement override to be rejected")
@@ -294,7 +295,7 @@ func TestSetBookReview_CascadesToAllFiles(t *testing.T) {
 	c.SetParamValues(strconv.Itoa(book.ID))
 
 	user := setupTestUser(t, db, library.ID, true)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.setBookReview(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -362,7 +363,7 @@ func TestBulkSetReview_AppliesToAllSpecifiedBooks(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	user := setupTestUser(t, db, library.ID, true)
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.bulkSetReview(c))
 	assert.Equal(t, http.StatusNoContent, rec.Code)

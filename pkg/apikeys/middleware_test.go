@@ -1,48 +1,22 @@
-package ereader
+package apikeys
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
-	"github.com/shishobooks/shisho/pkg/migrations"
+	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
-
-func newTestDB(t *testing.T) *bun.DB {
-	t.Helper()
-
-	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
-	require.NoError(t, err)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
-
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		db.Close()
-	})
-
-	return db
-}
 
 func TestMiddleware_ApiKeyAuth(t *testing.T) {
 	t.Parallel()
 	db := newTestDB(t)
-	apiKeyService := apikeys.NewService(db)
+	apiKeyService := NewService(db)
 	mw := NewMiddleware(apiKeyService)
 	ctx := context.Background()
 
@@ -53,7 +27,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 	// Create API key with permission
 	apiKey, err := apiKeyService.Create(ctx, 1, "Test Key")
 	require.NoError(t, err)
-	apiKey, err = apiKeyService.AddPermission(ctx, 1, apiKey.ID, apikeys.PermissionEReaderBrowser)
+	apiKey, err = apiKeyService.AddPermission(ctx, 1, apiKey.ID, PermissionEReaderBrowser)
 	require.NoError(t, err)
 
 	e := echo.New()
@@ -66,11 +40,14 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 		c.SetParamNames("apiKey")
 		c.SetParamValues(apiKey.Key)
 
-		handler := mw.APIKeyAuth(apikeys.PermissionEReaderBrowser)(func(c echo.Context) error {
-			// Verify API key is in context
-			ctxKey := GetAPIKeyFromContext(c.Request().Context())
-			assert.NotNil(t, ctxKey)
+		handler := mw.APIKeyAuth(PermissionEReaderBrowser)(func(c echo.Context) error {
+			// The key and its owner are in context
+			ctxKey, err := RequireKey(c)
+			require.NoError(t, err)
 			assert.Equal(t, apiKey.ID, ctxKey.ID)
+			owner, err := auth.RequireUser(c)
+			require.NoError(t, err)
+			assert.Equal(t, 1, owner.ID)
 			return c.String(http.StatusOK, "success")
 		})
 
@@ -87,7 +64,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 		c.SetParamNames("apiKey")
 		c.SetParamValues("invalid")
 
-		handler := mw.APIKeyAuth(apikeys.PermissionEReaderBrowser)(func(c echo.Context) error {
+		handler := mw.APIKeyAuth(PermissionEReaderBrowser)(func(c echo.Context) error {
 			return c.String(http.StatusOK, "success")
 		})
 
@@ -98,7 +75,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 	t.Run("key without required permission", func(t *testing.T) {
 		// Create a fresh DB for this subtest to avoid race conditions
 		subDB := newTestDB(t)
-		subAPIKeyService := apikeys.NewService(subDB)
+		subAPIKeyService := NewService(subDB)
 		subCtx := context.Background()
 
 		// Create test user
@@ -119,7 +96,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 		c.SetParamNames("apiKey")
 		c.SetParamValues(keyWithoutPerm.Key)
 
-		handler := subMW.APIKeyAuth(apikeys.PermissionEReaderBrowser)(func(c echo.Context) error {
+		handler := subMW.APIKeyAuth(PermissionEReaderBrowser)(func(c echo.Context) error {
 			return c.String(http.StatusOK, "success")
 		})
 
@@ -135,7 +112,7 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 		c.SetParamNames("apiKey")
 		c.SetParamValues("")
 
-		handler := mw.APIKeyAuth(apikeys.PermissionEReaderBrowser)(func(c echo.Context) error {
+		handler := mw.APIKeyAuth(PermissionEReaderBrowser)(func(c echo.Context) error {
 			return c.String(http.StatusOK, "success")
 		})
 
@@ -144,9 +121,38 @@ func TestMiddleware_ApiKeyAuth(t *testing.T) {
 	})
 }
 
-func TestGetAPIKeyFromContext_Empty(t *testing.T) {
+func TestRequireKey_NoKey_Returns401(t *testing.T) {
 	t.Parallel()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+	key, err := RequireKey(c)
+	assert.Nil(t, key)
+	var ec *errcodes.Error
+	require.ErrorAs(t, err, &ec)
+	assert.Equal(t, http.StatusUnauthorized, ec.HTTPCode)
+}
+
+// Each route family words the 403 for a key without its permission.
+func TestMiddleware_APIKeyAuth_PermissionDeniedMessage(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	service := NewService(db)
 	ctx := context.Background()
-	apiKey := GetAPIKeyFromContext(ctx)
-	assert.Nil(t, apiKey)
+	_, err := db.ExecContext(ctx, `INSERT INTO users (id, username, password_hash, role_id) VALUES (1, 'testuser', 'hash', 1)`)
+	require.NoError(t, err)
+	key, err := service.Create(ctx, 1, "No Perm Key")
+	require.NoError(t, err)
+
+	for permission, message := range map[string]string{
+		PermissionKoboSync:       "This API key does not allow Kobo sync access.",
+		PermissionEReaderBrowser: "This API key lacks the required permission.",
+	} {
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+		c.SetParamNames("apiKey")
+		c.SetParamValues(key.Key)
+		err := NewMiddleware(service).APIKeyAuth(permission)(func(echo.Context) error { return nil })(c)
+		var ec *errcodes.Error
+		require.ErrorAs(t, err, &ec)
+		assert.Equal(t, http.StatusForbidden, ec.HTTPCode)
+		assert.Equal(t, message, ec.Message)
+	}
 }

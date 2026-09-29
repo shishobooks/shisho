@@ -23,7 +23,7 @@ import (
 func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -102,12 +102,11 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	}
 
 	// Inject API key into context (as middleware would do).
-	apiKeyCtx := keyContext(ctx, t, db, apiKey)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(apiKeyCtx)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	withKey(c, t, db, apiKey)
 	c.SetParamNames("bookId")
 	c.SetParamValues(strconv.Itoa(book.ID))
 
@@ -127,7 +126,7 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	t.Parallel()
 
-	db := newTestDB(t)
+	db := setupEReaderDB(t)
 	ctx := context.Background()
 	e := echo.New()
 
@@ -204,13 +203,11 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 		libraryService: libraryService,
 	}
 
-	apiKeyCtx := keyContext(ctx, t, db, apiKey)
-
 	// First GET to capture the ETag.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
-	req1 = req1.WithContext(apiKeyCtx)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
+	withKey(c1, t, db, apiKey)
 	c1.SetParamNames("bookId")
 	c1.SetParamValues(strconv.Itoa(book.ID))
 	require.NoError(t, h.Cover(c1))
@@ -219,10 +216,10 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 
 	// Revalidate with If-None-Match.
 	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
-	req2 = req2.WithContext(apiKeyCtx)
 	req2.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
+	withKey(c2, t, db, apiKey)
 	c2.SetParamNames("bookId")
 	c2.SetParamValues(strconv.Itoa(book.ID))
 	require.NoError(t, h.Cover(c2))

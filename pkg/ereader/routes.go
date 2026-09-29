@@ -19,7 +19,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	seriesService := series.NewService(db)
 	peopleService := people.NewService(db)
 
-	mw := NewMiddleware(apiKeyService)
+	mw := apikeys.NewMiddleware(apiKeyService)
 	h := newHandler(libraryService, bookService, seriesService, peopleService, downloadCache, settings.NewService(db))
 
 	// Short URL resolution (no auth required - the short code IS the auth)

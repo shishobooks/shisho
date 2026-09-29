@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/covers"
@@ -131,10 +132,8 @@ func (h *handler) retrieve(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	aspectRatio := ""
@@ -198,20 +197,20 @@ func (h *handler) list(c echo.Context) error {
 		ReviewedFilter: reviewedFilter,
 	}
 
-	// Filter by user's library access if user is in context.
-	user, _ := c.Get("user").(*models.User)
-	if user != nil {
-		libraryIDs := user.GetAccessibleLibraryIDs()
-		if libraryIDs != nil {
-			opts.LibraryIDs = libraryIDs
-		}
+	// Filter by the user's library access.
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+		opts.LibraryIDs = libraryIDs
 	}
 
 	// Resolve the sort: explicit param wins, then stored per-(user, library)
 	// preference, then nil (service applies its hard-coded default). The
 	// resolver is only consulted when scoped to a single library — there is
 	// no natural "stored sort" for a multi-library or all-libraries listing.
-	if user != nil && params.LibraryID != nil {
+	if params.LibraryID != nil {
 		opts.Sort = sortspec.ResolveForLibrary(ctx, h.settingsService, user.ID, *params.LibraryID, explicitSort)
 	} else {
 		opts.Sort = explicitSort
@@ -262,10 +261,8 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	// The edit can change the Book's title, authors, series, and file paths,
@@ -760,10 +757,8 @@ func (h *handler) updateFile(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Get the library to check OrganizeFileStructure
@@ -1446,10 +1441,8 @@ func (h *handler) fileCover(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	coverPath := covers.FileCoverPath(file)
@@ -1503,10 +1496,8 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Page-based formats (CBZ, PDF) derive their cover from page content and
@@ -1629,10 +1620,8 @@ func (h *handler) bookCover(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	// Get the library to determine cover aspect ratio preference
@@ -1669,10 +1658,8 @@ func (h *handler) downloadFile(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Get the full book with relations for generation
@@ -1740,10 +1727,8 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Check if the file exists
@@ -1777,10 +1762,8 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Get the full book with relations for generation
@@ -1853,10 +1836,8 @@ func (h *handler) resyncFile(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Perform resync
@@ -1907,10 +1888,8 @@ func (h *handler) resyncBook(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	// Perform resync
@@ -1956,10 +1935,8 @@ func (h *handler) getPage(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Only CBZ and PDF files have pages
@@ -2024,10 +2001,8 @@ func (h *handler) streamFile(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Check if file exists on disk
@@ -2113,9 +2088,9 @@ func (h *handler) bookLists(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Verify book exists and user has library access
@@ -2143,9 +2118,9 @@ func (h *handler) updateBookLists(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Verify book exists and user has library access
@@ -2197,9 +2172,8 @@ func (h *handler) moveFiles(c echo.Context) error {
 	}
 
 	// Check library access
-	user, ok := c.Get("user").(*models.User)
-	if ok && !user.HasLibraryAccess(sourceBook.LibraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
+	if err := auth.RequireLibraryAccessFor(c, sourceBook.LibraryID); err != nil {
+		return err
 	}
 
 	// Bind payload
@@ -2297,9 +2271,8 @@ func (h *handler) mergeBooks(c echo.Context) error {
 	}
 
 	// Check library access
-	user, ok := c.Get("user").(*models.User)
-	if ok && !user.HasLibraryAccess(targetBook.LibraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
+	if err := auth.RequireLibraryAccessFor(c, targetBook.LibraryID); err != nil {
+		return err
 	}
 
 	// Validate source books exist and are in same library, collect all file IDs
@@ -2396,10 +2369,8 @@ func (h *handler) deleteBook(c echo.Context) error {
 	}
 
 	// Check library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	// Load library for deletion config
@@ -2444,10 +2415,8 @@ func (h *handler) deleteFile(c echo.Context) error {
 	}
 
 	// Check user has library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(file.LibraryID) {
-			return errcodes.Forbidden("You do not have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
 	}
 
 	// Load library
@@ -2526,10 +2495,8 @@ func (h *handler) deleteBooks(c echo.Context) error {
 	}
 
 	// Check user has library access
-	if user, ok := c.Get("user").(*models.User); ok {
-		if !user.HasLibraryAccess(book.LibraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
-		}
+	if err := auth.RequireLibraryAccessFor(c, book.LibraryID); err != nil {
+		return err
 	}
 
 	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{ID: &book.LibraryID})

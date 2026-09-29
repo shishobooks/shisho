@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -42,7 +43,7 @@ func callSeriesHandler(t *testing.T, fn echo.HandlerFunc, user *models.User, id 
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(id))
 	if user != nil {
-		c.Set("user", user)
+		auth.SetUser(c, user)
 	}
 	return fn(c)
 }

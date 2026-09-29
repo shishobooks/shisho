@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/pkg/errors"
@@ -124,18 +125,14 @@ func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.U
 	return s.Retrieve(ctx, user.ID)
 }
 
-// Retrieve gets a user by ID.
+// Retrieve gets a user by ID, active or not.
 func (s *Service) Retrieve(ctx context.Context, id int) (*models.User, error) {
-	user := &models.User{}
-	err := s.db.NewSelect().
-		Model(user).
-		Relation("Role").
-		Relation("Role.Permissions").
-		Relation("LibraryAccess").
-		Where("u.id = ?", id).
-		Scan(ctx)
-	if err != nil {
+	user, err := auth.LoadUser(ctx, s.db, auth.LoadUserOptions{ID: &id, IncludeInactive: true})
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errcodes.NotFound("User")
+	}
+	if err != nil {
+		return nil, err
 	}
 	return user, nil
 }

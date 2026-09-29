@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +51,7 @@ func setupTestHandler(t *testing.T) (*handler, *bun.DB, *echo.Echo) {
 }
 
 func setUserInContext(c echo.Context, user *models.User) {
-	c.Set("user", user)
+	auth.SetUser(c, user)
 }
 
 func TestHandler_List(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -27,6 +28,14 @@ func eventFilterFor(user *models.User) EventFilter {
 }
 
 func (h *handler) stream(c echo.Context) error {
+	// Authenticate stores the user with its role and permissions loaded. The
+	// filter is fixed for the life of the connection, so a permission change
+	// applies when the client reconnects.
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+
 	w := c.Response()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -38,10 +47,6 @@ func (h *handler) stream(c echo.Context) error {
 		return errors.New("streaming not supported")
 	}
 
-	// Authenticate stores the user with its role and permissions loaded. The
-	// filter is fixed for the life of the connection, so a permission change
-	// applies when the client reconnects.
-	user, _ := c.Get("user").(*models.User)
 	ch := h.broker.SubscribeFiltered(eventFilterFor(user))
 	defer h.broker.Unsubscribe(ch)
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -150,7 +151,7 @@ func newApplyEchoContext(t *testing.T, fields map[string]any) echo.Context {
 	c := e.NewContext(req, rec)
 
 	// User with access to all libraries (nil LibraryID)
-	c.Set("user", &models.User{
+	auth.SetUser(c, &models.User{
 		ID:            1,
 		LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}},
 	})
@@ -232,7 +233,7 @@ func TestApplyMetadata_WhitespaceFileNameClearsAndOrganizes(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.Set("user", &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
 
 	err = h.applyMetadata(c)
 	require.NoError(t, err)
@@ -475,7 +476,7 @@ func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	c := e.NewContext(req, httptest.NewRecorder())
-	c.Set("user", &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}}})
 
 	err = h.applyMetadata(c)
 	require.NoError(t, err)
@@ -639,7 +640,7 @@ func TestApplyMetadata_ExplicitFileName_AppliesToSupplement(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", &models.User{
+	auth.SetUser(c, &models.User{
 		ID:            1,
 		LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}},
 	})
@@ -767,7 +768,7 @@ func newApplyEchoContextWithFileName(t *testing.T, fields map[string]any, fileNa
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("user", &models.User{
+	auth.SetUser(c, &models.User{
 		ID:            1,
 		LibraryAccess: []*models.UserLibraryAccess{{LibraryID: nil}},
 	})

@@ -69,6 +69,7 @@ func getSeriesBooks(t *testing.T, h *handler, seriesID int, query string) *httpt
 	req := httptest.NewRequest(http.MethodGet, "/"+query, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(seriesID))
 

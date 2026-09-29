@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -24,9 +25,9 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	opts := ListListsOptions{
@@ -82,9 +83,9 @@ func (h *handler) retrieve(c echo.Context) error {
 		return errcodes.NotFound("List")
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check view permission
@@ -122,9 +123,9 @@ func (h *handler) create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	defaultSort := ""
@@ -159,9 +160,9 @@ func (h *handler) update(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check manage permission
@@ -219,9 +220,9 @@ func (h *handler) delete(c echo.Context) error {
 		return errcodes.NotFound("List")
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Only owner can delete
@@ -256,9 +257,9 @@ func (h *handler) listBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check view permission
@@ -322,9 +323,9 @@ func (h *handler) addBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check edit permission
@@ -378,9 +379,9 @@ func (h *handler) removeBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check edit permission
@@ -416,9 +417,9 @@ func (h *handler) reorderBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check edit permission
@@ -451,9 +452,9 @@ func (h *handler) listShares(c echo.Context) error {
 		return errcodes.NotFound("List")
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check manage permission to view shares
@@ -486,9 +487,9 @@ func (h *handler) createShare(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check manage permission
@@ -564,9 +565,9 @@ func (h *handler) updateShare(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check manage permission
@@ -599,9 +600,9 @@ func (h *handler) deleteShare(c echo.Context) error {
 		return errcodes.NotFound("Share")
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check manage permission
@@ -634,9 +635,9 @@ func (h *handler) checkVisibility(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check manage permission
@@ -667,9 +668,9 @@ func (h *handler) createFromTemplate(c echo.Context) error {
 
 	templateName := c.Param("name")
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	var name, description string
@@ -744,9 +745,9 @@ func (h *handler) moveBookPosition(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
 	// Check edit permission

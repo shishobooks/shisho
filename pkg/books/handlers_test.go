@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/robinjoseph08/golib/pointerutil"
@@ -24,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
@@ -57,7 +60,7 @@ func setupTestDB(t *testing.T) *bun.DB {
 }
 
 func setUserInContext(c echo.Context, user *models.User) {
-	c.Set("user", user)
+	auth.SetUser(c, user)
 }
 
 // userContextHandler wraps an Echo instance to inject user context without modifying the Echo middleware chain.
@@ -2570,4 +2573,29 @@ func TestUpdateFile_PreservesSourceForUnnormalizedStoredIdentifier(t *testing.T)
 	require.Len(t, stored, 1)
 	assert.Equal(t, "B01ABC1234", stored[0].Value)
 	assert.Equal(t, pluginSource, stored[0].Source, "an unchanged entry keeps its source regardless of stored formatting")
+}
+
+// setAllAccessUser stands in for the Authenticate middleware in handler tests
+// that call a handler directly: a user with access to every library. The user
+// is not in the database and has no Role, so a test that checks permissions
+// or writes rows referencing the user must load a real one instead.
+func setAllAccessUser(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
+}
+
+// A handler reached with no user in context rejects the request with 401
+// instead of skipping the library access check. The route is registered
+// without the Authenticate middleware.
+func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	db := setupBooksTestDB(t)
+	book := seedBook(t, db, seedLibrary(t, db, "Library"), "Title", "Title", time.Now())
+	h := &handler{bookService: NewService(db), libraryService: libraries.NewService(db)}
+
+	e := newTestEchoBooks(t)
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET("/books/:id", h.retrieve)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/books/%d", book.ID), nil))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }

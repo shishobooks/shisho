@@ -14,7 +14,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -233,6 +235,7 @@ func TestFiles_DefaultPagination(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pub.ID))
 
@@ -267,6 +270,7 @@ func TestFiles_ExplicitLimitOffset(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?limit=2&offset=1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pub.ID))
 
@@ -301,6 +305,7 @@ func TestFiles_ResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pub.ID))
 
@@ -339,6 +344,7 @@ func TestRetrieve_IncludesAncestorsAndDescendants(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(middle.ID))
 
@@ -392,6 +398,7 @@ func TestUpdate_SetParent(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(child.ID))
 
@@ -427,6 +434,7 @@ func TestUpdate_ClearParent(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(child.ID))
 
@@ -462,6 +470,7 @@ func TestUpdate_CycleRejected(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pubA.ID))
 
@@ -487,6 +496,7 @@ func TestList_ResponseUsesItemsKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err := h.list(c)
 	require.NoError(t, err)
@@ -527,6 +537,7 @@ func TestList_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err = h.list(c)
 	require.NoError(t, err)
@@ -579,6 +590,7 @@ func TestRetrieve_ResponseAliasesSerializeAsStringArray(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pub.ID))
 
@@ -640,6 +652,7 @@ func TestFiles_IncludesDescendantPublisherFiles(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(parent.ID))
 
@@ -704,6 +717,7 @@ func TestRetrieve_FileCountIncludesDescendants(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(root.ID))
 
@@ -742,6 +756,7 @@ func TestSetChild_Success(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(parent.ID))
 
@@ -779,6 +794,7 @@ func TestSetChild_CycleRejected(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pubB.ID))
 
@@ -804,6 +820,7 @@ func TestSetChild_SamePublisherRejected(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pub.ID))
 
@@ -838,7 +855,7 @@ func TestSetChild_LibraryAccessEnforced(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(parent.ID))
-	c.Set("user", user)
+	auth.SetUser(c, user)
 
 	err = h.setChild(c)
 	require.Error(t, err)
@@ -874,6 +891,7 @@ func TestUpdate_RenameTriggersmerge_ParentIDStillApplied(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(source.ID))
 
@@ -989,6 +1007,7 @@ func TestRetrieve_IncludesChildrenAndDescendantFileCount(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(parent.ID))
 
@@ -1075,6 +1094,7 @@ func TestList_IncludesHierarchyCounts(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 
 	err = h.list(c)
 	require.NoError(t, err)
@@ -1144,6 +1164,7 @@ func TestUpdate_SetParentByName_CreatesNewPublisher(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(child.ID))
 
@@ -1184,6 +1205,7 @@ func TestUpdate_SetParentByName_ReusesExistingPublisher(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(child.ID))
 
@@ -1217,10 +1239,40 @@ func TestUpdate_SetParentByName_RejectsSelfReference(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
 	c.SetParamNames("id")
 	c.SetParamValues(strconv.Itoa(pub.ID))
 
 	err = h.update(c)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cycle")
+}
+
+// setAllAccessUser stands in for the Authenticate middleware in handler tests
+// that call a handler directly: a user with access to every library. The user
+// is not in the database and has no Role, so a test that checks permissions
+// or writes rows referencing the user must load a real one instead.
+func setAllAccessUser(c echo.Context) {
+	auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
+}
+
+// serveWithoutUser serves GET path through a router that registers the
+// handler without the Authenticate middleware, so no user is in context.
+func serveWithoutUser(e *echo.Echo, route string, h echo.HandlerFunc, path string) int {
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET(route, h)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec.Code
+}
+
+// A handler reached with no user in context rejects the request with 401
+// instead of skipping the library access check.
+func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
+	t.Parallel()
+	db := setupHandlerTestDB(t)
+	publisher := seedPublisherWithFiles(t, db, createTestLibrary(t, db), "Publisher", nil)
+
+	code := serveWithoutUser(newTestEcho(t), "/publishers/:id", newTestHandler(db).retrieve, fmt.Sprintf("/publishers/%d", publisher.ID))
+	assert.Equal(t, http.StatusUnauthorized, code)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -34,16 +35,16 @@ func (h *handler) requireBookAccess(c echo.Context) (bookAccess, error) {
 	if err != nil {
 		return bookAccess{}, errcodes.NotFound("Book")
 	}
-	user, ok := c.Get("user").(*models.User)
-	if !ok {
-		return bookAccess{}, errcodes.Unauthorized("User not found in context")
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return bookAccess{}, err
 	}
 	libraryID, err := h.service.BookLibraryID(c.Request().Context(), bookID)
 	if err != nil {
 		return bookAccess{}, err
 	}
-	if !user.HasLibraryAccess(libraryID) {
-		return bookAccess{}, errcodes.Forbidden("You don't have access to this library")
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
+		return bookAccess{}, err
 	}
 	return bookAccess{bookID: bookID, libraryID: libraryID, user: user}, nil
 }

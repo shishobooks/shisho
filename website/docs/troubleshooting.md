@@ -106,11 +106,11 @@ Do not delete the database or its related files to clear a lock. Back it up befo
 
 **Symptom:** An OPDS client rejects the catalog or opens the root catalog but receives `401 Unauthorized` on a sub-feed or download.
 
-**Likely cause:** The client has incorrect Shisho credentials, the user lacks access to the library, or an HTTP-to-HTTPS redirect caused the client to drop its Basic Authentication header.
+**Likely cause:** The client has incorrect Shisho credentials, or an HTTP-to-HTTPS redirect caused the client to drop its Basic Authentication header. A `403 Forbidden` instead means the credentials worked, but the user's role lacks Books Read or the user cannot access that library.
 
-**Verify:** Use the exact catalog URL and the same username and password used for Shisho. Confirm the user can access the target library. Check generated sub-feed links for the wrong scheme and inspect the proxy's `X-Forwarded-Proto` handling.
+**Verify:** Use the exact catalog URL and the same username and password used for Shisho. For a `403`, check the user's role and library access. Check generated sub-feed links for the wrong scheme and inspect the proxy's `X-Forwarded-Proto` handling.
 
-**Fix:** Correct the credentials or library access. Behind an HTTPS-terminating proxy, forward `X-Forwarded-Proto: https` over a connection Shisho trusts so generated feed links stay on HTTPS. See [OPDS Catalog](./opds.md#repeated-login-prompts-or-401-responses), [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies), and [Users and Permissions](./users-and-permissions.md).
+**Fix:** Correct the credentials, or for a `403`, the role or library access. Behind an HTTPS-terminating proxy, forward `X-Forwarded-Proto: https` over a connection Shisho trusts so generated feed links stay on HTTPS. See [OPDS Catalog](./opds.md#repeated-login-prompts-or-401-responses), [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies), and [Users and Permissions](./users-and-permissions.md).
 
 ## Kobo Sync or the eReader Browser Cannot Connect
 
