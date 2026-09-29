@@ -70,7 +70,7 @@ The rule runs only when the PDF is first created in Shisho. Existing PDFs are no
 
 ## Managing Supplements
 
-Changing file roles requires **Books Write** permission and access to the book's library. See [Users and Permissions](./users-and-permissions.md).
+Changing file roles requires the Books Write permission and access to the book's library. See [Users and Permissions](./users-and-permissions.md).
 
 :::warning
 Demoting a main file clears its extracted format metadata, including its cover and chapters, but does not delete the media file from disk. Verify that the metadata can be recovered from the source or a backup before demoting. Leave the file as main if you only need to download it normally.
@@ -80,8 +80,8 @@ You can:
 
 - Download a supplement.
 - Give it a display name. The name you set replaces the filename as its label.
-- **Promote** a supported supplement to a main file. Promotion triggers metadata extraction for that format.
-- **Demote** a main file to a supplement. Demotion clears its format-specific metadata.
+- Promote a supported supplement to a main file. In the file's **Edit File** dialog, set **File Role** to **Main File** and select **Save Changes**. Promotion triggers metadata extraction for that format.
+- Demote a main file to a supplement. Set **File Role** to **Supplement**, then select **Save Changes** twice to confirm. Demotion clears its format-specific metadata.
 
 Supplements are excluded from Kobo Sync and normal bulk-download selection. They are also excluded from surfaces that distribute main reading files, even if the supplement itself uses EPUB, CBZ, M4B, or PDF.
 

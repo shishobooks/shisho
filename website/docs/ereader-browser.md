@@ -24,7 +24,17 @@ The short URL is reusable for 30 minutes. Opening it redirects to a full URL und
 The redirected full URL contains the device API key. Treat it like a password. Do not share it, publish it, include it in screenshots, or bookmark it on a device you do not control. Removing the device under **Security** revokes the URL and cannot be undone. If access may be needed later, keep the device entry and protect its URL instead.
 :::
 
-Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. The full URL remains valid until the device is removed from Shisho and its API key is revoked.
+Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL.
+
+### How Long the URL Works
+
+The full URL keeps working only while all three of these hold. The same rules apply to a [Kobo Sync](./kobo-sync.md) URL.
+
+- The device still appears under **Security**. Removing it revokes the URL permanently.
+- The device owner's account is active. A [deactivated](./users-and-permissions.md#deactivate-users) owner's URL returns an unauthorized response.
+- The owner's role has Books Read. Without it, the URL returns a forbidden response, and it works again once Books Read is restored.
+
+The short setup URL refuses to redirect in the same cases.
 
 ## Features
 
@@ -34,7 +44,7 @@ The current browser provides:
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
 - EPUB, CBZ, M4B, and PDF type filters.
 - Book details and a separate download for every main-file edition.
-- The user's saved per-library sort on **All Books**, author, and search results, or **Date Added, Newest First** when none is saved. Series books follow series-number order.
+- The user's saved per-library [sort](./browsing-search-bulk-actions.md#gallery-sort) on **All Books**, author, and search results. Series books follow series-number order.
 - An optional cover toggle.
 
 Supplement files are not offered as book downloads. See [Libraries, Scanning, and File Organization](./libraries.md), [Browsing, Search, and Bulk Actions](./browsing-search-bulk-actions.md), and [Supported Formats](./supported-formats.md).
@@ -57,15 +67,15 @@ Covers are off by default. Leave them off on slow devices or networks to reduce 
 
 **Fix:** Keep using a valid full bookmark, or open the device's **Setup** dialog and generate another short URL.
 
-### The Bookmark Returns Unauthorized
+### The Bookmark Stops Working
 
-**Symptom:** A previously working bookmark returns an unauthorized response.
+**Symptom:** A previously working bookmark returns an unauthorized or forbidden response.
 
-**Likely cause:** The bookmark is incomplete or the device was removed and its API key was revoked.
+**Likely cause:** The bookmark is incomplete, the device was removed, the owner was deactivated, or the owner's role lost Books Read. See [How Long the URL Works](#how-long-the-url-works).
 
-**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that the device still appears under **Security**.
+**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that the device still appears under **Security**. Ask an administrator to check the owner's account status and role under **Settings > Users**.
 
-**Fix:** If the device was removed, add it again and replace the bookmark. The old key cannot be restored.
+**Fix:** If the device was removed, add it again and replace the bookmark. The old key cannot be restored. If the role lost Books Read, an administrator can add it back under **Settings > Users** by selecting the role in the **Roles** section. See [Custom Roles](./users-and-permissions.md#custom-roles). A deactivated owner cannot be reactivated from the web interface, so add a device under an active account instead, or see [Deactivate Users](./users-and-permissions.md#deactivate-users).
 
 ### The Page Does Not Load Through a Proxy
 

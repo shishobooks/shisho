@@ -48,24 +48,24 @@ Keep `SERVER_HOST=0.0.0.0` inside Docker so published ports can reach the listen
 
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
-| `demo_mode` | `DEMO_MODE` | `false` | Present a prepared library without allowing API edits, including by admins. Disables background work, plugins, integrations, and explicit original, KePub, and bulk downloads. See [Demo Mode](#demo-mode) |
+| `demo_mode` | `DEMO_MODE` | `false` | Present a prepared library without allowing API edits, including by admins. See [Demo Mode](#demo-mode) for what it disables |
 | `sync_interval_minutes` | `SYNC_INTERVAL_MINUTES` | `60` | How often to scan libraries for new content, in minutes. Set to `0` to disable scheduled scans |
 | `worker_processes` | `WORKER_PROCESSES` | `2` | Number of background worker processes |
 | `job_retention_days` | `JOB_RETENTION_DAYS` | `30` | Days to retain completed and failed jobs before cleanup. Set to `0` to disable cleanup |
 
 ### Demo Mode
 
-Set `demo_mode: true` or `DEMO_MODE=true` to let visitors browse, search, read EPUB, CBZ, and PDF files, and stream M4B audio without changing the library through the API. The restriction applies to every user, including admins. Sign-in and sign-out still work; edits, setup, password changes, and server-side preference updates return `403` with code `demo_mode` and message `This action is unavailable in the demo.`
+Set `demo_mode: true` or `DEMO_MODE=true` to let visitors browse, search, read, and listen without changing the library through the API. The restriction applies to every user, including admins. Sign-in and sign-out still work; every other change returns `403` with code `demo_mode` and message `This action is unavailable in the demo.` The [Public Demo](./demo.md) page lists what visitors can do and [what is disabled](./demo.md#what-is-disabled), including downloads, integrations, Share Links, and list sharing.
 
-Prepare the library and user accounts before enabling Demo Mode. Scans, filesystem monitoring, job processing, and plugin loading are disabled regardless of their other settings. OPDS, eReader, Kobo, and plugin endpoints are unavailable.
+Every role loses the administration links and security settings, and gallery size, default sort, and reader preferences are stored in each visitor's browser instead of the server.
 
-Original, KePub, supplement, and bulk download controls are hidden, and the original, KePub, and bulk download routes stay blocked. The readers still need the generated download route, the page images, and the audio stream, so anyone signed in can save any main file by requesting its URL directly: the generated EPUB, CBZ, PDF, or M4B, or the full audiobook from the stream route. Demo Mode is not copy protection; only publish media you have permission to redistribute. Reader caches and startup database migrations still require writable storage.
+Prepare the library and user accounts before enabling Demo Mode. Scans, filesystem monitoring, job processing, and plugin loading are disabled regardless of their other settings. Reader caches and startup database migrations still require writable storage.
 
-The sign-in page identifies Demo Mode. After sign-in, a banner stays visible across the app and readers. The interface hides administration links and security settings, while rejected edits show `This action is unavailable in the demo.` Gallery size, default sort, and reader preferences are stored in each visitor's browser instead of the server.
+Hiding the download controls does not stop copying. The readers still need the generated download route, the page images, and the audio stream, so anyone signed in can save any main file by requesting its URL directly: the generated EPUB, CBZ, PDF, or M4B, or the full audiobook from the stream route. Demo Mode is not copy protection; only publish media you have permission to redistribute.
 
 Restart after changing this setting. To curate the library or manage accounts again, disable Demo Mode on a private instance rather than making a public instance writable.
 
-The hosted [Public Demo](./demo.md) runs in this mode.
+The hosted Public Demo runs in this mode.
 
 ### Library Monitor
 

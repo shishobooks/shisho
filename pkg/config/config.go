@@ -126,7 +126,7 @@ func defaults() *Config {
 // Load order (later sources override earlier):
 //  1. Defaults
 //  2. Config file (/config/shisho.yaml or CONFIG_FILE env var)
-//  3. Environment variables (prefixed with SHISHO_)
+//  3. Environment variables (unprefixed, e.g. DATABASE_FILE_PATH)
 func New() (*Config, error) {
 	k := koanf.New(".")
 

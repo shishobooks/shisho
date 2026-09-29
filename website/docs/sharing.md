@@ -71,7 +71,7 @@ The checks run each time the link is used, so some of them can be reversed:
 | Someone revokes the link | Stops working; stays listed as revoked |
 | Someone deletes the link | Stops working; removed from the list |
 | An admin turns sharing off | Stops working; works again when sharing is turned back on |
-| The creator is deactivated | Stops working and shows as paused; works again if the account is reactivated (the app has no reactivation control yet, see [Deactivate Users](./users-and-permissions.md#deactivate-users)) |
+| The creator is deactivated | Stops working and shows as paused; works again only if the account is reactivated. See [Deactivate Users](./users-and-permissions.md#deactivate-users) |
 | The creator loses access to the book's library | Stops working and shows as paused; works again if their access is restored |
 | The book is deleted | Stops working; removed |
 

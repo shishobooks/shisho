@@ -21,11 +21,11 @@ The sign-in page pre-fills both fields; select **Sign in**. The demo runs on a s
 
 ## What Is Disabled
 
-The demo rejects every change on the server, so nothing you do can affect the library or the next visitor. The shared `demo` account has the Viewer role, so most editing controls are hidden, as they are for any [read-only role](./users-and-permissions.md#what-a-read-only-role-sees). The demo also hides download buttons, administration, and security settings, and the list **Share** dialog shows a notice instead of its user picker. Most remaining controls that would make a change show **This action is unavailable in the demo.**
+The demo runs with [Demo Mode](./configuration.md#demo-mode) on, which rejects every change on the server, so nothing you do can affect the library or the next visitor. The sign-in page and a banner across the app and readers identify it. The shared `demo` account has the Viewer role, so most editing controls are hidden, as they are for any [read-only role](./users-and-permissions.md#what-a-read-only-role-sees). The demo also hides download buttons, administration, and security settings, and the list **Share** dialog shows a notice instead of its user picker. Most remaining controls that would make a change show **This action is unavailable in the demo.**
 
 - Editing books, files, metadata, series, and lists, including cover uploads, rescans, and deletion.
 - Sharing a list with other users.
-- Downloading files: the download buttons are hidden, and the original, KePub, and bulk download routes are blocked.
+- Downloading files: the original, KePub, supplement, and bulk download controls are hidden, and direct original, KePub, and bulk download links are also blocked.
 - Administration: libraries, users, roles, plugins, and security settings.
 - Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and [Share Links](./sharing.md) are not available.
 - Account changes such as the password and server-side preferences.

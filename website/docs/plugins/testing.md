@@ -176,18 +176,18 @@ Copy the built artifact to:
   main.js
 ```
 
-Then:
+`pluginDir` is controlled by `plugin_dir`; see [Configuration](../configuration.md). Then:
 
 1. Go to **Settings > Plugins > Installed**.
 2. Select **Scan for Local Plugins**.
-3. Open the discovered plugin and turn on **Enabled**.
+3. Open the discovered plugin and turn on **Enabled**. A newly scanned local plugin starts disabled.
 4. Confirm its capabilities, configuration, hook order, and status.
 5. Exercise every implemented hook with a small test library.
 6. Verify output metadata or files and review job and application logs.
 
 The local scan adds only previously unknown directories under the `local` scope. It does not reload an existing plugin.
 
-After changing an already discovered plugin, rebuild and recopy it. Use **Reload plugin from disk** on the plugin detail page. That action appears only for an active plugin whose scope is `local`, and it requires **Config: Write**. If loading fails, the detail page displays the current error; correct the artifact and reload again.
+After changing an already discovered plugin, rebuild and recopy it. Use **Reload plugin from disk** on the plugin detail page. That action appears for every plugin whose scope is `local` when your role has Config Write, but it reloads only an active plugin, one listed with no status badge. For a plugin with the **Disabled**, **Error**, or **Incompatible** status it shows an error instead. Turn on **Enabled** to load a disabled plugin. See [Understand Statuses](./overview.md#understand-statuses). Reload also rereads the manifest name, version, and description. If loading fails, the detail page displays the current error; correct the artifact and reload again.
 
 ## Integration Checklist
 

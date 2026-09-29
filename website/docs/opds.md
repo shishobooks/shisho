@@ -58,7 +58,7 @@ KePub catalogs use the same routes under `/opds/v1/kepub/{types}`. There are no 
 
 Catalog search matches book titles, subtitles, book and file paths, authors, narrators, and series. Author, narrator, and series aliases are searchable. It does not search genres, tags, or descriptions.
 
-The **All Books**, author, and search book feeds use the authenticated user's saved sort for that library. Without a saved sort, they use **Date Added, Newest First**. Books within a series follow series-number order. See [Browsing, Search, and Bulk Actions](./browsing-search-bulk-actions.md).
+The **All Books**, author, and search book feeds use the authenticated user's [saved sort](./browsing-search-bulk-actions.md#gallery-sort) for that library. Books within a series follow series-number order.
 
 ## Client Compatibility
 

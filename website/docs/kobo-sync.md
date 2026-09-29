@@ -50,6 +50,10 @@ The **API Endpoint URL** contains the device's secret Shisho API key. Treat the 
 
 If `.kobo` is hidden, enable hidden files in your file manager. On macOS, press `Cmd+Shift+.` in Finder.
 
+### How Long the URL Works
+
+The **API Endpoint URL** follows the same rules as an [eReader Browser URL](./ereader-browser.md#how-long-the-url-works): syncs fail once the Kobo is removed, while its owner is deactivated, and until the owner's role has Books Read again.
+
 ## Reset or Remove Sync
 
 Removing the Kobo device under **Security** deletes its API key, immediately revokes the URL, and cannot be undone. Restore Kobo's store endpoint on the device first when you want to stop using Shisho but keep normal Kobo service.
@@ -68,7 +72,7 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Symptom:** The Kobo reports a sync error before personal books appear.
 
-**Likely cause:** `api_endpoint` is incomplete, the library or list selector was left empty, or a reverse proxy is not forwarding `/kobo/`.
+**Likely cause:** `api_endpoint` is incomplete, the library or list selector was left empty, a reverse proxy is not forwarding `/kobo/`, or the URL stopped working for one of the reasons in [How Long the URL Works](#how-long-the-url-works).
 
 **Verify:** Compare the complete configured value with the setup dialog. It must include the API key, scope, and any required library or list ID. Confirm that the Kobo can resolve and open the external Shisho hostname.
 
@@ -80,7 +84,7 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Likely cause:** The Kobo still has an older scope URL or its incremental sync history no longer matches the desired state.
 
-**Verify:** Compare the `api_endpoint` stored on the Kobo with the currently intended scope URL.
+**Verify:** Compare the `api_endpoint` stored on the Kobo with the intended scope URL.
 
 **Fix:** Update `api_endpoint` if the scope changed. Otherwise click **Reset** in Shisho, then sync again.
 

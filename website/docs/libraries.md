@@ -8,7 +8,7 @@ Go to **Settings > Libraries**, then select **Add Library**. Choose a name, cove
 
 Paths must be visible from inside the Shisho container. A host path such as `/mnt/books` is not usable unless it is mounted into the container, and the library path must use the container side of that mount. Shisho also needs suitable read and write permissions if file organization is enabled.
 
-Saving a library queues a global scan of all libraries, unless a scan is already pending or running. The new library may therefore take a little time to appear populated. If you have `jobs:read`, follow progress under **Settings > Jobs**.
+Saving a library queues a global scan of all libraries, unless a scan is already pending or running. The new library may therefore take a little time to appear populated. If your role has Jobs Read, follow progress under **Settings > Jobs**.
 
 ### Cover and Download Preferences
 
@@ -61,9 +61,9 @@ Shisho discovers and reconciles content in three ways:
 
 - **Scheduled scans:** `sync_interval_minutes` controls the global schedule and defaults to 60 minutes. Set it to `0` to disable scheduled scans.
 - **Filesystem monitor:** `library_monitor_enabled` is enabled by default. It watches library paths and performs targeted rescans after changes settle. The default `library_monitor_delay_seconds` of 60 seconds acts as a debounce, so each new event restarts the wait. Some network filesystems do not provide reliable filesystem events, so scheduled or manual scans remain important.
-- **Manual scans:** A user with `jobs:write` can open **Settings > Jobs** and select **Trigger Scan** for an immediate full reconciliation. The scan runs as a background job; `jobs:read` is required to monitor its progress and errors.
+- **Manual scans:** A user whose role has Jobs Read and Jobs Write can open **Settings > Jobs** and select **Trigger Scan** for an immediate full reconciliation. The scan runs as a background job, and Jobs Read alone is enough to monitor its progress and errors. See [Users and Permissions](./users-and-permissions.md).
 
-You can also start a library scan with the resync button beside the library picker in the top navigation. If Shisho rejects the request or cannot start the scan, an error notification appears. The button becomes available for another attempt.
+The same two permissions let you start a library scan with the resync button beside the library picker in the top navigation. If Shisho rejects the request or cannot start the scan, an error notification appears. The button becomes available for another attempt.
 
 See [Configuration](./configuration.md) for the server settings behind the schedule and monitor.
 

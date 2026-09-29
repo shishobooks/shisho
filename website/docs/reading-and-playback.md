@@ -1,6 +1,6 @@
 # Reading and Playback
 
-Users with **Books Read** permission and access to a book's library can open supported files directly in Shisho. Select **Read** for EPUB, CBZ, and PDF files or **Listen** for M4B files.
+Users with Books Read permission and access to a book's library can open supported files directly in Shisho. Select **Read** for EPUB, CBZ, and PDF files or **Listen** for M4B files.
 
 Reader preferences are saved to your Shisho account and follow you between browsers. Reading and listening positions are not saved as progress records.
 
@@ -45,7 +45,7 @@ The audiobook player provides:
 
 The selected playback speed is saved to your account. Listening position is not saved, so reopening an audiobook starts from the beginning.
 
-Browser audio support depends on the file's codec. AAC-LC and HE-AAC are broadly supported. xHE-AAC works most reliably in Safari and iOS browsers; Firefox cannot play it, and Chrome cannot play it through Shisho's progressive stream. See [Supported Formats](./supported-formats.md#audiobook-browser-compatibility).
+Browser audio support depends on the file's codec, and some audiobooks play only in certain browsers. See [Audiobook Browser Compatibility](./supported-formats.md#audiobook-browser-compatibility).
 
 ## Reader Settings
 
