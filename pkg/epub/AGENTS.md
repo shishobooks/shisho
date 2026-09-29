@@ -87,9 +87,9 @@ xmlns:opf="http://www.idpf.org/2007/opf"       <!-- OPF attributes -->
 | Release Date | `<dc:date>` | Tries 4 date formats in order |
 | Language | `<dc:language>` | BCP 47 tag, normalized via `NormalizeLanguage` (handles ISO 639-2/T like "eng" → "en") |
 | Identifiers | `<dc:identifier>` | Type from `scheme` (any namespace), else the `identifier-type` refinement, else detected from the value. Unknown types are skipped |
-| Cover Image | Via manifest | `<meta name="cover" content="ID"/>`, then the image item with `properties="cover-image"` |
+| Cover Image | Via manifest | `<meta name="cover" content="ID"/>`, then the item with `properties="cover-image"`, then an image item whose id is `cover`, `cover-image`, or `coverimage` (see Cover Image below) |
 
-**Data Source:** All extracted metadata tagged with `models.DataSourceEPUBMetadata` (priority 2)
+**Data Source:** All extracted metadata tagged with `models.DataSourceEPUBMetadata` (priority 3, shared by every file-derived source). See "Data Source Priority System" in `pkg/AGENTS.md` (defined in `pkg/models/data-source.go`).
 
 ### Generation (`pkg/filegen/epub.go`)
 
@@ -150,8 +150,8 @@ When generating EPUBs, Shisho writes metadata in **dual format** for maximum com
 ### Key Functions
 
 ```go
-// Parse metadata from OPF file
-func ParseOPF(r io.Reader) (*OPFPackage, error)
+// Parse metadata from an OPF file (pkg/epub/opf.go)
+func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error)
 
 // Extract ParsedMetadata from EPUB file
 func Parse(path string) (*mediafile.ParsedMetadata, error)
@@ -181,9 +181,10 @@ Located at `META-INF/container.xml`, points to the OPF file:
 Covers are identified by (in order of preference):
 
 1. `<meta name="cover" content="cover-image-id"/>` in metadata, naming a manifest item (EPUB 2 style, also common in EPUB 3)
-2. A manifest image item with `properties="cover-image"` (EPUB 3)
+2. A manifest item with `properties="cover-image"` (EPUB 3)
+3. An image manifest item whose id is `cover`, `cover-image`, or `coverimage` (case-insensitive), for older EPUBs with no explicit hint
 
-Parsing and generation use the same order. Generation swaps the image either way, and adds a cover marked the version's way when the package has none (see the cover rules under Generation).
+Parsing (`pkg/epub/opf.go`) and generation (`findCoverImage` in `pkg/filegen/epub.go`) use the same three steps. The writer also requires an `image/*` media type at every step. Generation swaps the image either way, and adds a cover marked the version's way when the package has none (see the cover rules under Generation).
 
 **Cover Path Resolution:**
 - Root-level books: Cover stored in parent directory of file
@@ -192,13 +193,7 @@ Parsing and generation use the same order. Generation swaps the image either way
 
 ## Scanner Integration
 
-**Metadata Priority System:**
-```
-Priority 0 (highest): Manual edits
-Priority 1: Sidecar (.metadata.json)
-Priority 2: EPUB Metadata
-Priority 3: Filepath (fallback)
-```
+**Metadata Priority System:** EPUB metadata is a file-derived source at priority 3, below Manual (0), Sidecar (1), and Plugin (2), and above Filepath (4). See "Data Source Priority System" in `pkg/AGENTS.md` (defined in `pkg/models/data-source.go`).
 
 **Fallback Title Extraction:**
 If EPUB metadata has no title, extracts from filename.
@@ -259,10 +254,10 @@ func parseNavDocument(r io.Reader) ([]mediafile.ParsedChapter, error)
 func parseNCX(r io.Reader) ([]mediafile.ParsedChapter, error)
 
 // Find nav document href from manifest
-func findNavDocumentHref(manifest []ManifestItem, basePath string) string
+func findNavDocumentHref(pkg *Package, basePath string) string
 
 // Find NCX href from spine toc attribute
-func findNCXHref(pkg *OPFPackage, basePath string) string
+func findNCXHref(pkg *Package, basePath string) string
 ```
 
 ### Chapter Data Structure
@@ -321,10 +316,9 @@ type ParsedChapter struct {
 
 ## Related Files
 
-- `pkg/epub/opf.go` - OPF parsing and types
+- `pkg/epub/opf.go` - OPF parsing and types, and `Parse`, the EPUB file entry point
 - `pkg/epub/nav.go` - Navigation/chapter parsing
 - `pkg/epub/nav_test.go` - Navigation parsing tests
-- `pkg/epub/epub.go` - EPUB file handling
 - `pkg/filegen/epub.go` - EPUB generation
 - `pkg/filegen/epub_test.go` - EPUB generation tests
 - `pkg/filegen/epub_opf_fidelity_test.go` - OPF round-trip fidelity tests (EPUB 3 attributes, unique identifier)

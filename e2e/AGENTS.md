@@ -106,6 +106,7 @@ Test endpoints are only registered when `ENVIRONMENT=test`.
 | `/api/test/plugins/fixture.zip` | GET | Fixture plugin zipped for install flows |
 | `/api/test/plugins/fixture-info` | GET | `{scope, id, version, download_url, sha256}` for the fixture |
 | `/api/test/libraries`, `/api/test/books`, `/api/test/persons`, `/api/test/series` | POST | Seed library data directly in the database |
+| `/api/test/api-keys` | POST | Create an API key for a user |
 
 Seeded books have no file on disk, so their downloads fail. Pass `withEpubOnDisk: true` to `POST /api/test/books` (EPUB only) to write a minimal valid EPUB to a temporary directory and point the file at it, so a download generates a real file (see `share-link.spec.ts`).
 
@@ -125,7 +126,9 @@ func (c *Config) IsTestMode() bool {
 
 // pkg/server/server.go
 if cfg.IsTestMode() && !cfg.DemoMode {
-    testutils.RegisterRoutes(e.Group("/api"), db, pm, plugins.NewInstaller(cfg.PluginDir))
+    // Each E2E browser runs its own server with its own cache dir, so its
+    // seeded EPUBs never collide with another browser's.
+    testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir), filepath.Join(cfg.CacheDir, "e2e-epubs"))
 }
 ```
 
@@ -188,7 +191,7 @@ await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
 
 **Problem:** `getByRole(role, { name })` performs a case-insensitive substring match by default. If two elements with the same role have names where one is a prefix/substring of the other (e.g., a "Select" toolbar button and a "Select Library" dropdown trigger on the same page), the locator resolves to multiple elements and Playwright's strict mode fails it with `strict mode violation`.
 
-**Solution:** Pass `exact: true` whenever the visible name is — or could plausibly become — a substring of another element's name on the same page:
+**Solution:** Pass `exact: true` whenever the visible name is, or could plausibly become, a substring of another element's name on the same page:
 
 ```typescript
 // ❌ BAD: also matches "Select Library", "Select All", etc.
@@ -202,7 +205,7 @@ await expect(
 
 For more flexibility (e.g., "starts with X" or a specific casing), pass a regex instead: `name: /^Select /` to allow any "Select …" name, or `name: /select/i` for explicit case-insensitive matching.
 
-This is especially insidious because the test passes until someone adds an unrelated button whose name happens to contain the same substring — the failure shows up in CI on a PR that didn't touch the test.
+This is especially insidious because the test passes until someone adds an unrelated button whose name happens to contain the same substring, and the failure shows up in CI on a PR that didn't touch the test.
 
 ## Test File Structure
 
@@ -239,7 +242,7 @@ Playwright auto-starts servers via `webServer` config. When using `--project`, o
 
 The API webServer command (`playwright.config.ts`) inlines `go build -o ./build/api/api-e2e-<browser> ./cmd/api && exec ./build/api/api-e2e-<browser>`. Do NOT route it through `mise start:api` (= `go run ./cmd/api`) or a `mise` task wrapper.
 
-Why: Playwright spawns the webServer with `detached: true` (its own process group) and, on teardown, force-kills it with `process.kill(-pid, "SIGKILL")` — a process-GROUP kill. For that to reap the API, the API must be in the process group led by the PID Playwright spawned. Two wrappers break that:
+Why: Playwright spawns the webServer with `detached: true` (its own process group) and, on teardown, force-kills it with `process.kill(-pid, "SIGKILL")`, a process-GROUP kill. For that to reap the API, the API must be in the process group led by the PID Playwright spawned. Two wrappers break that:
 
 - `go run` spawns the api binary as a child and does not forward signals to it, so the binary is orphaned.
 - `mise <task>` (a Go program) puts the task subprocess in a separate process group on Linux, so the binary escapes the group kill even if the task execs it. (This passes on macOS, where mise keeps the same group, which is why it must be tested against CI, not just locally.)

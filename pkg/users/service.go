@@ -172,10 +172,12 @@ func (s *Service) List(ctx context.Context, opts ListOptions) ([]*models.User, i
 }
 
 // ListDirectory returns every active user's id and username, sorted by
-// username. It selects only those two columns so nothing else can leak into
-// the directory.
-func (s *Service) ListDirectory(ctx context.Context) ([]UserDirectoryEntry, error) {
-	entries := []UserDirectoryEntry{}
+// username, for GET /users/directory, which any signed-in user may read to
+// pick whom to share a list with. It selects only those two columns into
+// models.UserRef, the same id-and-username view list payloads embed, so no
+// email address, role, or library access can leak into the directory.
+func (s *Service) ListDirectory(ctx context.Context) ([]models.UserRef, error) {
+	entries := []models.UserRef{}
 	err := s.db.NewSelect().
 		Model((*models.User)(nil)).
 		Column("u.id", "u.username").

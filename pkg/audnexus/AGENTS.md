@@ -4,11 +4,11 @@ This package fetches chapter data for audiobooks from [Audnexus](https://audnex.
 
 ## Architecture
 
-- `service.go` — `Service` with a 5s-timeout HTTP client and a 24h in-memory TTL cache keyed by normalized (uppercase) ASIN. Only successes are cached; errors pass through so retries work.
-- `handlers.go` — Echo handler that calls the service and maps typed errors to HTTP statuses.
-- `routes.go` — `RegisterRoutes` wires the endpoint with `Authenticate` + `books:write` middleware.
-- `types.go` — Response types with snake_case JSON tags. The upstream Audnexus camelCase shape is decoded into `audnexusUpstream` and converted at the parse boundary.
-- `errors.go` — `ErrorCode` string identifiers and an `*Error` type. Use `AsAudnexusError(err)` to inspect.
+- `service.go`: `Service` with a 5s-timeout HTTP client and a 24h in-memory TTL cache keyed by normalized (uppercase) ASIN. Only successes are cached; errors pass through so retries work.
+- `handlers.go`: Echo handler that calls the service and maps typed errors to HTTP statuses.
+- `routes.go`: `RegisterRoutes` wires the endpoint with `Authenticate` + `books:write` middleware.
+- `types.go`: Response types with snake_case JSON tags. The upstream Audnexus camelCase shape is decoded into `audnexusUpstream` and converted at the parse boundary.
+- `errors.go`: `ErrorCode` string identifiers and an `*Error` type. Use `AsAudnexusError(err)` to inspect.
 
 ## Endpoint
 

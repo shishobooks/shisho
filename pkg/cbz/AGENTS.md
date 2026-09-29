@@ -249,9 +249,9 @@ CBZ filenames can encode either a volume (`v01`, `vol.5`, `volume 12`, `#001`, b
 Volume vs chapter is determined by the explicit indicator. Ambiguous indicators (`#001`, bare trailing numbers like `Title 5`) default to `volume` to preserve historical behavior; existing scanned files don't shift semantics on rescan.
 
 The pipeline lives in `pkg/fileutils/naming.go`:
-- `NormalizeSeriesNumberInTitle` — recognizes the indicators and produces a normalized title with the parsed unit.
-- `ExtractSeriesFromTitle` — splits a normalized title into the series name, start, optional end, and unit.
-- `formatSeriesNumber` / `IsOrganizedName` — handle the inverse, formatting single numbers and ranges as `v{N}` or `c{N}` suffixes.
+- `NormalizeSeriesNumberInTitle`: recognizes the indicators and produces a normalized title with the parsed unit.
+- `ExtractSeriesFromTitle`: splits a normalized title into the series name, start, optional end, and unit.
+- `formatSeriesNumber` / `IsOrganizedName`: handle the inverse, formatting single numbers and ranges as `v{N}` or `c{N}` suffixes.
 
 When a library has file organization enabled, the range is a folder suffix: chapter-numbered books use layouts such as `Title c042/Title.cbz` or `Title c005-008/Title.cbz`, while volume-numbered books use `Title v042/Title.cbz` or `Title v001-003/Title.cbz`.
 
@@ -268,13 +268,7 @@ ComicInfo `Number` round-trips the endpoints but cannot encode the volume/chapte
 - Series inference from title if not in metadata or sidecar
 - Cover page index tracked in `metadata.CoverPage`
 
-**Metadata Priority:**
-```
-Priority 0: Manual
-Priority 1: Sidecar
-Priority 2: CBZ Metadata
-Priority 3: Filepath
-```
+**Metadata Priority:** CBZ metadata is a file-derived source at priority 3, below Manual (0), Sidecar (1), and Plugin (2), and above Filepath (4). See "Data Source Priority System" in `pkg/AGENTS.md` (defined in `pkg/models/data-source.go`).
 
 ## KePub Conversion
 
@@ -375,12 +369,11 @@ This applies to:
 
 ## Related Files
 
-- `pkg/cbz/cbz.go` - CBZ parsing
+- `pkg/cbz/cbz.go` - CBZ parsing and the `ComicInfo` types
 - `pkg/cbz/chapters.go` - Chapter detection logic
 - `pkg/cbz/chapters_test.go` - Chapter detection tests
-- `pkg/cbz/types.go` - ComicInfo types
 - `pkg/filegen/cbz.go` - CBZ generation
 - `pkg/filegen/cbz_test.go` - CBZ generation tests
 - `pkg/kepub/cbz.go` - CBZ to KePub conversion
 - `pkg/kepub/cbz_test.go` - CBZ conversion tests
-- `pkg/models/author.go` - Author role constants
+- `pkg/models/person.go` - Author role constants (`AuthorRole*`)

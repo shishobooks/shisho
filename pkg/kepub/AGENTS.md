@@ -172,7 +172,7 @@ Ensures cover images have the `cover-image` property required by Kobo.
    - Worker pool: `min(CPU count, image count)`
    - Context cancellation support
 
-3. **Image Processing (`processImageForKobo`):**
+3. **Image Processing (`ProcessImageForEreader`, also used by `pkg/filegen/cbz.go`):**
    - **Resize** if larger than Kobo Libra Color (1264×1680)
    - **PNG→JPEG conversion** (85% quality)
    - **Grayscale detection** for manga optimization
@@ -395,12 +395,11 @@ func TransformOPF(r io.Reader, w io.Writer) error
 
 ## Related Files
 
-- `pkg/kepub/converter.go` - EPUB to KePub conversion
+- `pkg/kepub/converter.go` - EPUB to KePub conversion, and the injected `kobo.js` script (the `koboJS` const)
 - `pkg/kepub/cbz.go` - CBZ to KePub conversion
 - `pkg/kepub/content.go` - XHTML content transformation
 - `pkg/kepub/xhtml.go` - XHTML pre/post processing
 - `pkg/kepub/opf.go` - OPF transformation
-- `pkg/kepub/kobo.js` - Injected JavaScript
 - `pkg/kepub/converter_test.go` - EPUB conversion tests
 - `pkg/kepub/cbz_test.go` - CBZ conversion tests
 - `pkg/kepub/content_test.go` - Content transformation tests

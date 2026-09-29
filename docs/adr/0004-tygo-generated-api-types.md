@@ -4,7 +4,8 @@
 
 Accepted. This records the decision; the implementation is tracked in PRD #341
 and its slices (#342 onward), so the codebase reaches the described state
-incrementally rather than all at once.
+incrementally rather than all at once. Amended June 2026 (Plugin API surface,
+under Decision) and September 2026 (see Amendments).
 
 ## Context
 
@@ -177,3 +178,56 @@ end-to-end through tygo) and #384 (remaining type-boundary stragglers).
   the body.
 - A genuinely new shared shape still requires a Go struct first. Reaching for a
   quick `echo.Map` is no longer acceptable even for one-off responses.
+
+## Amendments
+
+The June 2026 Plugin API surface amendment sits under Decision, above.
+
+### Response shape rules and named exceptions (2026-09-29)
+
+Decision point 3 names `{Entity}Response`, `List{Entities}Response`, and
+`{Entity}ListItem`, and says publishers are the only list-item exception.
+Practice since then has settled two more rules and three named projections
+that fit none of those names. They are recorded here so the ADR matches what
+`AGENTS.md` and `pkg/AGENTS.md` enforce (#591).
+
+1. **Bare-model rule.** A single-resource endpoint returns the bare generated
+   model when the response adds nothing to it. An `{Entity}Response` wrapper
+   is required only when the response reshapes or extends the model (computed
+   fields like `book_count`, flattened relations like `aliases []string`).
+   Books, files, users, and roles return bare models; passthrough wrappers
+   such as `UserResponse` or `RoleResponse` are not wanted.
+
+2. **Two-tier collection rule.** Paginated list endpoints return the
+   `{ items, total }` envelope of point 3. Unpaginated endpoints that return a
+   whole collection return a bare array of a named type instead. Book lists,
+   list shares, list templates, library languages, the caller's libraries,
+   and the user directory work this way.
+
+3. **Named projections.** Some routes are open to every signed-in user, so
+   their payload must hold only what any role may see. Their types are reduced
+   projections of a model rather than wrappers or list items:
+
+   - `LibrarySummary` (`pkg/libraries/types.go`) is one library the caller can
+     access, returned as a bare array by `GET /api/user/libraries`. It carries
+     the id, name, cover aspect ratio, download format preference, and
+     organize flag, and no paths or timestamps. It is neither an
+     `{Entity}Response` (it removes fields rather than adding them) nor an
+     `{Entity}ListItem` (no paginated list of it exists).
+   - `UserRef` (`pkg/models/user.go`) is a user's id and username. Every user
+     embedded in a list payload (a list's owner, its shares, and who added
+     each book) is a `UserRef`, and `GET /api/users/directory` returns a bare
+     array of them. It never carries an email address, role, or account
+     state.
+   - `UserDirectoryEntry` was a second struct in `pkg/users` with the same two
+     fields, returned by the directory. It was folded into `UserRef` in #591,
+     so one type now carries the user projection. A new route that needs a
+     narrowed user reuses `UserRef` rather than declaring another.
+
+   These projections are built or scanned into a struct holding only the
+   returned fields (`LibrarySummary` copies five fields from each library row;
+   the directory selects two columns into `UserRef`), rather than blanking
+   fields on the full model, which would still emit the other keys as zero
+   values.
+
+Publishers remain the only `{Entity}ListItem`.
