@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import LogViewer from "@/components/library/LogViewer";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useJob, useJobLogs } from "@/hooks/queries/jobs";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { isLoadFailure } from "@/libraries/api";
 import {
   JobStatusInProgress,
   LogLevelError,
@@ -64,19 +66,16 @@ const JobDetail = () => {
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
   const [pluginFilter, setPluginFilter] = useState<string>("");
 
-  const { data: job, isLoading: isJobLoading, error: jobError } = useJob(id);
+  const jobQuery = useJob(id);
+  const job = jobQuery.data;
 
-  const {
-    data: logsData,
-    isLoading: isLogsLoading,
-    error: logsError,
-  } = useJobLogs(id, {
+  const logsQuery = useJobLogs(id, {
     level: levelFilter.length > 0 ? levelFilter : undefined,
     plugin: pluginFilter || undefined,
   });
+  const logsData = logsQuery.data;
 
-  const isLoading = isJobLoading || isLogsLoading;
-  const error = jobError ?? logsError;
+  const isLoading = jobQuery.isLoading || logsQuery.isLoading;
   const logs = useMemo(() => logsData?.items ?? [], [logsData?.items]);
 
   // Extract unique plugin names from log data
@@ -144,13 +143,8 @@ const JobDetail = () => {
     return <LoadingSpinner />;
   }
 
-  if (error) {
-    return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">Error Loading Job</h1>
-        <p className="text-muted-foreground">{error.message}</p>
-      </div>
-    );
+  if (isLoadFailure(jobQuery)) {
+    return <QueryError fallback="Failed to load job" query={jobQuery} />;
   }
 
   if (!job) {
@@ -237,11 +231,15 @@ const JobDetail = () => {
       </div>
 
       {/* Log viewer */}
-      <LogViewer
-        emptyMessage="No logs found."
-        entries={viewerEntries}
-        searchTerm={searchTerm}
-      />
+      {logsQuery.error && !logsData ? (
+        <QueryError fallback="Failed to load job logs" query={logsQuery} />
+      ) : (
+        <LogViewer
+          emptyMessage="No logs found."
+          entries={viewerEntries}
+          searchTerm={searchTerm}
+        />
+      )}
     </div>
   );
 };

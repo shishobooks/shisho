@@ -29,6 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
 import type { EntityType } from "./MetadataEditDialog";
@@ -40,7 +41,8 @@ interface EntityOption {
 }
 
 export interface SetChildConfig {
-  onSetChild: (childId: number) => Promise<void>;
+  /** A rejection is toasted here and keeps the dialog open. */
+  onSetChild: (childId: number) => Promise<unknown>;
   isPending: boolean;
   /** IDs of entities that are ancestors of the target — setting them as child would create a cycle */
   disabledIds: number[];
@@ -52,7 +54,8 @@ interface MetadataMergeDialogProps {
   entityType: EntityType;
   targetName: string;
   targetId: number;
-  onMerge: (sourceId: number) => Promise<void>;
+  /** A rejection is toasted here and keeps the dialog open. */
+  onMerge: (sourceId: number) => Promise<unknown>;
   isPending: boolean;
   entities: EntityOption[];
   isLoadingEntities: boolean;
@@ -114,10 +117,22 @@ export function MetadataMergeDialog({
 
   const handleConfirm = async () => {
     if (!selectedId) return;
-    if (action === "set-child" && setChildConfig) {
-      await setChildConfig.onSetChild(selectedId);
-    } else {
-      await onMerge(selectedId);
+    const setChild = action === "set-child" && setChildConfig;
+    try {
+      if (setChild) {
+        await setChildConfig.onSetChild(selectedId);
+      } else {
+        await onMerge(selectedId);
+      }
+    } catch (error) {
+      // Keep the dialog open with the selection so the user can retry.
+      toastRequestError(
+        error,
+        setChild
+          ? "Failed to set as child"
+          : `Failed to merge ${ENTITY_PLURALS[entityType]}`,
+      );
+      return;
     }
     resetDialogState();
   };

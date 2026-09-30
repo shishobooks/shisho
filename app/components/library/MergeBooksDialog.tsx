@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,11 +20,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useBooksByIds, useMergeBooks } from "@/hooks/queries/books";
-import {
-  requestErrorMessage,
-  ShishoAPIError,
-  toastRequestError,
-} from "@/libraries/api";
+import { firstFailedQuery, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { Book, LibrarySummary } from "@/types";
 
@@ -52,8 +49,7 @@ export function MergeBooksDialog({
   const bookQueries = useBooksByIds(bookIds, open);
 
   const isLoadingBooks = bookQueries.some((q) => q.isLoading);
-  const bookQueryError = bookQueries.find((q) => q.error)?.error as
-    ShishoAPIError | undefined;
+  const failedBookQuery = firstFailedQuery(...bookQueries);
   const books = useMemo(
     () => bookQueries.map((q) => q.data).filter((b): b is Book => b != null),
     [bookQueries],
@@ -142,23 +138,16 @@ export function MergeBooksDialog({
           </DialogBody>
         )}
 
-        {bookQueryError && (
+        {failedBookQuery && (
           <DialogBody>
-            <div className="flex items-start gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium text-destructive">
-                  Failed to load books
-                </p>
-                <p className="text-muted-foreground mt-1">
-                  {requestErrorMessage(bookQueryError, "Failed to load books")}
-                </p>
-              </div>
-            </div>
+            <QueryError
+              fallback="Failed to load books"
+              query={failedBookQuery}
+            />
           </DialogBody>
         )}
 
-        {!isLoadingBooks && !bookQueryError && step === "select" && (
+        {!isLoadingBooks && !failedBookQuery && step === "select" && (
           <>
             <DialogBody className="space-y-6">
               <div className="space-y-2">
@@ -242,7 +231,7 @@ export function MergeBooksDialog({
         )}
 
         {!isLoadingBooks &&
-          !bookQueryError &&
+          !failedBookQuery &&
           step === "confirm" &&
           targetBook && (
             <>

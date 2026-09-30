@@ -9,6 +9,7 @@ import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LibraryPluginsTab from "@/components/library/LibraryPluginsTab";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useLibrary, useUpdateLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { toastRequestError } from "@/libraries/api";
+import { isLoadFailure, toastRequestError } from "@/libraries/api";
 import type { CoverAspectRatio, DownloadFormat } from "@/types";
 import {
   DownloadFormatAsk,
@@ -226,7 +227,15 @@ const LibrarySettings = () => {
     );
   }
 
-  if (!libraryQuery.isSuccess || !libraryQuery.data) {
+  if (isLoadFailure(libraryQuery)) {
+    return (
+      <LibraryLayout>
+        <QueryError fallback="Failed to load library" query={libraryQuery} />
+      </LibraryLayout>
+    );
+  }
+
+  if (!libraryQuery.data) {
     return (
       <LibraryLayout>
         <div className="text-center">

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import Logo from "@/components/library/Logo";
+import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -244,7 +245,8 @@ const SecuritySettings = () => {
 };
 
 function EReaderSection() {
-  const { data: apiKeys, isLoading } = useApiKeys();
+  const apiKeysQuery = useApiKeys();
+  const { data: apiKeys, isLoading } = apiKeysQuery;
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const eReaderKeys = apiKeys?.filter((key) =>
@@ -268,6 +270,8 @@ function EReaderSection() {
 
       {isLoading ? (
         <LoadingSpinner />
+      ) : apiKeysQuery.error && !apiKeys ? (
+        <QueryError fallback="Failed to load devices" query={apiKeysQuery} />
       ) : eReaderKeys?.length === 0 ? (
         <div className="rounded-md border border-dashed border-border py-6 text-center">
           <p className="text-sm text-muted-foreground">
@@ -508,7 +512,8 @@ function EReaderSetupDialog({
 }
 
 function KoboSyncSection() {
-  const { data: apiKeys, isLoading } = useApiKeys();
+  const apiKeysQuery = useApiKeys();
+  const { data: apiKeys, isLoading } = apiKeysQuery;
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const koboKeys = apiKeys?.filter((key) =>
@@ -532,6 +537,8 @@ function KoboSyncSection() {
 
       {isLoading ? (
         <LoadingSpinner />
+      ) : apiKeysQuery.error && !apiKeys ? (
+        <QueryError fallback="Failed to load devices" query={apiKeysQuery} />
       ) : koboKeys?.length === 0 ? (
         <div className="rounded-md border border-dashed border-border py-6 text-center">
           <p className="text-sm text-muted-foreground">

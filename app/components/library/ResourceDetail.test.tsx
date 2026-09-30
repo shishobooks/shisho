@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import type { Permission } from "@/utils/permissions";
 
@@ -89,7 +91,24 @@ const defaultProps = {
     onDelete: vi.fn(),
     disabled: false,
   },
+  query: {
+    data: { id: 5 },
+    error: null,
+    isLoading: false,
+    isFetching: false,
+    isEnabled: true,
+    refetch: vi.fn(),
+  },
 };
+
+const failedQuery = (error: unknown) => ({
+  data: undefined,
+  error,
+  isLoading: false,
+  isFetching: false,
+  isEnabled: true,
+  refetch: vi.fn(),
+});
 
 describe("ResourceDetail", () => {
   it("renders the entity name as page heading", () => {
@@ -253,6 +272,100 @@ describe("ResourceDetail", () => {
 
     expect(onMerge).toHaveBeenCalledWith(10);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the merge dialog open and toasts when onMerge rejects", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const toastError = vi.spyOn(toast, "error");
+    const onMerge = vi
+      .fn()
+      .mockRejectedValue(new ShishoAPIError("Cannot merge", "conflict", 409));
+    render(
+      wrap(
+        <ResourceDetail
+          {...defaultProps}
+          mergeConfig={{
+            entities: [{ id: 10, name: "Fantasy", count: 5 }],
+            isLoadingEntities: false,
+            isPending: false,
+            onMerge,
+            onSearch: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /Merge/ }));
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Fantasy"));
+    await user.click(
+      screen
+        .getAllByRole("button", { name: /Merge/ })
+        .find((b) => b.closest("[role='dialog']") !== null)!,
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith("Cannot merge", undefined);
+    });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  describe("entity query", () => {
+    it("shows the fallback and Retry for a server fault", async () => {
+      const query = failedQuery(
+        new ShishoAPIError(
+          "Internal Server Error",
+          "internal_server_error",
+          500,
+        ),
+      );
+      render(wrap(<ResourceDetail {...defaultProps} query={query} />));
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /^Failed to load genre/,
+      );
+      expect(screen.queryByText(/Not Found/)).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(query.refetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the Not Found page for a 404", () => {
+      render(
+        wrap(
+          <ResourceDetail
+            {...defaultProps}
+            notFoundLabel="Genre Not Found"
+            query={failedQuery(
+              new ShishoAPIError("Genre not found", "not_found", 404),
+            )}
+          />,
+        ),
+      );
+
+      expect(
+        screen.getByRole("heading", { name: "Genre Not Found" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("keeps showing loaded data when a refetch fails", () => {
+      render(
+        wrap(
+          <ResourceDetail
+            {...defaultProps}
+            query={{
+              ...defaultProps.query,
+              error: new TypeError("Failed to fetch"),
+            }}
+          />,
+        ),
+      );
+
+      expect(
+        screen.getByRole("heading", { level: 1, name: "Science Fiction" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
   });
 
   describe("read-only user", () => {

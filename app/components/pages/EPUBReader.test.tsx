@@ -86,8 +86,25 @@ describe("EPUBReader", () => {
 
     renderReader();
     expect(screen.getByText(/couldn't load/i)).toBeInTheDocument();
+    // A rejection that did not come from the API says nothing useful.
+    expect(screen.getByText("Failed to load book")).toBeInTheDocument();
+    expect(screen.queryByText("boom")).not.toBeInTheDocument();
     screen.getByRole("button", { name: /retry/i }).click();
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it("keeps an open book on screen when a background refetch fails", () => {
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: true,
+      error: new TypeError("Failed to fetch"),
+      isEnabled: true,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument();
   });
 
   it("shows the extended-wait hint after 10 seconds of loading", () => {

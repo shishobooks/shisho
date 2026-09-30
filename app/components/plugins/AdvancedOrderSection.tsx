@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -39,7 +40,8 @@ export const AdvancedOrderSection = () => {
   const [selectedHookType, setSelectedHookType] =
     useState<PluginHookType>("metadataEnricher");
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
-  const { data: order, isLoading, error } = usePluginOrder(selectedHookType);
+  const orderQuery = usePluginOrder(selectedHookType);
+  const { data: order, isLoading } = orderQuery;
   const setPluginOrder = useSetPluginOrder();
   const { data: plugins } = usePluginsInstalled();
 
@@ -128,11 +130,9 @@ export const AdvancedOrderSection = () => {
     );
   }
   if (isLoading) return <LoadingSpinner />;
-  if (error) {
+  if (orderQuery.error && !order) {
     return (
-      <p className="text-sm text-destructive">
-        Failed to load plugin order: {error.message}
-      </p>
+      <QueryError fallback="Failed to load plugin order" query={orderQuery} />
     );
   }
 

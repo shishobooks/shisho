@@ -36,7 +36,7 @@ interface MetadataEditDialogProps {
     name: string;
     sort_name?: string;
     aliases?: string[];
-  }) => Promise<void>;
+  }) => Promise<unknown>;
   isPending: boolean;
 }
 

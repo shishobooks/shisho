@@ -30,16 +30,26 @@ let mockBookLists: List[] = [
   },
 ];
 
+// When set, the book's lists fail to load.
+let mockBookListsError: unknown = null;
+
 // Mock the list hooks
 vi.mock("@/hooks/queries/lists", () => ({
   useListLists: () => ({
     data: { items: mockLists },
     isLoading: false,
   }),
-  useBookLists: () => ({
-    data: mockBookLists,
-    isLoading: false,
-  }),
+  useBookLists: () =>
+    mockBookListsError
+      ? {
+          data: undefined,
+          error: mockBookListsError,
+          isLoading: false,
+          isFetching: false,
+          isEnabled: true,
+          refetch: vi.fn(),
+        }
+      : { data: mockBookLists, isLoading: false },
   useUpdateBookLists: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -70,6 +80,7 @@ describe("AddToListDialog", () => {
     });
 
   beforeEach(() => {
+    mockBookListsError = null;
     // Reset mock data before each test
     mockBookLists = [
       {
@@ -481,6 +492,29 @@ describe("AddToListDialog", () => {
 
       // Should NOT reinitialize - bookId didn't change
       expect(result).toBe(false);
+    });
+  });
+
+  describe("load failure", () => {
+    it("offers nothing that could save over the book's lists when they fail to load", () => {
+      mockBookListsError = new TypeError("Failed to fetch");
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <AddToListDialog bookId={123} onOpenChange={vi.fn()} open={true} />
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /^Failed to load lists/,
+      );
+      // Creating a list would select it and enable Save, which replaces the
+      // book's lists with only the new one.
+      expect(
+        screen.queryByRole("button", { name: /Create New List/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Save Changes/ }),
+      ).toBeDisabled();
     });
   });
 });

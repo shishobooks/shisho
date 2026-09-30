@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -328,6 +329,11 @@ export function ShareLinkDialog({
                 <h3 className="text-sm font-medium">Links</h3>
                 {linksQuery.isLoading ? (
                   <LoadingSpinner />
+                ) : linksQuery.error && !linksQuery.data ? (
+                  <QueryError
+                    fallback="Failed to load share links"
+                    query={linksQuery}
+                  />
                 ) : links.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">
                     This book has no share links yet.

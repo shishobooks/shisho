@@ -13,6 +13,7 @@ import { FileEditDialog } from "@/components/library/FileEditDialog";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
@@ -21,7 +22,7 @@ import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { toastRequestError } from "@/libraries/api";
+import { isLoadFailure, toastRequestError } from "@/libraries/api";
 import type { File } from "@/types";
 import { fileLabel } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
@@ -144,7 +145,15 @@ const FileDetail = () => {
     );
   }
 
-  if (!bookQuery.isSuccess || !bookQuery.data) {
+  if (isLoadFailure(bookQuery)) {
+    return (
+      <LibraryLayout>
+        <QueryError fallback="Failed to load book" query={bookQuery} />
+      </LibraryLayout>
+    );
+  }
+
+  if (!bookQuery.data) {
     return (
       <LibraryLayout>
         <div className="text-center">

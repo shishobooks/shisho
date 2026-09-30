@@ -12,6 +12,9 @@ import {
 import { forwardRef, useState } from "react";
 
 import { FilterChip } from "@/components/library/FilterChip";
+import QueryError, {
+  type RetryableQuery,
+} from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -59,6 +62,8 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/libraries/utils";
 import type { Genre, Tag } from "@/types";
 
+type FilterOptionsQuery = RetryableQuery & { data: unknown };
+
 interface FilterSheetProps {
   selectedFileTypes: string[];
   fileTypeOptions: readonly { value: string; label: string }[];
@@ -67,7 +72,8 @@ interface FilterSheetProps {
   selectedGenres: Genre[];
   genres: Genre[];
   genresLoading: boolean;
-  genresError: boolean;
+  /** The genres query, for its error report and Retry. */
+  genresQuery: FilterOptionsQuery;
   genreSearchInput: string;
   onGenreSearchChange: (value: string) => void;
   onToggleGenre: (genreId: number) => void;
@@ -75,7 +81,8 @@ interface FilterSheetProps {
   selectedTags: Tag[];
   tags: Tag[];
   tagsLoading: boolean;
-  tagsError: boolean;
+  /** The tags query, for its error report and Retry. */
+  tagsQuery: FilterOptionsQuery;
   tagSearchInput: string;
   onTagSearchChange: (value: string) => void;
   onToggleTag: (tagId: number) => void;
@@ -128,8 +135,8 @@ const FilterCombobox = ({
   selected,
   options,
   loading,
-  error,
-  errorText,
+  query,
+  errorFallback,
   searchInput,
   onSearchChange,
   onToggle,
@@ -141,8 +148,8 @@ const FilterCombobox = ({
   selected: FilterComboboxOption[];
   options: FilterComboboxOption[];
   loading: boolean;
-  error: boolean;
-  errorText: string;
+  query: FilterOptionsQuery;
+  errorFallback: string;
   searchInput: string;
   onSearchChange: (value: string) => void;
   onToggle: (id: number) => void;
@@ -194,10 +201,12 @@ const FilterCombobox = ({
                 <div className="py-6 text-center text-sm text-muted-foreground">
                   Loading...
                 </div>
-              ) : error ? (
-                <div className="py-6 text-center text-sm text-destructive">
-                  {errorText}
-                </div>
+              ) : query.error && !query.data ? (
+                <QueryError
+                  className="m-1"
+                  fallback={errorFallback}
+                  query={query}
+                />
               ) : options.length === 0 ? (
                 <CommandEmpty>{emptyText}</CommandEmpty>
               ) : (
@@ -237,7 +246,7 @@ const FilterContent = ({
   selectedGenres,
   genres,
   genresLoading,
-  genresError,
+  genresQuery,
   genreSearchInput,
   onGenreSearchChange,
   onToggleGenre,
@@ -245,7 +254,7 @@ const FilterContent = ({
   selectedTags,
   tags,
   tagsLoading,
-  tagsError,
+  tagsQuery,
   tagSearchInput,
   onTagSearchChange,
   onToggleTag,
@@ -304,12 +313,12 @@ const FilterContent = ({
       <FilterCombobox
         chipKind="genre"
         emptyText="No genres found."
-        error={genresError}
-        errorText="Error loading genres"
+        errorFallback="Failed to load genres"
         loading={genresLoading}
         onSearchChange={onGenreSearchChange}
         onToggle={onToggleGenre}
         options={genres}
+        query={genresQuery}
         searchInput={genreSearchInput}
         searchPlaceholder="Search genres..."
         selected={selectedGenres}
@@ -332,12 +341,12 @@ const FilterContent = ({
       <FilterCombobox
         chipKind="tag"
         emptyText="No tags found."
-        error={tagsError}
-        errorText="Error loading tags"
+        errorFallback="Failed to load tags"
         loading={tagsLoading}
         onSearchChange={onTagSearchChange}
         onToggle={onToggleTag}
         options={tags}
+        query={tagsQuery}
         searchInput={tagSearchInput}
         searchPlaceholder="Search tags..."
         selected={selectedTags}

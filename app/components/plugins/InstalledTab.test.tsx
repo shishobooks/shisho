@@ -103,3 +103,66 @@ describe("scanning for local plugins", () => {
     }
   });
 });
+
+describe("loading the installed plugins", () => {
+  it("shows the fallback for a server fault and retries on request", async () => {
+    vi.stubGlobal("__APP_VERSION__", "test");
+    let installedCalls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input).split("?")[0];
+      if (path === "/api/auth/status")
+        return Response.json({ needs_setup: false, demo_mode: false });
+      if (path === "/api/auth/me")
+        return Response.json({
+          id: 1,
+          username: "admin",
+          permissions: ["config:read", "config:write"],
+          role_name: "admin",
+        });
+      if (path === "/api/plugins/installed") {
+        installedCalls += 1;
+        if (installedCalls === 1)
+          return Response.json(
+            {
+              error: {
+                code: "internal_server_error",
+                message: "Internal Server Error",
+              },
+            },
+            { status: 500 },
+          );
+      }
+      return Response.json([]);
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <MemoryRouter>
+            <InstalledTab />
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(/^Failed to load plugins/);
+      expect(
+        screen.queryByText(/Internal Server Error/),
+      ).not.toBeInTheDocument();
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(
+        await screen.findByText(/No plugins installed yet/),
+      ).toBeInTheDocument();
+      expect(installedCalls).toBe(2);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+});

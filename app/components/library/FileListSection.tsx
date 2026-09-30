@@ -4,6 +4,9 @@ import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
+import QueryError, {
+  type RetryableQuery,
+} from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
@@ -11,7 +14,7 @@ import { fileLabel, formatDuration } from "@/utils/format";
 
 export const FILE_LIST_ITEMS_PER_PAGE = 50;
 
-interface FileListQuery {
+interface FileListQuery extends RetryableQuery {
   data: ResourceListResponse<File> | undefined;
   isLoading: boolean;
   isSuccess: boolean;
@@ -93,6 +96,15 @@ export function FileListSection({
       <section className="mb-10">
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <LoadingSpinner />
+      </section>
+    );
+  }
+
+  if (query.error && !query.data) {
+    return (
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-4">{title}</h2>
+        <QueryError fallback="Failed to load files" query={query} />
       </section>
     );
   }

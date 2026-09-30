@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
+import QueryError from "@/components/library/QueryError";
 import { SearchInput } from "@/components/library/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -60,14 +61,17 @@ const ResourceList = <T extends { id: number }>({
     handlePageChange,
   } = state;
 
-  // Track the search value that produced the currently displayed data
+  // Track the search value that produced the currently displayed data or
+  // error. A failed search settles it too, so the spinner gives way to the
+  // error instead of waiting for a success that never comes.
   const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
+  const settled = query.isSuccess || query.isError;
 
   useEffect(() => {
-    if (query.isSuccess && !query.isFetching) {
+    if (settled && !query.isFetching) {
       setConfirmedSearch(debouncedSearch);
     }
-  }, [query.isSuccess, query.isFetching, debouncedSearch]);
+  }, [settled, query.isFetching, debouncedSearch]);
 
   // Data is stale if search changed but query hasn't completed yet
   const isStaleData =
@@ -134,7 +138,11 @@ const ResourceList = <T extends { id: number }>({
         <LoadingSpinner />
       )}
 
-      {query.isSuccess && !query.isFetching && !isStaleData && (
+      {query.error && !query.data && !query.isFetching && !isStaleData && (
+        <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
+      )}
+
+      {query.data && !query.isFetching && !isStaleData && (
         <>
           {total > 0 && (
             <div className="mb-4 text-sm text-muted-foreground">

@@ -2,6 +2,7 @@ import { Download, FolderSearch, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import {
   PluginStatusActive,
@@ -23,7 +24,8 @@ import { PluginRow } from "./PluginRow";
 
 export const InstalledTab = () => {
   const canWrite = useCan("config:write");
-  const { data: plugins, error, isLoading } = usePluginsInstalled();
+  const pluginsQuery = usePluginsInstalled();
+  const { data: plugins, isLoading } = pluginsQuery;
   const { data: available = [] } = usePluginsAvailable();
   const { data: repos = [] } = usePluginRepositories();
   const updatePluginVersion = useUpdatePluginVersion();
@@ -113,11 +115,9 @@ export const InstalledTab = () => {
   };
 
   if (isLoading) return <LoadingSpinner />;
-  if (error) {
+  if (pluginsQuery.error && !plugins) {
     return (
-      <p className="text-sm text-destructive">
-        Failed to load plugins: {error.message}
-      </p>
+      <QueryError fallback="Failed to load plugins" query={pluginsQuery} />
     );
   }
 

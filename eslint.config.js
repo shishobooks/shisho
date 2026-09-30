@@ -73,6 +73,36 @@ const mutateWithoutOnError = [
   },
 ];
 
+// A mutateAsync promise rejects when the request fails, so one that nothing
+// catches is an unhandled rejection with no report to the user. The call must
+// sit in the block of a try that has a catch clause (not in the catch or
+// finally), in a chain that ends in .catch(), or hand its promise to the
+// caller with return or a concise arrow body, which makes the caller
+// responsible (MetadataDeleteDialog catches the promise the detail pages'
+// onDelete returns). A concise arrow in a JSX event prop is still flagged: an
+// event handler never catches what it is handed. The rule reads syntax only,
+// so it cannot tell whether a caller really catches a returned promise, or
+// whether a try catches a call made later from a callback defined inside it.
+const MUTATE_ASYNC_MESSAGE =
+  "Await mutateAsync in a try/catch that reports the failure with toastRequestError, chain .catch(), or return its promise to a caller that catches it.";
+const MUTATE_ASYNC_CALL = 'CallExpression[callee.property.name="mutateAsync"]';
+const mutateAsyncUnhandled = [
+  {
+    selector: [
+      MUTATE_ASYNC_CALL,
+      ":not(TryStatement[handler] > BlockStatement.block CallExpression)",
+      ':not(CallExpression[callee.property.name="catch"] > MemberExpression.callee CallExpression)',
+      ":not(ReturnStatement > CallExpression)",
+      ":not(ArrowFunctionExpression > CallExpression.body)",
+    ].join(""),
+    message: MUTATE_ASYNC_MESSAGE,
+  },
+  {
+    selector: `JSXAttribute[name.name=/^on[A-Z]/] > JSXExpressionContainer > ArrowFunctionExpression > ${MUTATE_ASYNC_CALL}.body`,
+    message: MUTATE_ASYNC_MESSAGE,
+  },
+];
+
 export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -132,6 +162,7 @@ export default tseslint.config(
         literalPermissionCheck,
         imperativeQueries,
         ...mutateWithoutOnError,
+        ...mutateAsyncUnhandled,
         ...literalFileUrls,
       ],
       "no-restricted-imports": [
@@ -182,6 +213,7 @@ export default tseslint.config(
         literalPermissionCheck,
         imperativeQueries,
         ...mutateWithoutOnError,
+        ...mutateAsyncUnhandled,
       ],
     },
   },

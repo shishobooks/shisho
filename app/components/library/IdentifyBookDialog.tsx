@@ -3,6 +3,7 @@ import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -704,10 +705,8 @@ export function IdentifyBookDialog({
                   </div>
                 )}
 
-                {searchQuery.isError && (
-                  <div className="text-center py-12 text-destructive">
-                    Search failed. Please try again.
-                  </div>
+                {searchQuery.error && !searchQuery.data && (
+                  <QueryError fallback="Search failed" query={searchQuery} />
                 )}
               </div>
             </div>

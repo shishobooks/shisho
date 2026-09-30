@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, ResourceListResponse } from "@/types";
@@ -73,16 +74,17 @@ function makeBook(id: number): Book {
   } as Book;
 }
 
-function makeQueryResult(
-  books: Book[],
-  total: number,
-): {
-  data: ResourceListResponse<Book>;
-  isSuccess: boolean;
-  isError: boolean;
-} {
+const QUERY_STATE = {
+  error: null,
+  isFetching: false,
+  isEnabled: true,
+  refetch: () => undefined,
+};
+
+function makeQueryResult(books: Book[], total: number) {
   return {
-    data: { items: books, total },
+    ...QUERY_STATE,
+    data: { items: books, total } as ResourceListResponse<Book>,
     isSuccess: true,
     isError: false,
   };
@@ -233,6 +235,7 @@ describe("BookGallerySection", () => {
         <BookGallerySection
           libraryId="1"
           query={{
+            ...QUERY_STATE,
             data: undefined,
             isSuccess: false,
             isError: false,
@@ -254,6 +257,7 @@ describe("BookGallerySection", () => {
           emptyMessage="No books here."
           libraryId="1"
           query={{
+            ...QUERY_STATE,
             data: undefined,
             isSuccess: false,
             isError: false,
@@ -266,21 +270,36 @@ describe("BookGallerySection", () => {
     expect(screen.queryByText("No books here.")).not.toBeInTheDocument();
   });
 
-  it("renders empty state when the query errors", () => {
+  it("reports a failed query under the heading with Retry", async () => {
+    const refetch = vi.fn();
     render(
       wrap(
         <BookGallerySection
           emptyMessage="No books here."
           libraryId="1"
           query={{
+            ...QUERY_STATE,
             data: undefined,
+            error: new ShishoAPIError(
+              "Internal Server Error",
+              "internal_server_error",
+              500,
+            ),
             isSuccess: false,
             isError: true,
+            refetch,
           }}
           title="Books"
         />,
       ),
     );
-    expect(screen.getByText("No books here.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Books" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /^Failed to load books/,
+    );
+    expect(screen.queryByText("No books here.")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

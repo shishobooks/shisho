@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 
 import BookDetail from "./BookDetail";
@@ -66,8 +68,35 @@ const { idle } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
 }));
 
+// Each test starts from a loaded book; the load-failure tests replace it.
+const bookQuery = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
+const loadedBook = () => ({
+  data: book,
+  error: null,
+  isLoading: false,
+  isSuccess: true,
+  isFetching: false,
+  isEnabled: true,
+  refetch: vi.fn(),
+});
+const failedBook = (error: unknown) => ({
+  data: undefined,
+  error,
+  isLoading: false,
+  isSuccess: false,
+  isError: true,
+  isFetching: false,
+  isEnabled: true,
+  refetch: vi.fn(),
+});
+beforeEach(() => {
+  bookQuery.current = loadedBook();
+});
+
 vi.mock("@/hooks/queries/books", () => ({
-  useBook: () => ({ data: book, isLoading: false, isSuccess: true }),
+  useBook: () => bookQuery.current,
   useDeleteBook: idle,
   useDeleteFile: idle,
   useResyncBook: idle,
@@ -184,5 +213,33 @@ describe("BookDetail library name", () => {
     renderPage();
 
     expect(screen.getByTestId("breadcrumbs")).toHaveTextContent("Fiction");
+  });
+});
+
+describe("BookDetail load failure", () => {
+  it("shows the fallback and Retry inside the page for a server fault", async () => {
+    bookQuery.current = failedBook(
+      new ShishoAPIError("Internal Server Error", "internal_server_error", 500),
+    );
+    renderPage();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/^Failed to load book/);
+    expect(screen.queryByText(/Not Found/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Internal Server Error/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(bookQuery.current.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the Not Found page for a 404", () => {
+    bookQuery.current = failedBook(
+      new ShishoAPIError("Book not found", "not_found", 404),
+    );
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Book Not Found" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

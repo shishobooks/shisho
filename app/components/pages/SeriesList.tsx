@@ -177,11 +177,14 @@ const SeriesList = () => {
   // Track the search value that produced the currently displayed data
   const [confirmedSearch, setConfirmedSearch] = useState<string | null>(null);
 
+  // A failed search settles too, so the gallery shows its error instead of a
+  // spinner that waits for a success.
+  const seriesSettled = seriesQuery.isSuccess || seriesQuery.isError;
   useEffect(() => {
-    if (seriesQuery.isSuccess && !seriesQuery.isFetching) {
+    if (seriesSettled && !seriesQuery.isFetching) {
       setConfirmedSearch(debouncedSearch);
     }
-  }, [seriesQuery.isSuccess, seriesQuery.isFetching, debouncedSearch]);
+  }, [seriesSettled, seriesQuery.isFetching, debouncedSearch]);
 
   // Data is stale if search changed but query hasn't completed yet
   const isStaleData =
@@ -239,12 +242,10 @@ const SeriesList = () => {
         isLoading={
           seriesQuery.isLoading || seriesQuery.isFetching || isStaleData
         }
-        isSuccess={
-          seriesQuery.isSuccess && !seriesQuery.isFetching && !isStaleData
-        }
         itemLabel="series"
         items={seriesQuery.data?.items ?? []}
         itemsPerPage={itemsPerPage}
+        query={seriesQuery}
         renderItem={renderSeriesItem}
         total={seriesQuery.data?.total ?? 0}
       />

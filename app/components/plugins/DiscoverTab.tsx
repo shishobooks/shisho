@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
 import { filterPlugins } from "@/components/plugins/discoverFilters";
 import { deriveCapabilityLabels } from "@/components/plugins/pluginCapabilities";
@@ -31,7 +32,8 @@ interface DiscoverTabProps {
 }
 
 export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
-  const { data: available = [], error, isLoading } = usePluginsAvailable();
+  const availableQuery = usePluginsAvailable();
+  const { data: available = [], isLoading } = availableQuery;
   const { data: installed = [] } = usePluginsInstalled();
   const { data: repos = [] } = usePluginRepositories();
   const installPlugin = useInstallPlugin();
@@ -103,11 +105,12 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   };
 
   if (isLoading) return <LoadingSpinner />;
-  if (error) {
+  if (availableQuery.error && !availableQuery.data) {
     return (
-      <p className="text-sm text-destructive">
-        Failed to load available plugins: {error.message}
-      </p>
+      <QueryError
+        fallback="Failed to load available plugins"
+        query={availableQuery}
+      />
     );
   }
 

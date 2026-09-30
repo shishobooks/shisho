@@ -169,3 +169,98 @@ describe("ESLint mutation rule", () => {
     expect(messages.filter(isMutateMessage)).toHaveLength(0);
   });
 });
+
+const MUTATE_ASYNC_FIXTURE = `
+declare const mutation: { mutateAsync: (vars: unknown) => Promise<unknown> };
+declare const report: (error: unknown) => void;
+export const run = async () => {
+  await mutation.mutateAsync(1);
+  void mutation.mutateAsync(2);
+  try {
+    await mutation.mutateAsync(3);
+  } catch (error) {
+    report(error);
+    // A retry inside the catch clause is not covered by the try.
+    await mutation.mutateAsync(4);
+  } finally {
+    await mutation.mutateAsync(5);
+  }
+  await mutation.mutateAsync(6).catch(report);
+  await mutation
+    .mutateAsync(7)
+    .then(() => undefined)
+    .catch(report);
+  // A .then chain without a .catch still drops the rejection.
+  await mutation.mutateAsync(8).then(() => undefined);
+  // A try with only a finally clause does not catch.
+  try {
+    await mutation.mutateAsync(10);
+  } finally {
+    report(null);
+  }
+};
+// Returning the promise hands the rejection to the caller.
+export const handOff = (id: number) => {
+  return mutation.mutateAsync(id);
+};
+export const handOffArrow = (id: number) => mutation.mutateAsync(id);
+// Known gaps, pinned so a change to them is deliberate. The rule reads
+// syntax only, so none of these is flagged although each can leak.
+export const knownGaps = async (ids: number[]) => {
+  // A concise arrow counts as a hand-off even inside Promise.all.
+  await Promise.all(ids.map(() => mutation.mutateAsync(11)));
+  // A try counts for a callback defined in it that runs later.
+  try {
+    ids.forEach(async () => {
+      await mutation.mutateAsync(12);
+    });
+  } catch (error) {
+    report(error);
+  }
+  // A destructured mutateAsync is not a member call.
+  const { mutateAsync } = mutation;
+  await mutateAsync(13);
+};
+// An event handler never catches what it is handed.
+export const Button = () => (
+  <button onClick={() => mutation.mutateAsync(9)} type="button" />
+);
+`;
+
+const isMutateAsyncMessage = (message: string) =>
+  message.includes("mutateAsync");
+
+// The argument of each mutateAsync call the rule flags, read from the
+// fixture line each message points at.
+const flaggedMutateAsyncCalls = async (filePath: string) => {
+  const [result] = await eslint.lintText(MUTATE_ASYNC_FIXTURE, { filePath });
+  const lines = MUTATE_ASYNC_FIXTURE.split("\n");
+  return result.messages
+    .filter(
+      (message) =>
+        message.ruleId === "no-restricted-syntax" &&
+        isMutateAsyncMessage(message.message),
+    )
+    .map((message) =>
+      Number(/mutateAsync\((\d+)\)/.exec(lines[message.line - 1])?.[1]),
+    );
+};
+
+describe("ESLint mutateAsync rule", () => {
+  it("rejects mutateAsync calls whose rejection nothing handles", async () => {
+    // 4 is in the catch clause, 5 in finally, 10 in a try without a catch.
+    // The known gaps (11, 12, 13) are not flagged.
+    expect(await flaggedMutateAsyncCalls("app/components/Fixture.tsx")).toEqual(
+      [1, 2, 4, 5, 8, 10, 9],
+    );
+  });
+
+  it("allows them in tests", async () => {
+    const messages = await restrictedSyntax(
+      "app/components/Fixture.test.tsx",
+      MUTATE_ASYNC_FIXTURE,
+    );
+
+    expect(messages.filter(isMutateAsyncMessage)).toHaveLength(0);
+  });
+});

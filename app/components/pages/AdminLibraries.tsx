@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { useConfig } from "@/hooks/queries/config";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
@@ -57,7 +58,8 @@ const AdminLibraries = () => {
   usePageTitle("Libraries");
 
   const navigate = useNavigate();
-  const { data, isLoading, error } = useLibraries({});
+  const librariesQuery = useLibraries({});
+  const { data, isLoading } = librariesQuery;
   const { data: config } = useConfig();
   const createLibraryMutation = useCreateLibrary();
   const isDevelopment = import.meta.env.DEV;
@@ -93,15 +95,6 @@ const AdminLibraries = () => {
 
   if (isLoading) {
     return <LoadingSpinner />;
-  }
-
-  if (error) {
-    return (
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-4">Error Loading Libraries</h1>
-        <p className="text-muted-foreground">{error.message}</p>
-      </div>
-    );
   }
 
   const libraries = data?.items ?? [];
@@ -140,7 +133,12 @@ const AdminLibraries = () => {
         </div>
       </div>
 
-      {libraries.length === 0 ? (
+      {librariesQuery.error && !data ? (
+        <QueryError
+          fallback="Failed to load libraries"
+          query={librariesQuery}
+        />
+      ) : libraries.length === 0 ? (
         <div className="border border-border rounded-md p-8 text-center">
           <p className="text-muted-foreground mb-4">No libraries found.</p>
           {canCreateLibraries && (

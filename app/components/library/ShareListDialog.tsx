@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -161,6 +162,8 @@ export function ShareListDialog({
               <p className="text-sm text-muted-foreground">
                 Sharing with other users is unavailable in the demo.
               </p>
+            ) : usersQuery.error && !usersQuery.data ? (
+              <QueryError fallback="Failed to load users" query={usersQuery} />
             ) : (
               <div className="flex gap-2">
                 <Select
@@ -224,6 +227,11 @@ export function ShareListDialog({
             <h3 className="text-sm font-medium">Current Shares</h3>
             {sharesQuery.isLoading ? (
               <LoadingSpinner />
+            ) : sharesQuery.error && !sharesQuery.data ? (
+              <QueryError
+                fallback="Failed to load shares"
+                query={sharesQuery}
+              />
             ) : shares.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">
                 This list hasn't been shared with anyone yet.

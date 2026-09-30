@@ -2,6 +2,7 @@ import { Loader2, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -78,23 +79,27 @@ export function BookSelectionList({
             )}
           </div>
 
-          <ScrollArea className="h-48 border rounded-md p-2">
-            {availableBooks.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-4">
-                {debouncedSearch
-                  ? "No books match your search"
-                  : "No other books in this library"}
-              </div>
-            ) : (
-              availableBooks.map((book) => (
-                <BookSelectionItem
-                  book={book}
-                  isSelected={String(book.id) === selectedBookId}
-                  key={book.id}
-                />
-              ))
-            )}
-          </ScrollArea>
+          {booksQuery.error && !booksQuery.data ? (
+            <QueryError fallback="Failed to load books" query={booksQuery} />
+          ) : (
+            <ScrollArea className="h-48 border rounded-md p-2">
+              {availableBooks.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  {debouncedSearch
+                    ? "No books match your search"
+                    : "No other books in this library"}
+                </div>
+              ) : (
+                availableBooks.map((book) => (
+                  <BookSelectionItem
+                    book={book}
+                    isSelected={String(book.id) === selectedBookId}
+                    key={book.id}
+                  />
+                ))
+              )}
+            </ScrollArea>
+          )}
         </>
       )}
     </RadioGroup>

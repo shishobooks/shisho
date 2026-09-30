@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -22,7 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useFilesystemBrowse } from "@/hooks/queries/filesystem";
-import { requestErrorMessage } from "@/libraries/api";
 import type { Entry } from "@/types";
 
 interface DirectoryPickerDialogProps {
@@ -288,13 +288,12 @@ const DirectoryPickerDialog = ({
 
           {/* Directory listing */}
           <div className="h-[400px] border rounded-md overflow-y-auto">
-            {browseQuery.isError ? (
-              <div className="flex items-center justify-center h-full py-12 text-destructive">
-                {requestErrorMessage(
-                  browseQuery.error,
-                  "Failed to load directory",
-                )}
-              </div>
+            {browseQuery.error && !browseQuery.data ? (
+              <QueryError
+                className="m-3"
+                fallback="Failed to load directory"
+                query={browseQuery}
+              />
             ) : accumulatedEntries.length === 0 ? (
               // While accumulatedEntries is empty during any fetch (initial
               // load, navigation, search, or hidden-toggle), show a spinner

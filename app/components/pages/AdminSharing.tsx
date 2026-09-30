@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -87,13 +88,16 @@ const AdminSharing = () => {
     );
   }
 
-  if (settingsQuery.isError || !settingsQuery.data) {
+  if (!settingsQuery.data) {
     return (
       <div>
         {pageHeader}
-        <p className="text-sm text-muted-foreground">
-          Failed to load sharing settings.
-        </p>
+        {settingsQuery.error && (
+          <QueryError
+            fallback="Failed to load sharing settings"
+            query={settingsQuery}
+          />
+        )}
       </div>
     );
   }

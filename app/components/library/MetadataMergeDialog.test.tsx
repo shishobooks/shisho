@@ -1,6 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
+
+import { ShishoAPIError } from "@/libraries/api";
+import { watchUnhandledRejections } from "@/testing/mutations";
 
 import { MetadataMergeDialog } from "./MetadataMergeDialog";
 
@@ -119,5 +123,95 @@ describe("MetadataMergeDialog", () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSearch).toHaveBeenLastCalledWith("");
+  });
+});
+
+describe("MetadataMergeDialog failures", () => {
+  it("toasts a rejected merge and stays open with the selection kept", async () => {
+    const user = createUser();
+    const toastError = vi.spyOn(toast, "error");
+    const onMerge = vi
+      .fn()
+      .mockRejectedValue(
+        new ShishoAPIError("Merge conflicts with an alias", "conflict", 409),
+      );
+    const onOpenChange = vi.fn();
+    const watcher = watchUnhandledRejections();
+
+    render(
+      <MetadataMergeDialog
+        entities={entities}
+        entityType="genre"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={onMerge}
+        onOpenChange={onOpenChange}
+        onSearch={vi.fn()}
+        open={true}
+        targetId={1}
+        targetName="Fantasy"
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Dutton"));
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(
+        "Merge conflicts with an alias",
+        undefined,
+      );
+    });
+    expect(await watcher.stop()).toEqual([]);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox")).toHaveTextContent("Dutton");
+  });
+
+  it("toasts a rejected set-child with the fallback for a server fault", async () => {
+    const user = createUser();
+    const toastError = vi.spyOn(toast, "error");
+    const onSetChild = vi
+      .fn()
+      .mockRejectedValue(
+        new ShishoAPIError(
+          "Internal Server Error",
+          "internal_server_error",
+          500,
+        ),
+      );
+    const onOpenChange = vi.fn();
+    const watcher = watchUnhandledRejections();
+
+    render(
+      <MetadataMergeDialog
+        entities={entities}
+        entityType="publisher"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={onOpenChange}
+        onSearch={vi.fn()}
+        open={true}
+        setChildConfig={{ disabledIds: [], isPending: false, onSetChild }}
+        targetId={1}
+        targetName="Penguin"
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Dutton"));
+    await user.click(screen.getByRole("radio", { name: /Set as child/i }));
+    await user.click(screen.getByRole("button", { name: /Set as child/i }));
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(
+        "Failed to set as child",
+        undefined,
+      );
+    });
+    expect(await watcher.stop()).toEqual([]);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox")).toHaveTextContent("Dutton");
   });
 });

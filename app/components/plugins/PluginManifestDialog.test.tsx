@@ -97,11 +97,14 @@ describe("PluginManifestDialog", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/loading/i);
   });
 
-  it("shows an error message when error is set", () => {
+  it("shows the fallback in an alert when the manifest fails to load", () => {
     mockUsePluginManifest.mockReturnValue({
       data: undefined,
       isLoading: false,
-      error: new Error("Failed to fetch manifest"),
+      isFetching: false,
+      isEnabled: true,
+      refetch: vi.fn(),
+      error: new TypeError("Failed to fetch"),
     });
 
     render(
@@ -115,6 +118,9 @@ describe("PluginManifestDialog", () => {
       ),
     );
 
-    expect(screen.getByText(/Failed to fetch manifest/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /^Failed to load plugin manifest/,
+    );
+    expect(screen.queryByText(/Failed to fetch/)).not.toBeInTheDocument();
   });
 });

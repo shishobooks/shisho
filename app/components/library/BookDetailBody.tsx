@@ -75,7 +75,12 @@ import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useSharingSettings } from "@/hooks/queries/sharing";
 import { useCan } from "@/hooks/useCan";
-import { API, ShishoAPIError, toastRequestError } from "@/libraries/api";
+import {
+  API,
+  requestErrorMessage,
+  ShishoAPIError,
+  toastRequestError,
+} from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   DownloadFormatKepub,
@@ -869,10 +874,10 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       });
 
       if (!headResponse.ok) {
-        // A HEAD response has no body, so GET the error message. checkStatus
-        // rejects with the API's message, or a status-based one when a proxy
-        // answered. A GET that succeeds after all is not read, since its body
-        // is the whole file.
+        // A HEAD response has no body, so GET the error message. The dialog
+        // shows the API's message, or the fallback when a proxy answered or
+        // the server failed without one (requestErrorMessage). A GET that
+        // succeeds after all is not read, since its body is the whole file.
         const errorResponse = await fetch(endpoint, {
           signal: abortController.signal,
         });
@@ -884,7 +889,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
             // A cancel while reading the body is an AbortError, which the
             // outer catch ignores.
             if (!(error instanceof ShishoAPIError)) throw error;
-            message = error.message;
+            message = requestErrorMessage(error, message);
           }
         }
         setDownloadError({ fileId, message });
@@ -900,7 +905,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         return;
       }
       console.error("Download error:", error);
-      toast.error("Failed to download file");
+      toastRequestError(error, "Failed to download file");
     } finally {
       downloadAbortController.current = null;
       setDownloadingFileId(null);

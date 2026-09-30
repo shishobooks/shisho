@@ -4,9 +4,11 @@ import BookDetailBody from "@/components/library/BookDetailBody";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { useBook } from "@/hooks/queries/books";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { isLoadFailure } from "@/libraries/api";
 
 const BookDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -23,7 +25,15 @@ const BookDetail = () => {
     );
   }
 
-  if (!bookQuery.isSuccess || !bookQuery.data) {
+  if (isLoadFailure(bookQuery)) {
+    return (
+      <LibraryLayout>
+        <QueryError fallback="Failed to load book" query={bookQuery} />
+      </LibraryLayout>
+    );
+  }
+
+  if (!bookQuery.data) {
     return (
       <LibraryLayout>
         <div className="text-center">

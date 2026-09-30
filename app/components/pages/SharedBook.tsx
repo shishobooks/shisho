@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { useSharedBook } from "@/hooks/queries/sharing";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { ShishoAPIError } from "@/libraries/api";
+import { isNotFoundError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { SharedBookResponse } from "@/types";
 import { shareBookCoverUrl, shareFileCoverUrl } from "@/utils/coverUrl";
@@ -91,11 +91,7 @@ const SharedBook = () => {
   let content;
   if (sharedQuery.isLoading) {
     content = <LoadingSpinner />;
-  } else if (
-    !token ||
-    (sharedQuery.error instanceof ShishoAPIError &&
-      sharedQuery.error.status === 404)
-  ) {
+  } else if (!token || isNotFoundError(sharedQuery.error)) {
     content = <ShareUnavailable />;
   } else if (sharedQuery.isError || !shared) {
     // The server failed or could not be reached; the link may be fine.

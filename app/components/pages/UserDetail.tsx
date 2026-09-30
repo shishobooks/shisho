@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import { isLoadFailure, toastRequestError } from "@/libraries/api";
 import { sortRoles } from "@/utils/roles";
 
 const UserDetail = () => {
@@ -43,7 +44,8 @@ const UserDetail = () => {
   const { user: currentUser } = useAuth();
   const canWrite = useCan("users:write");
 
-  const { data: user, isLoading, error } = useUser(id);
+  const userQuery = useUser(id);
+  const { data: user, isLoading } = userQuery;
 
   usePageTitle(user?.username ? `${user.username}` : "User Details");
   const { data: rolesData } = useRoles();
@@ -242,11 +244,16 @@ const UserDetail = () => {
     return <LoadingSpinner />;
   }
 
-  if (error || !user) {
+  if (isLoadFailure(userQuery)) {
+    return <QueryError fallback="Failed to load user" query={userQuery} />;
+  }
+
+  if (!user) {
     return (
-      <div className="text-center py-20">
-        <p className="text-destructive">
-          {requestErrorMessage(error, "User not found")}
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold mb-4">User Not Found</h1>
+        <p className="text-muted-foreground">
+          The user you're looking for doesn't exist or may have been removed.
         </p>
       </div>
     );

@@ -18,6 +18,7 @@ import {
 } from "@/components/files/chapterUtils";
 import FetchChaptersDialog from "@/components/files/FetchChaptersDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import {
   useFileChapters,
@@ -813,11 +814,13 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     }
 
     // Error state
-    if (chaptersQuery.isError) {
+    if (chaptersQuery.error && !chaptersQuery.data) {
       return (
-        <div className="py-8 text-center">
-          <p className="text-destructive">Failed to load chapters</p>
-        </div>
+        <QueryError
+          className="my-4"
+          fallback="Failed to load chapters"
+          query={chaptersQuery}
+        />
       );
     }
 

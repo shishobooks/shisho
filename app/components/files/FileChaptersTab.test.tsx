@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFileChapters } from "@/hooks/queries/chapters";
+import { ShishoAPIError } from "@/libraries/api";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
 
@@ -491,7 +492,45 @@ describe("FileChaptersTab - M4B Playback", () => {
         />,
       );
 
-      expect(screen.getByText("Failed to load chapters")).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /^Failed to load chapters/,
+      );
+    });
+
+    it("shows the server's message and retries on request", async () => {
+      const refetch = vi.fn();
+      mockUseFileChapters.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        isFetching: false,
+        isEnabled: true,
+        refetch,
+        error: new ShishoAPIError(
+          "Chapters are unreadable for this file",
+          "unprocessable",
+          422,
+        ),
+      } as unknown as ReturnType<typeof useFileChapters>);
+
+      renderWithProviders(
+        <FileChaptersTab
+          canEdit
+          file={mockM4bFile}
+          isEditing={false}
+          onEditingChange={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /^Chapters are unreadable for this file/,
+      );
+      expect(
+        screen.queryByText("Failed to load chapters"),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(refetch).toHaveBeenCalledTimes(1);
     });
   });
 });
