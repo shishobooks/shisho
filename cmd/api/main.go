@@ -54,6 +54,9 @@ func main() {
 	if err != nil {
 		log.Err(err).Fatal("config error")
 	}
+	for _, warning := range cfg.StartupWarnings() {
+		log.Warn("config warning: " + warning)
+	}
 
 	// Initialize cache directories
 	if err := initCacheDir(cfg.CacheDir); err != nil {

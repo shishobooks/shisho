@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -69,19 +70,16 @@ type Monitor struct {
 	refresh  chan struct{} // signals run() to reload library watches
 }
 
-// minMonitorDelaySeconds is the minimum allowed debounce delay.
-// Values below this are clamped to prevent instant event firing.
-const minMonitorDelaySeconds = 5
-
 // newMonitor creates a new filesystem monitor for the given worker.
 func newMonitor(w *Worker) *Monitor {
-	delaySec := w.config.LibraryMonitorDelaySeconds
-	if delaySec < minMonitorDelaySeconds {
+	// Delays below config.MinLibraryMonitorDelaySeconds are raised to it so
+	// events never fire instantly. Server Settings shows the same value.
+	delaySec := w.config.EffectiveLibraryMonitorDelaySeconds()
+	if delaySec != w.config.LibraryMonitorDelaySeconds {
 		w.log.Warn("library_monitor_delay_seconds too low, clamping to minimum", logger.Data{
 			"configured": w.config.LibraryMonitorDelaySeconds,
-			"minimum":    minMonitorDelaySeconds,
+			"minimum":    config.MinLibraryMonitorDelaySeconds,
 		})
-		delaySec = minMonitorDelaySeconds
 	}
 	return &Monitor{
 		worker:        w,

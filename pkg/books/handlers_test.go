@@ -203,6 +203,13 @@ func (m *mockScanner) Scan(_ context.Context, _ ScanOptions) (*ScanResult, error
 // setupTestServer sets up an Echo server with the book routes registered.
 func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	t.Helper()
+	return setupTestServerWithConfig(t, db, nil)
+}
+
+// setupTestServerWithConfig is setupTestServer with a hook to change the
+// test config before the routes are registered.
+func setupTestServerWithConfig(t *testing.T, db *bun.DB, configure func(*config.Config)) *echo.Echo {
+	t.Helper()
 
 	e := echo.New()
 	b, err := binder.New()
@@ -213,6 +220,9 @@ func setupTestServer(t *testing.T, db *bun.DB) *echo.Echo {
 	// Create config for testing
 	cfg := config.NewForTest()
 	cfg.CacheDir = t.TempDir()
+	if configure != nil {
+		configure(cfg)
+	}
 
 	// Create auth service and middleware
 	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
@@ -668,6 +678,117 @@ func TestDeleteFile_DeletesFileAndKeepsBook(t *testing.T) {
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
+}
+
+// A user's supplement_exclude_patterns only hide files from supplement
+// discovery. Deleting a book's last file cleans the directory with a fixed
+// junk list, so a file matching a user pattern such as "*.txt" survives.
+func TestDeleteFile_LastFileKeepsFilesMatchingUserExcludePatterns(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	bookDir := t.TempDir()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	user := setupTestUser(t, db, library.ID, true)
+	require.NoError(t, db.NewSelect().Model(user).Relation("Role").Relation("Role.Permissions").WherePK().Scan(ctx))
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookDir,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+	filePath := filepath.Join(bookDir, "test.epub")
+	require.NoError(t, os.WriteFile(filePath, []byte("content"), 0o644))
+	file := &models.File{LibraryID: library.ID, BookID: book.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, Filepath: filePath, FilesizeBytes: 7}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	notesPath := filepath.Join(bookDir, "notes.txt")
+	require.NoError(t, os.WriteFile(notesPath, []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, ".DS_Store"), []byte("junk"), 0o644))
+
+	e := setupTestServerWithConfig(t, db, func(cfg *config.Config) {
+		cfg.SupplementExcludePatterns = append(cfg.SupplementExcludePatterns, "*.txt")
+	})
+	req := httptest.NewRequest(http.MethodDelete, "/books/files/"+strconv.Itoa(file.ID), nil)
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), `"book_deleted":true`)
+
+	assert.FileExists(t, notesPath, "a file matching a user exclude pattern must not be deleted")
+}
+
+// Moving a book's only file away empties its directory. The cleanup deletes
+// the fixed junk list only, so a file matching a user exclude pattern such as
+// "*.txt" keeps the directory and survives.
+func TestMoveFiles_KeepsFilesMatchingUserExcludePatterns(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	libraryDir := t.TempDir()
+
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+		OrganizeFileStructure:    true,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	newBook := func(title string) (*models.Book, *models.File, string) {
+		dir := filepath.Join(libraryDir, title)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		book := &models.Book{
+			LibraryID:       library.ID,
+			Title:           title,
+			TitleSource:     models.DataSourceFilepath,
+			SortTitle:       title,
+			SortTitleSource: models.DataSourceFilepath,
+			AuthorSource:    models.DataSourceFilepath,
+			Filepath:        dir,
+		}
+		_, err := db.NewInsert().Model(book).Exec(ctx)
+		require.NoError(t, err)
+		path := filepath.Join(dir, title+".epub")
+		require.NoError(t, os.WriteFile(path, []byte("content"), 0o644))
+		return book, setupTestFile(t, db, book, models.FileTypeEPUB, path), dir
+	}
+	source, sourceFile, sourceDir := newBook("Source")
+	target, _, _ := newBook("Target")
+
+	notesPath := filepath.Join(sourceDir, "notes.txt")
+	require.NoError(t, os.WriteFile(notesPath, []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, ".DS_Store"), []byte("junk"), 0o644))
+
+	e := setupTestServerWithConfig(t, db, func(cfg *config.Config) {
+		cfg.SupplementExcludePatterns = append(cfg.SupplementExcludePatterns, "*.txt")
+	})
+	body := fmt.Sprintf(`{"file_ids":[%d],"target_book_id":%d}`, sourceFile.ID, target.ID)
+	req := httptest.NewRequest(http.MethodPost, "/books/"+strconv.Itoa(source.ID)+"/move-files", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	assert.NoFileExists(t, filepath.Join(sourceDir, "Source.epub"), "the file moved to the target book")
+	assert.FileExists(t, notesPath, "a file matching a user exclude pattern must not be deleted")
 }
 
 func TestListBooks_FiltersByIDs(t *testing.T) {

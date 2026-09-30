@@ -603,7 +603,7 @@ func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 
 	// Delete first file (pass nil for supportedTypes since another main file exists)
 	bookSvc := NewService(db)
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, file1.ID, library, nil, nil)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, file1.ID, library, nil)
 	require.NoError(t, err)
 
 	assert.False(t, result.BookDeleted, "book should not be deleted")
@@ -676,7 +676,7 @@ func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
 
 	// Delete the only file (pass nil for supportedTypes since there are no supplements)
 	bookSvc := NewService(db)
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil, nil)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil)
 	require.NoError(t, err)
 
 	assert.True(t, result.BookDeleted, "book should be deleted when last file removed")
@@ -748,10 +748,9 @@ func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
 	_, err = os.Stat(dsStorePath)
 	require.NoError(t, err, ".DS_Store should exist before deletion")
 
-	// Delete the only file with ignored patterns that include .DS_Store
+	// Delete the only file; .DS_Store is on the fixed junk list
 	bookSvc := NewService(db)
-	ignoredPatterns := []string{".*", ".DS_Store", "Thumbs.db"}
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil, ignoredPatterns)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil)
 	require.NoError(t, err)
 
 	assert.True(t, result.BookDeleted, "book should be deleted when last file removed")
@@ -831,8 +830,7 @@ func TestDeleteFileAndCleanup_CleansUpCoverAndSidecarFiles(t *testing.T) {
 
 	// Delete the only file
 	bookSvc := NewService(db)
-	ignoredPatterns := []string{".*", ".DS_Store", "Thumbs.db"}
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil, ignoredPatterns)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil)
 	require.NoError(t, err)
 
 	assert.True(t, result.BookDeleted, "book should be deleted when last file removed")
@@ -858,7 +856,7 @@ func TestDeleteFileAndCleanup_FileNotFound(t *testing.T) {
 
 	// Try to delete a non-existent file
 	bookSvc := NewService(db)
-	_, err = bookSvc.DeleteFileAndCleanup(ctx, 99999, library, nil, nil)
+	_, err = bookSvc.DeleteFileAndCleanup(ctx, 99999, library, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -1027,7 +1025,7 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 
 	// Delete the main file
 	bookSvc := NewService(db)
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes, nil)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
 	// Book should NOT be deleted (supplement was promoted)
@@ -1121,7 +1119,7 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 
 	// Delete the main file
 	bookSvc := NewService(db)
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes, nil)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
 	// Book SHOULD be deleted (no promotable supplements)
@@ -1213,7 +1211,7 @@ func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *te
 
 	// Delete the main file
 	bookSvc := NewService(db)
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes, nil)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
 	// Book should NOT be deleted (PDF supplement was promoted)
@@ -1325,7 +1323,7 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 
 	// Delete the main file
 	bookSvc := NewService(db)
-	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes, nil)
+	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
 	// Book should NOT be deleted

@@ -252,3 +252,37 @@ func TestCache_Clear_IdempotentWhenMissing(t *testing.T) {
 
 	require.NoError(t, c.Clear())
 }
+
+func TestGetPage_RenderSettingsChangeRerenders(t *testing.T) {
+	t.Parallel()
+	cacheDir := t.TempDir()
+
+	lowPath, _, err := NewCache(cacheDir, 100, 85).GetPage(testPDFPath, 7, 0)
+	require.NoError(t, err)
+
+	// A restart with a new DPI must not serve the page rendered at the old one.
+	highPath, _, err := NewCache(cacheDir, 200, 85).GetPage(testPDFPath, 7, 0)
+	require.NoError(t, err)
+	assert.NotEqual(t, lowPath, highPath)
+
+	low, err := os.ReadFile(lowPath)
+	require.NoError(t, err)
+	high, err := os.ReadFile(highPath)
+	require.NoError(t, err)
+	lowImg, err := jpeg.DecodeConfig(bytes.NewReader(low))
+	require.NoError(t, err)
+	highImg, err := jpeg.DecodeConfig(bytes.NewReader(high))
+	require.NoError(t, err)
+	assert.Equal(t, 2*lowImg.Width, highImg.Width, "the 200 DPI page is twice as wide as the 100 DPI one")
+
+	// Quality is part of the key too.
+	otherQuality, _, err := NewCache(cacheDir, 200, 60).GetPage(testPDFPath, 7, 0)
+	require.NoError(t, err)
+	assert.NotEqual(t, highPath, otherQuality)
+
+	// Invalidate still drops every rendering of the file.
+	require.NoError(t, NewCache(cacheDir, 200, 85).Invalidate(7))
+	for _, p := range []string{lowPath, highPath, otherQuality} {
+		assert.NoFileExists(t, p)
+	}
+}

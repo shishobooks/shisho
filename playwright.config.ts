@@ -43,6 +43,7 @@ interface BrowserConfig {
   dbPath: string;
   cacheDir: string;
   pluginDir: string;
+  pluginDataDir: string;
 }
 
 interface E2EConfig {
@@ -78,6 +79,9 @@ async function getOrCreateE2EConfig(): Promise<E2EConfig> {
       const dbPath = path.join(tmpDir, "data.sqlite");
       const cacheDir = path.join(tmpDir, "cache");
       const pluginDir = path.join(tmpDir, "plugins");
+      // Plugin data defaults to /config/plugins/data, which is not writable
+      // outside the container.
+      const pluginDataDir = path.join(tmpDir, "plugin-data");
 
       // Ensure cache and plugin directories exist
       fs.mkdirSync(cacheDir, { recursive: true });
@@ -91,6 +95,7 @@ async function getOrCreateE2EConfig(): Promise<E2EConfig> {
         dbPath,
         cacheDir,
         pluginDir,
+        pluginDataDir,
       };
     }),
   );
@@ -163,8 +168,9 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
         SERVER_PORT: String(config.apiPort),
         CACHE_DIR: config.cacheDir,
         PLUGIN_DIR: config.pluginDir,
-        JWT_SECRET: `e2e-test-secret-${config.browser}`,
-        ENVIRONMENT: "test", // Enables test-only API endpoints
+        PLUGIN_DATA_DIR: config.pluginDataDir,
+        JWT_SECRET: `e2e-test-secret-at-least-32-characters-${config.browser}`,
+        SHISHO_TEST_MODE: "true", // Enables test-only API endpoints
       },
     },
     {

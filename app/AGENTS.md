@@ -491,9 +491,10 @@ Download and stream endpoints are served `private, no-store`, so their URLs carr
 
 ### Page images
 
-The CBZ/PDF page endpoint (`/api/books/files/:id/page/:n`) is also served `private, max-age=31536000, immutable`, so page URLs follow the same rule. Build every page URL with `filePageUrl(file, page)` from `app/utils/pageUrl.ts`, which appends `?v=` with `fileCacheKey(file)` (the file's `updated_at` in epoch milliseconds, like file covers). Never write the page URL inline: a URL without the key keeps showing the old pages for a year after the file is replaced on disk. ESLint rejects a literal `/api/.../page/` URL outside `app/utils`.
+The CBZ/PDF page endpoint (`/api/books/files/:id/page/:n`) is also served `private, max-age=31536000, immutable`, so page URLs follow the same rule. In a component, call `const filePageUrl = useFilePageUrl()` (`app/hooks/useFilePageUrl.ts`) and build every page URL with it. It wraps `filePageUrl(file, page, pdfRenderKey)` from `app/utils/pageUrl.ts`, which appends `?v=` with `fileCacheKey(file)` (the file's `updated_at` in epoch milliseconds, like file covers) and, for PDFs only, `&r=` with the server's render key (`pdf_render_key` from `GET /auth/status`, kept in the auth context as `pdfRenderKey`). Never write the page URL inline: a URL without the keys keeps showing the old pages for a year after the file is replaced on disk or the PDF render settings change. ESLint rejects a literal `/api/.../page/` URL outside `app/utils`.
 
-- Components that render pages take the file (`PageSourceFile`, which is `id` plus `updated_at`), not a bare `fileId`, so they can build the keyed URL. `PagePicker`, `PagePreview`, and `ChapterRow` follow this.
+- Components that render pages take the file (`PageSourceFile`, which is `id`, `updated_at`, and `file_type`), not a bare `fileId`, so they can build the keyed URL. `PagePicker`, `PagePreview`, and `ChapterRow` follow this.
+- Tests that render a page-URL component need the shared auth mock (`vi.mock("@/hooks/useAuth", () => import("@/testing/auth"))`); its `pdfRenderKey` defaults to `200-85`.
 - `updated_at` is the key because every rescan that re-reads a changed file bumps it. The same scan drops the server's cached pages for that file (`invalidatePageCaches` in `pkg/worker/scan_unified.go`), so the new URL never gets an old render. The key also changes on unrelated metadata edits; that only causes a refetch, never a stale page. A size-plus-mtime key would churn less, but it would not change on a forced refresh, which is the manual fix after a replacement that kept the same size and mtime.
 
 ### Breadcrumbs
@@ -672,7 +673,7 @@ const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
 **See `e2e/AGENTS.md` for detailed E2E patterns**, including:
 - Test independence via `beforeAll` hooks
-- Test-only API endpoints (`ENVIRONMENT=test`)
+- Test-only API endpoints (`SHISHO_TEST_MODE=true`)
 - Common pitfalls (shared database, toast assertions, redirect expectations)
 
 ### Coverage

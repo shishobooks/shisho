@@ -128,7 +128,7 @@ func newPermissionTestConfig(t *testing.T) *config.Config {
 	t.Helper()
 	cfg := config.NewForTest()
 	// Test-mode routes mutate shared plugin globals; these tests run in parallel.
-	cfg.Environment = ""
+	cfg.TestMode = false
 	cfg.CacheDir = t.TempDir()
 	return cfg
 }

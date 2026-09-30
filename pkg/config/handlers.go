@@ -13,5 +13,9 @@ type handler struct {
 
 func (h *handler) retrieve(c echo.Context) error {
 	cfg := h.configService.RetrieveConfig()
-	return errors.WithStack(c.JSON(http.StatusOK, cfg))
+	return errors.WithStack(c.JSON(http.StatusOK, ConfigResponse{
+		Config:                              *cfg,
+		LibraryMonitorEffectiveDelaySeconds: cfg.EffectiveLibraryMonitorDelaySeconds(),
+		JWTSecretTooShort:                   cfg.JWTSecretTooShort(),
+	}))
 }

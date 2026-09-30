@@ -9,6 +9,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -36,7 +37,7 @@ func injectMonitorEvent(m *Monitor, path string, op fsnotify.Op, libraryID int, 
 // so callers can inject events with the correct library ID.
 func newTestMonitorWithWorker(tc *testContext, libDir string) (*Monitor, int) {
 	tc.t.Helper()
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 
 	libs, err := tc.libraryService.ListLibraries(tc.ctx, libraries.ListLibrariesOptions{})
 	if err != nil || len(libs) == 0 {

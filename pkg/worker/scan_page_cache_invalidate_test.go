@@ -23,18 +23,29 @@ func withPageCaches(t *testing.T, tc *testContext) (*cbzpages.Cache, string) {
 	cacheDir := t.TempDir()
 	cbzCache := cbzpages.NewCache(cacheDir)
 	tc.worker.cbzPageCache = cbzCache
-	tc.worker.pdfPageCache = pdfpages.NewCache(cacheDir, 72, 80)
+	tc.worker.pdfPageCache = pdfpages.NewCache(cacheDir, testPDFRenderDPI, testPDFRenderQuality)
 	return cbzCache, cacheDir
 }
 
+// The render settings of the test worker's PDF page cache.
+const (
+	testPDFRenderDPI     = 72
+	testPDFRenderQuality = 80
+)
+
 // primeCachedPage writes page 0 where the page cache of the given kind
-// ("pdf" or "cbz") keeps it: {cacheDir}/{kind}/{fileID}/page_0.jpg (see
-// pkg/pdfpages/AGENTS.md; cbzpages matches any page_0.* extension). A real
-// PDF render goes through the shared pdfium WASM pool, which is slow to start
-// and is not what these tests are about.
+// ("pdf" or "cbz") keeps it: {cacheDir}/cbz/{fileID}/page_0.jpg, or
+// {cacheDir}/pdf/{fileID}/{dpi}-{quality}/page_0.jpg at the render settings
+// the test worker's PDF cache uses (see pkg/pdfpages/AGENTS.md; cbzpages
+// matches any page_0.* extension). A real PDF render goes through the shared
+// pdfium WASM pool, which is slow to start and is not what these tests are
+// about.
 func primeCachedPage(t *testing.T, cacheDir, kind string, fileID int) string {
 	t.Helper()
 	pageDir := filepath.Join(cacheDir, kind, strconv.Itoa(fileID))
+	if kind == "pdf" {
+		pageDir = filepath.Join(pageDir, pdfpages.RenderKey(testPDFRenderDPI, testPDFRenderQuality))
+	}
 	require.NoError(t, os.MkdirAll(pageDir, 0755))
 	cachedPage := filepath.Join(pageDir, "page_0.jpg")
 	require.NoError(t, os.WriteFile(cachedPage, []byte("old render"), 0600))

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -136,5 +137,36 @@ func TestFileCover_MissingCoverOnDisk_ReturnsErrcodesNotFound(t *testing.T) {
 
 			requireErrcodesNotFound(t, rr, "Cover not found.")
 		})
+	}
+}
+
+// PDF pages depend on the server's render settings, which the page URL
+// carries as r. A browser tab opened before a restart with new settings still
+// asks for the old key; the page it gets is rendered at the new settings, so
+// it must not be cached immutably under the old URL.
+func TestGetPage_PDFCachesOnlyUnderCurrentRenderKey(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	library, book := setupTestLibraryAndBook(t, db)
+	filePath := testgen.GeneratePDF(t, t.TempDir(), "book.pdf", testgen.PDFOptions{PageCount: 2})
+	file := setupTestFile(t, db, book, models.FileTypePDF, filePath)
+	user := setupTestUser(t, db, library.ID, true)
+	e := setupTestServer(t, db)
+	base := "/books/files/" + strconv.Itoa(file.ID) + "/page/0?v=1"
+
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{"current render key", "&r=200-85", "private, max-age=31536000, immutable"},
+		{"stale render key", "&r=100-85", "private, no-store"},
+		{"no render key", "", "private, no-store"},
+	}
+	for _, tt := range tests {
+		rr := executeRequestWithUser(t, e, httptest.NewRequest(http.MethodGet, base+tt.query, nil), user)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Equal(t, tt.want, rr.Header().Get("Cache-Control"), tt.name)
 	}
 }

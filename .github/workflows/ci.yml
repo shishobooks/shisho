@@ -134,7 +134,7 @@ jobs:
         run: |
           docker run -d --name shisho-smoke \
             -p 127.0.0.1:5173:5173 \
-            -e JWT_SECRET=ci-image-smoke-test-secret \
+            -e JWT_SECRET=ci-image-smoke-test-secret-at-least-32-chars \
             shisho:smoke
 
           ready=false

@@ -6,8 +6,9 @@ import {
   HoverCardPortal,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { cn } from "@/libraries/utils";
-import { filePageUrl, type PageSourceFile } from "@/utils/pageUrl";
+import type { PageSourceFile } from "@/utils/pageUrl";
 
 export interface PagePreviewProps {
   file: PageSourceFile;
@@ -43,6 +44,7 @@ const PagePreview = ({
   onClick,
   children,
 }: PagePreviewProps) => {
+  const filePageUrl = useFilePageUrl();
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);

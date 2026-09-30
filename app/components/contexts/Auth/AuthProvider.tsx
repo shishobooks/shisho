@@ -16,6 +16,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [pdfRenderKey, setPdfRenderKey] = useState("");
 
   const checkAuthStatus = useCallback(async () => {
     try {
@@ -23,6 +24,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       const status = await API.request<StatusResponse>("GET", "/auth/status");
       setNeedsSetup(status.needs_setup);
       setDemoMode(status.demo_mode);
+      setPdfRenderKey(status.pdf_render_key);
 
       if (status.needs_setup) {
         setIsLoading(false);
@@ -113,6 +115,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuthenticated: !!user,
         needsSetup,
         demoMode,
+        pdfRenderKey,
         login,
         logout,
         can,

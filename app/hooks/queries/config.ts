@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Config } from "@/types/generated/config";
+import type { ConfigResponse } from "@/types/generated/config";
 
 import { useRequires } from "./permissions";
 
@@ -10,7 +10,7 @@ export enum QueryKey {
 }
 
 export const useConfig = () => {
-  return useQuery<Config, ShishoAPIError>({
+  return useQuery<ConfigResponse, ShishoAPIError>({
     enabled: useRequires("config:read"),
     queryKey: [QueryKey.RetrieveConfig],
     queryFn: ({ signal }) => {

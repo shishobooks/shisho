@@ -1993,8 +1993,16 @@ func (h *handler) getPage(c echo.Context) error {
 	}
 
 	// Cache for 1 year since page content doesn't change. The route is
-	// authenticated, so private keeps shared caches from storing it.
-	c.Response().Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	// authenticated, so private keeps shared caches from storing it. A PDF
+	// page also depends on the render settings, which the URL carries as r.
+	// A tab loaded before a restart with new settings asks for the old key;
+	// caching the new render under that URL would show it if the settings
+	// were reverted, so only the current key is cached.
+	cacheControl := "private, max-age=31536000, immutable"
+	if file.FileType == models.FileTypePDF && c.QueryParam("r") != h.pdfPageCache.RenderKey() {
+		cacheControl = "private, no-store"
+	}
+	c.Response().Header().Set("Cache-Control", cacheControl)
 	c.Response().Header().Set("Content-Type", mimeType)
 
 	return c.File(cachedPath)
@@ -2252,10 +2260,9 @@ func (h *handler) moveFiles(c echo.Context) error {
 
 	// Call service method
 	result, err := h.bookService.MoveFilesToBook(ctx, MoveFilesOptions{
-		FileIDs:         params.FileIDs,
-		TargetBookID:    params.TargetBookID,
-		LibraryID:       sourceBook.LibraryID,
-		IgnoredPatterns: h.config.SupplementExcludePatterns,
+		FileIDs:      params.FileIDs,
+		TargetBookID: params.TargetBookID,
+		LibraryID:    sourceBook.LibraryID,
 	})
 	if err != nil {
 		return moveFilesError(err)
@@ -2358,10 +2365,9 @@ func (h *handler) mergeBooks(c echo.Context) error {
 
 	// Call service method to move all files to target book
 	result, err := h.bookService.MoveFilesToBook(ctx, MoveFilesOptions{
-		FileIDs:         allFileIDs,
-		TargetBookID:    &params.TargetBookID,
-		LibraryID:       targetBook.LibraryID,
-		IgnoredPatterns: h.config.SupplementExcludePatterns,
+		FileIDs:      allFileIDs,
+		TargetBookID: &params.TargetBookID,
+		LibraryID:    targetBook.LibraryID,
 	})
 	if err != nil {
 		return moveFilesError(err)
@@ -2488,7 +2494,7 @@ func (h *handler) deleteFile(c echo.Context) error {
 	defer h.searchService.ReindexAffected(ctx, affected)
 
 	// Delete file
-	result, err := h.bookService.DeleteFileAndCleanup(ctx, id, library, supportedTypes, h.config.SupplementExcludePatterns)
+	result, err := h.bookService.DeleteFileAndCleanup(ctx, id, library, supportedTypes)
 	if err != nil {
 		return errors.WithStack(err)
 	}

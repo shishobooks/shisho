@@ -226,9 +226,7 @@ func (w *Worker) cleanupOrphanedFiles(
 	}
 
 	// Step 5: Directory cleanup.
-	cleanupIgnoredPatterns := make([]string, 0, len(fileutils.ShishoSpecialFilePatterns)+len(w.config.SupplementExcludePatterns))
-	cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, fileutils.ShishoSpecialFilePatterns...)
-	cleanupIgnoredPatterns = append(cleanupIgnoredPatterns, w.config.SupplementExcludePatterns...)
+	cleanupIgnoredPatterns := fileutils.DirectoryCleanupPatterns()
 
 	for dir := range orphanDirs {
 		for _, libPath := range library.LibraryPaths {

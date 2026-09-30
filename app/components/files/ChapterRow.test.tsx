@@ -7,6 +7,8 @@ import { FileTypeCBZ, FileTypeM4B, type Chapter } from "@/types";
 
 import ChapterRow from "./ChapterRow";
 
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
@@ -371,7 +373,11 @@ describe("ChapterRow - CBZ", () => {
       <ChapterRow
         chapter={baseCbzChapter}
         depth={0}
-        file={{ id: 100, updated_at: "2024-01-01T00:00:00Z" }}
+        file={{
+          id: 100,
+          updated_at: "2024-01-01T00:00:00Z",
+          file_type: FileTypeCBZ,
+        }}
         fileType={FileTypeCBZ}
         isEditing={false}
       />,
@@ -386,7 +392,11 @@ describe("ChapterRow - CBZ", () => {
         bookId={2}
         chapter={baseCbzChapter}
         depth={0}
-        file={{ id: 100, updated_at: "2024-01-01T00:00:00Z" }}
+        file={{
+          id: 100,
+          updated_at: "2024-01-01T00:00:00Z",
+          file_type: FileTypeCBZ,
+        }}
         fileType={FileTypeCBZ}
         isEditing={false}
         libraryId={1}
@@ -405,7 +415,11 @@ describe("ChapterRow - CBZ", () => {
       <ChapterRow
         chapter={baseCbzChapter}
         depth={0}
-        file={{ id: 100, updated_at: "2024-01-01T00:00:00Z" }}
+        file={{
+          id: 100,
+          updated_at: "2024-01-01T00:00:00Z",
+          file_type: FileTypeCBZ,
+        }}
         fileType={FileTypeCBZ}
         isEditing={false}
       />,
@@ -434,7 +448,11 @@ describe("ChapterRow - CBZ", () => {
         <ChapterRow
           chapter={editChapter}
           depth={0}
-          file={{ id: 100, updated_at: "2024-01-01T00:00:00Z" }}
+          file={{
+            id: 100,
+            updated_at: "2024-01-01T00:00:00Z",
+            file_type: FileTypeCBZ,
+          }}
           fileType={FileTypeCBZ}
           isEditing={true}
           onBlur={onBlur}
@@ -466,7 +484,11 @@ describe("ChapterRow - CBZ", () => {
         <ChapterRow
           chapter={editChapter}
           depth={0}
-          file={{ id: 100, updated_at: "2024-01-01T00:00:00Z" }}
+          file={{
+            id: 100,
+            updated_at: "2024-01-01T00:00:00Z",
+            file_type: FileTypeCBZ,
+          }}
           fileType={FileTypeCBZ}
           isEditing={true}
           onBlur={onBlur}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -22,12 +23,17 @@ import (
 // Environment variables use uppercase with underscores (e.g., DATABASE_FILE_PATH).
 type Config struct {
 	// Database settings
-	DatabaseConnectRetryCount int           `koanf:"database_connect_retry_count" json:"database_connect_retry_count"`
-	DatabaseConnectRetryDelay time.Duration `koanf:"database_connect_retry_delay" json:"database_connect_retry_delay"`
+
+	// DatabaseConnectRetryCount is the total number of startup connection
+	// attempts; 0 skips the check.
+	DatabaseConnectRetryCount int `koanf:"database_connect_retry_count" json:"database_connect_retry_count" validate:"min=0"`
+	// Durations use Go's duration format ("500ms", "5s"). A bare YAML number
+	// is nanoseconds, so the 1ms floor rejects it.
+	DatabaseConnectRetryDelay time.Duration `koanf:"database_connect_retry_delay" json:"database_connect_retry_delay" validate:"min=1ms"`
 	DatabaseDebug             bool          `koanf:"database_debug" json:"database_debug"`
 	DatabaseFilePath          string        `koanf:"database_file_path" json:"database_file_path" validate:"required"`
-	DatabaseBusyTimeout       time.Duration `koanf:"database_busy_timeout" json:"database_busy_timeout"`
-	DatabaseMaxRetries        int           `koanf:"database_max_retries" json:"database_max_retries"`
+	DatabaseBusyTimeout       time.Duration `koanf:"database_busy_timeout" json:"database_busy_timeout" validate:"min=1ms"`
+	DatabaseMaxRetries        int           `koanf:"database_max_retries" json:"database_max_retries" validate:"min=0"`
 
 	// Server settings
 	ServerHost string `koanf:"server_host" json:"server_host"`
@@ -36,7 +42,7 @@ type Config struct {
 	// Application settings
 	DemoMode            bool `koanf:"demo_mode" json:"demo_mode"`
 	SyncIntervalMinutes int  `koanf:"sync_interval_minutes" json:"sync_interval_minutes"`
-	WorkerProcesses     int  `koanf:"worker_processes" json:"worker_processes"`
+	WorkerProcesses     int  `koanf:"worker_processes" json:"worker_processes" validate:"min=1"`
 
 	// Job retention settings
 	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
@@ -54,26 +60,33 @@ type Config struct {
 	PluginDataDir string `koanf:"plugin_data_dir" json:"plugin_data_dir"`
 
 	// Enrichment settings
-	EnrichmentConfidenceThreshold float64 `koanf:"enrichment_confidence_threshold" json:"enrichment_confidence_threshold"`
+	EnrichmentConfidenceThreshold float64 `koanf:"enrichment_confidence_threshold" json:"enrichment_confidence_threshold" validate:"min=0,max=1"`
 
 	// Library monitor settings
 	LibraryMonitorEnabled      bool `koanf:"library_monitor_enabled" json:"library_monitor_enabled"`
 	LibraryMonitorDelaySeconds int  `koanf:"library_monitor_delay_seconds" json:"library_monitor_delay_seconds"`
 
 	// Supplement discovery settings
+	// SupplementExcludePatterns only hides files from supplement discovery.
+	// Directory cleanup deletes a fixed list instead (see
+	// fileutils.DirectoryCleanupPatterns), so a user pattern never deletes
+	// files from disk.
 	SupplementExcludePatterns []string `koanf:"supplement_exclude_patterns" json:"supplement_exclude_patterns"`
 	PDFSupplementFilenames    []string `koanf:"pdf_supplement_filenames" json:"pdf_supplement_filenames"`
 
 	// Authentication settings
+	// JWTSecret should be at least MinJWTSecretLength characters. A shorter
+	// one only warns (StartupWarnings), so existing installs keep starting;
+	// the public example placeholder is rejected.
 	JWTSecret           string `koanf:"jwt_secret" json:"-" validate:"required"` // Never expose in JSON
 	SessionDurationDays int    `koanf:"session_duration_days" json:"session_duration_days" validate:"min=1"`
 
-	// Environment settings
-	// Set to "test" to enable test-only API endpoints (e.g., /test/users)
-	Environment string `koanf:"environment" json:"environment"`
-
-	// Internal settings (computed, not from config file)
-	Hostname string `koanf:"-" json:"-"`
+	// TestMode mounts the unauthenticated /api/test routes that the E2E suite
+	// uses to seed and reset data. It is read from SHISHO_TEST_MODE, a name no
+	// other tool sets, so a host that sets a generic variable such as
+	// ENVIRONMENT=test for another reason cannot expose those routes. It is
+	// left out of the public docs and the example config on purpose.
+	TestMode bool `koanf:"shisho_test_mode" json:"test_mode"`
 
 	// DevLibraryPath is the computed path to tmp/library in the main git repo.
 	// Used by the frontend to create a default dev library.
@@ -83,8 +96,50 @@ type Config struct {
 
 // IsTestMode returns true if the server is running in test mode.
 func (c *Config) IsTestMode() bool {
-	return c.Environment == "test"
+	return c.TestMode
 }
+
+// MinLibraryMonitorDelaySeconds is the shortest debounce delay the library
+// monitor uses. Lower configured values are raised to it.
+const MinLibraryMonitorDelaySeconds = 5
+
+// EffectiveLibraryMonitorDelaySeconds returns the debounce delay the library
+// monitor actually uses: the configured value, raised to the minimum.
+func (c *Config) EffectiveLibraryMonitorDelaySeconds() int {
+	return max(c.LibraryMonitorDelaySeconds, MinLibraryMonitorDelaySeconds)
+}
+
+// MinJWTSecretLength is the recommended minimum jwt_secret length.
+const MinJWTSecretLength = 32
+
+// JWTSecretTooShort reports whether jwt_secret is shorter than
+// MinJWTSecretLength.
+func (c *Config) JWTSecretTooShort() bool {
+	return len(c.JWTSecret) < MinJWTSecretLength
+}
+
+// StartupWarnings returns problems that do not stop the server but that the
+// admin should fix. The server logs each one at startup. None includes a
+// secret value.
+func (c *Config) StartupWarnings() []string {
+	var warnings []string
+	if c.JWTSecretTooShort() {
+		warnings = append(warnings, fmt.Sprintf(
+			"jwt_secret (env JWT_SECRET) is shorter than %d characters, so login sessions are easier to forge. "+
+				"Replace it with the output of: openssl rand -hex 32 (everyone is signed out once)",
+			MinJWTSecretLength,
+		))
+	}
+	return warnings
+}
+
+// exampleJWTSecret is the placeholder in shisho.example.yaml. It is public,
+// so a server that signs sessions with it can have its sessions forged.
+const exampleJWTSecret = "your-secret-key-here-change-me"
+
+// devConfigFilename is the config file `mise start` uses. Loading it turns on
+// the development-only DevLibraryPath.
+const devConfigFilename = "shisho.dev.yaml"
 
 // defaults returns a Config with default values.
 func defaults() *Config {
@@ -145,10 +200,26 @@ func New() (*Config, error) {
 		}
 	}
 
-	// 3. Load environment variables (DATABASE_FILE_PATH -> database_file_path)
-	err := k.Load(env.Provider("", ".", strings.ToLower), nil)
+	// 3. Load environment variables (DATABASE_FILE_PATH -> database_file_path).
+	// List keys split on commas, since an environment variable holds one
+	// string; YAML lists are unaffected.
+	listKeys := stringListKeys()
+	err := k.Load(env.ProviderWithValue("", ".", func(key, value string) (string, any) {
+		key = strings.ToLower(key)
+		if _, ok := listKeys[key]; ok {
+			return key, splitList(value)
+		}
+		return key, value
+	}), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load environment variables")
+	}
+
+	// Unmarshal cannot parse a duration string without a unit ("5000" from
+	// the environment, "2 seconds" in YAML) and its error names neither the
+	// env variable nor the format, so check those strings first.
+	if msgs := durationStringErrors(k); len(msgs) > 0 {
+		return nil, errors.New("configuration validation failed:\n\n" + strings.Join(msgs, "\n\n"))
 	}
 
 	// Unmarshal into config struct
@@ -156,15 +227,8 @@ func New() (*Config, error) {
 		return nil, errors.Wrap(err, "failed to unmarshal config")
 	}
 
-	// Get hostname
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get hostname")
-	}
-	cfg.Hostname = hostname
-
 	// Compute dev library path only in development (when using shisho.dev.yaml)
-	if strings.Contains(configPath, "dev") {
+	if filepath.Base(configPath) == devConfigFilename {
 		cfg.DevLibraryPath = computeDevLibraryPath()
 	}
 
@@ -180,12 +244,10 @@ func New() (*Config, error) {
 func NewForTest() *Config {
 	cfg := defaults()
 	cfg.DatabaseFilePath = ":memory:"
-	cfg.DatabaseDebug = true
 	cfg.DatabaseBusyTimeout = 1 * time.Second // Shorter timeout for tests
 	cfg.DatabaseMaxRetries = 3                // Fewer retries for tests
 	cfg.ServerHost = "127.0.0.1"
 	cfg.ServerPort = 0
-	cfg.Hostname = "test-host"
 	cfg.WorkerProcesses = 1
 	cfg.LibraryMonitorEnabled = false
 	cfg.CacheDir = "" // Must be set by test
@@ -211,58 +273,142 @@ func (c *Config) DownloadCacheMaxSizeBytes() int64 {
 	return int64(c.DownloadCacheMaxSizeGB) * 1024 * 1024 * 1024
 }
 
-// validateConfig validates the config and returns user-friendly error messages.
+// stringListKeys returns the config keys of every []string field.
+func stringListKeys() map[string]struct{} {
+	keys := make(map[string]struct{})
+	t := reflect.TypeOf(Config{})
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Type == reflect.TypeOf([]string{}) {
+			keys[f.Tag.Get("koanf")] = struct{}{}
+		}
+	}
+	return keys
+}
+
+// durationFormatHint explains the duration format in validation errors.
+const durationFormatHint = "Durations use Go's format, such as 500ms, 5s or 1m"
+
+// durationStringErrors describes every duration setting whose value is a
+// string that time.ParseDuration rejects.
+func durationStringErrors(k *koanf.Koanf) []string {
+	var msgs []string
+	t := reflect.TypeOf(Config{})
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Type != reflect.TypeOf(time.Duration(0)) {
+			continue
+		}
+		key := f.Tag.Get("koanf")
+		value, ok := k.Get(key).(string)
+		if !ok {
+			continue
+		}
+		if _, err := time.ParseDuration(value); err != nil {
+			msgs = append(msgs, fmt.Sprintf("invalid config %s (env %s): must be a duration with a unit, got %q. %s",
+				key, strings.ToUpper(key), value, durationFormatHint))
+		}
+	}
+	return msgs
+}
+
+// splitList splits a comma-separated environment value, trimming spaces and
+// dropping empty items, so an empty variable is an empty list.
+func splitList(value string) []string {
+	items := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// validateConfig validates the config and returns user-friendly error
+// messages that name each config key, its environment variable, and the
+// allowed range.
 func validateConfig(cfg *Config) error {
 	validate := validator.New()
-	err := validate.Struct(cfg)
-	if err == nil {
-		return nil
-	}
-
-	validationErrors, ok := err.(validator.ValidationErrors)
-	if !ok {
-		return errors.Wrap(err, "config validation failed")
-	}
+	validate.RegisterTagNameFunc(func(f reflect.StructField) string {
+		return f.Tag.Get("koanf")
+	})
 
 	var msgs []string
-	for _, e := range validationErrors {
-		field := e.StructField()
-		tag := e.Tag()
+	if cfg.JWTSecret == exampleJWTSecret {
+		msgs = append(msgs, "invalid config jwt_secret (env JWT_SECRET): the value from shisho.example.yaml is public. "+
+			"Generate a private one with: openssl rand -hex 32 (everyone is signed out once)")
+	}
 
-		switch tag {
-		case "required":
-			envVar := strings.ToUpper(toSnakeCase(field))
-			yamlKey := toSnakeCase(field)
-			msgs = append(msgs, fmt.Sprintf(
-				"missing required config: %s\n  Set via environment variable: %s\n  Or in config file: %s",
-				field, envVar, yamlKey,
-			))
-		default:
-			msgs = append(msgs, fmt.Sprintf("invalid config %s: %s", field, tag))
+	err := validate.Struct(cfg)
+	if err != nil {
+		validationErrors, ok := err.(validator.ValidationErrors)
+		if !ok {
+			return errors.Wrap(err, "config validation failed")
+		}
+		for _, e := range validationErrors {
+			msgs = append(msgs, validationMessage(e))
 		}
 	}
 
+	if len(msgs) == 0 {
+		return nil
+	}
 	return errors.New("configuration validation failed:\n\n" + strings.Join(msgs, "\n\n"))
 }
 
-// toSnakeCase converts PascalCase to snake_case, handling acronyms properly.
-// e.g., "JWTSecret" -> "jwt_secret", "DatabaseFilePath" -> "database_file_path".
-func toSnakeCase(s string) string {
-	var result strings.Builder
-	runes := []rune(s)
-	for i, r := range runes {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			// Insert underscore if previous char is lowercase,
-			// or if next char is lowercase (end of acronym like "JWTSecret")
-			prevLower := runes[i-1] >= 'a' && runes[i-1] <= 'z'
-			nextLower := i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z'
-			if prevLower || nextLower {
-				result.WriteRune('_')
-			}
-		}
-		result.WriteRune(r)
+// validationMessage describes one failed rule in terms of the config key.
+func validationMessage(e validator.FieldError) string {
+	key := e.Field()
+	envVar := strings.ToUpper(key)
+
+	if e.Tag() == "required" {
+		return fmt.Sprintf(
+			"missing required config: %s\n  Set via environment variable: %s\n  Or in config file: %s",
+			key, envVar, key,
+		)
 	}
-	return strings.ToLower(result.String())
+
+	field, _ := reflect.TypeOf(Config{}).FieldByName(e.StructField())
+	isSecret := field.Tag.Get("json") == "-"
+	isDuration := field.Type == reflect.TypeOf(time.Duration(0))
+	isString := field.Type.Kind() == reflect.String
+
+	var rule string
+	lo, hi := ruleParams(field.Tag.Get("validate"))
+	switch {
+	case isString && e.Tag() == "min":
+		rule = fmt.Sprintf("must be at least %s characters", e.Param())
+	case lo != "" && hi != "":
+		rule = fmt.Sprintf("must be between %s and %s", lo, hi)
+	case e.Tag() == "min":
+		rule = "must be at least " + e.Param()
+	case e.Tag() == "max":
+		rule = "must be at most " + e.Param()
+	default:
+		rule = "failed the " + e.Tag() + " rule"
+	}
+
+	msg := fmt.Sprintf("invalid config %s (env %s): %s", key, envVar, rule)
+	if !isSecret {
+		msg += fmt.Sprintf(", got %v", e.Value())
+	}
+	if isDuration {
+		msg += ". " + durationFormatHint + "; a bare number in YAML is nanoseconds"
+	}
+	return msg
+}
+
+// ruleParams returns the min and max parameters of a validate tag.
+func ruleParams(tag string) (lo, hi string) {
+	for _, rule := range strings.Split(tag, ",") {
+		if v, ok := strings.CutPrefix(rule, "min="); ok {
+			lo = v
+		}
+		if v, ok := strings.CutPrefix(rule, "max="); ok {
+			hi = v
+		}
+	}
+	return lo, hi
 }
 
 // computeDevLibraryPath computes the path to tmp/library in the main git repo.

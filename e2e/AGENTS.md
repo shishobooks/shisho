@@ -6,7 +6,7 @@ This file documents E2E testing patterns and conventions for Shisho.
 
 - **Playwright** for browser automation
 - **Multiple browsers** (Chromium, Firefox) with per-browser database isolation
-- **Test-only API endpoints** enabled via `ENVIRONMENT=test`
+- **Test-only API endpoints** enabled via `SHISHO_TEST_MODE=true`
 
 ## Architecture: Per-Browser Isolation
 
@@ -92,7 +92,7 @@ For `beforeAll` hooks, use `getApiBaseURL` with `request.newContext()` since fix
 
 ## Test-Only API Endpoints
 
-Test endpoints are only registered when `ENVIRONMENT=test`.
+Test endpoints are only registered when `SHISHO_TEST_MODE=true`, which `playwright.config.ts` sets for each API server. The name is deliberately one no other tool sets: a generic `ENVIRONMENT=test` on a real host must never expose these unauthenticated routes. The key is kept out of the public docs.
 
 ### Available Endpoints
 
@@ -120,8 +120,9 @@ The fixture plugin (`pkg/testutils/plugin_fixture.go`) is an EPUB metadata enric
 
 ```go
 // pkg/config/config.go
+// TestMode bool `koanf:"shisho_test_mode" json:"test_mode"`
 func (c *Config) IsTestMode() bool {
-    return c.Environment == "test"
+    return c.TestMode
 }
 
 // pkg/server/server.go

@@ -408,3 +408,44 @@ func TestCleanupOrphanedFiles_MissingBookRow_SubsequentScanIsClean(t *testing.T)
 func intPtr(i int) *int {
 	return &i
 }
+
+// A user's supplement_exclude_patterns only hide files from supplement
+// discovery. Directory cleanup deletes a fixed junk list instead, so a
+// pattern such as "*.txt" never deletes the user's files from disk.
+func TestCleanupOrphanedFiles_UserExcludePatternsNeverDeleteFiles(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	tc.worker.config.SupplementExcludePatterns = append(tc.worker.config.SupplementExcludePatterns, "*.txt")
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	keptDir := testgen.CreateSubDir(t, libraryPath, "[Author] Has Notes")
+	keptEPUB := testgen.GenerateEPUB(t, keptDir, "book.epub", testgen.EPUBOptions{Title: "Has Notes", Authors: []string{"Author"}})
+	junkDir := testgen.CreateSubDir(t, libraryPath, "[Author] Only Junk")
+	junkEPUB := testgen.GenerateEPUB(t, junkDir, "book.epub", testgen.EPUBOptions{Title: "Only Junk", Authors: []string{"Author"}})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 2)
+
+	// Both books disappear from disk. One directory keeps a user's text file
+	// that matches the exclude pattern; the other keeps only OS junk.
+	require.NoError(t, os.Remove(keptEPUB))
+	require.NoError(t, os.Remove(junkEPUB))
+	notesPath := filepath.Join(keptDir, "notes.txt")
+	require.NoError(t, os.WriteFile(notesPath, []byte("mine"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(keptDir, ".DS_Store"), []byte("junk"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(junkDir, ".DS_Store"), []byte("junk"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(junkDir, "Thumbs.db"), []byte("junk"), 0o644))
+
+	existingFiles, err := tc.bookService.ListFilesForLibrary(tc.ctx, 1)
+	require.NoError(t, err)
+	library, err := tc.libraryService.RetrieveLibrary(tc.ctx, libraries.RetrieveLibraryOptions{ID: intPtr(1)})
+	require.NoError(t, err)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, 0, logger.FromContext(tc.ctx))
+	tc.worker.cleanupOrphanedFiles(tc.ctx, existingFiles, map[string]struct{}{}, library, jobLog)
+
+	assert.Empty(t, tc.listBooks())
+	assert.FileExists(t, notesPath, "a file matching a user exclude pattern must not be deleted")
+	assert.NoDirExists(t, junkDir, "a directory holding only OS junk is still removed")
+}

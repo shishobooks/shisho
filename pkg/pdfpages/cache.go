@@ -26,6 +26,19 @@ func NewCache(dir string, dpi int, quality int) *Cache {
 	return &Cache{dir: dir, dpi: dpi, quality: quality}
 }
 
+// RenderKey returns the key of this cache's render settings.
+func (c *Cache) RenderKey() string {
+	return RenderKey(c.dpi, c.quality)
+}
+
+// RenderKey identifies the render settings, as "{dpi}-{quality}". Rendered
+// pages are stored under it, and the frontend adds it to PDF page URLs, so a
+// restart with a new pdf_render_dpi or pdf_render_quality renders new pages
+// instead of serving the old ones from disk or from the browser cache.
+func RenderKey(dpi int, quality int) string {
+	return fmt.Sprintf("%d-%d", dpi, quality)
+}
+
 // GetPage returns the path to a cached page image, rendering if necessary.
 // pageNum is 0-indexed.
 func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error) {
@@ -112,9 +125,9 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 	return outPath, "image/jpeg", nil
 }
 
-// Invalidate removes all cached pages for a file.
+// Invalidate removes all cached pages for a file, at every render setting.
 func (c *Cache) Invalidate(fileID int) error {
-	return os.RemoveAll(c.pageDir(fileID))
+	return os.RemoveAll(c.fileDir(fileID))
 }
 
 // rootDir returns the directory this cache owns.
@@ -162,9 +175,16 @@ func (c *Cache) Clear() error {
 	return nil
 }
 
-// pageDir returns the cache directory for a file's rendered pages.
-func (c *Cache) pageDir(fileID int) string {
+// fileDir returns the cache directory for everything rendered from a file,
+// at any render settings. Invalidate removes it.
+func (c *Cache) fileDir(fileID int) string {
 	return filepath.Join(c.dir, "pdf", strconv.Itoa(fileID))
+}
+
+// pageDir returns the cache directory for a file's pages at the current
+// render settings.
+func (c *Cache) pageDir(fileID int) string {
+	return filepath.Join(c.fileDir(fileID), c.RenderKey())
 }
 
 // pagePath returns the expected cache path for a specific page.

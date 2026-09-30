@@ -71,7 +71,7 @@ These are common mistakes that cause bugs. Most are summarized here in a line an
 
 ### Frontend
 
-**Cover and page images require URL-based cache busting.** API cover endpoints and the CBZ/PDF page endpoint use `Cache-Control: immutable` so browsers cache forever, so every URL carries a `?v=` key that changes only when the image does. Build cover URLs with `bookCoverUrl`, `seriesCoverUrl`, and `fileCoverUrl` from `app/utils/coverUrl.ts` (keyed on the backend `cover_cache_key` for books and series, and on `file.updated_at` in epoch milliseconds for files) and page URLs with `filePageUrl` from `app/utils/pageUrl.ts`. Download and stream URLs come from `app/utils/downloadUrl.ts`. ESLint rejects a literal `/api/.../cover`, `/page/`, `/download`, or `/stream` URL anywhere outside `app/utils`. See `app/AGENTS.md` for details.
+**Cover and page images require URL-based cache busting.** API cover endpoints and the CBZ/PDF page endpoint use `Cache-Control: immutable` so browsers cache forever, so every URL carries a `?v=` key that changes only when the image does. Build cover URLs with `bookCoverUrl`, `seriesCoverUrl`, and `fileCoverUrl` from `app/utils/coverUrl.ts` (keyed on the backend `cover_cache_key` for books and series, and on `file.updated_at` in epoch milliseconds for files) and page URLs with the function `useFilePageUrl()` returns (it wraps `filePageUrl` from `app/utils/pageUrl.ts` and adds the PDF render key). Download and stream URLs come from `app/utils/downloadUrl.ts`. ESLint rejects a literal `/api/.../cover`, `/page/`, `/download`, or `/stream` URL anywhere outside `app/utils`. See `app/AGENTS.md` for details.
 
 ```tsx
 const coverUrl = bookCoverUrl(book);
@@ -186,7 +186,8 @@ For detailed architecture information, see:
   - `website/docs/configuration.md`: the same reference for users.
   - `app/components/pages/AdminSettings.tsx`: the Server Settings page shows every non-secret config field.
 
-  The yaml file and the docs page must always be a complete reference of all server config options. Exception: `environment` is test-only, so it is left out of `shisho.example.yaml` and `configuration.md` (the Server Settings page still shows it).
+  The yaml file and the docs page must always be a complete reference of all server config options. Exception: `shisho_test_mode` (env `SHISHO_TEST_MODE`, field `TestMode`) is test-only, so it is left out of `shisho.example.yaml` and `configuration.md` (the Server Settings page still shows it as Test Mode). It mounts the unauthenticated `/api/test/*` routes, so its name must stay one no other tool sets; never go back to a generic key such as `ENVIRONMENT=test`.
+  Validation errors name the config key, its env variable and the allowed range (`validationMessage` in `pkg/config/config.go`), so a new rule only needs a `validate` tag. List (`[]string`) fields split comma-separated env values automatically.
 
 ## Tool Versions
 

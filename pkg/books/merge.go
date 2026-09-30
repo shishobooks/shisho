@@ -20,10 +20,9 @@ import (
 
 // MoveFilesOptions contains the parameters for moving files between books.
 type MoveFilesOptions struct {
-	FileIDs         []int    // IDs of files to move
-	TargetBookID    *int     // Target book ID (nil to create a new book)
-	LibraryID       int      // Library ID for validation
-	IgnoredPatterns []string // Patterns for ignored files during cleanup (e.g., ".DS_Store", ".*")
+	FileIDs      []int // IDs of files to move
+	TargetBookID *int  // Target book ID (nil to create a new book)
+	LibraryID    int   // Library ID for validation
 }
 
 // MoveFilesResult contains the result of a move files operation.
@@ -398,7 +397,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 		for dir := range dirsToClean {
 			// Try to clean up the directory and any empty parents up to the library root
 			if libraryRootPath != "" {
-				if err := fileutils.CleanupEmptyParentDirectories(dir, libraryRootPath, opts.IgnoredPatterns...); err != nil {
+				if err := fileutils.CleanupEmptyParentDirectories(dir, libraryRootPath, fileutils.JunkFilePatterns()...); err != nil {
 					log.Warn("failed to cleanup empty source directory", logger.Data{
 						"directory": dir,
 						"error":     err.Error(),
@@ -406,7 +405,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 				}
 			} else {
 				// If no library root, just try to clean the immediate directory
-				if _, err := fileutils.CleanupEmptyDirectory(dir, opts.IgnoredPatterns...); err != nil {
+				if _, err := fileutils.CleanupEmptyDirectory(dir, fileutils.JunkFilePatterns()...); err != nil {
 					log.Warn("failed to cleanup empty source directory", logger.Data{
 						"directory": dir,
 						"error":     err.Error(),
