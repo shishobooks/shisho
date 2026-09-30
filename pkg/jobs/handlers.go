@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -220,16 +219,10 @@ func (h *handler) download(c echo.Context) error {
 		return err
 	}
 
-	zipPath := h.downloadCache.BulkZipPath(data.FingerprintHash)
-	if _, err := os.Stat(zipPath); os.IsNotExist(err) {
-		return errcodes.NotFound("Download file")
-	}
-
-	filename := fmt.Sprintf("shisho-download-%d-books.zip", data.FileCount)
-	httputil.SetAttachmentFilename(c.Response(), filename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	return c.File(zipPath)
+	return httputil.ServeFile(c, h.downloadCache.BulkZipPath(data.FingerprintHash), errcodes.NotFound("Download file"),
+		httputil.WithContentType("application/zip"),
+		httputil.WithAttachment(fmt.Sprintf("shisho-download-%d-books.zip", data.FileCount)),
+		httputil.WithCacheControl("private, no-store"))
 }
 
 // canReadJob reports whether the user may read a job. Jobs Read grants every

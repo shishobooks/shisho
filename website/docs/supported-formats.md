@@ -13,6 +13,10 @@ Shisho has native support for four main-file formats. See [Reading and Playback]
 
 Generated downloads are format-specific. Each format can represent a different set of metadata, so Shisho cannot write every database field or replace a cover in every generated file. The source file is not modified.
 
+Downloads are sent with the format's media type, whatever the server's operating system knows about file extensions: `application/epub+zip` for EPUB and KePub, `application/vnd.comicbook+zip` for CBZ, `audio/mp4` for M4B, and `application/pdf` for PDF. [Kobo Sync](./kobo-sync.md) downloads are sent as `application/octet-stream`. Other files, such as supplements, are typed by their extension.
+
+The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file when a generated one cannot be made: for a supplement, a format only a plugin can read, a KePub request for M4B or PDF, or a file whose contents Shisho cannot rewrite, such as a damaged EPUB. The failure is written to the server log. A source file Shisho cannot read, for example because of its permissions, fails the download with an error instead. In the web app, a failed download reports an error, and **Download Original** sends the file as it is. See [Troubleshooting](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high).
+
 CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parsers or converters for CBR and other formats.
 
 ## CBZ Page Images

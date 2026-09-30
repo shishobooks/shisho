@@ -247,6 +247,11 @@ func (g *M4BGenerator) loadCover(file *models.File, meta *mp4.Metadata) error {
 	coverPath := covers.FileCoverPath(file)
 
 	data, err := os.ReadFile(coverPath)
+	if os.IsNotExist(err) {
+		// A cover missing from disk keeps the source's embedded cover, as
+		// the EPUB generator does; any other read failure is a fault.
+		return nil
+	}
 	if err != nil {
 		return err
 	}

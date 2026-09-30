@@ -39,11 +39,14 @@ func RenderKey(dpi int, quality int) string {
 	return fmt.Sprintf("%d-%d", dpi, quality)
 }
 
+// ErrPageOutOfRange is returned by GetPage for a page the PDF does not have.
+var ErrPageOutOfRange = errors.New("page out of range")
+
 // GetPage returns the path to a cached page image, rendering if necessary.
 // pageNum is 0-indexed.
 func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error) {
 	if pageNum < 0 {
-		return "", "", errors.Errorf("page %d out of range", pageNum)
+		return "", "", errors.Wrapf(ErrPageOutOfRange, "page %d", pageNum)
 	}
 
 	// Check if page is already cached
@@ -85,7 +88,7 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 		return "", "", errors.Wrap(err, "failed to get page count")
 	}
 	if pageNum >= pageCountResp.PageCount {
-		return "", "", errors.Errorf("page %d out of range (0-%d)", pageNum, pageCountResp.PageCount-1)
+		return "", "", errors.Wrapf(ErrPageOutOfRange, "page %d (0-%d)", pageNum, pageCountResp.PageCount-1)
 	}
 
 	// Render the page

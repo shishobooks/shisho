@@ -33,6 +33,11 @@ func NewCache(dir string, dpi int, quality int) *Cache
 // pageNum is 0-indexed.
 func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error)
 
+// ErrPageOutOfRange is wrapped by GetPage for a page the PDF does not have.
+// The books page handler renders it as NotFound("Page"), since the file's
+// stored page count can be missing. cbzpages has the same sentinel.
+var ErrPageOutOfRange = errors.New("page out of range")
+
 // RenderKey identifies render settings as "{dpi}-{quality}".
 func RenderKey(dpi int, quality int) string
 

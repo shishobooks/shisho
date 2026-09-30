@@ -5,19 +5,16 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -711,86 +708,23 @@ func (h *handler) libraryOpenSearchKepub(c echo.Context) error {
 	return c.XML(http.StatusOK, desc)
 }
 
-// download handles file downloads with generated metadata.
-// For OPDS clients, we try to generate a file with embedded metadata.
-// If generation fails, we fall back to the original file.
+// download handles file downloads with generated metadata. When there is
+// nothing to generate (a supplement or a type with no generator), OPDS
+// clients get the original file.
 func (h *handler) download(c echo.Context) error {
-	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
-
-	fileID, err := httputil.ParamID(c, "id", "File")
-	if err != nil {
-		return err
-	}
-
-	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{
-		ID: &fileID,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Check library access
-	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
-		return err
-	}
-
-	// Check if source file exists
-	if err := books.RequireFileOnDisk(c, file, "File"); err != nil {
-		return err
-	}
-
-	// Get the full book with relations for generation
-	book, err := h.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{
-		ID: &file.BookID,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
-	var fileWithRelations *models.File
-	for _, f := range book.Files {
-		if f.ID == file.ID {
-			fileWithRelations = f
-			break
-		}
-	}
-	if fileWithRelations == nil {
-		fileWithRelations = file // Fallback to original file if not found
-	}
-
-	// Try to generate/get from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, fileWithRelations)
-	if err != nil {
-		// For OPDS clients, fall back to original file on generation error
-		var genErr *filegen.GenerationError
-		if errors.As(err, &genErr) {
-			log.Warn("file generation failed, serving original", logger.Data{
-				"file_id":   file.ID,
-				"file_type": file.FileType,
-				"error":     genErr.Message,
-			})
-			// Fall back to original file
-			filename := filepath.Base(file.Filepath)
-			httputil.SetAttachmentFilename(c.Response(), filename)
-			c.Response().Header().Set("Cache-Control", "private, no-store")
-			return c.File(file.Filepath)
-		}
-		return errors.WithStack(err)
-	}
-
-	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	return c.File(cachedPath)
+	return h.serveDownload(c, false)
 }
 
-// downloadKepub handles KePub file downloads.
-// KePub conversion is only supported for EPUB and CBZ files.
+// downloadKepub handles KePub file downloads. KePub conversion is only
+// supported for EPUB and CBZ files; other types get the original file.
 func (h *handler) downloadKepub(c echo.Context) error {
+	return h.serveDownload(c, true)
+}
+
+// serveDownload serves the file named by the id param, generated or as the
+// original, per books.ResolveFallbackDownload.
+func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
 
 	fileID, err := httputil.ParamID(c, "id", "File")
 	if err != nil {
@@ -823,52 +757,19 @@ func (h *handler) downloadKepub(c echo.Context) error {
 	}
 
 	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
-	var fileWithRelations *models.File
+	fileWithRelations := file
 	for _, f := range book.Files {
 		if f.ID == file.ID {
 			fileWithRelations = f
 			break
 		}
 	}
-	if fileWithRelations == nil {
-		fileWithRelations = file // Fallback to original file if not found
-	}
 
-	// Try to generate/get KePub from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, fileWithRelations)
+	download, err := books.ResolveFallbackDownload(ctx, h.downloadCache, book, fileWithRelations, kepub)
 	if err != nil {
-		// Check if this file type doesn't support KePub conversion
-		if errors.Is(err, filegen.ErrKepubNotSupported) {
-			log.Warn("kepub conversion not supported, serving original", logger.Data{
-				"file_id":   file.ID,
-				"file_type": file.FileType,
-			})
-			// Fall back to original file for unsupported types (M4B)
-			filename := filepath.Base(file.Filepath)
-			httputil.SetAttachmentFilename(c.Response(), filename)
-			c.Response().Header().Set("Cache-Control", "private, no-store")
-			return c.File(file.Filepath)
-		}
-		// For other errors, also fall back to original
-		var genErr *filegen.GenerationError
-		if errors.As(err, &genErr) {
-			log.Warn("kepub generation failed, serving original", logger.Data{
-				"file_id":   file.ID,
-				"file_type": file.FileType,
-				"error":     genErr.Message,
-			})
-			filename := filepath.Base(file.Filepath)
-			httputil.SetAttachmentFilename(c.Response(), filename)
-			c.Response().Header().Set("Cache-Control", "private, no-store")
-			return c.File(file.Filepath)
-		}
-		return errors.WithStack(err)
+		return err
 	}
-
-	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	return c.File(cachedPath)
+	return download.Serve(c)
 }
 
 // bookCover serves a book's cover image. Mirrors `pkg/books/handlers.go`

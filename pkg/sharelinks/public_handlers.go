@@ -3,8 +3,6 @@ package sharelinks
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,7 +14,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -195,15 +192,8 @@ func (h *publicHandler) fileCover(c echo.Context) error {
 	if file.FileRole == models.FileRoleSupplement {
 		return errcodes.NotFound("Cover")
 	}
-	coverPath := covers.FileCoverPath(file)
-	if _, err := os.Stat(coverPath); err != nil {
-		if os.IsNotExist(err) {
-			return errcodes.NotFound("Cover")
-		}
-		return errors.WithStack(err)
-	}
-	c.Response().Header().Set("Cache-Control", covers.CacheControlImmutable)
-	return errors.WithStack(c.File(coverPath))
+	return httputil.ServeFile(c, covers.FileCoverPath(file), errcodes.NotFound("Cover"),
+		httputil.WithCacheControl(covers.CacheControlImmutable))
 }
 
 // download serves the generated file with metadata injected, the same file
@@ -219,48 +209,19 @@ func (h *publicHandler) download(c echo.Context) error {
 		return err
 	}
 
-	path, filename, err := h.downloadFile(ctx, book, file)
+	download, err := books.ResolveFallbackDownload(ctx, h.downloadCache, book, file, false)
 	if err != nil {
 		return err
 	}
+	if err := download.Serve(c); err != nil {
+		return err
+	}
+	// Count only a download that was served. The client may have gone by the
+	// time the body is written, so the count must not depend on its context.
 	if startsDownload(c.Request()) {
-		countAccess(ctx, link, h.service.RecordDownload)
+		countAccess(context.WithoutCancel(ctx), link, h.service.RecordDownload)
 	}
-	httputil.SetAttachmentFilename(c.Response(), filename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return errors.WithStack(c.File(path))
-}
-
-// downloadFile returns the path to serve and its download filename: the
-// generated file, or the original for supplements, formats with no generator
-// (those only a plugin parses), and a failed generation.
-func (h *publicHandler) downloadFile(ctx context.Context, book *models.Book, file *models.File) (string, string, error) {
-	original := func() (string, string, error) {
-		return file.Filepath, filepath.Base(file.Filepath), nil
-	}
-	if file.FileRole == models.FileRoleSupplement {
-		return original()
-	}
-	if _, err := filegen.GetGenerator(file.FileType); err != nil {
-		return original()
-	}
-
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, file)
-	if err != nil {
-		var genErr *filegen.GenerationError
-		if !errors.As(err, &genErr) {
-			return "", "", errors.WithStack(err)
-		}
-		// A recipient has no Download Original to fall back on, so serve the
-		// original rather than an error, as the eReader download does.
-		logger.FromContext(ctx).Warn("share link file generation failed, serving original", logger.Data{
-			"file_id":   file.ID,
-			"file_type": file.FileType,
-			"error":     genErr.Message,
-		})
-		return original()
-	}
-	return cachedPath, downloadFilename, nil
+	return nil
 }
 
 // startsDownload reports whether a download request counts as a download. HEAD

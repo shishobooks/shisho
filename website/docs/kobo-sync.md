@@ -6,7 +6,7 @@ Kobo Sync sends books from Shisho to a Kobo eReader over Wi-Fi. Shisho handles p
 
 - Only **main EPUB and CBZ files** sync.
 - Every compatible main file syncs, so a book with multiple editions can create multiple entries on the device.
-- Shisho generates a KePub for each synced EPUB or CBZ.
+- Shisho generates a KePub for each synced EPUB or CBZ. Its filename uses the author, the series, and the file's name (or the book's title when the file has no name). It keeps only unaccented letters A to Z, digits, spaces, and `-_.,()'`, because other characters can stop a Kobo from reading the file, so accented and non-Latin characters are dropped from the filename. The book's metadata keeps them.
 - The first sync is full. Later syncs are incremental and send additions, removals, and detected metadata or cover changes. Scope changes take effect after the Kobo is configured with the new URL.
 - M4B, PDF, and [supplement files](./supplement-files.md) do not sync.
 

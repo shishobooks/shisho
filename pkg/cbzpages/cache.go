@@ -34,6 +34,9 @@ func NewCache(dir string) *Cache {
 	}
 }
 
+// ErrPageOutOfRange is returned by GetPage for a page the CBZ does not have.
+var ErrPageOutOfRange = errors.New("page out of range")
+
 // GetPage returns the path to a cached page image, extracting if necessary.
 // pageNum is 0-indexed.
 func (c *Cache) GetPage(cbzPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error) {
@@ -70,7 +73,7 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 	// Get sorted image files
 	imageFiles := getSortedImageFiles(zipReader)
 	if pageNum < 0 || pageNum >= len(imageFiles) {
-		return "", "", errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)
+		return "", "", errors.Wrapf(ErrPageOutOfRange, "page %d (0-%d)", pageNum, len(imageFiles)-1)
 	}
 
 	targetFile := imageFiles[pageNum]

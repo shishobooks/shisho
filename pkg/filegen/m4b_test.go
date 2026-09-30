@@ -500,9 +500,14 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "A Compelling Subtitle", meta.Subtitle)
 	})
 
-	t.Run("returns error for missing cover", func(t *testing.T) {
+	// A missing cover is skipped (TestM4BGenerator_MissingCoverFileIsSkipped),
+	// but one that exists and cannot be read is a fault.
+	t.Run("returns error for unreadable cover", func(t *testing.T) {
 		t.Parallel()
 		testgen.SkipIfNoFFmpeg(t)
+		if os.Geteuid() == 0 {
+			t.Skip("permission bits do not restrict root")
+		}
 		dir := testgen.TempDir(t, "m4b-gen-*")
 
 		srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{
@@ -513,9 +518,12 @@ func TestM4BGenerator_Generate(t *testing.T) {
 
 		destPath := filepath.Join(dir, "dest.m4b")
 
-		// Point to non-existent cover
+		// Point to a cover that exists but cannot be read
 		mimeType := "image/jpeg"
-		coverPath := "nonexistent.jpg"
+		coverPath := "locked.jpg"
+		lockedCover := filepath.Join(dir, coverPath)
+		require.NoError(t, os.WriteFile(lockedCover, []byte("jpeg"), 0o000))
+		t.Cleanup(func() { _ = os.Chmod(lockedCover, 0o644) })
 		book := &models.Book{
 			Title:    "Test Book",
 			Filepath: dir,
@@ -525,6 +533,7 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		}
 		file := &models.File{
 			FileType:           models.FileTypeM4B,
+			Filepath:           srcPath,
 			CoverImageFilename: &coverPath,
 			CoverMimeType:      &mimeType,
 		}
@@ -1338,4 +1347,18 @@ func TestM4BGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "New Series", meta.Freeform["com.apple.iTunes:SERIES"])
 		assert.Equal(t, "2", meta.Freeform["com.apple.iTunes:SERIES-PART"])
 	})
+}
+
+// A cover file missing from disk is skipped, as the EPUB generator skips it,
+// so a stale cover filename does not fail every download of the audiobook.
+func TestM4BGenerator_MissingCoverFileIsSkipped(t *testing.T) {
+	t.Parallel()
+	testgen.SkipIfNoFFmpeg(t)
+	dir := testgen.TempDir(t, "m4b-gen-*")
+	srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{Title: "Original", Duration: 1.0})
+	coverName := "source.m4b.cover.jpg"
+	file := &models.File{FileType: models.FileTypeM4B, Filepath: srcPath, CoverImageFilename: &coverName}
+
+	err := (&M4BGenerator{}).Generate(context.Background(), srcPath, filepath.Join(dir, "dest.m4b"), &models.Book{Title: "New"}, file)
+	require.NoError(t, err)
 }

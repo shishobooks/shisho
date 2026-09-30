@@ -45,6 +45,16 @@ linters:
         - pattern: ^echo\.Context\.(Get|Set)$
           pkg: ^github\.com/labstack/echo/v4$
           msg: use auth.RequireUser, auth.RequireLibraryAccessFor or auth.SetUser (apikeys.RequireKey for the API key) instead of reading or writing echo context values
+        # c.File (which c.Attachment and c.Inline wrap) and http.ServeFile turn
+        # every open failure, a permission error included, into a 404, and
+        # headers set before them ride on the error response. httputil.ServeFile
+        # returns 404 only for a missing file and sets headers after the open.
+        - pattern: ^echo\.Context\.(File|Attachment|Inline)$
+          pkg: ^github\.com/labstack/echo/v4$
+          msg: use httputil.ServeFile with its options instead of c.File, c.Attachment or c.Inline
+        - pattern: ^http\.ServeFile(FS)?$
+          pkg: ^net/http$
+          msg: use httputil.ServeFile with its options instead of http.ServeFile
     gocritic:
       disabled-checks:
         - appendAssign

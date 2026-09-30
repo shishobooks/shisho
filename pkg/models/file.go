@@ -125,6 +125,25 @@ func (f *File) CoverExtension() string {
 	return ext
 }
 
+// FileTypeMimeType returns the media type a file of this type is served as,
+// or "" for a type Shisho does not know (a supplement's extension or a format
+// only a plugin parses), which is typed by its extension instead. Downloads
+// use it rather than the host's mime table, which in the Alpine image has no
+// entry for .epub, .cbz, or .m4b.
+func FileTypeMimeType(fileType string) string {
+	switch fileType {
+	case FileTypeEPUB:
+		return "application/epub+zip"
+	case FileTypeCBZ:
+		return "application/vnd.comicbook+zip"
+	case FileTypeM4B:
+		return "audio/mp4"
+	case FileTypePDF:
+		return "application/pdf"
+	}
+	return ""
+}
+
 // IsPageBasedFileType returns true for file types that derive covers from page
 // content (CBZ, PDF). These formats should never have their covers replaced by
 // external sources (plugins, uploads).

@@ -4,15 +4,14 @@ package covers
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -125,38 +124,22 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cach
 	}
 
 	coverPath := FileCoverPath(coverFile)
-	// Stat first so a cover file deleted from disk surfaces as a typed 404
-	// (matching the no-filename branch above) instead of bubbling up as
-	// echo.HTTPError's generic "Not Found".
+	notFound := errcodes.NotFound(resource)
+	// The ETag needs the cover's mtime. ServeFile opens the file and sets the
+	// headers only once that succeeds, so a stat that passes before an open
+	// that fails still yields a plain 500.
 	stat, err := os.Stat(coverPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errcodes.NotFound(resource)
+			return notFound
 		}
 		return errors.WithStack(err)
 	}
-	modTime := stat.ModTime().UTC().Truncate(time.Second)
+	etag := fmt.Sprintf(`"%d-%d"`, coverFile.ID, stat.ModTime().Unix())
 
-	etag := fmt.Sprintf(`"%d-%d"`, coverFile.ID, modTime.Unix())
-
-	c.Response().Header().Set("Cache-Control", cacheControl)
-	c.Response().Header().Set("ETag", etag)
-
-	if inm := c.Request().Header.Get("If-None-Match"); inm != "" && inm == etag {
-		c.Response().WriteHeader(http.StatusNotModified)
-		return nil
-	}
-
-	fh, err := os.Open(coverPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return errcodes.NotFound(resource)
-		}
-		return errors.WithStack(err)
-	}
-	defer fh.Close()
-
-	// Zero modtime suppresses Last-Modified and IMS handling inside ServeContent.
-	http.ServeContent(c.Response(), c.Request(), filepath.Base(coverPath), time.Time{}, fh)
-	return nil
+	// WithETag makes the ETag the only validator: ServeContent answers a
+	// matching If-None-Match with 304 and sends no Last-Modified.
+	return httputil.ServeFile(c, coverPath, notFound,
+		httputil.WithCacheControl(cacheControl),
+		httputil.WithETag(etag))
 }
