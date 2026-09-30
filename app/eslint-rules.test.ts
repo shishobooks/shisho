@@ -1,10 +1,11 @@
-import { ESLint } from "eslint";
+import { ESLint, type Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
-// The permission, query, URL and mutation rules in eslint.config.js are
-// selectors, so a typo in one would silently match nothing. This lints
-// fixtures as if they sat in the app to prove each rule still fires where it
-// should.
+// The permission, query, URL and mutate rules in eslint.config.js are
+// selectors, so a typo in one would silently match nothing, and the local
+// mutateAsync rule in eslint-rules/ reads syntax in ways a refactor could
+// quietly change. This lints fixtures as if they sat in the app to prove each
+// rule still fires where it should.
 
 const eslint = new ESLint();
 
@@ -144,20 +145,45 @@ export const run = () => {
   // The rule cannot see into options held in a variable.
   const options = { onError: () => undefined };
   mutation.mutate(7, options);
+  // A destructured mutate is not a member call, so it is banned outright.
+  const { mutate } = mutation; mutate(8);
+  // An explicit undefined is no handler.
+  mutation.mutate(9, { onError: undefined });
 };
+// An uncalled mutate passes the click event as its variables and no options.
+export const Button = () => <button onClick={mutation.mutate} type="button" />; // (10)
 `;
 
 const isMutateMessage = (message: string) => message.includes("onError");
 
+// The number of each fixture call a filter's messages flag: the first
+// integer opening a call's arguments, like (5, or (5), on the line each
+// message points at.
+const flaggedCalls = async (
+  fixture: string,
+  filePath: string,
+  keep: (message: Linter.LintMessage) => boolean,
+) => {
+  const [result] = await eslint.lintText(fixture, { filePath });
+  const lines = fixture.split("\n");
+  return result.messages
+    .filter(keep)
+    .map((message) => Number(/\((\d+)[,)]/.exec(lines[message.line - 1])?.[1]));
+};
+
 describe("ESLint mutation rule", () => {
   it("rejects mutate calls that do not handle a rejection", async () => {
-    const messages = await restrictedSyntax(
-      "app/components/Fixture.tsx",
-      MUTATE_FIXTURE,
-    );
-
-    // 1, 2, the outer 5, and 7.
-    expect(messages.filter(isMutateMessage)).toHaveLength(4);
+    // The outer 5, the destructured mutate (8), and the uncalled
+    // onClick={mutation.mutate} (10) included.
+    expect(
+      await flaggedCalls(
+        MUTATE_FIXTURE,
+        "app/components/Fixture.tsx",
+        (message) =>
+          message.ruleId === "no-restricted-syntax" &&
+          isMutateMessage(message.message),
+      ),
+    ).toEqual([1, 2, 5, 7, 8, 9, 10]);
   });
 
   it("allows them in tests", async () => {
@@ -170,7 +196,11 @@ describe("ESLint mutation rule", () => {
   });
 });
 
+// Each mutateAsync call carries its number as the first parenthesized
+// integer on its line, which is how the test below names the flagged ones.
 const MUTATE_ASYNC_FIXTURE = `
+import { useCallback } from "react";
+
 declare const mutation: { mutateAsync: (vars: unknown) => Promise<unknown> };
 declare const report: (error: unknown) => void;
 export const run = async () => {
@@ -198,69 +228,136 @@ export const run = async () => {
   } finally {
     report(null);
   }
+  // A concise arrow passed to a call hands its promise to that call, which
+  // nothing here catches.
+  await Promise.all([1].map(() => mutation.mutateAsync(11)));
+  // A try does not cover a callback defined in it that runs later.
+  try {
+    [1].forEach(async () => {
+      await mutation.mutateAsync(12);
+    });
+  } catch (error) {
+    report(error);
+  }
+  // A destructured, renamed, aliased, or computed mutateAsync hides the call.
+  const { mutateAsync } = mutation; await mutateAsync(13);
+  const { mutateAsync: save } = mutation; await save(20);
+  const alias = mutation.mutateAsync; await alias(21);
+  await mutation["mutateAsync"](22);
+  // An empty catch swallows the failure, and a catch that only logs and
+  // rethrows reports nothing.
+  try {
+    await mutation.mutateAsync(23);
+  } catch {
+    // ignored
+  }
+  try {
+    await mutation.mutateAsync(24);
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+  // The second .then argument handles the rejection.
+  await mutation.mutateAsync(25).then(() => undefined, report);
+  // So does a try around a concise arrow passed to a call.
+  try {
+    await Promise.all([1].map(() => mutation.mutateAsync(26)));
+  } catch (error) {
+    report(error);
+  }
+  // A try catches only a promise it awaits.
+  try {
+    void mutation.mutateAsync(30);
+  } catch (error) {
+    report(error);
+  }
 };
 // Returning the promise hands the rejection to the caller.
 export const handOff = (id: number) => {
   return mutation.mutateAsync(id);
 };
 export const handOffArrow = (id: number) => mutation.mutateAsync(id);
-// Known gaps, pinned so a change to them is deliberate. The rule reads
-// syntax only, so none of these is flagged although each can leak.
-export const knownGaps = async (ids: number[]) => {
-  // A concise arrow counts as a hand-off even inside Promise.all.
-  await Promise.all(ids.map(() => mutation.mutateAsync(11)));
-  // A try counts for a callback defined in it that runs later.
+// A component callback prop such as onSave may catch what it is handed, so
+// a handler passed only there is a hand-off too.
+const handleSave = async () => {
+  return mutation.mutateAsync(27);
+};
+// Known gaps, pinned so a change to them is deliberate: a handler that
+// reaches an event prop only through a wrapper or a factory.
+const handleWrapped = async () => {
+  return mutation.mutateAsync(28);
+};
+const makeHandler = () => () => mutation.mutateAsync(33);
+// A try does not catch a callback that runs later, since it awaits nothing.
+export const later = () => {
   try {
-    ids.forEach(async () => {
-      await mutation.mutateAsync(12);
-    });
+    setTimeout(() => mutation.mutateAsync(29), 0);
   } catch (error) {
     report(error);
   }
-  // A destructured mutateAsync is not a member call.
-  const { mutateAsync } = mutation;
-  await mutateAsync(13);
 };
-// An event handler never catches what it is handed.
-export const Button = () => (
-  <button onClick={() => mutation.mutateAsync(9)} type="button" />
-);
+// An event handler never catches what it is handed, whether it is inline,
+// held in a variable, or wrapped in useCallback.
+const handleClick = () => mutation.mutateAsync(15);
+const handleSubmit = async () => {
+  return mutation.mutateAsync(17);
+};
+export const Button = () => {
+  const handleSelect = useCallback(() => mutation.mutateAsync(16), []);
+  return (
+    <div>
+      <button onClick={() => mutation.mutateAsync(9)} type="button" />
+      <button onClick={() => { return mutation.mutateAsync(14); }} type="button" />
+      <button onClick={handleClick} type="button" />
+      <button onClick={handleSelect} type="button" />
+      <form onSubmit={handleSubmit} />
+      <form action={() => mutation.mutateAsync(18)} />
+      <Dialog onSave={handleSave} />
+      <button onClick={() => void handleWrapped()} type="button" />
+      <button onClick={makeHandler()} type="button" />
+      <button onClick={async () => { try { return mutation.mutateAsync(31); } catch (error) { report(error); } }} type="button" />
+      <button onClick={flag ? () => mutation.mutateAsync(32) : undefined} type="button" />
+    </div>
+  );
+};
+declare const Dialog: (props: { onSave: () => Promise<unknown> }) => null;
+declare const flag: boolean;
 `;
 
 const isMutateAsyncMessage = (message: string) =>
   message.includes("mutateAsync");
 
-// The argument of each mutateAsync call the rule flags, read from the
-// fixture line each message points at.
-const flaggedMutateAsyncCalls = async (filePath: string) => {
-  const [result] = await eslint.lintText(MUTATE_ASYNC_FIXTURE, { filePath });
-  const lines = MUTATE_ASYNC_FIXTURE.split("\n");
-  return result.messages
-    .filter(
-      (message) =>
-        message.ruleId === "no-restricted-syntax" &&
-        isMutateAsyncMessage(message.message),
-    )
-    .map((message) =>
-      Number(/mutateAsync\((\d+)\)/.exec(lines[message.line - 1])?.[1]),
-    );
-};
+// A message from the mutateAsync checks: the local rule or the reference
+// bans in no-restricted-syntax.
+const isMutateAsyncCheck = (message: Linter.LintMessage) =>
+  message.ruleId === "shisho/mutate-async-handled" ||
+  (message.ruleId === "no-restricted-syntax" &&
+    isMutateAsyncMessage(message.message));
 
 describe("ESLint mutateAsync rule", () => {
   it("rejects mutateAsync calls whose rejection nothing handles", async () => {
-    // 4 is in the catch clause, 5 in finally, 10 in a try without a catch.
-    // The known gaps (11, 12, 13) are not flagged.
-    expect(await flaggedMutateAsyncCalls("app/components/Fixture.tsx")).toEqual(
-      [1, 2, 4, 5, 8, 10, 9],
-    );
+    // In fixture line order. 3, 6, 7, 25, and 26 are caught; the returned
+    // calls in handOff, handOffArrow, and handleSave (27) are hand-offs; the
+    // known gaps (28, 33) are not flagged.
+    expect(
+      await flaggedCalls(
+        MUTATE_ASYNC_FIXTURE,
+        "app/components/Fixture.tsx",
+        isMutateAsyncCheck,
+      ),
+    ).toEqual([
+      1, 2, 4, 5, 8, 10, 11, 12, 13, 20, 21, 22, 23, 24, 30, 29, 15, 17, 16, 9,
+      14, 18, 31, 32,
+    ]);
   });
 
   it("allows them in tests", async () => {
-    const messages = await restrictedSyntax(
-      "app/components/Fixture.test.tsx",
-      MUTATE_ASYNC_FIXTURE,
-    );
-
-    expect(messages.filter(isMutateAsyncMessage)).toHaveLength(0);
+    expect(
+      await flaggedCalls(
+        MUTATE_ASYNC_FIXTURE,
+        "app/components/Fixture.test.tsx",
+        isMutateAsyncCheck,
+      ),
+    ).toEqual([]);
   });
 });

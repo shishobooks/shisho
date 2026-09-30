@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterAll,
@@ -264,6 +264,25 @@ describe("IdentifyBookDialog search sequencing", () => {
       expect(screen.getByText("Result B")).toBeInTheDocument();
     });
     expect(screen.queryByText("Result A")).not.toBeInTheDocument();
+  });
+
+  it("enables the search button only while the query has text", async () => {
+    const user = createUser();
+    renderDialog(makeBook({ title: "Query A" }));
+
+    const input = screen.getByPlaceholderText(/Search by title/i);
+    // The search button is icon-only, so find it next to the input.
+    const search = within(input.parentElement!).getByRole("button");
+    expect(search).toBeEnabled();
+
+    await user.clear(input);
+    expect(search).toBeDisabled();
+
+    await user.type(input, "   ");
+    expect(search).toBeDisabled();
+
+    await user.type(input, "Query B");
+    expect(search).toBeEnabled();
   });
 
   it("renders an omnibus range in a plugin search result", async () => {

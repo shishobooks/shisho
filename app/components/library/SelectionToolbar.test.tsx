@@ -251,6 +251,28 @@ describe("SelectionToolbar download file-type selection", () => {
     expect(screen.getByText(/3 files/)).toBeInTheDocument();
   });
 
+  it("disables the popover Download button when no file types are checked", async () => {
+    const user = createUser();
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: /download/i }));
+    const downloadButtons = screen.getAllByRole("button", {
+      name: /download/i,
+    });
+    const submit = downloadButtons[downloadButtons.length - 1];
+    expect(submit).toBeEnabled();
+
+    // Uncheck EPUB, M4B and CBZ, the only available types.
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+    await user.click(checkboxes[2]);
+    expect(submit).toBeDisabled();
+
+    await user.click(checkboxes[2]);
+    expect(submit).toBeEnabled();
+  });
+
   it("submits only selected file types for download", async () => {
     const user = createUser();
     mockCreateJobMutateAsync.mockResolvedValueOnce({ id: 42 });

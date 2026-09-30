@@ -28,6 +28,42 @@ describe("IdentifierEditor", () => {
     expect(isbn).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("enables Add only once a value is typed and a type is free", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    const { rerender } = render(
+      <IdentifierEditor
+        identifierTypes={TYPES}
+        onChange={vi.fn()}
+        value={[]}
+      />,
+    );
+
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add).toBeDisabled();
+
+    const input = screen.getByPlaceholderText(/value/i);
+    await user.type(input, "   ");
+    expect(add).toBeDisabled();
+
+    await user.type(input, "B0BHRJYNHV");
+    expect(add).toBeEnabled();
+
+    // With every type already present, a typed value is not enough.
+    rerender(
+      <IdentifierEditor
+        identifierTypes={TYPES}
+        onChange={vi.fn()}
+        value={[
+          { type: "isbn_13", value: "9780306406157" },
+          { type: "asin", value: "B0BHRJYNHV" },
+        ]}
+      />,
+    );
+    expect(screen.getByPlaceholderText(/value/i)).toHaveValue("   B0BHRJYNHV");
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
+
   it("blocks Add and shows inline error when validateIdentifier rejects the value", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();

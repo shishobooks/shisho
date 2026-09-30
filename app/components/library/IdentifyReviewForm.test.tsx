@@ -779,6 +779,32 @@ describe("IdentifyReviewForm component", () => {
     expect(payload.sources.file_name).toBe("user");
   });
 
+  it("disables Apply with nothing selected and enables it again for one selection", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({
+        title: "Old Title",
+        title_source: DataSourceFilepath,
+      }),
+      result: makeResult({ title: "New Title" }),
+    });
+
+    expect(getApplyButton()).toBeEnabled();
+
+    const applyAll = screen.getByRole("checkbox", { name: "Apply all" });
+    expect(applyAll).toHaveAttribute("data-state", "checked");
+    await user.click(applyAll);
+
+    expect(applyAll).toHaveAttribute("data-state", "unchecked");
+    expect(getApplyButton()).toHaveTextContent(/^Apply changes$/);
+    expect(getApplyButton()).toBeDisabled();
+
+    await user.click(screen.getByRole("checkbox", { name: "Apply Title" }));
+
+    expect(getApplyButton()).toHaveTextContent(/^Apply 1 change$/);
+    expect(getApplyButton()).toBeEnabled();
+  });
+
   it("blocks a selected blank Title with a visible validation error", async () => {
     const user = createUser();
     renderForm({

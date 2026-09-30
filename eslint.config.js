@@ -5,6 +5,8 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import mutateAsyncHandled from "./eslint-rules/mutate-async-handled.js";
+
 // Permission checks take a typed requirement through useCan or can (see
 // "Permission-gated controls" in app/AGENTS.md), so a typo fails to compile.
 // hasPermission takes plain strings, where a typo fails silently.
@@ -53,8 +55,9 @@ const literalFileUrls = [
 // one without it fails silently. Toast it with toastRequestError (see
 // "Request errors and retries" in app/AGENTS.md), or use mutateAsync in a
 // try/catch. The options must be an object literal passed straight to
-// mutate(), so an onError inside a nested call does not count, and options
-// held in a variable are flagged because the rule cannot see into them.
+// mutate(), so an onError inside a nested call does not count, options held
+// in a variable are flagged because the rule cannot see into them, and
+// `onError: undefined` counts as missing.
 const MUTATE_MESSAGE =
   "Pass onError to mutate() and report the failure with toastRequestError, or await mutateAsync in a try/catch.";
 const MUTATE_CALL = 'CallExpression[callee.property.name="mutate"]';
@@ -63,7 +66,7 @@ const mutateWithoutOnError = [
   { selector: `${MUTATE_CALL}[arguments.length<2]`, message: MUTATE_MESSAGE },
   // Options without their own onError (one in a nested call does not count).
   {
-    selector: `${MUTATE_CALL} > ObjectExpression:nth-child(2):not(:has(> Property[key.name="onError"]))`,
+    selector: `${MUTATE_CALL} > ObjectExpression:nth-child(2):not(:has(> Property[key.name="onError"]:not([value.type="Identifier"][value.name="undefined"])))`,
     message: MUTATE_MESSAGE,
   },
   // Options the rule cannot see into.
@@ -73,35 +76,41 @@ const mutateWithoutOnError = [
   },
 ];
 
-// A mutateAsync promise rejects when the request fails, so one that nothing
-// catches is an unhandled rejection with no report to the user. The call must
-// sit in the block of a try that has a catch clause (not in the catch or
-// finally), in a chain that ends in .catch(), or hand its promise to the
-// caller with return or a concise arrow body, which makes the caller
-// responsible (MetadataDeleteDialog catches the promise the detail pages'
-// onDelete returns). A concise arrow in a JSX event prop is still flagged: an
-// event handler never catches what it is handed. The rule reads syntax only,
-// so it cannot tell whether a caller really catches a returned promise, or
-// whether a try catches a call made later from a callback defined inside it.
-const MUTATE_ASYNC_MESSAGE =
-  "Await mutateAsync in a try/catch that reports the failure with toastRequestError, chain .catch(), or return its promise to a caller that catches it.";
-const MUTATE_ASYNC_CALL = 'CallExpression[callee.property.name="mutateAsync"]';
-const mutateAsyncUnhandled = [
-  {
-    selector: [
-      MUTATE_ASYNC_CALL,
-      ":not(TryStatement[handler] > BlockStatement.block CallExpression)",
-      ':not(CallExpression[callee.property.name="catch"] > MemberExpression.callee CallExpression)',
-      ":not(ReturnStatement > CallExpression)",
-      ":not(ArrowFunctionExpression > CallExpression.body)",
-    ].join(""),
-    message: MUTATE_ASYNC_MESSAGE,
-  },
-  {
-    selector: `JSXAttribute[name.name=/^on[A-Z]/] > JSXExpressionContainer > ArrowFunctionExpression > ${MUTATE_ASYNC_CALL}.body`,
-    message: MUTATE_ASYNC_MESSAGE,
-  },
-];
+// The mutate and mutateAsync checks read calls on the mutation object
+// (`m.mutate(...)`), so a destructured, renamed, aliased, computed, or
+// uncalled reference would slip past them. Ban those shapes outright. An
+// uncalled `onClick={m.mutate}` would also pass the click event as the
+// mutation's variables.
+const mutationReferences = [
+  ["mutate", "Call mutate on the mutation object and pass onError"],
+  [
+    "mutateAsync",
+    "Call mutateAsync on the mutation object and catch its promise",
+  ],
+].flatMap(([name, action]) => {
+  const message = `${action}: a destructured, aliased, computed, or uncalled ${name} hides the call from the lint rule that checks it.`;
+  return [
+    {
+      selector: `ObjectPattern > Property:matches([key.name="${name}"], [key.value="${name}"])`,
+      message,
+    },
+    {
+      selector: `MemberExpression[property.name="${name}"]:not(CallExpression > MemberExpression.callee)`,
+      message,
+    },
+    {
+      selector: `MemberExpression[computed=true][property.value="${name}"]`,
+      message,
+    },
+  ];
+});
+
+// Every mutateAsync call on a mutation object must be caught. esquery cannot
+// express "within the nearest enclosing function", so this is a local rule;
+// eslint-rules/mutate-async-handled.js explains what it accepts.
+const shishoPlugin = {
+  rules: { "mutate-async-handled": mutateAsyncHandled },
+};
 
 export default tseslint.config(
   js.configs.recommended,
@@ -156,15 +165,17 @@ export default tseslint.config(
     // query written in a component would skip both. Tests may build queries.
     files: ["app/**/*.{ts,tsx}"],
     ignores: ["app/hooks/queries/**", "app/**/*.test.{ts,tsx}"],
+    plugins: { shisho: shishoPlugin },
     rules: {
       "no-restricted-syntax": [
         "error",
         literalPermissionCheck,
         imperativeQueries,
         ...mutateWithoutOnError,
-        ...mutateAsyncUnhandled,
+        ...mutationReferences,
         ...literalFileUrls,
       ],
+      "shisho/mutate-async-handled": "error",
       "no-restricted-imports": [
         "error",
         {
@@ -213,12 +224,12 @@ export default tseslint.config(
         literalPermissionCheck,
         imperativeQueries,
         ...mutateWithoutOnError,
-        ...mutateAsyncUnhandled,
+        ...mutationReferences,
       ],
     },
   },
   {
-    files: ["*.js"],
+    files: ["*.js", "eslint-rules/*.js"],
     ignores: ["app/**", "website/**"],
     languageOptions: {
       globals: globals.node,

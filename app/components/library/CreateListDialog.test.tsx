@@ -363,6 +363,38 @@ describe("CreateListDialog", () => {
     });
   });
 
+  describe("save button guard", () => {
+    it("keeps Create disabled until the name has non-blank text", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <CreateListDialog
+            isPending={false}
+            onCreate={vi.fn()}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const createButton = screen.getByRole("button", { name: "Create" });
+      expect(createButton).toBeDisabled();
+
+      // Whitespace counts as a change but not as a name
+      const nameInput = screen.getByLabelText(/name/i);
+      await user.type(nameInput, "   ");
+      expect(createButton).toBeDisabled();
+
+      await user.type(nameInput, "Reading");
+      expect(createButton).toBeEnabled();
+
+      await user.clear(nameInput);
+      expect(createButton).toBeDisabled();
+    });
+  });
+
   describe("hasChanges comparison against initial state", () => {
     it("should compute hasChanges against initial values, not live props (edit mode)", async () => {
       // This test exposes the bug: hasChanges compares form values against
@@ -398,9 +430,9 @@ describe("CreateListDialog", () => {
         expect(screen.getByDisplayValue("My List")).toBeInTheDocument();
       });
 
-      // Initially, no changes - Save button should be disabled (due to canSave = name.trim() && hasChanges)
-      // Actually the button is disabled when !hasChanges, let's check the button state
+      // Nothing has changed yet, so Save starts disabled
       const saveButton = screen.getByRole("button", { name: /save/i });
+      expect(saveButton).toBeDisabled();
 
       // User changes name to "Different Name"
       const nameInput = screen.getByLabelText(/name/i);
