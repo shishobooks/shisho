@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -18,6 +19,53 @@ import (
 // AllowedDownloadHosts lists the allowed host prefixes for plugin download URLs.
 // Tests can override this to allow test servers.
 var AllowedDownloadHosts = []string{"https://github.com/"}
+
+// Installer failures a caller must tell apart from server faults. Each wraps
+// the detail, so the error's message keeps it. installerError in
+// handler_install.go renders them.
+var (
+	// ErrInvalidDownloadURL marks a download URL outside AllowedDownloadHosts.
+	ErrInvalidDownloadURL = errors.New("invalid download URL")
+	// ErrChecksumMismatch marks a download whose SHA256 is not the expected one.
+	ErrChecksumMismatch = errors.New("SHA256 mismatch")
+	// ErrInvalidPackage marks a download that is not a valid plugin package:
+	// not a ZIP file, or without a valid manifest.json.
+	ErrInvalidPackage = errors.New("invalid plugin package")
+	// ErrDownloadFailed marks a download host that could not be reached or
+	// answered with a status other than 200.
+	ErrDownloadFailed = errors.New("failed to download plugin")
+)
+
+// invalidDownloadURL returns ErrInvalidDownloadURL naming the allowed hosts.
+func invalidDownloadURL() error {
+	return errors.WithStack(fmt.Errorf("%w: only URLs starting with %v are allowed", ErrInvalidDownloadURL, AllowedDownloadHosts))
+}
+
+// invalidPackage returns ErrInvalidPackage with detail and the cause.
+func invalidPackage(detail string, err error) error {
+	if err == nil {
+		return errors.WithStack(fmt.Errorf("%w: %s", ErrInvalidPackage, detail))
+	}
+	return errors.WithStack(fmt.Errorf("%w: %s: %w", ErrInvalidPackage, detail, err))
+}
+
+// readPackageManifest reads and parses manifest.json from an extracted
+// plugin directory. A missing or invalid manifest is ErrInvalidPackage; a
+// failed read is a server fault.
+func readPackageManifest(dir string) (*Manifest, error) {
+	manifestData, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	if os.IsNotExist(err) {
+		return nil, invalidPackage("manifest.json is missing", nil)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read manifest.json from extracted plugin")
+	}
+	manifest, err := ParseManifest(manifestData)
+	if err != nil {
+		return nil, invalidPackage("invalid manifest", err)
+	}
+	return manifest, nil
+}
 
 // Installer handles downloading and extracting plugins.
 type Installer struct {
@@ -33,7 +81,7 @@ func NewInstaller(pluginDir string) *Installer {
 // Returns the parsed manifest from the extracted plugin.
 func (inst *Installer) InstallPlugin(ctx context.Context, scope, pluginID, downloadURL, expectedSHA256 string) (*Manifest, error) {
 	if !isAllowedDownloadURL(downloadURL) {
-		return nil, errors.Errorf("invalid download URL: only URLs starting with %v are allowed", AllowedDownloadHosts)
+		return nil, invalidDownloadURL()
 	}
 
 	// Download ZIP to temp file
@@ -61,17 +109,10 @@ func (inst *Installer) InstallPlugin(ctx context.Context, scope, pluginID, downl
 	}
 
 	// Read and parse manifest.json from extracted directory
-	manifestPath := filepath.Join(destDir, "manifest.json")
-	manifestData, err := os.ReadFile(manifestPath)
+	manifest, err := readPackageManifest(destDir)
 	if err != nil {
 		os.RemoveAll(destDir)
-		return nil, errors.Wrap(err, "failed to read manifest.json from extracted plugin")
-	}
-
-	manifest, err := ParseManifest(manifestData)
-	if err != nil {
-		os.RemoveAll(destDir)
-		return nil, errors.Wrap(err, "invalid manifest in downloaded plugin")
+		return nil, err
 	}
 
 	return manifest, nil
@@ -91,7 +132,7 @@ func (inst *Installer) UninstallPlugin(scope, pluginID string) error {
 // UpdatePlugin replaces an existing plugin with a new version.
 func (inst *Installer) UpdatePlugin(ctx context.Context, scope, pluginID, downloadURL, expectedSHA256 string) (*Manifest, error) {
 	if !isAllowedDownloadURL(downloadURL) {
-		return nil, errors.Errorf("invalid download URL: only URLs starting with %v are allowed", AllowedDownloadHosts)
+		return nil, invalidDownloadURL()
 	}
 
 	// Download ZIP to temp file
@@ -118,15 +159,9 @@ func (inst *Installer) UpdatePlugin(ctx context.Context, scope, pluginID, downlo
 	}
 
 	// Verify manifest in new version before replacing
-	manifestPath := filepath.Join(tmpDir, "manifest.json")
-	manifestData, err := os.ReadFile(manifestPath)
+	manifest, err := readPackageManifest(tmpDir)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read manifest.json from updated plugin")
-	}
-
-	manifest, err := ParseManifest(manifestData)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid manifest in updated plugin")
+		return nil, err
 	}
 
 	// Remove old plugin directory
@@ -164,12 +199,12 @@ func (inst *Installer) downloadToTemp(ctx context.Context, url string) (string, 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to download plugin")
+		return "", errors.WithStack(fmt.Errorf("%w: %w", ErrDownloadFailed, err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.Errorf("failed to download plugin: HTTP %d", resp.StatusCode)
+		return "", errors.WithStack(fmt.Errorf("%w: HTTP %d", ErrDownloadFailed, resp.StatusCode))
 	}
 
 	tmpFile, err := os.CreateTemp("", "plugin-download-*.zip")
@@ -206,7 +241,7 @@ func (inst *Installer) verifySHA256(filePath, expected string) error {
 
 	actual := hex.EncodeToString(h.Sum(nil))
 	if actual != expected {
-		return errors.Errorf("SHA256 mismatch: expected %s, got %s", expected, actual)
+		return errors.WithStack(fmt.Errorf("%w: expected %s, got %s", ErrChecksumMismatch, expected, actual))
 	}
 
 	return nil
@@ -216,7 +251,7 @@ func (inst *Installer) verifySHA256(filePath, expected string) error {
 func (inst *Installer) extractZip(zipPath, destDir string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return errors.Wrap(err, "failed to open ZIP file")
+		return invalidPackage("not a ZIP file", err)
 	}
 	defer r.Close()
 
@@ -246,7 +281,9 @@ func (inst *Installer) extractZip(zipPath, destDir string) error {
 			return errors.Wrapf(err, "failed to create directory for %s", name)
 		}
 
-		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		// Keep the owner's read and write bits, so an entry stored without
+		// permission bits does not leave a file the server cannot read.
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode().Perm()|0o600)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create file %s", name)
 		}
@@ -254,20 +291,41 @@ func (inst *Installer) extractZip(zipPath, destDir string) error {
 		rc, err := f.Open()
 		if err != nil {
 			outFile.Close()
-			return errors.Wrapf(err, "failed to open ZIP entry %s", name)
+			return invalidPackage("unreadable ZIP entry "+name, err)
 		}
 
-		// Limit extraction to 100MB per file to prevent decompression bombs
+		// Limit extraction to 100MB per file to prevent decompression bombs.
+		// A failure reading the entry (bad compressed data, a CRC mismatch)
+		// is a corrupt package; a failure writing it is a server fault.
 		const maxFileSize = 100 * 1024 * 1024
-		_, err = io.Copy(outFile, io.LimitReader(rc, maxFileSize))
+		entry := &readErrorRecorder{r: io.LimitReader(rc, maxFileSize)}
+		_, err = io.Copy(outFile, entry)
 		rc.Close()
 		outFile.Close()
+		if entry.err != nil {
+			return invalidPackage("corrupt ZIP entry "+name, entry.err)
+		}
 		if err != nil {
 			return errors.Wrapf(err, "failed to extract %s", name)
 		}
 	}
 
 	return nil
+}
+
+// readErrorRecorder remembers the first read error other than io.EOF, so a
+// copy can tell a failed read from a failed write.
+type readErrorRecorder struct {
+	r   io.Reader
+	err error
+}
+
+func (r *readErrorRecorder) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) && r.err == nil {
+		r.err = err
+	}
+	return n, err
 }
 
 // DownloadPluginImage downloads an image from the given URL and saves it as icon.png

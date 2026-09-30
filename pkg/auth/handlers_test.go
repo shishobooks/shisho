@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 func newTestContext(t *testing.T, payload, method, path string) (echo.Context, *httptest.ResponseRecorder) {
@@ -114,4 +116,77 @@ func TestHandler_Login_ReturnsMustChangePassword(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.MustChangePassword)
 	assert.NotEmpty(t, resp.Username)
+}
+
+// /api/auth/me reports a missing session, an invalid token, and a missing or
+// deactivated user with the shared 401 constructors, and a failed user lookup
+// as a server fault.
+func TestHandler_Me_Errors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// setup returns the cookie value to send ("" sends none).
+		setup func(t *testing.T, db *bun.DB, svc *Service) string
+		want  error
+	}{
+		{
+			name:  "no session cookie",
+			setup: func(*testing.T, *bun.DB, *Service) string { return "" },
+			want:  errcodes.AuthenticationRequired(),
+		},
+		{
+			name:  "invalid token",
+			setup: func(*testing.T, *bun.DB, *Service) string { return "not-a-token" },
+			want:  errcodes.InvalidSession(),
+		},
+		{
+			name: "deactivated user",
+			setup: func(t *testing.T, db *bun.DB, svc *Service) string {
+				user := createUserWithPasswordResetRequired(context.Background(), t, db)
+				_, err := db.NewUpdate().Model(user).Set("is_active = ?", false).WherePK().Exec(context.Background())
+				require.NoError(t, err)
+				token, err := svc.GenerateToken(user)
+				require.NoError(t, err)
+				return token
+			},
+			want: errcodes.UserInactive(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := testdb.New(t)
+			svc := NewService(db, "test-jwt-secret", time.Hour)
+			h := &handler{authService: svc}
+			cookie := tt.setup(t, db, svc)
+
+			c, _ := newTestContext(t, "", http.MethodGet, "/auth/me")
+			if cookie != "" {
+				c.Request().AddCookie(&http.Cookie{Name: CookieName, Value: cookie})
+			}
+			assert.Equal(t, tt.want, h.me(c))
+		})
+	}
+
+	t.Run("user lookup fault", func(t *testing.T) {
+		t.Parallel()
+		db := testdb.New(t)
+		svc := NewService(db, "test-jwt-secret", time.Hour)
+		h := &handler{authService: svc}
+		user := createUserWithPasswordResetRequired(context.Background(), t, db)
+		token, err := svc.GenerateToken(user)
+		require.NoError(t, err)
+		// A created_at that cannot scan into a time fails the lookup with an
+		// error other than sql.ErrNoRows.
+		_, err = db.Exec("UPDATE users SET created_at = 'not a time' WHERE id = ?", user.ID)
+		require.NoError(t, err)
+
+		c, _ := newTestContext(t, "", http.MethodGet, "/auth/me")
+		c.Request().AddCookie(&http.Cookie{Name: CookieName, Value: token})
+		err = h.me(c)
+		require.Error(t, err)
+		var codeErr *errcodes.Error
+		assert.NotErrorAs(t, err, &codeErr, "want a server fault, got %v", err)
+	})
 }

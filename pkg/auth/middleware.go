@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,13 +40,13 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		claims, err := m.authService.ValidateToken(cookie.Value)
 		if err != nil {
-			return errcodes.Unauthorized("Invalid or expired token")
+			return errcodes.InvalidSession()
 		}
 
 		// Verify user still exists and is active
 		user, err := m.authService.GetUserByID(ctx, claims.UserID)
 		if err != nil {
-			return errcodes.UserInactive()
+			return err
 		}
 
 		if user.MustChangePassword && !isSelfPasswordResetRequest(c, user.ID) {
@@ -69,7 +70,7 @@ func (m *Middleware) RequirePermission(resource, operation string) echo.Middlewa
 			}
 
 			if !user.HasPermission(resource, operation) {
-				return errcodes.Forbidden("You don't have permission to " + operation + " " + resource)
+				return errcodes.PermissionDenied(resource, operation)
 			}
 
 			return next(c)
@@ -78,28 +79,12 @@ func (m *Middleware) RequirePermission(resource, operation string) echo.Middlewa
 }
 
 // Permission names one resource and operation for RequireAnyPermission.
-type Permission struct {
-	Resource  string
-	Operation string
-}
+type Permission = errcodes.Permission
 
 // RequireAnyPermission returns middleware that allows the request when the
 // user holds at least one of the permissions.
 // Must be used after Authenticate middleware.
 func (m *Middleware) RequireAnyPermission(permissions ...Permission) echo.MiddlewareFunc {
-	names := make([]string, len(permissions))
-	for i, p := range permissions {
-		names[i] = p.Operation + " " + p.Resource
-	}
-	var listed string
-	switch len(names) {
-	case 0:
-	case 1, 2:
-		listed = strings.Join(names, " or ")
-	default:
-		listed = strings.Join(names[:len(names)-1], ", ") + ", or " + names[len(names)-1]
-	}
-
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			user, err := RequireUser(c)
@@ -113,7 +98,7 @@ func (m *Middleware) RequireAnyPermission(permissions ...Permission) echo.Middle
 				}
 			}
 
-			return errcodes.Forbidden("You don't have permission to " + listed)
+			return errcodes.AnyPermissionDenied(permissions...)
 		}
 	}
 }
@@ -174,7 +159,13 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		if !ok {
 			authed, authErr := m.authService.Authenticate(ctx, username, password)
 			if authErr != nil {
-				return respondBasicAuthRequired(c)
+				// Only a credentials rejection is a challenge; a fault
+				// loading the user is a server error.
+				var codeErr *errcodes.Error
+				if errors.As(authErr, &codeErr) && codeErr.HTTPCode == http.StatusUnauthorized {
+					return respondBasicAuthRequired(c)
+				}
+				return authErr
 			}
 			user = authed
 			// Skip caching while a password reset is required so that
@@ -215,7 +206,10 @@ func isSelfPasswordResetRequest(c echo.Context, userID int) bool {
 	return id == userID
 }
 
+// respondBasicAuthRequired sets the Basic challenge that prompts an OPDS
+// reader for credentials and returns the 401 in the errcodes shape every
+// other API error uses.
 func respondBasicAuthRequired(c echo.Context) error {
 	c.Response().Header().Set("WWW-Authenticate", `Basic realm="Shisho OPDS"`)
-	return c.String(http.StatusUnauthorized, "Unauthorized")
+	return errcodes.AuthenticationRequired()
 }

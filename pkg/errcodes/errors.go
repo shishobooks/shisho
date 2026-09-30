@@ -3,6 +3,7 @@ package errcodes
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Error struct {
@@ -45,6 +46,44 @@ func Forbidden(msg string) error {
 		msg,
 		"forbidden",
 	}
+}
+
+// LibraryAccessDenied returns the 403 for a user who cannot access the
+// library a request reaches, whether through a route param or a loaded entity.
+func LibraryAccessDenied() error {
+	return Forbidden("You don't have access to this library")
+}
+
+// Permission names one resource and operation, such as books and read, for a
+// permission denial.
+type Permission struct {
+	Resource  string
+	Operation string
+}
+
+// PermissionDenied returns the 403 for a user whose role lacks the operation
+// on the resource, such as "You don't have permission to read books".
+func PermissionDenied(resource, operation string) error {
+	return AnyPermissionDenied(Permission{Resource: resource, Operation: operation})
+}
+
+// AnyPermissionDenied returns the 403 for a user who holds none of the
+// permissions, listing them as alternatives: "You don't have permission to
+// read shares, write shares, or read config".
+func AnyPermissionDenied(permissions ...Permission) error {
+	names := make([]string, len(permissions))
+	for i, p := range permissions {
+		names[i] = p.Operation + " " + p.Resource
+	}
+	var listed string
+	switch len(names) {
+	case 0:
+	case 1, 2:
+		listed = strings.Join(names, " or ")
+	default:
+		listed = strings.Join(names[:len(names)-1], ", ") + ", or " + names[len(names)-1]
+	}
+	return Forbidden("You don't have permission to " + listed)
 }
 
 // DemoMode returns a 403 error for actions disabled in Demo Mode.
@@ -97,6 +136,30 @@ func ValidationError(msg string) error {
 	}
 }
 
+// InvalidState returns the 422 for a well-formed request that the target's
+// current state cannot honor, such as downloading a job that has not
+// finished or preferring the cover of a file that has none. The distinct
+// code separates it from a rejected payload value (validation_error).
+func InvalidState(msg string) error {
+	return &Error{
+		http.StatusUnprocessableEntity,
+		msg,
+		"invalid_state",
+	}
+}
+
+// UpstreamError returns the 502 for a request that failed because an
+// upstream server it depends on, such as a plugin download host or
+// repository, did not answer or answered with an error. The code matches
+// the one the audnexus routes send for the same condition.
+func UpstreamError(msg string) error {
+	return &Error{
+		http.StatusBadGateway,
+		msg,
+		"upstream_error",
+	}
+}
+
 // PluginLoadFailure returns a 422 error for a plugin that failed to load at
 // runtime (e.g., malformed manifest, incompatible host version). The request
 // itself was well-formed — the side effect failed.
@@ -113,15 +176,6 @@ func MalformedPayload() error {
 		http.StatusBadRequest,
 		"Malformed Payload",
 		"malformed_payload",
-	}
-}
-
-// BadRequest returns a 400 error with the given message.
-func BadRequest(msg string) error {
-	return &Error{
-		http.StatusBadRequest,
-		msg,
-		"bad_request",
 	}
 }
 
@@ -150,6 +204,12 @@ func AuthenticationRequired() error {
 		"Authentication required",
 		"unauthorized",
 	}
+}
+
+// InvalidSession returns the 401 for a session token that does not validate,
+// because it is malformed, forged, or expired.
+func InvalidSession() error {
+	return Unauthorized("Invalid or expired token")
 }
 
 // UserInactive returns the 401 for an authenticated identity (a session, or

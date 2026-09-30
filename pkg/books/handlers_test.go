@@ -2183,7 +2183,7 @@ func TestUpdateFile_IsPreferredCover_RejectsFileWithNoCover(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := executeRequestWithUser(t, e, req, user)
-	assert.Equal(t, http.StatusBadRequest, rr.Code, "response body: %s", rr.Body.String())
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, "response body: %s", rr.Body.String())
 	assert.Contains(t, rr.Body.String(), "cover")
 }
 

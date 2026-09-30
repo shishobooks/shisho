@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,7 +33,7 @@ func (h *handler) install(c echo.Context) error {
 		manifest, err := h.installer.InstallPlugin(ctx, payload.Scope, payload.ID, payload.DownloadURL, payload.SHA256)
 		if err != nil {
 			logger.FromContext(ctx).Warn("plugin install failed", logger.Data{"url": payload.DownloadURL, "error": err.Error()})
-			return errcodes.ValidationError(err.Error())
+			return installerError(err)
 		}
 
 		plugin = &models.Plugin{
@@ -59,7 +60,7 @@ func (h *handler) install(c echo.Context) error {
 		manifest, err := h.installer.InstallPlugin(ctx, payload.Scope, payload.ID, downloadURL, sha256Hash)
 		if err != nil {
 			logger.FromContext(ctx).Warn("plugin install failed", logger.Data{"url": downloadURL, "error": err.Error()})
-			return errcodes.ValidationError(err.Error())
+			return installerError(err)
 		}
 
 		// Download plugin icon (non-fatal)
@@ -92,6 +93,12 @@ func (h *handler) install(c echo.Context) error {
 	}
 
 	if err := h.manager.LoadPlugin(ctx, plugin.Scope, plugin.ID); err != nil {
+		if !asLoadError(err) {
+			// Never loaded, so remove it rather than leave it Active with
+			// no runtime.
+			h.removeFailedInstall(ctx, plugin)
+			return errors.WithStack(err)
+		}
 		// Store load error but don't fail the install
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
@@ -100,7 +107,10 @@ func (h *handler) install(c echo.Context) error {
 		} else {
 			plugin.Status = models.PluginStatusMalfunctioned
 		}
-		_ = h.service.UpdatePlugin(ctx, plugin)
+		if err := h.service.UpdatePlugin(ctx, plugin); err != nil {
+			h.removeFailedInstall(ctx, plugin)
+			return errors.WithStack(err)
+		}
 		h.manager.emitEvent(PluginEventMalfunctioned, plugin.Scope, plugin.ID, nil)
 	} else {
 		var hooks []string
@@ -113,23 +123,63 @@ func (h *handler) install(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusCreated, plugin))
 }
 
+// removeFailedInstall undoes an install that failed with a server fault after
+// its row and files were written: it unloads the plugin and removes its files
+// and row. Each step is best effort and logged, since the request is already
+// failing.
+func (h *handler) removeFailedInstall(ctx context.Context, plugin *models.Plugin) {
+	log := logger.FromContext(ctx)
+	h.manager.UnloadPlugin(plugin.Scope, plugin.ID)
+	if err := h.installer.UninstallPlugin(plugin.Scope, plugin.ID); err != nil {
+		log.Warn("failed to remove files of a failed plugin install", logger.Data{"scope": plugin.Scope, "id": plugin.ID, "error": err.Error()})
+	}
+	if err := h.service.UninstallPlugin(ctx, plugin.Scope, plugin.ID); err != nil {
+		log.Warn("failed to remove the row of a failed plugin install", logger.Data{"scope": plugin.Scope, "id": plugin.ID, "error": err.Error()})
+	}
+}
+
+// installerError renders an Installer failure for the install and update
+// version routes. A download URL outside the allowed hosts, a checksum
+// mismatch, or a package that is not a valid plugin is a 422. A download host
+// that cannot be reached or answers with an error is a 502, because the
+// request was fine and the upstream failed. Anything else, such as a plugin
+// directory that cannot be written, is a server fault.
+func installerError(err error) error {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return err
+	case errors.Is(err, ErrInvalidDownloadURL), errors.Is(err, ErrChecksumMismatch), errors.Is(err, ErrInvalidPackage):
+		return errcodes.ValidationError(err.Error())
+	case errors.Is(err, ErrDownloadFailed):
+		return errcodes.UpstreamError(err.Error())
+	}
+	return errors.WithStack(err)
+}
+
 // findPluginInRepos searches enabled repositories for a plugin by scope and ID.
-// If version is empty, it returns the latest compatible version.
+// If version is empty, it returns the latest compatible version. When no
+// repository for the scope answered, it returns a 502 naming the last fetch
+// failure instead of a 404, since the plugin may well be listed.
 func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, resolvedVersion, repoURL, imageURL string, err error) {
 	repos, err := h.service.ListRepositories(c.Request().Context())
 	if err != nil {
 		return "", "", "", "", "", errors.WithStack(err)
 	}
 
+	var answered bool
+	var fetchErr error
 	for _, repo := range repos {
 		if !repo.Enabled || repo.Scope != scope {
 			continue
 		}
 
-		manifest, fetchErr := FetchRepository(repo.URL)
-		if fetchErr != nil {
+		manifest, err := FetchRepository(repo.URL)
+		if err != nil {
+			logger.FromContext(c.Request().Context()).Warn("plugin repository fetch failed", logger.Data{"url": repo.URL, "error": err.Error()})
+			fetchErr = err
 			continue
 		}
+		answered = true
 
 		for _, p := range manifest.Plugins {
 			if p.ID != pluginID {
@@ -156,6 +206,9 @@ func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version str
 		}
 	}
 
+	if !answered && fetchErr != nil {
+		return "", "", "", "", "", errcodes.UpstreamError("Could not reach the plugin repository: " + fetchErr.Error())
+	}
 	return "", "", "", "", "", errcodes.NotFound("Plugin in repositories")
 }
 

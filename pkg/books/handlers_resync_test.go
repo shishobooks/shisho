@@ -2,6 +2,8 @@ package books
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -160,5 +162,54 @@ func TestResyncFile_ValidModesReachScanner(t *testing.T) {
 			assert.Equal(t, tt.wantSkipPlugins, scanner.opts.SkipPlugins, "SkipPlugins")
 			assert.Equal(t, tt.wantReset, scanner.opts.Reset, "Reset")
 		})
+	}
+}
+
+// failingScanner implements the Scanner interface and returns err.
+type failingScanner struct{ err error }
+
+func (s *failingScanner) Scan(context.Context, ScanOptions) (*ScanResult, error) {
+	return nil, s.err
+}
+
+// A resync reports a file the scanner could not parse as a 422 with a fixed
+// message (the parse error names library paths, so it is logged and recorded
+// on the file instead), and any other scan failure, such as a database or
+// filesystem fault, as a 500 that does not echo the raw error.
+func TestResync_ScanErrorsMapByKind(t *testing.T) {
+	t.Parallel()
+
+	unreadable := fmt.Errorf("failed to parse file metadata: %w: %w", ErrFileUnreadable, errors.New("zip: not a valid zip file"))
+	tests := []struct {
+		name    string
+		err     error
+		status  int
+		code    string
+		message string
+	}{
+		{"unreadable file", unreadable, http.StatusUnprocessableEntity, "validation_error", "The file could not be parsed. Its scan error has the details."},
+		{"server fault", errors.New("database is locked"), http.StatusInternalServerError, "internal_server_error", "Internal Server Error"},
+	}
+	for _, tt := range tests {
+		for _, route := range []string{"file", "book"} {
+			t.Run(tt.name+" on "+route, func(t *testing.T) {
+				t.Parallel()
+				db := testdb.New(t)
+				library, book := setupTestLibraryAndBook(t, db)
+				file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
+				user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+				e := setupTestServerWithScanner(t, db, &failingScanner{err: tt.err})
+
+				path := "/books/files/" + strconv.Itoa(file.ID) + "/resync"
+				if route == "book" {
+					path = "/books/" + strconv.Itoa(book.ID) + "/resync"
+				}
+				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rr := executeRequestWithUser(t, e, req, user)
+
+				assertErrorResponse(t, rr, tt.status, tt.code, tt.message)
+			})
+		}
 	}
 }

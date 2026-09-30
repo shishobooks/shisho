@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -65,7 +64,7 @@ func validateIdentifierTypes(fields map[string]any) error {
 			continue
 		}
 		if _, dup := seen[entry.Type]; dup {
-			return errcodes.ValidationError("duplicate identifier type: " + entry.Type)
+			return identifiers.DuplicateTypeError(entry.Type)
 		}
 		seen[entry.Type] = struct{}{}
 	}

@@ -1,8 +1,11 @@
 package worker
 
 import (
+	"context"
+	"io/fs"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -58,6 +61,8 @@ func TestScan_UnreadableFile_RecordsScanErrorAndKeepsSidecar(t *testing.T) {
 	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: files[0].ID}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a valid zip file")
+	// The resync routes report this as a 422 rather than a server fault.
+	require.ErrorIs(t, err, books.ErrFileUnreadable)
 
 	assert.FileExists(t, sidecarPath, "sidecar must survive a failed parse")
 
@@ -152,4 +157,57 @@ func TestScanErrorMessage(t *testing.T) {
 		blank := "   \n"
 		assert.Equal(t, "file could not be parsed", scanErrorMessage(errors.New(blank)))
 	})
+}
+
+// A file the server cannot open is a server fault, not a file the user must
+// repair, so its scan error is not tagged books.ErrFileUnreadable and a
+// resync reports it as a 500.
+func TestScan_PermissionDeniedIsNotUnreadable(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	epubPath := testgen.GenerateEPUB(t, libraryPath, "locked.epub", testgen.EPUBOptions{
+		Title:   "Locked",
+		Authors: []string{"Some Author"},
+	})
+	require.NoError(t, tc.runScan())
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+
+	require.NoError(t, os.Chmod(epubPath, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(epubPath, 0o644) })
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: files[0].ID, ForceRefresh: true}, nil)
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, books.ErrFileUnreadable)
+}
+
+func TestIsUnparseableFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"corrupt archive", errors.Wrap(errors.New("zip: not a valid zip file"), "failed to parse file"), true},
+		{"MIME mismatch", errors.Errorf("file %s: detected MIME type %s does not match parser mimeTypes %v, skipping", "/lib/a.mobi", "text/plain", []string{"application/x-mobipocket-ebook"}), true},
+		{"filesystem error", errors.Wrap(&fs.PathError{Op: "open", Path: "/lib/a.epub", Err: syscall.EACCES}, "failed to parse file"), false},
+		{"plugin runtime error", &pluginParserError{err: errors.New("TypeError: x is undefined")}, false},
+		{"cancelled scan", errors.Wrap(context.Canceled, "failed to parse file"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isUnparseableFile(tt.err))
+		})
+	}
+
+	// scanErrorMessage still reaches the plugin's own message.
+	assert.Equal(t, "TypeError: x is undefined", scanErrorMessage(&pluginParserError{err: errors.New("TypeError: x is undefined")}))
 }

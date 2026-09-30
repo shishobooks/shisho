@@ -355,7 +355,7 @@ func (h *handler) addBooks(c echo.Context) error {
 			return errcodes.NotFound("Book")
 		}
 		if !user.HasLibraryAccess(libraryID) {
-			return errcodes.Forbidden("You don't have access to this library")
+			return errcodes.LibraryAccessDenied()
 		}
 	}
 
@@ -770,7 +770,7 @@ func (h *handler) moveBookPosition(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	if !list.IsOrdered {
-		return errcodes.ValidationError("Cannot move books in an unordered list")
+		return errcodes.InvalidState("Cannot move books in an unordered list")
 	}
 
 	err = h.listsService.MoveBookToPosition(ctx, listID, bookID, params.Position)

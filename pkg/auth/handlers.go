@@ -103,18 +103,18 @@ func (h *handler) me(c echo.Context) error {
 	// Read the session cookie directly
 	cookie, err := c.Cookie(CookieName)
 	if err != nil || cookie.Value == "" {
-		return errcodes.Unauthorized("Not authenticated")
+		return errcodes.AuthenticationRequired()
 	}
 
 	// Validate the token
 	claims, err := h.authService.ValidateToken(cookie.Value)
 	if err != nil {
-		return errcodes.Unauthorized("Invalid or expired token")
+		return errcodes.InvalidSession()
 	}
 
 	user, err := h.authService.GetUserByID(ctx, claims.UserID)
 	if err != nil {
-		return errcodes.Unauthorized("User not found")
+		return err
 	}
 
 	return c.JSON(http.StatusOK, buildMeResponse(user))
@@ -145,7 +145,7 @@ func (h *handler) setup(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	if count > 0 {
-		return errcodes.Forbidden("Setup has already been completed")
+		return errSetupCompleted()
 	}
 
 	params := SetupPayload{}

@@ -165,5 +165,19 @@ func ParseManifest(data []byte) (*Manifest, error) {
 		return nil, errors.New("manifest: version is required")
 	}
 
+	// Each identifier type needs a unique id. A repeated one would otherwise
+	// fail the identifier type insert, a database error that hides the
+	// plugin's own mistake.
+	seenIdentifierTypes := make(map[string]struct{}, len(m.Capabilities.IdentifierTypes))
+	for _, it := range m.Capabilities.IdentifierTypes {
+		if it.ID == "" {
+			return nil, errors.New("manifest: every identifierTypes entry needs an id")
+		}
+		if _, dup := seenIdentifierTypes[it.ID]; dup {
+			return nil, errors.Errorf("manifest: identifierTypes lists id %q more than once", it.ID)
+		}
+		seenIdentifierTypes[it.ID] = struct{}{}
+	}
+
 	return &m, nil
 }

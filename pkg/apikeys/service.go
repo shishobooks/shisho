@@ -83,7 +83,7 @@ func (s *Service) GetByKey(ctx context.Context, key string) (*APIKey, error) {
 		Where("key = ?", key).
 		Scan(ctx)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -158,7 +158,7 @@ func (s *Service) AddPermission(ctx context.Context, userID int, keyID string, p
 		Where("user_id = ?", userID).
 		Scan(ctx)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -220,7 +220,7 @@ func (s *Service) GenerateShortURL(ctx context.Context, userID int, keyID string
 		Where("user_id = ?", userID).
 		Scan(ctx)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -273,7 +273,7 @@ func (s *Service) ResolveShortCode(ctx context.Context, shortCode string) (*APIK
 		Where("expires_at > ?", time.Now()).
 		Scan(ctx)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -292,7 +292,7 @@ func (s *Service) RemovePermission(ctx context.Context, userID int, keyID string
 		Where("user_id = ?", userID).
 		Scan(ctx)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -336,7 +336,7 @@ func (s *Service) AuthenticateOwner(ctx context.Context, apiKey *APIKey) (*model
 		return nil, err
 	}
 	if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
-		return nil, errcodes.Forbidden("You don't have permission to read books")
+		return nil, errcodes.PermissionDenied(models.ResourceBooks, models.OperationRead)
 	}
 	return user, nil
 }
@@ -369,7 +369,7 @@ func (s *Service) ClearKoboSyncHistory(ctx context.Context, userID int, keyID st
 		Where("user_id = ?", userID).
 		Scan(ctx)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		return err

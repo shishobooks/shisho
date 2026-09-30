@@ -34,44 +34,54 @@ func (h *handler) getFieldSettings(c echo.Context) error {
 	})
 }
 
-func (h *handler) setFieldSettings(c echo.Context) error {
-	ctx := c.Request().Context()
-	scope := c.Param("scope")
-	id := c.Param("id")
-
-	// Validate plugin exists
+// bindEnricherFields validates a field settings request for the enricher
+// scope/id and returns the requested fields. The plugin must be loaded (404)
+// and a metadata enricher (422 invalid_state), and every field must be one it
+// declares (422).
+func (h *handler) bindEnricherFields(c echo.Context, scope, id string) (map[string]bool, error) {
 	rt := h.manager.GetRuntime(scope, id)
 	if rt == nil {
-		return errcodes.NotFound("Plugin")
+		return nil, errcodes.NotFound("Plugin")
 	}
 
-	// Validate plugin is a metadata enricher
 	enricherCap := rt.Manifest().Capabilities.MetadataEnricher
 	if enricherCap == nil {
-		return errcodes.BadRequest("Plugin is not a metadata enricher.")
+		return nil, errcodes.InvalidState("Plugin is not a metadata enricher.")
 	}
 
 	var payload SetFieldSettingsPayload
 	if err := c.Bind(&payload); err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	if payload.Fields == nil {
-		return errcodes.ValidationError("Fields are required.")
+		return nil, errcodes.ValidationError("Fields are required.")
 	}
 
-	// Validate field names are declared by the plugin
 	declared := make(map[string]bool, len(enricherCap.Fields))
 	for _, f := range enricherCap.Fields {
 		declared[f] = true
 	}
 	for field := range payload.Fields {
 		if !declared[field] {
-			return errcodes.ValidationError("Unknown field: " + field)
+			return nil, errcodes.ValidationError("Unknown field: " + field)
 		}
 	}
 
-	for field, enabled := range payload.Fields {
+	return payload.Fields, nil
+}
+
+func (h *handler) setFieldSettings(c echo.Context) error {
+	ctx := c.Request().Context()
+	scope := c.Param("scope")
+	id := c.Param("id")
+
+	fields, err := h.bindEnricherFields(c, scope, id)
+	if err != nil {
+		return err
+	}
+
+	for field, enabled := range fields {
 		if err := h.service.SetFieldSetting(ctx, scope, id, field, enabled); err != nil {
 			return errors.WithStack(err)
 		}
@@ -123,39 +133,12 @@ func (h *handler) setLibraryFieldSettings(c echo.Context) error {
 	scope := c.Param("scope")
 	pluginID := c.Param("pluginId")
 
-	// Validate plugin exists
-	rt := h.manager.GetRuntime(scope, pluginID)
-	if rt == nil {
-		return errcodes.NotFound("Plugin")
+	fields, err := h.bindEnricherFields(c, scope, pluginID)
+	if err != nil {
+		return err
 	}
 
-	// Validate plugin is a metadata enricher
-	enricherCap := rt.Manifest().Capabilities.MetadataEnricher
-	if enricherCap == nil {
-		return errcodes.BadRequest("Plugin is not a metadata enricher.")
-	}
-
-	var payload SetFieldSettingsPayload
-	if err := c.Bind(&payload); err != nil {
-		return errors.WithStack(err)
-	}
-
-	if payload.Fields == nil {
-		return errcodes.ValidationError("Fields are required.")
-	}
-
-	// Validate field names are declared by the plugin
-	declared := make(map[string]bool, len(enricherCap.Fields))
-	for _, f := range enricherCap.Fields {
-		declared[f] = true
-	}
-	for field := range payload.Fields {
-		if !declared[field] {
-			return errcodes.ValidationError("Unknown field: " + field)
-		}
-	}
-
-	for field, enabled := range payload.Fields {
+	for field, enabled := range fields {
 		if err := h.service.SetLibraryFieldSetting(ctx, libraryID, scope, pluginID, field, enabled); err != nil {
 			return errors.WithStack(err)
 		}

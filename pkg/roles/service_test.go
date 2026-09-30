@@ -115,6 +115,7 @@ func TestServiceDelete_RoleAssignedToUsers(t *testing.T) {
 	var codeErr *errcodes.Error
 	require.ErrorAs(t, err, &codeErr)
 	assert.Equal(t, http.StatusUnprocessableEntity, codeErr.HTTPCode)
+	assert.Equal(t, "invalid_state", codeErr.Code)
 	assert.Equal(t, "Cannot delete role that is assigned to users", codeErr.Message)
 
 	stillThere, err := svc.Retrieve(ctx, role.ID)

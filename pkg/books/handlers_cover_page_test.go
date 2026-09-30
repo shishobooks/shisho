@@ -21,6 +21,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -158,7 +159,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		assert.NoError(t, err, "Cover file should exist at %s", coverPath)
 	})
 
-	t.Run("returns 400 for invalid page number", func(t *testing.T) {
+	t.Run("returns 422 for invalid page number", func(t *testing.T) {
 		t.Parallel()
 		db := testdb.New(t)
 		ctx := context.Background()
@@ -232,7 +233,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("returns 400 for negative page number", func(t *testing.T) {
+	t.Run("returns 422 for negative page number", func(t *testing.T) {
 		t.Parallel()
 		db := testdb.New(t)
 		ctx := context.Background()
@@ -369,14 +370,17 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 		err = h.updateFileCoverPage(c)
 		// Handler should pass validation but fail at extraction (PDF file doesn't exist on disk).
-		// Key: it should NOT return a validation error about file type.
+		// Key: it should NOT return a validation error about file type, and
+		// the extraction failure is a server fault, not an errcodes error.
 		require.Error(t, err)
 		assert.NotContains(t, err.Error(), "does not support page-based covers")
 		assert.NotContains(t, err.Error(), "only available for CBZ files")
-		assert.Contains(t, err.Error(), "Failed to extract page from file")
+		assert.Contains(t, err.Error(), "failed to set cover page 0")
+		var codeErr *errcodes.Error
+		assert.NotErrorAs(t, err, &codeErr, "extraction failure must be a server fault, got %v", err)
 	})
 
-	t.Run("returns 400 for file without pages", func(t *testing.T) {
+	t.Run("returns 422 for file without pages", func(t *testing.T) {
 		t.Parallel()
 		db := testdb.New(t)
 		ctx := context.Background()
@@ -476,7 +480,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("returns 400 for file with no page count", func(t *testing.T) {
+	t.Run("returns 422 for file with no page count", func(t *testing.T) {
 		db := testdb.New(t)
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}

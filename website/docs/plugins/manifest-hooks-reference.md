@@ -193,7 +193,7 @@ Register identifiers that Shisho can display and validate:
 }
 ```
 
-`id` and `name` are required. `urlTemplate` and validation `pattern` are optional. Use `{value}` as the value placeholder. Metadata can then return `{ "type": "example_books", "value": "EB-123" }`.
+`id` and `name` are required, and each `id` may appear only once in the list. A manifest with an empty or repeated `id` is rejected: installing it fails as an invalid package, and an installed plugin with one fails to load. `urlTemplate` and validation `pattern` are optional. Use `{value}` as the value placeholder. Metadata can then return `{ "type": "example_books", "value": "EB-123" }`.
 
 ## Configuration Schema
 

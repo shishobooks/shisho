@@ -44,7 +44,7 @@ func (h *handler) create(c echo.Context) error {
 	// permissions. Every other job type needs Jobs Read and Jobs Write.
 	if params.Type == models.JobTypeBulkDownload {
 		if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
-			return errcodes.Forbidden("Bulk download requires the books:read permission.")
+			return errcodes.PermissionDenied(models.ResourceBooks, models.OperationRead)
 		}
 
 		// Validate file_ids by marshaling the data and checking the field.
@@ -69,11 +69,14 @@ func (h *handler) create(c echo.Context) error {
 			EstimatedSizeBytes: bulkData.EstimatedSizeBytes,
 		}
 		params.LibraryID = nil
-	} else if !user.HasPermission(models.ResourceJobs, models.OperationRead) ||
-		!user.HasPermission(models.ResourceJobs, models.OperationWrite) {
+	} else {
 		// Other job types keep the jobs:read plus jobs:write requirement the
 		// jobs group and route used to enforce together.
-		return errcodes.Forbidden("Creating this job requires the jobs:read and jobs:write permissions.")
+		for _, op := range []string{models.OperationRead, models.OperationWrite} {
+			if !user.HasPermission(models.ResourceJobs, op) {
+				return errcodes.PermissionDenied(models.ResourceJobs, op)
+			}
+		}
 	}
 
 	// Check if a scan job is already running or pending.
@@ -175,7 +178,7 @@ func (h *handler) download(c echo.Context) error {
 		return err
 	}
 	if !user.HasPermission(models.ResourceBooks, models.OperationRead) {
-		return errcodes.Forbidden("Downloading requires the books:read permission.")
+		return errcodes.PermissionDenied(models.ResourceBooks, models.OperationRead)
 	}
 
 	id, err := httputil.ParamID(c, "id", "Job")
@@ -196,11 +199,11 @@ func (h *handler) download(c echo.Context) error {
 	}
 
 	if job.Type != models.JobTypeBulkDownload {
-		return errcodes.BadRequest("Job is not a bulk download")
+		return errcodes.InvalidState("Job is not a bulk download")
 	}
 
 	if job.Status != models.JobStatusCompleted {
-		return errcodes.BadRequest("Job is not completed yet")
+		return errcodes.InvalidState("Job is not completed yet")
 	}
 
 	var data models.JobBulkDownloadData
@@ -209,7 +212,7 @@ func (h *handler) download(c echo.Context) error {
 	}
 
 	if data.FingerprintHash == "" {
-		return errcodes.BadRequest("Job has no download data")
+		return errcodes.InvalidState("Job has no download data")
 	}
 
 	// Library access may have been revoked since the job was created.

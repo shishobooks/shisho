@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -611,6 +612,12 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		metadata, err = w.parseFileMetadata(ctx, file.Filepath, file.FileType)
 		if err != nil {
 			w.recordFileScanError(ctx, file, err, logWarn)
+			// A file that is on disk but unparseable is one the user must
+			// repair, which a resync reports as a 422. Anything else is a
+			// server fault.
+			if isUnparseableFile(err) {
+				return nil, errors.WithStack(fmt.Errorf("%w: %w", books.ErrFileUnreadable, err))
+			}
 			return nil, errors.Wrap(err, "failed to parse file metadata")
 		}
 	}
@@ -3268,7 +3275,11 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 						return nil, errors.Errorf("file %s: detected MIME type %s does not match parser mimeTypes %v, skipping", path, mtype.String(), declaredMIMEs)
 					}
 				}
-				return w.pluginManager.RunFileParser(ctx, rt, path, fileType)
+				metadata, err := w.pluginManager.RunFileParser(ctx, rt, path, fileType)
+				if err != nil {
+					return nil, &pluginParserError{err: err}
+				}
+				return metadata, nil
 			}
 		}
 		return nil, errors.Errorf("unsupported file type: %s", fileType)
@@ -3279,6 +3290,31 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 	}
 
 	return metadata, nil
+}
+
+// pluginParserError marks a failure inside a plugin's file parser, which is
+// a plugin runtime error rather than a file the user must repair.
+type pluginParserError struct{ err error }
+
+func (e *pluginParserError) Error() string { return e.err.Error() }
+
+func (e *pluginParserError) Unwrap() error { return e.err }
+
+// Cause lets errors.Cause, and so scanErrorMessage, reach the plugin's error.
+func (e *pluginParserError) Cause() error { return e.err }
+
+// isUnparseableFile reports whether a parseFileMetadata error means the file
+// itself cannot be parsed: a corrupt or truncated file, content that does not
+// match the parser's MIME types, or a type no parser handles. A filesystem
+// error (the server cannot read the file), a plugin runtime error, and a
+// cancelled scan are server-side and return false.
+func isUnparseableFile(err error) bool {
+	var pathErr *fs.PathError
+	var pluginErr *pluginParserError
+	return !errors.As(err, &pathErr) &&
+		!errors.As(err, &pluginErr) &&
+		!errors.Is(err, context.Canceled) &&
+		!errors.Is(err, context.DeadlineExceeded)
 }
 
 // runMetadataEnrichers runs metadata enricher plugins on parsed metadata.

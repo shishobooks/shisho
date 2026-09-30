@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -91,11 +92,14 @@ func (h *handler) replace(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Write sidecar file with updated chapters
+	// Write sidecar file with updated chapters. Best effort: the chapters
+	// are saved, so a failure is logged rather than failing the request.
+	log := logger.FromContext(ctx)
 	fileWithRelations, err := h.bookService.RetrieveFileWithRelations(ctx, fileID)
-	if err == nil {
-		// Best effort - don't fail the request if sidecar write fails
-		_ = sidecar.WriteFileSidecarWithChapters(fileWithRelations, updatedChapters)
+	if err != nil {
+		log.Warn("failed to load file for sidecar", logger.Data{"file_id": fileID, "error": err.Error()})
+	} else if err := sidecar.WriteFileSidecarWithChapters(fileWithRelations, updatedChapters); err != nil {
+		log.Warn("failed to write file sidecar", logger.Data{"file_id": fileID, "error": err.Error()})
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, updatedChapters))
