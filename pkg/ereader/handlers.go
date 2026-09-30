@@ -3,6 +3,7 @@ package ereader
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -302,7 +303,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
-	content.WriteString(fmt.Sprintf("<h1>%s</h1>", s.Name))
+	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(s.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/series/%s", baseURL, libraryID, seriesID)
 	content.WriteString(filterBar(currentURL, typesFilter, coversParam))
@@ -423,7 +424,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
-	content.WriteString(fmt.Sprintf("<h1>%s</h1>", author.Name))
+	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(author.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/authors/%s", baseURL, libraryID, authorID)
 	content.WriteString(filterBar(currentURL, typesFilter, coversParam))
@@ -555,7 +556,7 @@ func (h *handler) Download(c echo.Context) error {
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
-	content.WriteString(fmt.Sprintf("<h1>%s</h1>", book.Title))
+	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(book.Title)))
 
 	// Cover toggle (only show if book has a cover)
 	hasCover := hasBookCover(book)
@@ -566,7 +567,7 @@ func (h *handler) Download(c echo.Context) error {
 		// Show cover if enabled
 		if showCover {
 			coverURL := getBookCoverURL(baseURL, book)
-			content.WriteString(fmt.Sprintf(`<p><img src="%s" alt="" style="max-width: 150px; max-height: 200px;"></p>`, coverURL))
+			content.WriteString(fmt.Sprintf(`<p><img src="%s" alt="" style="max-width: 150px; max-height: 200px;"></p>`, html.EscapeString(coverURL)))
 		}
 	}
 
@@ -578,12 +579,12 @@ func (h *handler) Download(c echo.Context) error {
 			}
 		}
 		if len(authorNames) > 0 {
-			content.WriteString(fmt.Sprintf("<p>By: %s</p>", strings.Join(authorNames, ", ")))
+			content.WriteString(fmt.Sprintf("<p>By: %s</p>", html.EscapeString(strings.Join(authorNames, ", "))))
 		}
 	}
 
-	if book.Description != nil && *book.Description != "" {
-		content.WriteString(fmt.Sprintf("<p>%s</p>", *book.Description))
+	if book.Description != nil {
+		content.WriteString(descriptionHTML(*book.Description))
 	}
 
 	// Render a download entry for each main file
@@ -895,9 +896,9 @@ func fileDownloadEntry(baseURL, bookTitle string, f *models.File, isKobo bool) s
 
 	var sb strings.Builder
 	sb.WriteString(`<div style="padding: 12px 0; border-bottom: 1px solid #ccc;">`)
-	sb.WriteString(fmt.Sprintf(`<div style="font-weight: bold;">%s</div>`, displayName))
-	sb.WriteString(fmt.Sprintf(`<div style="font-size: 0.9em; color: #666; margin: 4px 0;">%s</div>`, strings.Join(metaParts, " • ")))
-	sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-btn" style="display: inline-block; margin-top: 8px;">Download %s</a>`, downloadURL, downloadFormat))
+	sb.WriteString(fmt.Sprintf(`<div style="font-weight: bold;">%s</div>`, html.EscapeString(displayName)))
+	sb.WriteString(fmt.Sprintf(`<div style="font-size: 0.9em; color: #666; margin: 4px 0;">%s</div>`, html.EscapeString(strings.Join(metaParts, " • "))))
+	sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-btn" style="display: inline-block; margin-top: 8px;">Download %s</a>`, html.EscapeString(downloadURL), html.EscapeString(downloadFormat)))
 	if f.FileType == models.FileTypeCBZ {
 		sb.WriteString(`<div style="font-size: 0.9em; color: #666; margin-top: 4px;"><i>Note: The download may take a moment while the file is being prepared.</i></div>`)
 	}

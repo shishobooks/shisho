@@ -93,3 +93,27 @@ func TestFilterLink_UsesURLValuesEncoding(t *testing.T) {
 	assert.Contains(t, got, "q=a%26b", "ampersand in q is percent-encoded")
 	assert.Contains(t, got, "types=epub")
 }
+
+func TestDescriptionHTML(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"single paragraph", "Plain text", "<p>Plain text</p>"},
+		{"paragraphs and line breaks", "One\n\nTwo\nthree", "<p>One</p><p>Two<br>three</p>"},
+		{"markup is escaped", "<img src=x onerror=alert(1)> & \"q\"", "<p>&lt;img src=x onerror=alert(1)&gt; &amp; &#34;q&#34;</p>"},
+		{"extra blank lines make one break", "One\n\n \n\nTwo", "<p>One</p><p>Two</p>"},
+		{"windows line endings", "One\r\n\r\nTwo\r\nthree", "<p>One</p><p>Two<br>three</p>"},
+		{"surrounding newlines are trimmed", "\n\nOne\n\n", "<p>One</p>"},
+		{"whitespace only renders nothing", " \n\n ", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, descriptionHTML(tc.in))
+		})
+	}
+}

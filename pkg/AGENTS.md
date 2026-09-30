@@ -255,6 +255,12 @@ Server-rendered HTML pages for stock eReader browsers (Kobo, Kindle) that can't 
 - Full-width elements (`width: 100%`) instead of percentages
 - Use `<input type="submit">` instead of `<button>` for better compatibility
 
+**Escaping:**
+- The pages are built by string concatenation and served on the app's own origin, so every interpolated value, including URLs and values that look safe, goes through `html.EscapeString`. The KePub XHTML in `pkg/kepub/cbz.go` follows the same rule; OPDS (`xml.NewEncoder`) and Kobo sync (JSON) escape through their encoders.
+- Stored plain-text fields are not trusted to be tag-free. Titles, names, and file names come straight from file metadata. Descriptions pass through `htmlutil.StripTags`, which leaves plain text with no live tag but decodes only one level of entities, so its output is text to escape, not safe HTML.
+- Multi-line text goes through a helper that escapes first and adds markup after: `descriptionHTML` in `templates.go` turns stored blank lines and line breaks into `</p><p>` and `<br>`, and renders nothing for an empty description.
+- Reference test: `TestEReaderPages_EscapeMetadata` in `handlers_escape_test.go`.
+
 **Cover Images:**
 - eReader routes use API key auth, so covers need their own endpoint at `/ereader/key/:apiKey/cover/:bookId`
 - Cannot use `/api/books/{id}/cover` (requires session auth)
@@ -410,6 +416,7 @@ Request → Authenticate → RequirePermission → RequireLibraryAccess → Hand
 - **Shared conditions use the shared constructors, never a hand-built copy.** `errcodes.AuthenticationRequired()` (no user or no session), `InvalidSession()` (a session token that does not validate), `UserInactive()` (a missing or deactivated user), `LibraryAccessDenied()`, `PermissionDenied(resource, operation)` and `AnyPermissionDenied(...)`, `InvalidState(msg)`, and `UpstreamError(msg)`. A message repeated within one package gets one helper there, such as `identifiers.DuplicateTypeError`, `errRoleNameTaken` in `pkg/roles`, `requireSearchQuery` in `pkg/opds`, and `bindEnricherFields` in `pkg/plugins`.
 - **A Range header the stream handler cannot serve is ignored.** A malformed or suffix range (`bytes=-500`) gets the whole file with 200, as RFC 9110 allows; only a well-formed range outside the file is a bodyless 416.
 - **`errcodes.NotFound` takes the resource noun only.** It appends " not found.", so pass `"Download file"`, not `"Download file has expired from cache"`, which rendered "Download file has expired from cache not found."
+- **Hand-built HTML escapes every value, and stored plain text is not trusted to be tag-free.** See "Escaping" under eReader Browser UI.
 - **A numeric path or scope ID that does not parse returns `errcodes.NotFound(resource)`**, the same 404 as a well-formed ID with no row, because it names no row either. `RequireLibraryAccess` returns the same 404 for a library ID param that does not parse, so the handlers behind it agree with it. Parse every numeric path ID with `httputil.ParamID(c, name, resource)`, which returns `errcodes.NotFound(resource)` for anything but a positive integer; do not write `strconv.Atoi` plus `NotFound` inline. Keep `ValidationError` for payload and query values, such as a non-numeric page number. String path IDs checked for path safety are the exception: the plugin image and manifest handlers return `ValidationError("Invalid scope or plugin ID")` for a scope or plugin ID containing `..` or a slash, because that is a rejected traversal attempt, not a missing row.
 
 - **Response shapes are named Go structs generated to TS via tygo (no anonymous responses).** Go is the single source of truth for every request and response shape; the frontend imports the generated type and never restates it. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`). Rules:
