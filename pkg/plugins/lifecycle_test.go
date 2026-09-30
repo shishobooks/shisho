@@ -522,9 +522,15 @@ func TestCheckForUpdates_DisableDuringFetchSticks(t *testing.T) {
 
 // A scope or id that is not a single safe path segment is a
 // 422 on every route that touches the plugin directory, before anything on
-// disk is touched.
+// disk is touched. The rejection happens before any disk or database
+// access, so one environment serves every case: the subtests run in
+// sequence and re-check the sentinel and the live plugin after each call.
 func TestUnsafePluginIDsAreRejected(t *testing.T) {
 	t.Parallel()
+	e := newLifecycleEnv(t)
+	sentinel := filepath.Join(e.pluginDir, "sentinel.txt")
+	require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0o644))
+	writeLive(t, e.pluginDir, lifecycleSpec{id: "test", version: "1.0.0", enricher: true})
 	refs := []struct{ scope, id string }{
 		{"test", ".."},
 		{"..", "test"},
@@ -562,12 +568,6 @@ func TestUnsafePluginIDsAreRejected(t *testing.T) {
 	for name, call := range routes {
 		for _, ref := range refs {
 			t.Run(fmt.Sprintf("%s %q/%q", name, ref.scope, ref.id), func(t *testing.T) {
-				t.Parallel()
-				e := newLifecycleEnv(t)
-				sentinel := filepath.Join(e.pluginDir, "sentinel.txt")
-				require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0o644))
-				writeLive(t, e.pluginDir, lifecycleSpec{id: "test", version: "1.0.0", enricher: true})
-
 				assertErrcodeFields(t, call(e.h, ref.scope, ref.id), http.StatusUnprocessableEntity, "validation_error")
 				assert.FileExists(t, sentinel)
 				assert.FileExists(t, filepath.Join(e.pluginDir, "test", "test", "manifest.json"))
