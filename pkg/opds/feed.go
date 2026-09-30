@@ -3,6 +3,8 @@ package opds
 import (
 	"encoding/xml"
 	"time"
+
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // OPDS namespaces.
@@ -206,19 +208,13 @@ func NewOpenSearchDescription(shortName, description, searchTemplate string) *Op
 }
 
 // FileTypeMimeType returns the MIME type for a given file type.
+// It is the type the download routes serve the file as, or
+// application/octet-stream for a type Shisho does not know.
 func FileTypeMimeType(fileType string) string {
-	switch fileType {
-	case "epub":
-		return MimeTypeEPUB
-	case "cbz":
-		return MimeTypeCBZ
-	case "m4b":
-		return MimeTypeM4B
-	case "pdf":
-		return MimeTypePDF
-	default:
-		return "application/octet-stream"
+	if mimeType := models.FileTypeMimeType(fileType); mimeType != "" {
+		return mimeType
 	}
+	return "application/octet-stream"
 }
 
 // CoverMimeType returns the MIME type for a given cover extension.

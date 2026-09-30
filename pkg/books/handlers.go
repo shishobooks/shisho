@@ -1452,19 +1452,8 @@ func (h *handler) fileCover(c echo.Context) error {
 		return err
 	}
 
-	coverPath := covers.FileCoverPath(file)
-
-	// Stat first so a missing cover returns the errcodes 404 that the book and
-	// series cover routes return, not echo.HTTPError's generic "Not Found".
-	if _, err := os.Stat(coverPath); err != nil {
-		if os.IsNotExist(err) {
-			return errcodes.NotFound("Cover")
-		}
-		return errors.WithStack(err)
-	}
-
-	c.Response().Header().Set("Cache-Control", covers.CacheControlImmutable)
-	return errors.WithStack(c.File(coverPath))
+	return httputil.ServeFile(c, covers.FileCoverPath(file), errcodes.NotFound("Cover"),
+		httputil.WithCacheControl(covers.CacheControlImmutable))
 }
 
 func (h *handler) uploadFileCover(c echo.Context) error {
@@ -1696,15 +1685,18 @@ func (h *handler) downloadFile(c echo.Context) error {
 	// Try to generate/get from cache
 	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, fileWithRelations)
 	if err != nil {
-		// Every generation failure is a server fault; the device routes
-		// fall back to the original file instead.
+		// A type with no generator is one the user can work around with
+		// Download Original (422); any other generation failure is a server
+		// fault. The device routes fall back to the original instead
+		// (ResolveFallbackDownload), since a device has no such button.
+		if errors.Is(err, filegen.ErrNotImplemented) {
+			return errcodes.InvalidState("Generated downloads are not supported for " + file.FileType + " files")
+		}
 		return errors.WithStack(err)
 	}
 
-	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	return c.File(cachedPath)
+	download := &Download{Path: cachedPath, Filename: downloadFilename, ContentType: models.FileTypeMimeType(file.FileType)}
+	return download.Serve(c)
 }
 
 // downloadOriginalFile handles downloading the original file without any modifications.
@@ -1734,11 +1726,7 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 		return err
 	}
 
-	filename := filepath.Base(file.Filepath)
-	httputil.SetAttachmentFilename(c.Response(), filename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	return c.File(file.Filepath)
+	return OriginalDownload(file).Serve(c)
 }
 
 // downloadKepubFile handles downloading a file converted to KePub format.
@@ -1800,10 +1788,8 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	httputil.SetAttachmentFilename(c.Response(), downloadFilename)
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	return c.File(cachedPath)
+	download := &Download{Path: cachedPath, Filename: downloadFilename, ContentType: KepubContentType}
+	return download.Serve(c)
 }
 
 func (h *handler) resyncFile(c echo.Context) error {
@@ -1988,6 +1974,11 @@ func (h *handler) getPage(c echo.Context) error {
 	case models.FileTypePDF:
 		cachedPath, mimeType, err = h.pdfPageCache.GetPage(file.Filepath, file.ID, pageNum)
 	}
+	// The stored page count can be missing, so the cache may be the first
+	// to find that the page does not exist.
+	if errors.Is(err, cbzpages.ErrPageOutOfRange) || errors.Is(err, pdfpages.ErrPageOutOfRange) {
+		return errcodes.NotFound("Page")
+	}
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -2002,10 +1993,10 @@ func (h *handler) getPage(c echo.Context) error {
 	if file.FileType == models.FileTypePDF && c.QueryParam("r") != h.pdfPageCache.RenderKey() {
 		cacheControl = "private, no-store"
 	}
-	c.Response().Header().Set("Cache-Control", cacheControl)
-	c.Response().Header().Set("Content-Type", mimeType)
 
-	return c.File(cachedPath)
+	return httputil.ServeFile(c, cachedPath, errcodes.NotFound("Page"),
+		httputil.WithContentType(mimeType),
+		httputil.WithCacheControl(cacheControl))
 }
 
 // streamFile streams an M4B audio file with support for Range headers (seeking).
@@ -2024,14 +2015,15 @@ func (h *handler) streamFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Check library access before anything about the file, so a user without
+	// access cannot learn which files are M4Bs.
+	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
+		return err
+	}
+
 	// Only M4B files can be streamed
 	if file.FileType != models.FileTypeM4B {
 		return errcodes.NotFound("File")
-	}
-
-	// Check library access
-	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
-		return err
 	}
 
 	// Check if file exists on disk
@@ -2039,80 +2031,11 @@ func (h *handler) streamFile(c echo.Context) error {
 		return err
 	}
 
-	// Set Accept-Ranges header to indicate we support range requests
-	c.Response().Header().Set("Accept-Ranges", "bytes")
-	c.Response().Header().Set("Content-Type", "audio/mp4")
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-
-	// Check for Range header
-	rangeHeader := c.Request().Header.Get("Range")
-	if rangeHeader == "" {
-		// No range requested - serve full file
-		return c.File(file.Filepath)
-	}
-
-	// Parse Range header (format: "bytes=start-end")
-	return h.serveRangeRequest(c, file.Filepath, rangeHeader)
-}
-
-// serveRangeRequest handles HTTP Range requests for partial content delivery.
-func (h *handler) serveRangeRequest(c echo.Context, filePath, rangeHeader string) error {
-	// Open the file
-	f, err := os.Open(filePath)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer f.Close()
-
-	// Get file size
-	fileInfo, err := f.Stat()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	fileSize := fileInfo.Size()
-
-	// Parse the range header (expecting format: "bytes=start-end")
-	var start, end int64
-	_, err = fmt.Sscanf(rangeHeader, "bytes=%d-%d", &start, &end)
-	if err != nil {
-		// Try parsing just start (e.g., "bytes=0-")
-		_, err = fmt.Sscanf(rangeHeader, "bytes=%d-", &start)
-		if err != nil || start < 0 {
-			// A malformed or suffix range ("bytes=-500") is not one this
-			// handler serves. RFC 9110 lets a server ignore a Range header,
-			// so serve the whole open file with 200 instead of failing.
-			// Dropping the header keeps ServeContent from reading it again.
-			c.Request().Header.Del("Range")
-			http.ServeContent(c.Response(), c.Request(), fileInfo.Name(), fileInfo.ModTime(), f)
-			return nil
-		}
-		end = fileSize - 1
-	}
-
-	// Validate range
-	if start < 0 || start >= fileSize || end < start || end >= fileSize {
-		c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
-		return c.NoContent(http.StatusRequestedRangeNotSatisfiable)
-	}
-
-	// Calculate content length
-	contentLength := end - start + 1
-
-	// Set response headers
-	c.Response().Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
-	c.Response().Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-
-	// Seek to start position
-	_, err = f.Seek(start, io.SeekStart)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Create a limited reader for the requested range
-	limitedReader := io.LimitReader(f, contentLength)
-
-	// Stream the content with 206 Partial Content status
-	return c.Stream(http.StatusPartialContent, "audio/mp4", limitedReader)
+	// ServeFile answers Range requests (seeking) through http.ServeContent,
+	// and sets Accept-Ranges.
+	return httputil.ServeFile(c, file.Filepath, errcodes.NotFound("File"),
+		httputil.WithContentType(models.FileTypeMimeType(models.FileTypeM4B)),
+		httputil.WithCacheControl("private, no-store"))
 }
 
 func (h *handler) bookLists(c echo.Context) error {

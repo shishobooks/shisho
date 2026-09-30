@@ -23,7 +23,8 @@ import (
 // that tells the device the book has no cover. The stat fails when the
 // book's directory cannot be searched; the open fails when the cover file
 // itself cannot be read, whether the device asks for a resized copy or the
-// original (which echo's c.File would turn into a 404).
+// original (which echo's c.File would turn into a 404), and the error
+// response carries none of the cover's headers.
 func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 	t.Parallel()
 	if os.Geteuid() == 0 {
@@ -81,7 +82,8 @@ func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 			t.Cleanup(func() { _ = os.Chmod(lockedPath, restoreMode) })
 
 			h := &handler{service: NewService(db), bookService: books.NewService(db)}
-			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 			withKeyOwner(c)
 			c.SetParamNames("imageId", "w", "h")
 			c.SetParamValues(fmt.Sprintf("shisho-%d", file.ID), tt.w, tt.h)
@@ -92,6 +94,13 @@ func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 			assert.NotErrorAs(t, err, &codeErr, "want a server fault, got %v", err)
 			var httpErr *echo.HTTPError
 			assert.NotErrorAs(t, err, &httpErr, "want a server fault, not echo's 404")
+
+			// The cover's headers are set only once it opens, so the error
+			// response carries neither its cache policy nor its mtime.
+			errcodes.NewHandler().Handle(err, c)
+			assert.Equal(t, http.StatusInternalServerError, rec.Code)
+			assert.Empty(t, rec.Header().Get("Cache-Control"))
+			assert.Empty(t, rec.Header().Get("Last-Modified"))
 		})
 	}
 }

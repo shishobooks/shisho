@@ -36,6 +36,7 @@ type shareLinksFixture struct {
 	handler  http.Handler
 	authSvc  *auth.Service
 	rootDir  string // parent of every file on disk; must never reach a recipient
+	cacheDir string // the download cache's directory
 	libA     *models.Library
 	libB     *models.Library
 	bookA    *models.Book // library A: main EPUB with a cover, plus a supplement
@@ -58,16 +59,18 @@ func newShareLinksFixture(t *testing.T) *shareLinksFixture {
 
 	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
-	dlCache := downloadcache.NewCache(t.TempDir(), 1<<30)
+	cacheDir := t.TempDir()
+	dlCache := downloadcache.NewCache(cacheDir, 1<<30)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, dlCache, nil, nil, nil)
 	require.NoError(t, err)
 
 	f := &shareLinksFixture{
-		t:       t,
-		db:      db,
-		handler: srv.Handler,
-		authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration()),
-		rootDir: t.TempDir(),
+		t:        t,
+		db:       db,
+		handler:  srv.Handler,
+		authSvc:  auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration()),
+		rootDir:  t.TempDir(),
+		cacheDir: cacheDir,
 	}
 
 	f.libA = f.insertLibrary(ctx, "Library A")

@@ -24,7 +24,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"golang.org/x/image/draw"
@@ -262,7 +261,6 @@ func (h *handler) requireFileInScope(c echo.Context, fileID int) error {
 // Serves files as KePub.
 func (h *handler) handleDownload(c echo.Context) error {
 	ctx := c.Request().Context()
-	log := logger.FromContext(ctx)
 	bookID := c.Param("bookId")
 
 	fileID, ok := ParseShishoID(bookID)
@@ -299,22 +297,14 @@ func (h *handler) handleDownload(c echo.Context) error {
 		fileWithRelations = file
 	}
 
-	// Generate KePub
-	cachedPath, _, err := h.downloadCache.GetOrGenerateKepub(ctx, book, fileWithRelations)
+	// Generate KePub, named with the Kobo-safe filename. The scope holds only
+	// EPUB and CBZ files, which KePub converts, so the original fallback in
+	// ResolveFallbackDownload is not expected here.
+	download, err := books.ResolveFallbackDownload(ctx, h.downloadCache, book, fileWithRelations, true)
 	if err != nil {
-		if errors.Is(err, filegen.ErrKepubNotSupported) {
-			log.Warn("kepub not supported for file, serving original", logger.Data{"file_id": fileID})
-			return serveFileWithHeaders(c, file.Filepath, book.Title+".epub")
-		}
-		var genErr *filegen.GenerationError
-		if errors.As(err, &genErr) {
-			log.Warn("kepub generation failed, serving original", logger.Data{"file_id": fileID, "error": genErr.Message})
-			return serveFileWithHeaders(c, file.Filepath, book.Title+".epub")
-		}
-		return errors.WithStack(err)
+		return err
 	}
-
-	return serveFileWithHeaders(c, cachedPath, book.Title+".kepub.epub")
+	return download.Serve(c, httputil.WithContentType("application/octet-stream"))
 }
 
 // handleCover handles GET /v1/books/:imageId/thumbnail/:w/:h/*.
@@ -339,15 +329,13 @@ func (h *handler) handleCover(c echo.Context) error {
 		return errcodes.NotFound("Cover")
 	}
 
-	// Resolve via the file's parent dir — book.Filepath may be a synthetic
-	// organized-folder path that doesn't exist on disk for root-level files.
+	// Resolve via the file's parent dir, since book.Filepath may be a
+	// synthetic organized-folder path that doesn't exist on disk for
+	// root-level files.
 	coverPath := covers.FileCoverPath(file)
 
-	// Stat source cover for Last-Modified + conditional GET short-circuit.
-	// This runs before the resize so revalidated requests skip the expensive
-	// decode/resize/encode work. In the no-dimensions branch below, c.File
-	// also sets Last-Modified from the same file mtime — the values match
-	// (second precision), so the overlap is harmless.
+	// Stat the cover for the conditional GET before the resize, so a
+	// revalidated request skips the decode, resize, and encode work.
 	coverStat, err := os.Stat(coverPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -356,10 +344,15 @@ func (h *handler) handleCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	modTime := coverStat.ModTime().UTC().Truncate(time.Second)
-	c.Response().Header().Set("Cache-Control", "private, no-cache")
-	c.Response().Header().Set("Last-Modified", modTime.Format(http.TimeFormat))
+	// The cache headers go only on a response that carries the cover (or a
+	// 304 for it), never on an error.
+	setCoverHeaders := func() {
+		c.Response().Header().Set("Cache-Control", covers.CacheControlNoCache)
+		c.Response().Header().Set("Last-Modified", modTime.Format(http.TimeFormat))
+	}
 	if ims := c.Request().Header.Get("If-Modified-Since"); ims != "" {
 		if t, parseErr := http.ParseTime(ims); parseErr == nil && !modTime.After(t) {
+			setCoverHeaders()
 			c.Response().WriteHeader(http.StatusNotModified)
 			return nil
 		}
@@ -372,10 +365,10 @@ func (h *handler) handleCover(c echo.Context) error {
 	height, _ := strconv.Atoi(heightStr)
 
 	if width == 0 || height == 0 {
-		// Serve original if dimensions not specified. ServeFile handles
-		// Last-Modified/If-Modified-Since for this branch, and unlike
-		// c.File reports an unreadable cover as a server fault.
-		return httputil.ServeFile(c, coverPath, errcodes.NotFound("Cover"))
+		// Serve the original if dimensions are not specified. ServeContent
+		// sends Last-Modified from the same mtime.
+		return httputil.ServeFile(c, coverPath, errcodes.NotFound("Cover"),
+			httputil.WithCacheControl(covers.CacheControlNoCache))
 	}
 
 	// Open and resize the image
@@ -404,6 +397,7 @@ func (h *handler) handleCover(c echo.Context) error {
 	dstImg := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
 	draw.BiLinear.Scale(dstImg, dstImg.Bounds(), srcImg, srcBounds, draw.Over, nil)
 
+	setCoverHeaders()
 	c.Response().Header().Set("Content-Type", "image/jpeg")
 	c.Response().WriteHeader(http.StatusOK)
 	return jpeg.Encode(c.Response().Writer, dstImg, &jpeg.Options{Quality: 80})
@@ -719,14 +713,6 @@ func getBaseURL(c echo.Context) string {
 	}
 
 	return fmt.Sprintf("%s://%s%s", scheme, host, basePath)
-}
-
-// serveFileWithHeaders serves a file with proper Content-Type and Content-Disposition headers.
-func serveFileWithHeaders(c echo.Context, filepath, filename string) error {
-	c.Response().Header().Set("Content-Type", "application/octet-stream")
-	c.Response().Header().Set("Cache-Control", "private, no-store")
-	httputil.SetAttachmentFilename(c.Response(), filename)
-	return c.File(filepath)
 }
 
 // fitDimensions calculates target dimensions maintaining aspect ratio.

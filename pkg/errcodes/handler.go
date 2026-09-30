@@ -3,6 +3,7 @@ package errcodes
 import (
 	"context"
 	"net/http"
+	"syscall"
 
 	"github.com/iancoleman/strcase"
 	"github.com/labstack/echo/v4"
@@ -21,8 +22,15 @@ func NewHandler() *Handler {
 // generic error will be interpreted as an internal server error.
 func (h *Handler) Handle(err error, c echo.Context) {
 	// Silently ignore broken pipe errors - these are expected when clients
-	// disconnect during streaming (e.g., navigating away while audio plays)
-	if errutils.IsIgnorableErr(err) {
+	// disconnect during streaming (e.g., navigating away while audio plays).
+	// IsIgnorableErr only matches an EPIPE or ECONNRESET inside an
+	// os.SyscallError, so match the bare errno as well. Only a response
+	// already under way, or a request whose client is gone, can be a
+	// disconnect; the same errors on a live request (a truncated archive
+	// entry's io.ErrUnexpectedEOF) are server faults, and ignoring them
+	// would send an empty 200.
+	disconnectLike := errutils.IsIgnorableErr(err) || errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET)
+	if disconnectLike && (c.Response().Committed || c.Request().Context().Err() != nil) {
 		return
 	}
 
@@ -37,6 +45,13 @@ func (h *Handler) Handle(err error, c echo.Context) {
 	// Internal server errors
 	if httpCode == http.StatusInternalServerError {
 		logger.FromEchoContext(c).Err(err).Error("server error")
+	}
+
+	// A handler that fails after the response started, such as a stream cut
+	// off partway, can no longer change the status. Writing the JSON error
+	// would append it to the partial body the client is reading.
+	if c.Response().Committed {
+		return
 	}
 
 	if err := c.JSON(httpCode, payload); err != nil {

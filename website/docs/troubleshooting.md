@@ -86,7 +86,7 @@ Do not delete the database or its related files to clear a lock. Back it up befo
 
 **Symptom:** A generated download fails, a reader cannot render pages, a stale generated file is reused, or the cache consumes unexpected disk space.
 
-**Likely cause:** The cache path is full or not writable, the source media is no longer readable, generation failed in a background job, or cached generated output needs to be rebuilt after its producer changed.
+**Likely cause:** The cache path is full or not writable, the source media is no longer readable, generation failed in a background job, or cached generated output needs to be rebuilt after its producer changed. A file or cached copy that exists but cannot be read, such as one whose permissions deny the Shisho user, returns `500 Internal Server Error`; `404 Not Found` means the file is missing from disk. When a generated copy cannot be made from a file's contents, OPDS, eReader, Kobo Sync, and Share Link downloads send the original file instead and log a warning, so an unchanged download on a device can also point to a generation failure.
 
 **Verify:** Check **Settings > Jobs** for the generation job, **Settings > Cache** for cache size, the current-session server logs for request errors, and available space and permissions at `cache_dir`. Confirm that the original file remains readable.
 

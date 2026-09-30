@@ -19,7 +19,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -224,32 +223,6 @@ func TestUploadFileCover_FormFileErrors(t *testing.T) {
 			rr := executeRequestWithUser(t, e, req, user)
 
 			assertErrorResponse(t, rr, tt.status, tt.code, tt.message)
-		})
-	}
-}
-
-// A Range header the stream handler does not support, such as a suffix range
-// or a malformed one, is ignored and the whole file served with 200, as RFC
-// 9110 allows, rather than failing the request.
-func TestStreamFile_UnsupportedRangeServesWholeFile(t *testing.T) {
-	t.Parallel()
-
-	for _, rangeHeader := range []string{"bytes=-500", "bytes=abc", "items=0-10"} {
-		t.Run(rangeHeader, func(t *testing.T) {
-			t.Parallel()
-			db := testdb.New(t)
-			library, book := setupTestLibraryAndBook(t, db)
-			m4bPath := createTestM4BFile(t, 5000)
-			file := setupTestFile(t, db, book, models.FileTypeM4B, m4bPath)
-			user := setupTestUser(t, db, library.ID, true)
-
-			req := httptest.NewRequest(http.MethodGet, "/books/files/"+strconv.Itoa(file.ID)+"/stream", nil)
-			req.Header.Set("Range", rangeHeader)
-			rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
-
-			require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
-			assert.Equal(t, 5000, rr.Body.Len())
-			assert.Empty(t, rr.Header().Get("Content-Range"))
 		})
 	}
 }

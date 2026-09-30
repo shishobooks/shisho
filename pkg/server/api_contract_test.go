@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -67,6 +68,21 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	child := &models.Publisher{LibraryID: f.lib.ID, Name: "Child Imprint", ParentID: &parent.ID}
 	f.insert(child)
 	f.insert(&models.Plugin{Scope: "contract", ID: "installed", Name: "Installed", Version: "1.0.0", Status: models.PluginStatusActive, InstalledAt: time.Now()})
+	// Files on disk for the download and page rejections: a main file of a
+	// type with no generator, and a CBZ with no stored page count.
+	fileBook := &models.Book{
+		LibraryID: f.lib.ID, Title: "Served Files", TitleSource: models.DataSourceManual,
+		SortTitle: "Served Files", SortTitleSource: models.DataSourceFilepath,
+		AuthorSource: models.DataSourceFilepath, Filepath: t.TempDir(),
+	}
+	f.insert(fileBook)
+	pluginPath := filepath.Join(fileBook.Filepath, "book.fb2")
+	require.NoError(t, os.WriteFile(pluginPath, []byte("fb2"), 0o644))
+	pluginFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: "fb2", FileRole: models.FileRoleMain, Filepath: pluginPath, FilesizeBytes: 3}
+	f.insert(pluginFile)
+	cbzPath := testgen.GenerateCBZ(t, fileBook.Filepath, "comic.cbz", testgen.CBZOptions{Title: "Comic"})
+	cbzFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain, Filepath: cbzPath, FilesizeBytes: 1}
+	f.insert(cbzFile)
 
 	tests := []struct {
 		name   string
@@ -131,6 +147,17 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			method: http.MethodPost, path: fmt.Sprintf("/api/books/%d/move-files", seeded.bookID),
 			body:   fmt.Sprintf(`{"file_ids":[%d],"target_book_id":999999}`, seeded.fileID),
 			status: http.StatusNotFound, code: "not_found",
+		},
+		{
+			name:   "generated download of a type with no generator",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download", pluginFile.ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+			message: "Generated downloads are not supported for fb2 files",
+		},
+		{
+			name:   "page past the end of a file with no stored page count",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/page/99", cbzFile.ID),
+			status: http.StatusNotFound, code: "not_found", message: "Page not found.",
 		},
 		{
 			name:   "bulk book delete with a malformed body",

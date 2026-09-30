@@ -507,3 +507,34 @@ func TestServeBookCover_NotFoundNamesResource(t *testing.T) {
 		})
 	}
 }
+
+// A cover that exists but cannot be opened is a 500 that carries neither the
+// cover's cache policy nor its ETag, so a browser cannot keep the error for a
+// year under the cover URL.
+func TestServeBookCover_UnreadableCoverIsServerErrorWithoutCoverHeaders(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+
+	dir := t.TempDir()
+	bookPath := filepath.Join(dir, "book.epub")
+	require.NoError(t, os.WriteFile(bookPath, []byte("epub-bytes"), 0o644))
+	coverName := "book.epub.cover.jpg"
+	coverPath := filepath.Join(dir, coverName)
+	require.NoError(t, os.WriteFile(coverPath, []byte("jpeg"), 0o000))
+	t.Cleanup(func() { _ = os.Chmod(coverPath, 0o644) })
+
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+	files := []*models.File{{ID: 1, FileType: models.FileTypeEPUB, Filepath: bookPath, CoverImageFilename: &coverName}}
+
+	err := ServeBookCover(c, files, "book", CacheControlImmutable, "Cover")
+	require.Error(t, err)
+	errcodes.NewHandler().Handle(err, c)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Empty(t, rec.Header().Get("Cache-Control"))
+	assert.Empty(t, rec.Header().Get("ETag"))
+}

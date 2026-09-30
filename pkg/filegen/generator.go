@@ -44,6 +44,11 @@ func NewGenerationError(fileType string, err error, message string) *GenerationE
 // ErrKepubNotSupported is returned when KePub conversion is not supported for a file type.
 var ErrKepubNotSupported = errors.New("KePub conversion not supported for this file type")
 
+// ErrNotImplemented is returned for a file type with no generator, such as a
+// format only a plugin parses. The device and share download routes serve
+// the original file for it; any other generation failure is a server fault.
+var ErrNotImplemented = errors.New("no generator for this file type")
+
 // GetGenerator returns the appropriate generator for a file type.
 func GetGenerator(fileType string) (Generator, error) {
 	switch fileType {
@@ -56,7 +61,7 @@ func GetGenerator(fileType string) (Generator, error) {
 	case models.FileTypePDF:
 		return &PDFGenerator{}, nil
 	default:
-		return nil, errors.Errorf("unsupported file type: %s", fileType)
+		return nil, errors.Wrapf(ErrNotImplemented, "unsupported file type: %s", fileType)
 	}
 }
 
@@ -73,7 +78,7 @@ func GetKepubGenerator(fileType string) (Generator, error) {
 	case models.FileTypePDF:
 		return nil, ErrKepubNotSupported
 	default:
-		return nil, errors.Errorf("unsupported file type: %s", fileType)
+		return nil, errors.Wrapf(ErrNotImplemented, "unsupported file type: %s", fileType)
 	}
 }
 
