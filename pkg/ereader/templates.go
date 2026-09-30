@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+// paragraphBreakPattern matches a blank line, with any whitespace-only lines
+// around it, between two paragraphs.
+var paragraphBreakPattern = regexp.MustCompile(`\n[^\S\n]*(?:\n[^\S\n]*)+`)
 
 // buildFilterQuery seeds a url.Values with the eReader's standard
 // filter params (types, covers) plus any extra key/value pairs threaded
@@ -92,7 +97,7 @@ func paginationWithParams(currentPage, totalPages int, baseURL, typesFilter, cov
 
 	var parts []string
 	if currentPage > 1 {
-		parts = append(parts, fmt.Sprintf(`<a href="%s" class="nav-btn">← Prev</a>`, buildURL(currentPage-1)))
+		parts = append(parts, fmt.Sprintf(`<a href="%s" class="nav-btn">← Prev</a>`, html.EscapeString(buildURL(currentPage-1))))
 	} else {
 		parts = append(parts, `<span class="nav-btn" style="color: #999;">← Prev</span>`)
 	}
@@ -100,7 +105,7 @@ func paginationWithParams(currentPage, totalPages int, baseURL, typesFilter, cov
 	parts = append(parts, fmt.Sprintf("Page %d of %d", currentPage, totalPages))
 
 	if currentPage < totalPages {
-		parts = append(parts, fmt.Sprintf(`<a href="%s" class="nav-btn">Next →</a>`, buildURL(currentPage+1)))
+		parts = append(parts, fmt.Sprintf(`<a href="%s" class="nav-btn">Next →</a>`, html.EscapeString(buildURL(currentPage+1))))
 	} else {
 		parts = append(parts, `<span class="nav-btn" style="color: #999;">Next →</span>`)
 	}
@@ -186,9 +191,9 @@ func filterLink(baseURL, param, value, currentTypes, currentCovers, label string
 	}
 
 	if isCurrent {
-		return fmt.Sprintf(`<span class="filter-btn" style="font-weight: bold; border-color: #000;">%s</span>`, label)
+		return fmt.Sprintf(`<span class="filter-btn" style="font-weight: bold; border-color: #000;">%s</span>`, html.EscapeString(label))
 	}
-	return fmt.Sprintf(`<a href="%s" class="filter-btn">%s</a>`, html.EscapeString(linkURL), label)
+	return fmt.Sprintf(`<a href="%s" class="filter-btn">%s</a>`, html.EscapeString(linkURL), html.EscapeString(label))
 }
 
 // itemHTMLWithCover generates an HTML item with optional cover image.
@@ -212,14 +217,29 @@ func coverToggle(baseURL, currentCovers string) string {
 
 	var offLink, onLink string
 	if currentCovers == "on" {
-		offLink = fmt.Sprintf(`<a href="%s" class="filter-btn">Off</a>`, offURL)
+		offLink = fmt.Sprintf(`<a href="%s" class="filter-btn">Off</a>`, html.EscapeString(offURL))
 		onLink = `<span class="filter-btn" style="font-weight: bold; border-color: #000;">On</span>`
 	} else {
 		offLink = `<span class="filter-btn" style="font-weight: bold; border-color: #000;">Off</span>`
-		onLink = fmt.Sprintf(`<a href="%s" class="filter-btn">On</a>`, onURL)
+		onLink = fmt.Sprintf(`<a href="%s" class="filter-btn">On</a>`, html.EscapeString(onURL))
 	}
 
 	return fmt.Sprintf(`<div class="filter"><b>Cover:</b> %s %s</div>`, offLink, onLink)
+}
+
+// descriptionHTML renders a stored plain-text description as paragraphs. It
+// escapes the text first, so nothing in it can become markup, then turns the
+// blank-line paragraph breaks and single line breaks that StripTags preserves
+// into </p><p> and <br>. A description with no text renders nothing.
+func descriptionHTML(description string) string {
+	text := strings.TrimSpace(strings.ReplaceAll(description, "\r\n", "\n"))
+	if text == "" {
+		return ""
+	}
+	escaped := html.EscapeString(text)
+	escaped = paragraphBreakPattern.ReplaceAllString(escaped, "</p><p>")
+	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
+	return "<p>" + escaped + "</p>"
 }
 
 // RenderPage wraps content in the base template.

@@ -1,6 +1,7 @@
 package htmlutil
 
 import (
+	"html"
 	"regexp"
 	"strings"
 )
@@ -8,39 +9,56 @@ import (
 // tagPattern matches HTML tags including self-closing tags.
 var tagPattern = regexp.MustCompile(`<[^>]*>`)
 
+// decodedTagPattern matches only what a browser would parse as markup: a "<"
+// followed by a letter, "/", "!", or "?". It runs after entities are decoded,
+// where a bare "<" is prose ("a < b") and must survive.
+var decodedTagPattern = regexp.MustCompile(`<(?:/?[A-Za-z]|[!?])[^>]*>`)
+
+// tagOpenerPattern matches a run of "<" that a browser would read as the start
+// of a tag. After complete tags are removed, one can still be left with no
+// closing ">" ("&lt;img src=x onerror=..."), or be formed when removing a tag
+// joins two pieces ("<<b>img ...>"). Matching the whole run means dropping it
+// cannot leave another "<" in front of the letter.
+var tagOpenerPattern = regexp.MustCompile(`<+([A-Za-z/!?])`)
+
 // multipleSpacesPattern matches multiple consecutive spaces/tabs (not newlines).
 var multipleSpacesPattern = regexp.MustCompile(`[^\S\n]{2,}`)
 
 // threeOrMoreNewlines matches 3+ consecutive newlines (with optional whitespace-only lines between them).
 var threeOrMoreNewlines = regexp.MustCompile(`\n(\s*\n){2,}`)
 
-// StripTags removes all HTML tags from a string and normalizes whitespace.
-// It converts block-level tags (p, div, br, etc.) to newlines to preserve
-// paragraph structure, then strips remaining tags and cleans up whitespace.
-func StripTags(html string) string {
-	if html == "" {
+// StripTags converts HTML to plain text with no live HTML tag in it. It turns
+// block-level tags (p, div, br, etc.) into newlines to preserve paragraph
+// structure, strips the remaining tags, decodes one level of entities, and
+// cleans up whitespace.
+//
+// Markup that was entity-encoded ("&lt;img ...&gt;") becomes a tag once
+// decoded, so complete tags are stripped again after decoding and any leftover
+// "<" that would open a tag is dropped. Escaped prose such as "a &lt; b" still
+// decodes to "a < b". Deeper encodings ("&amp;lt;b&amp;gt;") decode one level
+// to inert text ("&lt;b&gt;"). The result is plain text, not safe HTML: every
+// consumer that writes it into HTML must still escape it.
+func StripTags(s string) string {
+	if s == "" {
 		return ""
 	}
 
-	// Replace paragraph close tags with double newlines to preserve paragraph breaks
-	result := html
-	for _, tag := range []string{"</p>", "</P>"} {
-		result = strings.ReplaceAll(result, tag, "\n\n")
-	}
-
-	// Replace other block-level elements with single newlines
-	blockTags := []string{"</div>", "<br>", "<br/>", "<br />", "</li>", "</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>"}
-	for _, tag := range blockTags {
-		result = strings.ReplaceAll(result, tag, "\n")
-		// Also handle uppercase variants
-		result = strings.ReplaceAll(result, strings.ToUpper(tag), "\n")
-	}
+	result := blockTagsToNewlines(s)
 
 	// Remove all remaining HTML tags
 	result = tagPattern.ReplaceAllString(result, "")
 
-	// Decode common HTML entities
-	result = decodeHTMLEntities(result)
+	// Decode one level of entities. Non-breaking spaces become plain spaces so
+	// the whitespace normalization below collapses and trims them.
+	result = html.UnescapeString(result)
+	result = strings.ReplaceAll(result, "\u00a0", " ")
+
+	// Decoding can turn "&lt;p&gt;" into a live tag. Strip those as well, then
+	// drop any "<" still able to open a tag, including one left by that strip.
+	// Both are single linear passes.
+	result = blockTagsToNewlines(result)
+	result = decodedTagPattern.ReplaceAllString(result, "")
+	result = tagOpenerPattern.ReplaceAllString(result, "$1")
 
 	// Normalize whitespace: collapse multiple spaces/tabs to single space per line
 	lines := strings.Split(result, "\n")
@@ -56,51 +74,20 @@ func StripTags(html string) string {
 	return strings.TrimSpace(result)
 }
 
-// decodeHTMLEntities decodes common HTML entities to their character equivalents.
-func decodeHTMLEntities(s string) string {
-	// Common named and numeric entities
-	replacements := []struct {
-		entity string
-		char   string
-	}{
-		{"&nbsp;", " "},
-		{"&#160;", " "}, // nbsp numeric
-		{"&amp;", "&"},
-		{"&#38;", "&"}, // ampersand numeric
-		{"&lt;", "<"},
-		{"&#60;", "<"}, // less than numeric
-		{"&gt;", ">"},
-		{"&#62;", ">"}, // greater than numeric
-		{"&quot;", "\""},
-		{"&#34;", "\""}, // quote numeric
-		{"&#39;", "'"},
-		{"&apos;", "'"},
-		{"&mdash;", "\u2014"},  // em dash
-		{"&#8212;", "\u2014"},  // em dash numeric
-		{"&ndash;", "\u2013"},  // en dash
-		{"&#8211;", "\u2013"},  // en dash numeric
-		{"&hellip;", "\u2026"}, // ellipsis
-		{"&#8230;", "\u2026"},  // ellipsis numeric
-		{"&rsquo;", "\u2019"},  // right single quote
-		{"&#8217;", "\u2019"},  // right single quote numeric
-		{"&lsquo;", "\u2018"},  // left single quote
-		{"&#8216;", "\u2018"},  // left single quote numeric
-		{"&rdquo;", "\u201D"},  // right double quote
-		{"&#8221;", "\u201D"},  // right double quote numeric
-		{"&ldquo;", "\u201C"},  // left double quote
-		{"&#8220;", "\u201C"},  // left double quote numeric
-		{"&copy;", "\u00A9"},   // copyright
-		{"&#169;", "\u00A9"},   // copyright numeric
-		{"&reg;", "\u00AE"},    // registered
-		{"&#174;", "\u00AE"},   // registered numeric
-		{"&trade;", "\u2122"},  // trademark
-		{"&#8482;", "\u2122"},  // trademark numeric
-	}
-
+// blockTagsToNewlines replaces paragraph close tags with double newlines and
+// other block-level tags with single newlines, so paragraph structure survives
+// tag removal.
+func blockTagsToNewlines(s string) string {
 	result := s
-	for _, r := range replacements {
-		result = strings.ReplaceAll(result, r.entity, r.char)
+	for _, tag := range []string{"</p>", "</P>"} {
+		result = strings.ReplaceAll(result, tag, "\n\n")
 	}
 
+	blockTags := []string{"</div>", "<br>", "<br/>", "<br />", "</li>", "</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>"}
+	for _, tag := range blockTags {
+		result = strings.ReplaceAll(result, tag, "\n")
+		// Also handle uppercase variants
+		result = strings.ReplaceAll(result, strings.ToUpper(tag), "\n")
+	}
 	return result
 }

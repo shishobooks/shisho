@@ -1,7 +1,9 @@
 package htmlutil
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -119,6 +121,71 @@ func TestStripTags(t *testing.T) {
 			input:    "<p>First paragraph</p><p>Second paragraph</p><p>Third paragraph</p>",
 			expected: "First paragraph\n\nSecond paragraph\n\nThird paragraph",
 		},
+		{
+			name:     "escaped less-than in prose decodes",
+			input:    "<p>a &lt; b</p>",
+			expected: "a < b",
+		},
+		{
+			name:     "escaped comparison operators in prose decode",
+			input:    "a &lt; b and c &gt; d",
+			expected: "a < b and c > d",
+		},
+		{
+			name:     "entity-encoded tag is removed",
+			input:    "&lt;img src=x onerror=alert(1)&gt;",
+			expected: "",
+		},
+		{
+			name:     "entity-encoded script keeps only its text",
+			input:    "Before &lt;script&gt;alert(1)&lt;/script&gt; after",
+			expected: "Before alert(1) after",
+		},
+		{
+			name:     "numeric-entity-encoded tag is removed",
+			input:    "x&#60;b&#62;bold&#60;/b&#62;y",
+			expected: "xboldy",
+		},
+		{
+			name:     "double-encoded tag decodes one level to inert text",
+			input:    "&amp;lt;b&amp;gt;x",
+			expected: "&lt;b&gt;x",
+		},
+		{
+			name:     "hex-encoded tag is removed",
+			input:    "a&#x3C;img src=x onerror=alert(1)&#x3E;b",
+			expected: "ab",
+		},
+		{
+			name:     "zero-padded decimal and uppercase entities are removed",
+			input:    "a&#060;b&#062;b&LT;i&GT;c",
+			expected: "abc",
+		},
+		{
+			name:     "numeric and named entities decode",
+			input:    "&copy; 2024 &#8220;quoted&#8221; &#39;it&apos;s&#39;",
+			expected: "\u00A9 2024 \u201Cquoted\u201D 'it's'",
+		},
+		{
+			name:     "removing a tag cannot join the pieces of another",
+			input:    "&lt;&lt;b&gt;img src=x onerror=alert(1)&gt;",
+			expected: "img src=x onerror=alert(1)>",
+		},
+		{
+			name:     "unclosed entity-encoded tag cannot open",
+			input:    "<p>&lt;img src=x onerror=alert(1)</p><p>next</p>",
+			expected: "img src=x onerror=alert(1)\n\nnext",
+		},
+		{
+			name:     "unclosed raw tag cannot open",
+			input:    "a <b",
+			expected: "a b",
+		},
+		{
+			name:     "entity-encoded paragraphs keep their breaks",
+			input:    "&lt;p&gt;First&lt;/p&gt;&lt;p&gt;Second&lt;br&gt;line&lt;/p&gt;",
+			expected: "First\n\nSecond\nline",
+		},
 	}
 
 	for _, tt := range tests {
@@ -130,61 +197,17 @@ func TestStripTags(t *testing.T) {
 	}
 }
 
-func TestDecodeHTMLEntities(t *testing.T) {
+// Nested encoded tags are handled in linear time: a loop that strips one level
+// per pass takes seconds on this input.
+func TestStripTags_NestedEncodedTagsAreLinear(t *testing.T) {
 	t.Parallel()
+	const depth = 20000
+	input := strings.Repeat("&lt;", depth) + "b&gt;" + strings.Repeat("b&gt;", depth)
 
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "ampersand",
-			input:    "Tom &amp; Jerry",
-			expected: "Tom & Jerry",
-		},
-		{
-			name:     "less than greater than",
-			input:    "&lt;tag&gt;",
-			expected: "<tag>",
-		},
-		{
-			name:     "quotes",
-			input:    "&quot;quoted&quot;",
-			expected: "\"quoted\"",
-		},
-		{
-			name:     "apostrophe variants",
-			input:    "it&#39;s &apos;quoted&apos;",
-			expected: "it's 'quoted'",
-		},
-		{
-			name:     "dashes named entities",
-			input:    "em&mdash;dash and en&ndash;dash",
-			expected: "em\u2014dash and en\u2013dash",
-		},
-		{
-			name:     "dashes numeric entities",
-			input:    "em&#8212;dash and en&#8211;dash",
-			expected: "em\u2014dash and en\u2013dash",
-		},
-		{
-			name:     "copyright trademark",
-			input:    "&copy; 2024 Brand&trade; &reg;",
-			expected: "\u00A9 2024 Brand\u2122 \u00AE",
-		},
-		{
-			name:     "numeric entities",
-			input:    "&#60;tag&#62; &#38; &#8220;quoted&#8221; &#8216;single&#8217;",
-			expected: "<tag> & \u201Cquoted\u201D \u2018single\u2019",
-		},
-	}
+	start := time.Now()
+	result := StripTags(input)
+	elapsed := time.Since(start)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := decodeHTMLEntities(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	assert.NotRegexp(t, `<[A-Za-z/!?]`, result)
+	assert.Less(t, elapsed, 2*time.Second)
 }
