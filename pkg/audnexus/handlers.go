@@ -33,8 +33,8 @@ func (h *handler) getChapters(c echo.Context) error {
 // carries the audnexus-specific code as `Code` (so the frontend can map it to
 // a user-facing message) alongside the appropriate HTTP status.
 //
-// The generic errcodes helpers (BadRequest, NotFound, etc.) would set Code to
-// the HTTP family (e.g. "bad_request") and stuff the audnexus slug in
+// The generic errcodes helpers (NotFound, ValidationError, etc.) would set
+// Code to the HTTP family (e.g. "not_found") and stuff the audnexus slug in
 // Message, which broke the frontend's code-based switch. Building the
 // errcodes.Error directly keeps the audnexus slug in Code end-to-end.
 //

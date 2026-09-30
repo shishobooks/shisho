@@ -40,6 +40,10 @@ func (h *handler) update(c echo.Context) error {
 			// Enabling: set Active and load the plugin
 			plugin.Status = models.PluginStatusActive
 			if err := h.manager.LoadPlugin(ctx, scope, id); err != nil {
+				if !asLoadError(err) {
+					// A server fault, not the plugin's: keep its state.
+					return errors.WithStack(err)
+				}
 				loadErr = err
 				errMsg := err.Error()
 				plugin.LoadError = &errMsg
@@ -124,10 +128,13 @@ func (h *handler) reload(c echo.Context) error {
 	}
 
 	if plugin.Status != models.PluginStatusActive {
-		return errcodes.ValidationError("Plugin must be active to reload.")
+		return errcodes.InvalidState("Plugin must be active to reload.")
 	}
 
 	if err := h.manager.ReloadPlugin(ctx, scope, id); err != nil {
+		if !asLoadError(err) {
+			return errors.WithStack(err)
+		}
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
 	} else {
@@ -173,7 +180,7 @@ func (h *handler) updateVersion(c echo.Context) error {
 
 	// 2. Check if an update is available
 	if plugin.UpdateAvailableVersion == nil || *plugin.UpdateAvailableVersion == "" {
-		return errcodes.ValidationError("No update available for this plugin.")
+		return errcodes.InvalidState("No update available for this plugin.")
 	}
 
 	targetVersion := *plugin.UpdateAvailableVersion
@@ -187,7 +194,7 @@ func (h *handler) updateVersion(c echo.Context) error {
 	// 4. Install (overwrite) the plugin files
 	manifest, err := h.installer.InstallPlugin(ctx, scope, id, downloadURL, sha256Hash)
 	if err != nil {
-		return errors.WithStack(err)
+		return installerError(err)
 	}
 
 	// Download updated plugin icon (non-fatal)
@@ -197,6 +204,9 @@ func (h *handler) updateVersion(c echo.Context) error {
 
 	// 5. Hot-reload the plugin
 	if err := h.manager.ReloadPlugin(ctx, scope, id); err != nil {
+		if !asLoadError(err) {
+			return errors.WithStack(err)
+		}
 		errMsg := err.Error()
 		plugin.LoadError = &errMsg
 		h.manager.emitEvent(PluginEventMalfunctioned, scope, id, nil)

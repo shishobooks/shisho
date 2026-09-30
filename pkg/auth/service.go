@@ -54,7 +54,7 @@ func (s *Service) CountUsers(ctx context.Context) (int, error) {
 func (s *Service) Authenticate(ctx context.Context, username, password string) (*models.User, error) {
 	user, err := LoadUser(ctx, s.db, LoadUserOptions{Username: &username})
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errcodes.Unauthorized("Invalid username or password")
+		return nil, errInvalidCredentials()
 	}
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		return nil, errcodes.Unauthorized("Invalid username or password")
+		return nil, errInvalidCredentials()
 	}
 
 	return user, nil
@@ -110,9 +110,31 @@ func (s *Service) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return claims, nil
 }
 
-// GetUserByID retrieves an active user by ID with relations.
+// GetUserByID retrieves an active user by ID with relations for a session.
+// A missing or deactivated user is errcodes.UserInactive; any other failure
+// is returned as is, so callers report it as a server fault.
 func (s *Service) GetUserByID(ctx context.Context, id int) (*models.User, error) {
-	return LoadUser(ctx, s.db, LoadUserOptions{ID: &id})
+	user, err := LoadUser(ctx, s.db, LoadUserOptions{ID: &id})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errcodes.UserInactive()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// errInvalidCredentials is the 401 for an unknown username or a wrong
+// password. Both read the same so a login cannot probe for usernames.
+func errInvalidCredentials() error {
+	return errcodes.Unauthorized("Invalid username or password")
+}
+
+// errSetupCompleted is the 403 for a setup request after the first user
+// exists. The setup handler checks it before binding and CreateFirstAdmin
+// checks it again, so both report the same message.
+func errSetupCompleted() error {
+	return errcodes.Forbidden("Setup has already been completed")
 }
 
 // CreateFirstAdmin creates the first admin user during setup.
@@ -123,7 +145,7 @@ func (s *Service) CreateFirstAdmin(ctx context.Context, username string, email *
 		return nil, err
 	}
 	if count > 0 {
-		return nil, errcodes.Forbidden("Setup has already been completed")
+		return nil, errSetupCompleted()
 	}
 
 	// Get admin role

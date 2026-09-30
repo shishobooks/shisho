@@ -44,7 +44,7 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 
 	// Validate file has pages
 	if file.PageCount == nil {
-		return errcodes.ValidationError("This file does not support page-based covers")
+		return errcodes.InvalidState("This file does not support page-based covers")
 	}
 
 	// Validate page is within bounds
@@ -60,8 +60,9 @@ func (h *handler) updateFileCoverPage(c echo.Context) error {
 		h.pdfPageCache,
 	)
 	if err != nil {
-		log.Error("failed to extract cover page", logger.Data{"error": err.Error(), "page": payload.Page, "file_type": file.FileType})
-		return errcodes.ValidationError("Failed to extract page from file")
+		// The page is in bounds, so a failure to render, read, or write it
+		// is a server fault.
+		return errors.Wrapf(err, "failed to set cover page %d of file %d", payload.Page, file.ID)
 	}
 
 	log.Info("set cover page", logger.Data{

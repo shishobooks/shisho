@@ -682,16 +682,18 @@ The priorities are defined in `pkg/models/data-source.go`; see "Data Source Prio
 
 | Method | When Called | What It Does |
 |--------|------------|--------------|
-| `LoadAll(ctx)` | Startup | Load all enabled plugins; errors stored, don't prevent others |
-| `LoadPlugin(ctx, scope, id)` | Install/Enable | Load single plugin, inject APIs, register identifiers, append to order |
+| `LoadAll(ctx)` | Startup | Load all enabled plugins; load errors stored, don't prevent others |
+| `LoadPlugin(ctx, scope, id)` | Install/Enable | Load single plugin, inject APIs, register identifiers, append to order, then register the runtime |
 | `UnloadPlugin(scope, id)` | Uninstall/Disable | Remove from memory |
-| `ReloadPlugin(ctx, scope, id)` | Update/Hot-reload | Write-lock old runtime, swap new, wait for in-progress hooks |
+| `ReloadPlugin(ctx, scope, id)` | Update/Hot-reload | Register identifiers, then write-lock old runtime, swap new, wait for in-progress hooks |
 | `GetRuntime(scope, id)` | Any | Get loaded runtime (nil if not loaded) |
 | `GetOrderedRuntimes(ctx, hookType, libraryID)` | Scan pipeline | Get runtimes with mode "enabled" in user-defined order (per-library or global) |
 | `GetManualRuntimes(ctx, hookType, libraryID)` | Manual identification | Get runtimes with mode "enabled" or "manual_only" (per-library or global) |
 | `GetParserForType(fileType)` | File scanning | First runtime with fileParser for type |
 | `GetOutputGenerator(formatID)` | Output generation | PluginGenerator wrapping runtime |
 | `CheckForUpdates(ctx)` | Periodic/on-demand | Check repos for newer versions |
+
+**Load failures are typed.** `LoadPlugin` and `ReloadPlugin` return a `*LoadError` (check with `asLoadError`) when the plugin itself fails to load: its manifest, its script, or its host version requirement. Only that is recorded on the plugin (`load_error`, Malfunctioned or Not Supported) by install, enable, reload, update version, and `LoadAll`, and enable reports it as `422 plugin_load_failure`. Any other error, such as a failure injecting the host APIs or a database fault writing identifier types or the hook order, is a server fault: the handler returns 500, `LoadAll` logs it, and the plugin's stored state is left alone. Both methods write the database before registering or swapping the runtime, so a fault leaves the plugin unloaded (load) or on its old runtime (reload). `AppendToOrder` failures are ignored only for a duplicate row (`database.IsUniqueViolation`). `ParseManifest` rejects an empty or repeated `identifierTypes` id, so that manifest mistake is a `LoadError` (and a 422 invalid package at install) rather than a UNIQUE violation that would read as a server fault.
 
 ## Thread Safety
 
@@ -719,7 +721,9 @@ In `pkg/worker/scan_unified.go`:
 4. Extract to `{pluginDir}/{scope}/{id}/`
 5. Parse manifest, insert DB record
 6. `LoadPlugin()` → inject APIs, register identifiers, append to hook order
-7. Load errors stored in DB but don't fail the install
+7. A `LoadError` is stored in the DB but doesn't fail the install. A server fault while loading or storing the load error fails it with a 500, and `removeFailedInstall` removes the row and files so the plugin is not left Active with no runtime
+
+`installerError` in `handler_install.go` renders an `Installer` failure for both install and update version: a URL outside `AllowedDownloadHosts`, a checksum mismatch, or a package that is not a ZIP or lacks a valid `manifest.json` is a 422 (`validation_error`); a download host that cannot be reached or answers with a non-200 is a 502 (`upstream_error`); anything else, such as a plugin directory that cannot be written, is a 500. When installing from repositories and no repository for the scope answered, `findPluginInRepos` returns a 502 instead of the 404 it returns when a repository answered without the plugin.
 
 ## Repository System
 

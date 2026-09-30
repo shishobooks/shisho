@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -66,6 +67,12 @@ type ScanResult struct {
 type Scanner interface {
 	Scan(ctx context.Context, opts ScanOptions) (*ScanResult, error)
 }
+
+// ErrFileUnreadable marks a scan error for a file that exists on disk but
+// could not be parsed, such as a corrupt EPUB. The scanner wraps its parse
+// failure with it so the resync routes can report it as a 422 the user can
+// act on, while any other scan failure is a server fault.
+var ErrFileUnreadable = errors.New("file could not be parsed")
 
 type handler struct {
 	config             *config.Config
@@ -800,7 +807,7 @@ func (h *handler) updateFile(c echo.Context) error {
 				models.FileTypePDF:  true,
 			}
 			if !supportedTypes[file.FileType] {
-				return errcodes.BadRequest(fmt.Sprintf("Cannot upgrade to main file: file type '%s' is not supported as a main file.", file.FileType))
+				return errcodes.InvalidState(fmt.Sprintf("Cannot upgrade to main file: file type '%s' is not supported as a main file.", file.FileType))
 			}
 		}
 
@@ -1102,7 +1109,7 @@ func (h *handler) updateFile(c echo.Context) error {
 		seen := make(map[string]struct{}, len(*params.Identifiers))
 		for _, id := range *params.Identifiers {
 			if _, dup := seen[id.Type]; dup {
-				return errcodes.ValidationError("duplicate identifier type: " + id.Type)
+				return identifiers.DuplicateTypeError(id.Type)
 			}
 			seen[id.Type] = struct{}{}
 		}
@@ -1140,7 +1147,7 @@ func (h *handler) updateFile(c echo.Context) error {
 		if *params.IsPreferredCover {
 			// Validate file has a cover
 			if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
-				return errcodes.BadRequest("Cannot set preferred cover: file has no cover image.")
+				return errcodes.InvalidState("Cannot set preferred cover: file has no cover image.")
 			}
 			// Clear is_preferred_cover on other files of the same type category
 			// in the same book. EPUB/CBZ/PDF = ebook, M4B = audiobook.
@@ -1469,10 +1476,9 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 		return err
 	}
 
-	// Get the uploaded file
 	fileHeader, err := c.FormFile("cover")
 	if err != nil {
-		return errcodes.ValidationError("Cover image is required")
+		return coverFormFileError(err)
 	}
 
 	// Validate file type
@@ -1503,7 +1509,7 @@ func (h *handler) uploadFileCover(c echo.Context) error {
 	// Page-based formats (CBZ, PDF) derive their cover from page content and
 	// cannot have it replaced by upload.
 	if models.IsPageBasedFileType(file.FileType) {
-		return errcodes.ValidationError("Cover upload is not supported for this file type.")
+		return errcodes.InvalidState("Cover upload is not supported for this file type.")
 	}
 
 	// The cover always lives next to the file — using book.Filepath here
@@ -1690,16 +1696,8 @@ func (h *handler) downloadFile(c echo.Context) error {
 	// Try to generate/get from cache
 	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, fileWithRelations)
 	if err != nil {
-		// Check if it's a "not implemented" error for M4B/CBZ
-		var genErr *filegen.GenerationError
-		if errors.As(err, &genErr) {
-			if errors.Is(genErr.Err, filegen.ErrNotImplemented) {
-				// Return a specific error that tells the user this format isn't supported yet
-				return errcodes.ValidationError("File generation for " + file.FileType + " is not yet supported. Use 'Download Original' instead.")
-			}
-			// Other generation error - return details
-			return errcodes.ValidationError("Failed to generate file: " + genErr.Message)
-		}
+		// Every generation failure is a server fault; the device routes
+		// fall back to the original file instead.
 		return errors.WithStack(err)
 	}
 
@@ -1794,14 +1792,10 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 	// Try to generate/get from cache
 	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, fileWithRelations)
 	if err != nil {
-		// Check if this file type doesn't support KePub conversion
+		// A file type KePub cannot convert is the one failure the user can
+		// work around; any other generation failure is a server fault.
 		if errors.Is(err, filegen.ErrKepubNotSupported) {
-			return errcodes.ValidationError("KePub conversion is not supported for " + file.FileType + " files")
-		}
-		// Check for other generation errors
-		var genErr *filegen.GenerationError
-		if errors.As(err, &genErr) {
-			return errcodes.ValidationError("Failed to generate KePub file: " + genErr.Message)
+			return errcodes.InvalidState("KePub conversion is not supported for " + file.FileType + " files")
 		}
 		return errors.WithStack(err)
 	}
@@ -1850,7 +1844,7 @@ func (h *handler) resyncFile(c echo.Context) error {
 	})
 	if err != nil {
 		log.Error("failed to resync file", logger.Data{"file_id": id, "error": err.Error()})
-		return errcodes.ValidationError(err.Error())
+		return resyncError(err)
 	}
 
 	// Handle deletion case
@@ -1902,7 +1896,7 @@ func (h *handler) resyncBook(c echo.Context) error {
 	})
 	if err != nil {
 		log.Error("failed to resync book", logger.Data{"book_id": id, "error": err.Error()})
-		return errcodes.ValidationError(err.Error())
+		return resyncError(err)
 	}
 
 	// Handle deletion case
@@ -1913,6 +1907,33 @@ func (h *handler) resyncBook(c echo.Context) error {
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, result.Book))
+}
+
+// resyncError renders a scan failure: a file that could not be parsed is a
+// 422, and anything else is a server fault. The parse error names library
+// paths, so the 422 carries a fixed message; the caller logs the detail and
+// the scanner records it on the file as its scan error.
+func resyncError(err error) error {
+	if errors.Is(err, ErrFileUnreadable) {
+		return errcodes.ValidationError("The file could not be parsed. Its scan error has the details.")
+	}
+	return errors.WithStack(err)
+}
+
+// coverFormFileError renders a failure to read the uploaded cover. A request
+// without a multipart body or without a cover part carries no cover (422). A
+// failure on the server's filesystem, such as spilling a large upload to a
+// temporary file, is a server fault. Anything else is a multipart body that
+// is malformed or cut short, the binder's 400.
+func coverFormFileError(err error) error {
+	var pathErr *fs.PathError
+	switch {
+	case errors.Is(err, http.ErrMissingFile), errors.Is(err, http.ErrNotMultipart), errors.Is(err, http.ErrMissingBoundary):
+		return errcodes.ValidationError("Cover image is required")
+	case errors.Is(err, context.Canceled), errors.As(err, &pathErr):
+		return errors.WithStack(err)
+	}
+	return errcodes.MalformedPayload()
 }
 
 func (h *handler) getPage(c echo.Context) error {
@@ -1941,7 +1962,7 @@ func (h *handler) getPage(c echo.Context) error {
 
 	// Only CBZ and PDF files have pages
 	if file.FileType != models.FileTypeCBZ && file.FileType != models.FileTypePDF {
-		return errcodes.ValidationError("Only CBZ and PDF files have pages")
+		return errcodes.InvalidState("Only CBZ and PDF files have pages")
 	}
 
 	// Validate page number against page count
@@ -2048,8 +2069,14 @@ func (h *handler) serveRangeRequest(c echo.Context, filePath, rangeHeader string
 	if err != nil {
 		// Try parsing just start (e.g., "bytes=0-")
 		_, err = fmt.Sscanf(rangeHeader, "bytes=%d-", &start)
-		if err != nil {
-			return errcodes.ValidationError("Invalid Range header")
+		if err != nil || start < 0 {
+			// A malformed or suffix range ("bytes=-500") is not one this
+			// handler serves. RFC 9110 lets a server ignore a Range header,
+			// so serve the whole open file with 200 instead of failing.
+			// Dropping the header keeps ServeContent from reading it again.
+			c.Request().Header.Del("Range")
+			http.ServeContent(c.Response(), c.Request(), fileInfo.Name(), fileInfo.ModTime(), f)
+			return nil
 		}
 		end = fileSize - 1
 	}
@@ -2297,11 +2324,13 @@ func (h *handler) mergeBooks(c echo.Context) error {
 			continue
 		}
 
+		// RetrieveBook returns NotFound("Book") for a missing row, and any
+		// other failure is a server fault.
 		sourceBook, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
 			ID: &sourceBookID,
 		})
 		if err != nil {
-			return errcodes.NotFound("Source book")
+			return errors.WithStack(err)
 		}
 		if sourceBook.LibraryID != targetBook.LibraryID {
 			return errcodes.ValidationError("All source books must be in the same library as target book")

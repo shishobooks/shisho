@@ -34,7 +34,7 @@ func (h *handler) setFileReview(c echo.Context) error {
 	// Supplements never participate in review state — reject overrides
 	// rather than silently persisting orphan rows.
 	if file.FileRole != models.FileRoleMain {
-		return errcodes.BadRequest("Cannot set review state on a supplement file")
+		return errcodes.InvalidState("Cannot set review state on a supplement file")
 	}
 
 	criteria, err := review.Load(ctx, h.appSettingsService)

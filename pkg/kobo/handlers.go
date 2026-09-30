@@ -350,7 +350,10 @@ func (h *handler) handleCover(c echo.Context) error {
 	// (second precision), so the overlap is harmless.
 	coverStat, err := os.Stat(coverPath)
 	if err != nil {
-		return errcodes.NotFound("Cover")
+		if os.IsNotExist(err) {
+			return errcodes.NotFound("Cover")
+		}
+		return errors.WithStack(err)
 	}
 	modTime := coverStat.ModTime().UTC().Truncate(time.Second)
 	c.Response().Header().Set("Cache-Control", "private, no-cache")
@@ -369,15 +372,19 @@ func (h *handler) handleCover(c echo.Context) error {
 	height, _ := strconv.Atoi(heightStr)
 
 	if width == 0 || height == 0 {
-		// Serve original if dimensions not specified. c.File handles
-		// Last-Modified/If-Modified-Since automatically for this branch.
-		return c.File(coverPath)
+		// Serve original if dimensions not specified. ServeFile handles
+		// Last-Modified/If-Modified-Since for this branch, and unlike
+		// c.File reports an unreadable cover as a server fault.
+		return httputil.ServeFile(c, coverPath, errcodes.NotFound("Cover"))
 	}
 
 	// Open and resize the image
 	imgFile, err := os.Open(coverPath)
 	if err != nil {
-		return errcodes.NotFound("Cover")
+		if os.IsNotExist(err) {
+			return errcodes.NotFound("Cover")
+		}
+		return errors.WithStack(err)
 	}
 	defer imgFile.Close()
 

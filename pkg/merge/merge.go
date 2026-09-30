@@ -33,7 +33,7 @@ func CheckPreconditions(user *models.User, kind string, target, source Side) err
 		return errcodes.AuthenticationRequired()
 	}
 	if !user.HasLibraryAccess(target.LibraryID) || !user.HasLibraryAccess(source.LibraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
+		return errcodes.LibraryAccessDenied()
 	}
 	if target.ID == source.ID {
 		return SelfMergeError(kind)

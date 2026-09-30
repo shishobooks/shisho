@@ -40,7 +40,8 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, status int
 
 // The file update errors go through errcodes, so their wire code is a fixed
 // code rather than a snake-cased copy of the message. A payload value that
-// fails validation is a 422; a request the file's state cannot honor is a 400.
+// fails validation is a 422 validation_error; a request the file's state
+// cannot honor is a 422 invalid_state.
 func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 	t.Parallel()
 
@@ -58,8 +59,8 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 			fileType: "txt",
 			role:     models.FileRoleSupplement,
 			body:     `{"file_role":"main"}`,
-			status:   http.StatusBadRequest,
-			code:     "bad_request",
+			status:   http.StatusUnprocessableEntity,
+			code:     "invalid_state",
 			message:  "Cannot upgrade to main file: file type 'txt' is not supported as a main file.",
 		},
 		{
@@ -76,8 +77,8 @@ func TestUpdateFile_ValidationErrorsUseErrcodes(t *testing.T) {
 			fileType: models.FileTypeEPUB,
 			role:     models.FileRoleMain,
 			body:     `{"is_preferred_cover":true}`,
-			status:   http.StatusBadRequest,
-			code:     "bad_request",
+			status:   http.StatusUnprocessableEntity,
+			code:     "invalid_state",
 			message:  "Cannot set preferred cover: file has no cover image.",
 		},
 	}

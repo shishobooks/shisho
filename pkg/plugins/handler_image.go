@@ -1,13 +1,13 @@
 package plugins
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
 func (h *handler) getImage(c echo.Context) error {
@@ -20,12 +20,9 @@ func (h *handler) getImage(c echo.Context) error {
 	}
 
 	iconPath := filepath.Join(h.installer.PluginDir(), scope, id, "icon.png")
-	if _, err := os.Stat(iconPath); err != nil {
-		return errcodes.NotFound("Plugin icon")
-	}
 
 	// The icon URL has no cache-busting version and the icon changes when the
 	// plugin is updated, so clients revalidate through Last-Modified.
 	c.Response().Header().Set("Cache-Control", covers.CacheControlNoCache)
-	return c.File(iconPath)
+	return httputil.ServeFile(c, iconPath, errcodes.NotFound("Plugin icon"))
 }

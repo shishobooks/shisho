@@ -372,3 +372,83 @@ func TestJobsPermissions_BulkDownloadStoresOnlyValidatedInput(t *testing.T) {
 	rec = f.do(f.viewer, http.MethodPost, "/api/jobs", fmt.Sprintf(`{"type":"bulk_download","library_id":999999,"data":{"file_ids":[%d]}}`, f.fileA.ID))
 	assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 }
+
+// errorOf decodes the errcodes body of a rejected request.
+func errorOf(t *testing.T, rec *httptest.ResponseRecorder) (int, string, string) {
+	t.Helper()
+	var resp errorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body: %s", rec.Body.String())
+	return rec.Code, resp.Error.Code, resp.Error.Message
+}
+
+// Downloading a job that is not a finished bulk download is a 422 with the
+// invalid_state code, not a 400.
+func TestJobs_DownloadStateChecksAreInvalidState(t *testing.T) {
+	t.Parallel()
+	f := newJobsPermissionFixture(t)
+	ctx := context.Background()
+
+	rec := f.do(f.admin, http.MethodPost, "/api/jobs", `{"type":"scan","data":{}}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	scanJob := f.jobID(rec)
+
+	rec = f.createBulkDownload(f.viewer, f.fileA.ID)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	pendingJob := f.jobID(rec)
+
+	rec = f.createBulkDownload(f.viewer, f.fileA.ID)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	noDataJob := f.jobID(rec)
+	_, err := f.db.NewUpdate().Table("jobs").Set("status = ?", models.JobStatusCompleted).Where("id = ?", noDataJob).Exec(ctx)
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		id      int
+		message string
+	}{
+		{scanJob, "Job is not a bulk download"},
+		{pendingJob, "Job is not completed yet"},
+		{noDataJob, "Job has no download data"},
+	} {
+		status, code, message := errorOf(t, f.do(f.admin, http.MethodGet, fmt.Sprintf("/api/jobs/%d/download", tt.id), ""))
+		assert.Equal(t, http.StatusUnprocessableEntity, status, tt.message)
+		assert.Equal(t, "invalid_state", code, tt.message)
+		assert.Equal(t, tt.message, message)
+	}
+}
+
+// Every jobs permission denial names the missing permission in the shared
+// wording RequirePermission uses.
+func TestJobs_PermissionDenialsUseSharedMessage(t *testing.T) {
+	t.Parallel()
+	f := newJobsPermissionFixture(t)
+	ctx := context.Background()
+
+	noBooksRole := &models.Role{Name: "jobs-only"}
+	_, err := f.db.NewInsert().Model(noBooksRole).Exec(ctx)
+	require.NoError(t, err)
+	for _, op := range []string{models.OperationRead, models.OperationWrite} {
+		_, err = f.db.NewInsert().Model(&models.Permission{RoleID: noBooksRole.ID, Resource: models.ResourceJobs, Operation: op}).Exec(ctx)
+		require.NoError(t, err)
+	}
+	jobsOnly := f.insertUser(ctx, "jobs-only", noBooksRole.Name, nil)
+
+	rec := f.createBulkDownload(f.viewer, f.fileA.ID)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	bulkJob := f.jobID(rec)
+
+	for _, tt := range []struct {
+		name    string
+		rec     *httptest.ResponseRecorder
+		message string
+	}{
+		{"bulk download without books:read", f.createBulkDownload(jobsOnly, f.fileA.ID), "You don't have permission to read books"},
+		{"download without books:read", f.do(jobsOnly, http.MethodGet, fmt.Sprintf("/api/jobs/%d/download", bulkJob), ""), "You don't have permission to read books"},
+		{"scan without jobs:read", f.do(f.writer, http.MethodPost, "/api/jobs", `{"type":"scan","data":{}}`), "You don't have permission to read jobs"},
+	} {
+		status, code, message := errorOf(t, tt.rec)
+		assert.Equal(t, http.StatusForbidden, status, tt.name)
+		assert.Equal(t, "forbidden", code, tt.name)
+		assert.Equal(t, tt.message, message, tt.name)
+	}
+}

@@ -79,6 +79,16 @@ func getBaseURLKepub(c echo.Context) string {
 	return getBaseURL(c) + "/kepub"
 }
 
+// requireSearchQuery returns the q query param both search feeds need, or a
+// 422 when it is empty.
+func requireSearchQuery(c echo.Context) (string, error) {
+	query := c.QueryParam("q")
+	if query == "" {
+		return "", errcodes.ValidationError("Search query is required")
+	}
+	return query, nil
+}
+
 // getPaginationParams extracts limit and offset from query params.
 func getPaginationParams(c echo.Context) (int, int) {
 	limit := defaultLimit
@@ -372,9 +382,9 @@ func (h *handler) librarySearch(c echo.Context) error {
 		return err
 	}
 
-	query := c.QueryParam("q")
-	if query == "" {
-		return errcodes.ValidationError("Search query is required")
+	query, err := requireSearchQuery(c)
+	if err != nil {
+		return err
 	}
 
 	limit, offset := getPaginationParams(c)
@@ -656,9 +666,9 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 		return err
 	}
 
-	query := c.QueryParam("q")
-	if query == "" {
-		return errcodes.ValidationError("Search query is required")
+	query, err := requireSearchQuery(c)
+	if err != nil {
+		return err
 	}
 
 	limit, offset := getPaginationParams(c)

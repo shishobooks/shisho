@@ -41,9 +41,6 @@ func NewGenerationError(fileType string, err error, message string) *GenerationE
 	}
 }
 
-// ErrNotImplemented is returned when a file type generator is not yet implemented.
-var ErrNotImplemented = errors.New("file type generation not yet implemented")
-
 // ErrKepubNotSupported is returned when KePub conversion is not supported for a file type.
 var ErrKepubNotSupported = errors.New("KePub conversion not supported for this file type")
 

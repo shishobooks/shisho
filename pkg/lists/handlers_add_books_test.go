@@ -101,3 +101,22 @@ func TestListsAddBooks_UnknownBook_Returns404(t *testing.T) {
 	assert.Equal(t, "Book not found.", codeErr.Message)
 	assert.Empty(t, f.listBookIDs(t))
 }
+
+// Moving a book in a list that is not ordered is a 422 with the
+// invalid_state code, and adding a book from a library the user cannot
+// access is the shared library access 403.
+func TestLists_StateAndAccessErrors(t *testing.T) {
+	t.Parallel()
+	f := newAddBooksFixture(t)
+	require.NoError(t, f.addBooks(t, f.bookA.ID))
+
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(`{"position":1}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	c := f.e.NewContext(req, httptest.NewRecorder())
+	c.SetParamNames("id", "bookId")
+	c.SetParamValues(strconv.Itoa(f.list.ID), strconv.Itoa(f.bookA.ID))
+	auth.SetUser(c, f.user)
+	assert.Equal(t, errcodes.InvalidState("Cannot move books in an unordered list"), f.h.moveBookPosition(c))
+
+	assert.Equal(t, errcodes.LibraryAccessDenied(), f.addBooks(t, f.bookB.ID))
+}

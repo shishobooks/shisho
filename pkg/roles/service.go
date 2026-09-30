@@ -66,6 +66,12 @@ func validatePermission(resource, operation string) error {
 	return nil
 }
 
+// errRoleNameTaken is the 422 for a create or rename to a name another role
+// already has.
+func errRoleNameTaken() error {
+	return errcodes.ValidationError("Role name already exists")
+}
+
 // Create creates a new role.
 func (s *Service) Create(ctx context.Context, name string, permissions []PermissionInput) (*models.Role, error) {
 	// Check if name already exists
@@ -77,7 +83,7 @@ func (s *Service) Create(ctx context.Context, name string, permissions []Permiss
 		return nil, errors.WithStack(err)
 	}
 	if exists {
-		return nil, errcodes.ValidationError("Role name already exists")
+		return nil, errRoleNameTaken()
 	}
 
 	// Validate permissions
@@ -188,7 +194,7 @@ func (s *Service) Update(ctx context.Context, id int, name *string, permissions 
 			return nil, errors.WithStack(err)
 		}
 		if exists {
-			return nil, errcodes.ValidationError("Role name already exists")
+			return nil, errRoleNameTaken()
 		}
 
 		role.Name = *name
@@ -268,7 +274,7 @@ func (s *Service) Delete(ctx context.Context, id int) error {
 		return errors.WithStack(err)
 	}
 	if count > 0 {
-		return errcodes.ValidationError("Cannot delete role that is assigned to users")
+		return errcodes.InvalidState("Cannot delete role that is assigned to users")
 	}
 
 	// Delete role (permissions are deleted via CASCADE)

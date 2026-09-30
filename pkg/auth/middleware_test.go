@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -228,17 +230,9 @@ func TestMiddlewareBasicAuth_CacheRespectsTTL(t *testing.T) {
 	require.NoError(t, err)
 
 	doRequest := func() (called bool, status int) {
-		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
 		req.SetBasicAuth("ttluser", "password1")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := middleware.BasicAuth(func(_ echo.Context) error {
-			called = true
-			return nil
-		})(c)
-		require.NoError(t, err)
+		called, rec := serveBasicAuth(middleware, req)
 		return called, rec.Code
 	}
 
@@ -287,12 +281,9 @@ func TestMiddlewareBasicAuth_DoesNotCacheFailedAuth(t *testing.T) {
 	require.NoError(t, err)
 
 	doRequest := func(password string) int {
-		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
 		req.SetBasicAuth("neguser", password)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		require.NoError(t, middleware.BasicAuth(func(_ echo.Context) error { return nil })(c))
+		_, rec := serveBasicAuth(middleware, req)
 		return rec.Code
 	}
 
@@ -353,22 +344,132 @@ func TestMiddlewareBasicAuth_RejectsWhenMustChangePassword(t *testing.T) {
 	_, err = db.NewInsert().Model(access).Exec(ctx)
 	require.NoError(t, err)
 
-	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
 	req.SetBasicAuth("basicauthuser", "testpassword")
+	nextCalled, rec := serveBasicAuth(middleware, req)
+	assert.False(t, nextCalled)
+	assertBasicAuthChallenge(t, rec)
+}
+
+// serveBasicAuth runs BasicAuth for req and renders any error it returns
+// through the errcodes handler, as the server does. It reports whether the
+// next handler ran.
+func serveBasicAuth(m *Middleware, req *http.Request) (bool, *httptest.ResponseRecorder) {
+	e := echo.New()
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-
-	nextCalled := false
-	err = middleware.BasicAuth(func(_ echo.Context) error {
-		nextCalled = true
+	called := false
+	if err := m.BasicAuth(func(_ echo.Context) error {
+		called = true
 		return nil
-	})(c)
-	// BasicAuth returns nil error but writes 401 directly to the response
+	})(c); err != nil {
+		e.HTTPErrorHandler(err, c)
+	}
+	return called, rec
+}
+
+// assertBasicAuthChallenge requires a 401 that carries the Basic challenge
+// and the errcodes JSON body every other API error uses.
+func assertBasicAuthChallenge(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusUnauthorized, rec.Code, "response body: %s", rec.Body.String())
+	assert.Equal(t, `Basic realm="Shisho OPDS"`, rec.Header().Get("WWW-Authenticate"))
+	var body struct {
+		Error struct {
+			Code       string `json:"code"`
+			Message    string `json:"message"`
+			StatusCode int    `json:"status_code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), "response body: %s", rec.Body.String())
+	assert.Equal(t, "unauthorized", body.Error.Code)
+	assert.Equal(t, "Authentication required", body.Error.Message)
+	assert.Equal(t, http.StatusUnauthorized, body.Error.StatusCode)
+}
+
+// Every Basic Auth rejection, whether the header is missing, malformed, or
+// names wrong credentials, is the same challenge in the errcodes shape.
+func TestMiddlewareBasicAuth_RejectionsUseErrcodesChallenge(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	middleware := NewMiddleware(NewService(db, "test-secret", 30*24*time.Hour))
+
+	tests := []struct {
+		name   string
+		header string
+	}{
+		{"missing header", ""},
+		{"not Basic", "Bearer abc"},
+		{"not base64", "Basic !!!"},
+		{"no colon", "Basic " + base64.StdEncoding.EncodeToString([]byte("nocolon"))},
+		{"unknown user", "Basic " + base64.StdEncoding.EncodeToString([]byte("nobody:secret"))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
+			if tt.header != "" {
+				req.Header.Set("Authorization", tt.header)
+			}
+			called, rec := serveBasicAuth(middleware, req)
+			assert.False(t, called)
+			assertBasicAuthChallenge(t, rec)
+		})
+	}
+}
+
+// A database fault while loading the user is a server error, not a
+// credentials challenge that would prompt the reader for a password again.
+func TestMiddlewareBasicAuth_LoadFaultIsServerError(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	middleware := NewMiddleware(NewService(db, "test-secret", 30*24*time.Hour))
+	_, err := db.Exec("DROP TABLE roles")
 	require.NoError(t, err)
-	assert.False(t, nextCalled)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Header().Get("WWW-Authenticate"), "Basic")
+
+	req := httptest.NewRequest(http.MethodGet, "/opds/catalog", nil)
+	req.SetBasicAuth("anyone", "secret")
+	called, rec := serveBasicAuth(middleware, req)
+	assert.False(t, called)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code, "response body: %s", rec.Body.String())
+	assert.Empty(t, rec.Header().Get("WWW-Authenticate"))
+}
+
+// A session whose user lookup fails for any reason but a missing or
+// deactivated user is a server error, not a 401 that signs the user out.
+func TestMiddlewareAuthenticate_LoadFaultIsServerError(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	authService := NewService(db, "test-secret", 30*24*time.Hour)
+	user := createUserWithPasswordResetRequired(context.Background(), t, db)
+	token, err := authService.GenerateToken(user)
+	require.NoError(t, err)
+	// A created_at that cannot scan into a time fails the lookup with an
+	// error other than sql.ErrNoRows.
+	_, err = db.Exec("UPDATE users SET created_at = 'not a time' WHERE id = ?", user.ID)
+	require.NoError(t, err)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/books", nil)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: token})
+	c := e.NewContext(req, httptest.NewRecorder())
+	err = NewMiddleware(authService).Authenticate(func(echo.Context) error { return nil })(c)
+	require.Error(t, err)
+	var codeErr *errcodes.Error
+	assert.NotErrorAs(t, err, &codeErr, "want a server fault, got %v", err)
+}
+
+// A session token that does not validate is the shared invalid-session 401.
+func TestMiddlewareAuthenticate_InvalidTokenIsInvalidSession(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/books", nil)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: "not-a-token"})
+	c := e.NewContext(req, httptest.NewRecorder())
+	err := NewMiddleware(NewService(db, "test-secret", time.Hour)).Authenticate(func(echo.Context) error { return nil })(c)
+	assert.Equal(t, errcodes.InvalidSession(), err)
 }
 
 func TestRequirePermission_Message(t *testing.T) {
@@ -420,9 +521,9 @@ func TestRequireAnyPermission(t *testing.T) {
 			m := &Middleware{}
 			called := false
 			err := m.RequireAnyPermission(
-				Permission{models.ResourceShares, models.OperationRead},
-				Permission{models.ResourceShares, models.OperationWrite},
-				Permission{models.ResourceConfig, models.OperationRead},
+				Permission{Resource: models.ResourceShares, Operation: models.OperationRead},
+				Permission{Resource: models.ResourceShares, Operation: models.OperationWrite},
+				Permission{Resource: models.ResourceConfig, Operation: models.OperationRead},
 			)(
 				func(echo.Context) error { called = true; return nil },
 			)(c)

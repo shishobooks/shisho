@@ -38,7 +38,7 @@ func RequireLibraryAccessFor(c echo.Context, libraryID int) error {
 		return err
 	}
 	if !user.HasLibraryAccess(libraryID) {
-		return errcodes.Forbidden("You don't have access to this library")
+		return errcodes.LibraryAccessDenied()
 	}
 	return nil
 }

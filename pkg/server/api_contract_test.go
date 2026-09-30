@@ -428,3 +428,94 @@ func TestAPIContract_MoveFilesServiceErrors(t *testing.T) {
 		})
 	}
 }
+
+// A user lookup that fails for any reason but a missing or deactivated user
+// is a server fault on every authenticating path, not a 401 that signs the
+// user out or prompts an OPDS reader for credentials again. The admin's
+// created_at holds a value that cannot scan into a time.
+func TestAPIContract_UserLookupFaultIsServerError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		req  func(f *resourceDeleteFixture) *http.Request
+	}{
+		{"/api/auth/me", func(f *resourceDeleteFixture) *http.Request {
+			return f.sessionRequest("/api/auth/me")
+		}},
+		{"a session route", func(f *resourceDeleteFixture) *http.Request {
+			return f.sessionRequest("/api/libraries")
+		}},
+		{"OPDS Basic Auth", func(f *resourceDeleteFixture) *http.Request {
+			req := httptest.NewRequest(http.MethodGet, "/opds/v1/epub/catalog", nil)
+			req.SetBasicAuth(f.admin.Username, "any password")
+			return req
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newResourceDeleteFixture(t)
+			req := tt.req(f)
+			_, err := f.db.ExecContext(f.ctx, "UPDATE users SET created_at = 'not a time' WHERE id = ?", f.admin.ID)
+			require.NoError(t, err)
+
+			rec := httptest.NewRecorder()
+			f.handler.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusInternalServerError, rec.Code, "response body: %s", rec.Body.String())
+			assert.Empty(t, rec.Header().Get("WWW-Authenticate"))
+		})
+	}
+}
+
+// A session whose user has been deactivated gets the shared 401 on
+// /api/auth/me, the same code and message as every other session route.
+func TestAPIContract_MeWithDeactivatedUser(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	req := f.sessionRequest("/api/auth/me")
+	_, err := f.db.ExecContext(f.ctx, "UPDATE users SET is_active = 0 WHERE id = ?", f.admin.ID)
+	require.NoError(t, err)
+
+	for _, r := range []*http.Request{req, f.sessionRequest("/api/libraries")} {
+		rec := httptest.NewRecorder()
+		f.handler.ServeHTTP(rec, r)
+		var resp errorResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body: %s", rec.Body.String())
+		assert.Equal(t, http.StatusUnauthorized, rec.Code, r.URL.Path)
+		assert.Equal(t, "unauthorized", resp.Error.Code, r.URL.Path)
+		assert.Equal(t, "User not found or inactive", resp.Error.Message, r.URL.Path)
+	}
+}
+
+// A merge source whose lookup fails for any reason but a missing row is a
+// server fault, not a 404. The source's created_at cannot scan into a time.
+func TestAPIContract_MergeSourceLookupFaultIsServerError(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	target := f.seedReviewedBook(models.FileTypeEPUB, nil)
+	source := f.seedReviewedBook(models.FileTypeEPUB, &target)
+	_, err := f.db.ExecContext(f.ctx, "UPDATE books SET created_at = 'not a time' WHERE id = ?", source.bookID)
+	require.NoError(t, err)
+
+	status, code, _ := f.requestError(t, http.MethodPost, "/api/books/merge",
+		fmt.Sprintf(`{"target_book_id":%d,"source_book_ids":[%d]}`, target.bookID, source.bookID))
+	assert.Equal(t, http.StatusInternalServerError, status)
+	assert.Equal(t, "internal_server_error", code)
+
+	status, code, message := f.requestError(t, http.MethodPost, "/api/books/merge",
+		fmt.Sprintf(`{"target_book_id":%d,"source_book_ids":[999999]}`, target.bookID))
+	assert.Equal(t, http.StatusNotFound, status)
+	assert.Equal(t, "not_found", code)
+	assert.Equal(t, "Book not found.", message)
+}
+
+// sessionRequest builds a GET request carrying the admin's session cookie.
+func (f *resourceDeleteFixture) sessionRequest(path string) *http.Request {
+	f.t.Helper()
+	token, err := f.authSvc.GenerateToken(f.admin)
+	require.NoError(f.t, err)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
+	return req
+}

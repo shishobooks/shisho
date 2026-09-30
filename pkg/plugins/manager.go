@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/models"
 	pkgversion "github.com/shishobooks/shisho/pkg/version"
 )
@@ -79,6 +80,26 @@ func pluginKey(scope, id string) string {
 	return scope + "/" + id
 }
 
+// LoadError is a load failure caused by the plugin itself: its manifest, its
+// script, or its host version requirement. Injecting the host APIs is the
+// server's side of loading, so its failure is not a LoadError. Install, enable, reload, and
+// startup record it on the plugin and mark the plugin Malfunctioned or Not
+// Supported. Any other error from LoadPlugin or ReloadPlugin, such as a
+// database fault, is a server fault that leaves the plugin's state alone.
+type LoadError struct {
+	Err error
+}
+
+func (e *LoadError) Error() string { return e.Err.Error() }
+
+func (e *LoadError) Unwrap() error { return e.Err }
+
+// asLoadError reports whether err is a LoadError.
+func asLoadError(err error) bool {
+	var loadErr *LoadError
+	return stderrors.As(err, &loadErr)
+}
+
 // isVersionIncompatible checks if the error (or any wrapped error) is ErrVersionIncompatible.
 func isVersionIncompatible(err error) bool {
 	var vErr *ErrVersionIncompatible
@@ -101,6 +122,15 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		}
 
 		if err := m.loadPlugin(ctx, p.Scope, p.ID); err != nil {
+			if !asLoadError(err) {
+				// A server fault says nothing about the plugin, so its
+				// stored state stays as it is.
+				log.Error("failed to load plugin", logger.Data{
+					"plugin": pluginKey(p.Scope, p.ID),
+					"error":  err.Error(),
+				})
+				continue
+			}
 			errMsg := err.Error()
 			p.LoadError = &errMsg
 
@@ -151,7 +181,7 @@ func (m *Manager) loadPlugin(ctx context.Context, scope, id string) error {
 
 	rt, err := LoadPlugin(dir, scope, id)
 	if err != nil {
-		return errors.Wrapf(err, "failed to load plugin %s/%s", scope, id)
+		return &LoadError{Err: errors.Wrapf(err, "failed to load plugin %s/%s", scope, id)}
 	}
 
 	// Set the persistent data directory for this plugin
@@ -161,11 +191,8 @@ func (m *Manager) loadPlugin(ctx context.Context, scope, id string) error {
 		return errors.Wrapf(err, "failed to inject host APIs for %s/%s", scope, id)
 	}
 
-	key := pluginKey(scope, id)
-	m.mu.Lock()
-	m.plugins[key] = rt
-	m.mu.Unlock()
-
+	// Write the plugin's rows before registering the runtime, so a database
+	// fault leaves the plugin unloaded.
 	// Register identifier types from manifest
 	if rt.manifest.Capabilities.IdentifierTypes != nil {
 		if err := m.service.UpsertIdentifierTypes(ctx, scope, id, rt.manifest.Capabilities.IdentifierTypes); err != nil {
@@ -173,13 +200,18 @@ func (m *Manager) loadPlugin(ctx context.Context, scope, id string) error {
 		}
 	}
 
-	// Append hook types to order table (ignore duplicate key errors)
+	// Append hook types to the order table. The plugin may already be in it,
+	// so only a duplicate row is ignored.
 	for _, hookType := range rt.HookTypes() {
-		if err := m.service.AppendToOrder(ctx, hookType, scope, id); err != nil {
-			// Ignore duplicate key errors — the plugin may already be in the order table
-			_ = err
+		if err := m.service.AppendToOrder(ctx, hookType, scope, id); err != nil && !database.IsUniqueViolation(err) {
+			return errors.Wrapf(err, "failed to add %s/%s to the %s order", scope, id, hookType)
 		}
 	}
+
+	key := pluginKey(scope, id)
+	m.mu.Lock()
+	m.plugins[key] = rt
+	m.mu.Unlock()
 
 	return nil
 }
@@ -214,7 +246,7 @@ func (m *Manager) ReloadPlugin(ctx context.Context, scope, id string) error {
 	// Load new runtime from disk
 	newRT, err := LoadPlugin(dir, scope, id)
 	if err != nil {
-		return errors.Wrapf(err, "failed to reload plugin %s/%s", scope, id)
+		return &LoadError{Err: errors.Wrapf(err, "failed to reload plugin %s/%s", scope, id)}
 	}
 
 	// Set the persistent data directory
@@ -223,6 +255,14 @@ func (m *Manager) ReloadPlugin(ctx context.Context, scope, id string) error {
 	// Inject host APIs into new runtime
 	if err := InjectHostAPIs(newRT, m.service); err != nil {
 		return errors.Wrapf(err, "failed to inject host APIs for %s/%s during reload", scope, id)
+	}
+
+	// Update identifier types before swapping, so a database fault leaves
+	// the old runtime in place.
+	if newRT.manifest.Capabilities.IdentifierTypes != nil {
+		if err := m.service.UpsertIdentifierTypes(ctx, scope, id, newRT.manifest.Capabilities.IdentifierTypes); err != nil {
+			return errors.Wrapf(err, "failed to upsert identifier types for %s/%s during reload", scope, id)
+		}
 	}
 
 	key := pluginKey(scope, id)
@@ -244,13 +284,6 @@ func (m *Manager) ReloadPlugin(ctx context.Context, scope, id string) error {
 		m.mu.Lock()
 		m.plugins[key] = newRT
 		m.mu.Unlock()
-	}
-
-	// Update identifier types
-	if newRT.manifest.Capabilities.IdentifierTypes != nil {
-		if err := m.service.UpsertIdentifierTypes(ctx, scope, id, newRT.manifest.Capabilities.IdentifierTypes); err != nil {
-			return errors.Wrapf(err, "failed to upsert identifier types for %s/%s during reload", scope, id)
-		}
 	}
 
 	return nil

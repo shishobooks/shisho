@@ -68,9 +68,6 @@ func (h *handler) UpdateName(c echo.Context) error {
 	}
 
 	keyID := c.Param("id")
-	if keyID == "" {
-		return errcodes.ValidationError("Key ID required")
-	}
 
 	var req UpdateAPIKeyNamePayload
 	if err := c.Bind(&req); err != nil {
@@ -103,9 +100,6 @@ func (h *handler) Delete(c echo.Context) error {
 	}
 
 	keyID := c.Param("id")
-	if keyID == "" {
-		return errcodes.ValidationError("Key ID required")
-	}
 
 	err = h.service.Delete(c.Request().Context(), user.ID, keyID)
 	if err != nil {
@@ -127,9 +121,6 @@ func (h *handler) AddPermission(c echo.Context) error {
 
 	keyID := c.Param("id")
 	permission := c.Param("permission")
-	if keyID == "" || permission == "" {
-		return errcodes.ValidationError("Key ID and permission required")
-	}
 
 	apiKey, err := h.service.AddPermission(c.Request().Context(), user.ID, keyID, permission)
 	if err != nil {
@@ -151,9 +142,6 @@ func (h *handler) RemovePermission(c echo.Context) error {
 
 	keyID := c.Param("id")
 	permission := c.Param("permission")
-	if keyID == "" || permission == "" {
-		return errcodes.ValidationError("Key ID and permission required")
-	}
 
 	apiKey, err := h.service.RemovePermission(c.Request().Context(), user.ID, keyID, permission)
 	if err != nil {
@@ -174,9 +162,6 @@ func (h *handler) GenerateShortURL(c echo.Context) error {
 	}
 
 	keyID := c.Param("id")
-	if keyID == "" {
-		return errcodes.ValidationError("Key ID required")
-	}
 
 	shortURL, err := h.service.GenerateShortURL(c.Request().Context(), user.ID, keyID)
 	if err != nil {
@@ -197,9 +182,6 @@ func (h *handler) ClearKoboSync(c echo.Context) error {
 	}
 
 	keyID := c.Param("id")
-	if keyID == "" {
-		return errcodes.ValidationError("Key ID required")
-	}
 
 	err = h.service.ClearKoboSyncHistory(c.Request().Context(), user.ID, keyID)
 	if err != nil {

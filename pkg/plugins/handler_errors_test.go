@@ -80,7 +80,7 @@ func TestFieldSettingsHandlers_ReturnErrcodes(t *testing.T) {
 			run: func() error {
 				return h.setFieldSettings(newErrorTestContext(`{"fields":{}}`, "scope", "shisho", "id", "plain"))
 			},
-			status: http.StatusBadRequest, code: "bad_request", message: "Plugin is not a metadata enricher.",
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "Plugin is not a metadata enricher.",
 		},
 		{
 			name: "global set with an undeclared field",
@@ -94,7 +94,7 @@ func TestFieldSettingsHandlers_ReturnErrcodes(t *testing.T) {
 			run: func() error {
 				return h.setLibraryFieldSettings(newErrorTestContext(`{"fields":{}}`, "id", "1", "scope", "shisho", "pluginId", "plain"))
 			},
-			status: http.StatusBadRequest, code: "bad_request", message: "Plugin is not a metadata enricher.",
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "Plugin is not a metadata enricher.",
 		},
 		{
 			name: "library set with an undeclared field",
