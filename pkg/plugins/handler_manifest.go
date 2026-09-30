@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -18,9 +17,8 @@ func (h *handler) getManifest(c echo.Context) error {
 	scope := c.Param("scope")
 	id := c.Param("id")
 
-	if strings.Contains(scope, "..") || strings.Contains(id, "..") ||
-		strings.ContainsAny(scope, "/\\") || strings.ContainsAny(id, "/\\") {
-		return errcodes.ValidationError("Invalid scope or plugin ID")
+	if err := validatePluginRef(scope, id); err != nil {
+		return err
 	}
 
 	if _, err := h.service.RetrievePlugin(ctx, scope, id); err != nil {

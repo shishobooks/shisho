@@ -1,17 +1,25 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
+	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,6 +66,7 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	f.insert(parent)
 	child := &models.Publisher{LibraryID: f.lib.ID, Name: "Child Imprint", ParentID: &parent.ID}
 	f.insert(child)
+	f.insert(&models.Plugin{Scope: "contract", ID: "installed", Name: "Installed", Version: "1.0.0", Status: models.PluginStatusActive, InstalledAt: time.Now()})
 
 	tests := []struct {
 		name   string
@@ -154,6 +163,28 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusBadRequest, code: "malformed_payload",
 		},
 		{
+			name:   "plugin install of an installed plugin",
+			method: http.MethodPost, path: "/api/plugins/installed",
+			body:   `{"scope":"contract","id":"installed"}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "Plugin is already installed.",
+		},
+		{
+			name:   "plugin install with an unsafe id",
+			method: http.MethodPost, path: "/api/plugins/installed",
+			body:   `{"scope":"contract","id":"a/b"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Invalid scope or plugin ID",
+		},
+		{
+			name:   "plugin uninstall with an unsafe scope",
+			method: http.MethodDelete, path: "/api/plugins/installed/.hidden/installed",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Invalid scope or plugin ID",
+		},
+		{
+			name:   "plugin reload with an unsafe scope",
+			method: http.MethodPost, path: "/api/plugins/installed/.hidden/installed/reload",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Invalid scope or plugin ID",
+		},
+		{
 			name:   "users list with a limit above the bound",
 			method: http.MethodGet, path: "/api/users?limit=1000",
 			status: http.StatusUnprocessableEntity, code: "validation_error",
@@ -174,6 +205,34 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A plugin reload whose files no longer load is a 422 plugin_load_failure
+// through the real route. The shared fixture mounts the plugin routes with
+// no manager, so this builds its own server with one.
+func TestAPIContract_PluginReloadLoadFailure(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	cfg := newPermissionTestConfig(t)
+	cfg.PluginDir = t.TempDir()
+	pluginService := plugins.NewService(db)
+	pm := plugins.NewManager(pluginService, cfg.PluginDir, t.TempDir())
+	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), pluginService, pm, nil, downloadcache.NewCache(t.TempDir(), 1<<30), nil, nil, nil)
+	require.NoError(t, err)
+	f := &resourceDeleteFixture{t: t, ctx: context.Background(), db: db, handler: srv.Handler, authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())}
+	f.admin = insertPermissionTestUser(f.ctx, t, db, "admin", models.RoleAdmin, nil)
+
+	dir := filepath.Join(cfg.PluginDir, "contract", "rl")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(`{"manifestVersion":1,"id":"rl","name":"Reload","version":"1.0.0","capabilities":{"fileParser":{"types":["rlx"]}}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.js"), []byte(`var plugin={fileParser:{parse:function(){return{}}}};`), 0o644))
+	f.insert(&models.Plugin{Scope: "contract", ID: "rl", Name: "Reload", Version: "1.0.0", Status: models.PluginStatusActive, InstalledAt: time.Now()})
+	require.NoError(t, pm.LoadPlugin(f.ctx, "contract", "rl"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.js"), []byte(`var plugin = (;`), 0o644))
+
+	status, code, _ := f.requestError(t, http.MethodPost, "/api/plugins/installed/contract/rl/reload", "")
+	assert.Equal(t, http.StatusUnprocessableEntity, status)
+	assert.Equal(t, "plugin_load_failure", code)
 }
 
 // The unpaginated chapters and caches lists are bare arrays, and a library

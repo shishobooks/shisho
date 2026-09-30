@@ -354,7 +354,9 @@ export const useReloadPlugin = () => {
         `/plugins/installed/${scope}/${id}/reload`,
       );
     },
-    onSuccess: () => {
+    // A reload that fails to load is a 422 that still stores the error on
+    // the plugin, so refresh on failure too.
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginsInstalled],
       });

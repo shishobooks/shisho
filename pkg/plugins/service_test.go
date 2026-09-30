@@ -12,7 +12,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) *models.Plugin {
+func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) {
 	t.Helper()
 	plugin := &models.Plugin{
 		Scope:       scope,
@@ -24,7 +24,6 @@ func insertTestPlugin(t *testing.T, db *bun.DB, scope, id string) *models.Plugin
 	}
 	_, err := db.NewInsert().Model(plugin).Exec(context.Background())
 	require.NoError(t, err)
-	return plugin
 }
 
 func TestService_InstallAndRetrievePlugin(t *testing.T) {
@@ -94,29 +93,6 @@ func TestService_ListPlugins_Empty(t *testing.T) {
 	// Frontend consumers call .filter on the response and crash on null.
 	require.NotNil(t, got)
 	require.Empty(t, got)
-}
-
-func TestService_UpdatePlugin(t *testing.T) {
-	t.Parallel()
-	db := testdb.New(t)
-	svc := NewService(db)
-	ctx := context.Background()
-
-	plugin := insertTestPlugin(t, db, "community", "test-plugin")
-
-	plugin.Version = "2.0.0"
-	plugin.Status = models.PluginStatusDisabled
-	now := time.Now().UTC().Truncate(time.Second)
-	plugin.UpdatedAt = &now
-
-	err := svc.UpdatePlugin(ctx, plugin)
-	require.NoError(t, err)
-
-	retrieved, err := svc.RetrievePlugin(ctx, "community", "test-plugin")
-	require.NoError(t, err)
-	assert.Equal(t, "2.0.0", retrieved.Version)
-	assert.Equal(t, models.PluginStatusDisabled, retrieved.Status)
-	assert.NotNil(t, retrieved.UpdatedAt)
 }
 
 func TestService_UninstallPlugin(t *testing.T) {
@@ -391,10 +367,9 @@ func TestService_AddAndRemoveRepository(t *testing.T) {
 	assert.Equal(t, "shisho", repos[0].Scope)
 }
 
-func TestService_UpsertIdentifierTypes(t *testing.T) {
+func TestReplaceIdentifierTypes(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
-	svc := NewService(db)
 	ctx := context.Background()
 
 	insertTestPlugin(t, db, "community", "metadata-plugin")
@@ -413,7 +388,7 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 		},
 	}
 
-	err := svc.UpsertIdentifierTypes(ctx, "community", "metadata-plugin", types)
+	err := replaceIdentifierTypes(ctx, db, "community", "metadata-plugin", types)
 	require.NoError(t, err)
 
 	// Verify by querying directly
@@ -445,7 +420,7 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 			Name: "DOI",
 		},
 	}
-	err = svc.UpsertIdentifierTypes(ctx, "community", "metadata-plugin", newTypes)
+	err = replaceIdentifierTypes(ctx, db, "community", "metadata-plugin", newTypes)
 	require.NoError(t, err)
 
 	idTypes = nil
@@ -458,7 +433,7 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 	assert.Equal(t, "doi", idTypes[0].ID)
 
 	// Upsert with empty types (should clear all)
-	err = svc.UpsertIdentifierTypes(ctx, "community", "metadata-plugin", nil)
+	err = replaceIdentifierTypes(ctx, db, "community", "metadata-plugin", nil)
 	require.NoError(t, err)
 
 	idTypes = nil
@@ -470,7 +445,7 @@ func TestService_UpsertIdentifierTypes(t *testing.T) {
 	assert.Empty(t, idTypes)
 }
 
-func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
+func TestReplaceIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	svc := NewService(db)
@@ -484,11 +459,11 @@ func TestService_UpsertIdentifierTypes_CrossPluginCoexistence(t *testing.T) {
 	}
 
 	// Local plugin registers "goodreads" identifier type
-	err := svc.UpsertIdentifierTypes(ctx, "local", "goodreads-enricher", goodreadsType)
+	err := replaceIdentifierTypes(ctx, db, "local", "goodreads-enricher", goodreadsType)
 	require.NoError(t, err)
 
 	// Published plugin registers the same identifier type — must not conflict
-	err = svc.UpsertIdentifierTypes(ctx, "shisho", "goodreads-enricher", goodreadsType)
+	err = replaceIdentifierTypes(ctx, db, "shisho", "goodreads-enricher", goodreadsType)
 	require.NoError(t, err)
 
 	// ListIdentifierTypes deduplicates by ID — should return one entry

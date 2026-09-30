@@ -40,7 +40,7 @@ Additional files and directories are allowed. When `main.js` executes, it must c
 | Field | Required | Contract |
 |-------|----------|----------|
 | `manifestVersion` | Yes | Integer `1`. Other values are rejected. |
-| `id` | Yes | Non-empty plugin identifier. Keep it stable across releases and match the repository entry and installation directory ID. |
+| `id` | Yes | Non-empty plugin identifier. It names the installation directory, so it cannot start with a dot or contain `/`, `\`, or a NUL character. Keep it stable across releases and match the repository entry and installation directory ID; Shisho refuses a package whose manifest `id` differs from the ID being installed or updated. |
 | `name` | Yes | Non-empty display name. |
 | `version` | Yes | Non-empty release version. Use a comparable semantic version for update handling. |
 | `overview` | No | Short one-line summary, separate from the longer description. |

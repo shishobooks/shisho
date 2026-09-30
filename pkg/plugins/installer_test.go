@@ -49,7 +49,7 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
-func TestInstaller_InstallPlugin_Success(t *testing.T) {
+func TestInstaller_StagePackage_Success(t *testing.T) {
 	manifest := &Manifest{
 		ManifestVersion: 1,
 		ID:              "test-plugin",
@@ -75,21 +75,24 @@ func TestInstaller_InstallPlugin_Success(t *testing.T) {
 	pluginDir := t.TempDir()
 	inst := NewInstaller(pluginDir)
 
-	result, err := inst.InstallPlugin(context.Background(), "shisho", "test-plugin", server.URL+"/test-plugin.zip", checksum)
+	pkg, err := inst.stagePackage(context.Background(), "shisho", "test-plugin", server.URL+"/test-plugin.zip", checksum)
 	require.NoError(t, err)
-	assert.Equal(t, "test-plugin", result.ID)
-	assert.Equal(t, "Test Plugin", result.Name)
-	assert.Equal(t, "1.0.0", result.Version)
+	assert.Equal(t, "test-plugin", pkg.manifest.ID)
+	assert.Equal(t, "Test Plugin", pkg.manifest.Name)
+	assert.Equal(t, "1.0.0", pkg.manifest.Version)
 
-	// Verify files were extracted
-	manifestPath := filepath.Join(pluginDir, "shisho", "test-plugin", "manifest.json")
-	assert.FileExists(t, manifestPath)
+	// The package is extracted under .staging on the plugin directory's
+	// filesystem, and nothing is installed yet.
+	assert.Equal(t, filepath.Join(pluginDir, "shisho", stagingDirName), filepath.Dir(pkg.dir))
+	assert.FileExists(t, filepath.Join(pkg.dir, "manifest.json"))
+	assert.FileExists(t, filepath.Join(pkg.dir, "main.js"))
+	assert.NoDirExists(t, filepath.Join(pluginDir, "shisho", "test-plugin"))
 
-	mainJsPath := filepath.Join(pluginDir, "shisho", "test-plugin", "main.js")
-	assert.FileExists(t, mainJsPath)
+	pkg.remove()
+	assert.NoDirExists(t, pkg.dir)
 }
 
-func TestInstaller_InstallPlugin_BadChecksum(t *testing.T) {
+func TestInstaller_StagePackage_BadChecksum(t *testing.T) {
 	manifest := &Manifest{
 		ManifestVersion: 1,
 		ID:              "test-plugin",
@@ -112,17 +115,17 @@ func TestInstaller_InstallPlugin_BadChecksum(t *testing.T) {
 	pluginDir := t.TempDir()
 	inst := NewInstaller(pluginDir)
 
-	_, err := inst.InstallPlugin(context.Background(), "shisho", "test-plugin", server.URL+"/test-plugin.zip", "wrong-checksum")
+	_, err := inst.stagePackage(context.Background(), "shisho", "test-plugin", server.URL+"/test-plugin.zip", "wrong-checksum")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "SHA256 mismatch")
 
 	// Verify no files were left behind
-	pluginPath := filepath.Join(pluginDir, "shisho", "test-plugin")
-	_, statErr := os.Stat(pluginPath)
-	assert.True(t, os.IsNotExist(statErr))
+	entries, err := os.ReadDir(pluginDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 }
 
-func TestInstaller_InstallPlugin_InvalidURL(t *testing.T) {
+func TestInstaller_StagePackage_InvalidURL(t *testing.T) {
 	origHosts := AllowedDownloadHosts
 	AllowedDownloadHosts = []string{"https://github.com/"}
 	defer func() { AllowedDownloadHosts = origHosts }()
@@ -130,84 +133,58 @@ func TestInstaller_InstallPlugin_InvalidURL(t *testing.T) {
 	pluginDir := t.TempDir()
 	inst := NewInstaller(pluginDir)
 
-	_, err := inst.InstallPlugin(context.Background(), "shisho", "test-plugin", "https://evil.com/plugin.zip", "abc123")
+	_, err := inst.stagePackage(context.Background(), "shisho", "test-plugin", "https://evil.com/plugin.zip", "abc123")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid download URL")
 }
 
-func TestInstaller_UninstallPlugin(t *testing.T) {
-	t.Parallel()
-	pluginDir := t.TempDir()
-	inst := NewInstaller(pluginDir)
-
-	// Create a plugin directory with some files
-	pluginPath := filepath.Join(pluginDir, "shisho", "test-plugin")
-	require.NoError(t, os.MkdirAll(pluginPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "manifest.json"), []byte("{}"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "main.js"), []byte(""), 0644))
-
-	err := inst.UninstallPlugin("shisho", "test-plugin")
-	require.NoError(t, err)
-
-	// Verify directory was removed
-	_, err = os.Stat(pluginPath)
-	assert.True(t, os.IsNotExist(err))
+// stageDir writes a directory under .staging holding one file.
+func stageDir(t *testing.T, pluginDir, name, content string) string {
+	t.Helper()
+	dir := filepath.Join(pluginDir, "shisho", stagingDirName, "pkg")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+	return dir
 }
 
-func TestInstaller_UninstallPlugin_NotExists(t *testing.T) {
+// swapIn replaces the whole live directory, and commit deletes the old one.
+func TestSwapIn_Commit(t *testing.T) {
 	t.Parallel()
 	pluginDir := t.TempDir()
-	inst := NewInstaller(pluginDir)
+	live := filepath.Join(pluginDir, "shisho", "p")
+	require.NoError(t, os.MkdirAll(live, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(live, "old.txt"), []byte("old"), 0o644))
 
-	// Should not error when directory doesn't exist
-	err := inst.UninstallPlugin("shisho", "nonexistent")
+	swap, err := swapIn(pluginDir, "shisho", "p", stageDir(t, pluginDir, "new.txt", "new"))
 	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(live, "new.txt"))
+	assert.NoFileExists(t, filepath.Join(live, "old.txt"))
+
+	swap.commit()
+	entries, err := os.ReadDir(filepath.Join(pluginDir, "shisho", trashDirName))
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 }
 
-func TestInstaller_UpdatePlugin(t *testing.T) {
-	manifest := &Manifest{
-		ManifestVersion: 1,
-		ID:              "test-plugin",
-		Name:            "Test Plugin Updated",
-		Version:         "2.0.0",
-		Description:     "Updated plugin",
-	}
-
-	zipData := createPluginZip(t, manifest)
-	checksum := sha256Hex(zipData)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/zip")
-		w.Write(zipData)
-	}))
-	defer server.Close()
-
-	origHosts := AllowedDownloadHosts
-	AllowedDownloadHosts = []string{server.URL}
-	defer func() { AllowedDownloadHosts = origHosts }()
-
+// rollback puts the replaced directory back, and removes a directory that
+// replaced nothing.
+func TestSwapIn_Rollback(t *testing.T) {
+	t.Parallel()
 	pluginDir := t.TempDir()
-	inst := NewInstaller(pluginDir)
+	live := filepath.Join(pluginDir, "shisho", "p")
+	require.NoError(t, os.MkdirAll(live, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(live, "old.txt"), []byte("old"), 0o644))
 
-	// Create an existing plugin directory (old version)
-	pluginPath := filepath.Join(pluginDir, "shisho", "test-plugin")
-	require.NoError(t, os.MkdirAll(pluginPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "old-file.txt"), []byte("old content"), 0644))
-
-	result, err := inst.UpdatePlugin(context.Background(), "shisho", "test-plugin", server.URL+"/test-plugin.zip", checksum)
+	swap, err := swapIn(pluginDir, "shisho", "p", stageDir(t, pluginDir, "new.txt", "new"))
 	require.NoError(t, err)
-	assert.Equal(t, "test-plugin", result.ID)
-	assert.Equal(t, "Test Plugin Updated", result.Name)
-	assert.Equal(t, "2.0.0", result.Version)
+	require.NoError(t, swap.rollback())
+	assert.FileExists(t, filepath.Join(live, "old.txt"))
+	assert.NoFileExists(t, filepath.Join(live, "new.txt"))
 
-	// Verify new files exist
-	manifestPath := filepath.Join(pluginPath, "manifest.json")
-	assert.FileExists(t, manifestPath)
-
-	// Verify old files were removed
-	oldFilePath := filepath.Join(pluginPath, "old-file.txt")
-	_, err = os.Stat(oldFilePath)
-	assert.True(t, os.IsNotExist(err))
+	fresh, err := swapIn(pluginDir, "shisho", "fresh", stageDir(t, pluginDir, "new.txt", "new"))
+	require.NoError(t, err)
+	require.NoError(t, fresh.rollback())
+	assert.NoDirExists(t, filepath.Join(pluginDir, "shisho", "fresh"))
 }
 
 func TestIsAllowedDownloadURL_AcceptsLocalhostWhenConfigured(t *testing.T) {
@@ -219,40 +196,4 @@ func TestIsAllowedDownloadURL_AcceptsLocalhostWhenConfigured(t *testing.T) {
 
 	assert.True(t, isAllowedDownloadURL("http://127.0.0.1:9876/test/plugins/fixture.zip"))
 	assert.False(t, isAllowedDownloadURL("http://evil.example.com/x.zip"))
-}
-
-func TestInstaller_UpdatePlugin_BadChecksum(t *testing.T) {
-	manifest := &Manifest{
-		ManifestVersion: 1,
-		ID:              "test-plugin",
-		Name:            "Test Plugin",
-		Version:         "2.0.0",
-	}
-
-	zipData := createPluginZip(t, manifest)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/zip")
-		w.Write(zipData)
-	}))
-	defer server.Close()
-
-	origHosts := AllowedDownloadHosts
-	AllowedDownloadHosts = []string{server.URL}
-	defer func() { AllowedDownloadHosts = origHosts }()
-
-	pluginDir := t.TempDir()
-	inst := NewInstaller(pluginDir)
-
-	// Create an existing plugin directory
-	pluginPath := filepath.Join(pluginDir, "shisho", "test-plugin")
-	require.NoError(t, os.MkdirAll(pluginPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "manifest.json"), []byte("{}"), 0644))
-
-	_, err := inst.UpdatePlugin(context.Background(), "shisho", "test-plugin", server.URL+"/test-plugin.zip", "bad-checksum")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "SHA256 mismatch")
-
-	// Original files should still be intact
-	assert.FileExists(t, filepath.Join(pluginPath, "manifest.json"))
 }
