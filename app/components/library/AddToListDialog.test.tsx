@@ -516,5 +516,45 @@ describe("AddToListDialog", () => {
         screen.getByRole("button", { name: /Save Changes/ }),
       ).toBeDisabled();
     });
+
+    it("keeps Save disabled over a pending selection change once the book's lists fail to load", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <AddToListDialog bookId={123} onOpenChange={vi.fn()} open={true} />
+        </QueryClientProvider>,
+      );
+
+      const saveButton = screen.getByRole("button", { name: /Save Changes/ });
+      expect(saveButton).toBeDisabled();
+
+      // With the lists loaded, checking another list enables Save
+      await user.click(
+        screen.getByRole("menuitemcheckbox", { name: /favorites/i }),
+      );
+      expect(saveButton).toBeEnabled();
+
+      // The dialog moves to another book whose lists fail to load. The
+      // selection made for book 123 is kept (nothing reinitializes it without
+      // data), so Save would replace the new book's lists with it.
+      mockBookListsError = new TypeError("Failed to fetch");
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <AddToListDialog bookId={456} onOpenChange={vi.fn()} open={true} />
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /^Failed to load lists/,
+      );
+      expect(saveButton).toBeDisabled();
+
+      // The change is still pending (closing asks about it), so the failed
+      // query alone is what keeps Save disabled.
+      await user.keyboard("{Escape}");
+      expect(await screen.findByText("Unsaved Changes")).toBeInTheDocument();
+    });
   });
 });

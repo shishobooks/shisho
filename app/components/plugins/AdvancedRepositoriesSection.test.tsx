@@ -24,6 +24,29 @@ vi.mock("@/hooks/queries/plugins", () => ({
 beforeEach(() => setAuth({ permissions: ["config:read", "config:write"] }));
 
 describe("AdvancedRepositoriesSection", () => {
+  it("enables Add only once both URL and scope are filled", async () => {
+    add.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AdvancedRepositoriesSection />);
+
+    const addButton = screen.getByRole("button", { name: /add/i });
+    expect(addButton).toBeDisabled();
+
+    const scope = screen.getByPlaceholderText("my-scope");
+    await user.type(scope, "mine");
+    expect(addButton).toBeDisabled();
+
+    await user.type(
+      screen.getByPlaceholderText("https://example.com/plugins/index.json"),
+      "https://example.com/index.json",
+    );
+    expect(addButton).toBeEnabled();
+
+    await user.clear(scope);
+    await user.type(scope, "   ");
+    expect(addButton).toBeDisabled();
+  });
+
   it("toasts when adding a repository fails", async () => {
     const error = vi.spyOn(toast, "error");
     add.mutate = rejectingMutate();

@@ -111,6 +111,36 @@ describe("DirectoryPickerDialog", () => {
     keyResponses = {};
   });
 
+  it("enables the Select button only while a folder is checked", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    keyResponses["/root::0::::0"] = {
+      current_path: "/root",
+      entries: makeEntries(1, 2),
+      total: 2,
+      has_more: false,
+    };
+    settle("/root::0::::0");
+
+    renderDialog();
+
+    expect(
+      screen.getByRole("button", { name: "Select folders" }),
+    ).toBeDisabled();
+
+    // The first checkbox is "Show hidden files"; the next is entry-1.
+    const entryCheckbox = screen.getAllByRole("checkbox")[1];
+    await user.click(entryCheckbox);
+    expect(
+      screen.getByRole("button", { name: "Select 1 folder" }),
+    ).toBeEnabled();
+
+    await user.click(entryCheckbox);
+    expect(
+      screen.getByRole("button", { name: "Select folders" }),
+    ).toBeDisabled();
+  });
+
   it("does not duplicate entries when Load More transitions through placeholder data", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 

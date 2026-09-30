@@ -157,7 +157,7 @@ export const PluginConfigForm = ({
     // Otherwise a failed field-settings save would silently clear the dirty
     // state and the user could navigate away thinking everything persisted.
     try {
-      const tasks: Promise<unknown>[] = [
+      await Promise.all([
         saveConfig.mutateAsync({
           scope,
           id,
@@ -167,13 +167,10 @@ export const PluginConfigForm = ({
           clear_confidence_threshold:
             confidenceThreshold == null ? true : undefined,
         }),
-      ];
-      if (Object.keys(changedFields).length > 0) {
-        tasks.push(
-          saveFieldSettings.mutateAsync({ scope, id, fields: changedFields }),
-        );
-      }
-      await Promise.all(tasks);
+        Object.keys(changedFields).length > 0
+          ? saveFieldSettings.mutateAsync({ scope, id, fields: changedFields })
+          : undefined,
+      ]);
 
       toast.success("Plugin configuration saved.");
       setInitialValues({

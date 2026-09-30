@@ -412,6 +412,38 @@ describe("PublisherEditDialog", () => {
     });
   });
 
+  describe("save button guard", () => {
+    it("keeps Save disabled while the name is blank, even with other changes", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PublisherEditDialog {...defaultProps} aliases={["Foo Press"]} />
+        </QueryClientProvider>,
+      );
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+
+      // Removing an alias is a change on its own, so Save enables
+      await user.click(
+        screen.getByRole("button", { name: "Remove alias Foo Press" }),
+      );
+      expect(saveButton).toBeEnabled();
+
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      expect(saveButton).toBeDisabled();
+
+      await user.type(nameInput, "   ");
+      expect(saveButton).toBeDisabled();
+
+      await user.clear(nameInput);
+      await user.type(nameInput, "Foobar Books");
+      expect(saveButton).toBeEnabled();
+    });
+  });
+
   describe("save errors", () => {
     it("shows an ordinary rejected save inline", async () => {
       const user = createUser();

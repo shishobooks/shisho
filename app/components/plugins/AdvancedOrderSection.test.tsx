@@ -55,6 +55,44 @@ describe("AdvancedOrderSection", () => {
   });
 });
 
+describe("AdvancedOrderSection save", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("enables Save Order only while the order differs from the saved one", async () => {
+    setAuth({ permissions: ["config:read", "config:write", "books:read"] });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      path === "/plugins/order/metadataEnricher"
+        ? [
+            { scope: "shisho", plugin_id: "first", mode: "enabled" },
+            { scope: "shisho", plugin_id: "second", mode: "enabled" },
+          ]
+        : [],
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    renderSection();
+
+    const save = await screen.findByRole("button", { name: "Save Order" });
+    expect(save).toBeDisabled();
+
+    const [firstMode] = screen.getAllByRole("combobox", {
+      name: "When this plugin runs",
+    });
+    await user.click(firstMode);
+    await user.click(screen.getByRole("option", { name: /^Never/ }));
+    expect(save).toBeEnabled();
+
+    // Setting the mode back matches the saved order again.
+    await user.click(firstMode);
+    await user.click(
+      screen.getByRole("option", { name: /^For every new file/ }),
+    );
+    expect(save).toBeDisabled();
+  });
+});
+
 describe("AdvancedOrderSection load failure", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

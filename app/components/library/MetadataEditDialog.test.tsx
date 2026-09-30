@@ -947,6 +947,44 @@ describe("MetadataEditDialog", () => {
     });
   });
 
+  describe("save button guard", () => {
+    it("keeps Save disabled while the name is blank, even with other changes", async () => {
+      const user = createUser();
+      const queryClient = createQueryClient();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MetadataEditDialog
+            aliases={["Sci-Fi"]}
+            entityName="Science Fiction"
+            entityType="genre"
+            isPending={false}
+            onOpenChange={vi.fn()}
+            onSave={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const saveButton = screen.getByRole("button", { name: /save/i });
+
+      // Removing an alias is a change on its own, so Save enables
+      await user.click(screen.getByRole("button", { name: /remove alias/i }));
+      expect(saveButton).toBeEnabled();
+
+      const nameInput = screen.getByLabelText("Name");
+      await user.clear(nameInput);
+      expect(saveButton).toBeDisabled();
+
+      await user.type(nameInput, "   ");
+      expect(saveButton).toBeDisabled();
+
+      await user.clear(nameInput);
+      await user.type(nameInput, "Speculative Fiction");
+      expect(saveButton).toBeEnabled();
+    });
+  });
+
   describe("hasChanges comparison against initial state", () => {
     it("should compute hasChanges against initial values, not live props", async () => {
       // This test exposes the bug: hasChanges compares form values against

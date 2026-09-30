@@ -226,24 +226,36 @@ describe("BookEditDialog series range editing", () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
-  it("prevents saving a range whose end is below its start", async () => {
+  it("prevents saving a range whose end is below its start until it is fixed", async () => {
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,
       delay: null,
     });
     renderDialog(makeBook("cbz"));
 
+    const saveButton = screen.getByText("Save Changes").closest("button");
+    expect(saveButton).toBeEnabled();
+
     const advancedButton = screen.getByRole("button", {
       name: "Advanced settings for Test Series",
     });
     expect(advancedButton).toHaveAttribute("title", "Advanced series settings");
     await user.click(advancedButton);
-    await user.type(screen.getByLabelText("End"), "0");
+    const endInput = screen.getByLabelText("End");
+    await user.type(endInput, "0");
 
     expect(
       screen.getByText("End must be greater than or equal to the start."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Save Changes").closest("button")).toBeDisabled();
+    expect(saveButton).toBeDisabled();
+
+    await user.clear(endInput);
+    await user.type(endInput, "3");
+
+    expect(
+      screen.queryByText("End must be greater than or equal to the start."),
+    ).not.toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
   });
 
   it("hides the unit control for a non-CBZ book", async () => {

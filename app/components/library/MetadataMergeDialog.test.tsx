@@ -17,6 +17,77 @@ const entities = [
 ];
 
 describe("MetadataMergeDialog", () => {
+  it("enables Merge only once a source is picked", async () => {
+    const user = createUser();
+
+    render(
+      <MetadataMergeDialog
+        entities={entities}
+        entityType="genre"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={vi.fn()}
+        open={true}
+        targetId={1}
+        targetName="Fantasy"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Merge" })).toBeDisabled();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Dutton"));
+
+    expect(screen.getByRole("button", { name: "Merge" })).toBeEnabled();
+  });
+
+  it("disables Set as child when the picked source becomes an ancestor", async () => {
+    const user = createUser();
+    const props = {
+      entities,
+      entityType: "publisher" as const,
+      isLoadingEntities: false,
+      isPending: false,
+      onMerge: vi.fn(),
+      onOpenChange: vi.fn(),
+      onSearch: vi.fn(),
+      open: true,
+      targetId: 1,
+      targetName: "Penguin",
+    };
+
+    const { rerender } = render(
+      <MetadataMergeDialog
+        {...props}
+        setChildConfig={{
+          disabledIds: [],
+          isPending: false,
+          onSetChild: vi.fn(),
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Dutton"));
+    await user.click(screen.getByRole("radio", { name: /Set as child/i }));
+    expect(screen.getByRole("button", { name: "Set as child" })).toBeEnabled();
+
+    // The ancestor list refetches and now includes the picked source.
+    rerender(
+      <MetadataMergeDialog
+        {...props}
+        setChildConfig={{
+          disabledIds: [10],
+          isPending: false,
+          onSetChild: vi.fn(),
+        }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Set as child" })).toBeDisabled();
+  });
+
   it("clears parent search state after a merge", async () => {
     const user = createUser();
     const onMerge = vi.fn().mockResolvedValue(undefined);

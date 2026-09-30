@@ -22,44 +22,48 @@ vi.mock("sonner", () => ({
   },
 }));
 
+const defaultConfig = {
+  schema: {
+    apiKey: {
+      type: "string",
+      label: "API Key",
+      description: "",
+      required: true,
+      secret: false,
+    },
+    maxResults: {
+      type: "number",
+      label: "Max Results",
+      description: "",
+      required: false,
+      secret: false,
+      min: 1,
+      max: 100,
+    },
+    splitMode: {
+      type: "select",
+      label: "Split Mode",
+      description: "How to split subtitles",
+      required: false,
+      secret: false,
+      options: [
+        { value: "colon", label: "Colon" },
+        { value: "dash", label: "Dash" },
+      ],
+    },
+  },
+  values: { apiKey: "", maxResults: 10, splitMode: "colon" },
+  // Declare a field so the field-settings save path fires.
+  declaredFields: ["title"],
+  fieldSettings: { title: true },
+  confidence_threshold: null,
+};
+// Per-test override of the config the plugin returns.
+let configData: Record<string, unknown> = defaultConfig;
+
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginConfig: () => ({
-    data: {
-      schema: {
-        apiKey: {
-          type: "string",
-          label: "API Key",
-          description: "",
-          required: true,
-          secret: false,
-        },
-        maxResults: {
-          type: "number",
-          label: "Max Results",
-          description: "",
-          required: false,
-          secret: false,
-          min: 1,
-          max: 100,
-        },
-        splitMode: {
-          type: "select",
-          label: "Split Mode",
-          description: "How to split subtitles",
-          required: false,
-          secret: false,
-          options: [
-            { value: "colon", label: "Colon" },
-            { value: "dash", label: "Dash" },
-          ],
-        },
-      },
-      values: { apiKey: "", maxResults: 10, splitMode: "colon" },
-      // Declare a field so the field-settings save path fires.
-      declaredFields: ["title"],
-      fieldSettings: { title: true },
-      confidence_threshold: null,
-    },
+    data: configData,
     isLoading: false,
     dataUpdatedAt: 1,
   }),
@@ -98,6 +102,25 @@ describe("PluginConfigForm", () => {
     mockToastError.mockClear();
     saveConfigError = null;
     saveFieldsError = null;
+    configData = defaultConfig;
+  });
+
+  it("enables Save only when the plugin has settings or declared fields", () => {
+    configData = { schema: {}, values: {}, declaredFields: [] };
+    const { unmount } = render(
+      wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />),
+    );
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    unmount();
+
+    configData = {
+      schema: {},
+      values: {},
+      declaredFields: ["title"],
+      fieldSettings: { title: true },
+    };
+    render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
   });
 
   it("renders the declared schema fields", () => {

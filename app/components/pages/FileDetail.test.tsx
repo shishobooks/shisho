@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ChaptersActionState } from "@/components/files/FileChaptersTab";
 import { useBook, useDeleteFile } from "@/hooks/queries/books";
 import { useLibrary } from "@/hooks/queries/libraries";
 import { setAuth } from "@/testing/auth";
@@ -51,11 +53,26 @@ vi.mock("@/components/library/LibraryBreadcrumbs", () => ({
 vi.mock("@/components/files/FileDetailsTab", () => ({
   default: () => <div>details-tab</div>,
 }));
+// The chapters stub keeps the action-state callback so a test can report
+// what the real tab would.
+const chapters = vi.hoisted(() => ({
+  report: undefined as undefined | ((state: ChaptersActionState) => void),
+}));
 vi.mock("@/components/files/FileChaptersTab", () => ({
-  default: () => <div>chapters-tab</div>,
+  default: ({
+    onActionStateChange,
+  }: {
+    onActionStateChange?: (state: ChaptersActionState) => void;
+  }) => {
+    chapters.report = onActionStateChange;
+    return <div>chapters-tab</div>;
+  },
 }));
 
-const renderForFileType = (fileType: string) => {
+const renderForFileType = (
+  fileType: string,
+  path = "/libraries/1/books/7/files/42",
+) => {
   vi.mocked(useBook).mockReturnValue({
     data: {
       id: 7,
@@ -80,7 +97,7 @@ const renderForFileType = (fileType: string) => {
 
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={["/libraries/1/books/7/files/42"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route
             element={<FileDetail />}
@@ -142,5 +159,26 @@ describe("FileDetail write controls", () => {
     expect(
       screen.queryByRole("button", { name: /delete/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("FileDetail chapters Save", () => {
+  it("enables Save only while the chapters tab can save and is not saving", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderForFileType("m4b", "/libraries/1/books/7/files/42/chapters");
+
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+
+    act(() =>
+      chapters.report?.({ isSaving: false, canSave: true, hasChanges: true }),
+    );
+    expect(save).toBeEnabled();
+
+    act(() =>
+      chapters.report?.({ isSaving: true, canSave: true, hasChanges: true }),
+    );
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
   });
 });
