@@ -70,7 +70,11 @@ Library settings do not expose per-library metadata field controls. Enricher fie
 
 When a repository reports a newer compatible version, the **Installed** tab shows an update badge and an **Update** action. The plugin detail page shows the installed version, available version, changelog, release date, and optional **View release** link. Updating replaces the installed artifact and loads the new version without a server restart.
 
-To remove a plugin, open its detail page and select **Uninstall** in **Danger zone**. This removes the installed plugin files and saved plugin configuration. Persistent files under `plugin_data_dir` remain unless the plugin removes them during its `onUninstalling` callback. An error in that callback does not block uninstalling.
+Shisho downloads and loads the new version before it touches the installed one. If the download is not a valid plugin package, or the new version fails to load, the update shows an error and the installed version stays in place and keeps running. Updating keeps the plugin's status. A disabled plugin stays disabled after an update and loads when you turn on **Enabled**. A plugin with the **Error** or **Incompatible** status becomes active when its new version loads.
+
+A plugin that is already installed cannot be installed again under the same scope and ID; use **Update** to change its version. Installing also refuses a scope and ID whose directory already exists under `plugin_dir` without being installed, such as a local plugin you have not scanned yet, instead of replacing those files.
+
+To remove a plugin, open its detail page and select **Uninstall** in **Danger zone**. This removes the installed plugin files and saved plugin configuration, including its entries in every library's plugin order. Persistent files under `plugin_data_dir` remain unless the plugin removes them during its `onUninstalling` callback. An error in that callback does not block uninstalling.
 
 ## Manage Repositories
 

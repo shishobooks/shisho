@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/covers"
@@ -14,9 +13,8 @@ func (h *handler) getImage(c echo.Context) error {
 	scope := c.Param("scope")
 	id := c.Param("id")
 
-	if strings.Contains(scope, "..") || strings.Contains(id, "..") ||
-		strings.ContainsAny(scope, "/\\") || strings.ContainsAny(id, "/\\") {
-		return errcodes.ValidationError("Invalid scope or plugin ID")
+	if err := validatePluginRef(scope, id); err != nil {
+		return err
 	}
 
 	iconPath := filepath.Join(h.installer.PluginDir(), scope, id, "icon.png")

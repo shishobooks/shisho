@@ -157,6 +157,11 @@ func ParseManifest(data []byte) (*Manifest, error) {
 		return nil, errors.New("manifest: id is required")
 	}
 
+	// The plugin is installed in a directory named after its id.
+	if !validPathSegment(m.ID) {
+		return nil, errors.Errorf("manifest: id %q must be at most %d bytes and must not start with a dot or contain a slash, a backslash, or a control character", m.ID, maxPathSegmentLen)
+	}
+
 	if m.Name == "" {
 		return nil, errors.New("manifest: name is required")
 	}

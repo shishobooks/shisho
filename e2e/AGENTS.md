@@ -114,6 +114,8 @@ Contexts made inside a test with `browser.newContext()` do not inherit the confi
 
 Seeded books and series are added to their FTS tables so search-driven UI (global search, the merge combobox) can find them. Seeded persons are not indexed. A test that searches for a seeded row must wait for the search response before acting on results: the merge combobox debounces input and replaces its list when results arrive, so a click that races the debounce can land on an item that is about to be removed (see the series merge test in `alias.spec.ts`).
 
+The seed route writes the fixture plugin's files under whatever scope and id it is given, but only the id `fixture` fully loads: any other id gets an Active row with a `load_error` (the manifest id does not match) and no runtime.
+
 The fixture plugin (`pkg/testutils/plugin_fixture.go`) is an EPUB metadata enricher that always proposes one result, `Fixture Title` with `abridged: false`, so a seeded plugin plus a seeded EPUB book is enough to drive the Identify dialog end to end (see `identify.spec.ts`). The Identify dialog searches on open; results are buttons named by their title, and the book page's actions menu trigger is labeled `Book actions`. Seed a fresh book per test: once a proposal is applied, its rows are unchanged and hidden by the Changed filter.
 
 ### Backend Pattern

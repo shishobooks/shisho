@@ -295,9 +295,9 @@ func failPluginUpdates(t *testing.T, db *bun.DB) {
 	require.NoError(t, err)
 }
 
-// An install whose plugin fails to load stores the failure on the row. If
-// that write fails the request is a 500, not a 201 whose body reports a
-// status the database never saved.
+// An install whose plugin fails to load stores the failure on the row it
+// inserts. If that write fails the request is a 500, not a 201 whose body
+// reports a status the database never saved, and the files are removed.
 // Mutates global AllowedDownloadHosts.
 func TestInstall_LoadFailureWriteFaultIsServerError(t *testing.T) {
 	zipData := pluginZip(t, map[string]string{
@@ -314,7 +314,8 @@ func TestInstall_LoadFailureWriteFaultIsServerError(t *testing.T) {
 
 	db := testdb.New(t)
 	svc := NewService(db)
-	failPluginUpdates(t, db)
+	_, err := db.Exec(`CREATE TRIGGER fail_plugin_inserts BEFORE INSERT ON plugins BEGIN SELECT RAISE(ABORT, 'injected insert fault'); END`)
+	require.NoError(t, err)
 	pluginDir := t.TempDir()
 	h := NewHandler(svc, NewManager(svc, pluginDir, ""), NewInstaller(pluginDir))
 
@@ -323,7 +324,7 @@ func TestInstall_LoadFailureWriteFaultIsServerError(t *testing.T) {
 	assert.NotEqual(t, http.StatusCreated, rec.Code)
 
 	// The install is removed rather than left Active with no runtime.
-	_, err := svc.RetrievePlugin(context.Background(), "test", "broken")
+	_, err = svc.RetrievePlugin(context.Background(), "test", "broken")
 	require.ErrorIs(t, err, sql.ErrNoRows, "the plugin row must be removed")
 	assert.NoDirExists(t, filepath.Join(pluginDir, "test", "broken"), "the plugin files must be removed")
 }

@@ -166,7 +166,12 @@ func (h *handler) seedPlugin(c echo.Context) error {
 			// the test may intentionally be seeding a broken state.
 			msg := err.Error()
 			plugin.LoadError = &msg
-			_, _ = h.db.NewUpdate().Model(plugin).WherePK().Exec(ctx)
+			_, _ = h.db.NewUpdate().Model(plugin).Column("load_error").WherePK().Exec(ctx)
+		}
+		// Loading stores the fixture manifest's name, version, and
+		// description, so respond with the row as it is now.
+		if err := h.db.NewSelect().Model(plugin).WherePK().Scan(ctx); err != nil {
+			return errors.Wrap(err, "reload plugin row")
 		}
 	}
 

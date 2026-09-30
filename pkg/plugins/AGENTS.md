@@ -9,7 +9,8 @@ pkg/plugins/
   types.go          - All HTTP API request/response types (tygo input, see below)
   manifest.go       - Manifest parsing and types
   runtime.go        - Goja VM wrapper, plugin loading
-  manager.go        - Plugin lifecycle coordination
+  manager.go        - Runtime registry, LoadAll, ordered runtime lookups, update check
+  lifecycle.go      - Lifecycle transitions: per-plugin lock, applyVersion, install/update/reload/enable/disable/uninstall
   hooks.go          - Hook invocation and result parsing
   hostapi.go        - Host API injection (shisho.*)
   hostapi_fs.go     - Filesystem sandbox (FSContext)
@@ -22,7 +23,7 @@ pkg/plugins/
   hostapi_ffmpeg.go - FFmpeg transcode/probe/version
   hostapi_shell.go  - Shell exec with command allowlist
   generator.go      - PluginGenerator (filegen.Generator interface)
-  installer.go      - Download, verify, extract
+  installer.go      - Download, verify, and stage packages; swap directories into place
   repository.go     - Repository manifest fetching
   service.go        - Database CRUD operations
   handler.go        - Handler struct, shared interfaces, NewHandler
@@ -680,27 +681,38 @@ The priorities are defined in `pkg/models/data-source.go`; see "Data Source Prio
 
 ## Manager Lifecycle
 
-| Method | When Called | What It Does |
-|--------|------------|--------------|
-| `LoadAll(ctx)` | Startup | Load all enabled plugins; load errors stored, don't prevent others |
-| `LoadPlugin(ctx, scope, id)` | Install/Enable | Load single plugin, inject APIs, register identifiers, append to order, then register the runtime |
-| `UnloadPlugin(scope, id)` | Uninstall/Disable | Remove from memory |
-| `ReloadPlugin(ctx, scope, id)` | Update/Hot-reload | Register identifiers, then write-lock old runtime, swap new, wait for in-progress hooks |
-| `GetRuntime(scope, id)` | Any | Get loaded runtime (nil if not loaded) |
-| `GetOrderedRuntimes(ctx, hookType, libraryID)` | Scan pipeline | Get runtimes with mode "enabled" in user-defined order (per-library or global) |
-| `GetManualRuntimes(ctx, hookType, libraryID)` | Manual identification | Get runtimes with mode "enabled" or "manual_only" (per-library or global) |
-| `GetParserForType(fileType)` | File scanning | First runtime with fileParser for type |
-| `GetOutputGenerator(formatID)` | Output generation | PluginGenerator wrapping runtime |
-| `CheckForUpdates(ctx)` | Periodic/on-demand | Check repos for newer versions |
+A plugin lives in four stores: its `plugins` row, its directory `{pluginDir}/{scope}/{id}/`, its registered runtime, and the tables derived from its manifest (`plugin_identifier_types`, `plugin_hook_configs`, and `library_plugin_hook_configs`). Every transition keeps them in agreement the same way (`lifecycle.go`):
 
-**Load failures are typed.** `LoadPlugin` and `ReloadPlugin` return a `*LoadError` (check with `asLoadError`) when the plugin itself fails to load: its manifest, its script, or its host version requirement. Only that is recorded on the plugin (`load_error`, Malfunctioned or Not Supported) by install, enable, reload, update version, and `LoadAll`, and enable reports it as `422 plugin_load_failure`. Any other error, such as a failure injecting the host APIs or a database fault writing identifier types or the hook order, is a server fault: the handler returns 500, `LoadAll` logs it, and the plugin's stored state is left alone. Both methods write the database before registering or swapping the runtime, so a fault leaves the plugin unloaded (load) or on its old runtime (reload). `AppendToOrder` failures are ignored only for a duplicate row (`database.IsUniqueViolation`). `ParseManifest` rejects an empty or repeated `identifierTypes` id, so that manifest mistake is a `LoadError` (and a 422 invalid package at install) rather than a UNIQUE violation that would read as a server fault.
+- **One lock per plugin.** Install, update, reload, enable, disable, PATCH, uninstall, `LoadAll`, `LoadPlugin`, `ReloadPlugin`, `UnloadPlugin`, and the update check's write each hold `lockPlugin(scope, id)` and re-read the row inside it. Download and staging happen before the lock, so a slow download never blocks a disable.
+- **Column-scoped writes, never a full-row write.** `Service.UpdatePlugin` is gone on purpose: a full-row write from a stale read reverted concurrent changes (a disable during the update check). Use `Service.UpdatePluginColumns` or `applyVersion`. Transitions write `lifecycleColumns`; PATCH writes `auto_update` and `updated_at`; the update check writes only `update_available_version`.
+- **`applyVersion(ctx, row, rt, insert)`** is the one place a loaded version is stored. In one transaction it inserts the row or writes its lifecycle columns, copies the manifest's name, version, description, and homepage onto it, replaces the identifier types (a manifest without `identifierTypes` has none), and reconciles the hook order with `rt.HookTypes()`. After the commit it registers `rt` only if the row is Active and unregisters the plugin otherwise. A nil `rt` (a version that failed to load) writes only the row. A database fault rolls back and leaves the old runtime registered.
+- **Hook order reconciliation (`reconcileHookOrder`).** Rows for hook types the version no longer provides are deleted, globally and from every library. A hook type the plugin now provides is appended to the end of the global order if missing, and to the end of every library order customized for that hook type that lacks it, with the global row's mode. Existing rows keep their position and mode. `library_plugin_customizations` rows are per library and hook type, so uninstall leaves them.
+- **Registering a runtime waits for hooks in progress.** `setRuntime` takes the write lock of the runtime it replaces or removes.
+
+| Transition | Entry point | What it does |
+|--------|------------|--------------|
+| Startup | `LoadAll(ctx)` | `sweepTransitDirs` first moves back any plugin directory a crash left only in a scope's `.trash` (its live directory is missing), then removes each scope's `.staging` and `.trash`; then it enables each Active row through `enableLocked`, which reconciles its derived rows |
+| Install | `installStaged` | Refuses an installed id (`ErrAlreadyInstalled`) and a directory that exists with no row (`ErrDirectoryExists`, such as an unscanned local plugin), swaps the staged package into place, loads it, and inserts the row through `applyVersion`; a `LoadError` installs it Malfunctioned or Not Supported; any other failure rolls the directory back |
+| Update version | `updateStaged` | Loads the new version from the staging directory first; a `LoadError` or any later failure leaves the directory, runtime, and row untouched. Then swaps and applies: Malfunctioned and Not Supported become Active, Disabled stays Disabled and unloaded, `update_available_version` is cleared |
+| Reload | `reload` | Active plugins only (`ErrNotActive`). Loads the live directory again; a `LoadError` stores `load_error` and keeps the old runtime and version |
+| Enable / disable | `enableLocked` / `disableLocked` | Called by PATCH under its lock. Enable records a `LoadError` as Malfunctioned or Not Supported |
+| Uninstall | `uninstall` | Runs `onUninstalling`, deletes the row (children cascade), unregisters the runtime, removes the directory, and with `delete_data=true` removes the data directory, all under the lock. The row goes first, so a failed delete leaves the plugin whole |
+| Update check | `refreshPluginUpdateVersion` | Fetches repositories without the lock, then writes `update_available_version` under it against the re-read row, skipping a plugin whose `auto_update` was turned off meanwhile |
+| Local scan | `addScannedPlugin` | Inserts a Disabled row under the lock for each unknown `local/<id>` whose manifest id is `<id>`; the runtime and derived rows come later from enable |
+
+`LoadPlugin(ctx, scope, id)` (enable without the handler, used by tests and the test-mode seed route), `ReloadPlugin`, and `UnloadPlugin` are the exported wrappers; the row must exist. `GetRuntime`, `GetOrderedRuntimes`, `GetManualRuntimes`, `GetParserForType`, and `GetOutputGenerator` read the registry.
+
+**Load failures are typed.** `loadRuntime` returns a `*LoadError` (check with `asLoadError`) when the plugin itself fails to load: its manifest, its script, its host version requirement, or a manifest id that differs from the directory's id. Install, enable, and `LoadAll` record it on the plugin (`load_error`, Malfunctioned or Not Supported); reload stores only `load_error` and keeps the plugin Active on its old runtime; update version records nothing. Enable, reload, and update version report it as `422 plugin_load_failure`. Any other error, such as a failure injecting the host APIs or a database fault in `applyVersion`, is a server fault: the handler returns 500, `LoadAll` logs it, and the plugin's stored state is left alone. `ParseManifest` rejects an empty or repeated `identifierTypes` id, so that manifest mistake is a `LoadError` (and a 422 invalid package at install) rather than a UNIQUE violation that would read as a server fault.
+
+**Plugin scopes and ids are single path segments.** `validPathSegment` rejects an empty value, a value longer than 128 bytes (`maxPathSegmentLen`, so a long id fails before the download instead of at the rename), a leading dot (which covers `.` and `..` and keeps ids clear of each scope's `.staging` and `.trash`), `/`, `\`, and control characters (bytes below 0x20, including NUL, and 0x7F). Every route that takes `:scope/:id` and touches the plugin directory (install, uninstall, PATCH, reload, update version, image, manifest) calls `validatePluginRef` first and returns `422 validation_error` ("Invalid scope or plugin ID"). `ParseManifest` applies the same rule to the manifest id, and the local scan skips a directory whose name differs from its manifest id.
 
 ## Thread Safety
 
 - `Manager.mu` (RWMutex): protects `plugins` map
+- `Manager.locks` (one `sync.Mutex` per plugin): serializes lifecycle transitions of one plugin (see Manager Lifecycle). Take it before `Runtime.mu`, never inside a hook, and never inside a database transaction
 - `Runtime.mu` (RWMutex): **Exclusive lock** for hook invocation, write lock for reload
 - Goja VMs are single-threaded: concurrent JS execution on the same VM corrupts internal state. All hook runners acquire an exclusive lock (`rt.mu.Lock()`) to ensure only one goroutine executes JS on a given runtime at a time. Different plugins (different runtimes) can run concurrently.
-- Hot-reload: acquire write lock on old runtime → swap in new → release
+- Hot-reload: `setRuntime` acquires the write lock on the old runtime, swaps in the new one, and releases
 - **CRITICAL:** Never use `RLock` for hook invocations. The parallel scan worker pool will call hooks from multiple goroutines simultaneously, and goja cannot handle concurrent access.
 
 ## Scan Pipeline Integration
@@ -715,13 +727,14 @@ In `pkg/worker/scan_unified.go`:
 
 ## Installation Flow
 
-1. `POST /plugins/installed` with `{ scope, id }` or `{ downloadURL, sha256 }`
+1. `POST /plugins/installed` with `{ scope, id }` or `{ scope, id, downloadURL, sha256 }`. The scope and id must pass `validatePluginRef`, and an installed id is refused with `422 invalid_state` ("Plugin is already installed.") before anything is downloaded; update version is how an installed plugin changes version. A directory that exists with no row is also a `422 invalid_state`, found under the lock after staging, because it is not Shisho's to replace
 2. If no downloadURL → search enabled repositories for latest compatible version
-3. Download ZIP from GitHub URL, verify SHA256
-4. Extract to `{pluginDir}/{scope}/{id}/`
-5. Parse manifest, insert DB record
-6. `LoadPlugin()` → inject APIs, register identifiers, append to hook order
-7. A `LoadError` is stored in the DB but doesn't fail the install. A server fault while loading or storing the load error fails it with a 500, and `removeFailedInstall` removes the row and files so the plugin is not left Active with no runtime
+3. `stagePackage` downloads the ZIP from an allowed host, verifies SHA256, and extracts it into `{pluginDir}/{scope}/.staging/<random>`, next to the installed plugins so moving it into place is a rename even when a scope directory is its own mount. It requires a valid `manifest.json` whose `id` equals the requested id (`ErrInvalidPackage`, a 422, otherwise)
+4. The repository's plugin icon, if any, is downloaded into the staged package. On update, `carryOverIcon` copies the installed `icon.png` into a package that still has none, so a failed or absent icon download keeps the old icon
+5. `installStaged` moves the package to `{pluginDir}/{scope}/{id}/` with `swapIn`, loads it, and inserts the row through `applyVersion` (identifier types, hook order, runtime). The row's name and version come from the manifest
+6. A `LoadError` installs the plugin Malfunctioned or Not Supported and still returns 201. A server fault rolls the directory back, so nothing is left behind, and returns 500
+
+Update version stages the same way, then `updateStaged` loads the runtime from the staging directory before `swapIn` renames the live directory to `{scope}/.trash/<random>/{id}` and the staged one into place. Any failure after the swap calls `rollback` (through `withRollback`, which adds a failed rollback to the returned error), which restores the previous directory; success calls `commit`, which deletes the trash. A crash between the two renames leaves the old version only in `.trash`; `LoadAll` restores it before removing leftovers.
 
 `installerError` in `handler_install.go` renders an `Installer` failure for both install and update version: a URL outside `AllowedDownloadHosts`, a checksum mismatch, or a package that is not a ZIP or lacks a valid `manifest.json` is a 422 (`validation_error`); a download host that cannot be reached or answers with a non-200 is a 502 (`upstream_error`); anything else, such as a plugin directory that cannot be written, is a 500. When installing from repositories and no repository for the scope answered, `findPluginInRepos` returns a 502 instead of the 404 it returns when a repository answered without the plugin.
 
@@ -844,7 +857,9 @@ meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 - `simple-enricher/`, `multi-hook/` - Multi-capability examples
 - `undeclared-hook/`, `missing-mainjs/`, `invalid-js/` - Error case fixtures
 
-**`t.Parallel()` in this package:** tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, while tests that share a plugin manager or runtime instance should not.
+**`t.Parallel()` in this package:** tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, and so should a test that builds its own database, plugin directory, and manager (most of `lifecycle_test.go`), while tests that share a plugin manager or runtime instance should not. A test that sets the package globals `AllowedDownloadHosts` or `AllowedFetchHosts` (every install or update-version test that downloads, including those using `servePackage`) must not call `t.Parallel()`.
+
+**Lifecycle tests** live in `lifecycle_test.go`. `Manager.onLockWait`, when a test sets it, is called just before `lockPlugin` blocks, which is how `TestTransitionsWaitForThePluginLock` proves each transition waits for the lock without sleeping. `newLifecycleEnv` gives a test its own database, plugin directory, manager, and handler; `lifecycleSpec` describes one version of a plugin (hooks, identifier types, a broken script, extra files) for `writeLive` or `pluginZip`; `servePackage` serves a repository index and package and can block the download until `releaseNow`, which is how the concurrency tests hold a transition mid-flight without sleeping.
 
 **Key test patterns:**
 - Use `installTestPlugin()` to create minimal plugins inline

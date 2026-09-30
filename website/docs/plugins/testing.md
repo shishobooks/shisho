@@ -185,9 +185,9 @@ Copy the built artifact to:
 5. Exercise every implemented hook with a small test library.
 6. Verify output metadata or files and review job and application logs.
 
-The local scan adds only previously unknown directories under the `local` scope. It does not reload an existing plugin.
+The local scan adds only previously unknown directories under the `local` scope. It does not reload an existing plugin. The directory name must equal the manifest `id`; a directory whose manifest names a different ID is skipped.
 
-After changing an already discovered plugin, rebuild and recopy it. Use **Reload plugin from disk** on the plugin detail page. That action appears for every plugin whose scope is `local` when your role has Config Write, but it reloads only an active plugin, one listed with no status badge. For a plugin with the **Disabled**, **Error**, or **Incompatible** status it shows an error instead. Turn on **Enabled** to load a disabled plugin. See [Understand Statuses](./overview.md#understand-statuses). Reload also rereads the manifest name, version, and description. If loading fails, the detail page displays the current error; correct the artifact and reload again.
+After changing an already discovered plugin, rebuild and recopy it. Use **Reload plugin from disk** on the plugin detail page. That action appears for every plugin whose scope is `local` when your role has Config Write, but it reloads only an active plugin, one listed with no status badge. For a plugin with the **Disabled**, **Error**, or **Incompatible** status it shows an error instead. Turn on **Enabled** to load a disabled plugin. See [Understand Statuses](./overview.md#understand-statuses). Reload also rereads the manifest name, version, and description, and picks up hook types the new build adds or removes, including in libraries with a customized plugin order. If loading fails, reload shows the error, the detail page displays it, and the previously loaded build keeps running; correct the artifact and reload again.
 
 ## Integration Checklist
 

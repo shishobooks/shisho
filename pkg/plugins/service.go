@@ -51,15 +51,12 @@ func (s *Service) RetrievePlugin(ctx context.Context, scope, id string) (*models
 	return plugin, nil
 }
 
-// UpdatePlugin updates an existing plugin record.
-func (s *Service) UpdatePlugin(ctx context.Context, plugin *models.Plugin) error {
-	_, err := s.db.NewUpdate().Model(plugin).
-		WherePK().
-		Exec(ctx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return nil
+// UpdatePluginColumns writes only the named columns of a plugin row, so a
+// writer never reverts a column another transition changed. There is no
+// full-row update on purpose.
+func (s *Service) UpdatePluginColumns(ctx context.Context, plugin *models.Plugin, columns ...string) error {
+	_, err := s.db.NewUpdate().Model(plugin).Column(columns...).WherePK().Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // UninstallPlugin removes a plugin and its related data (configs, orders cascade via FK).
@@ -200,7 +197,9 @@ func (s *Service) SetOrder(ctx context.Context, hookType string, entries []model
 	})
 }
 
-// AppendToOrder appends a plugin to the end of the hook config for a hook type.
+// AppendToOrder appends a plugin to the end of the global order for a hook
+// type. Lifecycle transitions reconcile the order through applyVersion; this
+// is for seeding an order directly, as tests do.
 func (s *Service) AppendToOrder(ctx context.Context, hookType, scope, pluginID string) error {
 	var maxPos int
 	err := s.db.NewSelect().Model((*models.PluginHookConfig)(nil)).
@@ -304,48 +303,6 @@ func (s *Service) ListIdentifierTypes(ctx context.Context) ([]*models.PluginIden
 		}
 	}
 	return deduped, nil
-}
-
-// UpsertIdentifierTypes replaces all identifier types for a plugin in a transaction.
-func (s *Service) UpsertIdentifierTypes(ctx context.Context, scope, pluginID string, types []IdentifierTypeCap) error {
-	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		_, err := tx.NewDelete().Model((*models.PluginIdentifierType)(nil)).
-			Where("scope = ?", scope).
-			Where("plugin_id = ?", pluginID).
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		if len(types) == 0 {
-			return nil
-		}
-
-		idTypes := make([]*models.PluginIdentifierType, len(types))
-		for i, t := range types {
-			idType := &models.PluginIdentifierType{
-				ID:       t.ID,
-				Scope:    scope,
-				PluginID: pluginID,
-				Name:     t.Name,
-			}
-			if t.URLTemplate != "" {
-				urlTemplate := t.URLTemplate
-				idType.URLTemplate = &urlTemplate
-			}
-			if t.Pattern != "" {
-				pattern := t.Pattern
-				idType.Pattern = &pattern
-			}
-			idTypes[i] = idType
-		}
-
-		_, err = tx.NewInsert().Model(&idTypes).Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		return nil
-	})
 }
 
 // UpdateConfidenceThreshold sets the per-plugin confidence threshold.

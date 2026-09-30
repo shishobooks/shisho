@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,92 +26,69 @@ func (h *handler) install(c echo.Context) error {
 	if payload.Scope == "" || payload.ID == "" {
 		return errcodes.ValidationError("Scope and ID are required.")
 	}
+	if err := validatePluginRef(payload.Scope, payload.ID); err != nil {
+		return err
+	}
 
-	var plugin *models.Plugin
+	// Refuse an installed id before downloading anything. installStaged
+	// checks again under the plugin's lock.
+	if _, err := h.service.RetrievePlugin(ctx, payload.Scope, payload.ID); err == nil {
+		return alreadyInstalledError()
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return errors.WithStack(err)
+	}
 
+	plugin := &models.Plugin{
+		Scope:       payload.Scope,
+		ID:          payload.ID,
+		InstalledAt: time.Now(),
+	}
+
+	var pkg *stagedPackage
 	if payload.DownloadURL != "" && payload.SHA256 != "" {
 		// Install from provided download URL
-		manifest, err := h.installer.InstallPlugin(ctx, payload.Scope, payload.ID, payload.DownloadURL, payload.SHA256)
+		staged, err := h.installer.stagePackage(ctx, payload.Scope, payload.ID, payload.DownloadURL, payload.SHA256)
 		if err != nil {
 			logger.FromContext(ctx).Warn("plugin install failed", logger.Data{"url": payload.DownloadURL, "error": err.Error()})
 			return installerError(err)
 		}
-
-		plugin = &models.Plugin{
-			Scope:       payload.Scope,
-			ID:          manifest.ID,
-			Name:        manifest.Name,
-			Version:     manifest.Version,
-			Status:      models.PluginStatusActive,
-			InstalledAt: time.Now(),
-		}
-		if manifest.Description != "" {
-			plugin.Description = &manifest.Description
-		}
-		if manifest.Homepage != "" {
-			plugin.Homepage = &manifest.Homepage
-		}
+		pkg = staged
 	} else if payload.DownloadURL == "" && payload.SHA256 == "" {
 		// Look up the plugin in repositories
-		downloadURL, sha256Hash, version, repoURL, imageURL, err := h.findPluginInRepos(c, payload.Scope, payload.ID, payload.Version)
+		downloadURL, sha256Hash, repoURL, imageURL, err := h.findPluginInRepos(c, payload.Scope, payload.ID, payload.Version)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		manifest, err := h.installer.InstallPlugin(ctx, payload.Scope, payload.ID, downloadURL, sha256Hash)
+		staged, err := h.installer.stagePackage(ctx, payload.Scope, payload.ID, downloadURL, sha256Hash)
 		if err != nil {
 			logger.FromContext(ctx).Warn("plugin install failed", logger.Data{"url": downloadURL, "error": err.Error()})
 			return installerError(err)
 		}
+		pkg = staged
 
-		// Download plugin icon (non-fatal)
+		// Download plugin icon into the package (non-fatal)
 		if imageURL != "" {
-			_ = h.installer.DownloadPluginImage(ctx, payload.Scope, manifest.ID, imageURL)
+			_ = h.installer.DownloadPluginImage(ctx, pkg.dir, imageURL)
 		}
 
-		plugin = &models.Plugin{
-			Scope:           payload.Scope,
-			ID:              manifest.ID,
-			Name:            manifest.Name,
-			Version:         version,
-			Status:          models.PluginStatusActive,
-			RepositoryScope: &payload.Scope,
-			RepositoryURL:   &repoURL,
-			InstalledAt:     time.Now(),
-		}
-		if manifest.Description != "" {
-			plugin.Description = &manifest.Description
-		}
-		if manifest.Homepage != "" {
-			plugin.Homepage = &manifest.Homepage
-		}
+		plugin.RepositoryScope = &payload.Scope
+		plugin.RepositoryURL = &repoURL
 	} else {
 		return errcodes.ValidationError("Both download_url and sha256 must be provided together, or neither (to install from repository).")
 	}
 
-	if err := h.service.InstallPlugin(ctx, plugin); err != nil {
+	if err := h.manager.installStaged(ctx, plugin, pkg); err != nil {
+		switch {
+		case errors.Is(err, ErrAlreadyInstalled):
+			return alreadyInstalledError()
+		case errors.Is(err, ErrDirectoryExists):
+			return errcodes.InvalidState("A plugin directory for this scope and ID already exists. Remove it, or use Scan for Local Plugins to add it.")
+		}
 		return errors.WithStack(err)
 	}
 
-	if err := h.manager.LoadPlugin(ctx, plugin.Scope, plugin.ID); err != nil {
-		if !asLoadError(err) {
-			// Never loaded, so remove it rather than leave it Active with
-			// no runtime.
-			h.removeFailedInstall(ctx, plugin)
-			return errors.WithStack(err)
-		}
-		// Store load error but don't fail the install
-		errMsg := err.Error()
-		plugin.LoadError = &errMsg
-		if isVersionIncompatible(err) {
-			plugin.Status = models.PluginStatusNotSupported
-		} else {
-			plugin.Status = models.PluginStatusMalfunctioned
-		}
-		if err := h.service.UpdatePlugin(ctx, plugin); err != nil {
-			h.removeFailedInstall(ctx, plugin)
-			return errors.WithStack(err)
-		}
+	if plugin.Status != models.PluginStatusActive {
 		h.manager.emitEvent(PluginEventMalfunctioned, plugin.Scope, plugin.ID, nil)
 	} else {
 		var hooks []string
@@ -123,19 +101,10 @@ func (h *handler) install(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusCreated, plugin))
 }
 
-// removeFailedInstall undoes an install that failed with a server fault after
-// its row and files were written: it unloads the plugin and removes its files
-// and row. Each step is best effort and logged, since the request is already
-// failing.
-func (h *handler) removeFailedInstall(ctx context.Context, plugin *models.Plugin) {
-	log := logger.FromContext(ctx)
-	h.manager.UnloadPlugin(plugin.Scope, plugin.ID)
-	if err := h.installer.UninstallPlugin(plugin.Scope, plugin.ID); err != nil {
-		log.Warn("failed to remove files of a failed plugin install", logger.Data{"scope": plugin.Scope, "id": plugin.ID, "error": err.Error()})
-	}
-	if err := h.service.UninstallPlugin(ctx, plugin.Scope, plugin.ID); err != nil {
-		log.Warn("failed to remove the row of a failed plugin install", logger.Data{"scope": plugin.Scope, "id": plugin.ID, "error": err.Error()})
-	}
+// alreadyInstalledError is the 422 for installing a scope and id that is
+// already installed. Updating is how an installed plugin changes version.
+func alreadyInstalledError() error {
+	return errcodes.InvalidState("Plugin is already installed.")
 }
 
 // installerError renders an Installer failure for the install and update
@@ -160,10 +129,10 @@ func installerError(err error) error {
 // If version is empty, it returns the latest compatible version. When no
 // repository for the scope answered, it returns a 502 naming the last fetch
 // failure instead of a 404, since the plugin may well be listed.
-func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, resolvedVersion, repoURL, imageURL string, err error) {
+func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version string) (downloadURL, sha256Hash, repoURL, imageURL string, err error) {
 	repos, err := h.service.ListRepositories(c.Request().Context())
 	if err != nil {
-		return "", "", "", "", "", errors.WithStack(err)
+		return "", "", "", "", errors.WithStack(err)
 	}
 
 	var answered bool
@@ -195,21 +164,21 @@ func (h *handler) findPluginInRepos(c echo.Context, scope, pluginID, version str
 				// Find specific version
 				for _, v := range compatible {
 					if v.Version == version {
-						return v.DownloadURL, v.SHA256, v.Version, repo.URL, p.ImageURL, nil
+						return v.DownloadURL, v.SHA256, repo.URL, p.ImageURL, nil
 					}
 				}
 			} else {
 				// Return the first (latest) compatible version
 				v := compatible[0]
-				return v.DownloadURL, v.SHA256, v.Version, repo.URL, p.ImageURL, nil
+				return v.DownloadURL, v.SHA256, repo.URL, p.ImageURL, nil
 			}
 		}
 	}
 
 	if !answered && fetchErr != nil {
-		return "", "", "", "", "", errcodes.UpstreamError("Could not reach the plugin repository: " + fetchErr.Error())
+		return "", "", "", "", errcodes.UpstreamError("Could not reach the plugin repository: " + fetchErr.Error())
 	}
-	return "", "", "", "", "", errcodes.NotFound("Plugin in repositories")
+	return "", "", "", "", errcodes.NotFound("Plugin in repositories")
 }
 
 func (h *handler) uninstall(c echo.Context) error {
@@ -217,25 +186,12 @@ func (h *handler) uninstall(c echo.Context) error {
 
 	scope := c.Param("scope")
 	id := c.Param("id")
-
-	// Run onUninstalling lifecycle hook before unloading
-	if rt := h.manager.GetRuntime(scope, id); rt != nil {
-		h.manager.RunOnUninstalling(rt)
+	if err := validatePluginRef(scope, id); err != nil {
+		return err
 	}
 
-	h.manager.UnloadPlugin(scope, id)
-
-	if err := h.installer.UninstallPlugin(scope, id); err != nil {
+	if err := h.manager.uninstall(ctx, scope, id, c.QueryParam("delete_data") == "true"); err != nil {
 		return errors.WithStack(err)
-	}
-
-	if err := h.service.UninstallPlugin(ctx, scope, id); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Optionally delete persistent plugin data
-	if c.QueryParam("delete_data") == "true" {
-		h.manager.DeletePluginData(scope, id)
 	}
 
 	h.manager.emitEvent(PluginEventUninstalled, scope, id, nil)
@@ -265,12 +221,8 @@ func (h *handler) scan(c echo.Context) error {
 		}
 
 		pluginID := entry.Name()
-
-		// Check if already installed
-		_, err := h.service.RetrievePlugin(ctx, "local", pluginID)
-		if err == nil {
-			// Already exists in DB, skip
-			continue
+		if !validPathSegment(pluginID) {
+			continue // Skip hidden directories
 		}
 
 		// Try to read manifest.json
@@ -283,6 +235,9 @@ func (h *handler) scan(c echo.Context) error {
 		manifest, err := ParseManifest(manifestData)
 		if err != nil {
 			continue // Skip invalid manifests
+		}
+		if manifest.ID != pluginID {
+			continue // The directory must be named after the manifest id
 		}
 
 		// Insert as disabled
@@ -298,11 +253,9 @@ func (h *handler) scan(c echo.Context) error {
 			plugin.Description = &manifest.Description
 		}
 
-		if err := h.service.InstallPlugin(ctx, plugin); err != nil {
-			continue // Skip on DB error (e.g., duplicate)
+		if h.addScannedPlugin(ctx, plugin) {
+			discovered = append(discovered, plugin)
 		}
-
-		discovered = append(discovered, plugin)
 	}
 
 	if discovered == nil {
@@ -310,4 +263,17 @@ func (h *handler) scan(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, discovered)
+}
+
+// addScannedPlugin inserts a plugin the local scan found, under the plugin's
+// lock so it cannot race an install of the same id. It reports whether the
+// plugin was added; one that is already installed, or cannot be inserted, is
+// skipped.
+func (h *handler) addScannedPlugin(ctx context.Context, plugin *models.Plugin) bool {
+	unlock := h.manager.lockPlugin(plugin.Scope, plugin.ID)
+	defer unlock()
+	if _, err := h.service.RetrievePlugin(ctx, plugin.Scope, plugin.ID); err == nil {
+		return false
+	}
+	return h.service.InstallPlugin(ctx, plugin) == nil
 }

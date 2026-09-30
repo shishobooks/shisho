@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 )
 
 // AllowedDownloadHosts lists the allowed host prefixes for plugin download URLs.
@@ -77,45 +78,88 @@ func NewInstaller(pluginDir string) *Installer {
 	return &Installer{pluginDir: pluginDir}
 }
 
-// InstallPlugin downloads a plugin ZIP, verifies its SHA256, and extracts it.
-// Returns the parsed manifest from the extracted plugin.
-func (inst *Installer) InstallPlugin(ctx context.Context, scope, pluginID, downloadURL, expectedSHA256 string) (*Manifest, error) {
+// Directories inside each scope directory that hold packages in transit:
+// {pluginDir}/{scope}/.staging and {pluginDir}/{scope}/.trash. Keeping them
+// next to the installed plugins means moving a directory in or out of place
+// is a rename even when a scope directory is its own mount. Plugin ids
+// cannot start with a dot (see validPathSegment), so neither can collide
+// with a plugin.
+const (
+	// stagingDirName holds packages that are extracted and checked but not
+	// yet installed.
+	stagingDirName = ".staging"
+	// trashDirName holds replaced plugin directories, as
+	// .trash/<random>/<id>, until the transition that replaced them commits.
+	trashDirName = ".trash"
+)
+
+// stagedPackage is a downloaded, verified, and extracted plugin package that
+// is not installed yet.
+type stagedPackage struct {
+	dir      string
+	manifest *Manifest
+}
+
+// remove deletes the staged files. It is a no-op once the package has been
+// moved into place.
+func (p *stagedPackage) remove() {
+	if err := os.RemoveAll(p.dir); err != nil {
+		logger.New().Warn("failed to remove a staged plugin package", logger.Data{"path": p.dir, "error": err.Error()})
+	}
+}
+
+// stagePackage downloads a plugin ZIP, verifies its SHA256, and extracts it
+// into its own directory under {pluginDir}/{scope}/.staging. It requires a
+// valid manifest whose id is pluginID, so a package never lands under an id
+// it does not declare. Nothing outside the staging directory is touched;
+// the caller installs the package with swapIn or removes it.
+func (inst *Installer) stagePackage(ctx context.Context, scope, pluginID, downloadURL, expectedSHA256 string) (*stagedPackage, error) {
 	if !isAllowedDownloadURL(downloadURL) {
 		return nil, invalidDownloadURL()
 	}
 
-	// Download ZIP to temp file
 	tmpFile, err := inst.downloadToTemp(ctx, downloadURL)
 	if err != nil {
 		return nil, err
 	}
 	defer os.Remove(tmpFile)
 
-	// Verify SHA256
 	if err := inst.verifySHA256(tmpFile, expectedSHA256); err != nil {
 		return nil, err
 	}
 
-	// Extract to plugin directory
-	destDir := filepath.Join(inst.pluginDir, scope, pluginID)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return nil, errors.Wrap(err, "failed to create plugin directory")
+	stagingRoot := filepath.Join(inst.pluginDir, scope, stagingDirName)
+	if err := os.MkdirAll(stagingRoot, 0755); err != nil {
+		return nil, errors.Wrap(err, "failed to create the plugin staging directory")
 	}
-
-	if err := inst.extractZip(tmpFile, destDir); err != nil {
-		// Clean up on failure
-		os.RemoveAll(destDir)
-		return nil, err
-	}
-
-	// Read and parse manifest.json from extracted directory
-	manifest, err := readPackageManifest(destDir)
+	dir, err := os.MkdirTemp(stagingRoot, "package-")
 	if err != nil {
-		os.RemoveAll(destDir)
+		return nil, errors.Wrap(err, "failed to create a plugin staging directory")
+	}
+	pkg := &stagedPackage{dir: dir}
+	// MkdirTemp creates the directory private; installed plugins have
+	// always been world-readable.
+	if err := os.Chmod(dir, 0755); err != nil {
+		pkg.remove()
+		return nil, errors.Wrap(err, "failed to set plugin staging directory permissions")
+	}
+
+	if err := inst.extractZip(tmpFile, dir); err != nil {
+		pkg.remove()
 		return nil, err
 	}
 
-	return manifest, nil
+	manifest, err := readPackageManifest(dir)
+	if err != nil {
+		pkg.remove()
+		return nil, err
+	}
+	if manifest.ID != pluginID {
+		pkg.remove()
+		return nil, invalidPackage(fmt.Sprintf("manifest id %q does not match plugin id %q", manifest.ID, pluginID), nil)
+	}
+	pkg.manifest = manifest
+	return pkg, nil
 }
 
 // PluginDir returns the base directory for installed plugins.
@@ -123,69 +167,142 @@ func (inst *Installer) PluginDir() string {
 	return inst.pluginDir
 }
 
-// UninstallPlugin removes a plugin's files from disk.
-func (inst *Installer) UninstallPlugin(scope, pluginID string) error {
-	dir := filepath.Join(inst.pluginDir, scope, pluginID)
-	return os.RemoveAll(dir)
+// dirSwap is a live plugin directory replaced by a staged one. Until commit
+// or rollback, the replaced directory waits under the scope's .trash.
+type dirSwap struct {
+	live string
+	// trashParent is the .trash entry holding the replaced directory, and
+	// trash the directory itself. Both are empty when nothing was replaced.
+	trashParent string
+	trash       string
 }
 
-// UpdatePlugin replaces an existing plugin with a new version.
-func (inst *Installer) UpdatePlugin(ctx context.Context, scope, pluginID, downloadURL, expectedSHA256 string) (*Manifest, error) {
-	if !isAllowedDownloadURL(downloadURL) {
-		return nil, invalidDownloadURL()
+// swapIn moves the staged directory into place as scope/id. A directory
+// already there is moved to .trash/<random>/<id> first, and put back if the
+// move fails. A crash between the two renames leaves the old version only
+// in .trash, which sweepTransitDirs restores at startup.
+func swapIn(pluginDir, scope, id, staged string) (*dirSwap, error) {
+	live := filepath.Join(pluginDir, scope, id)
+	if err := os.MkdirAll(filepath.Dir(live), 0755); err != nil {
+		return nil, errors.Wrap(err, "failed to create the plugin scope directory")
 	}
+	swap := &dirSwap{live: live}
 
-	// Download ZIP to temp file
-	tmpFile, err := inst.downloadToTemp(ctx, downloadURL)
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(tmpFile)
-
-	// Verify SHA256
-	if err := inst.verifySHA256(tmpFile, expectedSHA256); err != nil {
-		return nil, err
-	}
-
-	// Extract to a temp directory first
-	tmpDir, err := os.MkdirTemp("", "plugin-update-*")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create temp directory for update")
-	}
-	defer os.RemoveAll(tmpDir)
-
-	if err := inst.extractZip(tmpFile, tmpDir); err != nil {
-		return nil, err
-	}
-
-	// Verify manifest in new version before replacing
-	manifest, err := readPackageManifest(tmpDir)
-	if err != nil {
-		return nil, err
-	}
-
-	// Remove old plugin directory
-	destDir := filepath.Join(inst.pluginDir, scope, pluginID)
-	if err := os.RemoveAll(destDir); err != nil {
-		return nil, errors.Wrap(err, "failed to remove old plugin directory")
-	}
-
-	// Move new files to plugin directory
-	if err := os.MkdirAll(filepath.Dir(destDir), 0755); err != nil {
-		return nil, errors.Wrap(err, "failed to create parent directory")
-	}
-
-	if err := os.Rename(tmpDir, destDir); err != nil {
-		// Fallback: if rename fails (cross-device), copy files
-		if err := os.MkdirAll(destDir, 0755); err != nil {
-			return nil, errors.Wrap(err, "failed to create plugin directory")
+	if _, err := os.Lstat(live); err == nil {
+		trashRoot := filepath.Join(pluginDir, scope, trashDirName)
+		if err := os.MkdirAll(trashRoot, 0755); err != nil {
+			return nil, errors.Wrap(err, "failed to create the plugin trash directory")
 		}
-		if err := inst.extractZip(tmpFile, destDir); err != nil {
-			return nil, errors.Wrap(err, "failed to extract updated plugin")
+		parent, err := os.MkdirTemp(trashRoot, "replaced-")
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create a plugin trash directory")
 		}
+		trash := filepath.Join(parent, id)
+		if err := os.Rename(live, trash); err != nil {
+			_ = os.RemoveAll(parent)
+			return nil, errors.Wrap(err, "failed to move the installed plugin aside")
+		}
+		swap.trashParent, swap.trash = parent, trash
+	} else if !os.IsNotExist(err) {
+		return nil, errors.Wrap(err, "failed to check the installed plugin directory")
 	}
 
-	return manifest, nil
+	if err := os.Rename(staged, live); err != nil {
+		err = errors.Wrap(err, "failed to move the new plugin version into place")
+		if swap.trash != "" {
+			if restoreErr := os.Rename(swap.trash, live); restoreErr != nil {
+				return nil, errors.Wrapf(err, "and failed to restore the installed version from %s: %v", swap.trash, restoreErr)
+			}
+			_ = os.RemoveAll(swap.trashParent)
+		}
+		return nil, err
+	}
+	return swap, nil
+}
+
+// commit deletes the replaced directory.
+func (s *dirSwap) commit() {
+	if s.trashParent == "" {
+		return
+	}
+	if err := os.RemoveAll(s.trashParent); err != nil {
+		logger.New().Warn("failed to remove a replaced plugin directory", logger.Data{"path": s.trashParent, "error": err.Error()})
+	}
+}
+
+// rollback removes the new directory and puts the replaced one back. If it
+// fails, the replaced directory stays in .trash and the error says where.
+func (s *dirSwap) rollback() error {
+	if err := os.RemoveAll(s.live); err != nil {
+		return errors.Wrapf(err, "failed to remove %s while rolling back a plugin swap", s.live)
+	}
+	if s.trash == "" {
+		return nil
+	}
+	if err := os.Rename(s.trash, s.live); err != nil {
+		return errors.Wrapf(err, "failed to restore %s from %s while rolling back a plugin swap", s.live, s.trash)
+	}
+	_ = os.RemoveAll(s.trashParent)
+	return nil
+}
+
+// withRollback returns err, adding a rollback failure to it if swap cannot
+// be undone.
+func withRollback(err error, swap *dirSwap) error {
+	if rollbackErr := swap.rollback(); rollbackErr != nil {
+		return errors.Wrapf(err, "rollback also failed: %v", rollbackErr)
+	}
+	return err
+}
+
+// sweepTransitDirs cleans up after transitions a crash interrupted. It runs
+// at startup, before any transition can be in flight. In every scope it
+// first moves back each replaced directory in .trash whose plugin has no
+// live directory (the crash came between swapIn's two renames), then
+// removes .staging and .trash. A .trash it could not restore from is kept.
+func sweepTransitDirs(pluginDir string) {
+	log := logger.New()
+	scopes, err := os.ReadDir(pluginDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Warn("failed to read the plugin directory", logger.Data{"path": pluginDir, "error": err.Error()})
+		}
+		return
+	}
+	for _, scope := range scopes {
+		if !scope.IsDir() || !validPathSegment(scope.Name()) {
+			continue
+		}
+		scopeDir := filepath.Join(pluginDir, scope.Name())
+		trashRoot := filepath.Join(scopeDir, trashDirName)
+		keepTrash := false
+		parents, _ := os.ReadDir(trashRoot)
+		for _, parent := range parents {
+			replaced, _ := os.ReadDir(filepath.Join(trashRoot, parent.Name()))
+			for _, entry := range replaced {
+				live := filepath.Join(scopeDir, entry.Name())
+				if _, err := os.Lstat(live); !os.IsNotExist(err) {
+					continue
+				}
+				old := filepath.Join(trashRoot, parent.Name(), entry.Name())
+				if err := os.Rename(old, live); err != nil {
+					keepTrash = true
+					log.Error("failed to restore a plugin directory left in trash", logger.Data{"path": live, "trash": old, "error": err.Error()})
+					continue
+				}
+				log.Warn("restored a plugin directory an interrupted update left in trash", logger.Data{"path": live})
+			}
+		}
+		dirs := []string{filepath.Join(scopeDir, stagingDirName)}
+		if !keepTrash {
+			dirs = append(dirs, trashRoot)
+		}
+		for _, dir := range dirs {
+			if err := os.RemoveAll(dir); err != nil {
+				log.Warn("failed to remove leftover plugin directory", logger.Data{"path": dir, "error": err.Error()})
+			}
+		}
+	}
 }
 
 // downloadToTemp downloads a URL to a temporary file and returns the path.
@@ -328,9 +445,11 @@ func (r *readErrorRecorder) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// DownloadPluginImage downloads an image from the given URL and saves it as icon.png
-// in the plugin's directory. Errors are non-fatal and logged by the caller.
-func (inst *Installer) DownloadPluginImage(ctx context.Context, scope, pluginID, imageURL string) error {
+// DownloadPluginImage downloads an image from the given URL and saves it as
+// icon.png in dir, a staged package's directory, so the icon is installed
+// with the rest of the package. Errors are non-fatal and logged by the
+// caller.
+func (inst *Installer) DownloadPluginImage(ctx context.Context, dir, imageURL string) error {
 	if imageURL == "" {
 		return nil
 	}
@@ -356,8 +475,7 @@ func (inst *Installer) DownloadPluginImage(ctx context.Context, scope, pluginID,
 		return errors.Errorf("failed to download plugin image: HTTP %d", resp.StatusCode)
 	}
 
-	destDir := filepath.Join(inst.pluginDir, scope, pluginID)
-	destPath := filepath.Join(destDir, "icon.png")
+	destPath := filepath.Join(dir, "icon.png")
 
 	// Limit image download to 5MB
 	const maxImageSize = 5 * 1024 * 1024

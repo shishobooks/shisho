@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"database/sql"
 	stderrors "errors"
 	"os"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
-	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/models"
 	pkgversion "github.com/shishobooks/shisho/pkg/version"
 )
@@ -25,8 +25,17 @@ var reservedExtensions = map[string]struct{}{
 // Manager holds loaded Runtime instances indexed by "scope/id".
 // It coordinates loading at startup, unloading, and hot-reloading on install/update/enable.
 type Manager struct {
-	mu            sync.RWMutex
-	plugins       map[string]*Runtime // key: "scope/id"
+	mu      sync.RWMutex
+	plugins map[string]*Runtime // key: "scope/id"
+	// locks holds one *sync.Mutex per plugin key, taken by every lifecycle
+	// transition (see lockPlugin). The zero value is ready to use. Entries
+	// are never removed: one small mutex per plugin id ever seen is cheaper
+	// than coordinating deletion with a waiter.
+	locks sync.Map
+	// onLockWait, when set, is called by lockPlugin just before it blocks
+	// on a lock another transition holds. Tests use it to know a call is
+	// waiting.
+	onLockWait    func(key string)
 	service       *Service
 	pluginDir     string
 	pluginDataDir string // Base directory for persistent plugin data
@@ -106,10 +115,14 @@ func isVersionIncompatible(err error) bool {
 	return stderrors.As(err, &vErr)
 }
 
-// LoadAll loads all enabled plugins from the database at startup.
-// Errors are stored in plugins.LoadError and don't prevent other plugins from loading.
+// LoadAll loads all enabled plugins from the database at startup, after
+// removing the staging and trash directories an interrupted transition
+// left behind. A plugin that fails to load is marked Malfunctioned or Not
+// Supported and doesn't prevent other plugins from loading. Each loaded
+// plugin is reconciled through applyVersion, which repairs its derived
+// rows.
 func (m *Manager) LoadAll(ctx context.Context) error {
-	log := logger.New()
+	sweepTransitDirs(m.pluginDir)
 
 	plugins, err := m.service.ListPlugins(ctx)
 	if err != nil {
@@ -120,108 +133,60 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		if p.Status != models.PluginStatusActive {
 			continue
 		}
-
-		if err := m.loadPlugin(ctx, p.Scope, p.ID); err != nil {
-			if !asLoadError(err) {
-				// A server fault says nothing about the plugin, so its
-				// stored state stays as it is.
-				log.Error("failed to load plugin", logger.Data{
-					"plugin": pluginKey(p.Scope, p.ID),
-					"error":  err.Error(),
-				})
-				continue
-			}
-			errMsg := err.Error()
-			p.LoadError = &errMsg
-
-			// Distinguish version incompatibility from other load errors
-			if isVersionIncompatible(err) {
-				p.Status = models.PluginStatusNotSupported
-			} else {
-				p.Status = models.PluginStatusMalfunctioned
-			}
-
-			if updateErr := m.service.UpdatePlugin(ctx, p); updateErr != nil {
-				log.Warn("failed to store load error", logger.Data{
-					"plugin": pluginKey(p.Scope, p.ID),
-					"error":  updateErr.Error(),
-				})
-			}
-			log.Warn("failed to load plugin", logger.Data{
-				"plugin": pluginKey(p.Scope, p.ID),
-				"error":  err.Error(),
-			})
-			continue
-		}
-
-		// Clear any previous LoadError and ensure Active status on success
-		if p.LoadError != nil || p.Status != models.PluginStatusActive {
-			p.LoadError = nil
-			p.Status = models.PluginStatusActive
-			if updateErr := m.service.UpdatePlugin(ctx, p); updateErr != nil {
-				log.Warn("failed to clear load error", logger.Data{
-					"plugin": pluginKey(p.Scope, p.ID),
-					"error":  updateErr.Error(),
-				})
-			}
-		}
+		m.loadAtStartup(ctx, p.Scope, p.ID)
 	}
 
 	return nil
 }
 
-// LoadPlugin loads a single plugin (called during install/enable).
-func (m *Manager) LoadPlugin(ctx context.Context, scope, id string) error {
-	return m.loadPlugin(ctx, scope, id)
-}
+// loadAtStartup loads one plugin for LoadAll, logging instead of failing.
+func (m *Manager) loadAtStartup(ctx context.Context, scope, id string) {
+	unlock := m.lockPlugin(scope, id)
+	defer unlock()
 
-// loadPlugin is the internal loading logic shared by LoadAll and LoadPlugin.
-func (m *Manager) loadPlugin(ctx context.Context, scope, id string) error {
-	dir := filepath.Join(m.pluginDir, scope, id)
-
-	rt, err := LoadPlugin(dir, scope, id)
+	row, err := m.service.RetrievePlugin(ctx, scope, id)
+	if err != nil || row.Status != models.PluginStatusActive {
+		return
+	}
+	loadErr, err := m.enableLocked(ctx, row)
+	if err == nil {
+		// A load failure the plugin caused is already stored on its row.
+		err = loadErr
+	}
+	// A server fault says nothing about the plugin, so enableLocked left its
+	// stored state as it is.
 	if err != nil {
-		return &LoadError{Err: errors.Wrapf(err, "failed to load plugin %s/%s", scope, id)}
+		logger.New().Warn("failed to load plugin", logger.Data{"plugin": pluginKey(scope, id), "error": err.Error()})
 	}
-
-	// Set the persistent data directory for this plugin
-	rt.dataDir = filepath.Join(m.pluginDataDir, scope, id)
-
-	if err := InjectHostAPIs(rt, m.service); err != nil {
-		return errors.Wrapf(err, "failed to inject host APIs for %s/%s", scope, id)
-	}
-
-	// Write the plugin's rows before registering the runtime, so a database
-	// fault leaves the plugin unloaded.
-	// Register identifier types from manifest
-	if rt.manifest.Capabilities.IdentifierTypes != nil {
-		if err := m.service.UpsertIdentifierTypes(ctx, scope, id, rt.manifest.Capabilities.IdentifierTypes); err != nil {
-			return errors.Wrapf(err, "failed to upsert identifier types for %s/%s", scope, id)
-		}
-	}
-
-	// Append hook types to the order table. The plugin may already be in it,
-	// so only a duplicate row is ignored.
-	for _, hookType := range rt.HookTypes() {
-		if err := m.service.AppendToOrder(ctx, hookType, scope, id); err != nil && !database.IsUniqueViolation(err) {
-			return errors.Wrapf(err, "failed to add %s/%s to the %s order", scope, id, hookType)
-		}
-	}
-
-	key := pluginKey(scope, id)
-	m.mu.Lock()
-	m.plugins[key] = rt
-	m.mu.Unlock()
-
-	return nil
 }
 
-// UnloadPlugin removes a plugin from memory (called during uninstall/disable).
+// LoadPlugin loads a plugin from its directory, marks it Active, reconciles
+// its derived rows, and registers it. It is enable without the handler: a
+// *LoadError is returned without changing the row, so the caller can record
+// it. Any other error is a server fault and leaves the plugin unloaded.
+func (m *Manager) LoadPlugin(ctx context.Context, scope, id string) error {
+	unlock := m.lockPlugin(scope, id)
+	defer unlock()
+
+	row, err := m.service.RetrievePlugin(ctx, scope, id)
+	if err != nil {
+		return err
+	}
+	rt, err := m.loadRuntime(m.liveDir(scope, id), scope, id)
+	if err != nil {
+		return err
+	}
+	row.Status = models.PluginStatusActive
+	row.LoadError = nil
+	return m.applyVersion(ctx, row, rt, false)
+}
+
+// UnloadPlugin unregisters a plugin's runtime once hooks in progress on it
+// finish. The plugin's row is not changed.
 func (m *Manager) UnloadPlugin(scope, id string) {
-	key := pluginKey(scope, id)
-	m.mu.Lock()
-	delete(m.plugins, key)
-	m.mu.Unlock()
+	unlock := m.lockPlugin(scope, id)
+	defer unlock()
+	m.setRuntime(scope, id, nil)
 }
 
 // DeletePluginData removes the persistent data directory for a plugin.
@@ -238,55 +203,23 @@ func (m *Manager) DeletePluginData(scope, id string) {
 	}
 }
 
-// ReloadPlugin performs a hot-reload (called during update).
-// Acquires write lock on old runtime (waits for in-progress hooks), then swaps.
+// ReloadPlugin loads an Active plugin again from its directory and swaps
+// the new runtime in once hooks in progress on the old one finish. A
+// *LoadError leaves the row and the old runtime as they were.
 func (m *Manager) ReloadPlugin(ctx context.Context, scope, id string) error {
-	dir := filepath.Join(m.pluginDir, scope, id)
+	unlock := m.lockPlugin(scope, id)
+	defer unlock()
 
-	// Load new runtime from disk
-	newRT, err := LoadPlugin(dir, scope, id)
+	row, err := m.service.RetrievePlugin(ctx, scope, id)
 	if err != nil {
-		return &LoadError{Err: errors.Wrapf(err, "failed to reload plugin %s/%s", scope, id)}
+		return err
 	}
-
-	// Set the persistent data directory
-	newRT.dataDir = filepath.Join(m.pluginDataDir, scope, id)
-
-	// Inject host APIs into new runtime
-	if err := InjectHostAPIs(newRT, m.service); err != nil {
-		return errors.Wrapf(err, "failed to inject host APIs for %s/%s during reload", scope, id)
+	rt, err := m.loadRuntime(m.liveDir(scope, id), scope, id)
+	if err != nil {
+		return err
 	}
-
-	// Update identifier types before swapping, so a database fault leaves
-	// the old runtime in place.
-	if newRT.manifest.Capabilities.IdentifierTypes != nil {
-		if err := m.service.UpsertIdentifierTypes(ctx, scope, id, newRT.manifest.Capabilities.IdentifierTypes); err != nil {
-			return errors.Wrapf(err, "failed to upsert identifier types for %s/%s during reload", scope, id)
-		}
-	}
-
-	key := pluginKey(scope, id)
-
-	// Acquire write lock on old runtime to wait for in-progress hooks
-	m.mu.RLock()
-	oldRT := m.plugins[key]
-	m.mu.RUnlock()
-
-	if oldRT != nil {
-		oldRT.mu.Lock()
-		// Swap new runtime into the map while holding the old runtime's lock
-		m.mu.Lock()
-		m.plugins[key] = newRT
-		m.mu.Unlock()
-		oldRT.mu.Unlock()
-	} else {
-		// No existing runtime, just store the new one
-		m.mu.Lock()
-		m.plugins[key] = newRT
-		m.mu.Unlock()
-	}
-
-	return nil
+	row.LoadError = nil
+	return m.applyVersion(ctx, row, rt, false)
 }
 
 // GetRuntime returns the runtime for a plugin (nil if not loaded).
@@ -600,8 +533,46 @@ func (m *Manager) CheckForUpdatesForRepo(ctx context.Context, scope string, mani
 // refreshPluginUpdateVersion finds the newest compatible version of the plugin
 // across the provided manifests and persists UpdateAvailableVersion if the
 // computed value differs from the current one. If no newer version is found,
-// the field is cleared.
-func (m *Manager) refreshPluginUpdateVersion(ctx context.Context, plugin *models.Plugin, manifests []scopedManifest) error {
+// the field is cleared. It holds the plugin's lock and re-reads the row, so
+// the version it compares is current, and it writes only
+// update_available_version, so a transition that landed while the
+// repositories were being fetched is kept.
+func (m *Manager) refreshPluginUpdateVersion(ctx context.Context, listed *models.Plugin, manifests []scopedManifest) error {
+	unlock := m.lockPlugin(listed.Scope, listed.ID)
+	defer unlock()
+
+	plugin, err := m.service.RetrievePlugin(ctx, listed.Scope, listed.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !plugin.AutoUpdate {
+		// Turned off while the repositories were being fetched.
+		return nil
+	}
+
+	latestVersion := latestAvailableVersion(plugin, manifests)
+
+	if latestVersion != "" {
+		if plugin.UpdateAvailableVersion != nil && *plugin.UpdateAvailableVersion == latestVersion {
+			return nil
+		}
+		plugin.UpdateAvailableVersion = &latestVersion
+	} else {
+		if plugin.UpdateAvailableVersion == nil {
+			return nil
+		}
+		plugin.UpdateAvailableVersion = nil
+	}
+
+	return m.service.UpdatePluginColumns(ctx, plugin, "update_available_version")
+}
+
+// latestAvailableVersion returns the newest compatible version of plugin
+// listed in manifests that is newer than its installed version, or "".
+func latestAvailableVersion(plugin *models.Plugin, manifests []scopedManifest) string {
 	var latestVersion string
 	for _, sm := range manifests {
 		if sm.manifest.Scope != plugin.Scope {
@@ -612,13 +583,7 @@ func (m *Manager) refreshPluginUpdateVersion(ctx context.Context, plugin *models
 				continue
 			}
 			compatible := FilterVersionCompatibleVersions(FilterCompatibleVersions(available.Versions))
-			if len(compatible) == 0 {
-				continue
-			}
 			for _, v := range compatible {
-				if v.Version == plugin.Version {
-					continue
-				}
 				if pkgversion.Compare(v.Version, plugin.Version) <= 0 {
 					continue
 				}
@@ -628,20 +593,5 @@ func (m *Manager) refreshPluginUpdateVersion(ctx context.Context, plugin *models
 			}
 		}
 	}
-
-	var changed bool
-	if latestVersion != "" {
-		if plugin.UpdateAvailableVersion == nil || *plugin.UpdateAvailableVersion != latestVersion {
-			plugin.UpdateAvailableVersion = &latestVersion
-			changed = true
-		}
-	} else if plugin.UpdateAvailableVersion != nil {
-		plugin.UpdateAvailableVersion = nil
-		changed = true
-	}
-
-	if !changed {
-		return nil
-	}
-	return m.service.UpdatePlugin(ctx, plugin)
+	return latestVersion
 }
