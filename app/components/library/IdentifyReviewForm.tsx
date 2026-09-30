@@ -60,6 +60,7 @@ import {
   type PluginApplyPayload,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
+import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { toastRequestError } from "@/libraries/api";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
@@ -80,7 +81,6 @@ import {
   formatPageCount,
 } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
-import { filePageUrl } from "@/utils/pageUrl";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
@@ -523,6 +523,7 @@ export function IdentifyReviewForm({
   onClose,
   onHasChangesChange,
 }: IdentifyReviewFormProps) {
+  const filePageUrl = useFilePageUrl();
   const file = findFile(book, fileId);
   const anyCBZ = hasAnyCBZFile(book);
   const applyMutation = usePluginApply();

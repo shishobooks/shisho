@@ -14,7 +14,7 @@ import (
 func TestListenServer_UsesConfiguredHost(t *testing.T) {
 	t.Parallel()
 	cfg := config.NewForTest()
-	cfg.Environment = ""
+	cfg.TestMode = false
 	cfg.ServerHost = "127.0.0.1"
 	cfg.ServerPort = 0
 	srv, err := server.New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)

@@ -39,6 +39,8 @@ interface AuthOptions {
   /** The role's permissions. Defaults to none. */
   permissions?: readonly Permission[];
   demoMode?: boolean;
+  /** The PDF render key from GET /auth/status. Defaults to "200-85". */
+  pdfRenderKey?: string;
   /** The signed-in user, or `null` when signed out. */
   user?: Partial<AuthUser> | null;
 }
@@ -46,10 +48,12 @@ interface AuthOptions {
 const newState = ({
   permissions = [],
   demoMode = false,
+  pdfRenderKey = "200-85",
   user = {},
 }: AuthOptions = {}) => ({
   permissions: new Set<string>(permissions),
   demoMode,
+  pdfRenderKey,
   user: user === null ? null : { ...DEFAULT_USER, ...user },
   login: vi.fn<AuthContextValue["login"]>(),
   logout: vi.fn<AuthContextValue["logout"]>(),
@@ -76,6 +80,7 @@ export const authValue = (): AuthContextValue => {
     isAuthenticated: user !== null,
     needsSetup: false,
     demoMode: auth.demoMode,
+    pdfRenderKey: auth.pdfRenderKey,
     login: auth.login,
     logout: auth.logout,
     can: (requirement) => meetsRequirement(hasPermission, requirement),

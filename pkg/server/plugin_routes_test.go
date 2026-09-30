@@ -29,7 +29,7 @@ func TestPluginRoutes_Permissions(t *testing.T) {
 	tc.db.SetMaxOpenConns(1)
 	ctx := t.Context()
 	cfg := config.NewForTest()
-	cfg.Environment = ""
+	cfg.TestMode = false
 	cfg.CacheDir = t.TempDir()
 	cfg.PluginDir = t.TempDir()
 	svc := auth.NewService(tc.db, cfg.JWTSecret, cfg.SessionDuration())

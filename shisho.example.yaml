@@ -5,6 +5,12 @@
 # All settings can also be configured via environment variables.
 # Environment variables use uppercase with underscores (e.g., DATABASE_FILE_PATH).
 # Environment variables take precedence over config file values.
+# List settings take comma-separated values as environment variables.
+# Durations use Go's format with a unit (500ms, 5s, 1m); a bare number is
+# nanoseconds, so values below 1ms are rejected.
+# Shisho refuses to start if a setting is invalid, naming the setting and range.
+# Logging is set with LOG_FORMAT (json or console) and LOG_LEVEL (debug, info,
+# warn or error; default info), which are environment variables only.
 
 # =============================================================================
 # DATABASE SETTINGS
@@ -15,27 +21,33 @@
 # Default: /config/shisho.db
 database_file_path: /config/shisho.db
 
-# Enable SQL query logging (useful for debugging)
+# Log every SQL statement, with parameter values, at debug level.
+# Very verbose, and exposes stored values such as password hashes and share
+# tokens to Settings > Logs. Enable briefly for troubleshooting.
+# Queries slower than 250 ms are always logged as warnings without their values.
 # Env: DATABASE_DEBUG
 # Default: false
 database_debug: false
 
-# Number of connection retry attempts on startup
+# Total number of connection attempts on startup, including the first.
+# 0 skips the startup connection check. Minimum: 0
 # Env: DATABASE_CONNECT_RETRY_COUNT
 # Default: 5
 database_connect_retry_count: 5
 
-# Delay between connection retry attempts
+# Delay between connection attempts (a duration). Minimum: 1ms
 # Env: DATABASE_CONNECT_RETRY_DELAY
 # Default: 2s
 database_connect_retry_delay: 2s
 
-# SQLite busy timeout - how long to wait when the database is locked
+# SQLite busy timeout: how long to wait when the database is locked
+# (a duration). Minimum: 1ms
 # Env: DATABASE_BUSY_TIMEOUT
 # Default: 5s
 database_busy_timeout: 5s
 
-# Maximum number of retries for database operations on busy/locked errors
+# Maximum number of retries for database operations on busy/locked errors.
+# 0 means one attempt with no retries. Minimum: 0
 # Env: DATABASE_MAX_RETRIES
 # Default: 5
 database_max_retries: 5
@@ -69,17 +81,19 @@ server_port: 3689
 demo_mode: false
 
 # How often to scan libraries for new content (in minutes)
+# The first scheduled scan runs one interval after startup.
 # Set to 0 to disable scheduled scans
 # Env: SYNC_INTERVAL_MINUTES
 # Default: 60
 sync_interval_minutes: 60
 
-# Number of background worker processes
+# Number of background workers that run jobs at the same time. Minimum: 1
 # Env: WORKER_PROCESSES
 # Default: 2
 worker_processes: 2
 
-# How many days to retain completed/failed jobs (older jobs are deleted)
+# How many days to keep completed and failed jobs, with their logs.
+# An hourly cleanup deletes jobs created longer ago than this.
 # Set to 0 to disable retention cleanup
 # Env: JOB_RETENTION_DAYS
 # Default: 30
@@ -98,20 +112,23 @@ job_retention_days: 30
 # Default: /config/cache
 cache_dir: /config/cache
 
-# Maximum size of the download cache in gigabytes
-# When the cache exceeds this size, older files are automatically removed (LRU).
+# Maximum size of the download cache in GiB (1 GiB = 1024^3 bytes)
+# After each generated download, if the cache is over this size, the least
+# recently used files are removed until it is at 80% of it.
+# 0 removes every cached download after each generation.
 # Env: DOWNLOAD_CACHE_MAX_SIZE_GB
 # Default: 5
 download_cache_max_size_gb: 5
 
 # DPI for rendering PDF pages in the viewer (higher = sharper but larger images)
 # Range: 72-600. At 200 DPI, a typical letter-size page renders to ~1700x2200 pixels.
+# Rendered pages are stored per setting, so pages render again after a change.
 # Env: PDF_RENDER_DPI
 # Default: 200
 pdf_render_dpi: 200
 
 # JPEG quality for rendered PDF pages (higher = better quality but larger files)
-# Range: 1-100
+# Range: 1-100. Pages render again after a change.
 # Env: PDF_RENDER_QUALITY
 # Default: 85
 pdf_render_quality: 85
@@ -137,7 +154,7 @@ plugin_data_dir: /config/plugins/data
 
 # Confidence threshold for automatic metadata enrichment during scans.
 # When a plugin returns a confidence score with search results, results
-# below this threshold are skipped. Range: 0.0 - 1.0 (0.85 = 85%).
+# below this threshold are skipped. Range: 0 to 1 (0.85 = 85%).
 # Per-plugin thresholds can override this in plugin settings.
 # Env: ENRICHMENT_CONFIDENCE_THRESHOLD
 # Default: 0.85
@@ -162,6 +179,7 @@ library_monitor_enabled: true
 # When a change is detected, the monitor waits this long before acting.
 # If more changes occur during the wait, the timer resets, which batches
 # rapid changes (e.g., copying multiple files) into a single rescan.
+# Values below 5 are raised to 5.
 # Env: LIBRARY_MONITOR_DELAY_SECONDS
 # Default: 60
 library_monitor_delay_seconds: 60
@@ -171,7 +189,11 @@ library_monitor_delay_seconds: 60
 # =============================================================================
 
 # Patterns to exclude from supplement discovery (glob patterns)
-# These files will not be picked up as supplements even if they're in book directories
+# These files will not be picked up as supplements even if they're in book directories.
+# Matching files are only skipped, never deleted. When a directory is left
+# with no tracked files, Shisho removes it only if what remains is hidden
+# files, Thumbs.db, desktop.ini, or its own covers and sidecars; this fixed
+# list is separate from these patterns.
 # Env: SUPPLEMENT_EXCLUDE_PATTERNS (comma-separated)
 # Default: [".*", ".DS_Store", "Thumbs.db", "desktop.ini"]
 supplement_exclude_patterns:
@@ -215,8 +237,11 @@ pdf_supplement_filenames:
 # =============================================================================
 
 # REQUIRED: Secret key for signing JWT tokens
-# Use a long, random string (at least 32 characters recommended)
-# Generate one with: openssl rand -hex 32
+# Use at least 32 characters. Generate one with: openssl rand -hex 32
+# Replace the placeholder below: Shisho refuses to start with it, because it
+# is public and would let anyone forge a login session. A shorter secret
+# still starts but logs a warning and shows one on Settings > Server.
+# Changing the secret signs everyone out once.
 # Env: JWT_SECRET
 jwt_secret: your-secret-key-here-change-me
 

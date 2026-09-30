@@ -1,7 +1,13 @@
+import { useId } from "react";
+
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { useConfig } from "@/hooks/queries/config";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  MinJWTSecretLength,
+  MinLibraryMonitorDelaySeconds,
+} from "@/types/generated/config";
 
 const formatDuration = (nanoseconds: number): string => {
   const seconds = nanoseconds / 1_000_000_000;
@@ -22,14 +28,26 @@ interface ConfigRowProps {
   value: string | number | boolean;
 }
 
+/** Shows a setting where 0 turns the feature off. */
+const orDisabled = (value: number, unit: string): string =>
+  value === 0 ? "Disabled" : `${value} ${unit}`;
+
 const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
+  const labelId = useId();
   const displayValue =
     typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
 
   return (
-    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4 py-3 border-b border-border last:border-b-0">
+    <div
+      aria-labelledby={labelId}
+      className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4 py-3 border-b border-border last:border-b-0"
+      role="group"
+    >
       <div className="flex flex-col gap-1 sm:shrink-0">
-        <span className="text-sm font-medium text-foreground sm:whitespace-nowrap">
+        <span
+          className="text-sm font-medium text-foreground sm:whitespace-nowrap"
+          id={labelId}
+        >
           {label}
         </span>
         {description && (
@@ -94,27 +112,27 @@ const AdminSettings = () => {
               value={config.database_file_path}
             />
             <ConfigRow
-              description="Whether SQL query logging is enabled"
+              description="Logs every SQL statement, with its values, at debug level. This exposes stored values such as password hashes and share tokens in Settings > Logs, so enable it only briefly. Queries slower than 250 ms are always logged as warnings without their values"
               label="Debug Mode"
               value={config.database_debug}
             />
             <ConfigRow
-              description="Number of connection retry attempts on startup"
+              description="Total connection attempts on startup. 0 skips the check"
               label="Connection Retry Count"
               value={config.database_connect_retry_count}
             />
             <ConfigRow
-              description="Delay between connection retry attempts"
+              description="Delay between connection attempts. Minimum 1ms"
               label="Connection Retry Delay"
               value={formatDuration(config.database_connect_retry_delay)}
             />
             <ConfigRow
-              description="How long to wait for a locked database before retrying"
+              description="How long to wait for a locked database before retrying. Minimum 1ms"
               label="Busy Timeout"
               value={formatDuration(config.database_busy_timeout)}
             />
             <ConfigRow
-              description="Maximum retries for transient database errors"
+              description="Maximum retries for busy or locked database errors. 0 means one attempt with no retries"
               label="Max Retries"
               value={config.database_max_retries}
             />
@@ -152,19 +170,19 @@ const AdminSettings = () => {
               value={config.demo_mode}
             />
             <ConfigRow
-              description="How often libraries are scanned for new content"
+              description="How often libraries are scanned for new content. The first scan runs one interval after startup"
               label="Sync Interval"
-              value={`${config.sync_interval_minutes} minutes`}
+              value={orDisabled(config.sync_interval_minutes, "minutes")}
             />
             <ConfigRow
-              description="Number of background worker processes"
+              description="Number of background workers that run jobs at the same time. Minimum 1"
               label="Worker Processes"
               value={config.worker_processes}
             />
             <ConfigRow
-              description="Number of days to retain completed job logs"
+              description="Days to keep completed and failed jobs, with their logs, before the hourly cleanup deletes them"
               label="Job Retention"
-              value={`${config.job_retention_days} days`}
+              value={orDisabled(config.job_retention_days, "days")}
             />
             <ConfigRow
               description="Real-time filesystem monitoring of library paths"
@@ -172,14 +190,19 @@ const AdminSettings = () => {
               value={config.library_monitor_enabled}
             />
             <ConfigRow
-              description="Seconds to wait before processing detected changes"
+              description={
+                config.library_monitor_effective_delay_seconds ===
+                config.library_monitor_delay_seconds
+                  ? `Seconds to wait before processing detected changes. Minimum ${MinLibraryMonitorDelaySeconds}s`
+                  : `Seconds to wait before processing detected changes. Configured ${config.library_monitor_delay_seconds}s, raised to the ${MinLibraryMonitorDelaySeconds}s minimum`
+              }
               label="Monitor Delay"
-              value={`${config.library_monitor_delay_seconds}s`}
+              value={`${config.library_monitor_effective_delay_seconds}s`}
             />
             <ConfigRow
-              description="Application environment mode"
-              label="Environment"
-              value={config.environment || "production"}
+              description="Test-only API routes for the end-to-end test suite"
+              label="Test Mode"
+              value={config.test_mode}
             />
           </div>
         </div>
@@ -196,12 +219,12 @@ const AdminSettings = () => {
               value={config.cache_dir}
             />
             <ConfigRow
-              description="Maximum disk space for the download cache"
+              description="Maximum disk space for generated downloads. When exceeded, the least recently used are removed until the cache is at 80% of this size"
               label="Download Cache Max Size"
-              value={`${config.download_cache_max_size_gb} GB`}
+              value={`${config.download_cache_max_size_gb} GiB`}
             />
             <ConfigRow
-              description="File patterns excluded from supplement discovery"
+              description="File patterns excluded from supplement discovery. They never cause files to be deleted"
               label="Supplement Exclude Patterns"
               value={config.supplement_exclude_patterns.join(", ")}
             />
@@ -215,12 +238,12 @@ const AdminSettings = () => {
           </h2>
           <div className="space-y-0">
             <ConfigRow
-              description="Resolution for rendering PDF pages in the viewer"
+              description="Resolution for rendering PDF pages in the viewer. Pages are rendered again after a change"
               label="PDF Render DPI"
               value={`${config.pdf_render_dpi} DPI`}
             />
             <ConfigRow
-              description="JPEG quality for rendered PDF pages"
+              description="JPEG quality for rendered PDF pages. Pages are rendered again after a change"
               label="PDF Render Quality"
               value={`${config.pdf_render_quality}`}
             />
@@ -267,6 +290,13 @@ const AdminSettings = () => {
               label="Session Duration"
               value={`${config.session_duration_days} days`}
             />
+            {config.jwt_secret_too_short && (
+              <ConfigRow
+                description={`Shorter than ${MinJWTSecretLength} characters, so login sessions are easier to forge. Replace it with the output of openssl rand -hex 32 and restart; everyone is signed out once`}
+                label="JWT Secret"
+                value="Too short"
+              />
+            )}
           </div>
         </div>
       </div>

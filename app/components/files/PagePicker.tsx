@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/dialog";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { cn } from "@/libraries/utils";
-import { filePageUrl, type PageSourceFile } from "@/utils/pageUrl";
+import type { PageSourceFile } from "@/utils/pageUrl";
 
 export interface PagePickerProps {
   file: PageSourceFile;
@@ -42,6 +43,7 @@ const PagePicker = ({
   onOpenChange,
   title = "Select Page",
 }: PagePickerProps) => {
+  const filePageUrl = useFilePageUrl();
   // Track the currently focused/previewed page (not necessarily the selected one)
   const [focusedPage, setFocusedPage] = useState<number>(currentPage ?? 0);
   // Track the last loaded page to avoid flashing during transitions

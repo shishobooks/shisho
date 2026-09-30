@@ -15,8 +15,9 @@ const (
 )
 
 type handler struct {
-	authService *Service
-	demoMode    bool
+	authService  *Service
+	demoMode     bool
+	pdfRenderKey string
 }
 
 // buildMeResponse builds a MeResponse from a user model.
@@ -130,8 +131,9 @@ func (h *handler) status(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, StatusResponse{
-		NeedsSetup: count == 0,
-		DemoMode:   h.demoMode,
+		NeedsSetup:   count == 0,
+		DemoMode:     h.demoMode,
+		PDFRenderKey: h.pdfRenderKey,
 	})
 }
 

@@ -24,6 +24,7 @@ import {
   useFileChapters,
   useUpdateFileChapters,
 } from "@/hooks/queries/chapters";
+import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { toastRequestError } from "@/libraries/api";
 import {
   FileTypeCBZ,
@@ -36,7 +37,6 @@ import {
   type File,
 } from "@/types";
 import { fileStreamUrl } from "@/utils/downloadUrl";
-import { filePageUrl } from "@/utils/pageUrl";
 
 export interface FileChaptersTabHandle {
   save: () => void;
@@ -129,6 +129,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       props;
     const chaptersQuery = useFileChapters(file.id);
     const updateChaptersMutation = useUpdateFileChapters(file.id);
+    const filePageUrl = useFilePageUrl();
 
     // State for edited chapters (used in edit mode)
     const [editedChapters, setEditedChapters] = useState<EditedChapter[]>([]);

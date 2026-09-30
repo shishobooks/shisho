@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -14,25 +15,80 @@ import (
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
-type key int
+// slowQueryThreshold is how long a query may take before it is logged as a
+// warning. The warning is always on, so it carries no SQL text or values.
+const slowQueryThreshold = 250 * time.Millisecond
 
-const ctxKey key = 0
+// maxLoggedQueryBytes caps the SQL text a database_debug log line carries, so
+// a bulk insert does not flood the log buffer.
+const maxLoggedQueryBytes = 2048
 
-type logQueryHook struct {
-	log logger.Logger
+// queryLogHook logs queries in two tiers. Queries slower than
+// slowQueryThreshold always log at warn with their operation, table and
+// duration. bun inlines parameter values into the SQL text (password hashes,
+// share tokens, plugin config), and Settings > Logs is readable with
+// config:read, so that tier never includes the SQL. With database_debug on,
+// every query also logs at debug with its SQL, truncated to
+// maxLoggedQueryBytes.
+type queryLogHook struct {
+	log      logger.Logger
+	debugLog *logger.Logger
 }
 
-func (*logQueryHook) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
+// newQueryLogHook builds the hook. Build it after logger.SetOutput, since a
+// logger keeps the output it was created with.
+func newQueryLogHook(debug bool) *queryLogHook {
+	h := &queryLogHook{log: logger.New()}
+	if debug {
+		// Debug logging must not depend on LOG_LEVEL: turning on
+		// database_debug is the request to see every statement.
+		debugLog := logger.NewWithLevel("debug")
+		h.debugLog = &debugLog
+	}
+	return h
+}
+
+func (*queryLogHook) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
 	return ctx
 }
 
-func (qh *logQueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
-	enabled, ok := ctx.Value(ctxKey).(bool)
-	if !ok || !enabled {
-		return
+func (h *queryLogHook) AfterQuery(_ context.Context, event *bun.QueryEvent) {
+	duration := time.Since(event.StartTime)
+	durationMS := float64(duration.Microseconds()) / 1000
+
+	if h.debugLog != nil {
+		query := event.Query
+		if len(query) > maxLoggedQueryBytes {
+			// Cut on a rune boundary so the log line stays valid UTF-8.
+			end := maxLoggedQueryBytes
+			for end > 0 && !utf8.RuneStart(query[end]) {
+				end--
+			}
+			query = query[:end] + "...(truncated)"
+		}
+		data := logger.Data{"query": query, "duration_ms": durationMS}
+		if event.Err != nil && !errors.Is(event.Err, sql.ErrNoRows) {
+			data["error"] = event.Err.Error()
+		}
+		h.debugLog.Debug("sql query", data)
 	}
 
-	qh.log.Debug(event.Query)
+	if duration >= slowQueryThreshold {
+		data := logger.Data{"operation": event.Operation(), "duration_ms": durationMS}
+		if table := queryTable(event); table != "" {
+			data["table"] = table
+		}
+		h.log.Warn("slow query", data)
+	}
+}
+
+// queryTable returns the table of a model query, or "" for a raw query. It
+// reads the model's schema rather than the query text, which can hold values.
+func queryTable(event *bun.QueryEvent) string {
+	if tm, ok := event.Model.(bun.TableModel); ok && tm.Table() != nil {
+		return tm.Table().Name
+	}
+	return ""
 }
 
 // CheckFTS5Support verifies FTS5 is available in the SQLite build.
@@ -83,10 +139,7 @@ func New(cfg *config.Config) (*bun.DB, error) {
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 
-	// print out all queries in debug mode
-	if cfg.DatabaseDebug {
-		db.AddQueryHook(&logQueryHook{logger.NewWithLevel("debug")})
-	}
+	db.AddQueryHook(newQueryLogHook(cfg.DatabaseDebug))
 
 	// Retry up to a few times to ensure that the database can connect.
 	for i := 0; i < cfg.DatabaseConnectRetryCount; i++ {

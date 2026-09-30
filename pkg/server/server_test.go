@@ -20,7 +20,7 @@ func TestNew_RoutingBoundary(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
 	cfg := config.NewForTest()
-	cfg.Environment = ""
+	cfg.TestMode = false
 	cfg.CacheDir = t.TempDir()
 	originalNotFound := reflect.ValueOf(echo.NotFoundHandler).Pointer()
 	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
@@ -72,7 +72,7 @@ func TestNew_RoutingBoundary(t *testing.T) {
 func TestNew_ServerAddress(t *testing.T) {
 	t.Parallel()
 	cfg := config.NewForTest()
-	cfg.Environment = ""
+	cfg.TestMode = false
 	cfg.ServerHost = "::1"
 	cfg.ServerPort = 3689
 	srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
@@ -96,9 +96,9 @@ func TestNew_DemoModeSession(t *testing.T) {
 		rec := httptest.NewRecorder()
 		srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/auth/status", nil))
 		assert.Equal(t, http.StatusOK, rec.Code)
-		expected := `{"needs_setup":false,"demo_mode":false}`
+		expected := `{"needs_setup":false,"demo_mode":false,"pdf_render_key":"200-85"}`
 		if demo {
-			expected = `{"needs_setup":false,"demo_mode":true}`
+			expected = `{"needs_setup":false,"demo_mode":true,"pdf_render_key":"200-85"}`
 		}
 		assert.JSONEq(t, expected, rec.Body.String())
 
@@ -144,7 +144,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := config.NewForTest()
 			cfg.DemoMode = demo
-			cfg.Environment = "test"
+			cfg.TestMode = true
 			cfg.CacheDir = t.TempDir()
 			srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 			require.NoError(t, err)

@@ -54,7 +54,7 @@ Discovery skips:
 - Files matching `supplement_exclude_patterns`.
 - Directories when evaluating root-level candidates.
 
-The default exclusion patterns cover hidden files and common operating-system files. Configure exceptions and additional globs in [Configuration](./configuration.md#supplement-discovery) instead of relying on repeated manual demotion.
+The default exclusion patterns cover hidden files and common operating-system files. Configure exceptions and additional globs in [Configuration](./configuration.md#supplement-discovery) instead of relying on repeated manual demotion. Exclusion only skips a file during discovery; it never deletes it. See [Empty Directory Cleanup](./configuration.md#empty-directory-cleanup) for the files Shisho does remove with an empty directory.
 
 ## PDF Auto-Demotion
 

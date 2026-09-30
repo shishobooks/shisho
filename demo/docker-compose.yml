@@ -21,4 +21,4 @@ services:
       PGID: "1000"
       # The authoring database never leaves this machine with sessions in it,
       # and the demo sets its own secret, so a fixed value is fine here.
-      JWT_SECRET: "demo-corpus-authoring-secret"
+      JWT_SECRET: "demo-corpus-authoring-secret-fixed-for-local-use"

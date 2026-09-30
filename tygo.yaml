@@ -39,6 +39,7 @@ packages:
     output_path: "app/types/generated/config.ts"
     include_files:
       - config.go
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/jobs"
     output_path: "app/types/generated/jobs.ts"
     frontmatter: |

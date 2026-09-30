@@ -80,7 +80,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	if cfg.IsTestMode() && !cfg.DemoMode {
 		// Allow localhost download URLs so E2E tests can install the fixture
 		// plugin from /test/plugins/fixture.zip. Safe because these hosts are
-		// only added in test mode (ENVIRONMENT=test).
+		// only added in test mode (SHISHO_TEST_MODE=true).
 		plugins.AllowedDownloadHosts = append(plugins.AllowedDownloadHosts,
 			"http://127.0.0.1:",
 			"http://localhost:",
@@ -117,7 +117,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 
 	// Register auth routes. The auth middleware wraps the same service.
 	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
-	auth.RegisterRoutes(api, authService, cfg.DemoMode)
+	auth.RegisterRoutes(api, authService, cfg.DemoMode, pdfpages.RenderKey(cfg.PDFRenderDPI, cfg.PDFRenderQuality))
 	authMiddleware := auth.NewMiddleware(authService)
 
 	// Register user and role management routes

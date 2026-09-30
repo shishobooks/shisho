@@ -23,7 +23,7 @@ func newTestMonitor(t *testing.T) *Monitor {
 	t.Helper()
 	w := &Worker{
 		config: &config.Config{
-			LibraryMonitorDelaySeconds: minMonitorDelaySeconds,
+			LibraryMonitorDelaySeconds: config.MinLibraryMonitorDelaySeconds,
 		},
 		log: logger.New(),
 	}
@@ -41,7 +41,7 @@ func TestMonitor_DelayClampsToMinimum(t *testing.T) {
 		log:    logger.New(),
 	}
 	m := newMonitor(w)
-	assert.Equal(t, time.Duration(minMonitorDelaySeconds)*time.Second, m.delay)
+	assert.Equal(t, time.Duration(config.MinLibraryMonitorDelaySeconds)*time.Second, m.delay)
 
 	w2 := &Worker{
 		config: &config.Config{LibraryMonitorDelaySeconds: 120},
@@ -337,7 +337,7 @@ func TestMonitor_ProcessEvent_CreateSkipsNonexistentFile(t *testing.T) {
 	libDir := t.TempDir()
 	tc.createLibrary([]string{libDir})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -357,7 +357,7 @@ func TestMonitor_ProcessEvent_DeleteSkipsUnknownFile(t *testing.T) {
 	libDir := t.TempDir()
 	tc.createLibrary([]string{libDir})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -383,7 +383,7 @@ func TestMonitor_ProcessEvent_CreateScansNewFile(t *testing.T) {
 		Authors: []string{"Test Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -417,7 +417,7 @@ func TestMonitor_ProcessEvent_WriteRescansExistingFile(t *testing.T) {
 		Authors: []string{"Test Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -458,7 +458,7 @@ func TestMonitor_ProcessEvent_DeleteRemovesFile(t *testing.T) {
 		Authors: []string{"Test Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -500,7 +500,7 @@ func TestMonitor_SkipsWhenScanJobActive(t *testing.T) {
 	err := tc.jobService.CreateJob(tc.ctx, job)
 	require.NoError(t, err)
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -608,7 +608,7 @@ func TestMonitor_ProcessEvent_DirectoryRemoveDeletesBookAndFile(t *testing.T) {
 		Authors: []string{"Test Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -651,7 +651,7 @@ func TestMonitor_ProcessEvent_DirectoryRemoveCascadesToNestedBooks(t *testing.T)
 		Title: "B", Authors: []string{"Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -692,7 +692,7 @@ func TestMonitor_ProcessEvent_DirectoryRemoveDoesNotMatchSiblingPrefix(t *testin
 		Title: "Go", Authors: []string{"Go"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -729,7 +729,7 @@ func TestMonitor_ProcessEvent_DirectoryRenameCleansOldRows(t *testing.T) {
 		Title: "Renamed", Authors: []string{"Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -772,7 +772,7 @@ func TestMonitor_ProcessEvent_DirectoryRemoveWithMultipleFilesKeepsBookUntilLast
 		Title: "Multi", Authors: []string{"Multi"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -812,7 +812,7 @@ func TestMonitor_ProcessEvent_SkipsNewFileWithUnexpectedMime(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, expected, "test needs a file that fails the mime check")
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
@@ -871,7 +871,7 @@ func TestMonitor_ProcessEvent_KnownFileReplacedWithBadContent_RecordsScanError(t
 		Authors: []string{"Test Author"},
 	})
 
-	tc.worker.config.LibraryMonitorDelaySeconds = minMonitorDelaySeconds
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 

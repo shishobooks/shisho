@@ -1,13 +1,21 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import { FileTypeCBZ } from "@/types";
 
 import PagePreview from "./PagePreview";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 describe("PagePreview", () => {
   it("loads the page thumbnail with the file's cache key", () => {
     render(
       <PagePreview
-        file={{ id: 100, updated_at: "2024-06-01T00:00:00Z" }}
+        file={{
+          id: 100,
+          updated_at: "2024-06-01T00:00:00Z",
+          file_type: FileTypeCBZ,
+        }}
         page={4}
       />,
     );
@@ -20,7 +28,11 @@ describe("PagePreview", () => {
   it("retries the image when the page URL changes after an error", () => {
     const { rerender } = render(
       <PagePreview
-        file={{ id: 100, updated_at: "2024-01-01T00:00:00Z" }}
+        file={{
+          id: 100,
+          updated_at: "2024-01-01T00:00:00Z",
+          file_type: FileTypeCBZ,
+        }}
         page={4}
       />,
     );
@@ -29,7 +41,11 @@ describe("PagePreview", () => {
 
     rerender(
       <PagePreview
-        file={{ id: 100, updated_at: "2024-06-01T00:00:00Z" }}
+        file={{
+          id: 100,
+          updated_at: "2024-06-01T00:00:00Z",
+          file_type: FileTypeCBZ,
+        }}
         page={4}
       />,
     );

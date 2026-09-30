@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -25,6 +26,23 @@ import (
 var ShishoSpecialFilePatterns = []string{
 	"*.cover.*",       // individual cover files: book.epub.cover.jpg
 	"*.metadata.json", // sidecar files: book.epub.metadata.json, Book Title.metadata.json
+}
+
+// JunkFilePatterns returns the operating system files that directory cleanup
+// deletes so an otherwise empty book directory can be removed: dotfiles (".*"
+// covers .DS_Store), Thumbs.db, and desktop.ini. The list is fixed on
+// purpose. The supplement_exclude_patterns setting only hides files from
+// supplement discovery; if cleanup used it, a user pattern such as "*.txt"
+// would delete the user's files from disk.
+func JunkFilePatterns() []string {
+	return []string{".*", "Thumbs.db", "desktop.ini"}
+}
+
+// DirectoryCleanupPatterns returns the files that cleanup after a scan or a
+// book deletion removes along with an empty directory: JunkFilePatterns plus
+// Shisho's own covers and sidecars (ShishoSpecialFilePatterns).
+func DirectoryCleanupPatterns() []string {
+	return slices.Concat(JunkFilePatterns(), ShishoSpecialFilePatterns)
 }
 
 // OrganizeFileResult contains the results of organizing a file.

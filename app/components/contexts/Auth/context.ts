@@ -13,6 +13,11 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
   needsSetup: boolean;
   demoMode: boolean;
+  /**
+   * The server's PDF render settings key from GET /auth/status. PDF page
+   * URLs carry it; build them with `useFilePageUrl`.
+   */
+  pdfRenderKey: string;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   /**

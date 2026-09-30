@@ -43,6 +43,7 @@ import {
 } from "@/hooks/queries/entity-search";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetFileReview } from "@/hooks/queries/review";
+import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { isDemoModeError, requestErrorMessage } from "@/libraries/api";
 import { cn, isPageBasedFileType } from "@/libraries/utils";
@@ -60,7 +61,6 @@ import {
   type ReviewOverride,
 } from "@/types";
 import { fileCoverUrl } from "@/utils/coverUrl";
-import { filePageUrl } from "@/utils/pageUrl";
 
 interface FileEditDialogProps {
   file: File;
@@ -87,6 +87,7 @@ export function FileEditDialog({
   open,
   onOpenChange,
 }: FileEditDialogProps) {
+  const filePageUrl = useFilePageUrl();
   const [narrators, setNarrators] = useState<string[]>(
     file.narrators?.map((n) => n.person?.name || "") || [],
   );

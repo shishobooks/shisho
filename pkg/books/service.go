@@ -1934,8 +1934,9 @@ type DeleteFileAndCleanupResult struct {
 // If this was the last main file in the book, it checks if any supplement files can be
 // promoted to main (based on supportedTypes). If a promotable supplement exists, the oldest
 // one is promoted. If no promotable supplements exist, the book and remaining files are deleted.
-// ignoredPatterns are glob patterns for files to ignore during directory cleanup (e.g., ".DS_Store", ".*").
-func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, library *models.Library, supportedTypes map[string]struct{}, ignoredPatterns []string) (*DeleteFileAndCleanupResult, error) {
+// Directory cleanup removes only fileutils.DirectoryCleanupPatterns (OS junk,
+// covers, and sidecars) with an empty book directory.
+func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, library *models.Library, supportedTypes map[string]struct{}) (*DeleteFileAndCleanupResult, error) {
 	result := &DeleteFileAndCleanupResult{}
 
 	// Load file with book
@@ -2034,14 +2035,8 @@ func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, librar
 
 	// Clean up book directory if organized structure
 	if library.OrganizeFileStructure && file.Book != nil && file.Book.Filepath != "" {
-		// Combine caller's ignored patterns with shisho special file patterns
-		// so covers (*.cover.*) and sidecars (*.metadata.json) are cleaned up too
-		allIgnoredPatterns := make([]string, 0, len(ignoredPatterns)+len(fileutils.ShishoSpecialFilePatterns))
-		allIgnoredPatterns = append(allIgnoredPatterns, ignoredPatterns...)
-		allIgnoredPatterns = append(allIgnoredPatterns, fileutils.ShishoSpecialFilePatterns...)
-
 		// Clean up book directory (removes covers, sidecars, and OS junk files)
-		_, _ = fileutils.CleanupEmptyDirectory(file.Book.Filepath, allIgnoredPatterns...)
+		_, _ = fileutils.CleanupEmptyDirectory(file.Book.Filepath, fileutils.DirectoryCleanupPatterns()...)
 	}
 
 	return result, nil

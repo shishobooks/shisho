@@ -25,6 +25,7 @@ import {
   type PluginSearchParams,
   type PluginSearchResult,
 } from "@/hooks/queries/plugins";
+import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { cn } from "@/libraries/utils";
 import { PluginHookMetadataEnricher, type Book } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
@@ -37,7 +38,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
-import { filePageUrl, type PageSourceFile } from "@/utils/pageUrl";
+import type { PageSourceFile } from "@/utils/pageUrl";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import { computeIdentifyEmptyState, pickInitialFile } from "./identify-utils";
@@ -762,6 +763,7 @@ function ResultCoverThumbnail({
   previewFileType?: string;
   previewPageCount?: number | null;
 }) {
+  const filePageUrl = useFilePageUrl();
   const [imgError, setImgError] = useState(false);
   const pageUrl =
     previewFile && coverPage != null

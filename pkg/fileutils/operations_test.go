@@ -999,3 +999,25 @@ func TestWriteFileAtomic(t *testing.T) {
 		assert.True(t, os.IsNotExist(err))
 	})
 }
+
+func TestDirectoryCleanupPatterns(t *testing.T) {
+	t.Parallel()
+
+	junkOnly := t.TempDir()
+	for _, name := range []string{".DS_Store", "._book.epub", "Thumbs.db", "desktop.ini", "book.epub.cover.jpg", "Book.metadata.json"} {
+		require.NoError(t, os.WriteFile(filepath.Join(junkOnly, name), []byte("x"), 0o644))
+	}
+	removed, err := CleanupEmptyDirectory(junkOnly, DirectoryCleanupPatterns()...)
+	require.NoError(t, err)
+	assert.True(t, removed, "a directory with only OS junk, covers, and sidecars is removed")
+
+	// A user file is never on the fixed list, whatever the user's
+	// supplement_exclude_patterns say.
+	withNotes := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(withNotes, ".DS_Store"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(withNotes, "notes.txt"), []byte("x"), 0o644))
+	removed, err = CleanupEmptyDirectory(withNotes, DirectoryCleanupPatterns()...)
+	require.NoError(t, err)
+	assert.False(t, removed)
+	assert.FileExists(t, filepath.Join(withNotes, "notes.txt"))
+}

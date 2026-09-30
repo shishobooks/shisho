@@ -1,5 +1,5 @@
 // Package testutils provides test-only API endpoints.
-// These routes are only registered when ENVIRONMENT=test.
+// These routes are only registered when SHISHO_TEST_MODE=true.
 package testutils
 
 import (

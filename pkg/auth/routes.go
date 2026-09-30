@@ -6,10 +6,12 @@ import (
 
 // RegisterRoutes registers all auth routes. The server builds authService,
 // because the auth middleware every other route family uses wraps it too.
-func RegisterRoutes(e *echo.Group, authService *Service, demoMode bool) {
+// pdfRenderKey is reported by GET /auth/status (see StatusResponse).
+func RegisterRoutes(e *echo.Group, authService *Service, demoMode bool, pdfRenderKey string) {
 	h := &handler{
-		authService: authService,
-		demoMode:    demoMode,
+		authService:  authService,
+		demoMode:     demoMode,
+		pdfRenderKey: pdfRenderKey,
 	}
 
 	auth := e.Group("/auth")
