@@ -55,7 +55,7 @@ Shisho automatically applies forward database migrations during startup. Databas
 Take and test a stopped-container backup before updating. Recovery may require restoring that pre-update backup as well as the corresponding application version.
 :::
 
-1. Read the release notes and choose the target tag.
+1. Read the release notes and choose the target tag. When a release changes something you must act on (a renamed config option, a changed default, a removed route), it is listed under **Breaking Changes** at the top of the release notes and of that version's entry in `CHANGELOG.md`.
 2. Stop Shisho and take a backup of `/config` and any custom state paths.
 3. Update the image tag in `docker-compose.yml`.
 4. Pull and recreate the container.

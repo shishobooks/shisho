@@ -34,7 +34,16 @@ docker pull ghcr.io/shishobooks/shisho:{{ trimprefix .Tag "v" }}
 ```
 EOF
 
+if ! grep -q "^## \[$VERSION\]" "$CHANGELOG_FILE"; then
+    # A tag pushed by hand has no entry; the release still gets the install
+    # block, and the Actions log carries a warning.
+    echo "::warning::$CHANGELOG_FILE has no entry for $VERSION; the release header has no Breaking Changes block" >&2
+fi
+
 BREAKING=$(breaking_changes_from_changelog "$VERSION" "$CHANGELOG_FILE")
 if [[ -n "$BREAKING" ]]; then
+    # The file is a Go template, so a literal "{{" copied from a PR body would
+    # break rendering (or expand an action). Escape it.
+    BREAKING=$(printf '%s\n' "$BREAKING" | sed 's/{{/{{"{{"}}/g')
     printf '\n### Breaking Changes\n\nRead these before upgrading.\n\n%s\n' "$BREAKING"
 fi

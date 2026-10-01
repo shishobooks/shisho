@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Changelog generation shared by scripts/release.sh and scripts/changelog_test.sh.
+# Changelog generation shared by scripts/release.sh, scripts/release-notes-header.sh
+# and scripts/changelog_test.sh.
 #
 # Source this file, then call:
 #   generate_changelog_section <version> <commit-range>
@@ -17,49 +18,108 @@
 # Bash 3 compatible (macOS ships 3.2): no associative arrays, no mapfile.
 
 # breaking_section_from_body <sha>
-# Prints the lines under a "## BREAKING CHANGES" heading in the commit body,
-# up to the next heading or the end of the message. Prints nothing when the
-# body has no such heading. The heading match is case-insensitive and accepts
-# "BREAKING CHANGE" or "BREAKING CHANGES" at any heading level.
+# Prints the content under a "## BREAKING CHANGES" heading in the commit body
+# and returns 0 when the heading exists, 1 when it does not (the heading alone
+# marks the commit as breaking, even with nothing under it). The match is
+# case-insensitive, accepts "BREAKING CHANGE" or "BREAKING CHANGES", and works
+# at any heading level. The section ends at the next heading of the same or a
+# shallower level; a deeper heading inside it is kept as a bold bullet. Lines
+# inside fenced code blocks are never treated as headings, so an example of the
+# heading in a fence does not start or end a section.
 breaking_section_from_body() {
     local sha="$1"
     local in_section=false
-    local line lower
+    local found=1
+    local in_fence=false
+    local section_level=0
+    local line lower hashes level
     while IFS= read -r line; do
-        if [[ "$line" =~ ^#{1,6}[[:space:]] ]]; then
+        if [[ "$line" =~ ^[[:space:]]*(\`\`\`|~~~) ]]; then
+            if [[ "$in_fence" == "true" ]]; then in_fence=false; else in_fence=true; fi
+            if [[ "$in_section" == "true" ]]; then
+                printf '%s\n' "$line"
+            fi
+            continue
+        fi
+        if [[ "$in_fence" == "false" && "$line" =~ ^(#{1,6})[[:space:]] ]]; then
+            hashes="${BASH_REMATCH[1]}"
+            level=${#hashes}
             lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
-            if [[ "$lower" =~ ^#{1,6}[[:space:]]+breaking[[:space:]]+changes?[[:space:]]*$ ]]; then
-                in_section=true
+            if [[ "$in_section" == "false" ]]; then
+                if [[ "$lower" =~ ^#{1,6}[[:space:]]+breaking[[:space:]]+changes?[[:space:]]*$ ]]; then
+                    in_section=true
+                    found=0
+                    section_level=$level
+                fi
                 continue
             fi
-            if [[ "$in_section" == "true" ]]; then
+            if (( level <= section_level )); then
                 break
             fi
+            # A subheading inside the section becomes a bold bullet.
+            line="${line#"${hashes}"}"
+            line="${line#"${line%%[![:space:]]*}"}"
+            printf -- '- **%s**\n' "$line"
             continue
         fi
         if [[ "$in_section" == "true" ]]; then
             printf '%s\n' "$line"
         fi
     done < <(git show -s --format=%B "$sha")
+    return $found
 }
 
 # indent_breaking_notes
-# Reads section lines on stdin and prints them nested under a parent bullet:
-# bullets and their wrapped continuation lines are indented two spaces, blank
-# lines are dropped, and a plain paragraph becomes its own nested bullet.
+# Reads section lines on stdin and prints them nested under a parent bullet.
+# "-", "*" or "1." items become "  - text" and their wrapped continuation
+# lines are indented four spaces; a plain paragraph becomes its own "  - "
+# item (older PR bodies wrote the note as a paragraph). Fenced code blocks are
+# copied with a four-space indent so they stay inside the item. Issue
+# references such as "Closes #12" and trailers such as "Co-authored-by:" are
+# dropped, because squash bodies end with them and they are not upgrade notes.
 indent_breaking_notes() {
-    local line trimmed
+    local line trimmed lower
     local in_bullet=false
+    local in_fence=false
+    local fence_indent=""
+    # Kept in variables because a ")" inside a bracket expression confuses
+    # the [[ ]] parser when the pattern is written inline.
+    local item_re='^([-*]|[0-9]+[.)])[[:space:]]+(.*)$'
+    local issue_ref_re='^(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?)[[:space:]:]+(#|https?://)'
+    local trailer_re='^[a-z][a-z-]*-by:[[:space:]]'
     while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*(\`\`\`|~~~) ]]; then
+            if [[ "$in_fence" == "true" ]]; then
+                in_fence=false
+            else
+                in_fence=true
+                # The fence's own indentation is removed from its content so
+                # the block nests at the same depth wherever it was written.
+                fence_indent="${line%%[![:space:]]*}"
+            fi
+            printf '    %s\n' "${line#"${line%%[![:space:]]*}"}"
+            continue
+        fi
+        if [[ "$in_fence" == "true" ]]; then
+            printf '    %s\n' "${line#"$fence_indent"}"
+            continue
+        fi
         trimmed="${line#"${line%%[![:space:]]*}"}"
         if [[ -z "$trimmed" ]]; then
             in_bullet=false
             continue
         fi
-        if [[ "$trimmed" =~ ^[-*][[:space:]] ]]; then
-            printf '  - %s\n' "${trimmed#[-*] }"
+        if [[ "$trimmed" =~ $item_re ]]; then
+            printf '  - %s\n' "${BASH_REMATCH[2]}"
             in_bullet=true
-        elif [[ "$in_bullet" == "true" ]]; then
+            continue
+        fi
+        lower=$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')
+        if [[ "$lower" =~ $issue_ref_re || "$lower" =~ $trailer_re ]]; then
+            in_bullet=false
+            continue
+        fi
+        if [[ "$in_bullet" == "true" ]]; then
             printf '    %s\n' "$trimmed"
         else
             printf '  - %s\n' "$trimmed"
@@ -80,17 +140,18 @@ generate_changelog_section() {
     local commits_other=""
     local commits_breaking=""
 
-    local sha subject commit_cat marker commit_msg notes
+    local sha subject commit_cat marker commit_msg notes raw_notes has_section
     while IFS= read -r sha; do
         [[ -z "$sha" ]] && continue
         subject=$(git show -s --format=%s "$sha")
         marker=""
 
-        # Extract category from "[Category]" or "[Category]!" format
-        if [[ "$subject" =~ ^\[([^\]]+)\](!?)[[:space:]] ]]; then
+        # Extract category from "[Category]" or "[Category]!" format. The
+        # space after the bracket is optional, as it was before the marker.
+        if [[ "$subject" =~ ^\[([^\]]+)\](!?)[[:space:]]*(.*)$ ]]; then
             commit_cat="${BASH_REMATCH[1]}"
             marker="${BASH_REMATCH[2]}"
-            commit_msg="${subject#\[$commit_cat\]$marker }"
+            commit_msg="${BASH_REMATCH[3]}"
 
             case "$commit_cat" in
                 Frontend|Backend|Feature|Feat)
@@ -117,8 +178,14 @@ generate_changelog_section() {
             commits_other+="- $commit_msg"$'\n'
         fi
 
-        notes=$(breaking_section_from_body "$sha" | indent_breaking_notes)
-        if [[ "$marker" == "!" || -n "$notes" ]]; then
+        # The body heading alone marks a commit as breaking; so does the "!".
+        if raw_notes=$(breaking_section_from_body "$sha"); then
+            has_section=true
+        else
+            has_section=false
+        fi
+        if [[ "$marker" == "!" || "$has_section" == "true" ]]; then
+            notes=$(printf '%s\n' "$raw_notes" | indent_breaking_notes)
             commits_breaking+="- **$commit_msg**"$'\n'
             if [[ -n "$notes" ]]; then
                 commits_breaking+="$notes"$'\n'

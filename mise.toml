@@ -241,10 +241,4 @@ usage = '''
 arg "<tag>" help="Version to release, e.g. 0.2.0"
 flag "--dry-run" help="Print the changelog entry without changing anything"
 '''
-run = '''
-if [ "${usage_dry_run:-false}" = "true" ]; then
-  ./scripts/release.sh "$usage_tag" --dry-run
-else
-  ./scripts/release.sh "$usage_tag"
-fi
-'''
+run = './scripts/release.sh "$usage_tag" ${usage_dry_run:+--dry-run}'
