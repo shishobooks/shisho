@@ -17,20 +17,17 @@ changelog:
       - typo
       - merge conflict
   groups:
-    # A "!" after the category marks a breaking change ("[Fix]! Rename the
-    # key"). Groups are matched in this order, so the breaking group must stay
-    # first. GoReleaser only sees commit subjects; the upgrade notes written
-    # under "## BREAKING CHANGES" in the PR body reach the release page through
-    # the header file that scripts/release-notes-header.sh generates in CI.
-    - title: "Breaking Changes"
-      regexp: '^.*?\[[^\]]+\]!.*$'
-      order: 0
+    # Breaking changes are not a group here on purpose. GoReleaser only sees
+    # commit subjects, so a group would list the "[Fix]! ..." subject a second
+    # time without its notes. The release header that
+    # scripts/release-notes-header.sh generates in CI already carries the
+    # version's Breaking Changes block from CHANGELOG.md, notes included.
     - title: "Features"
       regexp: '^.*?\[(?:Frontend|Backend|Feature|Feat)\].*$'
-      order: 1
+      order: 0
     - title: "Bug Fixes"
       regexp: '^.*?\[Fix\].*$'
-      order: 2
+      order: 1
     - title: "Other Changes"
       order: 999
 
