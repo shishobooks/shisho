@@ -43,6 +43,34 @@ const computedColors = async (
     };
   });
 
+for (const gamut of ["srgb", "p3"]) {
+  test(`clips the headline gradient to text on ${gamut} displays`, async ({
+    page,
+  }) => {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "color-gamut", value: gamut }],
+    });
+    await page.goto("/");
+
+    expect(
+      await page.evaluate(() => matchMedia("(color-gamut: p3)").matches),
+    ).toBe(gamut === "p3");
+
+    const headline = page.locator(".docs-home__title em");
+    await expect(headline).toHaveText("digital");
+    const styles = await headline.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        background: computed.backgroundImage,
+        clip: computed.backgroundClip,
+      };
+    });
+    expect(styles.background).toContain("linear-gradient(");
+    expect(styles.clip).toBe("text");
+  });
+}
+
 test("keeps Aurora controls readable", async ({ page }) => {
   await page.goto("/");
 
