@@ -110,6 +110,7 @@ const coverUrl = bookCoverUrl(book);
 - `mise test:js` - Run all JS tests (unit + E2E) in parallel
 - `mise test:js:fast` - Run JS tests with chromium e2e only (Firefox runs in CI); used by `mise check:quiet`
 - `mise test:unit` - Run JS unit tests only
+- `mise test:scripts` - Run the shell script tests (`scripts/changelog_test.sh`, the release changelog generator)
 - `mise test:e2e` - Run app E2E tests (Chromium + Firefox) in parallel
 - `mise e2e:docs` - Run documentation theme E2E tests in Chromium
 
@@ -168,6 +169,7 @@ For detailed architecture information, see:
   - Frontend-only edits → `mise run lint:js ::: test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
   - Separate tasks with `:::`. `mise lint test` passes `test` to the linter as an argument and silently skips the tests.
   - Both → run both
+  - Release or changelog scripts under `scripts/` → `mise test:scripts`
   - Migrations → also `mise db:rollback && mise db:migrate`
   - App E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
   - Documentation theme flows → `mise e2e:docs`
@@ -237,14 +239,25 @@ Each commit should be in the format of `[{Category}] {Change description}`
 [CI] Add release automation with GitHub Actions
 ```
 
+### Breaking Changes
+
+A change is breaking when an operator has to do something before or after upgrading: a renamed or removed config key or env var, a changed default, a removed route or response field, a new startup validation that can refuse an existing config, or a changed on-disk layout. Mark it in two places, both required:
+
+1. **Title marker.** Put `!` right after the category in the PR title, which becomes the squash commit subject: `[Fix]! Replace ENVIRONMENT=test with SHISHO_TEST_MODE`. The category still decides the changelog section; the `!` flags the change to anyone reading PR titles or `git log`, and on its own it still puts the commit in the changelog's Breaking Changes list when the body section is missing.
+2. **Upgrade notes.** Add a `## BREAKING CHANGES` section to the PR body with one bullet per change, written for an operator who is upgrading: what changed, what they must do, and what happens if they do not. Pull requests squash-merge with the PR body as the commit message, so these bullets end up in git history and `scripts/release.sh` copies them into the changelog under the commit's subject. List items (`-`, `*`, or `1.`, with their wrapped lines), plain paragraphs (each becomes a bullet), and fenced code blocks are copied; a `Closes #N` or `Fixes #N` line and trailers such as `Co-authored-by:` are dropped. The section ends at the next heading of the same level, and a deeper heading inside it becomes a bold bullet. The heading alone marks the commit as breaking even when the title has no `!`. A literal `{{` in the notes is escaped before it reaches GoReleaser's template renderer.
+
+Reviewers treat a breaking change without both markers as a review failure. There is no way to add notes at release time: the changelog is generated from commit subjects and bodies, so the PR is the only place to write them.
+
 ### Releases
 
-- Use `mise release 0.2.0` to create a release
+- Use `mise release 0.2.0` to create a release (`mise release 0.2.0 --dry-run` prints the changelog entry without changing anything)
 - This runs `scripts/release.sh` which:
-  1. Generates changelog from commits since the last tag
+  1. Generates the changelog entry from commits since the last tag with `scripts/lib/changelog.sh`: a `### Breaking Changes` block first (commits marked with `!` or carrying a `## BREAKING CHANGES` body section, with their upgrade notes nested under the subject), then the category sections
   2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-sdk/package.json`
   3. Creates a commit `[Release] v0.2.0`
   4. Tags and pushes to trigger GitHub Actions
+- The release workflow runs `scripts/release-notes-header.sh` to build the GitHub release header from the install block plus that version's `### Breaking Changes` block in `CHANGELOG.md`, and passes it to GoReleaser with `--release-header-tmpl`. That header is the only Breaking Changes section on the release page; GoReleaser's own commit list below it groups by category only, because it reads subjects and would repeat the headline without the notes.
+- `mise test:scripts` runs `scripts/changelog_test.sh`, which exercises the generator against a throwaway git repository. Run it after changing anything under `scripts/`.
 
 ## Worktree Setup
 

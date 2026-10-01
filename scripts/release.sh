@@ -71,84 +71,24 @@ fi
 # Get the previous tag for changelog generation
 PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-# Generate changelog entries from commits since last tag
+# Generate the changelog entry from commits since the last tag. The generator
+# lives in scripts/lib/changelog.sh so scripts/changelog_test.sh can exercise it
+# against a fixture repository. Commits marked breaking (a "!" after the
+# category, or a "## BREAKING CHANGES" section in the commit body) are listed
+# first with their upgrade notes; see AGENTS.md, "Breaking Changes".
 echo "Generating changelog..."
 
-CHANGELOG_ENTRIES=""
 if [[ -n "$PREV_TAG" ]]; then
     COMMIT_RANGE="$PREV_TAG..HEAD"
 else
     COMMIT_RANGE="HEAD"
 fi
 
-# Initialize category commit lists (Bash 3.x compatible - no associative arrays)
-COMMITS_FEATURES=""
-COMMITS_BUGFIXES=""
-COMMITS_DOCS=""
-COMMITS_TESTING=""
-COMMITS_CICD=""
-COMMITS_OTHER=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/changelog.sh
+source "$SCRIPT_DIR/lib/changelog.sh"
 
-while IFS= read -r commit; do
-    [[ -z "$commit" ]] && continue
-
-    # Extract category from [Category] format
-    if [[ "$commit" =~ ^\[([^\]]+)\] ]]; then
-        commit_cat="${BASH_REMATCH[1]}"
-        commit_msg="${commit#\[$commit_cat\] }"
-
-        case "$commit_cat" in
-            Frontend|Backend|Feature|Feat)
-                COMMITS_FEATURES+="- $commit_msg"$'\n'
-                ;;
-            Fix)
-                COMMITS_BUGFIXES+="- $commit_msg"$'\n'
-                ;;
-            Docs|Doc)
-                COMMITS_DOCS+="- $commit_msg"$'\n'
-                ;;
-            Test|E2E)
-                COMMITS_TESTING+="- $commit_msg"$'\n'
-                ;;
-            CI|CD)
-                COMMITS_CICD+="- $commit_msg"$'\n'
-                ;;
-            *)
-                COMMITS_OTHER+="- $commit_msg"$'\n'
-                ;;
-        esac
-    else
-        COMMITS_OTHER+="- $commit"$'\n'
-    fi
-done < <(git log --pretty=tformat:"%s" $COMMIT_RANGE)
-
-# Build changelog section
-CHANGELOG_SECTION="## [$VERSION] - $(date +%Y-%m-%d)"$'\n'
-
-if [[ -n "$COMMITS_FEATURES" ]]; then
-    CHANGELOG_SECTION+=$'\n'"### Features"$'\n'
-    CHANGELOG_SECTION+="$COMMITS_FEATURES"
-fi
-if [[ -n "$COMMITS_BUGFIXES" ]]; then
-    CHANGELOG_SECTION+=$'\n'"### Bug Fixes"$'\n'
-    CHANGELOG_SECTION+="$COMMITS_BUGFIXES"
-fi
-if [[ -n "$COMMITS_DOCS" ]]; then
-    CHANGELOG_SECTION+=$'\n'"### Documentation"$'\n'
-    CHANGELOG_SECTION+="$COMMITS_DOCS"
-fi
-if [[ -n "$COMMITS_TESTING" ]]; then
-    CHANGELOG_SECTION+=$'\n'"### Testing"$'\n'
-    CHANGELOG_SECTION+="$COMMITS_TESTING"
-fi
-if [[ -n "$COMMITS_CICD" ]]; then
-    CHANGELOG_SECTION+=$'\n'"### CI/CD"$'\n'
-    CHANGELOG_SECTION+="$COMMITS_CICD"
-fi
-if [[ -n "$COMMITS_OTHER" ]]; then
-    CHANGELOG_SECTION+=$'\n'"### Other"$'\n'
-    CHANGELOG_SECTION+="$COMMITS_OTHER"
-fi
+CHANGELOG_SECTION=$(generate_changelog_section "$VERSION" "$COMMIT_RANGE")
 
 # In dry-run mode, show what would be added to changelog and exit
 if [[ "$DRY_RUN" == "true" ]]; then
