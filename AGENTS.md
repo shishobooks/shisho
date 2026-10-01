@@ -237,14 +237,25 @@ Each commit should be in the format of `[{Category}] {Change description}`
 [CI] Add release automation with GitHub Actions
 ```
 
+### Breaking Changes
+
+A change is breaking when an operator has to do something before or after upgrading: a renamed or removed config key or env var, a changed default, a removed route or response field, a new startup validation that can refuse an existing config, or a changed on-disk layout. Mark it in two places, both required:
+
+1. **Title marker.** Put `!` right after the category in the PR title, which becomes the squash commit subject: `[Fix]! Replace ENVIRONMENT=test with SHISHO_TEST_MODE`. The category still decides the changelog section; the `!` adds the commit to the Breaking Changes list in `CHANGELOG.md` and on the GitHub release page.
+2. **Upgrade notes.** Add a `## BREAKING CHANGES` section to the PR body with one bullet per change, written for an operator who is upgrading: what changed, what they must do, and what happens if they do not. Pull requests squash-merge with the PR body as the commit message, so these bullets end up in git history and `scripts/release.sh` copies them into the changelog under the commit's subject. Nothing else in the PR body is copied.
+
+Reviewers treat a breaking change without both markers as a review failure. There is no way to add notes at release time: the changelog is generated from commit subjects and bodies, so the PR is the only place to write them.
+
 ### Releases
 
-- Use `mise release 0.2.0` to create a release
+- Use `mise release 0.2.0` to create a release (`mise release 0.2.0 --dry-run` prints the changelog entry without changing anything)
 - This runs `scripts/release.sh` which:
-  1. Generates changelog from commits since the last tag
+  1. Generates the changelog entry from commits since the last tag with `scripts/lib/changelog.sh`: a `### Breaking Changes` block first (commits marked with `!` or carrying a `## BREAKING CHANGES` body section, with their upgrade notes nested under the subject), then the category sections
   2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-sdk/package.json`
   3. Creates a commit `[Release] v0.2.0`
   4. Tags and pushes to trigger GitHub Actions
+- The release workflow runs `scripts/release-notes-header.sh` to build the GitHub release header from the install block plus that version's `### Breaking Changes` block in `CHANGELOG.md`, and passes it to GoReleaser with `--release-header-tmpl`. GoReleaser's own grouping only sees commit subjects, so the `!` marker is what puts a commit under its Breaking Changes heading; the notes come from the header file.
+- `mise test:scripts` runs `scripts/changelog_test.sh`, which exercises the generator against a throwaway git repository. Run it after changing anything under `scripts/`.
 
 ## Worktree Setup
 

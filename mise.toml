@@ -125,6 +125,10 @@ depends = ["tygo", "test:unit", "e2e:chromium", "e2e:docs"]
 description = "Run JS unit tests"
 run = "pnpm test:unit"
 
+[tasks."test:scripts"]
+description = "Run the shell script tests (changelog generation)"
+run = "./scripts/changelog_test.sh"
+
 [tasks."test:e2e"]
 description = "Run E2E tests"
 depends = ["e2e:chromium", "e2e:firefox"]
@@ -149,7 +153,7 @@ run = "go tool cover -html=coverage.out"
 
 [tasks.check]
 description = "Run all validation checks"
-depends = ["lint", "lint:js", "test", "test:js"]
+depends = ["lint", "lint:js", "test", "test:js", "test:scripts"]
 
 [tasks."check:quiet"]
 description = "Run all checks, suppress output on success"
@@ -172,14 +176,14 @@ fi
 echo "Running checks..."
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
-for step in lint test test:js:fast lint:js; do
+for step in lint test test:js:fast lint:js test:scripts; do
   echo 1 >"$tmpdir/$step.rc"
   touch "$tmpdir/$step.out"
   ( mise "$step" >"$tmpdir/$step.out" 2>&1; echo $? >"$tmpdir/$step.rc" ) &
 done
 wait
 failed=0
-for step in lint test test:js:fast lint:js; do
+for step in lint test test:js:fast lint:js test:scripts; do
   rc=$(cat "$tmpdir/$step.rc" 2>/dev/null || echo 1)
   if [ "$rc" -eq 0 ]; then
     printf '  \033[32mPASS\033[0m  %s\n' "$step"
@@ -209,7 +213,8 @@ go run ./cmd/migrations migrate
 [tasks."db:migrate:create"]
 description = "Create a new migration"
 env = { CONFIG_FILE = "./shisho.dev.yaml" }
-run = "go run ./cmd/migrations create {{arg(i=0, name='name')}}"
+usage = 'arg "<name>" help="Migration name, e.g. add_books_index"'
+run = 'go run ./cmd/migrations create "$usage_name"'
 
 [tasks."db:rollback"]
 description = "Rollback last migration"
@@ -232,4 +237,14 @@ mise tygo
 
 [tasks.release]
 description = "Create a release"
-run = "./scripts/release.sh {{arg(i=0, name='tag')}} {{flag(name='dry-run')}}"
+usage = '''
+arg "<tag>" help="Version to release, e.g. 0.2.0"
+flag "--dry-run" help="Print the changelog entry without changing anything"
+'''
+run = '''
+if [ "${usage_dry_run:-false}" = "true" ]; then
+  ./scripts/release.sh "$usage_tag" --dry-run
+else
+  ./scripts/release.sh "$usage_tag"
+fi
+'''
