@@ -222,6 +222,7 @@ website/
 - The navbar logo combines the shelf mark, Shisho name, and 司書 superscript.
 - `ShishoLogo.tsx` draws the same shelf mark as the app's `Logo.tsx`; keep both in sync. `static/img/favicon.ico` and `static/img/shisho-social-card.png` are copies produced by the `favicon` and `splash` skills, not hand-edited files.
 - `website/e2e/theme.spec.ts` checks control contrast, mobile drawer background, and the dark-only invariant.
+- Use `background-image`, not the `background` shorthand, for gradients clipped to text. The production CSS pipeline generates Display P3 overrides for out-of-gamut colors; a generated `background` override resets `background-clip` to `border-box` while the text stays transparent. The theme tests emulate both sRGB and P3 with Chromium's `Emulation.setEmulatedMedia` to catch this production-only failure.
 
 ## Icon and `.gitignore` Gotcha
 
