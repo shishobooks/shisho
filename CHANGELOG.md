@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
+### Breaking Changes
+- **Make every config option behave as documented: validation, env list splitting, a working database_debug, and the test-mode key (#605)**
+  - **Placeholder JWT secret.** The example placeholder `jwt_secret` now
+    stops startup. Generate a new one with `openssl rand -hex 32`. Changing
+    the secret logs everyone out.
+  - **Invalid values stop startup.** Durations without a unit or under 1
+    ms, `worker_processes` below 1, negative retry counts, and an enrichment
+    threshold outside 0 to 1 now stop startup with an error naming the
+    setting.
+  - **Test routes need their own key.** Hosts that set the generic
+    `ENVIRONMENT=test` no longer get the unauthenticated `/api/test` routes.
+    Those routes now require `SHISHO_TEST_MODE`.
+  - **Directory cleanup uses a fixed junk list.** Users with a custom
+    `supplement_exclude_patterns` list now have dotfiles, `Thumbs.db` and
+    `desktop.ini` removed along with emptied book directories. Cleanup uses
+    a fixed junk list and never a user pattern.
+  - **Old PDF page renders linger.** PDF pages rendered at old settings
+    stay on disk until the PDF cache is cleared.
+- **Converge API response shapes, status codes and error handling on the documented rules (#595)**
+  - `/api/user/api-keys` responses now use snake_case keys: `user_id`,
+    `created_at`, `updated_at`, `last_accessed_at`, `api_key_id`,
+    `short_code`, `expires_at`. External callers that read the old camelCase
+    names must update.
+
+### Features
+- Report every failed query through QueryError, catch silent merge and delete failures, and lint uncaught mutateAsync (#603)
+- Build cover and download URLs through helpers, derive request error toasts once, and unify loading, read-only, and gallery-size handling (#599)
+- Type every permission check through useCan, let query hooks own their gates, and quiet closed-dialog queries (#596)
+- Converge API response shapes, status codes and error handling on the documented rules (#595)
+- Deduplicate backend helpers, delete dead code, share test database setup, and index remaining foreign keys (#594)
+- Gate every query hook on its route's permission and add a test that catches ungated or misgated hooks (#584)
+- Align route permissions with the pages that call them and add a user-scoped libraries listing (#582)
+- Finish Share Links: revoke while off, Kobo list-scope access, settings toasts (#568)
+- Revoke and delete Share Links, count their use, and pause links whose creator lost access (#566)
+- Create a Share Link and open it without an account (#560)
+- Consistency pass: inject shared services, unify error construction, dedupe orphan cleanup, fix stale docs (#558)
+- Index foreign key columns and make name lookups use the NOCASE indexes (#556)
+- Prefactor Book Detail so its body renders from a supplied payload (#547)
+- Add Sharing settings page and the shares permission (#545)
+- Inject the books service into series and chapters routes and share the missing-file 404 check (#543)
+- Allow bulk download with Books Read (#527)
+- Hide mutating controls from users without write permission (#524)
+- Extract the book detail file download control into one component (#512)
+
+### Bug Fixes
+- Serve every file through httputil.ServeFile: 500 on filesystem faults, headers only after the open, Go Range handling, and correct download types and names (#613)
+- Keep plugin rows, files, runtimes, and hook tables consistent across install, update, reload, enable, and uninstall (#608) (#612)
+- Escape metadata in the eReader HTML pages and stop StripTags reviving entity-encoded tags (#610)
+- Make every config option behave as documented: validation, env list splitting, a working database_debug, and the test-mode key (#605)
+- Stop mapping server faults to 4xx, share the repeated error messages, and settle the state-check status (#604)
+- Use snake_case API key fields in the SecuritySettings permissions test fixture (#597)
+- Require Books Read on OPDS and fail closed when a handler has no authenticated user (#593)
+- Guard every resource merge against self, cross-library and inaccessible sources, dedupe shared rows, and reject Series and People rename collisions (#583)
+- Reindex every FTS row a mutation touches through one ReindexAffected helper called after commit (#581)
+- Limit Kobo download, cover and metadata to the sync scope, and check the API key owner on device routes (#580)
+- Add a cache key to page image URLs and drop cached pages when a file changes (#574)
+- Land roles without Libraries Read on a usable page, stop the language picker 403, and share one plugin service (#573)
+- Swap EPUB 3 cover-image covers and write OPF creator and identifier attributes per EPUB version (#572)
+- Reject invalid People merges, dedupe shared rows, reindex series on person changes, and clean up orphaned narrators on file delete (#571)
+- Apply list visibility to the Kobo list sync scope (#570)
+- Share Links QA follow-ups: preserve OPF attributes, clipboard fallback, and small UI drift (#561)
+- Restore the files.library_id foreign key, make users.role_id RESTRICT, and fix the library_paths.library_id type (#557)
+- Hide the closed mobile drawer's shadow and highlight one item on settings pages (#555)
+- Return typed 404s from the page and file cover routes and share the series cover helper (#554)
+- Recompute Reviewed after Publisher delete and refresh search after People merge and File delete (#553)
+- Key FTS rows by entity id so per-entity deletes are rowid lookups (#546)
+- Close the remaining Public Demo gaps (#542)
+- Recompute Reviewed and refresh book search after deleting a Genre, Tag, or Person (#533)
+- Send live log events only to users with Config Read (#532)
+- Stop doubling "not found" in missing-file error messages (#531)
+- Map non-JSON API error responses to ShishoAPIError (#526)
+- Let non-admin roles read plugin identifier types and hook order (#525)
+- Stamp a manual collection source when a Genre, Tag, Series, or Person is deleted (#521)
+- Drop plugin chapters with a negative start page on scan (#520)
+- Set timestamps on user, role, library path, and review job inserts (#516)
+- Log dropped PDF covers and chapters, and give Scans a longer PDFium wait (#515)
+- Stamp a manual empty Publisher on files when a Publisher is deleted (#514)
+- Skip PDF bookmarks without a page instead of storing them as chapters at page -1 (#513)
+
+### Documentation
+- Correct device URL lifetime, jobs and plugin permissions, UI labels, and duplicated facts across the website docs (#598)
+- Correct stale AGENTS.md statements, remove em-dashes, amend ADR 0004, and fold UserDirectoryEntry into UserRef (#592)
+- Rename CLAUDE.md files to AGENTS.md (#569)
+- Add Share Link glossary entries and ADR 0008 (#541)
+- Link the demo button directly and remove the useDocPath hook (#511)
+
+### Testing
+- Share one plugin environment across the unsafe id cases so pkg/plugins fits the CI timeout (#614)
+- Close the mutation lint bypasses and assert both states of every gated save button (#611)
+
+### CI/CD
+- Generate breaking-change notes from PR bodies in the changelog and release page, and replace deprecated mise task arguments (#615)
+
 ## [0.0.52] - 2026-09-25
 
 ### Features
