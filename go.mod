@@ -18,13 +18,13 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
-	github.com/klippa-app/go-pdfium v1.20.3
+	github.com/klippa-app/go-pdfium v1.21.1
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
-	github.com/knadh/koanf/v2 v2.3.6
-	github.com/labstack/echo/v4 v4.15.4
-	github.com/pdfcpu/pdfcpu v0.15.0
+	github.com/knadh/koanf/v2 v2.3.7
+	github.com/labstack/echo/v4 v4.16.0
+	github.com/pdfcpu/pdfcpu v0.16.0
 	github.com/pkg/errors v0.9.1
 	github.com/robinjoseph08/golib v0.6.0
 	github.com/segmentio/encoding v0.5.4
@@ -59,7 +59,7 @@ require (
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/mattn/go-runewidth v0.0.27 // indirect
+	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/mattn/go-sqlite3 v1.14.34 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
