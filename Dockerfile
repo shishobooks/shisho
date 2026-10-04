@@ -1,7 +1,10 @@
+# syntax=docker/dockerfile:1
+
+# Build tools run natively; only the runtime image uses the target platform.
 # =============================================================================
 # Stage 1: Generate TypeScript Types
 # =============================================================================
-FROM golang:1.26.8-alpine AS typegen
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS typegen
 
 WORKDIR /app
 
@@ -22,7 +25,7 @@ RUN tygo generate
 # =============================================================================
 # Stage 2: Build Frontend
 # =============================================================================
-FROM node:24.21.0-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:24.21.0-alpine AS frontend-builder
 
 WORKDIR /app
 
@@ -32,7 +35,7 @@ COPY packages/plugin-sdk/package.json ./packages/plugin-sdk/
 RUN corepack enable && corepack install
 
 # Install production dependencies only (build tools, not test/lint tools)
-# Note: fetch-timeout for arm64/QEMU is configured in .npmrc
+# Note: fetch-timeout for slow registry requests is configured in .npmrc
 RUN pnpm install --prod --frozen-lockfile
 
 # Copy frontend source
@@ -49,9 +52,7 @@ RUN NODE_ENV=production pnpm build
 # =============================================================================
 # Stage 3: Build Backend
 # =============================================================================
-FROM golang:1.26.8-alpine AS backend-builder
-
-ARG VERSION=dev
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -65,8 +66,13 @@ COPY pkg/ ./pkg/
 COPY internal/ ./internal/
 COPY --from=frontend-builder /app/build/app/ ./pkg/frontend/dist/
 
-# Build static binary with version
-RUN CGO_ENABLED=0 go build -o /app/shisho -installsuffix cgo \
+# Keep target and version arguments after dependency installation for caching.
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+
+# Cross-compile a static binary with the embedded frontend and version.
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /app/shisho -installsuffix cgo \
     -ldflags "-w -s -X github.com/shishobooks/shisho/pkg/version.Version=${VERSION}" \
     ./cmd/api
 
