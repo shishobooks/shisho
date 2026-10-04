@@ -148,6 +148,14 @@ This allows the Dockerfile to use `pnpm install --prod` to skip installing test/
 
 `demo/` holds the derived Public Demo image (`Dockerfile`), the Fly.io config (`fly.toml`), the corpus authoring Compose file, and `demo/README.md` with the authoring loop and operator setup. `.github/workflows/demo.yml` deploys when the Release workflow calls it after publishing the image, on manual dispatch, and on `repository_dispatch` from `shishobooks/demo-corpus`; it refuses tags older than the first Demo Mode release. Media and the prepared database live only in that corpus repository; `demo/corpus/` is a gitignored CI checkout. Demo Mode behavior itself is documented in `pkg/AGENTS.md`.
 
+### Docker builds
+
+The type-generation, frontend, and backend Docker stages run on `$BUILDPLATFORM`. The backend uses `CGO_ENABLED=0` and cross-compiles with `$TARGETOS`/`$TARGETARCH`; declare target and version arguments only after dependency installation so they do not invalidate dependency layers. Keep the final Alpine stage on the target platform. Multiarch builders still need QEMU for its package installation and user setup, not for Go or Node compilation.
+
+CI builds one multiarch OCI archive and runs that same artifact on native AMD64 and ARM64 runners. Smoke tests check architecture, startup, the embedded frontend and its assets, version injection, custom `PUID`/`PGID`, and graceful shutdown. Do not rebuild the image in smoke jobs or use emulation there.
+
+Only trusted `master` pushes export the shared GHA `image-smoke` cache. PRs and release tags may import it but must not export tag-local caches: exporting the intermediate layers can take longer than compiling, and the next release tag cannot reuse the previous tag's cache.
+
 ### Production serving
 
 The Alpine image runs a single Go process through `su-exec` after resolving `PUID`/`PGID` and preparing `/config` ownership. It has no Caddy layer, startup health polling, or signal-forwarding shell. The image sets `SERVER_PORT=5173`; the application default stays `3689`. The listener honors `server_host`.

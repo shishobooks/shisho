@@ -64,8 +64,9 @@ jobs:
           tags: ghcr.io/shishobooks/shisho:${{ github.ref_name }}-amd64
           build-args: |
             VERSION=${{ github.ref_name }}
-          cache-from: type=gha,scope=amd64
-          cache-to: type=gha,mode=max,scope=amd64
+          # Master warms this scope through CI. Tag-local cache exports are
+          # expensive and cannot be reused by the next release tag.
+          cache-from: type=gha,scope=image-smoke
 
   docker-arm64:
     name: Docker (arm64)
@@ -96,8 +97,6 @@ jobs:
           tags: ghcr.io/shishobooks/shisho:${{ github.ref_name }}-arm64
           build-args: |
             VERSION=${{ github.ref_name }}
-          cache-from: type=gha,scope=arm64
-          cache-to: type=gha,mode=max,scope=arm64
 
   docker-manifest:
     name: Docker Manifest
