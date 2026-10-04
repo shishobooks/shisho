@@ -1,0 +1,164 @@
+name: Docker experiment
+
+on:
+  push:
+    branches: [experiment/shisho-docker-benchmark]
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Baseline (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Uncached native build and OCI export
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.baseline
+          platforms: linux/${{ matrix.arch }}
+          build-args: VERSION=image-smoke
+          no-cache: true
+          outputs: type=oci,dest=${{ runner.temp }}/baseline.tar
+      - name: Warm native build with a new version
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.baseline
+          platforms: linux/${{ matrix.arch }}
+          build-args: VERSION=image-smoke-rebuild
+          outputs: type=oci,dest=${{ runner.temp }}/baseline-rebuild.tar
+
+  image-build:
+    name: Image Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build both architectures
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=image-smoke
+          outputs: type=oci,dest=${{ runner.temp }}/shisho.tar
+          no-cache: true
+      - name: Warm build with a new version
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=image-smoke-rebuild
+          outputs: type=oci,dest=${{ runner.temp }}/shisho-rebuild.tar
+      - uses: actions/upload-artifact@v7
+        with:
+          name: shisho-image
+          path: ${{ runner.temp }}/shisho.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+  image-smoke:
+    name: Image Smoke (${{ matrix.arch }})
+    needs: image-build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: shisho-image
+          path: ${{ runner.temp }}
+      - name: Load the built image on its native runner
+        env:
+          ARCH: ${{ matrix.arch }}
+          MACHINE: ${{ matrix.machine }}
+        run: |
+          test "$(uname -m)" = "$MACHINE"
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y skopeo
+          fi
+          skopeo copy --override-os linux --override-arch "$ARCH" \
+            "oci-archive:${RUNNER_TEMP}/shisho.tar" docker-daemon:shisho:smoke
+          test "$(docker image inspect --format '{{.Architecture}}' shisho:smoke)" = "$ARCH"
+      - name: Verify container startup and embedded frontend
+        run: |
+          docker run -d --name shisho-smoke \
+            -p 127.0.0.1:5173:5173 \
+            -e JWT_SECRET=ci-image-smoke-test-secret-at-least-32-chars \
+            -e PUID=1234 -e PGID=2345 \
+            shisho:smoke
+
+          ready=false
+          for _ in $(seq 1 120); do
+            if [ "$(docker inspect --format '{{.State.Running}}' shisho-smoke)" != true ]; then
+              echo "Container exited before becoming ready"
+              exit 1
+            fi
+            status=$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/health || true)
+            if [ "$status" = 200 ]; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "Container did not become ready within 120 attempts"
+            exit 1
+          fi
+
+          status=$(curl -sS --max-time 5 -D /tmp/shisho-headers -o /tmp/shisho-index.html -w '%{http_code}' http://127.0.0.1:5173/)
+          test "$status" = 200
+          grep -qi '^content-type: text/html' /tmp/shisho-headers
+          grep -q '<div id="root"></div>' /tmp/shisho-index.html
+          grep -q 'src="/assets/[^" ]*\.js"' /tmp/shisho-index.html
+          grep -q 'href="/assets/[^" ]*\.css"' /tmp/shisho-index.html
+          for asset in $(grep -oE '(src|href)="/assets/[^" ]+\.(js|css)"' /tmp/shisho-index.html | cut -d '"' -f 2); do
+            curl --fail --silent --show-error --max-time 10 \
+              -D /tmp/shisho-asset-headers "http://127.0.0.1:5173${asset}" -o /tmp/shisho-asset
+            test -s /tmp/shisho-asset
+            case "$asset" in
+              *.js) grep -Eqi '^content-type: (text|application)/javascript([;[:space:]]|$)' /tmp/shisho-asset-headers ;;
+              *.css) grep -Eqi '^content-type: text/css([;[:space:]]|$)' /tmp/shisho-asset-headers ;;
+            esac
+          done
+          docker logs shisho-smoke > /tmp/shisho-smoke.log 2>&1
+          grep -Eq '"version"[[:space:]]*:[[:space:]]*"image-smoke"' /tmp/shisho-smoke.log
+          test "$(docker exec shisho-smoke cat /proc/1/comm)" = shisho
+          docker exec shisho-smoke grep -Eq '^Uid:[[:space:]]+1234[[:space:]]+1234[[:space:]]+1234[[:space:]]+1234$' /proc/1/status
+          docker exec shisho-smoke grep -Eq '^Gid:[[:space:]]+2345[[:space:]]+2345[[:space:]]+2345[[:space:]]+2345$' /proc/1/status
+          test "$(docker exec shisho-smoke stat -c '%u:%g' /config)" = 1234:2345
+          docker stop --timeout 10 shisho-smoke
+          test "$(docker inspect --format '{{.State.ExitCode}}' shisho-smoke)" = 0
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs shisho-smoke || true
+          docker rm -f shisho-smoke || true
+
