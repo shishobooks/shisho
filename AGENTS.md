@@ -152,6 +152,8 @@ This allows the Dockerfile to use `pnpm install --prod` to skip installing test/
 
 The type-generation, frontend, and backend Docker stages run on `$BUILDPLATFORM`. The backend uses `CGO_ENABLED=0` and cross-compiles with `$TARGETOS`/`$TARGETARCH`; declare target and version arguments only after dependency installation so they do not invalidate dependency layers. Keep the final Alpine stage on the target platform. Multiarch builders still need QEMU for its package installation and user setup, not for Go or Node compilation.
 
+Release publishing keeps parallel native AMD64 and ARM64 build jobs. The single-builder alternative passed native smoke tests but was slower in both cold and version-only GitHub benchmarks, so cross-compilation support does not mean consolidating the release runners.
+
 CI builds one multiarch OCI archive and runs that same artifact on native AMD64 and ARM64 runners. Smoke tests check architecture, startup, the embedded frontend and its assets, version injection, custom `PUID`/`PGID`, and graceful shutdown. Do not rebuild the image in smoke jobs or use emulation there.
 
 Only trusted `master` pushes export the shared GHA `image-smoke` cache. PRs and release tags may import it but must not export tag-local caches: exporting the intermediate layers can take longer than compiling, and the next release tag cannot reuse the previous tag's cache.
