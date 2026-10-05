@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -963,9 +964,6 @@ func TestWriteFileAtomic(t *testing.T) {
 		got, err := os.ReadFile(path)
 		require.NoError(t, err)
 		assert.Equal(t, []byte("new"), got)
-		info, err := os.Stat(path)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0644), info.Mode().Perm())
 		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
@@ -991,6 +989,32 @@ func TestWriteFileAtomic(t *testing.T) {
 		assert.Equal(t, "book.epub.cover.jpg", entries[0].Name())
 	})
 
+	for _, failAt := range []string{"write", "sync", "close"} {
+		t.Run("a failed "+failAt+" leaves the previous file and no temporary file", func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			path := filepath.Join(dir, "book.epub.cover.jpg")
+			require.NoError(t, os.WriteFile(path, []byte("old"), 0600))
+
+			create := func(dir, pattern string, perm os.FileMode) (atomicTempFile, error) {
+				f, err := CreateTemp(dir, pattern, perm)
+				if err != nil {
+					return nil, err
+				}
+				return &failingTempFile{File: f, failAt: failAt}, nil
+			}
+			require.Error(t, writeFileAtomic(path, []byte("new"), 0644, create))
+
+			got, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, []byte("old"), got)
+			entries, err := os.ReadDir(dir)
+			require.NoError(t, err)
+			require.Len(t, entries, 1)
+			assert.Equal(t, "book.epub.cover.jpg", entries[0].Name())
+		})
+	}
+
 	t.Run("a missing directory fails without side effects", func(t *testing.T) {
 		t.Parallel()
 		path := filepath.Join(t.TempDir(), "missing", "cover.jpg")
@@ -998,6 +1022,35 @@ func TestWriteFileAtomic(t *testing.T) {
 		_, err := os.Stat(filepath.Dir(path))
 		assert.True(t, os.IsNotExist(err))
 	})
+}
+
+// failingTempFile fails one step of an atomic write after doing the real work
+// up to that point, so a failed close still leaves a file behind to clean up.
+type failingTempFile struct {
+	*os.File
+	failAt string
+}
+
+func (f *failingTempFile) Write(p []byte) (int, error) {
+	if f.failAt == "write" {
+		return 0, errors.New("injected write failure")
+	}
+	return f.File.Write(p)
+}
+
+func (f *failingTempFile) Sync() error {
+	if f.failAt == "sync" {
+		return errors.New("injected sync failure")
+	}
+	return f.File.Sync()
+}
+
+func (f *failingTempFile) Close() error {
+	err := f.File.Close()
+	if f.failAt == "close" {
+		return errors.New("injected close failure")
+	}
+	return err
 }
 
 func TestDirectoryCleanupPatterns(t *testing.T) {

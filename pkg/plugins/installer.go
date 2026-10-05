@@ -15,6 +15,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 )
 
 // AllowedDownloadHosts lists the allowed host prefixes for plugin download URLs.
@@ -132,17 +133,12 @@ func (inst *Installer) stagePackage(ctx context.Context, scope, pluginID, downlo
 	if err := os.MkdirAll(stagingRoot, 0755); err != nil {
 		return nil, errors.Wrap(err, "failed to create the plugin staging directory")
 	}
-	dir, err := os.MkdirTemp(stagingRoot, "package-")
+	// Installed plugins have always been world-readable.
+	dir, err := fileutils.MkdirTemp(stagingRoot, "package-", 0755)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a plugin staging directory")
 	}
 	pkg := &stagedPackage{dir: dir}
-	// MkdirTemp creates the directory private; installed plugins have
-	// always been world-readable.
-	if err := os.Chmod(dir, 0755); err != nil {
-		pkg.remove()
-		return nil, errors.Wrap(err, "failed to set plugin staging directory permissions")
-	}
 
 	if err := inst.extractZip(tmpFile, dir); err != nil {
 		pkg.remove()
