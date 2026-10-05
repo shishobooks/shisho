@@ -68,6 +68,12 @@ For example, `Supplement.pdf` can be auto-demoted beside `Book.epub` when `suppl
 
 The rule runs only when the PDF is first created in Shisho. Existing PDFs are not reclassified by later scans. A root-level PDF remains a main PDF even when its basename matches the configured list.
 
+## Removed Supplement Files
+
+When a supplement's file is deleted from disk, Shisho removes it from the book. The [library monitor](./libraries.md#automatic-and-manual-scans) does this after it sees the delete. Otherwise the next full scan does it. Only the supplement is removed: the book and its other files stay. A file that Shisho cannot check, for example because of a permission error, is kept and the scan logs a warning.
+
+After removing a missing supplement, the scan looks for supplements in that book's folder again. A supplement renamed while Shisho was not watching, or moved along with its book folder, is linked again at its new path. It comes back as a new file, so a display name you gave it is lost.
+
 ## Managing Supplements
 
 Changing file roles requires the Books Write permission and access to the book's library. See [Users and Permissions](./users-and-permissions.md).

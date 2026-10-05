@@ -138,11 +138,14 @@ func TestCleanupOrphanedFiles_FullOrphan_PromotesSupplement(t *testing.T) {
 	allBooks := tc.listBooks()
 	bookID := allBooks[0].ID
 
-	// Manually add a supplement file in the DB (a CBZ supplement that can be promoted)
+	// Manually add a supplement file in the DB (a CBZ supplement that can be
+	// promoted). It is on disk, so supplement cleanup keeps it.
+	supplementPath := filepath.Join(bookDir, "supplement.cbz")
+	require.NoError(t, os.WriteFile(supplementPath, []byte("cbz"), 0o644))
 	supplement := &models.File{
 		LibraryID:     1,
 		BookID:        bookID,
-		Filepath:      filepath.Join(bookDir, "supplement.cbz"),
+		Filepath:      supplementPath,
 		FileType:      models.FileTypeCBZ,
 		FileRole:      models.FileRoleSupplement,
 		FilesizeBytes: 100,

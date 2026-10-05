@@ -88,7 +88,7 @@ Move detection requires all of the following:
 - The new file is in the same library and has the same supported file type.
 - The file contents are byte-for-byte unchanged.
 
-If Shisho was offline during a move, the next full scan performs the same reconciliation for main files. Offline reconciliation does not match supplement moves. A move that also rewrites or retags the file changes its fingerprint, so Shisho treats it as a removed file and a new import.
+If Shisho was offline during a move, the next full scan performs the same reconciliation for main files. Offline reconciliation does not match supplement moves: the scan removes the supplement at its old path and discovers it again at the new one. See [Supplement Files](./supplement-files.md#removed-supplement-files). A move that also rewrites or retags the file changes its fingerprint, so Shisho treats it as a removed file and a new import.
 
 Fingerprint generation runs as a background hash-generation job after discovery. Before renaming or moving many files outside Shisho, wait for that job to finish under **Settings > Jobs**. This is especially important after a first scan or an upgrade that introduces hashes for existing files.
 
