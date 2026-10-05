@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -248,4 +250,167 @@ func TestOrganizeBookFiles_DirectoryBased_UndoesPromotionWhenDatabaseUpdateFails
 	assert.NoFileExists(t, filepath.Join(folder, "Beach Read (1).epub"))
 	assert.Equal(t, rootFile.Filepath, f.reloadFile(rootFile).Filepath)
 	assert.FileExists(t, filepath.Join(folder, "Beach Read.epub"), "the folder and its other file are untouched")
+}
+
+// nestedLayout is Book A in a folder named oldName with a file of its own, and
+// Book B nested inside A's folder at extras/b.epub, both on disk. Organizing A
+// renames its folder to "[Emily Henry] Beach Read".
+type nestedLayout struct {
+	oldFolder, newFolder string
+	a, b                 *models.Book
+	aFile, bFile         *models.File
+}
+
+func (f *organizeFixture) addNestedLayout(oldName string) nestedLayout {
+	f.t.Helper()
+	l := nestedLayout{
+		oldFolder: filepath.Join(f.libDir, oldName),
+		newFolder: filepath.Join(f.libDir, "[Emily Henry] Beach Read"),
+	}
+	l.a = f.addBook("Beach Read", l.oldFolder)
+	l.aFile = f.addFile(l.a, filepath.Join(l.oldFolder, "Beach Read.epub"), true)
+	l.b = f.addBook("Book Lovers", filepath.Join(l.oldFolder, "extras"))
+	l.bFile = f.addFile(l.b, filepath.Join(l.oldFolder, "extras", "b.epub"), true)
+	return l
+}
+
+func TestOrganizeBookFiles_DirectoryBased_RewritesNestedBooks(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old Title")
+
+	f.organize(l.a)
+
+	assert.Equal(t, l.newFolder, f.reloadBook(l.a).Filepath)
+	assert.Equal(t, filepath.Join(l.newFolder, "Beach Read.epub"), f.reloadFile(l.aFile).Filepath)
+	assert.Equal(t, filepath.Join(l.newFolder, "extras"), f.reloadBook(l.b).Filepath)
+	nested := f.reloadFile(l.bFile)
+	assert.Equal(t, filepath.Join(l.newFolder, "extras", "b.epub"), nested.Filepath)
+	assert.FileExists(t, nested.Filepath, "the nested Book's row points where its file is")
+}
+
+func TestOrganizeBookFiles_DirectoryBased_LeavesSiblingFolderSharingNamePrefix(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old Title")
+	// " 2" sorts just before the separator and "0" just after it.
+	var siblings []*models.File
+	for _, suffix := range []string{" 2", "0"} {
+		siblingFolder := l.oldFolder + suffix
+		sibling := f.addBook("Old Title"+suffix, siblingFolder)
+		siblings = append(siblings, f.addFile(sibling, filepath.Join(siblingFolder, "d.epub"), true))
+	}
+
+	f.organize(l.a)
+
+	for _, sibling := range siblings {
+		assert.Equal(t, filepath.Dir(sibling.Filepath), f.reloadBook(&models.Book{ID: sibling.BookID}).Filepath)
+		assert.Equal(t, sibling.Filepath, f.reloadFile(sibling).Filepath)
+		assert.FileExists(t, sibling.Filepath)
+	}
+}
+
+// The old folder name is matched exactly: LIKE wildcards in it match only
+// themselves, and a folder differing only in case is a different folder.
+func TestOrganizeBookFiles_DirectoryBased_MatchesFolderNameLiterally(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old_Title 100%")
+	wildcardFolder := filepath.Join(f.libDir, "[Emily Henry] OldXTitle 100 percent")
+	wildcardMatch := f.addBook("Wildcard", wildcardFolder)
+	wildcardFile := f.addFile(wildcardMatch, filepath.Join(wildcardFolder, "x.epub"), true)
+	// Rows only: a case-insensitive file system cannot hold both folders.
+	caseFolder := filepath.Join(f.libDir, "[emily henry] old_title 100%")
+	caseMatch := f.addBook("Case", caseFolder)
+	caseFile := f.addFile(caseMatch, filepath.Join(caseFolder, "y.epub"), false)
+
+	f.organize(l.a)
+
+	assert.Equal(t, filepath.Join(l.newFolder, "extras", "b.epub"), f.reloadFile(l.bFile).Filepath)
+	assert.Equal(t, wildcardFolder, f.reloadBook(wildcardMatch).Filepath)
+	assert.Equal(t, wildcardFile.Filepath, f.reloadFile(wildcardFile).Filepath)
+	assert.Equal(t, caseFolder, f.reloadBook(caseMatch).Filepath)
+	assert.Equal(t, caseFile.Filepath, f.reloadFile(caseFile).Filepath)
+}
+
+func TestOrganizeBookFiles_DirectoryBased_LeavesNestedBooksWhenDatabaseUpdateFails(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old Title")
+	f.failFilepathUpdates()
+
+	loaded, err := f.svc.RetrieveBook(f.ctx, RetrieveBookOptions{ID: &l.a.ID})
+	require.NoError(t, err)
+	require.Error(t, f.svc.OrganizeBookFiles(f.ctx, loaded))
+
+	assert.FileExists(t, l.bFile.Filepath, "the folder is renamed back")
+	assert.NoDirExists(t, l.newFolder)
+	assert.Equal(t, l.oldFolder, f.reloadBook(l.a).Filepath)
+	assert.Equal(t, l.aFile.Filepath, f.reloadFile(l.aFile).Filepath)
+	assert.Equal(t, l.b.Filepath, f.reloadBook(l.b).Filepath)
+	assert.Equal(t, l.bFile.Filepath, f.reloadFile(l.bFile).Filepath)
+}
+
+// Library paths can overlap, and the rename moves everything under the folder
+// whichever library a row belongs to.
+func TestOrganizeBookFiles_DirectoryBased_RewritesNestedBooksInOtherLibraries(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old Title")
+	other := &models.Library{
+		Name:                     "Other Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := f.db.NewInsert().Model(other).Exec(f.ctx)
+	require.NoError(t, err)
+	otherBook := f.addBook("Other", filepath.Join(l.oldFolder, "other"))
+	otherFile := f.addFile(otherBook, filepath.Join(l.oldFolder, "other", "c.epub"), true)
+	_, err = f.db.NewUpdate().Model((*models.Book)(nil)).Set("library_id = ?", other.ID).Where("id = ?", otherBook.ID).Exec(f.ctx)
+	require.NoError(t, err)
+	_, err = f.db.NewUpdate().Model((*models.File)(nil)).Set("library_id = ?", other.ID).Where("id = ?", otherFile.ID).Exec(f.ctx)
+	require.NoError(t, err)
+
+	f.organize(l.a)
+
+	assert.Equal(t, filepath.Join(l.newFolder, "other"), f.reloadBook(otherBook).Filepath)
+	reloaded := f.reloadFile(otherFile)
+	assert.Equal(t, filepath.Join(l.newFolder, "other", "c.epub"), reloaded.Filepath)
+	assert.FileExists(t, reloaded.Filepath)
+}
+
+func TestOrganizeBookFiles_DirectoryBased_ReindexesNestedBooks(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old Title")
+	require.NoError(t, search.NewService(f.db).ReindexBookByID(f.ctx, l.b.ID))
+
+	f.organize(l.a)
+
+	var row struct {
+		Filepath  string
+		Filenames string
+	}
+	require.NoError(t, f.db.NewRaw(`SELECT filepath, filenames FROM books_fts WHERE rowid = ?`, l.b.ID).Scan(f.ctx, &row))
+	assert.Equal(t, filepath.Join(l.newFolder, "extras"), row.Filepath)
+	assert.Equal(t, filepath.Join(l.newFolder, "extras", "b.epub"), row.Filenames)
+}
+
+// A Book whose row is not at the folder it was organized from fails the
+// record, so organize renames the folder back instead of leaving the
+// database behind.
+func TestRecordRenamedBookFolder_FailsWhenBookIsNotRecordedAtOldFolder(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+	l := f.addNestedLayout("[Emily Henry] Old Title")
+	stale := *l.a
+	stale.Filepath = filepath.Join(f.libDir, "elsewhere")
+	staleFolder := stale.Filepath
+	staleFile := f.addFile(l.b, filepath.Join(staleFolder, "s.epub"), false)
+
+	_, err := f.svc.recordRenamedBookFolder(f.ctx, &stale, nil, l.newFolder, time.Now())
+
+	require.Error(t, err)
+	assert.Equal(t, staleFolder, stale.Filepath, "the in-memory Book keeps its path")
+	assert.Equal(t, staleFile.Filepath, f.reloadFile(staleFile).Filepath, "nothing is rewritten")
 }

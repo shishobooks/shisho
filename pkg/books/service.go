@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/shishobooks/shisho/pkg/sortspec"
@@ -972,9 +974,11 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				"new_path": newFolderPath,
 			})
 
-			// Record the book's and its files' new paths together. If that
-			// fails, rename the folder back so disk and database agree.
-			if err := svc.recordRenamedBookFolder(ctx, book, files, newFolderPath, now); err != nil {
+			// Record the new paths of the book, its files, and any Book nested
+			// in the folder together. If that fails, rename the folder back so
+			// disk and database agree.
+			nestedBookIDs, err := svc.recordRenamedBookFolder(ctx, book, files, newFolderPath, now)
+			if err != nil {
 				data := logger.Data{
 					"book_id":  book.ID,
 					"old_path": oldFolderPath,
@@ -989,6 +993,10 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 				}
 				return err
 			}
+			// Callers reindex the organized Book but cannot know which Books
+			// are nested in its folder, so reindex those here. The search
+			// service holds only the db, so building it inline is deliberate.
+			search.NewService(svc.db).ReindexAffected(ctx, &search.Affected{BookIDs: nestedBookIDs})
 
 			// Delete old sidecar file (it has the old folder name in its filename)
 			// The old sidecar is now at: newFolderPath/oldFolderName.metadata.json
@@ -1229,50 +1237,62 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 }
 
 // recordRenamedBookFolder records, in one transaction, that a directory-based
-// Book's folder was renamed to newFolderPath: the Book's path and the path of
-// each of its files inside the old folder. On success it updates book and
-// files in memory too.
-func (svc *Service) recordRenamedBookFolder(ctx context.Context, book *models.Book, files []*models.File, newFolderPath string, now time.Time) error {
-	oldPrefix := book.Filepath + string(os.PathSeparator)
-	newPaths := map[int]string{}
-	for _, file := range files {
-		if strings.HasPrefix(file.Filepath, oldPrefix) {
-			newPaths[file.ID] = filepath.Join(newFolderPath, strings.TrimPrefix(file.Filepath, oldPrefix))
-		}
-	}
-
+// Book's folder was renamed to newFolderPath. Every books and files row at the
+// old folder or inside it gets the new prefix: the Book and its files, and any
+// other Book nested in the folder, in any library, since those moved on disk
+// with it. On success it updates book and files in memory too, and returns the
+// ids of the other Books it rewrote, possibly repeated, whose search rows
+// still hold the old paths.
+func (svc *Service) recordRenamedBookFolder(ctx context.Context, book *models.Book, files []*models.File, newFolderPath string, now time.Time) ([]int, error) {
+	oldFolderPath := book.Filepath
+	var bookIDs, fileBookIDs []int
 	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewUpdate().
-			Model((*models.Book)(nil)).
-			Set("filepath = ?, updated_at = ?", newFolderPath, now).
-			Where("id = ?", book.ID).
-			Exec(ctx); err != nil {
+		if _, err := underFolder(tx.NewUpdate().Model((*models.Book)(nil)), oldFolderPath).
+			Set("filepath = ? || substr(filepath, length(?) + 1), updated_at = ?", newFolderPath, oldFolderPath, now).
+			Returning("id").
+			Exec(ctx, &bookIDs); err != nil {
 			return errors.WithStack(err)
 		}
-		for fileID, newPath := range newPaths {
-			if _, err := tx.NewUpdate().
-				Model((*models.File)(nil)).
-				Set("filepath = ?, updated_at = ?", newPath, now).
-				Where("id = ?", fileID).
-				Exec(ctx); err != nil {
-				return errors.WithStack(err)
-			}
+		if !slices.Contains(bookIDs, book.ID) {
+			return errors.Errorf("book %d is not recorded at %s", book.ID, oldFolderPath)
+		}
+		// A file in the folder can belong to a Book stored elsewhere, so the
+		// Books to reindex include the owners of the files rewritten here.
+		if _, err := underFolder(tx.NewUpdate().Model((*models.File)(nil)), oldFolderPath).
+			Set("filepath = ? || substr(filepath, length(?) + 1), updated_at = ?", newFolderPath, oldFolderPath, now).
+			Returning("book_id").
+			Exec(ctx, &fileBookIDs); err != nil {
+			return errors.WithStack(err)
 		}
 		return nil
 	})
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	book.Filepath = newFolderPath
 	book.UpdatedAt = now
+	oldPrefix := oldFolderPath + string(os.PathSeparator)
 	for _, file := range files {
-		if newPath, ok := newPaths[file.ID]; ok {
-			file.Filepath = newPath
+		if strings.HasPrefix(file.Filepath, oldPrefix) {
+			file.Filepath = newFolderPath + strings.TrimPrefix(file.Filepath, oldFolderPath)
 			file.UpdatedAt = now
 		}
 	}
-	return nil
+
+	return slices.DeleteFunc(slices.Concat(bookIDs, fileBookIDs), func(id int) bool { return id == book.ID }), nil
+}
+
+// underFolder limits q to rows whose filepath is folder or inside it. It
+// compares bytes instead of using LIKE, which folds ASCII case and would need
+// its wildcards escaped: every path that starts with folder and a separator
+// sorts at or after that prefix and before folder followed by the byte after
+// the separator. A range can also use the filepath index.
+func underFolder(q *bun.UpdateQuery, folder string) *bun.UpdateQuery {
+	return q.Where("filepath = ? OR (filepath >= ? AND filepath < ?)",
+		folder,
+		folder+string(os.PathSeparator),
+		folder+string(os.PathSeparator+1))
 }
 
 // isFileAtLibraryRoot reports whether the file's parent directory is one of
