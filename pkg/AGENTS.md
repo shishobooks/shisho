@@ -100,6 +100,8 @@ Other services that hold only the `*bun.DB` handle (search, aliases, libraries, 
 - **Sidecar removal is deferred until the file has parsed.** When a file is swapped on disk or scanned with refresh, the stale sidecar must go, but only after the replacement file parses. Removing it first and then failing to parse would destroy the last on-disk record of the file's metadata. Keep the `discardSidecar` decision before the parse and the `removeFileSidecar` call after it.
 - **`checkExpectedMimeType` is the single content check for built-in extensions.** Both the scan walker (`ProcessScanJob`) and the monitor's new-file path (`processEvent`) call it, so a file can never be rejected by one and imported by the other. `.m4b` accepts `audio/x-m4a` (`M4A ` brand), `audio/mp4` (`M4B ` brand), and `video/mp4` (`isom`/`mp42` brands); all three are real audiobooks depending on the tool that wrote them. Files already in the DB skip the check in both places, including a Create event on a tracked path (temp file + rename), which is rescanned so a now-unreadable replacement gets flagged instead of silently ignored.
 
+- **`scanFileByID` handles a file row whose Book is missing** (left by a Book delete that ran without foreign keys). `scanOrphanedFile` deletes the row, deletes the Book's other rows with `DeleteOrphanedBookChildren` once no file row points at it, and, when the file is still on disk, imports it through `scanFileCreateNew` as a new Book. The result then has `FileCreated` set, so callers organize it as they would any new file. Do not turn a missing parent Book back into an error: the monitor and full scans would fail on that path forever and never import the file.
+
 ### scanInternal and File Organization
 
 **CRITICAL: `scanInternal(FilePath)` defers file organization.** When scanning a new file by path, `scanFileCore` is called with `isResync=false`, which skips the book organization step. The caller is responsible for running organization afterward if the library has `OrganizeFileStructure` enabled.
@@ -639,6 +641,11 @@ Path-affecting removal operations must also trigger reorganization. For example,
 
 For directory-backed books, folder organization owns the book sidecar. Rename the files inside that folder with `RenameOrganizedFileOnly`, not `RenameOrganizedFile`. A file previously moved from the library root can carry a leftover basename-based book sidecar. Renaming that sidecar during a narrator change can overwrite the current folder-based sidecar and restore stale metadata on the next Scan.
 
+**Disk and database must agree after every move.** Organizing moves the file first and records its new path second. If that write fails, the database names a path with nothing there, and the next scan deletes the Book and reimports the moved file without its metadata. Every rename or move site does two things:
+
+- Set `OrganizedNameOptions.Claimed` so a destination another `files` row holds counts as taken, the same as one on disk. `books.Service.FilepathClaimedByOtherFile` builds it for a file. Without it, a row left behind by a deleted Book makes the write fail on the `files (filepath, library_id)` unique index.
+- Record the new path with `books.Service.RecordOrganizedFilepath` right after the move, not later with other columns. On failure it moves the file and its covers and sidecars back (`fileutils.UndoOrganizedMove`) and logs at error level. Pass `includeBookSidecar` to match the move: false for `RenameOrganizedFileOnly`, true otherwise. A folder rename records the Book and all its files in one transaction and renames the folder back on failure (`recordRenamedBookFolder`).
+
 **Pattern in handlers:**
 ```go
 // After updating the field
@@ -649,12 +656,16 @@ if fieldChanged && library.OrganizeFileStructure {
         NarratorNames: narratorNames,
         Title:         title,  // Use file.Name if available
         FileType:      file.FileType,
+        Claimed:       bookService.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID),
     }
     newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
     if err != nil {
         // Handle error
     }
-    // Update file.Filepath in database
+    if newPath != file.Filepath {
+        // Moves the file back if the write fails.
+        err = bookService.RecordOrganizedFilepath(ctx, file, file.Filepath, newPath, false)
+    }
 }
 ```
 

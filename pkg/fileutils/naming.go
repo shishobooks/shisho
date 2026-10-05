@@ -19,6 +19,13 @@ type OrganizedNameOptions struct {
 	SeriesNumberEnd  *float64
 	SeriesNumberUnit *string // for CBZ: models.SeriesNumberUnitVolume or models.SeriesNumberUnitChapter; nil treated as volume
 	FileType         string  // for determining number formatting
+
+	// Claimed reports whether another record already holds a path, such as
+	// a files row for a different file. The organize helpers skip a claimed
+	// destination with a numbered suffix, the same as one that exists on
+	// disk, so a move never lands on a path the database gives to another
+	// file. Nil means only the disk is checked.
+	Claimed func(path string) bool
 }
 
 // GenerateOrganizedFolderName creates a standardized folder name: [Author] Title <number>.

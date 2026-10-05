@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -125,54 +124,29 @@ func (fo *fileOrganizer) RenameNarratedFile(ctx context.Context, fileID int) (st
 		NarratorNames: narratorNames,
 		Title:         title,
 		FileType:      file.FileType,
+		Claimed:       fo.bookService.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID),
 	}
 
 	// Rename the file
 	// Use RenameOrganizedFileOnly to avoid renaming the book sidecar.
 	// Narrator changes are file-level, not book-level.
-	newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
+	oldPath := file.Filepath
+	newPath, err := fileutils.RenameOrganizedFileOnly(oldPath, organizeOpts)
 	if err != nil {
-		return file.Filepath, errors.WithStack(err)
+		return oldPath, errors.WithStack(err)
 	}
 
-	if newPath != file.Filepath {
+	if newPath != oldPath {
 		log.Info("renamed narrated file after person name change", logger.Data{
 			"file_id":  file.ID,
-			"old_path": file.Filepath,
+			"old_path": oldPath,
 			"new_path": newPath,
 		})
 
-		// Update file path in database
-		now := time.Now()
-		_, err = fo.db.NewUpdate().
-			Model((*models.File)(nil)).
-			Set("filepath = ?, updated_at = ?", newPath, now).
-			Where("id = ?", file.ID).
-			Exec(ctx)
-		if err != nil {
-			// Log error but return the new path since the file was renamed
-			log.Error("failed to update file path in database after rename", logger.Data{
-				"file_id":  file.ID,
-				"new_path": newPath,
-				"error":    err.Error(),
-			})
-		}
-
-		// Update cover path if it exists
-		if file.CoverImageFilename != nil {
-			newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
-			_, err = fo.db.NewUpdate().
-				Model((*models.File)(nil)).
-				Set("cover_image_filename = ?", newCoverPath).
-				Where("id = ?", file.ID).
-				Exec(ctx)
-			if err != nil {
-				log.Warn("failed to update cover path in database after rename", logger.Data{
-					"file_id":        file.ID,
-					"new_cover_path": newCoverPath,
-					"error":          err.Error(),
-				})
-			}
+		// Record the new path and cover filename. A failure moves the file
+		// back, so it is still at oldPath.
+		if err := fo.bookService.RecordOrganizedFilepath(ctx, file, oldPath, newPath, false); err != nil {
+			return oldPath, err
 		}
 	}
 

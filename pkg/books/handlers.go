@@ -1337,6 +1337,7 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 		NarratorNames: narratorNames,
 		Title:         title,
 		FileType:      file.FileType,
+		Claimed:       h.bookService.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID),
 	}
 	// RenameOrganizedFileOnly leaves the book sidecar untouched — file-level
 	// changes must not rename the book sidecar.
@@ -1362,13 +1363,12 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 			"old_path": file.Filepath,
 			"new_path": newPath,
 		})
-		if file.CoverImageFilename != nil {
-			newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
-			file.CoverImageFilename = &newCoverPath
-			opts.Columns = append(opts.Columns, "cover_image_filename")
+		// Record the new path now rather than with the outer UpdateFile, so a
+		// failure can move the file back. Then revert the name the same way
+		// as a failed rename.
+		if err := h.bookService.RecordOrganizedFilepath(ctx, file, file.Filepath, newPath, false); err != nil {
+			h.revertRenameDrivenColumns(ctx, file, opts, log)
 		}
-		file.Filepath = newPath
-		opts.Columns = append(opts.Columns, "filepath")
 	}
 	return file
 }

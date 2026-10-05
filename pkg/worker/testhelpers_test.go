@@ -23,10 +23,10 @@ import (
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 // testContext holds all the dependencies needed for testing the worker.
@@ -55,11 +55,13 @@ func newTestContext(t *testing.T) *testContext {
 	// Using a unique name per test ensures parallel tests don't share databases,
 	// while cache=shared allows multiple connections (from worker goroutines) to
 	// share the same database within a test.
+	// Every pooled connection runs PRAGMA foreign_keys, as in production.
 	dbName := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dbName)
+	connector, err := sqliteconn.NewConnector(dbName, "PRAGMA foreign_keys=ON")
 	if err != nil {
 		t.Fatalf("failed to open in-memory database: %v", err)
 	}
+	sqldb := sql.OpenDB(connector)
 
 	// Configure connection pool for shared in-memory database.
 	// Without this, closing a connection could destroy the database.
@@ -67,12 +69,6 @@ func newTestContext(t *testing.T) *testContext {
 	sqldb.SetConnMaxLifetime(0)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	if err != nil {
-		t.Fatalf("failed to enable foreign keys: %v", err)
-	}
 
 	// Run migrations
 	_, err = migrations.BringUpToDate(context.Background(), db)
@@ -276,11 +272,13 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	// Using a unique name per test ensures parallel tests don't share databases,
 	// while cache=shared allows multiple connections (from worker goroutines) to
 	// share the same database within a test.
+	// Every pooled connection runs PRAGMA foreign_keys, as in production.
 	dbName := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	sqldb, err := sql.Open(sqliteshim.ShimName, dbName)
+	connector, err := sqliteconn.NewConnector(dbName, "PRAGMA foreign_keys=ON")
 	if err != nil {
 		t.Fatalf("failed to open in-memory database: %v", err)
 	}
+	sqldb := sql.OpenDB(connector)
 
 	// Configure connection pool for shared in-memory database.
 	// Without this, closing a connection could destroy the database.
@@ -288,12 +286,6 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 	sqldb.SetConnMaxLifetime(0)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Enable foreign keys to match production behavior
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	if err != nil {
-		t.Fatalf("failed to enable foreign keys: %v", err)
-	}
 
 	// Run migrations
 	_, err = migrations.BringUpToDate(context.Background(), db)
