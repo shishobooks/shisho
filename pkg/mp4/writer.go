@@ -44,9 +44,10 @@ func WriteToFile(srcPath, destPath string, metadata *Metadata) error {
 }
 
 // WriteToFileContext is WriteToFile with cancellation support. Cancellation
-// interrupts incremental copying and removes the temporary destination.
+// interrupts incremental copying and removes the temporary destination. The
+// destination is created requesting 0644, like other generated files.
 func WriteToFileContext(ctx context.Context, srcPath, destPath string, metadata *Metadata) error {
-	mode := os.FileMode(0600)
+	mode := os.FileMode(0644)
 	return writeToFileContext(ctx, srcPath, destPath, metadata, &mode)
 }
 

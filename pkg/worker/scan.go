@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -808,7 +807,7 @@ func (w *Worker) runInputConverters(ctx context.Context, filesToScan []string, j
 				continue
 			}
 
-			if mErr := moveFile(result.TargetPath, destPath); mErr != nil {
+			if mErr := fileutils.MoveFile(result.TargetPath, destPath); mErr != nil {
 				jobLog.Warn("converter: failed to move output", logger.Data{
 					"source": result.TargetPath,
 					"dest":   destPath,
@@ -825,38 +824,4 @@ func (w *Worker) runInputConverters(ctx context.Context, filesToScan []string, j
 	}
 
 	return convertedFiles
-}
-
-// moveFile moves a file from src to dst. If os.Rename fails (e.g., cross-device),
-// it falls back to copy+remove.
-func moveFile(src, dst string) error {
-	if err := os.Rename(src, dst); err == nil {
-		return nil
-	}
-
-	// Fallback: copy + remove
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return errors.Wrap(err, "failed to open source")
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return errors.Wrap(err, "failed to create destination")
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		os.Remove(dst)
-		return errors.Wrap(err, "failed to copy file")
-	}
-
-	if err := dstFile.Close(); err != nil {
-		os.Remove(dst)
-		return errors.Wrap(err, "failed to close destination")
-	}
-
-	srcFile.Close()
-	return os.Remove(src)
 }
