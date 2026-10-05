@@ -130,9 +130,23 @@ export interface ShishoFS {
   readFile(path: string): ArrayBuffer;
   /** Read file contents as UTF-8 string. */
   readTextFile(path: string): string;
-  /** Write ArrayBuffer data to a file. */
+  /**
+   * Write ArrayBuffer data to a file.
+   *
+   * A new file is created with mode 0600 inside the plugin's own directory,
+   * `shisho.dataDir`, or `tempDir()`, and 0644 at any other permitted path
+   * (hook-provided paths and paths allowed by `fileAccess: "readwrite"`).
+   * The umask still applies. Overwriting an existing file keeps its mode.
+   */
   writeFile(path: string, data: ArrayBuffer): void;
-  /** Write string content to a file. */
+  /**
+   * Write string content to a file as UTF-8.
+   *
+   * New files get the same mode as `writeFile`: 0600 inside the plugin's own
+   * directory, `shisho.dataDir`, or `tempDir()`, and 0644 at any other
+   * permitted path. The umask still applies. Overwriting an existing file
+   * keeps its mode.
+   */
   writeTextFile(path: string, content: string): void;
   /** Check if a path exists. */
   exists(path: string): boolean;

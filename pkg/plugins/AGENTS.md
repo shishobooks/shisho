@@ -550,6 +550,8 @@ shisho.fs.listDir(path)              // → string[] (entry names)
 shisho.fs.tempDir()                  // → string (lazy-created, auto-cleaned)
 ```
 
+`writeFile`/`writeTextFile` request the new file's mode from `FSContext.writeMode`: 0600 inside the plugin's own directory, its data directory, or its `tempDir()` (`isInPrivateDir`, checked first even when a hook path or the `readwrite` capability also covers the path), and 0644 for every other permitted path (hook-provided paths such as an output generator's `destPath`, an input converter's `targetDir`, a file parser's path, and paths allowed only by `fileAccess: "readwrite"`). The converter's output keeps that mode when the scanner moves it into the library with `fileutils.MoveFile`. `NewFSContext` makes the plugin and data directories absolute, because config may set them relative (the dev config does) and every access and mode check compares absolute paths. Overwriting an existing file keeps its mode, since `os.WriteFile` only applies the mode on creation. There is deliberately no SDK option to choose a mode. The mode tests are in `hostapi_fs_permissions_unix_test.go` and do not run in parallel (see "File Modes Are Set at Creation" in `pkg/AGENTS.md`).
+
 ### shisho.archive
 
 ```javascript
@@ -857,7 +859,7 @@ meaning (`PluginSearchParams`) stay hand-written in the hooks file.
 - `simple-enricher/`, `multi-hook/` - Multi-capability examples
 - `undeclared-hook/`, `missing-mainjs/`, `invalid-js/` - Error case fixtures
 
-**`t.Parallel()` in this package:** tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, and so should a test that builds its own database, plugin directory, and manager (most of `lifecycle_test.go`), while tests that share a plugin manager or runtime instance should not. A test that sets the package globals `AllowedDownloadHosts` or `AllowedFetchHosts` (every install or update-version test that downloads, including those using `servePackage`) must not call `t.Parallel()`.
+**`t.Parallel()` in this package:** tests for pure functions (like `handler_convert_test.go`, `hooks_search_result_test.go`, `hostapi_url_test.go`) should use `t.Parallel()`, and so should a test that builds its own database, plugin directory, and manager (most of `lifecycle_test.go`), while tests that share a plugin manager or runtime instance should not. A test that sets the package globals `AllowedDownloadHosts` or `AllowedFetchHosts` (every install or update-version test that downloads, including those using `servePackage`) must not call `t.Parallel()`, and neither may a test that sets the process umask with `testumask.Set` (the `*_permissions_unix_test.go` files).
 
 **Lifecycle tests** live in `lifecycle_test.go`. `Manager.onLockWait`, when a test sets it, is called just before `lockPlugin` blocks, which is how `TestTransitionsWaitForThePluginLock` proves each transition waits for the lock without sleeping. `newLifecycleEnv` gives a test its own database, plugin directory, manager, and handler; `lifecycleSpec` describes one version of a plugin (hooks, identifier types, a broken script, extra files) for `writeLive` or `pluginZip`; `servePackage` serves a repository index and package and can block the download until `releaseNow`, which is how the concurrency tests hold a transition mid-flight without sleeping.
 

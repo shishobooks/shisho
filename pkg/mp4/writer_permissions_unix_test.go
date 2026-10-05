@@ -45,17 +45,26 @@ func TestWrite_CreatesRewriteWithSourceFileMode(t *testing.T) {
 	}
 }
 
-func TestWriteToFile_CreatesPrivateDestination(t *testing.T) {
-	testumask.Set(t, 0o022)
-	dir := t.TempDir()
-	srcPath := filepath.Join(dir, "source.m4b")
-	destPath := filepath.Join(dir, "dest.m4b")
-	require.NoError(t, os.WriteFile(srcPath, testM4B(), 0o600))
-	require.NoError(t, os.Chmod(srcPath, 0o644))
+// WriteToFile builds download-cache output, which is created 0644 like the
+// other generated formats whatever the source file's mode.
+func TestWriteToFile_CreatesDestinationWithGeneratedFileMode(t *testing.T) {
+	for _, tc := range []struct {
+		umask int
+		want  os.FileMode
+	}{
+		{0o022, 0o644},
+		{0o077, 0o600},
+	} {
+		testumask.Set(t, tc.umask)
+		dir := t.TempDir()
+		srcPath := filepath.Join(dir, "source.m4b")
+		destPath := filepath.Join(dir, "dest.m4b")
+		require.NoError(t, os.WriteFile(srcPath, testM4B(), 0o600))
 
-	require.NoError(t, mp4.WriteToFile(srcPath, destPath, &mp4.Metadata{}))
+		require.NoError(t, mp4.WriteToFile(srcPath, destPath, &mp4.Metadata{}))
 
-	info, err := os.Stat(destPath)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		info, err := os.Stat(destPath)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, info.Mode().Perm(), "umask %#o", tc.umask)
+	}
 }

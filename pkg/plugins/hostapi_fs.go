@@ -34,11 +34,24 @@ type FSContext struct {
 // NewFSContext creates a new FSContext for a hook invocation.
 func NewFSContext(pluginDir, dataDir string, allowedPaths []string, fileAccessCap *FileAccessCap) *FSContext {
 	return &FSContext{
-		pluginDir:     pluginDir,
-		dataDir:       dataDir,
+		pluginDir:     absDir(pluginDir),
+		dataDir:       absDir(dataDir),
 		allowedPaths:  allowedPaths,
 		fileAccessCap: fileAccessCap,
 	}
+}
+
+// absDir makes a configured directory absolute so it compares against the
+// absolute paths the access checks build. The plugin and data directories come
+// from config, which may set relative paths (the dev config does).
+func absDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		return abs
+	}
+	return dir
 }
 
 // SetReadOnlyAllowedPaths replaces the set of paths the plugin may read but
@@ -80,18 +93,8 @@ func (ctx *FSContext) isReadAllowed(path string) bool {
 		return false
 	}
 
-	// Always allow plugin's own directory
-	if isPathWithin(absPath, ctx.pluginDir) {
-		return true
-	}
-
-	// Always allow persistent data directory
-	if ctx.dataDir != "" && isPathWithin(absPath, ctx.dataDir) {
-		return true
-	}
-
-	// Always allow temp directory
-	if ctx.tempDir != "" && isPathWithin(absPath, ctx.tempDir) {
+	// Always allow the plugin's own, data and temp directories
+	if ctx.isInPrivateDir(absPath) {
 		return true
 	}
 
@@ -126,6 +129,32 @@ func (ctx *FSContext) isReadAllowed(path string) bool {
 	return false
 }
 
+// isInPrivateDir reports whether absPath is inside the plugin's own directory,
+// its persistent data directory, or its temp directory.
+func (ctx *FSContext) isInPrivateDir(absPath string) bool {
+	if isPathWithin(absPath, ctx.pluginDir) {
+		return true
+	}
+	if ctx.dataDir != "" && isPathWithin(absPath, ctx.dataDir) {
+		return true
+	}
+	return ctx.tempDir != "" && isPathWithin(absPath, ctx.tempDir)
+}
+
+// writeMode returns the mode requested when a write creates a new file. Files
+// in the plugin's own, data and temp directories are private to Shisho (0600).
+// Every other permitted path, such as a hook-provided destination or a path
+// allowed by the readwrite fileAccess capability, holds output other tools may
+// read, so it gets 0644 like Shisho's other generated files. Overwriting an
+// existing file keeps its mode.
+func (ctx *FSContext) writeMode(path string) os.FileMode {
+	absPath, err := filepath.Abs(path)
+	if err != nil || ctx.isInPrivateDir(absPath) {
+		return 0600
+	}
+	return 0644
+}
+
 // isWriteAllowed checks if the given path is allowed for write operations.
 func (ctx *FSContext) isWriteAllowed(path string) bool {
 	absPath, err := filepath.Abs(path)
@@ -133,18 +162,8 @@ func (ctx *FSContext) isWriteAllowed(path string) bool {
 		return false
 	}
 
-	// Always allow plugin's own directory
-	if isPathWithin(absPath, ctx.pluginDir) {
-		return true
-	}
-
-	// Always allow persistent data directory
-	if ctx.dataDir != "" && isPathWithin(absPath, ctx.dataDir) {
-		return true
-	}
-
-	// Always allow temp directory
-	if ctx.tempDir != "" && isPathWithin(absPath, ctx.tempDir) {
+	// Always allow the plugin's own, data and temp directories
+	if ctx.isInPrivateDir(absPath) {
 		return true
 	}
 
@@ -260,7 +279,7 @@ func injectFSNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime) er
 			panic(vm.ToValue("shisho.fs.writeFile: data must be an ArrayBuffer"))
 		}
 
-		err := os.WriteFile(path, ab.Bytes(), 0600)
+		err := os.WriteFile(path, ab.Bytes(), ctx.writeMode(path))
 		if err != nil {
 			panic(vm.ToValue("shisho.fs.writeFile: " + err.Error()))
 		}
@@ -283,7 +302,7 @@ func injectFSNamespace(vm *goja.Runtime, shishoObj *goja.Object, rt *Runtime) er
 			panic(vm.ToValue("shisho.fs.writeTextFile: access denied for path: " + path))
 		}
 
-		err := os.WriteFile(path, []byte(content), 0600)
+		err := os.WriteFile(path, []byte(content), ctx.writeMode(path))
 		if err != nil {
 			panic(vm.ToValue("shisho.fs.writeTextFile: " + err.Error()))
 		}

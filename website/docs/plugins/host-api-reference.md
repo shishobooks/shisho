@@ -209,6 +209,17 @@ shisho.fs.tempDir(): string;
 
 An enricher's scoped target access covers exactly that file, not siblings. Declare broad `read` access to inspect sidecars or neighboring assets. Access violations and failed file operations throw.
 
+### File Modes
+
+When `writeFile` or `writeTextFile` creates a new file, the mode depends on where it is:
+
+| Path | Mode requested |
+|------|----------------|
+| Plugin artifact directory, `shisho.dataDir`, or `shisho.fs.tempDir()` | `0600` (owner only) |
+| Any other permitted path, such as a hook's `targetDir` or `destPath`, or a path allowed by `fileAccess: readwrite` | `0644` (readable by other users) |
+
+Files in the plugin's own directories stay private to the account running Shisho. Files written anywhere else, such as converted books and generated downloads, can be read by other users and tools on the host, like the rest of the files Shisho creates. The umask still applies, so a stricter umask gives stricter modes. Overwriting an existing file keeps its current mode. The mode cannot be chosen per write. This rule covers `writeFile` and `writeTextFile` only: `shisho.archive.extractZip` gives each extracted file the mode stored in its ZIP entry, and `shisho.archive.createZip` creates the archive like `os.Create` (`0666` before the umask, so `0644` under the usual `022`).
+
 ## ZIP Archives
 
 Archive methods use the same filesystem path checks as `shisho.fs`:
