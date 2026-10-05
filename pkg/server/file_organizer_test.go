@@ -427,3 +427,66 @@ func TestFileOrganizer_OrganizeBookFiles_CoverImageFilenameUpdated(t *testing.T)
 	assert.Equal(t, expectedNewCoverFilename, *updatedFile.CoverImageFilename,
 		"CoverImageFilename should be updated to match the new filename")
 }
+
+// scanNarratedFile scans one M4B and renames its narrator, so the next
+// RenameNarratedFile call moves it to a "{New Narrator}" name.
+func (tc *testContext) scanNarratedFile() *models.File {
+	tc.t.Helper()
+	libraryPath := testgen.TempLibraryDir(tc.t)
+	tc.createLibraryWithOrganize([]string{libraryPath})
+	bookDir := testgen.CreateSubDir(tc.t, libraryPath, "[Test Author] Audiobook Title")
+	testgen.GenerateM4B(tc.t, bookDir, "[Test Author] Audiobook Title {Old Narrator}.m4b", testgen.M4BOptions{
+		Title:    "Audiobook Title",
+		Artist:   "Test Author",
+		Composer: "Old Narrator",
+	})
+	require.NoError(tc.t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(tc.t, files, 1)
+	narrator := files[0].Narrators[0].Person
+	narrator.Name = "New Narrator"
+	require.NoError(tc.t, tc.personService.UpdatePerson(tc.ctx, narrator, people.UpdatePersonOptions{Columns: []string{"name"}}))
+	return files[0]
+}
+
+func TestFileOrganizer_RenameNarratedFile_SkipsPathClaimedByAnotherFile(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	file := tc.scanNarratedFile()
+
+	dir := filepath.Dir(file.Filepath)
+	claimed := filepath.Join(dir, "Audiobook Title {New Narrator}.m4b")
+	_, err := tc.db.ExecContext(tc.ctx, `INSERT INTO files (library_id, book_id, filepath, file_type, file_role)
+		VALUES (?, ?, ?, 'm4b', 'supplement')`, file.LibraryID, file.BookID, claimed)
+	require.NoError(t, err)
+
+	newPath, err := tc.fileOrganizer.RenameNarratedFile(tc.ctx, file.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, filepath.Join(dir, "Audiobook Title {New Narrator} (1).m4b"), newPath)
+	assert.True(t, testgen.FileExists(newPath))
+	updated, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &file.ID})
+	require.NoError(t, err)
+	assert.Equal(t, newPath, updated.Filepath)
+}
+
+func TestFileOrganizer_RenameNarratedFile_UndoesRenameWhenDatabaseUpdateFails(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	file := tc.scanNarratedFile()
+
+	_, err := tc.db.ExecContext(tc.ctx, `CREATE TRIGGER fail_filepath_update BEFORE UPDATE OF filepath ON files
+		BEGIN SELECT RAISE(ABORT, 'forced filepath update failure'); END`)
+	require.NoError(t, err)
+
+	path, err := tc.fileOrganizer.RenameNarratedFile(tc.ctx, file.ID)
+	require.Error(t, err)
+	assert.Equal(t, file.Filepath, path)
+
+	assert.True(t, testgen.FileExists(file.Filepath), "the file is moved back")
+	assert.False(t, testgen.FileExists(filepath.Join(filepath.Dir(file.Filepath), "Audiobook Title {New Narrator}.m4b")))
+	updated, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &file.ID})
+	require.NoError(t, err)
+	assert.Equal(t, file.Filepath, updated.Filepath)
+}

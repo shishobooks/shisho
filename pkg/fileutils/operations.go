@@ -92,12 +92,9 @@ func MoveFileIntoOrganizedFolder(originalPath, targetFolder string, opts Organiz
 		result.FolderCreated = true
 	}
 
-	// Check if a file already exists at the target path
-	if _, err := os.Stat(targetPath); err == nil {
-		// File already exists, generate a unique name
-		targetPath = generateUniqueFilepath(targetPath)
-		result.NewPath = targetPath
-	}
+	// Pick a numbered name if the target exists or is claimed
+	targetPath = generateUniqueFilepath(targetPath, "", opts.Claimed)
+	result.NewPath = targetPath
 
 	// Move the file
 	if err := moveFile(originalPath, targetPath); err != nil {
@@ -161,10 +158,10 @@ func renameOrganizedFileInternal(currentPath string, opts OrganizedNameOptions, 
 		return currentPath, nil
 	}
 
-	// Check if a file already exists at the target path
-	if _, err := os.Stat(newPath); err == nil {
-		// File already exists, generate a unique name
-		newPath = generateUniqueFilepath(newPath)
+	// Pick a numbered name if the target exists or is claimed
+	newPath = generateUniqueFilepath(newPath, currentPath, opts.Claimed)
+	if currentPath == newPath {
+		return currentPath, nil
 	}
 
 	// Rename the file
@@ -252,10 +249,10 @@ func RenameOrganizedFolder(currentFolderPath string, opts OrganizedNameOptions) 
 		return currentFolderPath, nil
 	}
 
-	// Check if a folder already exists at the target path
-	if _, err := os.Stat(newFolderPath); err == nil {
-		// Folder already exists, generate a unique name
-		newFolderPath = generateUniqueDirpath(newFolderPath)
+	// Pick a numbered name if the target exists or is claimed
+	newFolderPath = generateUniqueDirpath(newFolderPath, currentFolderPath, opts.Claimed)
+	if currentFolderPath == newFolderPath {
+		return currentFolderPath, nil
 	}
 
 	// Rename the folder
@@ -329,9 +326,24 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-// generateUniqueFilepath creates a unique filepath by appending a number if needed.
-func generateUniqueFilepath(path string) string {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+// pathTaken reports whether path exists on disk or claimed reports it held.
+// The path being renamed (self) is never taken, so an item already at a
+// numbered name because its base name is held keeps that name.
+func pathTaken(path, self string, claimed func(string) bool) bool {
+	if path == self {
+		return false
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return true
+	}
+	return claimed != nil && claimed(path)
+}
+
+// generateUniqueFilepath creates a unique filepath by appending a number if
+// path exists on disk or claimed reports it held. self is the path of the file
+// being renamed, which counts as free; pass "" when there is none.
+func generateUniqueFilepath(path, self string, claimed func(string) bool) string {
+	if !pathTaken(path, self, claimed) {
 		return path
 	}
 
@@ -343,7 +355,7 @@ func generateUniqueFilepath(path string) string {
 	for i := 1; i < 1000; i++ {
 		newName := fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
 		newPath := filepath.Join(dir, newName)
-		if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		if !pathTaken(newPath, self, claimed) {
 			return newPath
 		}
 	}
@@ -352,9 +364,11 @@ func generateUniqueFilepath(path string) string {
 	return path
 }
 
-// generateUniqueDirpath creates a unique directory path by appending a number if needed.
-func generateUniqueDirpath(path string) string {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+// generateUniqueDirpath creates a unique directory path by appending a number
+// if path exists on disk or claimed reports it held. self is the folder being
+// renamed, which counts as free.
+func generateUniqueDirpath(path, self string, claimed func(string) bool) string {
+	if !pathTaken(path, self, claimed) {
 		return path
 	}
 
@@ -364,7 +378,7 @@ func generateUniqueDirpath(path string) string {
 	for i := 1; i < 1000; i++ {
 		newName := fmt.Sprintf("%s (%d)", name, i)
 		newPath := filepath.Join(parent, newName)
-		if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		if !pathTaken(newPath, self, claimed) {
 			return newPath
 		}
 	}
@@ -712,7 +726,40 @@ func OtherCoverExtensions(coverDir, coverBaseName, keepExt string) []string {
 
 // GenerateUniqueFilepathIfExists returns a unique filepath if the path exists, otherwise returns the original.
 func GenerateUniqueFilepathIfExists(path string) string {
-	return generateUniqueFilepath(path)
+	return generateUniqueFilepath(path, "", nil)
+}
+
+// UndoOrganizedMove moves a file that organizing moved or renamed from
+// newPath back to originalPath, with its covers and file sidecar, and its book
+// sidecar when includeBookSidecar is set (pass the same value the move used:
+// true for OrganizeRootLevelFile, MoveFileIntoOrganizedFolder, and
+// RenameOrganizedFile, false for RenameOrganizedFileOnly). Callers use it
+// when recording the new path in the database fails, so disk and database
+// agree again. The original directory is recreated if organizing removed it,
+// and newPath's directory is removed if the undo leaves it empty.
+func UndoOrganizedMove(originalPath, newPath string, includeBookSidecar bool) error {
+	if originalPath == newPath {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(originalPath), 0755); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := moveFile(newPath, originalPath); err != nil {
+		return errors.WithStack(err)
+	}
+	var err error
+	if includeBookSidecar {
+		_, err = moveAssociatedCovers(newPath, originalPath)
+	} else {
+		_, err = moveFileAssociatedFiles(newPath, originalPath)
+	}
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if newDir := filepath.Dir(newPath); newDir != filepath.Dir(originalPath) {
+		_, _ = CleanupEmptyDirectory(newDir)
+	}
+	return nil
 }
 
 // MoveFile safely moves a file from source to destination. Returns error if move fails.

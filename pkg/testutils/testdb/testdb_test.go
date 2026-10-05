@@ -54,3 +54,20 @@ func TestNew_DatabasesAreIsolated(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, count)
 }
+
+// A connection whose query is canceled mid-statement is replaced, and foreign
+// keys apply per connection, so the replacement must turn them on too.
+func TestNew_ForeignKeysSurviveConnectionReplacement(t *testing.T) {
+	t.Parallel()
+	db := New(t)
+	ctx := context.Background()
+
+	cancelCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	_, err := db.ExecContext(cancelCtx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
+	require.Error(t, err)
+
+	var foreignKeys int
+	require.NoError(t, db.NewRaw("PRAGMA foreign_keys").Scan(ctx, &foreignKeys))
+	assert.Equal(t, 1, foreignKeys)
+}

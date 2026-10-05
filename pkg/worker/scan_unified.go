@@ -145,8 +145,10 @@ type ScanOptions struct {
 //
 // For single file scans (FilePath or FileID mode), the File and Book fields contain
 // the scanned/updated records. FileCreated indicates whether a new file record was
-// created (only possible in FilePath mode). FileDeleted and BookDeleted indicate
-// whether records were removed because the file no longer exists on disk.
+// created: in FilePath mode, or in FileID mode when the file's Book was missing
+// and the file was imported again (see scanOrphanedFile). FileDeleted and
+// BookDeleted indicate whether records were removed because the file no longer
+// exists on disk.
 //
 // For book scans (BookID mode), the Files slice contains the results for each
 // individual file in the book. The top-level Book field contains the updated book
@@ -155,7 +157,7 @@ type ScanResult struct {
 	// For single file scans
 	File        *models.File // The scanned/updated file (nil if deleted)
 	Book        *models.Book // The parent book (nil if deleted)
-	FileCreated bool         // True if file was newly created (FilePath mode only)
+	FileCreated bool         // True if file was newly created
 	FileDeleted bool         // True if file was deleted (no longer on disk)
 	BookDeleted bool         // True if book was also deleted (was last file)
 
@@ -415,16 +417,19 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		return nil, errors.Wrap(err, "failed to retrieve file")
 	}
 
+	// Get parent book to check file count
+	book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
+	if errors.Is(err, errcodes.NotFound("Book")) {
+		return w.scanOrphanedFile(ctx, file, opts, cache, logInfo)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to retrieve parent book")
+	}
+
 	// Check if file exists on disk
 	fileStat, err := os.Stat(file.Filepath)
 	if os.IsNotExist(err) {
 		logInfo("file no longer exists on disk, deleting record", logger.Data{"file_id": file.ID, "path": file.Filepath})
-
-		// Get parent book to check file count
-		book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to retrieve parent book")
-		}
 
 		fileDir := filepath.Dir(file.Filepath)
 		bookPath := book.Filepath
@@ -627,8 +632,9 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	// The file parsed, so any error recorded by an earlier scan is stale.
 	w.clearFileScanError(ctx, file, logWarn)
 
-	// Get parent book for scanFileCore
-	book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
+	// Reload the parent book for scanFileCore. Recovering the cover and
+	// clearing the scan error above update this file, which book.Files holds.
+	book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to retrieve parent book")
 	}
@@ -711,6 +717,51 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	}
 
 	return result, nil
+}
+
+// scanOrphanedFile handles a file row whose Book no longer exists, which a
+// Book delete leaves behind when it runs without foreign keys. The row is
+// deleted, and once the Book has no file rows left, so are its other rows
+// (authors, series links, and the like). A file still on disk is then
+// scanned as newly discovered, so it is imported as a new Book. Deleting the
+// rows one file at a time lets each sibling file of the missing Book take
+// the same path when it is scanned.
+func (w *Worker) scanOrphanedFile(ctx context.Context, file *models.File, opts ScanOptions, cache *ScanCache, logInfo func(msg string, data logger.Data)) (*ScanResult, error) {
+	logInfo("file belongs to a missing book, deleting record", logger.Data{"file_id": file.ID, "book_id": file.BookID, "path": file.Filepath})
+
+	// The missing Book may still have a search row and Series that list it.
+	affected := w.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{file.BookID}})
+	defer w.searchService.ReindexAffected(ctx, affected)
+
+	if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
+		return nil, errors.Wrap(err, "failed to delete orphaned file record")
+	}
+	siblings, err := w.bookService.ListFiles(ctx, books.ListFilesOptions{BookID: &file.BookID})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list the missing book's files")
+	}
+	if len(siblings) == 0 {
+		if err := w.bookService.DeleteOrphanedBookChildren(ctx, file.BookID); err != nil {
+			return nil, errors.Wrap(err, "failed to delete the missing book's rows")
+		}
+	}
+
+	_, err = os.Stat(file.Filepath)
+	if os.IsNotExist(err) {
+		return &ScanResult{FileDeleted: true}, nil
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to stat file")
+	}
+
+	logInfo("importing file of a missing book as a new book", logger.Data{"path": file.Filepath})
+	return w.scanFileCreateNew(ctx, ScanOptions{
+		FilePath:     file.Filepath,
+		LibraryID:    file.LibraryID,
+		ForceRefresh: opts.ForceRefresh,
+		SkipPlugins:  opts.SkipPlugins,
+		JobLog:       opts.JobLog,
+	}, cache)
 }
 
 // scanBook handles book resync - scan all files belonging to the book.
@@ -1830,6 +1881,7 @@ func (w *Worker) scanFileCore(
 				NarratorNames: narratorNames,
 				Title:         title,
 				FileType:      file.FileType,
+				Claimed:       w.bookService.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID),
 			}
 
 			// Rename the file
@@ -1849,20 +1901,10 @@ func (w *Worker) scanFileCore(
 					"old_path": file.Filepath,
 					"new_path": newPath,
 				})
-				// Update cover path if it exists (covers are renamed by rename function)
-				fileRenameOpts := books.UpdateFileOptions{Columns: []string{"filepath"}}
-				if file.CoverImageFilename != nil {
-					newCoverPath := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
-					file.CoverImageFilename = &newCoverPath
-					fileRenameOpts.Columns = append(fileRenameOpts.Columns, "cover_image_filename")
-				}
-				file.Filepath = newPath
-				if err := w.bookService.UpdateFile(ctx, file, fileRenameOpts); err != nil {
-					logWarn("failed to update file path after rename", logger.Data{
-						"file_id": file.ID,
-						"error":   err.Error(),
-					})
-				}
+				// Record the new path and cover filename (covers are renamed by
+				// the rename function). A failure is logged and the rename
+				// undone inside, leaving file at its old path.
+				_ = w.bookService.RecordOrganizedFilepath(ctx, file, file.Filepath, newPath, false)
 			}
 		}
 	}

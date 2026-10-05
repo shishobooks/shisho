@@ -947,13 +947,9 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		FileType:         folderFileType,
 	}
 
-	// Track path updates for database
-	var pathUpdates []struct {
-		fileID         int
-		oldPath        string
-		newPath        string
-		coverImagePath *string // old cover image path (filename only), nil if none
-	}
+	// Each move below records its new path right away through
+	// RecordOrganizedFilepath, which moves the file back if the write fails.
+	// Destinations another files row claims count as taken.
 
 	// Check if this is a directory-based book or root-level files
 	isDirectoryBased := filepath.Dir(files[0].Filepath) == book.Filepath
@@ -963,41 +959,45 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 
 	if isDirectoryBased {
 		// For directory-based books, rename the folder and update all file paths
+		organizeOpts.Claimed = svc.folderClaimedByOtherBook(ctx, book.LibraryID, book.ID)
 		newFolderPath, err := fileutils.RenameOrganizedFolder(book.Filepath, organizeOpts)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		folderRenamed := newFolderPath != book.Filepath
-		if folderRenamed {
+		if newFolderPath != book.Filepath {
+			oldFolderPath := book.Filepath
 			log.Info("renamed book folder", logger.Data{
-				"old_path": book.Filepath,
+				"old_path": oldFolderPath,
 				"new_path": newFolderPath,
 			})
 
+			// Record the book's and its files' new paths together. If that
+			// fails, rename the folder back so disk and database agree.
+			if err := svc.recordRenamedBookFolder(ctx, book, files, newFolderPath, now); err != nil {
+				data := logger.Data{
+					"book_id":  book.ID,
+					"old_path": oldFolderPath,
+					"new_path": newFolderPath,
+					"error":    err.Error(),
+				}
+				if undoErr := os.Rename(newFolderPath, oldFolderPath); undoErr != nil {
+					data["undo_error"] = undoErr.Error()
+					log.Error("failed to record renamed book folder in database and to rename it back; the folder is at new_path but the database has old_path", data)
+				} else {
+					log.Error("failed to record renamed book folder in database, renamed it back", data)
+				}
+				return err
+			}
+
 			// Delete old sidecar file (it has the old folder name in its filename)
 			// The old sidecar is now at: newFolderPath/oldFolderName.metadata.json
-			oldFolderName := filepath.Base(book.Filepath)
-			oldSidecarPath := filepath.Join(newFolderPath, oldFolderName+".metadata.json")
+			oldSidecarPath := filepath.Join(newFolderPath, filepath.Base(oldFolderPath)+".metadata.json")
 			if err := os.Remove(oldSidecarPath); err != nil && !os.IsNotExist(err) {
 				log.Warn("failed to remove old sidecar", logger.Data{
 					"path":  oldSidecarPath,
 					"error": err.Error(),
 				})
-			}
-
-			// Update book filepath
-			book.Filepath = newFolderPath
-			book.UpdatedAt = now
-
-			// Update book in database
-			_, err = svc.db.NewUpdate().
-				Model(book).
-				Column("filepath", "updated_at").
-				WherePK().
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
 			}
 
 			// Write a fresh book sidecar at the renamed folder so the
@@ -1012,14 +1012,10 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			}
 		}
 
-		// Rename files inside the folder (whether or not folder was renamed)
+		// Rename files inside the folder (whether or not folder was renamed).
+		// recordRenamedBookFolder already moved file.Filepath into the new
+		// folder.
 		for _, file := range files {
-			// Calculate the current path (after potential folder rename)
-			currentPath := file.Filepath
-			if folderRenamed {
-				currentPath = strings.Replace(file.Filepath, filepath.Dir(file.Filepath), newFolderPath, 1)
-			}
-
 			// Set file type, title, and narrator names for proper naming
 			organizeOpts.FileType = file.FileType
 			// Use file.Name for title if available, otherwise book.Title
@@ -1034,6 +1030,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
 				}
 			}
+			organizeOpts.Claimed = svc.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID)
 
 			// If this file sits at a library root (e.g. user dropped a second
 			// file for an already-organized book), promote it into the book
@@ -1060,12 +1057,8 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 						"old_path": result.OriginalPath,
 						"new_path": result.NewPath,
 					})
-					pathUpdates = append(pathUpdates, struct {
-						fileID         int
-						oldPath        string
-						newPath        string
-						coverImagePath *string
-					}{file.ID, result.OriginalPath, result.NewPath, file.CoverImageFilename})
+					// A failure is logged and the move undone inside.
+					_ = svc.RecordOrganizedFilepath(ctx, file, result.OriginalPath, result.NewPath, true)
 				}
 				continue
 			}
@@ -1073,6 +1066,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// The folder owns the book sidecar, which was handled above.
 			// Renaming a file must not move a leftover basename sidecar over
 			// it, or a narrator clear can restore old book metadata.
+			currentPath := file.Filepath
 			newPath, err := fileutils.RenameOrganizedFileOnly(currentPath, organizeOpts)
 			if err != nil {
 				log.Error("failed to rename file in folder", logger.Data{
@@ -1080,31 +1074,17 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					"path":    currentPath,
 					"error":   err.Error(),
 				})
-				// If file rename failed but folder was renamed, still track the folder path change
-				if folderRenamed && currentPath != file.Filepath {
-					pathUpdates = append(pathUpdates, struct {
-						fileID         int
-						oldPath        string
-						newPath        string
-						coverImagePath *string
-					}{file.ID, file.Filepath, currentPath, file.CoverImageFilename})
-				}
 				continue
 			}
 
-			// Track path update if anything changed
-			if newPath != file.Filepath {
+			if newPath != currentPath {
 				log.Info("renamed file", logger.Data{
 					"file_id":  file.ID,
-					"old_path": file.Filepath,
+					"old_path": currentPath,
 					"new_path": newPath,
 				})
-				pathUpdates = append(pathUpdates, struct {
-					fileID         int
-					oldPath        string
-					newPath        string
-					coverImagePath *string
-				}{file.ID, file.Filepath, newPath, file.CoverImageFilename})
+				// A failure is logged and the rename undone inside.
+				_ = svc.RecordOrganizedFilepath(ctx, file, currentPath, newPath, false)
 			}
 		}
 	} else if isRootLevelBook {
@@ -1133,6 +1113,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
 				}
 			}
+			organizeOpts.Claimed = svc.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID)
 
 			result, err := fileutils.OrganizeRootLevelFile(file.Filepath, organizeOpts)
 			if err != nil {
@@ -1151,12 +1132,11 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					"new_path": result.NewPath,
 				})
 
-				pathUpdates = append(pathUpdates, struct {
-					fileID         int
-					oldPath        string
-					newPath        string
-					coverImagePath *string
-				}{file.ID, result.OriginalPath, result.NewPath, file.CoverImageFilename})
+				// A failure is logged and the move undone inside, and the
+				// book keeps its path.
+				if err := svc.RecordOrganizedFilepath(ctx, file, result.OriginalPath, result.NewPath, true); err != nil {
+					continue
+				}
 
 				// Track the new folder path (should be same for all files)
 				if newBookPath == "" {
@@ -1220,58 +1200,78 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					organizeOpts.NarratorNames = append(organizeOpts.NarratorNames, n.Person.Name)
 				}
 			}
+			organizeOpts.Claimed = svc.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID)
 
-			newPath, err := fileutils.RenameOrganizedFile(file.Filepath, organizeOpts)
+			currentPath := file.Filepath
+			newPath, err := fileutils.RenameOrganizedFile(currentPath, organizeOpts)
 			if err != nil {
 				log.Error("failed to rename file", logger.Data{
 					"file_id": file.ID,
-					"path":    file.Filepath,
+					"path":    currentPath,
 					"error":   err.Error(),
 				})
 				continue
 			}
 
-			if newPath != file.Filepath {
+			if newPath != currentPath {
 				log.Info("renamed file", logger.Data{
 					"file_id":  file.ID,
-					"old_path": file.Filepath,
+					"old_path": currentPath,
 					"new_path": newPath,
 				})
-
-				pathUpdates = append(pathUpdates, struct {
-					fileID         int
-					oldPath        string
-					newPath        string
-					coverImagePath *string
-				}{file.ID, file.Filepath, newPath, file.CoverImageFilename})
+				// A failure is logged and the rename undone inside.
+				_ = svc.RecordOrganizedFilepath(ctx, file, currentPath, newPath, true)
 			}
 		}
 	}
 
-	// Update file paths in database
-	for _, update := range pathUpdates {
-		q := svc.db.NewUpdate().
-			Model((*models.File)(nil)).
-			Set("filepath = ?, updated_at = ?", update.newPath, now).
-			Where("id = ?", update.fileID)
+	return nil
+}
 
-		// Also update cover image path if the file has a cover
-		if update.coverImagePath != nil {
-			newCoverPath := fileutils.ComputeNewCoverFilename(*update.coverImagePath, update.newPath)
-			q = q.Set("cover_image_filename = ?", newCoverPath)
-		}
-
-		_, err = q.Exec(ctx)
-		if err != nil {
-			log.Error("failed to update file path in database", logger.Data{
-				"file_id":  update.fileID,
-				"old_path": update.oldPath,
-				"new_path": update.newPath,
-				"error":    err.Error(),
-			})
+// recordRenamedBookFolder records, in one transaction, that a directory-based
+// Book's folder was renamed to newFolderPath: the Book's path and the path of
+// each of its files inside the old folder. On success it updates book and
+// files in memory too.
+func (svc *Service) recordRenamedBookFolder(ctx context.Context, book *models.Book, files []*models.File, newFolderPath string, now time.Time) error {
+	oldPrefix := book.Filepath + string(os.PathSeparator)
+	newPaths := map[int]string{}
+	for _, file := range files {
+		if strings.HasPrefix(file.Filepath, oldPrefix) {
+			newPaths[file.ID] = filepath.Join(newFolderPath, strings.TrimPrefix(file.Filepath, oldPrefix))
 		}
 	}
 
+	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("filepath = ?, updated_at = ?", newFolderPath, now).
+			Where("id = ?", book.ID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		for fileID, newPath := range newPaths {
+			if _, err := tx.NewUpdate().
+				Model((*models.File)(nil)).
+				Set("filepath = ?, updated_at = ?", newPath, now).
+				Where("id = ?", fileID).
+				Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	book.Filepath = newFolderPath
+	book.UpdatedAt = now
+	for _, file := range files {
+		if newPath, ok := newPaths[file.ID]; ok {
+			file.Filepath = newPath
+			file.UpdatedAt = now
+		}
+	}
 	return nil
 }
 

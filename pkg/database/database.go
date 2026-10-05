@@ -3,16 +3,16 @@ package database
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
+	"fmt"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
 // slowQueryThreshold is how long a query may take before it is logged as a
@@ -105,31 +105,37 @@ func CheckFTS5Support(db *bun.DB) error {
 	return nil
 }
 
+// connectionPragmas returns the pragmas every connection runs when it opens.
+// They apply per connection, so sqliteconn runs them on replacements too.
+func connectionPragmas(cfg *config.Config) []string {
+	return []string{
+		// busy_timeout makes SQLite wait before returning SQLITE_BUSY.
+		// This handles short-term lock contention automatically.
+		fmt.Sprintf("PRAGMA busy_timeout=%d", cfg.DatabaseBusyTimeout.Milliseconds()),
+		// synchronous=NORMAL is faster than FULL and still safe with WAL mode.
+		// It only risks data loss on OS crash, not application crash.
+		"PRAGMA synchronous=NORMAL",
+		// Increase page cache to 64MB (negative value = KB).
+		// Improves read performance for repeated queries.
+		"PRAGMA cache_size=-65536",
+		// Store temporary tables in memory instead of disk.
+		// Faster for complex queries with temp results.
+		"PRAGMA temp_store=MEMORY",
+		// SQLite has foreign keys OFF by default; without this, ON DELETE
+		// CASCADE and other FK actions are silently ignored.
+		"PRAGMA foreign_keys=ON",
+	}
+}
+
 func New(cfg *config.Config) (*bun.DB, error) {
-	var sqldb *sql.DB
-	var err error
-
-	// Get the underlying SQLite driver.
-	drv := sqliteshim.Driver()
-
-	// Try to use native OpenConnector if supported, otherwise create our own connector.
-	var connector driver.Connector
-	drvCtx, ok := drv.(interface {
-		OpenConnector(name string) (driver.Connector, error)
-	})
-	if ok {
-		connector, err = drvCtx.OpenConnector(cfg.DatabaseFilePath)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-	} else {
-		// Fallback: wrap the driver in our own connector implementation.
-		connector = newDriverConnector(drv, cfg.DatabaseFilePath)
+	connector, err := sqliteconn.NewConnector(cfg.DatabaseFilePath, connectionPragmas(cfg)...)
+	if err != nil {
+		return nil, err
 	}
 
 	// Wrap the connector with retry logic for SQLITE_BUSY errors.
 	retryConnector := newRetryConnector(connector, cfg.DatabaseMaxRetries)
-	sqldb = sql.OpenDB(retryConnector)
+	sqldb := sql.OpenDB(retryConnector)
 
 	// Limit to a single connection for SQLite.
 	// SQLite only supports one writer at a time, so multiple connections
@@ -155,48 +161,11 @@ func New(cfg *config.Config) (*bun.DB, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	// Configure SQLite for better concurrency handling.
-	// WAL mode allows concurrent reads during writes.
+	// WAL mode allows concurrent reads during writes. It is stored in the
+	// database file, so one call covers every later connection.
 	_, err = db.Exec("PRAGMA journal_mode=WAL")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to enable WAL mode")
-	}
-
-	// busy_timeout makes SQLite wait before returning SQLITE_BUSY.
-	// This handles short-term lock contention automatically.
-	busyTimeoutMs := cfg.DatabaseBusyTimeout.Milliseconds()
-	_, err = db.Exec("PRAGMA busy_timeout=?", busyTimeoutMs)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to set busy_timeout")
-	}
-
-	// synchronous=NORMAL is faster than FULL and still safe with WAL mode.
-	// It only risks data loss on OS crash, not application crash.
-	_, err = db.Exec("PRAGMA synchronous=NORMAL")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to set synchronous mode")
-	}
-
-	// Increase page cache to 64MB (negative value = KB).
-	// Improves read performance for repeated queries.
-	_, err = db.Exec("PRAGMA cache_size=-65536")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to set cache_size")
-	}
-
-	// Store temporary tables in memory instead of disk.
-	// Faster for complex queries with temp results.
-	_, err = db.Exec("PRAGMA temp_store=MEMORY")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to set temp_store")
-	}
-
-	// Enable foreign key constraint enforcement.
-	// SQLite has foreign keys OFF by default; without this, ON DELETE CASCADE
-	// and other FK actions are silently ignored.
-	_, err = db.Exec("PRAGMA foreign_keys=ON")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to enable foreign keys")
 	}
 
 	return db, nil

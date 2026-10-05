@@ -47,6 +47,8 @@ Keep unrelated books in separate directories when you manage the layout yourself
 
 The per-library **Organize file structure during scans** setting is backed by `organize_file_structure` and defaults to `true` for new libraries. When enabled, Shisho can move and rename media into its standardized author and title layout during scans and after metadata changes, identification, file moves, or book merges. Associated covers and file sidecars move with their media files.
 
+If another file already uses the organized name, either on disk or in Shisho's records, Shisho adds a number instead of replacing it, such as `Beach Read (1).epub`. If Shisho moves a file but cannot save its new location, it moves the file back to where it was, so the library keeps matching the files on disk.
+
 :::danger[This Setting Changes Files on Disk]
 File organization is not only a display preference. Shisho can rename files, create directories, and move content. Confirm the library paths and container permissions, and keep a backup before enabling it for an existing collection.
 :::
