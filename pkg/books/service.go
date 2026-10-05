@@ -1742,9 +1742,9 @@ func (svc *Service) PromoteSupplementToMain(ctx context.Context, fileID int) err
 	return errors.WithStack(err)
 }
 
-// ListFilesForLibrary returns all main files for a library.
-// Used for orphan cleanup during batch scans - only main files are tracked,
-// supplements don't need orphan cleanup.
+// ListFilesForLibrary returns all main files for a library. The full scan
+// uses ListAllFilesForLibrary instead, since its orphan cleanup also removes
+// supplements whose files are gone.
 func (svc *Service) ListFilesForLibrary(ctx context.Context, libraryID int) ([]*models.File, error) {
 	var files []*models.File
 	err := svc.db.NewSelect().

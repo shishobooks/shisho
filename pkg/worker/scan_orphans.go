@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +18,16 @@ import (
 
 // cleanupOrphanedFiles batch-cleans files that exist in the database but were not found on disk
 // during the scan. This replaces the previous sequential scanInternal loop with batch operations.
+//
+// existingFiles holds the library's main files from before the scan; a main
+// file is orphaned when its path is missing from scannedPaths. Supplements
+// are loaded fresh here, so a row whose file moved during the scan is checked
+// at its current path, and one is missing when stat says its file does not
+// exist (see missingSupplements). Missing supplement rows are deleted first,
+// so a missing supplement is never promoted. Deleting one never deletes its
+// Book, and a surviving Book that lost one is searched for supplements again.
+// The search index is not touched here: a full scan rebuilds every index when
+// it finishes.
 //
 // The method is non-fatal: all errors are logged as warnings and execution continues.
 //
@@ -36,8 +48,30 @@ func (w *Worker) cleanupOrphanedFiles(
 		sc = cache[0]
 	}
 
-	// Step 1: Collect orphans and group by book.
-	// existingFiles only contains main files (from ListFilesForLibrary).
+	// Step 1: Delete supplements whose files are gone.
+	missing := w.missingSupplements(ctx, library.ID, jobLog)
+	missingSupplementIDs := make(map[int]struct{}, len(missing))
+	missingIDs := make([]int, 0, len(missing))
+	for _, f := range missing {
+		missingSupplementIDs[f.ID] = struct{}{}
+		missingIDs = append(missingIDs, f.ID)
+		jobLog.Info("missing supplement", logger.Data{"file_id": f.ID, "book_id": f.BookID, "filepath": f.Filepath})
+	}
+	// Books that lost a supplement are searched for supplements again at the
+	// end, since discovery otherwise runs only when a main file is imported.
+	// That finds a supplement that was renamed or moved with its book folder.
+	rediscoverBookIDs := make(map[int]struct{})
+	if len(missingIDs) > 0 {
+		if err := w.bookService.DeleteFilesByIDs(ctx, missingIDs); err != nil {
+			jobLog.Warn("failed to batch-delete missing supplements", logger.Data{"error": err.Error()})
+		} else {
+			for _, f := range missing {
+				rediscoverBookIDs[f.BookID] = struct{}{}
+			}
+		}
+	}
+
+	// Step 2: Collect orphaned main files and group by book.
 	totalFilesByBook := make(map[int]int)         // bookID → total main file count
 	orphansByBook := make(map[int][]*models.File) // bookID → orphaned files
 
@@ -57,7 +91,7 @@ func (w *Worker) cleanupOrphanedFiles(
 		}
 	}
 
-	if len(orphansByBook) == 0 {
+	if len(orphansByBook) == 0 && len(missingIDs) == 0 {
 		return
 	}
 
@@ -68,7 +102,7 @@ func (w *Worker) cleanupOrphanedFiles(
 	// Collect directories for cleanup at the end
 	orphanDirs := make(map[string]struct{})
 
-	// Step 2 & 3: Handle partial orphan books.
+	// Step 3: Handle partial orphan books.
 	// Collect file IDs from books where only SOME main files are orphaned.
 	var partialOrphanFileIDs []int
 
@@ -169,17 +203,22 @@ func (w *Worker) cleanupOrphanedFiles(
 			continue
 		}
 
-		// Collect supplements (files with supplement role)
-		var supplements []*models.File
+		// Collect supplements (files with supplement role). Missing ones were
+		// deleted in step 1; skipping them here also covers a failed delete.
+		var bookSupplements []*models.File
 		for i := range book.Files {
-			if book.Files[i].FileRole == models.FileRoleSupplement {
-				supplements = append(supplements, book.Files[i])
+			if book.Files[i].FileRole != models.FileRoleSupplement {
+				continue
 			}
+			if _, isMissing := missingSupplementIDs[book.Files[i].ID]; isMissing {
+				continue
+			}
+			bookSupplements = append(bookSupplements, book.Files[i])
 		}
 
 		// Try to promote a supplement
 		var promoted bool
-		for _, supp := range supplements {
+		for _, supp := range bookSupplements {
 			if _, supported := supportedTypes[supp.FileType]; supported {
 				if err := w.bookService.PromoteSupplementToMain(ctx, supp.ID); err != nil {
 					jobLog.Warn("failed to promote supplement", logger.Data{"file_id": supp.ID, "error": err.Error()})
@@ -225,7 +264,13 @@ func (w *Worker) cleanupOrphanedFiles(
 		}
 	}
 
-	// Step 5: Directory cleanup.
+	// Step 5: Rediscover supplements for books that lost one. A book deleted
+	// above is gone, so the retrieve skips it.
+	for bookID := range rediscoverBookIDs {
+		w.rediscoverSupplements(ctx, bookID, library, jobLog)
+	}
+
+	// Step 6: Directory cleanup.
 	cleanupIgnoredPatterns := fileutils.DirectoryCleanupPatterns()
 
 	for dir := range orphanDirs {
@@ -240,8 +285,73 @@ func (w *Worker) cleanupOrphanedFiles(
 	}
 
 	jobLog.Info("batch orphan cleanup complete", logger.Data{
-		"partial_files_attempted":  len(partialOrphanFileIDs),
-		"promoted_files_attempted": len(promotedBookOrphanFileIDs),
-		"books_attempted":          len(bookIDsToDelete),
+		"missing_supplements_attempted": len(missingIDs),
+		"partial_files_attempted":       len(partialOrphanFileIDs),
+		"promoted_files_attempted":      len(promotedBookOrphanFileIDs),
+		"books_attempted":               len(bookIDsToDelete),
 	})
+}
+
+// rediscoverSupplements runs supplement discovery for an existing book, as a
+// main file import does.
+func (w *Worker) rediscoverSupplements(ctx context.Context, bookID int, library *models.Library, jobLog *joblogs.JobLogger) {
+	book, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &bookID})
+	if err != nil {
+		var errCode *errcodes.Error
+		if !errors.As(err, &errCode) || errCode.Code != "not_found" {
+			jobLog.Warn("failed to retrieve book for supplement discovery", logger.Data{"book_id": bookID, "error": err.Error()})
+		}
+		return
+	}
+	for _, f := range book.Files {
+		if f.FileRole != models.FileRoleMain {
+			continue
+		}
+		isRootLevelFile := false
+		for _, libraryPath := range library.LibraryPaths {
+			if filepath.Dir(f.Filepath) == libraryPath.Filepath {
+				isRootLevelFile = true
+				break
+			}
+		}
+		w.discoverAndCreateSupplements(ctx, book, f.Filepath, isRootLevelFile, library.ID, library, jobLog)
+		return
+	}
+}
+
+// missingSupplements returns the library's supplements whose files are gone
+// from disk. It stats each one: the scannable-file list cannot answer this,
+// since most supplements (.txt, .jpg, and so on) never appear in it. Only a
+// definite not-exist counts as missing; another stat error leaves the row
+// alone and logs a warning.
+func (w *Worker) missingSupplements(ctx context.Context, libraryID int, jobLog *joblogs.JobLogger) []*models.File {
+	files, err := w.bookService.ListAllFilesForLibrary(ctx, libraryID)
+	if err != nil {
+		jobLog.Warn("failed to list supplements for orphan cleanup", logger.Data{"error": err.Error()})
+		return nil
+	}
+	stat := w.statFile
+	if stat == nil {
+		stat = os.Stat
+	}
+	var missing []*models.File
+	for _, f := range files {
+		if f.FileRole != models.FileRoleSupplement {
+			continue
+		}
+		_, err := stat(f.Filepath)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			jobLog.Warn("could not check whether supplement exists, keeping it", logger.Data{
+				"file_id":  f.ID,
+				"filepath": f.Filepath,
+				"error":    err.Error(),
+			})
+			continue
+		}
+		missing = append(missing, f)
+	}
+	return missing
 }

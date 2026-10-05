@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"io/fs"
 	"math/rand"
 	"time"
 
@@ -75,6 +76,11 @@ type Worker struct {
 	pdfPageCache *pdfpages.Cache
 
 	monitor *Monitor
+
+	// statFile is the stat a full scan uses to check whether a supplement is
+	// gone from disk. It is nil in production, which means os.Stat; tests set
+	// it to simulate stat failures.
+	statFile func(name string) (fs.FileInfo, error)
 
 	queue           chan *models.Job
 	shutdown        chan struct{}

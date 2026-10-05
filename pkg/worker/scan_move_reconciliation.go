@@ -61,7 +61,8 @@ func (w *Worker) reconcileMoves(
 	}
 
 	// Identify candidate orphans (DB files whose paths were not found on disk).
-	// Only main files are considered — supplement lifecycle is tied to the parent book.
+	// Only main files are considered. A moved supplement is deleted by orphan
+	// cleanup at its old path and rediscovered at its new one.
 	type sizeKey = int64
 	// orphanIndex maps filesize_bytes → list of orphanEntry for orphans that
 	// have a stored sha256 fingerprint. Orphans without a fingerprint are

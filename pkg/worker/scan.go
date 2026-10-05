@@ -420,8 +420,9 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			cache.LoadKnownFiles(allFiles)
 			jobLog.Info("pre-loaded known files", logger.Data{"count": len(allFiles)})
 		}
-		// Orphan cleanup only considers main files — supplements don't need
-		// orphan cleanup (their lifecycle follows the parent book).
+		// Move reconciliation and main-file orphan cleanup only consider main
+		// files. Orphan cleanup loads supplements itself (see
+		// cleanupOrphanedFiles).
 		var existingFiles []*models.File
 		for _, f := range allFiles {
 			if f.FileRole == models.FileRoleMain {
