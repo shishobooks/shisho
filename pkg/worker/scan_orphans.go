@@ -37,12 +37,15 @@ func (w *Worker) cleanupOrphanedFiles(
 	}
 
 	// Step 1: Collect orphans and group by book.
-	// existingFiles only contains main files (from ListFilesForLibrary).
+	// existingFiles includes main and supplement files (#625). Supplements do
+	// not participate in main-file book deletion or promotion: a missing
+	// supplement row is deleted on its own.
 	totalFilesByBook := make(map[int]int)         // bookID → total main file count
-	orphansByBook := make(map[int][]*models.File) // bookID → orphaned files
+	orphansByBook := make(map[int][]*models.File) // bookID → orphaned main files
+	var supplementOrphanIDs []int
+	var supplementOrphanPaths []string
 
 	for _, file := range existingFiles {
-		totalFilesByBook[file.BookID]++
 		if _, seen := scannedPaths[file.Filepath]; !seen {
 			// Skip files that were already reconciled as moves — they have a
 			// valid updated filepath and must not be deleted.
@@ -53,11 +56,28 @@ func (w *Worker) cleanupOrphanedFiles(
 				})
 				continue
 			}
-			orphansByBook[file.BookID] = append(orphansByBook[file.BookID], file)
+			if file.FileRole == models.FileRoleSupplement {
+				supplementOrphanIDs = append(supplementOrphanIDs, file.ID)
+				supplementOrphanPaths = append(supplementOrphanPaths, file.Filepath)
+				jobLog.Info("orphaned supplement (file missing on disk)", logger.Data{
+					"file_id":  file.ID,
+					"filepath": file.Filepath,
+				})
+				continue
+			}
+		}
+		if file.FileRole == models.FileRoleMain {
+			totalFilesByBook[file.BookID]++
+			if _, seen := scannedPaths[file.Filepath]; !seen {
+				if sc != nil && sc.IsMovedOrphan(file.ID) {
+					continue
+				}
+				orphansByBook[file.BookID] = append(orphansByBook[file.BookID], file)
+			}
 		}
 	}
 
-	if len(orphansByBook) == 0 {
+	if len(orphansByBook) == 0 && len(supplementOrphanIDs) == 0 {
 		return
 	}
 
@@ -97,6 +117,14 @@ func (w *Worker) cleanupOrphanedFiles(
 	if len(partialOrphanFileIDs) > 0 {
 		if err := w.bookService.DeleteFilesByIDs(ctx, partialOrphanFileIDs); err != nil {
 			jobLog.Warn("failed to batch-delete partial orphan files", logger.Data{"error": err.Error()})
+		}
+	}
+
+	// Supplement rows whose file is gone from disk: delete the row only.
+	// No book deletion, no promotion (#625).
+	if len(supplementOrphanIDs) > 0 {
+		if err := w.bookService.DeleteFilesByIDs(ctx, supplementOrphanIDs); err != nil {
+			jobLog.Warn("failed to batch-delete orphaned supplements", logger.Data{"error": err.Error()})
 		}
 	}
 
@@ -240,8 +268,9 @@ func (w *Worker) cleanupOrphanedFiles(
 	}
 
 	jobLog.Info("batch orphan cleanup complete", logger.Data{
-		"partial_files_attempted":  len(partialOrphanFileIDs),
-		"promoted_files_attempted": len(promotedBookOrphanFileIDs),
-		"books_attempted":          len(bookIDsToDelete),
+		"partial_files_attempted":    len(partialOrphanFileIDs),
+		"supplement_files_attempted": len(supplementOrphanIDs),
+		"promoted_files_attempted":   len(promotedBookOrphanFileIDs),
+		"books_attempted":            len(bookIDsToDelete),
 	})
 }

@@ -421,14 +421,10 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 			cache.LoadKnownFiles(allFiles)
 			jobLog.Info("pre-loaded known files", logger.Data{"count": len(allFiles)})
 		}
-		// Orphan cleanup only considers main files — supplements don't need
-		// orphan cleanup (their lifecycle follows the parent book).
-		var existingFiles []*models.File
-		for _, f := range allFiles {
-			if f.FileRole == models.FileRoleMain {
-				existingFiles = append(existingFiles, f)
-			}
-		}
+		// Orphan cleanup sees every file: main files drive book deletion /
+		// promotion, supplements are cleaned up only when their path is gone
+		// from disk (#625).
+		existingFiles := allFiles
 
 		// Go through all the library paths to find all the .cbz files.
 		for _, libraryPath := range library.LibraryPaths {
