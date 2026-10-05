@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -236,9 +237,15 @@ func (m *Monitor) setupWatches(watcher *fsnotify.Watcher) (int, error) {
 	return watchCount, nil
 }
 
+// dirWatcher is the part of *fsnotify.Watcher that watchRecursive uses.
+type dirWatcher interface {
+	Add(name string) error
+	Remove(name string) error
+}
+
 // watchRecursive adds watches on root and all its subdirectories.
 // Returns the number of directories added.
-func (m *Monitor) watchRecursive(watcher *fsnotify.Watcher, root string) (int, error) {
+func (m *Monitor) watchRecursive(watcher dirWatcher, root string) (int, error) {
 	count := 0
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -247,17 +254,43 @@ func (m *Monitor) watchRecursive(watcher *fsnotify.Watcher, root string) (int, e
 		if !d.IsDir() {
 			return nil
 		}
-		if addErr := watcher.Add(path); addErr != nil {
-			m.log.Warn("failed to watch directory", logger.Data{
-				"path":  path,
-				"error": addErr.Error(),
-			})
-			return nil
+		if m.addDirWatch(watcher, path) {
+			count++
 		}
-		count++
 		return nil
 	})
 	return count, err
+}
+
+// addDirWatch adds a watch on dir and reports whether it is now watched.
+//
+// On kqueue (macOS/BSD), Add registers the directory and then lists it to watch
+// each file, failing with a not-exist error naming a file that vanished between
+// the listing and its lstat, such as an old sidecar deleted while organize
+// renames a folder. The directory stays registered, but files listed after the
+// vanished one are not marked seen. A second Add on a registered directory
+// returns nil without listing it again, so the retry removes the watch first to
+// force a fresh listing. inotify never lists files, so the vanished-file case
+// does not arise on Linux.
+func (m *Monitor) addDirWatch(watcher dirWatcher, dir string) bool {
+	err := watcher.Add(dir)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		if _, statErr := os.Stat(dir); errors.Is(statErr, fs.ErrNotExist) {
+			m.log.Debug("directory removed before it could be watched", logger.Data{"path": dir})
+			return false
+		}
+		// Remove fails when Add never registered the directory, which is fine.
+		_ = watcher.Remove(dir)
+		err = watcher.Add(dir)
+	}
+	if err != nil {
+		m.log.Warn("failed to watch directory", logger.Data{
+			"path":  dir,
+			"error": err.Error(),
+		})
+		return false
+	}
+	return true
 }
 
 // findLibraryID returns the library ID for a file path by checking which
