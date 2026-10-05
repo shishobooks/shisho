@@ -270,8 +270,10 @@ func (m *Monitor) watchRecursive(watcher dirWatcher, root string) (int, error) {
 // renames a folder. The directory stays registered, but files listed after the
 // vanished one are not marked seen. A second Add on a registered directory
 // returns nil without listing it again, so the retry removes the watch first to
-// force a fresh listing. inotify never lists files, so the vanished-file case
-// does not arise on Linux.
+// force a fresh listing. Remove also forgets that the parent's listing saw dir,
+// so the parent's next change sends one Create for dir and handleEvent
+// re-queues its files; those rescans are idempotent. inotify never lists files,
+// so the vanished-file case does not arise on Linux.
 func (m *Monitor) addDirWatch(watcher dirWatcher, dir string) bool {
 	err := watcher.Add(dir)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {

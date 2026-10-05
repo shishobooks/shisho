@@ -35,7 +35,8 @@ func newLogCapturingMonitor(t *testing.T) (*Monitor, *bytes.Buffer) {
 // listing fails, and an Add on a registered path succeeds without listing
 // again, so only Remove followed by Add produces a fresh listing. A path in
 // removeOnAdd is deleted from disk before its error is returned, simulating a
-// directory removed mid-walk.
+// directory removed mid-walk. It does not model the internal watch a parent's
+// listing puts on each subdirectory, or kqueue's seen set.
 type fakeDirWatcher struct {
 	errs        map[string][]error
 	removeOnAdd map[string]bool
