@@ -553,9 +553,19 @@ func (s *Service) GenerateFile(ctx context.Context, fileID int) (*File, error) {
 - Check `ctx.Err()` before expensive operations (file I/O, loops over content)
 - Return early with `ctx.Err()` if cancelled - don't cache partial results
 
+### File Modes Are Set at Creation
+
+Give a file its mode when you create it and never chmod a file you just created. Some NAS storage refuses chmod outright: a ZFS dataset with `acltype=nfsv4`, `aclmode=restricted` and an inherited ACL returns `EPERM` for every chmod, even when the process owns the file and the ACL grants it full control, and that broke every cover write. A chmod after creation also overrides the operator's umask, so they could not make Shisho's files stricter.
+
+- For a uniquely named temporary file, use `fileutils.CreateTemp(dir, pattern, perm)` instead of `os.CreateTemp` (which always creates 0600 and would need a chmod). It has `os.CreateTemp`'s naming rules and creates exclusively, retrying on a collision. `fileutils.MkdirTemp` is the directory equivalent.
+- For a fixed name, pass the mode to `os.OpenFile` or `os.WriteFile`. `copyFile` creates the destination with the source's permission bits.
+- `fileutils.WriteFileAtomic` follows the rule, so its callers just pass the mode they want.
+
+The umask and any inherited ACL then decide the final mode, as they do for `os.WriteFile`. Under the usual `022` umask, a 0644 request gives 0644 and a 0600 request gives 0600; a stricter umask makes files stricter, which is the operator's choice. The umask also drops group-write bits a copy would otherwise keep: a 0664 book that `moveFile` has to copy across devices comes out 0644 under `022`. `forbidigo` rejects `os.Chmod` and `(*os.File).Chmod` outside tests. Tests that assert a mode set the umask with `testumask.Set` (`pkg/testutils/testumask`), live in a `//go:build unix` file, and must not call `t.Parallel()`, because the umask is process-wide.
+
 ### Publishing Cache Files
 
-Concurrent requests read the reader and download caches, so a cache file must never be visible at its final path until it is complete. For bytes already in memory, use `fileutils.WriteFileAtomic`. For streamed output, write under a unique temporary name in the same directory (`os.CreateTemp`), close it, then `os.Rename` it into place. The temporary name must not match whatever the cache-hit check looks for (`cbzpages` globs `page_<n>.*`, so its temp files start with `.extracting-`). A fixed `dest + ".tmp"` name is not enough: two requests share it and truncate or remove each other's output.
+Concurrent requests read the reader and download caches, so a cache file must never be visible at its final path until it is complete. For bytes already in memory, use `fileutils.WriteFileAtomic`. For streamed output, write under a unique temporary name in the same directory (`fileutils.CreateTemp`, see "File Modes Are Set at Creation"), close it, then `os.Rename` it into place. The temporary name must not match whatever the cache-hit check looks for (`cbzpages` globs `page_<n>.*`, so its temp files start with `.extracting-`). A fixed `dest + ".tmp"` name is not enough: two requests share it and truncate or remove each other's output.
 
 `downloadcache.Cache` goes further because generation is expensive: `getOrGenerate` serializes work per destination path with a context-aware keyed lock, rechecks the cache after acquiring it, has the generator write into a private `.staging-*` directory, renames the result into place, and only then writes metadata (also via temp+rename). Concurrent cold reads of one file generate it once; unrelated files proceed in parallel. The lock lives on the `Cache` instance, so every consumer (books, OPDS, eReader, Kobo, the bulk download worker) must share the one `dlCache` built in `cmd/api/main.go` rather than calling `NewCache` for the same directory. New generated formats should go through `getOrGenerate` rather than calling a generator against the final path. A process killed mid-write leaves its temporary files behind; nothing sweeps them automatically, and the admin cache clear removes them.
 

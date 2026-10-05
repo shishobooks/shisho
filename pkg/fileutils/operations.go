@@ -292,7 +292,9 @@ func moveFile(src, dst string) error {
 	return nil
 }
 
-// copyFile copies a file from source to destination.
+// copyFile copies a file from source to destination, creating it with the
+// source's permission bits (see CreateTemp). A failed copy removes the
+// destination, since moveFile deletes the source after a successful one.
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -300,25 +302,27 @@ func copyFile(src, dst string) error {
 	}
 	defer sourceFile.Close()
 
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Copy file permissions
 	sourceInfo, err := sourceFile.Stat()
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = destFile.Chmod(sourceInfo.Mode())
+	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, sourceInfo.Mode().Perm())
 	if err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		_ = destFile.Close()
+		_ = os.Remove(dst)
+		return errors.WithStack(err)
+	}
+	if err := destFile.Sync(); err != nil {
+		_ = destFile.Close()
+		_ = os.Remove(dst)
+		return errors.WithStack(err)
+	}
+	if err := destFile.Close(); err != nil {
+		_ = os.Remove(dst)
 		return errors.WithStack(err)
 	}
 
@@ -643,10 +647,25 @@ func NormalizeImage(data []byte, mimeType string) ([]byte, string, error) {
 // (scanner, Identify, page selection, upload) goes through it so a failed
 // replacement never destroys a working cover. Because the replacement is a
 // rename, a symlink or hard link at path is replaced by a new regular file
-// rather than written through.
+// rather than written through. The file is created with perm, never chmodded
+// (see CreateTemp).
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	return writeFileAtomic(path, data, perm, func(dir, pattern string, perm os.FileMode) (atomicTempFile, error) {
+		return CreateTemp(dir, pattern, perm)
+	})
+}
+
+// atomicTempFile is the part of *os.File that writeFileAtomic uses, so tests
+// can make a single step fail.
+type atomicTempFile interface {
+	Name() string
+	Write(p []byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+func writeFileAtomic(path string, data []byte, perm os.FileMode, create func(dir, pattern string, perm os.FileMode) (atomicTempFile, error)) error {
+	tmp, err := create(filepath.Dir(path), filepath.Base(path)+".*.tmp", perm)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -657,9 +676,6 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		return errors.WithStack(err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		return cleanup(err)
-	}
-	if err := tmp.Chmod(perm); err != nil {
 		return cleanup(err)
 	}
 	if err := tmp.Sync(); err != nil {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
@@ -74,7 +75,7 @@ func writeToFileContext(ctx context.Context, srcPath, destPath string, metadata 
 	if requestedMode != nil {
 		mode = *requestedMode
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(destPath), "."+filepath.Base(destPath)+".tmp-*")
+	tmp, err := fileutils.CreateTemp(filepath.Dir(destPath), "."+filepath.Base(destPath)+".tmp-*", mode)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -83,9 +84,6 @@ func writeToFileContext(ctx context.Context, srcPath, destPath string, metadata 
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)
 	}()
-	if err := tmp.Chmod(mode); err != nil {
-		return errors.WithStack(err)
-	}
 
 	if err := rewriteToFile(ctx, src, tmp, info.Size(), boxes, metadata); err != nil {
 		return errors.WithStack(err)

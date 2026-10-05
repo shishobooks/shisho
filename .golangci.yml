@@ -55,6 +55,13 @@ linters:
         - pattern: ^http\.ServeFile(FS)?$
           pkg: ^net/http$
           msg: use httputil.ServeFile with its options instead of http.ServeFile
+        # Some NAS storage (ZFS with aclmode=restricted) refuses every chmod,
+        # and a chmod also overrides the operator's umask. Files and
+        # directories get their mode at creation instead. See "File Modes Are
+        # Set at Creation" in pkg/AGENTS.md.
+        - pattern: ^os\.(File\.)?Chmod$
+          pkg: ^os$
+          msg: create the file with its mode instead (fileutils.CreateTemp, fileutils.MkdirTemp, os.OpenFile or os.WriteFile)
     gocritic:
       disabled-checks:
         - appendAssign
@@ -91,6 +98,11 @@ linters:
       - linters:
           - forbidigo
         path: ^pkg/server/http_middleware\.go$
+      # Tests chmod their fixtures, for example to inject permission faults.
+      - linters:
+          - forbidigo
+        path: _test\.go
+        text: Chmod
       # Ignore a bunch of linters for test files.
       - linters:
           - err113

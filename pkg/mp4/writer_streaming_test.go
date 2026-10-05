@@ -135,20 +135,6 @@ func TestWriteToFile_RejectsExcessiveTopLevelBoxCount(t *testing.T) {
 	assert.NoFileExists(t, destPath)
 }
 
-func TestWrite_PreservesSourceFileMode(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "source.m4b")
-	source := append(testBox("ftyp", []byte("M4B ")), testBox("moov", testBox("free", []byte{0}))...)
-	source = append(source, testBox("mdat", []byte("audio payload"))...)
-	require.NoError(t, os.WriteFile(path, source, 0640))
-
-	require.NoError(t, mp4.Write(path, &mp4.Metadata{}, mp4.WriteOptions{}))
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0640), info.Mode().Perm())
-}
-
 func TestWrite_PreservesSymlinkAndUpdatesTarget(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {

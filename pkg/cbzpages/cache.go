@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 )
 
 // maxImageSize is the maximum size for a single page image (100 MB).
@@ -97,7 +98,7 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 	// Write to a temporary name that GetPage's glob cannot match, then rename
 	// it into place. A concurrent request either misses and extracts its own
 	// copy or finds the complete page; it never reads a partial one.
-	outFile, err := os.CreateTemp(cacheDir, tempPagePattern(pageNum))
+	outFile, err := fileutils.CreateTemp(cacheDir, tempPagePattern(pageNum), 0644)
 	if err != nil {
 		return "", "", errors.WithStack(err)
 	}
@@ -106,10 +107,6 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 
 	// Use LimitReader to prevent decompression bombs
 	if _, err := io.Copy(outFile, io.LimitReader(r, maxImageSize)); err != nil {
-		outFile.Close()
-		return "", "", errors.WithStack(err)
-	}
-	if err := outFile.Chmod(0644); err != nil { //nolint:gosec // Cache files need to be readable by the HTTP server
 		outFile.Close()
 		return "", "", errors.WithStack(err)
 	}
@@ -123,7 +120,7 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 	return cachedPath, mimeTypeFromPath(cachedPath), nil
 }
 
-// tempPagePattern is the os.CreateTemp pattern for a page being extracted. It
+// tempPagePattern is the fileutils.CreateTemp pattern for a page being extracted. It
 // must never match the page_<n>.* glob that GetPage treats as a cache hit.
 func tempPagePattern(pageNum int) string {
 	return fmt.Sprintf(".extracting-page_%d-*", pageNum)

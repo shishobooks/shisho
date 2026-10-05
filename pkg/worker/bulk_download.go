@@ -18,6 +18,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -69,6 +70,74 @@ func DeduplicateFilenames(names map[int]string) map[int]string {
 		}
 	}
 	return result
+}
+
+// writeBulkZip zips the cached files, in file ID order, under their download
+// names. The zip is built under a temporary name and renamed into place once it
+// is complete, so another job checking BulkZipExists never sees a partial zip
+// and two jobs for the same set never write into the same file.
+func writeBulkZip(bulkDir, zipPath string, cachedPaths, names map[int]string) error {
+	// Served over HTTP like the other cache files.
+	zipFile, err := fileutils.CreateTemp(bulkDir, ".partial-*", 0644)
+	if err != nil {
+		return errors.Wrap(err, "failed to create zip file")
+	}
+	tmpZipPath := zipFile.Name()
+
+	zipWriter := zip.NewWriter(zipFile)
+	zipSuccess := false
+	defer func() {
+		if !zipSuccess {
+			zipWriter.Close()
+			zipFile.Close()
+			os.Remove(tmpZipPath)
+		}
+	}()
+
+	// Sort file IDs for deterministic zip ordering
+	sortedFileIDs := make([]int, 0, len(cachedPaths))
+	for fileID := range cachedPaths {
+		sortedFileIDs = append(sortedFileIDs, fileID)
+	}
+	sort.Ints(sortedFileIDs)
+
+	for _, fileID := range sortedFileIDs {
+		cachedPath := cachedPaths[fileID]
+		filename := names[fileID]
+
+		header := &zip.FileHeader{
+			Name:   filename,
+			Method: zip.Store,
+		}
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create zip entry for %s", filename)
+		}
+
+		f, err := os.Open(cachedPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to open cached file %s", cachedPath)
+		}
+
+		_, err = io.Copy(writer, f)
+		f.Close()
+		if err != nil {
+			return errors.Wrapf(err, "failed to write %s to zip", filename)
+		}
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		return errors.Wrap(err, "failed to finalize zip")
+	}
+	if err := zipFile.Close(); err != nil {
+		return errors.Wrap(err, "failed to close zip file")
+	}
+	if err := os.Rename(tmpZipPath, zipPath); err != nil {
+		return errors.Wrap(err, "failed to publish zip file")
+	}
+	zipSuccess = true
+	return nil
 }
 
 // ProcessBulkDownloadJob generates metadata-injected files and creates a zip archive.
@@ -190,72 +259,10 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 		return errors.Wrap(err, "failed to create bulk zip directory")
 	}
 
-	// Build the zip under a temporary name and rename it into place once it is
-	// complete, so another job checking BulkZipExists never sees a partial zip
-	// and two jobs for the same set never write into the same file.
 	zipPath := w.downloadCache.BulkZipPath(compositeHash)
-	zipFile, err := os.CreateTemp(bulkDir, ".partial-*")
-	if err != nil {
-		return errors.Wrap(err, "failed to create zip file")
+	if err := writeBulkZip(bulkDir, zipPath, cachedPaths, dedupedNames); err != nil {
+		return err
 	}
-	tmpZipPath := zipFile.Name()
-
-	zipWriter := zip.NewWriter(zipFile)
-	zipSuccess := false
-	defer func() {
-		if !zipSuccess {
-			zipWriter.Close()
-			zipFile.Close()
-			os.Remove(tmpZipPath)
-		}
-	}()
-
-	// Sort file IDs for deterministic zip ordering
-	sortedFileIDs := make([]int, 0, len(cachedPaths))
-	for fileID := range cachedPaths {
-		sortedFileIDs = append(sortedFileIDs, fileID)
-	}
-	sort.Ints(sortedFileIDs)
-
-	for _, fileID := range sortedFileIDs {
-		cachedPath := cachedPaths[fileID]
-		filename := dedupedNames[fileID]
-
-		header := &zip.FileHeader{
-			Name:   filename,
-			Method: zip.Store,
-		}
-
-		writer, err := zipWriter.CreateHeader(header)
-		if err != nil {
-			return errors.Wrapf(err, "failed to create zip entry for %s", filename)
-		}
-
-		f, err := os.Open(cachedPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to open cached file %s", cachedPath)
-		}
-
-		_, err = io.Copy(writer, f)
-		f.Close()
-		if err != nil {
-			return errors.Wrapf(err, "failed to write %s to zip", filename)
-		}
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		return errors.Wrap(err, "failed to finalize zip")
-	}
-	if err := zipFile.Close(); err != nil {
-		return errors.Wrap(err, "failed to close zip file")
-	}
-	if err := os.Chmod(tmpZipPath, 0644); err != nil { //nolint:gosec // Served over HTTP like the other cache files
-		return errors.Wrap(err, "failed to set zip permissions")
-	}
-	if err := os.Rename(tmpZipPath, zipPath); err != nil {
-		return errors.Wrap(err, "failed to publish zip file")
-	}
-	zipSuccess = true
 
 	// Get zip file size
 	zipInfo, err := os.Stat(zipPath)
