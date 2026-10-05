@@ -77,7 +77,7 @@ func (w *Worker) reconcileMoves(
 			continue // file still exists at its known path — not an orphan
 		}
 		if file.FilesizeBytes == 0 {
-			continue // no size recorded; can't use for size-based pruning
+			continue // empty file; every empty file shares a size and sha256, so a match would be ambiguous
 		}
 
 		// Look up stored sha256 fingerprint for this orphan.

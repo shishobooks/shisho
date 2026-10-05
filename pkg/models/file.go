@@ -50,7 +50,7 @@ type File struct {
 	Filepath                 string            `bun:",nullzero" json:"filepath"`
 	FileType                 string            `bun:",nullzero" json:"file_type" tstype:"FileType"`
 	FileRole                 string            `bun:",nullzero,default:'main'" json:"file_role" tstype:"FileRole"`
-	FilesizeBytes            int64             `bun:",nullzero" json:"filesize_bytes"`
+	FilesizeBytes            int64             `json:"filesize_bytes"`
 	FileModifiedAt           *time.Time        `json:"file_modified_at"`
 	ScanError                *string           `json:"scan_error"` // Why the last scan could not parse the file; nil when it parsed fine
 	CoverImageFilename       *string           `json:"cover_image_filename"`
