@@ -754,8 +754,14 @@ func (m *Monitor) processPendingEvents() {
 // move was detected.
 func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int) (*models.File, error) {
 	// Stat the file — if it's missing, we can't compute a hash.
-	if _, err := os.Stat(path); err != nil {
+	stat, err := os.Stat(path)
+	if err != nil {
 		return nil, nil //nolint:nilerr // missing file is not an error
+	}
+	// Every empty file shares a sha256, so a match would be ambiguous and
+	// could repoint an unrelated Book's empty file.
+	if stat.Size() == 0 {
+		return nil, nil
 	}
 
 	// Compute sha256 of the new file.
