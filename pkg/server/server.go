@@ -22,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/ereader"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -112,6 +113,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		dlCache:     dlCache,
 		cbzCache:    cbzCache,
 		pdfCache:    pdfCache,
+		coverCache:  covers.NewThumbnailCache(cfg.CacheDir, covers.DefaultThumbnailCacheMaxBytes),
 	}
 	svcs.books = books.NewService(db).WithAppSettings(svcs.appSettings)
 
@@ -150,7 +152,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 
 		// Register the anonymous Share Link recipient routes
-		sharelinks.RegisterPublicRoutes(api, svcs.shareLinks, svcs.books, svcs.dlCache)
+		sharelinks.RegisterPublicRoutes(api, svcs.shareLinks, svcs.books, svcs.dlCache, svcs.coverCache)
 	}
 
 	// Config routes (require authentication)
@@ -176,7 +178,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	audnexus.RegisterRoutes(api, audnexusService, authMiddleware)
 
 	// Cache management routes (admin only; requires config:read to list, config:write to clear)
-	cacheHandler := cache.NewHandler(svcs.dlCache, svcs.cbzCache, svcs.pdfCache)
+	cacheHandler := cache.NewHandler(svcs.dlCache, svcs.cbzCache, svcs.pdfCache, svcs.coverCache)
 	cache.RegisterRoutes(api, cacheHandler, authMiddleware)
 
 	// Echo's Group.Use adds authenticated not-found handlers. Unknown paths
@@ -230,6 +232,7 @@ type sharedServices struct {
 	dlCache     *downloadcache.Cache
 	cbzCache    *cbzpages.Cache
 	pdfCache    *pdfpages.Cache
+	coverCache  *covers.ThumbnailCache
 }
 
 // registerProtectedRoutes registers all protected API routes with proper authentication and authorization.
@@ -240,7 +243,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	booksGroup := e.Group("/books")
 	booksGroup.Use(authMiddleware.Authenticate)
 	booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, bookService, svcs.cbzCache, svcs.pdfCache)
+	books.RegisterRoutes(booksGroup, db, cfg, authMiddleware, w, pm, svcs.dlCache, bookService, svcs.cbzCache, svcs.pdfCache, svcs.coverCache)
 	chapters.RegisterRoutes(booksGroup, db, authMiddleware, bookService)
 
 	// Share Link management under /books/:id/share-links. A role may hold
@@ -303,7 +306,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	seriesGroup := e.Group("/series")
 	seriesGroup.Use(authMiddleware.Authenticate)
 	seriesGroup.Use(authMiddleware.RequirePermission(models.ResourceSeries, models.OperationRead))
-	series.RegisterRoutes(seriesGroup, db, authMiddleware, bookService)
+	series.RegisterRoutes(seriesGroup, db, authMiddleware, bookService, svcs.coverCache)
 
 	// Lists routes
 	listsGroup := e.Group("/lists")

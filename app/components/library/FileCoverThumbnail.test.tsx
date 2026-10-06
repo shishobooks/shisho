@@ -1,9 +1,12 @@
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { File } from "@/types";
 
 import FileCoverThumbnail from "./FileCoverThumbnail";
+
+mockCoverDimensions();
 
 function makeFile(overrides: Partial<File> = {}): File {
   return {
@@ -29,7 +32,7 @@ describe("FileCoverThumbnail", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
     );
   });
 
@@ -60,7 +63,7 @@ describe("FileCoverThumbnail", () => {
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1717200000000",
+      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=1",
     );
   });
 
@@ -120,7 +123,7 @@ describe("FileCoverThumbnail", () => {
       />,
     );
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/share/tok/files/1/cover",
+      "/api/share/tok/files/1/cover?size=512&aspect=book&r=1",
     );
   });
 

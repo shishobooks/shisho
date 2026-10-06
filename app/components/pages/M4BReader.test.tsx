@@ -8,11 +8,14 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, File } from "@/types";
 import { SEEK_TIMEOUT_MS } from "@/utils/audioCodec";
 
 import M4BReader from "./M4BReader";
+
+mockCoverDimensions();
 
 // The player reads/writes the persisted playback speed through the
 // user-settings hooks; mock them so tests control the stored speed and can
@@ -161,7 +164,7 @@ describe("M4BReader", () => {
     renderReader();
     const img = screen.getByRole("img") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(
-      "/api/books/files/42/cover?v=1704067200000",
+      "/api/books/files/42/cover?v=1704067200000&size=512&aspect=book&r=1",
     );
   });
 

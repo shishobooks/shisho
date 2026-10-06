@@ -6,9 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { queryClient } from "@/libraries/query-client";
 import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { SharedBookResponse } from "@/types";
 
 import { shareRoutes } from "./shareRoutes";
+
+mockCoverDimensions();
 
 // A recipient has no session, so every permission check fails.
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
@@ -112,14 +115,14 @@ describe("SharedBook", () => {
     }
     expect(screen.getByAltText("The Shared Book Cover")).toHaveAttribute(
       "src",
-      `/api/share/${TOKEN}/cover?v=42-1`,
+      `/api/share/${TOKEN}/cover?v=42-1&size=512&aspect=book&r=1`,
     );
     // The file cover carries the file's updated_at in epoch milliseconds.
     expect(
       document.querySelector(`img[src^="/api/share/${TOKEN}/files/42/cover"]`),
     ).toHaveAttribute(
       "src",
-      `/api/share/${TOKEN}/files/42/cover?v=${Date.parse("2026-09-02T00:00:00Z")}`,
+      `/api/share/${TOKEN}/files/42/cover?v=${Date.parse("2026-09-02T00:00:00Z")}&size=512&aspect=book&r=1`,
     );
     // The file row renders its download button once per layout breakpoint.
     expect(

@@ -6,6 +6,7 @@ import { EntityCombobox } from "@/components/common/EntityCombobox";
 import { IdentifierEditor } from "@/components/common/IdentifierEditor";
 import { SortableEntityList } from "@/components/common/SortableEntityList";
 import PagePicker from "@/components/files/PagePicker";
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { LanguageCombobox } from "@/components/library/LanguageCombobox";
 import { ReviewPanel } from "@/components/library/ReviewPanel";
@@ -687,7 +688,7 @@ export function FileEditDialog({
                             />
                           ) : file.cover_mime_type ||
                             file.cover_image_filename ? (
-                            <img
+                            <CoverImage
                               alt="File cover"
                               className="w-full h-full object-cover"
                               key={coverUrl}
@@ -715,7 +716,7 @@ export function FileEditDialog({
                             />
                           ) : file.cover_mime_type ||
                             file.cover_image_filename ? (
-                            <img
+                            <CoverImage
                               alt="File cover"
                               className="w-full h-full object-cover"
                               key={coverUrl}

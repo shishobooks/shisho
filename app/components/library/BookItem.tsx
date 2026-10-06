@@ -12,6 +12,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import AddToListPopover from "@/components/library/AddToListPopover";
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
@@ -271,7 +272,7 @@ const BookItem = ({
           )}
           {/* Image hidden until loaded, removed on error */}
           {!coverError && (
-            <img
+            <CoverImage
               alt={`${book.title} Cover`}
               className={cn(
                 "w-full h-full object-cover rounded-sm border-border border-1",

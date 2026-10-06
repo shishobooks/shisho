@@ -25,6 +25,7 @@ type handler struct {
 	bookService    *books.Service
 	libraryService *libraries.Service
 	searchService  *search.Service
+	coverCache     *covers.ThumbnailCache
 }
 
 // buildSeriesResponse adds the book count and the flat alias list to a series.
@@ -327,7 +328,7 @@ func (h *handler) seriesCover(c echo.Context) error {
 	// The shared helper's ETag bakes in the selected file's ID, so it changes
 	// when the series' first book switches to a different file even if the
 	// new cover has an older mtime.
-	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Series cover")
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Series cover", h.coverCache)
 }
 
 func (h *handler) merge(c echo.Context) error {

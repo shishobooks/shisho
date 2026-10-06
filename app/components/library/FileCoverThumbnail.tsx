@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
@@ -80,7 +81,7 @@ function FileCoverThumbnail({
       )}
 
       {hasCover && (
-        <img
+        <CoverImage
           alt=""
           className={cn(
             "absolute inset-0 w-full h-full object-cover",

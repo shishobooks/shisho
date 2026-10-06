@@ -1,4 +1,16 @@
-import type { Book, File, Series } from "@/types";
+import {
+  ThumbnailRenderKey,
+  ThumbnailSize128,
+  ThumbnailSize256,
+  ThumbnailSize512,
+  ThumbnailSize1024,
+  ThumbnailSize2048,
+  type Book,
+  type File,
+  type Series,
+  type ThumbnailAspect,
+  type ThumbnailSize,
+} from "@/types";
 
 // Cover endpoints are served `private, max-age=31536000, immutable`, so the
 // browser never revalidates a cover URL it has seen. Every cover URL carries a
@@ -58,3 +70,27 @@ export const shareFileCoverUrl = (
   file: CoverSourceFile,
 ): string =>
   `${shareBase(token)}/files/${file.id}/cover?v=${fileCacheKey(file)}`;
+
+// Go owns the allowed tiers and render version. Declaring a tier does not
+// generate it on the server; only the selected one is requested.
+export const COVER_THUMBNAIL_SIZES = [
+  ThumbnailSize128,
+  ThumbnailSize256,
+  ThumbnailSize512,
+  ThumbnailSize1024,
+  ThumbnailSize2048,
+] as const;
+
+/** Adds a thumbnail size while retaining the original cover's cache key. */
+export const coverThumbnailUrl = (
+  url: string,
+  size: ThumbnailSize,
+  aspect?: ThumbnailAspect,
+): string => {
+  const [path, query] = url.split("?");
+  const params = new URLSearchParams(query);
+  params.set("size", String(size));
+  if (aspect) params.set("aspect", aspect);
+  params.set("r", ThumbnailRenderKey);
+  return `${path}?${params.toString()}`;
+};

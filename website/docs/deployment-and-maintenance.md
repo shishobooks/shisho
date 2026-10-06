@@ -148,10 +148,14 @@ Core local library management does not require sending your library to a hosted 
 
 ## Maintain Server Caches
 
-Generated downloads, extracted CBZ pages, and rendered PDF pages live under `CACHE_DIR`, which defaults to `/config/cache`. The download cache is automatically limited by `DOWNLOAD_CACHE_MAX_SIZE_GB`; viewer caches can still grow with use.
+Generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pages live under `CACHE_DIR`, which defaults to `/config/cache`. The download cache is automatically limited by `DOWNLOAD_CACHE_MAX_SIZE_GB`; viewer caches can still grow with use.
+
+Cover thumbnails are generated only when the web interface requests a size. Scanning a library does not generate every thumbnail size. The first view of an uncached cover or size can take longer; later requests reuse the saved thumbnail, including after a server restart. See [Gallery Size](./browsing-search-bulk-actions.md#gallery-size) for the display controls.
+
+The **Cover Thumbnails** cache is limited to 256 MiB. Shisho removes the least recently used thumbnails when it reaches that limit. Changed covers get new thumbnails on demand, and their older versions are removed when a replacement is generated. Metadata-only edits reuse the existing thumbnails. Generating or clearing thumbnails leaves the cover files in your library untouched.
 
 :::warning[Check the Cache Before Clearing]
-Clearing a cache permanently deletes its generated files, but does not delete the library database or source media. Verify that you selected the intended cache. The content can be regenerated, although the next affected download or reader request may be slower.
+Clearing a cache permanently deletes its generated files, but does not delete the library database, source media, or original covers. Verify that you selected the intended cache. The content can be regenerated, although the next affected cover, download, or reader request may be slower.
 :::
 
 Users with Config Read permission can open **Settings > Cache** to inspect each cache. Config Write permission is required to select **Clear** and reclaim space or regenerate output. See [Configuration](./configuration.md#cache) for cache limits and rendering options.

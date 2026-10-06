@@ -6,6 +6,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 
 import ListDetail from "./ListDetail";
 
@@ -91,6 +92,8 @@ describe("ListDetail permission gating", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
+
+  mockCoverDimensions();
 
   it("lets an owner without Users Read share through the user directory", async () => {
     setAuth({ permissions: ["books:read"] });

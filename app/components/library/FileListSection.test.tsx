@@ -5,9 +5,12 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { File, ResourceListResponse } from "@/types";
 
 import { FileListSection } from "./FileListSection";
+
+mockCoverDimensions();
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -109,7 +112,7 @@ describe("FileListSection", () => {
     );
 
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
     );
   });
 

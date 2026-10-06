@@ -16,6 +16,7 @@ import { EntityCombobox } from "@/components/common/EntityCombobox";
 import { IdentifierEditor } from "@/components/common/IdentifierEditor";
 import { SortableEntityList } from "@/components/common/SortableEntityList";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import CoverImage from "@/components/library/CoverImage";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1844,7 +1845,7 @@ export function IdentifyReviewForm({
                           }}
                           type="button"
                         >
-                          <img
+                          <CoverImage
                             alt="Current cover"
                             className={cn(
                               "w-24 bg-muted object-cover",

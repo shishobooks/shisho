@@ -108,6 +108,7 @@ job_retention_days: 30
 #   - {cache_dir}/downloads/  Generated download files with embedded metadata
 #   - {cache_dir}/cbz/        Extracted CBZ page images for the comic viewer
 #   - {cache_dir}/pdf/        Rendered PDF page images for the PDF viewer
+#   - {cache_dir}/cover-thumbnails/  Cover sizes generated on demand (256 MiB limit)
 # Env: CACHE_DIR
 # Default: /config/cache
 cache_dir: /config/cache

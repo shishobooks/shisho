@@ -95,6 +95,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		message string
 	}{
 		{
+			name:   "cover thumbnail with an unsupported size",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/%d/cover?size=300", seeded.bookID),
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
+			name:   "cover thumbnail with an unsupported aspect",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/cover?size=256&aspect=wide", seeded.fileID),
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "book update with an invalid series range",
 			method: http.MethodPost, path: fmt.Sprintf("/api/books/%d", seeded.bookID),
 			body:   `{"series":[{"name":"Saga","number":3,"number_end":2}]}`,
@@ -280,7 +290,7 @@ func TestAPIContract_ResponseShapes(t *testing.T) {
 	caches := f.request(http.MethodGet, "/api/cache", "", http.StatusOK)
 	var cacheList []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(caches), &cacheList), "cache list must be a bare array: %s", caches)
-	assert.Len(t, cacheList, 3)
+	assert.Len(t, cacheList, 4)
 
 	library := f.request(http.MethodGet, fmt.Sprintf("/api/libraries/%d", f.lib.ID), "", http.StatusOK)
 	var lib map[string]any

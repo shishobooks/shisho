@@ -237,7 +237,7 @@ func setupTestServerWithConfig(t *testing.T, db *bun.DB, configure func(*config.
 	// cache cleanups before the directory is removed.
 	t.Cleanup(downloadCache.Wait)
 	appSettingsSvc := appsettings.NewService(db)
-	RegisterRoutes(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, NewService(db).WithAppSettings(appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality))
+	RegisterRoutes(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, NewService(db).WithAppSettings(appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality), nil)
 
 	return e
 }

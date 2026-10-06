@@ -33,6 +33,7 @@ Project-specific conventions are documented in `AGENTS.md` files within each sub
 | `pkg/plugins/AGENTS.md` | Plugin system: Goja runtime, hooks, host APIs, manifests |
 | `pkg/epub/AGENTS.md` | EPUB format: OPF, Dublin Core, parsing/generation |
 | `pkg/cbz/AGENTS.md` | CBZ format: ComicInfo.xml, creator roles, chapter detection |
+| `pkg/covers/AGENTS.md` | Cover selection, lazy thumbnails, resize bounds, cache invalidation |
 | `pkg/kepub/AGENTS.md` | KePub format: koboSpan wrapping, CBZ-to-KePub conversion |
 | `pkg/mp4/AGENTS.md` | M4B format: iTunes atoms, chapters, narrator fallback |
 | `pkg/pdf/AGENTS.md` | PDF format: info dict metadata, pdfcpu thread safety |
@@ -75,7 +76,7 @@ These are common mistakes that cause bugs. Most are summarized here in a line an
 
 ```tsx
 const coverUrl = bookCoverUrl(book);
-<img key={coverUrl} src={coverUrl} />;
+<CoverImage alt="Book cover" key={coverUrl} src={coverUrl} />;
 ```
 
 ### Plugins

@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -34,7 +35,7 @@ func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middl
 // read the review criteria through the same app settings service. The page
 // caches must be the ones the server shares with the cache admin routes and
 // the plugin page extractor.
-func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache, coverCache *covers.ThumbnailCache) {
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 	searchService := search.NewService(db)
@@ -59,6 +60,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddlewar
 		downloadCache:      dlCache,
 		pageCache:          pageCache,
 		pdfPageCache:       pdfPageCache,
+		coverCache:         coverCache,
 		scanner:            scanner,
 	}
 	// Only set pluginManager if it's not nil to avoid interface holding nil pointer

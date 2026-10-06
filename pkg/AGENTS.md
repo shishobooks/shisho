@@ -138,6 +138,7 @@ When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if
 
 - Individual file covers: `{filename}.cover.{ext}`
 - API endpoints: `/api/books/{id}/cover` and `/api/books/files/{id}/cover`
+- Web thumbnails: one `covers.ThumbnailCache` built in `server.New` is shared by book, file, series, Share Link covers, and Settings > Cache. API handlers pass it to `covers.ServeBookCover` or `covers.ServeFileCover` after authorization. Device callers omit the cache and continue serving originals. See `pkg/covers/AGENTS.md` for request parameters, bounds, publication, and invalidation rules.
 
 **CRITICAL - CoverImageFilename stores FILENAME ONLY:**
 

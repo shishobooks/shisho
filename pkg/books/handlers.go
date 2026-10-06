@@ -89,6 +89,7 @@ type handler struct {
 	downloadCache      *downloadcache.Cache
 	pageCache          *cbzpages.Cache
 	pdfPageCache       *pdfpages.Cache
+	coverCache         *covers.ThumbnailCache
 	scanner            Scanner
 	pluginManager      pluginManager
 }
@@ -1452,8 +1453,7 @@ func (h *handler) fileCover(c echo.Context) error {
 		return err
 	}
 
-	return httputil.ServeFile(c, covers.FileCoverPath(file), errcodes.NotFound("Cover"),
-		httputil.WithCacheControl(covers.CacheControlImmutable))
+	return covers.ServeFileCover(c, file, covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 
 func (h *handler) uploadFileCover(c echo.Context) error {
@@ -1627,7 +1627,7 @@ func (h *handler) bookCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Cover")
+	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 
 // downloadFile handles downloading a file with generated metadata embedded.

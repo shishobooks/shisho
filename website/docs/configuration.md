@@ -102,7 +102,7 @@ sudo sysctl --system
 
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
-| `cache_dir` | `CACHE_DIR` | `/config/cache` | Directory for generated downloads, extracted CBZ pages, and rendered PDF pages |
+| `cache_dir` | `CACHE_DIR` | `/config/cache` | Directory for generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pages |
 | `download_cache_max_size_gb` | `DOWNLOAD_CACHE_MAX_SIZE_GB` | `5` | Maximum download cache size in GiB (1 GiB is 1024³ bytes). After each generated download, if the cache is over this size, the least recently used files are removed until it is at 80% of it. `0` removes every cached download after each generation |
 | `pdf_render_dpi` | `PDF_RENDER_DPI` | `200` | PDF viewer render resolution. Range: 72 to 600. Higher values produce sharper and larger images. After a change, pages render again at the new setting |
 | `pdf_render_quality` | `PDF_RENDER_QUALITY` | `85` | JPEG quality for rendered PDF pages. Range: 1 to 100. After a change, pages render again at the new setting |

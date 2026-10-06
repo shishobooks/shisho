@@ -15,11 +15,14 @@ import {
 } from "vitest";
 
 import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, File, SharingSettingsResponse } from "@/types";
 import type { Permission } from "@/utils/permissions";
 
 import BookDetailBody, { type ShareLinkContext } from "./BookDetailBody";
+
+mockCoverDimensions();
 
 beforeAll(() => {
   vi.stubGlobal("__APP_VERSION__", "test");
@@ -322,12 +325,14 @@ describe("BookDetailBody in Share Link context", () => {
 
     expect(screen.getByAltText("Test Book Cover")).toHaveAttribute(
       "src",
-      "/api/share/tok/cover?v=42-1",
+      "/api/share/tok/cover?v=42-1&size=512&aspect=book&r=1",
     );
     const thumbnails = Array.from(container.querySelectorAll("img")).map(
       (img) => img.getAttribute("src"),
     );
-    expect(thumbnails).toContain("/api/share/tok/files/42/cover");
+    expect(thumbnails).toContain(
+      "/api/share/tok/files/42/cover?size=512&aspect=book&r=1",
+    );
   });
 
   it("downloads through the supplied download URL builder", async () => {
