@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-05
+
+### Bug Fixes
+- Drop setuid, setgid, and sticky bits when extracting ZIP entries (#635)
+- Store a size of 0 for empty files instead of failing on NOT NULL (#634)
+- Remove supplements whose files are missing during a full scan (#633)
+- Retry directory watches that fail because a file vanished mid-add (#632)
+- Rewrite nested Books' paths when organizing renames a Book folder (#630)
+- Create M4B downloads and plugin-written files with the right mode (#629)
+- Apply SQLite pragmas on every connection, repair orphaned rows, and keep organized files and the database in step (#627)
+- Create files with their mode instead of chmodding them after creation (#623)
+- Preserve docs headline text clipping on Display P3 screens (#616)
+
+### CI/CD
+- Improve Docker cache reuse and verify images on both architectures
+
 ## [0.1.0] - 2026-10-01
 
 ### Breaking Changes
