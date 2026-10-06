@@ -185,7 +185,10 @@ func extractZipFile(f *zip.File, target string) error {
 	}
 	defer rc.Close()
 
-	out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	// Keep only the entry's permission bits, so a crafted entry cannot create
+	// a setuid, setgid, or sticky file, and always let the owner read and
+	// write it, so the plugin can read the file back and extract over it.
+	out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode().Perm()|0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create file %q: %w", f.Name, err)
 	}
