@@ -561,6 +561,8 @@ shisho.archive.readZipEntry(archivePath, entryPath)      // → ArrayBuffer
 shisho.archive.listZipEntries(archivePath)               // → string[]
 ```
 
+`extractZip` creates each file with `f.Mode().Perm()|0o600`, like the installer, never the raw `f.Mode()`: Go passes setuid, setgid, and sticky bits from the mode through to `open(2)`, so a crafted entry would otherwise produce a setuid file (with its contents, when Shisho runs as root). The `0o600` floor keeps a read-only or mode-0 entry readable by the plugin and overwritable by a second extraction. The test is in `hostapi_archive_permissions_unix_test.go`; its entries are empty because an unprivileged write makes the kernel clear setuid and setgid, which would hide a regression.
+
 ### shisho.xml
 
 ```javascript
