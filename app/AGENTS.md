@@ -78,6 +78,7 @@ Every form that creates or updates data has unsaved changes protection: dialogs 
 - **Dialogs focus their container, not the header close button.** `DialogContent` does this when the first tabbable element carries `data-dialog-header-close`; otherwise Radix focuses the first field. A caller's `onOpenAutoFocus` runs first and wins with `preventDefault()`. Close buttons keep `focus-visible:` rings.
 - **A dialog opened from a dropdown item**: the `Dialog` wrapper in `app/components/ui/dialog.tsx` already clears the `pointer-events: none` Radix can leave on `<body>`. Give the `DropdownMenuContent` `onCloseAutoFocus={(e) => e.preventDefault()}` so the two focus managers do not fight.
 - **File labels come from the server.** Render `fileLabel(file)` from `@/utils/format` (the Go-resolved `display_name`); a supplement's label is its filename, and the Share Link payload has no path to rebuild one from.
+- **`Button` defaults `type="button"`**, so a form's submit button must say `type="submit"`. Its kit also covers one-offs: `size="icon-sm"`/`"icon-xs"` for small icon buttons, `variant="link"` for inline text links (no `h-auto p-0` needed), `variant="unstyled"` for rows and tiles, and `BadgeRemoveButton` for the X in a `Badge`.
 - New shadcn components are added with `npx shadcn@latest add`.
 
 ## Topic docs

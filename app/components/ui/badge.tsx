@@ -1,7 +1,9 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { X } from "lucide-react";
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/libraries/utils";
 
 const badgeVariants = cva(
@@ -45,4 +47,30 @@ function Badge({
   );
 }
 
-export { Badge, badgeVariants };
+type BadgeRemoveButtonProps = Omit<
+  React.ComponentProps<typeof Button>,
+  "variant" | "size" | "children" | "asChild"
+> & {
+  // Name what gets removed ("Remove alias Foo"): the button shows only an X.
+  "aria-label": string;
+};
+
+// The X that removes a Badge's value. Place it last inside the Badge.
+function BadgeRemoveButton({ className, ...props }: BadgeRemoveButtonProps) {
+  return (
+    <Button
+      className={cn(
+        "ml-0.5 shrink-0 rounded-sm transition-colors hover:text-destructive",
+        className,
+      )}
+      data-slot="badge-remove-button"
+      size="none"
+      variant="unstyled"
+      {...props}
+    >
+      <X aria-hidden="true" className="size-3" />
+    </Button>
+  );
+}
+
+export { Badge, BadgeRemoveButton, badgeVariants };
