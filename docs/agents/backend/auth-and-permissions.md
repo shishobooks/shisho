@@ -25,7 +25,7 @@ Load every user through `auth.LoadUser`. On an authenticating path a missing or 
 ## Adding a permission resource
 
 1. Constant in `pkg/models/role.go`.
-2. Add it to `roles.ValidResources` in `pkg/roles/service.go`, or roles using it fail validation.
+2. Add it to `roles.ValidResources` in `pkg/roles/service.go` (`pkg/roles/valid_resources_test.go` fails if you forget).
 3. Seed it onto the admin role in a migration (`20260927000000_add_shares_permission.go` is the pattern).
 4. Show it in `app/components/library/PermissionMatrix.tsx`.
 5. Guard the routes.

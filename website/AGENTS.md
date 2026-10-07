@@ -14,11 +14,13 @@ Lead with the reader's task and the consequence of each choice. The docs are a p
 
 ## Information Architecture
 
-`website/sidebars.ts` alone sets navigation and order; its comments give the ordering rules and the legacy files left out on purpose. Place every new page where its intended reader would seek it, never at the bottom by default. Optional or niche does not mean last. If a page changes a category's purpose or audience, reconsider the architecture instead of forcing it into the nearest directory.
+`website/sidebars.ts` alone sets navigation and order; its comments give the ordering rules, and `website/sidebars.test.ts` fails when a page is neither in it nor in `website/legacyDocs.ts`. Place every new page where its intended reader would seek it, never at the bottom by default. Optional or niche does not mean last. If a page changes a category's purpose or audience, reconsider the architecture instead of forcing it into the nearest directory.
 
 ## Editorial Policy
 
 ### Inclusion Test
+
+The question for every addition is whether an operator running Shisho needs it to deploy, configure, use, troubleshoot, or extend it. If not, it stays out, however much work the change took.
 
 Document a fact only when all five statements are true:
 

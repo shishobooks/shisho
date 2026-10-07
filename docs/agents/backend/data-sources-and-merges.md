@@ -13,7 +13,7 @@ The priority order and series provenance are under "Data sources" in `pkg/AGENTS
 A new delete path for an owner-referenced resource (one a Book or File points at) does what the existing ones do. `deleteSeries` in `pkg/series/handlers.go` is the reference; add the new path to `pkg/server/resource_delete_test.go`.
 
 1. **Stamp `manual` on every affected owner's `*_source`** inside the delete's transaction, before the join rows or foreign key go, whatever the prior source and even when other members remain. Otherwise the sidecar from the last scan re-creates the resource on the next scan (ADR 0006). Merges and orphan cleanup are exempt.
-2. **Recompute Reviewed after commit** for every affected Book, through the shared `WithAppSettings` books service. A package that `pkg/books` imports takes the `review.BookReviewRecomputer` interface instead.
+2. **Recompute Reviewed after commit** for every affected Book, through the shared books service. A package that `pkg/books` imports takes the `review.BookReviewRecomputer` interface instead.
 3. **Reindex** per `search-fts.md`.
 
 ## Merges

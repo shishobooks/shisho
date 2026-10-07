@@ -5,7 +5,7 @@ Timing-aware Go test splitter used by the `test` job in `.github/workflows/ci.ym
 ## Design rules
 
 - **`Pack` (`pack.go`) is the single planner** for every subcommand, so their plans agree. A new subcommand that plans shards calls it rather than reimplementing packing.
-- The tool imports nothing from `pkg/`, only the standard library and `go-junit-report/v2`, so it can be extracted into its own repo. Keep it that way.
+- The tool stays extractable into its own repo; depguard in `.golangci.yml` limits its imports.
 
 ## Changing the shard count
 

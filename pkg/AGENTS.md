@@ -23,8 +23,6 @@ golangci `forbidigo` and `pkg/migrations/schema_invariants_test.go` enforce seve
 
 **A route package never builds a service or cache that holds state or settings.** `New` in `pkg/server/server.go` builds those once in `sharedServices` and passes them in; `cmd/api/main.go` builds the ones the worker also uses. Services that hold only `*bun.DB` may be built locally.
 
-**Every `books.Service` outside tests is built `WithAppSettings`.** One built without it silently skips the Reviewed recompute on every mutation.
-
 ## Data sources
 
 Lower priority number wins (`pkg/models/data-source.go`).

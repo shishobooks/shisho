@@ -5,7 +5,7 @@ Each browser project runs against its own API server and SQLite database, and te
 ## Writing Tests
 
 - **Each test file sets up its own preconditions** through the test-only API, typically in `beforeAll`. Never rely on test ordering or state left by another file.
-- **Import `test`, `expect`, and `request` from `./fixtures`**, not `@playwright/test` (type-only imports are fine). The fixtures point each browser at its own API server; `e2e/fixtures.ts` documents which helper to use where.
+- **Import test helpers from `./fixtures`** (ESLint enforces it): they point each browser at its own API server, and `e2e/fixtures.ts` documents which helper to use where.
 - **API request paths include `/api` explicitly**, including `/api/test/*`. The API helpers target the backend origin, and adding `/api` to `baseURL` does not help because a leading-slash path replaces the base path. Device routes and SPA navigation stay at the root.
 - **Contexts made with `browser.newContext()` inherit neither the config's `baseURL` nor cookies.** That is how to get a recipient with no session; pass `baseURL` when such a context navigates by relative path.
 

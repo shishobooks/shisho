@@ -84,12 +84,12 @@ Go (Echo, Bun ORM, SQLite) backend in `pkg/`; React, TypeScript, Tailwind, Tanst
 
 ## Docs and config must move with behavior
 
-- **Any user-facing change updates `website/docs/`** in the same change: new or changed features, behavior, config options, API endpoints, or UI. A new or changed API endpoint counts even when its UI ships later. Plans for user-facing changes include a docs task. New pages cross-link to related pages and vice versa.
+- **`website/docs/` holds only what an operator of Shisho needs to know**: how to deploy, configure, use, troubleshoot, or extend it through the supported plugin contract. A change that alters what an operator sees or does updates the page that owns that fact, in the same change, and plans for such changes include a docs task. How the feature works inside (endpoints the UI calls, the data model, package layout, internal behavior) stays out, however large the change. Read `website/AGENTS.md` before editing the site; its inclusion test decides what belongs.
 - **A new field in `config.Config`** (`pkg/config/config.go`) also updates `shisho.example.yaml` (field, env var, default, description), `website/docs/configuration.md`, and the Server Settings page in `app/components/pages/AdminSettings.tsx`. The yaml file and the docs page stay complete references; the few exempt fields say so in their comments. Validation and env parsing are under "Config" in `pkg/AGENTS.md`.
 
 ## Tool versions
 
-`mise.toml` is the source of truth for tool versions, but Docker does not use mise. When bumping a tool, also update its pin in the `Dockerfile` (base images, the tygo `go install`) and, for Node or pnpm, `@types/node` and `packageManager` in `package.json` (then `pnpm install`).
+`mise.toml` is the source of truth for tool versions, but Docker does not use mise, so a bump also updates the copies in the `Dockerfile` and `package.json`; `mise lint` (`tools/checkversions`) names any that disagree.
 
 ## Testing
 
@@ -106,10 +106,6 @@ Commit subjects and PR titles use `[{Category}] {Change description}`. Categorie
 **Watch CI by run id** (`gh run view $RUN_ID --json jobs`), not by PR: `gh pr checks` follows the latest commit, and `gh run view` reports a run as in progress until the whole workflow finishes.
 
 **Breaking changes carry two markers**: `!` after the category in the PR title (`[Fix]! Replace ENVIRONMENT=test with SHISHO_TEST_MODE`), and a `## BREAKING CHANGES` section in the PR body with one upgrade-note bullet per change. A change is breaking when an operator must act before or after upgrading: a renamed or removed config key or env var, a changed default, a removed route or response field, new startup validation that can refuse an existing config, or a changed on-disk layout. The PR body is the only place to write the notes; `docs/agents/releases.md` covers how they reach the changelog. Reviewers treat a breaking change missing either marker as a review failure.
-
-## Worktrees
-
-Create worktrees in `~/.worktrees/shisho/` and run `mise setup` in each new one.
 
 ## Database
 

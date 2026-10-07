@@ -11,9 +11,9 @@ Rules a reviewer applies to a Go backend diff. Each rule names the violation to 
 - **502 `upstream_error`** (`errcodes.UpstreamError`) when an upstream server fails. Not 422, not 500.
 - **404 only when the lookup found no row.** Map `sql.ErrNoRows` or the service's own `errcodes.NotFound` to 404; wrap everything else so it renders 500. Flag `if err != nil { return errcodes.NotFound(...) }`.
 - **Filesystem errors are 404 only for `os.IsNotExist`.** `EACCES`, `EIO`, and other stat or open failures are 500.
-- **A numeric path ID that does not parse is `errcodes.NotFound(resource)`**, through `httputil.ParamID` (flag inline `strconv.Atoi(c.Param(...))`), matching `RequireLibraryAccess`. `ValidationError` stays for payload and query values. A string path ID rejected for path safety is a `ValidationError`.
+- **A numeric path ID that does not parse is `errcodes.NotFound(resource)`**, through `httputil.ParamID` (ruleguard enforces it), matching `RequireLibraryAccess`. `ValidationError` stays for payload and query values. A string path ID rejected for path safety is a `ValidationError`.
 - **A server fault is a plain error (500)**: `errors.New` or `errors.WithStack`, including a handler registered without a dependency.
-- **Service errors a handler must distinguish are exported sentinels matched with `errors.Is`; flag `strings.Contains(err.Error(), ...)` and comparisons against `err.Error()`.** Only a sentinel-matched or pure-validator error may carry its text into a 4xx; flag `ValidationError(err.Error())` on an arbitrary service error, since parse errors name library paths.
+- **Service errors a handler must distinguish are exported sentinels matched with `errors.Is`** (ruleguard rejects matching on error text). Only a sentinel-matched or pure-validator error may carry its text into a 4xx; flag `ValidationError(err.Error())` on an arbitrary service error, since parse errors name library paths.
 - **Shared conditions use the shared constructors in `pkg/errcodes`**, not a hand-written message. A message repeated within one package gets one helper there.
 - **Messages are full sentences used verbatim.** `errcodes.Forbidden` is for denials that are not a missing role permission. `errcodes.NotFound` takes the resource noun only, because it appends " not found." (flag `NotFound("Download file has expired from cache")`).
 
@@ -24,7 +24,7 @@ Rules a reviewer applies to a Go backend diff. Each rule names the violation to 
 
 ## Response shapes
 
-- Every request and response payload is a named exported struct in the package's `types.go`, and the package is listed in `tygo.yaml`. A struct in `handlers.go` is invisible to the frontend. Flag `echo.Map`, `map[string]any`, and anonymous structs passed to `c.JSON`. A response carrying nothing the client cannot derive is `204 No Content`.
+- Every request and response payload is a named exported struct in the package's `types.go`, and the package is listed in `tygo.yaml`. A struct in `handlers.go` is invisible to the frontend. Ruleguard rejects maps passed to `c.JSON`; flag anonymous structs. A response carrying nothing the client cannot derive is `204 No Content`.
 - Responses reuse the model by value embed with `tstype:",extends"`, not by re-listing fields or pointer embedding.
 - Naming: `{Entity}Response` for one resource; `List{Entities}Response` shaped `{ items, total }` for paginated lists; `{Entity}ListItem` only when the list item genuinely differs from the single shape.
 - **Bare-model rule:** return the bare generated model when the response adds nothing; flag passthrough wrappers.
