@@ -30,7 +30,7 @@ func (e *ErrVersionIncompatible) Error() string {
 // hook function references.
 type Runtime struct {
 	vm       *goja.Runtime
-	mu       sync.RWMutex //nolint:unused // Read lock for hook invocation, write lock for reload (future use)
+	mu       sync.RWMutex // Held exclusively (Lock) for every hook call: a goja VM is not goroutine-safe
 	manifest *Manifest
 	scope    string
 	pluginID string
