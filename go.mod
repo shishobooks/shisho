@@ -26,6 +26,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/pkg/errors v0.9.1
+	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/robinjoseph08/golib v0.6.0
 	github.com/segmentio/encoding v0.5.4
 	github.com/stretchr/testify v1.12.1

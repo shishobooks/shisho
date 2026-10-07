@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -28,7 +29,7 @@ import (
 func newSeriesHandler(db *bun.DB) *handler {
 	return &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 		aliasService:   aliases.NewService(db),
 	}

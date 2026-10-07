@@ -31,10 +31,9 @@ func RegisterLibraryRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middl
 
 // RegisterRoutes registers book routes on a group the server has already
 // configured with authentication and the resource's read permission.
-// bookService must carry app settings (see WithAppSettings); the handlers
-// read the review criteria through the same app settings service. The page
-// caches must be the ones the server shares with the cache admin routes and
-// the plugin page extractor.
+// The handlers read the review criteria through bookService's app settings
+// service. The page caches must be the ones the server shares with the cache
+// admin routes and the plugin page extractor.
 func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddleware *auth.Middleware, scanner Scanner, pm *plugins.Manager, dlCache *downloadcache.Cache, bookService *Service, pageCache *cbzpages.Cache, pdfPageCache *pdfpages.Cache, coverCache *covers.ThumbnailCache) {
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)

@@ -109,7 +109,7 @@ type Worker struct {
 func New(cfg *config.Config, db *bun.DB, pluginService *plugins.Service, pm *plugins.Manager, broker *events.Broker, dlCache *downloadcache.Cache, cbzCache *cbzpages.Cache, pdfCache *pdfpages.Cache) *Worker {
 	aliasService := aliases.NewService(db)
 	appSettingsService := appsettings.NewService(db)
-	bookService := books.NewService(db).WithAppSettings(appSettingsService)
+	bookService := books.NewService(db, appSettingsService)
 	chapterService := chapters.NewService(db)
 	genreService := genres.NewService(db)
 	jobService := jobs.NewService(db)

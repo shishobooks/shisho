@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -31,7 +32,7 @@ func TestOrganizeBookFiles_RootLevel_CleansUpStaleBookFolderAfterTitleChange(t *
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	libDir := t.TempDir()
 
@@ -147,7 +148,7 @@ func TestOrganizeBookFiles_RootLevel_PreservesUserFilesInStaleFolder(t *testing.
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	libDir := t.TempDir()
 
@@ -239,7 +240,7 @@ func TestOrganizeBookFiles_DirectoryBased_WritesFreshSidecarAfterFolderRename(t 
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	libDir := t.TempDir()
 
@@ -335,7 +336,7 @@ func TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder(t *te
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	libDir := t.TempDir()
 

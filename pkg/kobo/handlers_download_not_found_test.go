@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -61,7 +62,7 @@ func TestHandleDownload_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 
 			h := &handler{
 				service:       NewService(db),
-				bookService:   books.NewService(db),
+				bookService:   books.NewService(db, appsettings.NewService(db)),
 				downloadCache: downloadcache.NewCache(t.TempDir(), 1<<30),
 			}
 

@@ -5,6 +5,7 @@ linters:
     - asciicheck
     - bodyclose
     - decorder
+    - depguard
     - dogsled
     - dupword
     - err113
@@ -35,6 +36,16 @@ linters:
     - unused
     - whitespace
   settings:
+    depguard:
+      rules:
+        # gotestsplit must stay extractable into its own repo.
+        gotestsplit:
+          list-mode: strict
+          files:
+            - "**/tools/gotestsplit/**"
+          allow:
+            - $gostd
+            - github.com/jstemmer/go-junit-report/v2
     forbidigo:
       analyze-types: true
       forbid:
@@ -76,7 +87,20 @@ linters:
         - pattern: ^migrate\.NewMigrator$
           pkg: ^github\.com/uptrace/bun/migrate$
           msg: use migrations.NewMigrator, which marks a migration applied only after it succeeds
+        # echo.NotFoundHandler is a process-wide global: setting it leaks into
+        # every Echo instance (parallel tests included) and is bypassed by the
+        # authenticated fallbacks Group.Use adds. pkg/server registers
+        # per-router RouteNotFound handlers instead.
+        - pattern: ^echo\.NotFoundHandler$
+          pkg: ^github\.com/labstack/echo/v4$
+          msg: register a per-router e.RouteNotFound handler instead of using echo.NotFoundHandler
     gocritic:
+      enabled-checks:
+        - ruleguard
+      settings:
+        ruleguard:
+          rules: ${base-path}/tools/ruleguard/rules.go
+          failOn: all
       disabled-checks:
         - appendAssign
         - ifElseChain
@@ -130,6 +154,29 @@ linters:
           - forbidigo
         path: _test\.go
         text: Chmod
+      # IsUniqueViolation is the one sanctioned message match: sqliteshim picks
+      # mattn or modernc SQLite by build, and each has its own error type.
+      - linters:
+          - gocritic
+        path: ^pkg/database/unique\.go$
+        text: errors\.Is or errors\.As
+      # Tests may assert on the wording of a user-facing error message.
+      - linters:
+          - gocritic
+        path: _test\.go
+        text: errors\.Is or errors\.As
+      # Kobo responses pass through the Kobo store protocol's JSON, whose
+      # shapes the device defines and the frontend never reads.
+      - linters:
+          - gocritic
+        path: ^pkg/kobo/
+        text: named response struct
+      # The routing test reads the global to prove server construction leaves
+      # it alone.
+      - linters:
+          - forbidigo
+        path: ^pkg/server/server_test\.go$
+        text: echo\.NotFoundHandler
       # Ignore a bunch of linters for test files.
       - linters:
           - err113

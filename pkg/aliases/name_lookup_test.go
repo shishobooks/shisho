@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/genres"
@@ -98,7 +99,7 @@ func TestNameLookups_CaseInsensitiveUsingNameIndex(t *testing.T) {
 
 	peopleSvc := people.NewService(db)
 	seriesSvc := series.NewService(db)
-	booksSvc := books.NewService(db)
+	booksSvc := books.NewService(db, appsettings.NewService(db))
 	genresSvc := genres.NewService(db)
 	tagsSvc := tags.NewService(db)
 	publishersSvc := publishers.NewService(db)

@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/xml"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -104,7 +105,7 @@ func parseXML(content string) (*xmlElement, error) {
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, fmt.Errorf("XML parse error: %w", err)

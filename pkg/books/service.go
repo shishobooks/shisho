@@ -92,10 +92,15 @@ type Service struct {
 	appSettingsService *appsettings.Service
 }
 
-// NewService creates a book service without review-criteria support.
-// Pass the result to WithAppSettings to enable automatic reviewed recomputation.
-func NewService(db *bun.DB) *Service {
-	return &Service{db: db}
+// NewService creates a book service. appSettings is required: mutation
+// methods recompute files.reviewed after each successful write from the
+// review criteria it holds, and a service without it would silently skip
+// that recompute.
+func NewService(db *bun.DB, appSettings *appsettings.Service) *Service {
+	if appSettings == nil {
+		panic("books.NewService: appSettings must not be nil")
+	}
+	return &Service{db: db, appSettingsService: appSettings}
 }
 
 // DB returns the underlying database connection. Used by review override APIs.
@@ -103,15 +108,8 @@ func (svc *Service) DB() *bun.DB {
 	return svc.db
 }
 
-// WithAppSettings attaches an appsettings.Service so that mutation methods
-// automatically recompute files.reviewed after each successful write.
-func (svc *Service) WithAppSettings(s *appsettings.Service) *Service {
-	svc.appSettingsService = s
-	return svc
-}
-
-// AppSettings returns the app settings service attached by WithAppSettings,
-// or nil when none is attached.
+// AppSettings returns the app settings service the books service was built
+// with.
 func (svc *Service) AppSettings() *appsettings.Service {
 	return svc.appSettingsService
 }
@@ -120,9 +118,6 @@ func (svc *Service) AppSettings() *appsettings.Service {
 // files.reviewed for the given file. Errors are logged but do not propagate
 // to the caller — review state is non-critical metadata.
 func (svc *Service) RecomputeReviewedForFile(ctx context.Context, fileID int) {
-	if svc.appSettingsService == nil {
-		return
-	}
 	criteria, err := review.Load(ctx, svc.appSettingsService)
 	if err != nil {
 		log := logger.FromContext(ctx)
@@ -146,7 +141,7 @@ func (svc *Service) RecomputeReviewedForBook(ctx context.Context, bookID int) {
 // books, such as deleting a shared resource. Errors are logged, and a failure
 // on one book does not stop the rest.
 func (svc *Service) RecomputeReviewedForBooks(ctx context.Context, bookIDs []int) {
-	if svc.appSettingsService == nil || len(bookIDs) == 0 {
+	if len(bookIDs) == 0 {
 		return
 	}
 	log := logger.FromContext(ctx)

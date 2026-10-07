@@ -72,9 +72,18 @@ func TestRecomputeReviewedForBooks_RecomputesOnlyListedBooks(t *testing.T) {
 		bookIDs = append(bookIDs, file.BookID)
 	}
 
-	NewService(db).WithAppSettings(appsettings.NewService(db)).RecomputeReviewedForBooks(ctx, bookIDs)
+	NewService(db, appsettings.NewService(db)).RecomputeReviewedForBooks(ctx, bookIDs)
 
 	assert.False(t, fileReviewed(ctx, t, db, first))
 	assert.False(t, fileReviewed(ctx, t, db, second))
 	assert.True(t, fileReviewed(ctx, t, db, unlisted), "a Book that was not listed is not recomputed")
+}
+
+// A nil app settings service would make every mutation skip the Reviewed
+// recompute, so the constructor refuses it instead of failing later.
+func TestNewService_PanicsWithoutAppSettings(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	assert.Panics(t, func() { NewService(db, nil) })
 }

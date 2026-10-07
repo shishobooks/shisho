@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
@@ -93,7 +94,7 @@ func TestStoredSortFlowsThroughBooksService(t *testing.T) {
 	}, resolved)
 
 	// Feed it into the books service exactly as the handler does.
-	bookSvc := books.NewService(db)
+	bookSvc := books.NewService(db, appsettings.NewService(db))
 	got, _, err := bookSvc.ListBooksWithTotal(context.Background(), books.ListBooksOptions{
 		LibraryID: &lib.ID,
 		Sort:      resolved,
@@ -265,7 +266,7 @@ func TestAuthorBooks_PersonIDAndSortFlow(t *testing.T) {
 	resolved := sortspec.ResolveForLibrary(ctx, settingsSvc, user.ID, lib.ID, nil)
 	require.NotNil(t, resolved)
 
-	bookSvc := books.NewService(db)
+	bookSvc := books.NewService(db, appsettings.NewService(db))
 	got, total, err := bookSvc.ListBooksWithTotal(ctx, books.ListBooksOptions{
 		LibraryID: &lib.ID,
 		PersonID:  &alice.ID,

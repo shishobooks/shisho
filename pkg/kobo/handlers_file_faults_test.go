@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -53,7 +54,7 @@ func newKoboDownloadFixture(t *testing.T, title string) *koboDownloadFixture {
 	t.Cleanup(cache.Wait)
 	return &koboDownloadFixture{
 		t: t, db: db, book: book, dir: dir, cacheDir: cacheDir,
-		h: &handler{service: NewService(db), bookService: books.NewService(db), downloadCache: cache},
+		h: &handler{service: NewService(db), bookService: books.NewService(db, appsettings.NewService(db)), downloadCache: cache},
 	}
 }
 

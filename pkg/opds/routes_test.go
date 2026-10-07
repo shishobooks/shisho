@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -25,7 +26,7 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
 
 	e := echo.New()
-	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db))
+	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)))
 
 	methods := map[string]map[string]bool{}
 	for _, r := range e.Routes() {

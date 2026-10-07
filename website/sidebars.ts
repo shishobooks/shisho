@@ -7,14 +7,10 @@ import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
 // Troubleshooting stays top-level because urgent problems cross categories,
 // and Developer stays last.
 //
-// Some current-doc files are left out on purpose: they are legacy fragments
-// waiting to be folded into a canonical page, so don't add them back.
-//   advanced/bulk-download.md, gallery-size.md, gallery-sort.md
-//     -> browsing-search-bulk-actions
-//   audible-chapters.md, review-state.md -> metadata
-//   cache-management.md -> deployment-and-maintenance
-//   directory-structure.md, file-fingerprints.md -> libraries
-//   plugins/repositories.md -> plugins/overview and plugins/publishing
+// Every page in docs/ is either placed below or listed in legacyDocs.ts, the
+// legacy fragments left out on purpose; sidebars.test.ts fails otherwise.
+// Keep this file's only export the default: Docusaurus would read a named
+// export as another sidebar.
 const sidebars: SidebarsConfig = {
   docsSidebar: [
     "getting-started",

@@ -1,11 +1,12 @@
 import { ESLint, type Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
-// The permission, query, URL, mutate and UI rules in eslint.config.js are
-// selectors, so a typo in one would silently match nothing, and the local
-// mutateAsync rule in eslint-rules/ reads syntax in ways a refactor could
-// quietly change. This lints fixtures as if they sat in the app to prove each
-// rule still fires where it should.
+// The permission, query, URL, mutate, UI and e2e import rules in
+// eslint.config.js are selectors or path patterns, so a typo in one would
+// silently match nothing, and the local mutateAsync rule in eslint-rules/
+// reads syntax in ways a refactor could quietly change. This lints fixtures
+// as if they sat in the app or e2e/ to prove each rule still fires where it
+// should.
 
 const eslint = new ESLint();
 
@@ -429,5 +430,34 @@ describe("ESLint UI convention rules", () => {
         (message) => message.ruleId === "no-restricted-properties",
       ),
     ).toEqual([]);
+  });
+});
+
+const playwrightImports = async (filePath: string) => {
+  const [result] = await eslint.lintText(
+    `import { test } from "@playwright/test";
+import { type Locator } from "@playwright/test";
+import type { Page } from "@playwright/test";
+export { expect } from "@playwright/test";
+
+export const run = (page: Page, locator: Locator) => test(String(page), () => void locator);
+`,
+    { filePath },
+  );
+  return result.messages
+    .filter(
+      (message) =>
+        message.ruleId === "@typescript-eslint/no-restricted-imports",
+    )
+    .map((message) => message.line);
+};
+
+describe("ESLint e2e fixture import rule", () => {
+  it("rejects value imports and re-exports of @playwright/test in e2e specs", async () => {
+    expect(await playwrightImports("e2e/fixture.spec.ts")).toEqual([1, 4]);
+  });
+
+  it("allows them in e2e/fixtures.ts", async () => {
+    expect(await playwrightImports("e2e/fixtures.ts")).toEqual([]);
   });
 });

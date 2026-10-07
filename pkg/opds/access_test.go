@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -50,7 +51,7 @@ func serveOPDS(t *testing.T, db *bun.DB, username, method, path string) *httptes
 	e := echo.New()
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
-	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db))
+	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)))
 
 	req := httptest.NewRequest(method, path, nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":secret")))
@@ -98,7 +99,7 @@ func TestOPDSHandlers_NoUserInContext_Returns401(t *testing.T) {
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	h := &handler{
 		opdsService:     NewService(db, bookService),
 		bookService:     bookService,

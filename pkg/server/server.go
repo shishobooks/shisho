@@ -124,7 +124,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		pdfCache:    pdfCache,
 		coverCache:  covers.NewThumbnailCache(cfg.CacheDir, int64(cacheSettings.CoverThumbnailMaxSizeGB*(1<<30))),
 	}
-	svcs.books = books.NewService(db).WithAppSettings(svcs.appSettings)
+	svcs.books = books.NewService(db, svcs.appSettings)
 
 	// Register auth routes. The auth middleware wraps the same service.
 	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration(), auth.WithCookieNamespace(cfg.CookieNamespace))

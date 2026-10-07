@@ -113,7 +113,7 @@ func TestMoveFilesToBook_Basic(t *testing.T) {
 	targetBook, _ := setupTestBookWithFile(t, db, library, "Target Book")
 
 	// Act: Move one file from source to target
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:      []int{sourceFile1.ID},
 		TargetBookID: &targetBook.ID,
@@ -157,7 +157,7 @@ func TestMoveFilesToBook_SourceBookDeleted(t *testing.T) {
 	targetBook, _ := setupTestBookWithFile(t, db, library, "Target Book")
 
 	// Act: Move the only file from source to target
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:      []int{sourceFile.ID},
 		TargetBookID: &targetBook.ID,
@@ -241,7 +241,7 @@ func TestMoveFilesToBook_CreateNewBook(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act: Move the second file (which is in a different directory) to a new book
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:      []int{sourceFile2.ID},
 		TargetBookID: nil, // Create new book
@@ -334,7 +334,7 @@ func TestMoveFilesToBook_CreateNewBook_UsesFileMetadataName(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act: Move the file to a new book
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:      []int{sourceFile2.ID},
 		TargetBookID: nil, // Create new book
@@ -355,7 +355,7 @@ func TestMoveFilesToBook_DifferentLibraries(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create two libraries
 	lib1 := &models.Library{
@@ -395,7 +395,7 @@ func TestMoveFilesToBook_MoveToSameBook(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	library := setupTestLibrary(t, db)
 	book, file := setupTestBookWithFile(t, db, library, "Test Book")
@@ -416,7 +416,7 @@ func TestMoveFilesToBook_FileNotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	library := setupTestLibrary(t, db)
 	targetBook, _ := setupTestBookWithFile(t, db, library, "Target Book")
@@ -435,7 +435,7 @@ func TestMoveFilesToBook_NoFilesSelected(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:   []int{},
@@ -489,7 +489,7 @@ func TestMoveFilesToBook_RecomputesReviewedForBothBooks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Move the source file to the target book
-	svc := NewService(db).WithAppSettings(appSettingsSvc)
+	svc := NewService(db, appSettingsSvc)
 	_, err = svc.MoveFilesToBook(ctx, MoveFilesOptions{
 		FileIDs:      []int{sourceFile.ID},
 		TargetBookID: &targetBook.ID,

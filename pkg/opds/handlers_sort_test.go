@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
@@ -80,7 +81,7 @@ func TestLibraryAllBooksFeed_HonorsStoredSort(t *testing.T) {
 	_, err = settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
-	opdsSvc := NewService(db, books.NewService(db))
+	opdsSvc := NewService(db, books.NewService(db, appsettings.NewService(db)))
 
 	resolved, err := settingsSvc.GetLibrarySettings(context.Background(), user.ID, lib.ID)
 	require.NoError(t, err)
@@ -152,7 +153,7 @@ func TestLibraryAllBooksFeed_NilSortUsesBuiltinDefault(t *testing.T) {
 	_, err = db.NewInsert().Model(apple).Exec(context.Background())
 	require.NoError(t, err)
 
-	opdsSvc := NewService(db, books.NewService(db))
+	opdsSvc := NewService(db, books.NewService(db, appsettings.NewService(db)))
 
 	// Pass empty fileTypes so the books-with-files filter doesn't drop
 	// our test books (which have no file rows).

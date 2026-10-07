@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ func setupScopedFilesTest(t *testing.T) (context.Context, *books.Service, *Servi
 	t.Helper()
 	ctx := context.Background()
 	db := newSyncPointTestDB(t)
-	bookSvc := books.NewService(db)
+	bookSvc := books.NewService(db, appsettings.NewService(db))
 	koboSvc := NewService(db)
 
 	library := &models.Library{

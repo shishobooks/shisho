@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -57,7 +58,7 @@ func TestListBooks_PersonIDFilter(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "Books")
 
 	now := time.Now()
@@ -97,7 +98,7 @@ func TestListBooks_PersonIDFilter_ScopesToLibrary(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	libA := seedLibrary(t, db, "LibA")
 	libB := seedLibrary(t, db, "LibB")
 
@@ -128,7 +129,7 @@ func TestListBooks_ReviewedFilter(t *testing.T) {
 	ctx := context.Background()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "L")
 
 	bookCounter := 0

@@ -82,7 +82,7 @@ func TestReplaceChapters_TriggersReviewRecompute(t *testing.T) {
 	require.NoError(t, err)
 
 	// Build handler with appSettings wired so recompute is active
-	bookSvc := books.NewService(db).WithAppSettings(appSettingsSvc)
+	bookSvc := books.NewService(db, appSettingsSvc)
 	h := &handler{
 		chapterService: NewService(db),
 		bookService:    bookSvc,
@@ -230,7 +230,7 @@ func TestList_NoUserInContext_Returns401(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
-	h := &handler{chapterService: NewService(db), bookService: books.NewService(db)}
+	h := &handler{chapterService: NewService(db), bookService: books.NewService(db, appsettings.NewService(db))}
 	e := newTestEcho(t)
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	e.GET("/books/files/:id/chapters", h.list)

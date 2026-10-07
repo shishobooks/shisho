@@ -281,6 +281,29 @@ export default tseslint.config(
     rules: { "no-restricted-properties": "off" },
   },
   {
+    // e2e/fixtures.ts extends Playwright's test with fixtures that point each
+    // browser project at its own API server; importing test from
+    // @playwright/test directly skips them. Keeping every value import in
+    // fixtures.ts leaves one place to add shared setup.
+    files: ["e2e/**/*.ts"],
+    ignores: ["e2e/fixtures.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@playwright/test",
+              allowTypeImports: true,
+              message:
+                "Import test, expect, and request from ./fixtures, which point each browser at its own API server (see e2e/AGENTS.md). Type-only imports are fine.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["*.js", "eslint-rules/*.js"],
     ignores: ["app/**", "website/**"],
     languageOptions: {

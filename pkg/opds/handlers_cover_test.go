@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -69,7 +70,7 @@ func setupCoverTest(t *testing.T) (*handler, int, int, []byte) {
 	require.NoError(t, err)
 
 	h := &handler{
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 	}
 	return h, lib.ID, book.ID, coverBytes
@@ -181,7 +182,7 @@ func TestBookCover_NotFoundWhenBookHasNoCover(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 	}
 

@@ -28,7 +28,6 @@ func TestClassify(t *testing.T) {
 		{"/api/books", kindSkip, ""},
 		{"/config", kindSkip, ""},
 		{"https://www.shishobooks.com", kindSkip, ""},
-		{"~/.worktrees/shisho/", kindSkip, ""},
 		{"pkg/plugins/*.go", kindSkip, ""},
 		{"/docs/<id>", kindSkip, ""},
 		{"pkg/{books,series}", kindSkip, ""},

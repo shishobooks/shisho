@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -125,7 +126,7 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	bookDir := filepath.Join(t.TempDir(), "Test Book")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	book := &models.Book{
 		LibraryID:       library.ID,
 		Title:           "My Book",
@@ -243,7 +244,7 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 	bookDir := filepath.Join(t.TempDir(), "Single File Book")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	book := &models.Book{
 		LibraryID:       library.ID,
 		Title:           "Single File Book",
@@ -329,7 +330,7 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	bookDir := filepath.Join(t.TempDir(), "Kobo Book")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	book := &models.Book{
 		LibraryID:       library.ID,
 		Title:           "Kobo Book",
@@ -427,7 +428,7 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 	bookDir := filepath.Join(t.TempDir(), "Named Files")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	book := &models.Book{
 		LibraryID:       library.ID,
 		Title:           "The Book Title",

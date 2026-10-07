@@ -56,7 +56,7 @@ func setupTestServerWithScanner(t *testing.T, db *bun.DB, scanner Scanner) *echo
 
 	g := e.Group("/books")
 	appSettingsSvc := appsettings.NewService(db)
-	RegisterRoutes(g, db, cfg, authMiddleware, scanner, nil, nil, NewService(db).WithAppSettings(appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality), nil)
+	RegisterRoutes(g, db, cfg, authMiddleware, scanner, nil, nil, NewService(db, appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality), nil)
 
 	return e
 }

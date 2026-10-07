@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ func TestService_BulkCreateAuthors(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create library, book, and persons
 	library, book := setupTestLibraryAndBook(t, db)
@@ -64,7 +65,7 @@ func TestService_BulkCreateNarrators(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create library, book, file, and persons
 	library, book := setupTestLibraryAndBook(t, db)
@@ -126,7 +127,7 @@ func TestService_BulkCreateBookGenres(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create library, book, and genres
 	library, book := setupTestLibraryAndBook(t, db)
@@ -169,7 +170,7 @@ func TestService_BulkCreateBookTags(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create library, book, and tags
 	library, book := setupTestLibraryAndBook(t, db)
@@ -212,7 +213,7 @@ func TestService_BulkCreateBookSeries(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create library, book, and series
 	library, book := setupTestLibraryAndBook(t, db)
@@ -267,7 +268,7 @@ func TestService_BulkCreate_EmptySlice(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Test that empty slices return nil without error
 	err := svc.BulkCreateAuthors(ctx, []*models.Author{})
@@ -290,7 +291,7 @@ func TestService_BulkCreate_NilSlice(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Test that nil slices return nil without error
 	err := svc.BulkCreateAuthors(ctx, nil)
