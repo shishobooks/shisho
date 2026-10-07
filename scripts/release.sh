@@ -75,7 +75,7 @@ PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 # lives in scripts/lib/changelog.sh so scripts/changelog_test.sh can exercise it
 # against a fixture repository. Commits marked breaking (a "!" after the
 # category, or a "## BREAKING CHANGES" section in the commit body) are listed
-# first with their upgrade notes; see AGENTS.md, "Breaking Changes".
+# first with their upgrade notes; see docs/agents/releases.md.
 echo "Generating changelog..."
 
 if [[ -n "$PREV_TAG" ]]; then

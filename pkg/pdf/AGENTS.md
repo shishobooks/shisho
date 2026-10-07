@@ -1,211 +1,39 @@
-# PDF Format Reference
+# PDF Format
 
-This file documents the PDF format as used in Shisho for parsing.
+`pkg/pdf` reads metadata (pdfcpu, `pdf.go`), the cover (`cover.go`), and the outline (`outline.go`, PDFium); `pkg/filegen/pdf.go` writes downloads. The info-dict-to-field mapping lives in `pdf.go`. PDFs are page-based: page numbers are 0-indexed everywhere except pdfcpu's bookmark API.
 
-## Metadata Extraction
+## Parsing
 
-Metadata is extracted from the PDF info dictionary via pdfcpu.
+- **Language comes from the catalog `Lang`, not the info dict.** pdfcpu exposes no field for it; read it from `xrt.RootDict` after `api.ReadAndValidate`.
+- `Author` is one string split on `,`, `&`, and `;`; PDF authors have no role. `Keywords` become tags, `Subject` the description, `CreationDate` the release date (pdfcpu `types.DateTime` in relaxed mode plus fallback formats).
+- **`CoverPage` is always 0, even when cover extraction fails.** The file type (`models.IsPageBasedFileType`) is the guard that blocks external covers; `CoverPage` is only page-selection data. Never set it conditionally.
+- **Cover extraction and outline extraction are best-effort**: a failure logs a warning and `Parse` returns metadata without that piece. The cover is the largest embedded image on page 1 (pdfcpu `ExtractImagesRaw`), else page 0 rendered by PDFium at 150 DPI, JPEG quality 85.
+- **Outlines are read with PDFium (`GetBookmarks`), never pdfcpu.** pdfcpu refuses outlines containing `/Dest [null ...]`, which some tooling writes on most bookmarks. The tree is flattened (`flattenBookmarks`); a bookmark with no `DestInfo` or a `PageIndex` of -1 is skipped, but its children are still walked because they can point at real pages.
 
-### Info Dict Fields Extracted
+## pdfcpu config is disabled on purpose
 
-| Field | Info Dict Key | Shisho Usage |
-|-------|---------------|--------------|
-| Title | `Title` | Book title |
-| Authors | `Author` | Split on `,` / `&` / `;` into multiple authors |
-| Description | `Subject` | Book description |
-| Tags | `Keywords` | Split on `,` / `;` into tag list |
-| Release Date | `CreationDate` | PDF date format `D:YYYYMMDDHHmmSSOHH'mm'` |
-| Page Count | Page tree | Total page count from PDF structure |
-| Language | Catalog `Lang` | BCP 47 language tag from document catalog |
+pdfcpu's `NewDefaultConfiguration()` reads or creates `$HOME/.config/pdfcpu/config.yml`, which is not safe across processes: `go test` runs `pkg/pdf` and `pkg/filegen` binaries concurrently, one can read the file mid-write, and pdfcpu panics with `config problem: EOF`. The package `init()` sets `model.ConfigPath = "disable"` so the configuration is in-memory only. Nothing needs the on-disk config: `ValidationMode` is set at each call site, and Shisho never fills forms or validates signatures. `EnsurePdfcpuInit()` is a remaining `sync.Once` for the in-process case.
 
-**Data Source:** `models.DataSourcePDFMetadata` ("pdf_metadata")
+## Writing downloads (`pkg/filegen/pdf.go`)
 
-### Language Extraction
+- **Info properties go through `writeInfoProperties`** (`api.ReadValidateAndOptimize`, `pdfcpu.PropertiesAdd`, `api.Write`). Since pdfcpu 0.14, `api.AddPropertiesFile` rejects `Keywords`, `Producer`, `CreationDate`, `ModDate`, and `Trapped`, and `api.AddKeywordsFile` merges with the source keywords, joins with `"; "`, and strips XMP keywords; use neither. The release date is not written because pdfcpu always overwrites `CreationDate` with the current time.
+- **Chapters are written as bookmarks** with `api.AddBookmarksFile` (`replace=true`), pages converted to 1-indexed, through a sibling `.bookmarks.tmp` file renamed over the destination (pdfcpu needs distinct input and output paths). Empty `file.Chapters` skips the write so source bookmarks survive. A failure logs a warning with `category=pdf_bookmark_write` and returns the properties-only file, so a chapter quirk never blocks a download.
+- **pdfcpu rejects out-of-order bookmark trees**, so `convertModelChaptersToPDFBookmarks` drops chapters with a nil, negative, or out-of-range page and children that start before their parent (with their whole subtree, no re-parenting), and sorts siblings by page, then `SortOrder`. Do not trust database order: plugins, sidecars, and API callers can store any order.
 
-Language is read from the document catalog's `Lang` entry (not the info dict). The pdfcpu `XRefTable` does not expose `Lang` as a dedicated field, but the catalog dict is available via `xrt.RootDict` after `api.ReadAndValidate` populates it. The value is a `types.StringLiteral` and is passed through `mediafile.NormalizeLanguage` for BCP 47 validation/normalization.
+## Shared PDFium pool
 
-### PDF Date Format
+One lazily initialized go-pdfium WASM pool with `MaxTotal: 1` (`cover.go`) serves cover and outline extraction, Scan page-cover rendering (`RenderPageJPEG`), and the reader page cache (`pkg/pdfpages`). Get an instance with `PdfiumInstance(timeout)` and `defer instance.Close()`. One instance is deliberate: each holds its own PDFium memory, many installs run on small NAS hardware, so raise it only after measuring per-instance memory and seeing real contention in the warn logs.
 
-PDF dates use the format `D:YYYYMMDDHHmmSSOHH'mm'` where:
-- `D:` is a literal prefix
-- `YYYY` is the year
-- `MM` is the month (01-12)
-- `DD` is the day (01-31)
-- `HH` is the hour (00-23)
-- `mm` is the minute (00-59)
-- `SS` is the second (00-59)
-- `O` is the timezone offset direction (`+`, `-`, or `Z`)
-- `HH'mm'` is the timezone offset hours and minutes
+**Pick the timeout for where the caller runs; never change a shared default.**
 
-Parsing uses pdfcpu's `types.DateTime()` with relaxed mode, plus fallback formats for non-standard dates.
-
-### Author Splitting
-
-The `Author` field is a single string. Multiple authors are split on:
-- Comma (`,`) - e.g., "Author One, Author Two"
-- Ampersand (`&`) - e.g., "Author One & Author Two"
-- Semicolon (`;`) - e.g., "Author One; Author Two"
-
-All PDF authors have an empty role (generic author, same as EPUB).
-
-### Thread Safety
-
-pdfcpu's `NewDefaultConfiguration()` reads/creates a shared per-user config file at `$HOME/.config/pdfcpu/config.yml` (plus a font dir and cert dir). This is **not safe across processes**: `go test` runs package binaries concurrently, and more than one package initializes pdfcpu (`pkg/pdf`, `pkg/filegen`). On a fresh machine where the file doesn't exist yet, one process can read it mid-write from another, and pdfcpu 0.12.x panics with `config problem: EOF` (it calls `fault.Fail` on any config load error rather than returning it).
-
-The package `init()` in `pdf.go` sets `model.ConfigPath = "disable"`, which makes `NewDefaultConfiguration()` return its in-memory defaults and never touch the shared file. We rely on nothing the on-disk config provides: `ValidationMode` is set explicitly at each call site, and we never fill PDF forms (the bundled Roboto font) or validate signatures (the EU certs), which are the only other things the config dir bootstraps.
-
-`pdf.EnsurePdfcpuInit()` (a shared `sync.Once` used by both the parser and the file generator) remains as belt-and-suspenders for the in-process case, but with the on-disk config disabled `NewDefaultConfiguration()` is already pure.
-
-## Cover Extraction
-
-Cover extraction uses a two-tier approach implemented in `pkg/pdf/cover.go`:
-
-### Tier 1: Embedded Image Extraction (pdfcpu)
-
-- Uses `api.ExtractImagesRaw()` to extract images from page 1 only
-- Picks the largest image by pixel area (`Width * Height`)
-- Returns the raw image data and MIME type
-- Works well for publisher ebook PDFs with full-page cover images
-- Image FileType from pdfcpu can be "jpg", "png", or "tif"
-
-### Tier 2: Page Rendering (go-pdfium WASM)
-
-- Falls through to this tier when no embedded images are found on page 1
-- Uses go-pdfium's WebAssembly backend to render page 0 at 150 DPI
-- Encodes the rendered `image.RGBA` to JPEG at quality 85
-- The pdfium WASM pool is lazily initialized via `sync.Once` (embeds ~15-25 MB PDFium binary)
-- Pool configured with `MaxTotal: 1` to limit memory usage
-
-### CoverPage Always Set
-
-`CoverPage` is always set to `0` for PDF files, even when cover extraction fails. This ensures:
-- The frontend shows the page picker (not the upload button)
-- File type guards consistently block external covers for PDFs
-- The data is consistent: PDFs are page-based formats
-
-Do NOT conditionally set `CoverPage` based on extraction success. The file type (`models.IsPageBasedFileType`) is the authoritative guard for cover protection, and `CoverPage` serves as page selection data.
-
-### Error Handling
-
-Cover extraction is best-effort. If it fails, `Parse()` logs `failed to extract PDF cover, continuing without it` at warn level with `path` and `error`, and returns metadata without a cover (does not fail the parse).
-
-## Outline (Bookmark) Extraction
-
-PDF bookmarks (the outline tree) are extracted via go-pdfium's `GetBookmarks` API and converted to `ParsedChapter` entries during `Parse()`.
-
-- **Best-effort**: outline extraction failures don't fail the parse. `Parse()` logs `failed to extract PDF outline, continuing without chapters` at warn level with `path` and `error`, and returns metadata without chapters
-- **Flat output**: nested bookmark trees are recursively flattened into a linear list
-- **Page index**: each bookmark's `DestInfo.PageIndex` (0-indexed) maps to `ParsedChapter.StartPage`
-- **No DestInfo = skipped**: bookmarks without a page destination are omitted
-- **Negative PageIndex = skipped**: a destination with no page, such as `/Dest [null 0 0 1]`, comes back from PDFium with a non-nil `DestInfo` and `PageIndex` -1. `flattenBookmarks` skips it like a missing `DestInfo` but still walks its children, which can point at real pages. Some document tooling writes these on most of its bookmarks. pdfcpu refuses to read such an outline at all (`unable to extract page number from [null ...]`), so keep outline extraction on PDFium.
-- **Guards elsewhere**: the chapter edit API (`validateChapters` in `pkg/chapters`) rejects a negative `start_page`, and the scanner's sidecar chapter conversion drops negative-page chapters with their subtree, because sidecars written by older Scans still contain them. Migration `20260925000000` deleted the -1 chapters older Scans stored on PDF files.
-
-### Writing Info Dict Properties
-
-`pkg/filegen/pdf.go` writes Title, Author, Subject, Keywords (tags joined with `", "`) and Language into downloaded PDFs through its own `writeInfoProperties`, which calls `api.ReadValidateAndOptimize` + `pdfcpu.PropertiesAdd` + `api.Write`. Do not switch it back to `api.AddPropertiesFile`: since pdfcpu 0.14 that wrapper rejects `Keywords`, `Producer`, `CreationDate`, `ModDate` and `Trapped` with `property name "Keywords" not allowed`. pdfcpu's keyword API (`api.AddKeywordsFile`) is not a drop-in replacement either: it merges with the source PDF's keywords, joins them with `"; "`, and strips keywords from XMP metadata. The release date is not written, because pdfcpu always overwrites `CreationDate` with the current time on write.
-
-### Writing Chapters Back
-
-`pkg/filegen/pdf.go` writes `file.Chapters` back to downloaded PDFs as a bookmark outline via `pdfcpu.api.AddBookmarksFile` (with `replace=true`), preserving nested hierarchy. Page numbers are converted from the 0-indexed storage format to the 1-indexed form pdfcpu expects, and the generator writes to a sibling `.bookmarks.tmp` file (pdfcpu requires distinct input/output paths) and renames over the destination. When `file.Chapters` is empty the bookmark write is skipped entirely so existing source bookmarks are left untouched. The entire block is **best-effort**: if `AddBookmarksFile` or the rename fails, the generator logs a warning (with `category=pdf_bookmark_write` for aggregation) and returns the properties-only `destPath` rather than failing the whole download, matching the cover-extraction pattern in `pdf.go` Parse, so a metadata quirk can never block an otherwise-valid file.
-
-**Filtering and ordering.** pdfcpu rejects bookmark trees where siblings are not monotonically non-decreasing by page, or where a child's page is less than its parent's. `convertModelChaptersToPDFBookmarks` enforces both constraints rather than trusting `SortOrder` from the database:
-
-- nil / negative / `>= pageCount` StartPage → dropped
-- Child StartPage < parent StartPage → dropped
-- Siblings sorted by `StartPage` (ties broken by `SortOrder` for stability)
-
-If a parent's StartPage is invalid, the entire subtree is dropped; we do not re-parent grandchildren. In practice the UI produces flat PDF chapters today, so this only matters for sidecar- or plugin-supplied nested chapters.
-
-This is belt-and-suspenders with the frontend's `normalizeChapterOrder` in `app/components/files/chapterUtils.ts`, which already sorts on save. The backend fallback matters because plugins, sidecar imports, or external API callers can introduce out-of-order state without touching the UI.
-
-### Key Types
-
-```go
-// OutlineEntry represents a single bookmark from a PDF's outline tree.
-type OutlineEntry struct {
-    Title     string
-    StartPage int // 0-indexed page number
-}
-```
-
-## Shared Pdfium Pool
-
-The pdfium WASM pool (`MaxTotal: 1`) is lazily initialized in `cover.go` and shared across:
-- Cover extraction (`renderPageCover`)
-- Outline extraction (`ExtractOutline`)
-- Page-cover rendering during Scans (`RenderPageJPEG`, called by `extractPDFPageCover` in `pkg/worker/scan_unified.go`)
-- PDF page rendering for the reader and cover-page picker (`pkg/pdfpages`)
-
-Access via exported functions:
-- `EnsurePdfiumPoolInit()`: idempotent pool initialization
-- `PdfiumInstance(timeout)`: get an instance; caller must `defer instance.Close()`
-
-### Two Timeouts
-
-Every caller queues for the one instance, and gives up after its timeout. There are two:
-
-| Timeout | Value | Used by |
+| Timeout | Value | Callers |
 |---------|-------|---------|
-| `InteractivePdfiumTimeout` (exported const) | 30s | `pkg/pdfpages`: reader pages, the cover-page picker via `books.ExtractCoverPageToFile`, and plugin identify-apply `cover_page` via `books.PluginPageExtractor` (`applyCoverPage` in `pkg/plugins/handler_persist_metadata.go`) |
-| `scanPdfiumTimeout` (unexported var) | 5m | `Parse` via `extractCover`/`renderPageCover` and `ExtractOutline`; `RenderPageJPEG` (worker cover recovery from a selected page, sidecar and plugin cover pages) |
+| `InteractivePdfiumTimeout` | 30s | `pkg/pdfpages` (reader pages), the cover-page picker (`books.ExtractCoverPageToFile`), Identify `cover_page` (`books.PluginPageExtractor`) |
+| `scanPdfiumTimeout` | 5m | everything inside `pkg/pdf`: `Parse` (cover and outline), `RenderPageJPEG` |
 
-Scans parse files in parallel, so a few large PDFs can hold the instance past 30 seconds. With the short wait, `Parse` used to store a File with no cover or no chapters, and ordinary Scans skip Files whose size and mtime are unchanged, so the loss stuck until a forced refresh. Scans mostly run in the background, so waiting minutes costs nothing a user notices. Interactive requests keep the short wait so the reader fails fast instead of hanging.
+Scans parse files in parallel, so large PDFs can hold the instance past 30 seconds; a short wait used to store a File with no cover or chapters, and unchanged Files are skipped by later Scans, so the loss stuck. Consequences of the long wait: handlers that run a Scan in the request (`resyncFile`, `resyncBook`, and `deleteFile` when it promotes a supplement) can take minutes and keep going after the client disconnects, and `Parse` waits separately for cover and outline, so one PDF can wait twice the Scan timeout. An interactive caller of `pkg/pdf` needs a variant that takes a timeout.
 
-Things to know about the Scan wait:
-- Some HTTP handlers in `pkg/books/handlers.go` run a Scan inside the request: `resyncFile`, `resyncBook`, and `deleteFile` when deleting a file promotes a supplement. Under heavy contention those requests can take minutes. The wait does not follow the request context, so it keeps going after a client disconnect and the work still completes.
-- `Parse` waits separately for the cover render and the outline, so one PDF can wait up to twice the Scan wait. A book resync scans its files one at a time, so its ceiling is the number of PDFs times twice the Scan wait.
+## Tests
 
-New callers must pick the timeout that matches where they run. Do not change one shared default. Everything in `pkg/pdf` that touches the pool uses the Scan wait, so an interactive caller would need a variant that takes a timeout.
-
-Tests shorten the Scan wait through `scanPdfiumTimeout` (see `pool_test.go`). Tests that hold the instance or change package-level state must not call `t.Parallel()`, because the pool, the variable, and the logger output are process-global.
-
-### Why One Instance
-
-The pool stays at `MaxTotal: 1` on purpose. Each WASM instance holds its own PDFium memory, which grows with large documents, and many installs run on small NAS hardware. Only revisit this if the warn logs above show real contention in Scans and the per-instance memory has been measured.
-
-## Key Functions
-
-```go
-// Parse metadata, cover, and outline from PDF file
-func Parse(path string) (*mediafile.ParsedMetadata, error)
-
-// ExtractOutline extracts bookmarks as a flat list of OutlineEntry (Scan wait)
-func ExtractOutline(path string) ([]OutlineEntry, error)
-
-// RenderPageJPEG renders one page to JPEG (Scan wait)
-func RenderPageJPEG(path string, pageIdx int, dpi int, quality int) ([]byte, string, error)
-
-// EnsurePdfiumPoolInit initializes the shared pdfium WASM pool
-func EnsurePdfiumPoolInit() error
-
-// PdfiumInstance returns an instance from the shared pool
-func PdfiumInstance(timeout time.Duration) (pdfium.Pdfium, error)
-
-// extractCover tries Tier 1 then Tier 2
-func extractCover(path string) ([]byte, string, error)
-
-// extractEmbeddedCover extracts the largest embedded image from page 1
-func extractEmbeddedCover(path string) ([]byte, string, error)
-
-// renderPageCover renders page 1 to JPEG via go-pdfium WASM (Scan wait)
-func renderPageCover(path string) ([]byte, string, error)
-```
-
-## Test Fixtures
-
-Test PDFs are created as raw PDF files in `TestMain` rather than using pdfcpu's creation API. This is because pdfcpu's write path always overwrites `CreationDate`, `ModDate`, and `Producer` in the info dict, making it impossible to set a specific `CreationDate` for testing. Raw PDF construction gives full control over the info dict contents.
-
-The `with-image.pdf` fixture embeds a small JPEG image as a DCTDecode XObject on page 1, used for testing Tier 1 cover extraction.
-
-## Related Files
-
-- `pkg/pdf/pdf.go` - PDF parsing and metadata extraction
-- `pkg/pdf/cover.go` - Two-tier cover extraction and shared pdfium pool
-- `pkg/pdf/outline.go` - Outline (bookmark) extraction
-- `pkg/pdf/pdf_test.go` - PDF parsing tests with fixture generation
-- `pkg/pdf/outline_test.go` - Outline extraction tests
-- `pkg/pdf/pool_test.go` - Shared pool timeout and warn-log tests (not parallel)
-- `pkg/pdfpages/` - PDF page rendering cache (uses shared pdfium pool)
-- `pkg/mediafile/mediafile.go` - ParsedMetadata type definition
-- `pkg/models/data-source.go` - DataSourcePDFMetadata constant
-- `pkg/models/file.go` - FileTypePDF constant
+- Fixtures are raw PDF bytes built in `TestMain`, because pdfcpu's write path overwrites `CreationDate`, `ModDate`, and `Producer`. `with-image.pdf` embeds a DCTDecode JPEG on page 1 for the embedded-cover path.
+- Tests that hold the PDFium instance or change package state (`scanPdfiumTimeout`, the logger) must not call `t.Parallel()`: the pool, the variable, and the logger output are process-global (`pool_test.go`).

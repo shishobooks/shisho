@@ -9,7 +9,7 @@ import { anyOf, type Permission, type Requirement } from "@/utils/permissions";
 
 // Every query hook in this directory must gate its request on the permission
 // its backend route requires, inside the hook (see "Query hooks gate their own
-// permissions" in app/AGENTS.md). QUERY_HOOKS records each hook's expected
+// permissions" in docs/agents/frontend/permissions.md). QUERY_HOOKS records each hook's expected
 // requirement and arguments that enable it. The test renders every exported
 // query hook and checks that:
 //

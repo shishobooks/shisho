@@ -445,7 +445,7 @@ func TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder(t *te
 
 	// DB filepath for the m4b reflects the new location, and
 	// CoverImageFilename remains filename-only (the project's "stores
-	// filename, not full path" invariant — see AGENTS.md).
+	// filename, not full path" invariant, see docs/agents/backend/covers-and-file-serving.md).
 	reloadedFiles, err := svc.ListFiles(ctx, ListFilesOptions{BookID: &book.ID})
 	require.NoError(t, err)
 	var foundM4b bool

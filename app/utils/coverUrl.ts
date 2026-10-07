@@ -15,8 +15,8 @@ import {
 // Cover endpoints are served `private, max-age=31536000, immutable`, so the
 // browser never revalidates a cover URL it has seen. Every cover URL carries a
 // `?v=` cache key that changes when the cover does, and every one is built
-// here so no call site can leave the key off. See "Cover Image Caching" in
-// app/AGENTS.md.
+// here so no call site can leave the key off. See
+// docs/agents/frontend/image-urls.md.
 
 /** The fields of a book a cover URL depends on. */
 export type CoverSourceBook = Pick<Book, "id" | "cover_cache_key">;

@@ -18,7 +18,7 @@ The media, covers, sidecars, prepared database, and credits live in the separate
 3. It refuses any tag older than `DEMO_MIN_VERSION` in the workflow. Older releases ignore `DEMO_MODE` and would come up fully writable with the admin password that the corpus publishes.
 4. `flyctl deploy` builds `demo/Dockerfile` on Fly's remote builder with the corpus in the build context and rolls the single Machine. The multi-arch manifest tag carries no `v` prefix (`0.0.51`, not `v0.0.51`), so the workflow strips it. Nothing is downloaded at Machine start; the database and media are already in the image.
 
-Demo Mode itself (write-rejecting middleware, skipped workers and plugins, hidden downloads) is application behavior. See the Demo Mode section of `pkg/AGENTS.md` and `website/docs/configuration.md`.
+Demo Mode itself (write-rejecting middleware, skipped workers and plugins, hidden downloads) is application behavior. See `docs/agents/backend/demo-mode.md` and `website/docs/configuration.md`.
 
 ## Authoring and updating the corpus
 
