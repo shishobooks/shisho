@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import AddToListPopover from "@/components/library/AddToListPopover";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import CoverGalleryTabs from "@/components/library/CoverGalleryTabs";
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
@@ -1175,7 +1176,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               )}
               {/* Image hidden until loaded, removed on error */}
               {!coverError && coverUrl && (
-                <img
+                <CoverImage
                   alt={`${book.title} Cover`}
                   className={`w-full h-full object-cover rounded-md border border-border ${!coverLoaded ? "opacity-0" : ""}`}
                   key={coverCacheKey}

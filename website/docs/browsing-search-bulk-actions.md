@@ -38,6 +38,8 @@ Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is av
 
 The inline **Size** control is hidden on small screens. On those devices, open the user menu, select **User Settings**, and change the gallery size under **Appearance**.
 
+Covers use thumbnails sized for their display size and screen pixel density. A new size is generated when first needed, so its initial load can take longer. Subsequent views reuse cached thumbnails. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for cache limits and clearing.
+
 ## Selecting Books
 
 Click the explicit **Select** button on the library gallery to enter selection mode. Click books to add or remove them from the selection. Selections remain active as you move between gallery pages.

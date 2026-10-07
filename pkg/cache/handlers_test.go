@@ -39,15 +39,15 @@ func newTestFakes() (*fakeCache, *fakeCache, *fakeCache) {
 
 func newTestHandler() (*Handler, *fakeCache, *fakeCache, *fakeCache) {
 	dl, cbz, pdf := newTestFakes()
-	return NewHandler(dl, cbz, pdf), dl, cbz, pdf
+	return NewHandler(dl, cbz, pdf, &fakeCache{bytes: 75, count: 4}), dl, cbz, pdf
 }
 
 func newTestHandlerOnly() *Handler {
 	dl, cbz, pdf := newTestFakes()
-	return NewHandler(dl, cbz, pdf)
+	return NewHandler(dl, cbz, pdf, &fakeCache{bytes: 75, count: 4})
 }
 
-func TestList_ReturnsAllThreeCaches(t *testing.T) {
+func TestList_ReturnsAllFourCaches(t *testing.T) {
 	t.Parallel()
 	h := newTestHandlerOnly()
 
@@ -61,12 +61,13 @@ func TestList_ReturnsAllThreeCaches(t *testing.T) {
 
 	var resp []Info
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "the cache list is a bare array")
-	require.Len(t, resp, 3)
+	require.Len(t, resp, 4)
 
-	ids := []string{resp[0].ID, resp[1].ID, resp[2].ID}
+	ids := []string{resp[0].ID, resp[1].ID, resp[2].ID, resp[3].ID}
 	assert.Contains(t, ids, "downloads")
 	assert.Contains(t, ids, "cbz_pages")
 	assert.Contains(t, ids, "pdf_pages")
+	assert.Contains(t, ids, "cover_thumbnails")
 
 	for _, ci := range resp {
 		switch ci.ID {

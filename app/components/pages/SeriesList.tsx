@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
@@ -88,7 +89,7 @@ export const SeriesCard = ({
           )}
           {/* Image hidden until loaded, removed on error */}
           {!coverError && (
-            <img
+            <CoverImage
               alt={`${seriesItem.name} Cover`}
               className={cn(
                 "w-full h-full object-cover rounded-sm border-border border-1",

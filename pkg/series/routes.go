@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -17,7 +18,7 @@ import (
 // or the delete handler's review recompute does nothing. The handler also
 // uses it for series covers and book listings, so it takes the full service
 // rather than the narrow review recompute interface.
-func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, bookService *books.Service) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, bookService *books.Service, coverCache *covers.ThumbnailCache) {
 	seriesService := NewService(db)
 	aliasService := aliases.NewService(db)
 	libraryService := libraries.NewService(db)
@@ -29,6 +30,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 		bookService:    bookService,
 		libraryService: libraryService,
 		searchService:  searchService,
+		coverCache:     coverCache,
 	}
 
 	g.GET("", h.list)

@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -46,12 +47,13 @@ func RegisterBookRoutes(booksGroup *echo.Group, authMiddleware *auth.Middleware,
 
 // RegisterPublicRoutes registers the unauthenticated recipient family under
 // /share/:token. The server skips it in Demo Mode.
-func RegisterPublicRoutes(api *echo.Group, shareLinkService *Service, bookService *books.Service, dlCache *downloadcache.Cache) {
+func RegisterPublicRoutes(api *echo.Group, shareLinkService *Service, bookService *books.Service, dlCache *downloadcache.Cache, coverCache *covers.ThumbnailCache) {
 	h := &publicHandler{
 		service:            shareLinkService,
 		bookService:        bookService,
 		appSettingsService: bookService.AppSettings(),
 		downloadCache:      dlCache,
+		coverCache:         coverCache,
 	}
 	g := api.Group("/share")
 	g.GET("/:token", h.book)

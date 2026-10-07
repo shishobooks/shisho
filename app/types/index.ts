@@ -1,3 +1,4 @@
+export * from "./generated/covers";
 export * from "./generated/models";
 export {
   type AuthorInput,

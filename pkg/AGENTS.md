@@ -36,6 +36,7 @@ This file documents backend patterns and conventions specific to Shisho.
 - Do not register OPDS (`/opds/*`), eReader (`/ereader/*` and `/e/:shortCode`), Kobo (`/kobo/*`), the public Share Link family (`/api/share/*`), any `/api/plugins` group, per-library plugin routes (`/api/libraries/:id/plugins/*`), or test routes (`/api/test/*`, even with `SHISHO_TEST_MODE=true`). GET requests to omitted families return `404`; write methods still receive the global `403`.
 - `GET /api/user/libraries` is allowed like any read. `GET /api/users/directory` is not registered, because it would show every visitor the admin's username; the path falls through to `GET /api/users/:id`, which requires Users Read, so the demo viewer gets `403`. `TestNew_DemoModeRoutes` covers both.
 - Share Link management stays registered: `GET /api/books/:id/share-links` is allowed like any read, and create, revoke, and delete are rejected by the global `403`. `TestNew_DemoModeRoutes` and `TestShareLinks_ManagementRejectedInDemoMode` cover them.
+- Cache policy reads at `GET /api/settings/cache` stay allowed with Config Read; updates at `PUT /api/settings/cache` are rejected by the global `403`.
 - Skip `pluginManager.LoadAll` and `wrkr.Start` in `cmd/api/main.go`. Also skip `wrkr.Shutdown`, which waits for goroutines that only `Start` creates. Reader caches and startup migrations still run.
 - `GET /api/auth/status` exposes the flag before sign-in. Pass the boolean to `auth.RegisterRoutes`; importing `config` from `auth` creates an import cycle because config routes use auth middleware.
 
@@ -46,6 +47,8 @@ Any new route family or download path must be classified here as allowed, denied
 `app_settings` (`pkg/appsettings`) holds admin-editable feature settings as one JSON document per key, with a domain package owning the key, the struct, and load and save helpers (`review.Load`/`review.Save`, `sharelinks.LoadSettings`/`sharelinks.SaveSettings`) that fall back to defaults when no row exists. The review criteria (`pkg/books/review`, key `review_criteria`) set the precedent. Sharing (`pkg/sharelinks`, key `sharing`) follows it and is the first feature switch stored there instead of in `config.Config`: a switch that carries companion policy and a warning the admin must read belongs in the admin UI, with no config field or env var (ADR 0008). Prefer this store for new policy an admin decides at runtime; keep deployment facts in config.
 
 The endpoints live under `/api/settings/*`. The sharing endpoints are registered by `sharelinks.RegisterRoutes`, not `pkg/settings`, because `pkg/books` imports `pkg/settings` and `pkg/sharelinks` imports `pkg/books`. `PUT /api/settings/sharing` takes pointer fields so each switch saves on its own, and the handler loads, merges, and saves the document outside a transaction. Two admins changing different switches at the same instant can lose one change; that is accepted for rarely edited admin settings, but wrap the load and save in a transaction if a document ever gets frequent concurrent writers. Writes require `config:write` and are rejected in Demo Mode by the global middleware; reads are GETs and stay allowed.
+
+Cache policy (`pkg/cache`, app-settings key `cache`) follows the same store. `GET /api/settings/cache` requires Config Read and `PUT` requires Config Write. Updates serialize persistence and `SetMaxBytes` on the one shared thumbnail cache; the server loads the saved policy before constructing that cache. Do not add a config/env override for the same limit. Defaults are 1 GiB, fractional GiB limits are allowed, and zero disables disk retention.
 
 ### Share Links (`pkg/sharelinks`)
 
@@ -138,6 +141,7 @@ When editing the cover-extraction block in `scanFileCreateNew`, preserve the `if
 
 - Individual file covers: `{filename}.cover.{ext}`
 - API endpoints: `/api/books/{id}/cover` and `/api/books/files/{id}/cover`
+- Web thumbnails: one `covers.ThumbnailCache` built in `server.New` is shared by book, file, series, Share Link covers, and Settings > Cache. API handlers pass it to `covers.ServeBookCover` or `covers.ServeFileCover` after authorization. Device callers omit the cache and continue serving originals. See `pkg/covers/AGENTS.md` for request parameters, bounds, publication, and invalidation rules.
 
 **CRITICAL - CoverImageFilename stores FILENAME ONLY:**
 

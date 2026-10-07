@@ -108,8 +108,10 @@ func CacheKey(files []*models.File, coverAspectRatio string) string {
 // cacheControl sets the Cache-Control header. API callers should pass
 // CacheControlImmutable (the frontend uses ?v=cover_cache_key to bust cache);
 // external callers (OPDS, eReader, Kobo) should pass CacheControlNoCache.
+// API callers may supply the shared thumbnail cache to honor size/aspect query
+// parameters. Calls without a cache always serve the original image.
 //
-// Conditional GET uses an ETag of `"<file_id>-<mtime_unix>"` and intentionally
+// Original-image conditional GET uses an ETag of `"<file_id>-<mtime_unix>"` and intentionally
 // omits Last-Modified. SelectFile's choice depends on the library's
 // CoverAspectRatio and which files belong to the book, so the served file's
 // identity can change without any change to the new cover's mtime — flipping
@@ -117,10 +119,15 @@ func CacheKey(files []*models.File, coverAspectRatio string) string {
 // served, and the new cover may have an older mtime than the previously-served
 // one. Mtime-only revalidation would return stale 304s in that case; baking
 // the file ID into the validator ensures it bumps whenever selection changes.
-func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cacheControl, resource string) error {
+func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cacheControl, resource string, thumbnailCaches ...*ThumbnailCache) error {
 	coverFile := SelectFile(files, coverAspectRatio)
 	if coverFile == nil || coverFile.CoverImageFilename == nil || *coverFile.CoverImageFilename == "" {
 		return errcodes.NotFound(resource)
+	}
+	if len(thumbnailCaches) > 0 {
+		if handled, err := serveThumbnail(c, coverFile, cacheControl, resource, thumbnailCaches[0]); handled {
+			return err
+		}
 	}
 
 	coverPath := FileCoverPath(coverFile)
@@ -142,4 +149,12 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cach
 	return httputil.ServeFile(c, coverPath, notFound,
 		httputil.WithCacheControl(cacheControl),
 		httputil.WithETag(etag))
+}
+
+// ServeFileCover serves an individual file's cover, optionally resized on demand.
+func ServeFileCover(c echo.Context, file *models.File, cacheControl, resource string, thumbnails *ThumbnailCache) error {
+	if handled, err := serveThumbnail(c, file, cacheControl, resource, thumbnails); handled {
+		return err
+	}
+	return httputil.ServeFile(c, FileCoverPath(file), errcodes.NotFound(resource), httputil.WithCacheControl(cacheControl))
 }

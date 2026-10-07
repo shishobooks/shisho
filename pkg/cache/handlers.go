@@ -16,17 +16,19 @@ type Provider interface {
 
 // Handler exposes HTTP endpoints for cache management.
 type Handler struct {
-	downloads Provider
-	cbzPages  Provider
-	pdfPages  Provider
+	downloads       Provider
+	cbzPages        Provider
+	pdfPages        Provider
+	coverThumbnails Provider
 }
 
 // NewHandler returns a new cache management handler.
-func NewHandler(downloads, cbzPages, pdfPages Provider) *Handler {
+func NewHandler(downloads, cbzPages, pdfPages, coverThumbnails Provider) *Handler {
 	return &Handler{
-		downloads: downloads,
-		cbzPages:  cbzPages,
-		pdfPages:  pdfPages,
+		downloads:       downloads,
+		cbzPages:        cbzPages,
+		pdfPages:        pdfPages,
+		coverThumbnails: coverThumbnails,
 	}
 }
 
@@ -39,6 +41,12 @@ type cacheEntry struct {
 
 func (h *Handler) entries() []cacheEntry {
 	return []cacheEntry{
+		{
+			id:          "cover_thumbnails",
+			name:        "Cover Thumbnails",
+			description: "Cover sizes generated on demand for the web interface. Originals are kept in the library.",
+			provider:    h.coverThumbnails,
+		},
 		{
 			id:          "downloads",
 			name:        "Downloads",

@@ -15,3 +15,13 @@ type ClearResponse struct {
 	ClearedBytes int64 `json:"cleared_bytes"`
 	ClearedFiles int   `json:"cleared_files"`
 }
+
+// SettingsResponse contains the admin-editable cache policy.
+type SettingsResponse struct {
+	CoverThumbnailMaxSizeGB float64 `json:"cover_thumbnail_max_size_gb"`
+}
+
+// UpdateSettingsPayload allows individual cache policies to be changed.
+type UpdateSettingsPayload struct {
+	CoverThumbnailMaxSizeGB *float64 `json:"cover_thumbnail_max_size_gb,omitempty" validate:"omitempty,min=0,max=1024"`
+}

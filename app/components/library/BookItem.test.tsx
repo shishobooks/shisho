@@ -4,10 +4,13 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { FileRoleMain, FileRoleSupplement, type Book } from "@/types";
 import type { Permission } from "@/utils/permissions";
 
 import BookItem from "./BookItem";
+
+mockCoverDimensions();
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -308,7 +311,7 @@ describe("BookItem cover", () => {
     render(wrap(<BookItem book={book} libraryId="1" />));
     expect(screen.getByAltText("Test Book Cover")).toHaveAttribute(
       "src",
-      "/api/books/1/cover?v=10-1704067200",
+      "/api/books/1/cover?v=10-1704067200&size=512&aspect=book&r=1",
     );
   });
 });

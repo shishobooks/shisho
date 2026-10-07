@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import {
   Tooltip,
@@ -148,7 +149,7 @@ function CoverGalleryTabs({
 
         {/* Image hidden until loaded */}
         {hasCover && (
-          <img
+          <CoverImage
             alt={`${selectedFile ? fileLabel(selectedFile) : "File"} Cover`}
             className={cn(
               "absolute inset-0 w-full h-full object-cover",

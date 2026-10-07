@@ -5,12 +5,95 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useCaches, useClearCache } from "@/hooks/queries/cache";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
+import {
+  useCaches,
+  useCacheSettings,
+  useClearCache,
+  useUpdateCacheSettings,
+} from "@/hooks/queries/cache";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 import type { Info as CacheInfo } from "@/types/generated/cache";
 import { formatFileSize } from "@/utils/format";
+
+const CoverThumbnailLimit = ({ canEdit }: { canEdit: boolean }) => {
+  const settingsQuery = useCacheSettings();
+  const mutation = useUpdateCacheSettings();
+  const [draft, setDraft] = useState<string | null>(null);
+  const current = settingsQuery.data?.cover_thumbnail_max_size_gb;
+  const value = draft ?? String(current ?? "");
+  const size = Number(value);
+  const hasChanges =
+    canEdit && draft !== null && (value.trim() === "" || size !== current);
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(hasChanges);
+  if (!settingsQuery.data) {
+    return settingsQuery.error ? (
+      <QueryError
+        fallback="Failed to load cache settings"
+        query={settingsQuery}
+      />
+    ) : (
+      <LoadingSpinner />
+    );
+  }
+  const valid =
+    value.trim() !== "" && Number.isFinite(size) && size >= 0 && size <= 1024;
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!valid || !canEdit) return;
+    try {
+      await mutation.mutateAsync({ cover_thumbnail_max_size_gb: size });
+      setDraft(null);
+      toast.success("Cover thumbnail cache limit saved");
+    } catch (err) {
+      toastRequestError(err, "Failed to save cache limit");
+    }
+  };
+  return (
+    <>
+      <form className="mt-4 space-y-2" onSubmit={save}>
+        <Label htmlFor="cover-thumbnail-limit">Maximum size (GiB)</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            className="w-32"
+            disabled={!canEdit || mutation.isPending}
+            id="cover-thumbnail-limit"
+            max={1024}
+            min={0}
+            onChange={(event) => setDraft(event.target.value)}
+            required
+            step="any"
+            type="number"
+            value={value}
+          />
+          {canEdit && (
+            <Button
+              disabled={mutation.isPending || !valid || size === current}
+              type="submit"
+            >
+              {mutation.isPending ? "Saving..." : "Save limit"}
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Least recently used thumbnails are removed above this limit. Changes
+          apply immediately. Set 0 to keep no thumbnails on disk.
+        </p>
+      </form>
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
+    </>
+  );
+};
 
 const AdminCache = () => {
   usePageTitle("Cache");
@@ -93,6 +176,9 @@ const AdminCache = () => {
                       {cache.file_count === 1 ? "file" : "files"}
                     </span>
                   </div>
+                  {cache.id === "cover_thumbnails" && (
+                    <CoverThumbnailLimit canEdit={canClear} />
+                  )}
                 </div>
                 {canClear && (
                   <Button

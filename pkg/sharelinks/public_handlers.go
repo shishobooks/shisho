@@ -27,6 +27,7 @@ type publicHandler struct {
 	bookService        *books.Service
 	appSettingsService *appsettings.Service
 	downloadCache      *downloadcache.Cache
+	coverCache         *covers.ThumbnailCache
 }
 
 // errUnavailable is the one response for a token that cannot be used, so a
@@ -181,7 +182,7 @@ func (h *publicHandler) bookCover(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return covers.ServeBookCover(c, book.Files, coverAspectRatio(book), covers.CacheControlImmutable, "Cover")
+	return covers.ServeBookCover(c, book.Files, coverAspectRatio(book), covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 
 func (h *publicHandler) fileCover(c echo.Context) error {
@@ -192,8 +193,7 @@ func (h *publicHandler) fileCover(c echo.Context) error {
 	if file.FileRole == models.FileRoleSupplement {
 		return errcodes.NotFound("Cover")
 	}
-	return httputil.ServeFile(c, covers.FileCoverPath(file), errcodes.NotFound("Cover"),
-		httputil.WithCacheControl(covers.CacheControlImmutable))
+	return covers.ServeFileCover(c, file, covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 
 // download serves the generated file with metadata injected, the same file

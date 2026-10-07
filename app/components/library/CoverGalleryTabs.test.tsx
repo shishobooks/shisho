@@ -1,9 +1,12 @@
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { File } from "@/types";
 
 import CoverGalleryTabs from "./CoverGalleryTabs";
+
+mockCoverDimensions();
 
 function makeFile(overrides: Partial<File> = {}): File {
   return {
@@ -35,7 +38,7 @@ describe("CoverGalleryTabs", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
     );
   });
 
@@ -54,7 +57,7 @@ describe("CoverGalleryTabs", () => {
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
     );
 
     fireEvent.error(firstImg!);
@@ -73,7 +76,7 @@ describe("CoverGalleryTabs", () => {
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1717200000000",
+      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=1",
     );
   });
 
@@ -92,7 +95,7 @@ describe("CoverGalleryTabs", () => {
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
     );
 
     const updatedFiles = [
@@ -110,7 +113,7 @@ describe("CoverGalleryTabs", () => {
     expect(secondImg).not.toBeNull();
     expect(secondImg).not.toBe(firstImg);
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1717200000000",
+      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=1",
     );
   });
 
@@ -127,7 +130,7 @@ describe("CoverGalleryTabs", () => {
       />,
     );
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/share/tok/files/1/cover",
+      "/api/share/tok/files/1/cover?size=512&aspect=book&r=1",
     );
   });
 

@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestNew_TestModeKey(t *testing.T) {
 		cfg, err := config.New()
 		require.NoError(t, err)
 		cfg.CacheDir = t.TempDir()
-		srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
+		srv, err := New(cfg, testdb.New(t), &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 		require.NoError(t, err)
 		for _, route := range srv.Handler.(*echo.Echo).Routes() {
 			if strings.HasPrefix(route.Path, "/api/test/") {

@@ -7,9 +7,12 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { SeriesResponse } from "@/types";
 
 import SeriesList, { SeriesCard } from "./SeriesList";
+
+mockCoverDimensions();
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
@@ -48,7 +51,7 @@ describe("SeriesCard", () => {
 
     expect(screen.getByAltText("Saga Cover")).toHaveAttribute(
       "src",
-      "/api/series/3/cover?v=12-1704067200",
+      "/api/series/3/cover?v=12-1704067200&size=512&aspect=book&r=1",
     );
   });
 });

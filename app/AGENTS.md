@@ -481,8 +481,13 @@ Chromium and Firefox maintain an in-memory image cache (the HTML spec's "list of
 
 ### Checklist for new cover components
 
+**Render server covers with `CoverImage`** (`app/components/library/CoverImage.tsx`), passing a base URL from the helpers above. It measures the image's CSS box before setting `src`, selects one tier for the box and device pixel ratio, and uses `coverThumbnailUrl` to append `size`, the book/square `aspect` when applicable, and `r`. Sizes, aspect values, and the render key come from Go via `app/types/generated/covers.ts`; do not duplicate them in TS. `ResizeObserver`, window resize, and a resolution media query update the selected tier when layout or pixel density changes. A zero-size or hidden image waits for measurable dimensions, and images default to native lazy loading. Very large boxes beyond the largest tier use the original URL.
+
+Use a normal `<img>` for local upload previews, provider image previews, and CBZ/PDF pages. These are not server cover thumbnails. Keep base cover URLs for loading-state keys and React keys; `CoverImage` adds the size-specific request URL. Tests using cover components can call `mockCoverDimensions()` from `app/testing/coverDimensions.ts` because jsdom does not compute layout.
+
 - [ ] The URL comes from a `coverUrl.ts` helper
-- [ ] For mutation-capable pages, `<img key={coverUrl}>` for React remount
+- [ ] Server covers render with `CoverImage`
+- [ ] For mutation-capable pages, `<CoverImage key={coverUrl}>` for React remount
 - [ ] Cover-mutating mutations invalidate the query whose data drives the key
 
 ### Download and stream URLs

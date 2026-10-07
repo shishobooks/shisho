@@ -2,6 +2,7 @@ import { Search, User, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Input } from "@/components/ui/input";
 import { useUserLibrary } from "@/hooks/queries/libraries";
@@ -97,7 +98,7 @@ const SearchResultCover = ({
       )}
       {/* Image hidden until loaded, removed on error */}
       {!coverError && (
-        <img
+        <CoverImage
           alt=""
           className={cn(
             "w-full h-full object-cover",

@@ -27,6 +27,10 @@ type_mappings:
   models.Role: "Role"
 
 packages:
+  - path: "github.com/shishobooks/shisho/pkg/covers"
+    output_path: "app/types/generated/covers.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/models"
     output_path: "app/types/generated/models.ts"
   - path: "github.com/shishobooks/shisho/pkg/books"

@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { Button } from "@/components/ui/button";
 import {
@@ -336,7 +337,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
         <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center gap-6 p-4 md:p-8">
           <div className="aspect-square w-48 sm:w-56 md:w-64 shrink-0">
             {coverUrl && !coverError ? (
-              <img
+              <CoverImage
                 alt={`${book?.title ?? "Audiobook"} cover`}
                 className="h-full w-full rounded-md border border-border object-cover shadow-sm"
                 key={coverUrl}
