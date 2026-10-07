@@ -1,7 +1,5 @@
 # Docker, Production Serving, and the Public Demo
 
-Read this before changing the `Dockerfile`, image smoke tests, the release or demo workflows, how the server listens or serves the frontend, or anything under `demo/`.
-
 ## Docker builds
 
 Build stages cross-compile on the build platform; only the final stage runs on the target platform. Keep it that way: emulated compilation is what made multiarch builds slow. The comments in the `Dockerfile` and in `.github/workflows/ci.yml` and `release.yml` explain the stage layout, the smoke-test artifact, and the cache rules; read them before changing either.

@@ -348,22 +348,51 @@ func isInstructionDoc(p string) bool {
 		strings.HasPrefix(p, "docs/agents/") && ext(p) == "md"
 }
 
+// Allowlist holds tokens to accept and records which ones a doc used, so
+// entries no doc mentions any more can be reported and removed.
+type Allowlist struct {
+	tokens map[string]bool
+	used   map[string]bool
+}
+
 // ParseAllowlist reads one token per line; `#` starts a comment.
-func ParseAllowlist(data []byte) map[string]bool {
-	allow := map[string]bool{}
+func ParseAllowlist(data []byte) *Allowlist {
+	a := &Allowlist{tokens: map[string]bool{}, used: map[string]bool{}}
 	for line := range strings.SplitSeq(string(data), "\n") {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = line[:i]
 		}
 		if line = strings.TrimSpace(line); line != "" {
-			allow[line] = true
+			a.tokens[line] = true
 		}
 	}
-	return allow
+	return a
+}
+
+// has reports whether s is allowed and marks it used. A nil Allowlist
+// allows nothing.
+func (a *Allowlist) has(s string) bool {
+	if a == nil || !a.tokens[s] {
+		return false
+	}
+	a.used[s] = true
+	return true
+}
+
+// Unused returns, sorted, the entries no checked doc has matched.
+func (a *Allowlist) Unused() []string {
+	var out []string
+	for t := range a.tokens {
+		if !a.used[t] {
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // CheckDoc returns the stale references in one instruction doc.
-func CheckDoc(r *Repo, docPath string, content []byte, allow map[string]bool) []Finding {
+func CheckDoc(r *Repo, docPath string, content []byte, allow *Allowlist) []Finding {
 	docDir := path.Dir(docPath)
 	var out []Finding
 	add := func(line int, token, reason string) {
@@ -381,11 +410,11 @@ func CheckDoc(r *Repo, docPath string, content []byte, allow map[string]bool) []
 		}
 		for _, m := range codeSpanRe.FindAllStringSubmatch(line, -1) {
 			tok := m[1]
-			if allow[strings.TrimSpace(tok)] {
+			if allow.has(strings.TrimSpace(tok)) {
 				continue
 			}
 			kind, norm := classify(tok)
-			if allow[norm] {
+			if allow.has(norm) {
 				continue
 			}
 			switch kind {
@@ -405,7 +434,7 @@ func CheckDoc(r *Repo, docPath string, content []byte, allow map[string]bool) []
 		}
 		for _, m := range sectionRe.FindAllStringSubmatch(line, -1) {
 			name, file := m[1], m[2]
-			if allow[name] {
+			if allow.has(name) {
 				continue
 			}
 			target, ok := r.resolve(docDir, strings.TrimPrefix(file, "./"))
@@ -425,7 +454,7 @@ func CheckDoc(r *Repo, docPath string, content []byte, allow map[string]bool) []
 		for _, m := range linkRe.FindAllStringSubmatch(line, -1) {
 			target := m[1]
 			if strings.Contains(target, "://") || strings.HasPrefix(target, "#") ||
-				strings.HasPrefix(target, "mailto:") || strings.HasPrefix(target, "/") || allow[target] {
+				strings.HasPrefix(target, "mailto:") || strings.HasPrefix(target, "/") || allow.has(target) {
 				continue
 			}
 			p, _, _ := strings.Cut(target, "#")

@@ -9,8 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { AdvancedOrderSection } from "./AdvancedOrderSection";
 import { AdvancedRepositoriesSection } from "./AdvancedRepositoriesSection";
-
-export type AdvancedSection = "order" | "repositories";
+import { isAdvancedSection, type AdvancedSection } from "./advancedSections";
 
 export interface AdvancedPluginsDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -35,7 +34,7 @@ export const AdvancedPluginsDialog = ({
           <Tabs
             className="flex flex-col overflow-hidden"
             onValueChange={(value) => {
-              if (value === "order" || value === "repositories") {
+              if (isAdvancedSection(value)) {
                 onSectionChange(value);
               }
             }}

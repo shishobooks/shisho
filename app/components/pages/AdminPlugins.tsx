@@ -2,10 +2,12 @@ import { Settings } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { AdvancedPluginsDialog } from "@/components/plugins/AdvancedPluginsDialog";
 import {
-  AdvancedPluginsDialog,
+  ADVANCED_SECTIONS,
+  isAdvancedSection,
   type AdvancedSection,
-} from "@/components/plugins/AdvancedPluginsDialog";
+} from "@/components/plugins/advancedSections";
 import { DiscoverTab } from "@/components/plugins/DiscoverTab";
 import { InstalledTab } from "@/components/plugins/InstalledTab";
 import { TabUpdatePill } from "@/components/plugins/TabUpdatePill";
@@ -14,12 +16,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePluginsInstalled } from "@/hooks/queries/plugins";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
-
-// The first entry is the default section.
-const ADVANCED_SECTIONS: readonly AdvancedSection[] = ["order", "repositories"];
-
-const isAdvancedSection = (value: string): value is AdvancedSection =>
-  (ADVANCED_SECTIONS as readonly string[]).includes(value);
 
 const AdminPlugins = () => {
   usePageTitle("Plugins");
@@ -51,16 +47,21 @@ const AdminPlugins = () => {
       ? advancedParam
       : ADVANCED_SECTIONS[0];
 
+  // Opening pushes a history entry; switching tabs and closing replace it,
+  // so Back after closing never reopens the dialog.
   const setAdvanced = (section: AdvancedSection | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (section === null) {
-        next.delete("advanced");
-      } else {
-        next.set("advanced", section);
-      }
-      return next;
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (section === null) {
+          next.delete("advanced");
+        } else {
+          next.set("advanced", section);
+        }
+        return next;
+      },
+      { replace: section === null || advancedOpen },
+    );
   };
 
   const handleTabChange = (value: string) => {

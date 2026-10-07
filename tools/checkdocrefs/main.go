@@ -27,7 +27,7 @@ func main() {
 		os.Exit(2)
 	}
 	if n > 0 {
-		fmt.Fprintf(os.Stderr, "check-docrefs: %d stale reference(s) in agent instruction files. Fix or delete the line, or add an intentional mention to tools/checkdocrefs/allowlist.txt.\n", n)
+		fmt.Fprintf(os.Stderr, "check-docrefs: %d stale reference(s) in agent instruction files or the allowlist. Fix or delete the line, or add an intentional mention to tools/checkdocrefs/allowlist.txt.\n", n)
 		os.Exit(1)
 	}
 }
@@ -85,6 +85,10 @@ func run(allowPath string) (int, error) {
 			fmt.Println(f)
 			found++
 		}
+	}
+	for _, t := range allow.Unused() {
+		fmt.Printf("%s: %s: no instruction doc uses this allowlist entry; delete it\n", allowPath, t)
+		found++
 	}
 	return found, nil
 }

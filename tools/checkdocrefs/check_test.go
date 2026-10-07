@@ -149,7 +149,7 @@ func TestCheckDoc_Identifiers(t *testing.T) {
 		"Tests: `TestSchema_ForeignKeysHaveOnDelete`, `t.Parallel()`. Env `SHISHO_TEST_MODE`. Column `books.series_source`.\n" +
 		"Stale: `CollectEverything`, `otherutils.CreateTemp`, `useCannot()`, `GhostOnlyInMarkdown`, `OLD_ENV_VAR`.\n" +
 		"Allowed: `NeverExisted`.\n"
-	got := findingStrings(CheckDoc(repo, "AGENTS.md", []byte(doc), map[string]bool{"NeverExisted": true}))
+	got := findingStrings(CheckDoc(repo, "AGENTS.md", []byte(doc), ParseAllowlist([]byte("NeverExisted\n"))))
 	assert.Equal(t, []string{
 		"AGENTS.md:3: CollectEverything: identifier not found in source",
 		"AGENTS.md:3: otherutils.CreateTemp: identifier not found in source (otherutils)",
@@ -178,14 +178,23 @@ func TestCheckDoc_SectionRefs(t *testing.T) {
 func TestCheckDoc_AllowlistAppliesToPaths(t *testing.T) {
 	t.Parallel()
 	repo := fixtureRepo(t)
-	got := CheckDoc(repo, "AGENTS.md", []byte("Old `pkg/legacy.go`.\n"), map[string]bool{"pkg/legacy.go": true})
+	got := CheckDoc(repo, "AGENTS.md", []byte("Old `pkg/legacy.go`.\n"), ParseAllowlist([]byte("pkg/legacy.go\n")))
 	assert.Empty(t, got)
 }
 
 func TestParseAllowlist(t *testing.T) {
 	t.Parallel()
 	allow := ParseAllowlist([]byte("# comment\n\nLOWER  # trailing comment\n  recreateTable\n"))
-	assert.Equal(t, map[string]bool{"LOWER": true, "recreateTable": true}, allow)
+	assert.Equal(t, []string{"LOWER", "recreateTable"}, allow.Unused())
+}
+
+func TestAllowlist_UnusedReportsEntriesNoDocMentions(t *testing.T) {
+	t.Parallel()
+	repo := fixtureRepo(t)
+	allow := ParseAllowlist([]byte("NeverExisted\nStaleEntry\nOld section\nUsed section\npkg/legacy.go\n"))
+	CheckDoc(repo, "AGENTS.md", []byte("Allowed `NeverExisted`.\n"), allow)
+	CheckDoc(repo, "pkg/AGENTS.md", []byte("Old `pkg/legacy.go`. See \"Used section\" in `pkg/AGENTS.md`.\n"), allow)
+	assert.Equal(t, []string{"Old section", "StaleEntry"}, allow.Unused())
 }
 
 func TestCheckDoc_PathEdgeCases(t *testing.T) {

@@ -4,11 +4,7 @@ React 19, TypeScript, Tailwind, TanStack Query, Vite, and Radix UI with shadcn/u
 
 ## Enforced by checks
 
-ESLint (`eslint.config.js`, local rules in `eslint-rules/`) and `app/hooks/queries/permissions.test.tsx` fail on these; their messages say how to comply:
-
-- media URLs built outside `app/utils`; `hasPermission(...)` with string literals; query hooks used outside `app/hooks/queries`; a query hook missing from `QUERY_HOOKS` or gating the wrong permission
-- `mutate()` without `onError`, or an unhandled `mutateAsync` promise
-- template-literal class names instead of `cn()`; `navigator.clipboard` instead of `copyText`; a hand-appended "ago"; an inline `status === 404`; `<Tabs defaultValue>`
+ESLint (`eslint.config.js`, local rules in `eslint-rules/`) and `app/hooks/queries/permissions.test.tsx` enforce the mechanical frontend rules; their messages say how to comply.
 
 The rules have known bypasses, pinned in `app/eslint-rules.test.ts`: a passing lint is a tripwire, not a guarantee. Tab state in `useState` passes lint but is still wrong; tabs deep-link through the URL ("Every page" in `docs/agents/standards/frontend.md`).
 
@@ -83,7 +79,7 @@ Cover and page endpoints are cached `immutable`, and browsers also keep an in-me
 - **CBZ and PDF page numbers are 0-indexed in storage and the API, 1-indexed on screen.** Convert at the display edge, never in what you send back.
 - **A dialog opened from a dropdown item**: give the `DropdownMenuContent` `onCloseAutoFocus={(e) => e.preventDefault()}` so the two focus managers do not fight.
 - **File labels come from the server**: render `fileLabel(file)` from `@/utils/format`, never a label rebuilt from the name or path.
-- **`Button` defaults `type="button"`**, so a submit button says `type="submit"`. Before overriding its classes, use its other sizes and variants (`icon-sm`, `icon-xs`, `link`, `unstyled`) or `BadgeRemoveButton`.
+- **`Button` defaults `type="button"`**, so a submit button says `type="submit"`. Before overriding its classes, use another of its sizes or variants (`app/components/ui/button.tsx`) or `BadgeRemoveButton`.
 - **Full-height surfaces offset with `--demo-banner-height`**, never a fixed banner height; modals cover the banner instead. UI shared by library and admin pages (sidebar chrome, top-nav geometry, `UserMenu`) lives in `app/components/layout/` so the two cannot drift.
 - **M4B audio can hang silently.** Outside WebKit, xHE-AAC files pass `canPlayType` and then hang on any seek with no error, so a test file that plays fine never shows the bug. New code driving an `<audio>` element reuses `app/utils/audioCodec.ts` and follows its header comment (no `play()` before `canplay`, a timeout on every wait).
 - New shadcn components are added with `npx shadcn@latest add`.

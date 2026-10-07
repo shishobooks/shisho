@@ -92,14 +92,10 @@ type Service struct {
 	appSettingsService *appsettings.Service
 }
 
-// NewService creates a book service. appSettings is required: mutation
+// NewService creates a book service. appSettings must be non-nil: mutation
 // methods recompute files.reviewed after each successful write from the
-// review criteria it holds, and a service without it would silently skip
-// that recompute.
+// review criteria it holds.
 func NewService(db *bun.DB, appSettings *appsettings.Service) *Service {
-	if appSettings == nil {
-		panic("books.NewService: appSettings must not be nil")
-	}
 	return &Service{db: db, appSettingsService: appSettings}
 }
 

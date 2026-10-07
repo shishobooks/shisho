@@ -4,7 +4,7 @@
 
 - **`file.CoverImageFilename` stores the filename only**, never a path; readers join it with the file's directory, so a stored path doubles. When renaming, store `filepath.Base` of the new cover path.
 - **Resolve cover paths from the file, never the book.** `book.Filepath` can be a synthetic organized-folder path that does not exist on disk. Read with `covers.FileCoverPath(file)`, never an inline join; write with `fileutils.ResolveCoverDirForWrite` when the book path may not exist yet.
-- Serve book and series covers through `covers.ServeBookCover`, and file covers through `covers.ServeFileCover`; see `pkg/covers/AGENTS.md`.
+- Serving covers: see `pkg/covers/AGENTS.md`.
 
 ## Cover writes never destroy a working cover
 

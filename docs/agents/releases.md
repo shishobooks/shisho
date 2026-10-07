@@ -1,7 +1,5 @@
 # Breaking Changes and Releases
 
-Read this before writing a PR body for a breaking change, cutting a release, or changing anything under `scripts/` or the release workflow.
-
 ## Breaking change upgrade notes
 
 Root `AGENTS.md` defines a breaking change and its two markers. Write one bullet per change for an operator who is upgrading: what changed, what they must do, and what happens if they do not.

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
@@ -68,19 +68,26 @@ describe("AdminPlugins with Config Read only", () => {
 
 const LocationProbe = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   return (
-    <div data-testid="location">{location.pathname + location.search}</div>
+    <>
+      <div data-testid="location">{location.pathname + location.search}</div>
+      <button onClick={() => navigate(-1)} type="button">
+        Browser Back
+      </button>
+    </>
   );
 };
 
-const renderAt = (entry: string) => {
+// The last entry is the current URL; earlier ones are history Back reaches.
+const renderAt = (...entries: string[]) => {
   vi.spyOn(API, "request").mockResolvedValue([]);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[entry]}>
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
         <AdminPlugins />
         <LocationProbe />
       </MemoryRouter>
@@ -159,5 +166,42 @@ describe("AdminPlugins advanced dialog deep link", () => {
       screen.queryByRole("dialog", { name: "Advanced plugin settings" }),
     ).not.toBeInTheDocument();
     expect(currentURL()).toBe("/settings/plugins?foo=bar");
+  });
+
+  it("switching tabs and closing replace the entry, so Back after closing does not reopen the dialog", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderAt("/settings", "/settings/plugins");
+
+    await user.click(
+      screen.getByRole("button", { name: "Advanced plugin settings" }),
+    );
+    await user.click(await screen.findByRole("tab", { name: "Repositories" }));
+    expect(currentURL()).toBe("/settings/plugins?advanced=repositories");
+    await user.keyboard("{Escape}");
+    expect(currentURL()).toBe("/settings/plugins");
+
+    await user.click(screen.getByRole("button", { name: "Browser Back" }));
+
+    expect(currentURL()).toBe("/settings/plugins");
+    expect(
+      screen.queryByRole("dialog", { name: "Advanced plugin settings" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Browser Back" }));
+
+    expect(currentURL()).toBe("/settings");
+  });
+
+  it("closing a deep-linked dialog replaces its entry, so Back does not reopen it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderAt("/settings", "/settings/plugins?advanced=repositories");
+
+    await screen.findByRole("dialog", { name: "Advanced plugin settings" });
+    await user.keyboard("{Escape}");
+    expect(currentURL()).toBe("/settings/plugins");
+
+    await user.click(screen.getByRole("button", { name: "Browser Back" }));
+
+    expect(currentURL()).toBe("/settings");
   });
 });

@@ -17,11 +17,10 @@
 //
 // Outside WebKit the browser answers canPlayType for xHE-AAC with "probably"
 // and then hangs on any seek: nothing throws and canplay never fires. So any
-// code driving an M4B <audio> element (M4BReader, the FileChaptersTab chapter
-// preview) never calls play() before readyState >= 3 (wait for canplay), puts
-// a timeout on every wait for seeked or canplay, and on timeout removes its
-// listeners, resets the playing state, and tells the user the codec may be
-// unsupported. Check a file's profile with
+// code driving an M4B <audio> element never calls play() before
+// readyState >= 3 (wait for canplay), puts a timeout on every wait for seeked
+// or canplay, and on timeout removes its listeners, resets the playing state,
+// and tells the user the codec may be unsupported. Check a file's profile with
 // `ffprobe -v error -show_streams <file.m4b> | grep profile`. The user-facing
 // caveat is the xHE-AAC note in website/docs/supported-formats.md; keep it in
 // sync with player behavior.
