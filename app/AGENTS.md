@@ -77,6 +77,7 @@ Cover and page endpoints are cached `immutable`, and browsers also keep an in-me
 
 ## Gotchas
 
+- **Queries never go stale on their own** (the global `staleTime` in `app/libraries/query-client.ts`), so a new query shows old data until something invalidates it. Invalidate it from every mutation and every SSE event (`app/hooks/useSSE.ts`) that changes its data.
 - **A custom component used as a Radix `asChild` trigger must `forwardRef` and spread props** onto the underlying `Button`, with `displayName` set. Without the ref, floating content anchors at `(0, 0)` off-screen and `Dialog`/`Sheet` cannot restore focus. jsdom runs no positioning, so unit tests pass; only a real browser shows it.
 - **Sortable lists need stable client-side row keys** assigned when a row enters the list. Index and content keys change on reorder and break dnd-kit drag tracking; server ids work only if unsaved rows have one too.
 - **CBZ and PDF page numbers are 0-indexed in storage and the API, 1-indexed on screen.** Convert at the display edge, never in what you send back.
