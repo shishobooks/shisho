@@ -26,6 +26,7 @@ import {
 } from "@/hooks/queries/chapters";
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { toastRequestError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 import {
   FileTypeCBZ,
   FileTypeEPUB,
@@ -923,7 +924,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               "w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left";
             return canEdit ? (
               <button
-                className={`${baseClass} hover:bg-amber-500/20 transition-colors cursor-pointer`}
+                className={cn(
+                  baseClass,
+                  "hover:bg-amber-500/20 transition-colors cursor-pointer",
+                )}
                 onClick={handleAddChapterAtPageZero}
                 type="button"
               >

@@ -82,7 +82,12 @@ description = "Run Go linting"
 # "parallel golangci-lint is running" lock against each other. Cold cache
 # costs ~30s extra on the first run in a fresh worktree; warm cache is ~3s.
 env = { GOLANGCI_LINT_CACHE = "{{config_root}}/tmp/golangci-lint-cache" }
+depends = ["lint:emdash"]
 run = "golangci-lint run"
+
+[tasks."lint:emdash"]
+description = "Reject em-dashes on lines added since the merge base with master"
+run = "./scripts/check-emdash.sh"
 
 [tasks."lint:js"]
 description = "Run all JS/TS linting"
@@ -126,8 +131,8 @@ description = "Run JS unit tests"
 run = "pnpm test:unit"
 
 [tasks."test:scripts"]
-description = "Run the shell script tests (changelog generation)"
-run = "./scripts/changelog_test.sh"
+description = "Run the shell script tests (changelog generation, em-dash check)"
+run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh"]
 
 [tasks."test:e2e"]
 description = "Run E2E tests"

@@ -34,6 +34,8 @@ export const isDemoModeError = (error: unknown): error is ShishoAPIError =>
 // True for a 404 from the API or a proxy in front of it. Detail pages show
 // their Not Found page for it and QueryError for any other failure.
 export const isNotFoundError = (error: unknown): error is ShishoAPIError =>
+  // This is the helper the inline-404 lint rule points to.
+  // eslint-disable-next-line no-restricted-syntax
   error instanceof ShishoAPIError && error.status === 404;
 
 interface QueryOutcome {

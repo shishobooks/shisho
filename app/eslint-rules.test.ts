@@ -1,7 +1,7 @@
 import { ESLint, type Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
-// The permission, query, URL and mutate rules in eslint.config.js are
+// The permission, query, URL, mutate and UI rules in eslint.config.js are
 // selectors, so a typo in one would silently match nothing, and the local
 // mutateAsync rule in eslint-rules/ reads syntax in ways a refactor could
 // quietly change. This lints fixtures as if they sat in the app to prove each
@@ -357,6 +357,76 @@ describe("ESLint mutateAsync rule", () => {
         MUTATE_ASYNC_FIXTURE,
         "app/components/Fixture.test.tsx",
         isMutateAsyncCheck,
+      ),
+    ).toEqual([]);
+  });
+});
+
+// Each UI convention rule flags its line; the lines after them are the
+// accepted forms and must stay clean.
+const UI_FIXTURE = `
+import { Tabs } from "@/components/ui/tabs";
+import { cn } from "@/libraries/utils";
+
+declare const error: { status: number };
+declare const c: string;
+export const Fixture = ({ n }: { n: number }) => {
+  void navigator.clipboard.writeText("x");
+  const { clipboard } = navigator;
+  const a = error.status === 404;
+  const b = 404 !== error.status;
+  const t = \`\${n} minutes ago\`;
+  const forbidden = error.status === 403;
+  return (
+    <div className={\`p-2 \${c}\`}>
+      <span>{n} days ago</span>
+      <Tabs defaultValue="x" />
+      <Tabs onValueChange={() => undefined} value="x" />
+      <span className={cn("p-2", c)}>{String(a && b && forbidden) + t}</span>
+      <span>{String(clipboard)} Chicago</span>
+    </div>
+  );
+};
+`;
+
+const uiMessages = async (filePath: string) => {
+  const [result] = await eslint.lintText(UI_FIXTURE, { filePath });
+  return result.messages
+    .filter(
+      (message) =>
+        message.ruleId === "no-restricted-syntax" ||
+        message.ruleId === "no-restricted-properties",
+    )
+    .map((message) => message.message);
+};
+
+describe("ESLint UI convention rules", () => {
+  it("rejects each convention once per violation", async () => {
+    const messages = await uiMessages("app/components/Fixture.tsx");
+    const count = (needle: string) =>
+      messages.filter((message) => message.includes(needle)).length;
+
+    expect(count("copyText")).toBe(2);
+    expect(count("isNotFoundError")).toBe(2);
+    expect(count("formatDistanceToNow")).toBe(2);
+    expect(count("cn()")).toBe(1);
+    expect(count("Deep-link tabs")).toBe(1);
+    expect(messages).toHaveLength(8);
+  });
+
+  it("allows them in tests", async () => {
+    expect(await uiMessages("app/components/Fixture.test.tsx")).toEqual([]);
+  });
+
+  it("lets copyText use the async clipboard", async () => {
+    const [result] = await eslint.lintText(
+      'export const copy = () => navigator.clipboard.writeText("x");\n',
+      { filePath: "app/utils/clipboard.ts" },
+    );
+
+    expect(
+      result.messages.filter(
+        (message) => message.ruleId === "no-restricted-properties",
       ),
     ).toEqual([]);
   });

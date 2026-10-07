@@ -30,6 +30,9 @@ export const AdvancedPluginsDialog = ({
         <DialogBody className="flex flex-1 flex-col overflow-hidden">
           <Tabs
             className="flex flex-col overflow-hidden"
+            // Dialog sections, not page navigation. AdminPlugins deep-links
+            // the opening section through its ?advanced= param.
+            // eslint-disable-next-line no-restricted-syntax
             defaultValue={defaultSection}
           >
             <TabsList className="w-full justify-start">

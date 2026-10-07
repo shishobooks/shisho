@@ -335,8 +335,8 @@ const SortSheet = ({
 };
 
 // forwardRef + spread so SheetTrigger/DrawerTrigger asChild can attach its DOM
-// ref and merge handlers onto the underlying button. See app/AGENTS.md →
-// "asChild trigger components must forwardRef".
+// ref and merge handlers onto the underlying button. See the Radix `asChild`
+// trigger gotcha in app/AGENTS.md.
 export const SortButton = forwardRef<
   HTMLButtonElement,
   { isDirty: boolean } & React.ComponentPropsWithoutRef<typeof Button>

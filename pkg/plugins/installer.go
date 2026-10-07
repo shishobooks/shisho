@@ -320,7 +320,8 @@ func (inst *Installer) downloadToTemp(ctx context.Context, url string) (string, 
 		return "", errors.WithStack(fmt.Errorf("%w: HTTP %d", ErrDownloadFailed, resp.StatusCode))
 	}
 
-	tmpFile, err := os.CreateTemp("", "plugin-download-*.zip")
+	// The download is private to this process and removed after install.
+	tmpFile, err := fileutils.CreateTemp("", "plugin-download-*.zip", 0600)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create temp file")
 	}

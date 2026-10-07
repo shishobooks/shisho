@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
+import { cn } from "@/libraries/utils";
 
 interface SearchInputProps {
   initialValue: string;
@@ -46,7 +47,10 @@ export const SearchInput = ({
 
   return (
     <Input
-      className={`${className} [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden`}
+      className={cn(
+        className,
+        "[&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
+      )}
       onChange={(e) => setValue(e.target.value)}
       placeholder={placeholder}
       type="search"

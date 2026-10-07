@@ -8,7 +8,7 @@ import tseslint from "typescript-eslint";
 import mutateAsyncHandled from "./eslint-rules/mutate-async-handled.js";
 
 // Permission checks take a typed requirement through useCan or can (see
-// "Permission-gated controls" in app/AGENTS.md), so a typo fails to compile.
+// docs/agents/frontend/permissions.md), so a typo fails to compile.
 // hasPermission takes plain strings, where a typo fails silently.
 const literalPermissionCheck = {
   selector:
@@ -51,9 +51,44 @@ const literalFileUrls = [
   },
 ];
 
+// Mechanical UI conventions from app/AGENTS.md. app/components/ui is ignored
+// above, so the shadcn primitives are exempt.
+const uiConventions = [
+  {
+    // A template literal skips tailwind-merge's conflict resolution.
+    selector:
+      'JSXAttribute[name.name="className"] > JSXExpressionContainer > TemplateLiteral',
+    message:
+      "Compose className with cn() from @/libraries/utils, not a template literal (see app/AGENTS.md).",
+  },
+  ...[
+    "TemplateElement[value.raw=/\\sago\\b/]",
+    "Literal[value=/\\sago\\b/]",
+    "JSXText[value=/\\sago\\b/]",
+  ].map((selector) => ({
+    selector,
+    message:
+      'Write relative times with formatDistanceToNow(date, { addSuffix: true }) from date-fns, not a hand-appended "ago" (see app/AGENTS.md).',
+  })),
+  ...[
+    'BinaryExpression[operator=/^[!=]==?$/][left.property.name="status"][right.value=404]',
+    'BinaryExpression[operator=/^[!=]==?$/][right.property.name="status"][left.value=404]',
+  ].map((selector) => ({
+    selector,
+    message:
+      "Use isNotFoundError(error) or isLoadFailure(query) from @/libraries/api, not an inline status check for 404 (see app/AGENTS.md).",
+  })),
+  {
+    selector:
+      'JSXOpeningElement[name.name="Tabs"] > JSXAttribute[name.name="defaultValue"]',
+    message:
+      'Deep-link tabs: pass value and onValueChange synced to the URL instead of defaultValue (see "Every page" in docs/agents/standards/frontend.md).',
+  },
+];
+
 // A mutation fired with mutate() reports a rejection only through onError, so
 // one without it fails silently. Toast it with toastRequestError (see
-// "Request errors and retries" in app/AGENTS.md), or use mutateAsync in a
+// docs/agents/frontend/request-errors.md), or use mutateAsync in a
 // try/catch. The options must be an object literal passed straight to
 // mutate(), so an onError inside a nested call does not count, options held
 // in a variable are flagged because the rule cannot see into them, and
@@ -174,8 +209,18 @@ export default tseslint.config(
         ...mutateWithoutOnError,
         ...mutationReferences,
         ...literalFileUrls,
+        ...uiConventions,
       ],
       "shisho/mutate-async-handled": "error",
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "navigator",
+          property: "clipboard",
+          message:
+            "Copy with copyText from @/utils/clipboard, which falls back when navigator.clipboard is undefined over plain HTTP (see app/AGENTS.md).",
+        },
+      ],
       "no-restricted-imports": [
         "error",
         {
@@ -209,6 +254,7 @@ export default tseslint.config(
         "error",
         literalPermissionCheck,
         ...literalFileUrls,
+        ...uiConventions,
       ],
     },
   },
@@ -225,8 +271,14 @@ export default tseslint.config(
         imperativeQueries,
         ...mutateWithoutOnError,
         ...mutationReferences,
+        ...uiConventions,
       ],
     },
+  },
+  {
+    // copyText is the one place allowed to touch the async clipboard.
+    files: ["app/utils/clipboard.ts"],
+    rules: { "no-restricted-properties": "off" },
   },
   {
     files: ["*.js", "eslint-rules/*.js"],

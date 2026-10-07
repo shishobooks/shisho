@@ -19,7 +19,7 @@
 // dialogs, which catch them. Destructured, aliased, computed, and uncalled
 // mutateAsync references are banned by no-restricted-syntax selectors in
 // eslint.config.js, so this rule only sees calls on the mutation object. See
-// "Every mutate() passes onError" in app/AGENTS.md, and
+// "Mutations" in docs/agents/frontend/request-errors.md, and
 // app/eslint-rules.test.ts for the pinned cases and known gaps.
 
 const FUNCTIONS = new Set([

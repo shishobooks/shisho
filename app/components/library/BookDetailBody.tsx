@@ -721,7 +721,7 @@ interface BookDetailBodyProps {
 // and the file list with download and read controls, plus the action menus
 // and the dialogs behind them. The page supplies the book and library from
 // the authenticated query hooks; a share page supplies a share payload and a
-// `shareLink`. See "Book Detail body" in app/AGENTS.md.
+// `shareLink`. See docs/agents/frontend/share-links.md.
 const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;
@@ -1165,12 +1165,15 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
           ) : (
             /* Single file - show book cover directly */
             <div
-              className={`${coverAspectRatio} w-48 sm:w-64 lg:w-full mx-auto lg:mx-0 relative`}
+              className={cn(
+                coverAspectRatio,
+                "w-48 sm:w-64 lg:w-full mx-auto lg:mx-0 relative",
+              )}
             >
               {/* Placeholder shown until image loads or on error */}
               {(!coverLoaded || coverError || !coverUrl) && (
                 <CoverPlaceholder
-                  className={`absolute inset-0 rounded-md border border-border`}
+                  className="absolute inset-0 rounded-md border border-border"
                   variant={coverFileType}
                 />
               )}
@@ -1178,7 +1181,10 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               {!coverError && coverUrl && (
                 <CoverImage
                   alt={`${book.title} Cover`}
-                  className={`w-full h-full object-cover rounded-md border border-border ${!coverLoaded ? "opacity-0" : ""}`}
+                  className={cn(
+                    "w-full h-full object-cover rounded-md border border-border",
+                    !coverLoaded && "opacity-0",
+                  )}
                   key={coverCacheKey}
                   onError={() => setCoverError(true)}
                   onLoad={handleCoverLoad}

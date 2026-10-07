@@ -22,6 +22,7 @@ import {
   type PluginHookType,
 } from "@/hooks/queries/plugins";
 import { toastRequestError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
   { label: "Input Converter", value: "inputConverter" },
@@ -177,13 +178,14 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
         <div className="space-y-2">
           {displayPlugins.map((plugin, index) => (
             <div
-              className={`flex items-center justify-between gap-3 rounded-md border p-3 ${
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-md border p-3",
                 plugin.mode === "disabled"
                   ? "border-border/50 opacity-60"
                   : plugin.mode === "manual_only"
                     ? "border-border/70 opacity-80"
-                    : "border-border"
-              }`}
+                    : "border-border",
+              )}
               key={`${plugin.scope}/${plugin.id}`}
             >
               <div className="flex items-center gap-3">

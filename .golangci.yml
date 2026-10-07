@@ -62,6 +62,20 @@ linters:
         - pattern: ^os\.(File\.)?Chmod$
           pkg: ^os$
           msg: create the file with its mode instead (fileutils.CreateTemp, fileutils.MkdirTemp, os.OpenFile or os.WriteFile)
+        # os.CreateTemp always creates 0600, which would need a chmod.
+        - pattern: ^os\.CreateTemp$
+          pkg: ^os$
+          msg: use fileutils.CreateTemp(dir, pattern, perm), which sets the mode at creation
+        # The error handler snake-cases an echo.HTTPError message into its wire
+        # code, so every call site would invent a code.
+        - pattern: ^echo\.NewHTTPError$
+          pkg: ^github\.com/labstack/echo/v4$
+          msg: return an errcodes constructor (errcodes.NotFound, ValidationError, InvalidState, Forbidden, Conflict, ...) instead of echo.NewHTTPError
+        # migrations.NewMigrator enables WithMarkAppliedOnSuccess, so a failed
+        # migration is not recorded as applied.
+        - pattern: ^migrate\.NewMigrator$
+          pkg: ^github\.com/uptrace/bun/migrate$
+          msg: use migrations.NewMigrator, which marks a migration applied only after it succeeds
     gocritic:
       disabled-checks:
         - appendAssign
@@ -95,9 +109,22 @@ linters:
       - linters:
           - forbidigo
         path: ^pkg/(auth|apikeys|binder)/
+        text: echo context values
       - linters:
           - forbidigo
         path: ^pkg/server/http_middleware\.go$
+        text: echo context values
+      # fileutils.CreateTemp is the sanctioned wrapper around os.CreateTemp's
+      # naming rules, and tests create throwaway files whose mode is irrelevant.
+      - linters:
+          - forbidigo
+        path: (^pkg/fileutils/|_test\.go)
+        text: os\.CreateTemp
+      # pkg/migrations owns the one sanctioned migrate.NewMigrator call.
+      - linters:
+          - forbidigo
+        path: ^pkg/migrations/migrations\.go$
+        text: migrate\.NewMigrator
       # Tests chmod their fixtures, for example to inject permission faults.
       - linters:
           - forbidigo

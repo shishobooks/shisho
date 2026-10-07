@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # mise lint runs scripts/check-emdash.sh, which needs master's
+          # history to find the merge base.
+          fetch-depth: 0
       - uses: jdx/mise-action@v4
       - run: mise lint
       - run: mise test:scripts

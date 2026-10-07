@@ -417,8 +417,8 @@ const FilterContent = ({
 );
 
 // forwardRef so SheetTrigger/DrawerTrigger asChild can attach its DOM ref
-// onto the underlying button. See app/AGENTS.md →
-// "asChild trigger components must forwardRef".
+// onto the underlying button. See the Radix `asChild` trigger gotcha in
+// app/AGENTS.md.
 const FilterButton = forwardRef<
   HTMLButtonElement,
   { hasActiveFilters: boolean } & Omit<
