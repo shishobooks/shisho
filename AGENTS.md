@@ -37,7 +37,12 @@ Repo-wide topic docs:
 
 ## Adding to these files
 
-Add a line only for a rule that applies beyond the fix at hand and that neither the code nor a check can convey: an unwritten convention, the reason behind a choice, a gotcha no config confesses. Before writing a rule, ask whether a lint rule or test could enforce it instead; if so, add the check and a one-line pointer. Put topic detail in the topic doc its pointer names, judgement rules for reviewers in `CODING_STANDARDS.md` or the file it points to, and bug history (what used to happen, PR numbers) in the commit message. When a change makes a line wrong, fix or delete it in the same change.
+Instruction files hold two kinds of content, and nothing else:
+
+- **How and why things are done, when it applies across the codebase.** A rule about one function or file goes in a comment at that code, where the agent editing it will see it. A doc earns a rule when the trap fires while writing new code elsewhere (a new delete endpoint must reindex search; a new route family must be classified for Demo Mode), so no comment would be read in time.
+- **Guidance that keeps agents out of traps and rabbit holes**: the wrong turn and the right one.
+
+Never copy what the code or config already holds: no lists of files, components, endpoints, fields, ports, or defaults, and no values that change when the code does. Where agents are known to look in the wrong place, name the right lookup (the file, command, or test), not its result. If a rule is mechanical, enforce it with a lint rule or test and keep at most a one-line pointer. Judgement rules for reviewers go in `CODING_STANDARDS.md` or the files it points to; bug history (what used to happen, PR numbers) goes in the commit message. `scripts/check-docrefs.sh` fails when a doc names a path or identifier that no longer exists; when a change makes a line wrong, fix or delete it in the same change.
 
 ## Subagent instructions
 
@@ -60,7 +65,7 @@ When dispatching subagents (implementation, review, or anything else), include t
 All tasks are in `mise.toml` (`mise tasks` lists them). The ones with non-obvious behavior:
 
 - `mise setup` installs tools and dependencies and generates types. Run it after creating a worktree.
-- `mise start` runs the API with hot reload plus Vite; air runs `mise tygo` before each rebuild. Several worktrees can run it at once: each server takes the first free port at or above its usual one (API `3689`, Vite `5173`, docs `3000`) and prints the URL it got, so read the URL from the output. Never hardcode a dev port in a task; reserve it through `internal/devtool`.
+- `mise start` runs the API with hot reload plus Vite; air runs `mise tygo` before each rebuild. Several worktrees can run it at once, so each server may land on a different port than usual: read the URL it prints. Never hardcode a dev port in a task; reserve it through `internal/devtool`.
 - `mise build` generates types, builds the frontend, copies it into `pkg/frontend/dist`, and compiles the binary. `pnpm build` alone does not refresh the embedded files. Keep the tracked `pkg/frontend/dist/placeholder.html` (it lets plain `go build` and `go test ./...` work without a frontend build); never overwrite it with build output.
 - `mise check:quiet` runs every check, skips Firefox e2e (CI runs it), and serializes across worktrees via `flock` (`brew install flock` on macOS). Use it instead of `mise check`.
 - `app/types/generated/` is gitignored output of `mise tygo`; change the Go structs, never the generated files.
