@@ -1,0 +1,15 @@
+# Tokens that agent instruction files name on purpose although they do not
+# exist in the repo's source: things to avoid, placeholders, and third-party
+# APIs the repo does not call. One token per line, exactly as written between
+# the backticks (or the quoted section name). Keep this short; a stale
+# reference belongs in the doc fix, not here.
+
+setupTestDB          # AGENTS.md: "don't copy a setupTestDB into a package"
+UserResponse         # standards/backend.md: example of a wrapper to flag
+github.run_attempt   # gotestsplit/AGENTS.md: "do not add github.run_attempt"
+api.AddKeywordsFile  # pdf/AGENTS.md: pdfcpu API to avoid
+useLatestVersion()   # website/AGENTS.md: Docusaurus API for a future hook
+kobo.js              # kepub/AGENTS.md: file injected into KePubs, not a repo file
+CONTEXT-MAP.md       # domain.md: read it "if it exists"
+X.test.tsx           # frontend/permissions.md: placeholder file name
+X.permissions.test.tsx
