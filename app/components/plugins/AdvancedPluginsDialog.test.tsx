@@ -14,14 +14,28 @@ vi.mock("./AdvancedRepositoriesSection", () => ({
 
 describe("AdvancedPluginsDialog", () => {
   it("renders nothing when closed", () => {
-    render(<AdvancedPluginsDialog onOpenChange={vi.fn()} open={false} />);
+    render(
+      <AdvancedPluginsDialog
+        onOpenChange={vi.fn()}
+        onSectionChange={vi.fn()}
+        open={false}
+        section="order"
+      />,
+    );
     expect(
       screen.queryByText("Advanced plugin settings"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows the dialog with Order tab active by default", () => {
-    render(<AdvancedPluginsDialog onOpenChange={vi.fn()} open={true} />);
+  it("shows the Order tab when section='order'", () => {
+    render(
+      <AdvancedPluginsDialog
+        onOpenChange={vi.fn()}
+        onSectionChange={vi.fn()}
+        open={true}
+        section="order"
+      />,
+    );
     expect(screen.getByText("Advanced plugin settings")).toBeInTheDocument();
     expect(screen.getByText("Order Section Content")).toBeInTheDocument();
     expect(
@@ -29,12 +43,13 @@ describe("AdvancedPluginsDialog", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the Repositories tab when defaultSection='repositories'", () => {
+  it("shows the Repositories tab when section='repositories'", () => {
     render(
       <AdvancedPluginsDialog
-        defaultSection="repositories"
         onOpenChange={vi.fn()}
+        onSectionChange={vi.fn()}
         open={true}
+        section="repositories"
       />,
     );
     expect(
@@ -43,22 +58,26 @@ describe("AdvancedPluginsDialog", () => {
     expect(screen.queryByText("Order Section Content")).not.toBeInTheDocument();
   });
 
-  it("switches from Order to Repositories when the tab is clicked", async () => {
+  it("reports the clicked tab through onSectionChange", async () => {
+    const onSectionChange = vi.fn();
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,
     });
 
-    render(<AdvancedPluginsDialog onOpenChange={vi.fn()} open={true} />);
-
-    // Initially on Order
-    expect(screen.getByText("Order Section Content")).toBeInTheDocument();
+    render(
+      <AdvancedPluginsDialog
+        onOpenChange={vi.fn()}
+        onSectionChange={onSectionChange}
+        open={true}
+        section="order"
+      />,
+    );
 
     await user.click(screen.getByRole("tab", { name: "Repositories" }));
 
-    expect(
-      screen.getByText("Repositories Section Content"),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Order Section Content")).not.toBeInTheDocument();
+    expect(onSectionChange).toHaveBeenCalledWith("repositories");
+    // Controlled: the visible section follows the prop, not the click.
+    expect(screen.getByText("Order Section Content")).toBeInTheDocument();
   });
 
   it("calls onOpenChange when the dialog requests close", async () => {
@@ -67,7 +86,14 @@ describe("AdvancedPluginsDialog", () => {
       advanceTimers: vi.advanceTimersByTime,
     });
 
-    render(<AdvancedPluginsDialog onOpenChange={onOpenChange} open={true} />);
+    render(
+      <AdvancedPluginsDialog
+        onOpenChange={onOpenChange}
+        onSectionChange={vi.fn()}
+        open={true}
+        section="order"
+      />,
+    );
 
     await user.keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);

@@ -10,16 +10,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AdvancedOrderSection } from "./AdvancedOrderSection";
 import { AdvancedRepositoriesSection } from "./AdvancedRepositoriesSection";
 
+export type AdvancedSection = "order" | "repositories";
+
 export interface AdvancedPluginsDialogProps {
-  defaultSection?: "order" | "repositories";
   onOpenChange: (open: boolean) => void;
+  onSectionChange: (section: AdvancedSection) => void;
   open: boolean;
+  section: AdvancedSection;
 }
 
 export const AdvancedPluginsDialog = ({
-  defaultSection = "order",
   onOpenChange,
+  onSectionChange,
   open,
+  section,
 }: AdvancedPluginsDialogProps) => {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -30,10 +34,12 @@ export const AdvancedPluginsDialog = ({
         <DialogBody className="flex flex-1 flex-col overflow-hidden">
           <Tabs
             className="flex flex-col overflow-hidden"
-            // Dialog sections, not page navigation. AdminPlugins deep-links
-            // the opening section through its ?advanced= param.
-            // eslint-disable-next-line no-restricted-syntax
-            defaultValue={defaultSection}
+            onValueChange={(value) => {
+              if (value === "order" || value === "repositories") {
+                onSectionChange(value);
+              }
+            }}
+            value={section}
           >
             <TabsList className="w-full justify-start">
               <TabsTrigger value="order">Order</TabsTrigger>
