@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -198,7 +197,7 @@ func isSelfPasswordResetRequest(c echo.Context, userID int) bool {
 		return false
 	}
 
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := httputil.ParamID(c, "id", "User")
 	if err != nil {
 		return false
 	}

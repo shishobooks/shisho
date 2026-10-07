@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ func TestCreateFile_StoresZeroFilesize(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	_, book := setupTestLibraryAndBook(t, db)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	file := &models.File{
 		LibraryID:     book.LibraryID,
@@ -39,7 +40,7 @@ func TestUpdateFile_StoresZeroFilesize(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	_, book := setupTestLibraryAndBook(t, db)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	file := &models.File{
 		LibraryID:     book.LibraryID,

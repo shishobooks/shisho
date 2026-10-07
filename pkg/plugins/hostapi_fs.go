@@ -146,7 +146,9 @@ func (ctx *FSContext) isInPrivateDir(absPath string) bool {
 // Every other permitted path, such as a hook-provided destination or a path
 // allowed by the readwrite fileAccess capability, holds output other tools may
 // read, so it gets 0644 like Shisho's other generated files. Overwriting an
-// existing file keeps its mode.
+// existing file keeps its mode, since os.WriteFile applies the mode only on
+// creation. The private-directory check wins even when another rule also
+// allows the path. There is deliberately no SDK option to choose a mode.
 func (ctx *FSContext) writeMode(path string) os.FileMode {
 	absPath, err := filepath.Abs(path)
 	if err != nil || ctx.isInPrivateDir(absPath) {
@@ -187,6 +189,10 @@ func (ctx *FSContext) isWriteAllowed(path string) bool {
 }
 
 // isPathWithin checks if child is within or equal to parent directory.
+//
+// Known gap: it compares cleaned paths and does not resolve symlinks. A fix
+// cannot simply call filepath.EvalSymlinks, which fails for write targets
+// that do not exist yet, so it must handle both cases.
 func isPathWithin(child, parent string) bool {
 	// Clean both paths
 	child = filepath.Clean(child)

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -81,7 +82,7 @@ func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 			require.NoError(t, os.Chmod(lockedPath, 0o000))
 			t.Cleanup(func() { _ = os.Chmod(lockedPath, restoreMode) })
 
-			h := &handler{service: NewService(db), bookService: books.NewService(db)}
+			h := &handler{service: NewService(db), bookService: books.NewService(db, appsettings.NewService(db))}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 			withKeyOwner(c)

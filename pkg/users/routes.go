@@ -29,8 +29,10 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	users.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceUsers, models.OperationWrite))
 	users.DELETE("/:id", h.deactivate, authMiddleware.RequirePermission(models.ResourceUsers, models.OperationWrite))
 
-	// Password reset is special - authenticated users can reset their own password
-	// and users:write is required for resetting another user's password.
+	// Password reset requires authentication only. Do not add users:read or
+	// users:write middleware here: it breaks self-service and forced password
+	// changes for roles like Viewer. The handler itself requires users:write
+	// only for resetting another user's password.
 	users.POST("/:id/reset-password", h.resetPassword)
 }
 

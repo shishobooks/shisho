@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 )
@@ -21,7 +22,7 @@ func TestBookCover_SetsCacheControlImmutable(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := NewService(db)
+	bookService := NewService(db, appsettings.NewService(db))
 	libraryService := libraries.NewService(db)
 	h := &handler{bookService: bookService, libraryService: libraryService}
 
@@ -57,7 +58,7 @@ func TestBookCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := NewService(db)
+	bookService := NewService(db, appsettings.NewService(db))
 	libraryService := libraries.NewService(db)
 	h := &handler{bookService: bookService, libraryService: libraryService}
 

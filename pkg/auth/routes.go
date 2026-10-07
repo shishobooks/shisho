@@ -6,7 +6,9 @@ import (
 
 // RegisterRoutes registers all auth routes. The server builds authService,
 // because the auth middleware every other route family uses wraps it too.
-// pdfRenderKey is reported by GET /auth/status (see StatusResponse).
+// pdfRenderKey is reported by GET /auth/status (see StatusResponse), and so
+// is demoMode, which is a bool rather than the config because pkg/config
+// imports pkg/auth.
 func RegisterRoutes(e *echo.Group, authService *Service, demoMode bool, pdfRenderKey string) {
 	h := &handler{
 		authService:  authService,

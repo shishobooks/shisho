@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	db := testdb.New(t)
 
 	e := echo.New()
-	RegisterRoutes(e, db, nil, books.NewService(db))
+	RegisterRoutes(e, db, nil, books.NewService(db, appsettings.NewService(db)))
 
 	methods := map[string]map[string]bool{}
 	for _, r := range e.Routes() {

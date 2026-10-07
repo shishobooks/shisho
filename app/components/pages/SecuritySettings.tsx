@@ -43,6 +43,7 @@ import { useResetPassword } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 import {
   PermissionEReaderBrowser,
   PermissionKoboSync,
@@ -762,11 +763,12 @@ function KoboSetupDialog({
             <Label>Sync Scope</Label>
             <div className="flex rounded-md border border-input">
               <button
-                className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer ${
+                className={cn(
+                  "flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer",
                   scopeType === "all"
                     ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
+                    : "hover:bg-muted",
+                )}
                 onClick={() => {
                   setScopeType("all");
                   setScopeId("");
@@ -776,11 +778,12 @@ function KoboSetupDialog({
                 All Libraries
               </button>
               <button
-                className={`flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                className={cn(
+                  "flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
                   scopeType === "library"
                     ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
+                    : "hover:bg-muted",
+                )}
                 onClick={() => {
                   setScopeType("library");
                   setScopeId("");
@@ -790,11 +793,12 @@ function KoboSetupDialog({
                 Library
               </button>
               <button
-                className={`flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer ${
+                className={cn(
+                  "flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer",
                   scopeType === "list"
                     ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
+                    : "hover:bg-muted",
+                )}
                 onClick={() => {
                   setScopeType("list");
                   setScopeId("");

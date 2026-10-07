@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -75,7 +76,7 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	h := &handler{bookService: books.NewService(db)}
+	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	opts := books.ListBooksOptions{LibraryID: &lib.ID}
 
 	got, gotTotal, err := h.listBooksPaginated(ctx, opts, 1, "")
@@ -150,7 +151,7 @@ func TestListBooksPaginated_TypeFilter(t *testing.T) {
 		mkBook(i, models.FileTypeCBZ)
 	}
 
-	h := &handler{bookService: books.NewService(db)}
+	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	opts := books.ListBooksOptions{LibraryID: &lib.ID}
 
 	got, total, err := h.listBooksPaginated(ctx, opts, 1, "epub")

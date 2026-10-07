@@ -246,6 +246,9 @@ func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 }
 
 // cbzComicInfo represents ComicInfo.xml structure for CBZ generation.
+// The generator unmarshals the source ComicInfo.xml into it and marshals it
+// back with no catch-all, so an element the struct does not declare is
+// dropped from generated files. Add the element here to preserve it.
 // Uses pointers for optional string fields to distinguish empty from omitted.
 type cbzComicInfo struct {
 	XMLName     xml.Name `xml:"ComicInfo"`

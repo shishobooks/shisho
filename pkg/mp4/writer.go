@@ -93,6 +93,7 @@ func writeToFileContext(ctx context.Context, srcPath, destPath string, metadata 
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	// A source changed mid-copy must not be published.
 	if afterInfo.Size() != info.Size() || !afterInfo.ModTime().Equal(info.ModTime()) {
 		return errors.New("source file changed during M4B rewrite")
 	}
@@ -157,6 +158,10 @@ type fileBox struct {
 	toEOF      bool
 }
 
+// inspectTopLevelBoxes lists the top-level boxes from their headers alone
+// (including 64-bit largesize), without reading payloads. Offsets and sizes
+// are bounds-checked against the file, and the box count is capped, so a
+// malformed file fails here instead of driving a huge allocation.
 func inspectTopLevelBoxes(ctx context.Context, input io.ReaderAt, fileSize int64) ([]fileBox, error) {
 	var boxes []fileBox
 	offset := int64(0)
@@ -216,6 +221,10 @@ func inspectTopLevelBoxes(ctx context.Context, input io.ReaderAt, fileSize int64
 	return boxes, nil
 }
 
+// rewriteToFile rebuilds only moov plus the modified metadata, cover, and
+// chapter samples, and copies every unchanged box, above all the audio mdat,
+// through a fixed buffer. Peak memory must scale with the modified structures,
+// never the audiobook size; writer_streaming_test.go enforces a bound.
 func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize int64, boxes []fileBox, metadata *Metadata) error {
 	if sourceSize < 0 {
 		return errors.New("source file size is negative")
@@ -269,10 +278,19 @@ func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize
 		return errors.Errorf("rewritten moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
 	}
 
+	// The chapter co64 holds a placeholder during the shift below, so the
+	// shift cannot underflow it, and is patched to the real offset later.
 	if chapterMdat != nil {
 		// #nosec G115 -- sourceSize is checked as non-negative above.
 		binary.BigEndian.PutUint64(newMoov[8+chapterMdat.co64FieldOffset:], uint64(sourceSize))
 	}
+	// stco/co64 hold absolute file offsets into mdat. In faststart layout
+	// (moov before the first mdat, as Audible, Apple Books, and ffmpeg
+	// +faststart write it) a resized moov moves mdat, so every chunk offset
+	// shifts by the size delta, or decoders read metadata as audio and strict
+	// players refuse the file. In mdat-first layout nothing moves. Tests need
+	// testgen's Faststart option to reach this path; ffmpeg's default output
+	// is mdat-first.
 	if firstMdat != nil && moov.offset < firstMdat.offset {
 		delta := int64(len(newMoov)) - moov.size
 		if delta != 0 {

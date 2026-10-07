@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -95,7 +96,7 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
-	h := &handler{bookService: books.NewService(db)}
+	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := echo.New().NewContext(req, httptest.NewRecorder())
 	withKey(c, t, db, apiKey)

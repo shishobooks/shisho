@@ -72,7 +72,7 @@ func TestRecomputeReviewedForBooks_RecomputesOnlyListedBooks(t *testing.T) {
 		bookIDs = append(bookIDs, file.BookID)
 	}
 
-	NewService(db).WithAppSettings(appsettings.NewService(db)).RecomputeReviewedForBooks(ctx, bookIDs)
+	NewService(db, appsettings.NewService(db)).RecomputeReviewedForBooks(ctx, bookIDs)
 
 	assert.False(t, fileReviewed(ctx, t, db, first))
 	assert.False(t, fileReviewed(ctx, t, db, second))

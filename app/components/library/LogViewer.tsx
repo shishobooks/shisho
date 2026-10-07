@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/libraries/utils";
 
 /**
  * Normalized log entry that both JobDetail and AdminLogs map into.
@@ -79,7 +80,10 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
   return (
     <div className="py-1.5 px-3 border-b border-border/50 last:border-b-0 font-mono text-xs hover:bg-muted/50 transition-colors">
       <div
-        className={`flex items-center gap-2 overflow-hidden ${hasExpandableContent ? "cursor-pointer" : ""}`}
+        className={cn(
+          "flex items-center gap-2 overflow-hidden",
+          hasExpandableContent && "cursor-pointer",
+        )}
         onClick={() => hasExpandableContent && setExpanded(!expanded)}
       >
         {hasExpandableContent ? (
@@ -95,7 +99,10 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
           {formatTimestamp(entry.timestamp)}
         </span>
         <Badge
-          className={`${levelColors[entry.level] ?? levelColors.info} text-[10px] px-1.5 py-0 flex-shrink-0 font-mono uppercase`}
+          className={cn(
+            levelColors[entry.level] ?? levelColors.info,
+            "text-[10px] px-1.5 py-0 flex-shrink-0 font-mono uppercase",
+          )}
           variant="secondary"
         >
           {entry.level.length > 4 ? entry.level.slice(0, 3) : entry.level}
@@ -174,7 +181,10 @@ const LogViewer = ({
   return (
     <div className="relative">
       <div
-        className={`overflow-y-auto border border-border rounded-md bg-muted/20 ${className}`}
+        className={cn(
+          "overflow-y-auto border border-border rounded-md bg-muted/20",
+          className,
+        )}
         onScroll={handleScroll}
         ref={scrollRef}
       >

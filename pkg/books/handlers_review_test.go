@@ -61,7 +61,7 @@ func TestSetFileReview_SetsOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	// Build handler
-	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc := NewService(db, appsettings.NewService(db))
 	h := &handler{
 		bookService:        svc,
 		appSettingsService: appsettings.NewService(db),
@@ -144,7 +144,7 @@ func TestSetFileReview_ClearsOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	// Build handler
-	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc := NewService(db, appsettings.NewService(db))
 	h := &handler{
 		bookService:        svc,
 		appSettingsService: appsettings.NewService(db),
@@ -213,7 +213,7 @@ func TestSetFileReview_RejectsSupplement(t *testing.T) {
 	_, err = db.NewInsert().Model(supplement).Exec(ctx)
 	require.NoError(t, err)
 
-	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc := NewService(db, appsettings.NewService(db))
 	h := &handler{
 		bookService:        svc,
 		appSettingsService: appsettings.NewService(db),
@@ -280,7 +280,7 @@ func TestSetBookReview_CascadesToAllFiles(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc := NewService(db, appsettings.NewService(db))
 	h := &handler{
 		bookService:        svc,
 		appSettingsService: appsettings.NewService(db),
@@ -350,7 +350,7 @@ func TestBulkSetReview_AppliesToAllSpecifiedBooks(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc := NewService(db, appsettings.NewService(db))
 	h := &handler{
 		bookService:        svc,
 		appSettingsService: appsettings.NewService(db),
@@ -382,10 +382,8 @@ func TestBulkSetReview_AppliesToAllSpecifiedBooks(t *testing.T) {
 // Adding a genre via the book update handler should fire the recompute and
 // flip files.reviewed to TRUE.
 //
-// The bug this guards against: pkg/books/routes.go was instantiating the books
-// service without WithAppSettings(...), so RecomputeReviewedForBook silently
-// no-op'd — the toggle never auto-flipped after edits even though the data
-// became complete.
+// It guards the handler path end to end: the update must reach
+// RecomputeReviewedForBook so the toggle flips once the data is complete.
 func TestUpdateBook_AddingGenre_FlipsReviewedToTrue(t *testing.T) {
 	t.Parallel()
 
@@ -448,7 +446,7 @@ func TestUpdateBook_AddingGenre_FlipsReviewedToTrue(t *testing.T) {
 	// Pre-condition: no genres → file should evaluate to NOT reviewed.
 	// Run a recompute manually so files.reviewed reflects current state
 	// (mirrors what the migration job would do for existing books).
-	svc := NewService(db).WithAppSettings(appsettings.NewService(db))
+	svc := NewService(db, appsettings.NewService(db))
 	svc.RecomputeReviewedForBook(ctx, book.ID)
 
 	var preFile models.File

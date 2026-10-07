@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -67,7 +68,7 @@ func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 
 	f.e = echo.New()
 	f.e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	RegisterRoutes(f.e, db, nil, books.NewService(db))
+	RegisterRoutes(f.e, db, nil, books.NewService(db, appsettings.NewService(db)))
 	return f
 }
 

@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/SortableList";
 
 interface SortableEntityListProps<T extends object> {
+  /**
+   * Row keys are kept per item reference, so pass stable references (from
+   * `useState` or `useMemo`), not items rebuilt on every render.
+   */
   items: T[];
   onReorder: (next: T[]) => void;
   onRemove: (index: number) => void;
@@ -36,8 +40,8 @@ interface SortableEntityListProps<T extends object> {
 
 // Module-level monotonic counter for assigning stable client-side ids to
 // list rows. Mirrors the `_editKey` pattern used by chapter editing
-// (`pkg/files/FileChaptersTab.tsx`) — index- or label-based ids would
-// change after a reorder/remove and confuse dnd-kit's drag tracking.
+// (`app/components/files/FileChaptersTab.tsx`): index- or label-based ids
+// would change after a reorder/remove and confuse dnd-kit's drag tracking.
 let rowKeyCounter = 0;
 const nextRowKey = () => `row-${++rowKeyCounter}`;
 

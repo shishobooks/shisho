@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -48,7 +49,7 @@ func TestRetrieveBook_LoadsChaptersForEachFile(t *testing.T) {
 	}
 
 	// Call RetrieveBook
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	retrievedBook, err := bookSvc.RetrieveBook(ctx, RetrieveBookOptions{ID: &book.ID})
 	require.NoError(t, err)
 
@@ -123,7 +124,7 @@ func TestRetrieveBook_LoadsNestedChaptersViaChildren(t *testing.T) {
 	}
 
 	// Call RetrieveBook
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	retrievedBook, err := bookSvc.RetrieveBook(ctx, RetrieveBookOptions{ID: &book.ID})
 	require.NoError(t, err)
 
@@ -189,7 +190,7 @@ func TestRetrieveBookByFilePath_LoadsChaptersForEachFile(t *testing.T) {
 	}
 
 	// Call RetrieveBookByFilePath
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	retrievedBook, err := bookSvc.RetrieveBookByFilePath(ctx, testFilePath, library.ID)
 	require.NoError(t, err)
 
@@ -265,7 +266,7 @@ func TestRetrieveBookByFilePath_LoadsNestedChapters(t *testing.T) {
 	}
 
 	// Call RetrieveBookByFilePath
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	retrievedBook, err := bookSvc.RetrieveBookByFilePath(ctx, testFilePath, library.ID)
 	require.NoError(t, err)
 
@@ -362,7 +363,7 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call DeleteBookAndFiles
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
 	require.NoError(t, err)
 
@@ -443,7 +444,7 @@ func TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing(t *testing.T)
 	require.NoError(t, err)
 
 	// Call DeleteBookAndFiles — main file absence is expected and fine.
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	_, err = bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
 	require.NoError(t, err)
 
@@ -519,7 +520,7 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 	require.NoError(t, err)
 
 	// Call DeleteBookAndFiles
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
 	require.NoError(t, err)
 
@@ -602,7 +603,7 @@ func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete first file (pass nil for supportedTypes since another main file exists)
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, file1.ID, library, nil)
 	require.NoError(t, err)
 
@@ -675,7 +676,7 @@ func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete the only file (pass nil for supportedTypes since there are no supplements)
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil)
 	require.NoError(t, err)
 
@@ -749,7 +750,7 @@ func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
 	require.NoError(t, err, ".DS_Store should exist before deletion")
 
 	// Delete the only file; .DS_Store is on the fixed junk list
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil)
 	require.NoError(t, err)
 
@@ -829,7 +830,7 @@ func TestDeleteFileAndCleanup_CleansUpCoverAndSidecarFiles(t *testing.T) {
 	require.NoError(t, err, "book sidecar file should exist before deletion")
 
 	// Delete the only file
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, file.ID, library, nil)
 	require.NoError(t, err)
 
@@ -855,7 +856,7 @@ func TestDeleteFileAndCleanup_FileNotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to delete a non-existent file
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	_, err = bookSvc.DeleteFileAndCleanup(ctx, 99999, library, nil)
 
 	require.Error(t, err)
@@ -933,7 +934,7 @@ func TestDeleteBooksAndFiles_DeletesMultipleBooks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete both books
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteBooksAndFiles(ctx, []int{book1.ID, book2.ID}, library)
 	require.NoError(t, err)
 
@@ -1024,7 +1025,7 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 	}
 
 	// Delete the main file
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
@@ -1118,7 +1119,7 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 	}
 
 	// Delete the main file
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
@@ -1210,7 +1211,7 @@ func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *te
 	}
 
 	// Delete the main file
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
@@ -1322,7 +1323,7 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 	}
 
 	// Delete the main file
-	bookSvc := NewService(db)
+	bookSvc := NewService(db, appsettings.NewService(db))
 	result, err := bookSvc.DeleteFileAndCleanup(ctx, mainFile.ID, library, supportedTypes)
 	require.NoError(t, err)
 
@@ -1346,7 +1347,7 @@ func TestListAllFilesForLibrary_IncludesSupplements(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	library, book := setupTestLibraryAndBook(t, db)
 

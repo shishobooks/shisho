@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -173,7 +174,7 @@ func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
 
 	h := &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 		aliasService:   aliases.NewService(db),
 	}
@@ -262,7 +263,7 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 
 	h := &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 		aliasService:   aliases.NewService(db),
 	}
@@ -299,7 +300,7 @@ func TestSeriesCover_SetsCacheControlImmutable(t *testing.T) {
 	e := echo.New()
 	h := &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 	}
 
@@ -332,7 +333,7 @@ func TestSeriesCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	e := echo.New()
 	h := &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 	}
 
@@ -373,7 +374,7 @@ func TestSeriesCover_Returns200WhenIfNoneMatchMismatches(t *testing.T) {
 	e := echo.New()
 	h := &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 	}
 
@@ -406,7 +407,7 @@ func TestSeriesCover_FirstBookChangeInvalidatesEtagEvenWhenNewCoverMtimeIsOlder(
 	e := echo.New()
 	h := &handler{
 		seriesService:  NewService(db),
-		bookService:    books.NewService(db),
+		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 	}
 
@@ -531,7 +532,7 @@ func TestSeriesCover_MissingCover_ReturnsSeriesCoverNotFound(t *testing.T) {
 			e := newTestEchoSeries(t)
 			h := &handler{
 				seriesService:  NewService(db),
-				bookService:    books.NewService(db),
+				bookService:    books.NewService(db, appsettings.NewService(db)),
 				libraryService: libraries.NewService(db),
 			}
 

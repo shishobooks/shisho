@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -31,7 +32,7 @@ func newOrganizeFixture(t *testing.T) *organizeFixture {
 	t.Helper()
 	ctx := context.Background()
 	db := testdb.New(t)
-	f := &organizeFixture{t: t, ctx: ctx, db: db, svc: NewService(db), libDir: t.TempDir()}
+	f := &organizeFixture{t: t, ctx: ctx, db: db, svc: NewService(db, appsettings.NewService(db)), libDir: t.TempDir()}
 
 	f.library = &models.Library{
 		Name:                     "Test Library",

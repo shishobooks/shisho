@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
@@ -73,7 +74,7 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 	_, err = db.NewInsert().Model(orphan).Exec(ctx)
 	require.NoError(t, err)
 
-	deletedIDs, err := NewService(db).CleanupOrphanedSeries(ctx)
+	deletedIDs, err := NewService(db, appsettings.NewService(db)).CleanupOrphanedSeries(ctx)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []int{orphan.ID}, deletedIDs,
 		"CleanupOrphanedSeries must return the IDs of deleted series so callers can purge FTS")
@@ -133,7 +134,7 @@ func TestCleanupOrphanedEntities_DeletesOrphansAndTheirFTSRows(t *testing.T) {
 	require.NoError(t, searchSvc.IndexPublisher(ctx, orphanPublisher))
 
 	CleanupOrphanedEntities(ctx, logger.New(), OrphanCleanupServices{
-		Books:      NewService(db),
+		Books:      NewService(db, appsettings.NewService(db)),
 		People:     people.NewService(db),
 		Genres:     genres.NewService(db),
 		Tags:       tags.NewService(db),

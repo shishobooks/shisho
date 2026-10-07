@@ -29,6 +29,9 @@ export enum QueryKey {
   PublisherFiles = "PublisherFiles",
 }
 
+// Reparenting a publisher changes descendant-inclusive data on both sides of
+// the move and for every cached ancestor, so it invalidates both families
+// whole rather than the moved publisher's entries.
 const invalidatePublisherHierarchyQueries = (queryClient: QueryClient) => {
   queryClient.invalidateQueries({ queryKey: [QueryKey.RetrievePublisher] });
   queryClient.invalidateQueries({ queryKey: [QueryKey.PublisherFiles] });

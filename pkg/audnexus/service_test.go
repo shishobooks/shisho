@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Stub the upstream with stubService rather than an httptest.NewServer; see
+// roundTripFunc. httptest.NewRequest and NewRecorder for driving the handler
+// are fine.
+//
 // roundTripFunc adapts a function to an http.RoundTripper so tests can serve
 // canned responses without a real socket. The live httptest servers this
 // replaced could flake under CI load: when the localhost connection raced the

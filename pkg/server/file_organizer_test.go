@@ -7,6 +7,7 @@ import (
 
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/joblogs"
@@ -40,7 +41,7 @@ func newTestContext(t *testing.T) *testContext {
 	db := testdb.New(t)
 
 	// Create services
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	libraryService := libraries.NewService(db)
 	personService := people.NewService(db)
 

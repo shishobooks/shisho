@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 import type { GallerySize } from "@/types";
 
 interface ThemeOptionProps {
@@ -32,11 +33,12 @@ const ThemeOption = ({
   onSelect,
 }: ThemeOptionProps) => (
   <button
-    className={`flex items-center gap-3 px-4 py-3 rounded-md border transition-colors w-full cursor-pointer ${
+    className={cn(
+      "flex items-center gap-3 px-4 py-3 rounded-md border transition-colors w-full cursor-pointer",
       currentTheme === theme
         ? "border-primary bg-primary/5 text-primary"
-        : "border-border hover:bg-muted"
-    }`}
+        : "border-border hover:bg-muted",
+    )}
     onClick={() => onSelect(theme)}
     type="button"
   >

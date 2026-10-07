@@ -11,6 +11,7 @@ import {
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useCan } from "@/hooks/useCan";
+import { cn } from "@/libraries/utils";
 
 const LibraryListPicker = () => {
   const { libraryId } = useParams();
@@ -80,26 +81,22 @@ const LibraryListPicker = () => {
                 !isViewingList && library.id === Number(libraryId);
               return (
                 <button
-                  className={`
-                    group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer
-                    ${
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-foreground hover:bg-accent"
-                    }
-                  `}
+                  className={cn(
+                    "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-foreground hover:bg-accent",
+                  )}
                   key={library.id}
                   onClick={() => handleLibrarySwitch(library.id)}
                 >
                   <div
-                    className={`
-                      flex h-7 w-7 shrink-0 items-center justify-center rounded-md
-                      ${
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground group-hover:bg-muted/80"
-                      }
-                    `}
+                    className={cn(
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground group-hover:bg-muted/80",
+                    )}
                   >
                     <Library className="h-3.5 w-3.5" />
                   </div>
@@ -131,26 +128,22 @@ const LibraryListPicker = () => {
                 const isActive = currentListId === list.id;
                 return (
                   <Link
-                    className={`
-                      group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors
-                      ${
-                        isActive
-                          ? "bg-primary/10 text-primary"
-                          : "text-foreground hover:bg-accent/50"
-                      }
-                    `}
+                    className={cn(
+                      "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground hover:bg-accent/50",
+                    )}
                     key={list.id}
                     to={`/lists/${list.id}`}
                   >
                     <div
-                      className={`
-                        flex h-7 w-7 shrink-0 items-center justify-center rounded-md
-                        ${
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-background text-muted-foreground group-hover:bg-background/80"
-                        }
-                      `}
+                      className={cn(
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground group-hover:bg-background/80",
+                      )}
                     >
                       <List className="h-3.5 w-3.5" />
                     </div>
@@ -158,10 +151,10 @@ const LibraryListPicker = () => {
                       {list.name}
                     </span>
                     <span
-                      className={`
-                        shrink-0 tabular-nums text-xs
-                        ${isActive ? "text-primary/70" : "text-muted-foreground"}
-                      `}
+                      className={cn(
+                        "shrink-0 tabular-nums text-xs",
+                        isActive ? "text-primary/70" : "text-muted-foreground",
+                      )}
                     >
                       {list.book_count}
                     </span>

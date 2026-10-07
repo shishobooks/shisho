@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -48,7 +49,7 @@ func TestListBooks_SortByTitleAsc(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "Books")
 
 	now := time.Now()
@@ -72,7 +73,7 @@ func TestListBooks_SortByPrimarySeriesPlacesOmnibusesAfterSingles(t *testing.T) 
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "Books")
 	ctx := context.Background()
 	now := time.Now()
@@ -115,7 +116,7 @@ func TestListBooks_SortByDateAddedDesc(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "Books")
 
 	now := time.Now()
@@ -142,7 +143,7 @@ func TestListBooks_SortByTiesFallsBackToID(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "Books")
 
 	// Seed 3 books with identical created_at — every user-specified
@@ -180,7 +181,7 @@ func TestListBooks_NilSortUsesBuiltinDefault(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	lib := seedLibrary(t, db, "Books")
 
 	// "Cheese" is newer than "Apple" — sort_title ASC would surface

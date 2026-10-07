@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # mise lint runs scripts/check-emdash.sh, which needs master's
+          # history to find the merge base.
+          fetch-depth: 0
       - uses: jdx/mise-action@v4
       - run: mise lint
       - run: mise test:scripts
@@ -43,6 +47,11 @@ jobs:
         # consolidate-test-timings job below. If we used actions/cache here,
         # all shards would race to save, and only one shard's JUnit data
         # would survive — defeating timing-aware bin-packing.
+        # Every shard must restore the same cache: each runs Pack on its own,
+        # and different histories give divergent plans that skip or repeat
+        # tests. Keys are immutable and include github.sha, so a re-run on the
+        # same SHA fails the consolidator's save step; that is expected. Never
+        # add github.run_attempt to the key, which fragments the cache.
         uses: actions/cache/restore@v6
         with:
           path: .gotest-timings
@@ -116,12 +125,16 @@ jobs:
           path: .gotest-timings
           key: gotest-timings-${{ github.ref }}-${{ github.sha }}
 
+  # Builds both architectures once; image-smoke runs this same archive on
+  # native runners, so smoke jobs never rebuild or emulate.
   image-build:
     name: Image Build
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      # Go and Node cross-compile natively; QEMU is only for the final arm64
+      # stage's package installation and user setup.
       - uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64

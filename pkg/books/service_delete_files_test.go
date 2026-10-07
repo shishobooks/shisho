@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ func TestDeleteFilesByIDs(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// Create library and book
 	_, book := setupTestLibraryAndBook(t, db)
@@ -150,7 +151,7 @@ func TestDeleteFilesByIDs_EmptySlice(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// nil slice should be a no-op
 	err := svc.DeleteFilesByIDs(ctx, nil)
@@ -165,7 +166,7 @@ func TestDeleteBooksByIDs(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	now := time.Now()
 
@@ -418,7 +419,7 @@ func TestDeleteBooksByIDs_EmptySlice(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	// nil slice should be a no-op
 	err := svc.DeleteBooksByIDs(ctx, nil)
@@ -433,7 +434,7 @@ func TestDeleteFile_DeletesChapters(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, book := setupTestLibraryAndBook(t, db)
 	now := time.Now()
@@ -502,7 +503,7 @@ func TestDeleteBook_DeletesChapters(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, book := setupTestLibraryAndBook(t, db)
 	now := time.Now()

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ func TestService_BulkCreateFileIdentifiers_DedupesByType(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, book := setupTestLibraryAndBook(t, db)
 	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
@@ -48,7 +49,7 @@ func TestService_BulkCreateFileIdentifiers_NoDuplicates(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, book := setupTestLibraryAndBook(t, db)
 	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
@@ -71,7 +72,7 @@ func TestService_BulkCreateFileIdentifiers_EmptySliceIsNoop(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	err := svc.BulkCreateFileIdentifiers(ctx, nil)
 	require.NoError(t, err)
@@ -84,7 +85,7 @@ func TestService_BulkCreateFileIdentifiers_TrimsType(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, book := setupTestLibraryAndBook(t, db)
 	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))
@@ -110,7 +111,7 @@ func TestService_BulkCreateFileIdentifiers_SetsTimestamps(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	_, book := setupTestLibraryAndBook(t, db)
 	file := setupTestFile(t, db, book, "epub", createTestEPUBFile(t))

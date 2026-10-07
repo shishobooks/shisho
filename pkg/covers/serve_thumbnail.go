@@ -15,6 +15,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+// serveThumbnail serves the size and aspect variant a request asks for and
+// reports whether it handled the request. Errors must not carry success image
+// or cache headers, so generation and cache reads finish before any header is
+// set. The ETag (the thumbnail key) identifies the source version, size, and
+// aspect.
 func serveThumbnail(c echo.Context, file *models.File, cacheControl, resource string, cache *ThumbnailCache) (bool, error) {
 	value := c.QueryParam("size")
 	if cache == nil || value == "" {

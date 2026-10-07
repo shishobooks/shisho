@@ -1,312 +1,123 @@
 # AGENTS.md
 
-This file provides guidance to coding agents (Claude Code, Codex, Pi, etc.) when working with code in this repository.
+Guidance for coding agents (Claude Code, Codex, Pi, etc.) working in this repository.
 
-## Subagent Instructions
+## How the instructions are organized
 
-**When dispatching subagents (for implementation, code review, spec review, or any other task), always include this instruction in the prompt:**
-
-> Check the project's root AGENTS.md and any relevant subdirectory AGENTS.md files for rules that apply to your work. These contain critical project conventions, gotchas, and requirements (e.g., docs update requirements, testing conventions, naming rules). Violations of these rules are review failures.
-
-Subdirectory AGENTS.md files are loaded automatically when working on files in that directory, but cross-cutting rules (like "update website docs when changing user-facing behavior") live in this root file and are easy to overlook if not explicitly checked.
-
-## Important Notes
-
-**When `mise tygo` prints "skipping, outputs are up-to-date", this is NORMAL.** It means the generated types are already up-to-date (mise checks source/output timestamps). Do not treat this as an error. The user often has `mise start` running in another session which runs tygo automatically via air, but you should still run `mise tygo` yourself (especially in worktrees where `mise start` may not be running).
-
-**Keep AGENTS.md files up to date.** Subdirectory `AGENTS.md` files document patterns, conventions, and gotchas for each area of the codebase. When you make changes that affect what's documented, such as adding new patterns, changing APIs, renaming fields, or adding new conventions, update the relevant `AGENTS.md` to reflect the new state. Outdated documentation is worse than no documentation.
-
-- **Domain-specific** (patterns, gotchas, conventions for a specific area) → Update or add to the relevant `AGENTS.md` in the subdirectory (e.g., `pkg/epub/AGENTS.md`)
-- **Project-wide** (general conventions, critical gotchas, workflow rules) → Update or add to this file (AGENTS.md)
-
-Examples of things to record: discovered gotchas, naming conventions, architectural decisions, common mistakes, integration patterns, edge cases.
-
-## Subdirectory AGENTS.md Files
-
-Project-specific conventions are documented in `AGENTS.md` files within each subdirectory. These are automatically loaded when working on files in that directory.
+- **This file**: rules every task needs.
+- **Subdirectory `AGENTS.md` files**: rules most tasks in that directory need. Some harnesses load them automatically and some do not, so before editing files in a directory listed below, read its `AGENTS.md` yourself.
+- **Topic docs in `docs/agents/`**: reference for one area. Each is reached by a pointer line that says when to read it; read it when the trigger matches your change.
+- **`CODING_STANDARDS.md`**: review-time judgement rules. The code-review Standards reviewer reads it and the files it points to.
+- **Lint and tests**: mechanical rules are enforced by golangci-lint, ESLint, `scripts/check-emdash.sh`, and invariant tests. Their messages say what to do instead, so these docs only name them.
 
 | Location | Covers |
 |----------|--------|
 | `pkg/AGENTS.md` | Go backend: Echo handlers, Bun ORM, workers |
 | `app/AGENTS.md` | React frontend: Tanstack Query, components, UI patterns |
-| `app/components/layout/AGENTS.md` | Shared layout primitives: Sidebar, UserMenu, top-nav class constants |
 | `pkg/plugins/AGENTS.md` | Plugin system: Goja runtime, hooks, host APIs, manifests |
-| `pkg/epub/AGENTS.md` | EPUB format: OPF, Dublin Core, parsing/generation |
-| `pkg/cbz/AGENTS.md` | CBZ format: ComicInfo.xml, creator roles, chapter detection |
-| `pkg/covers/AGENTS.md` | Cover selection, lazy thumbnails, resize bounds, cache invalidation |
-| `pkg/kepub/AGENTS.md` | KePub format: koboSpan wrapping, CBZ-to-KePub conversion |
-| `pkg/mp4/AGENTS.md` | M4B format: iTunes atoms, chapters, narrator fallback |
-| `pkg/pdf/AGENTS.md` | PDF format: info dict metadata, pdfcpu thread safety |
-| `pkg/pdfpages/AGENTS.md` | PDF page cache: render/cache PDF pages as JPEG, thread safety, config |
-| `pkg/events/AGENTS.md` | SSE: event broker, streaming handler, event types |
-| `pkg/audnexus/AGENTS.md` | Audnexus chapter lookup: cached HTTP client, typed error codes, the M4B chapter route |
+| `pkg/epub/AGENTS.md` | EPUB format: parsing and generation |
+| `pkg/cbz/AGENTS.md` | CBZ format: ComicInfo.xml, page order |
+| `pkg/covers/AGENTS.md` | Cover serving and the shared thumbnail cache |
+| `pkg/kepub/AGENTS.md` | KePub conversion from EPUB and CBZ |
+| `pkg/mp4/AGENTS.md` | M4B format: reading, rewriting, chapters |
+| `pkg/pdf/AGENTS.md` | PDF format: pdfcpu and PDFium, page numbering |
+| `pkg/events/AGENTS.md` | Server-sent events broker and stream |
 | `website/AGENTS.md` | Docs site: Docusaurus, versioning, deployment |
 | `e2e/AGENTS.md` | E2E testing: Playwright, per-browser isolation, fixtures |
-| `tools/gotestsplit/AGENTS.md` | Timing-aware Go test sharding: cache strategy, picking shard count, recalibration playbook |
+| `tools/gotestsplit/AGENTS.md` | Timing-aware Go test sharding |
 
-## Utility Skills
+Repo-wide topic docs:
 
-These workflow-based skills (in `.claude/skills/`) are invoked on demand:
+- Read `docs/agents/docker-and-deploy.md` before changing the `Dockerfile`, image smoke tests, the release or demo workflows, the server listener or frontend serving, or anything under `demo/`.
+- Read `docs/agents/dev-servers.md` before adding or changing a `mise start*` or `mise docs` task, or anything that picks a dev port or names the session cookie.
+- Read `docs/agents/releases.md` before writing a breaking change's upgrade notes, cutting a release, or changing `scripts/` or the release workflow.
 
-| Skill | Invoke When |
-|-------|-------------|
-| `favicon` | Creating or updating favicon, app icons, PWA icons |
-| `splash` | Creating or updating the README splash image |
-| `metadata-field` | Adding, removing, or significantly modifying a metadata field on books or files |
+## Adding to these files
 
-## Critical Gotchas
+Instruction files hold two kinds of content, and nothing else:
 
-These are common mistakes that cause bugs. Most are summarized here in a line and documented in detail in `pkg/AGENTS.md`, `app/AGENTS.md`, or `pkg/plugins/AGENTS.md`; the self password reset rule lives only here.
+- **How and why things are done, when it applies across the codebase.** A rule about one function or file goes in a comment at that code, where the agent editing it will see it. A doc earns a rule when the trap fires while writing new code elsewhere (a new delete endpoint must reindex search; a new route family must be classified for Demo Mode), so no comment would be read in time.
+- **Guidance that keeps agents out of traps and rabbit holes**: the wrong turn and the right one.
 
-### Backend
+Never copy what the code or config already holds: no lists of files, components, endpoints, fields, ports, or defaults, and no values that change when the code does. Where agents are known to look in the wrong place, name the right lookup (the file, command, or test), not its result. If a rule is mechanical, enforce it with a lint rule or test and keep at most a one-line pointer. Judgement rules for reviewers go in `CODING_STANDARDS.md` or the files it points to; bug history (what used to happen, PR numbers) goes in the commit message. `scripts/check-docrefs.sh` fails when a doc names a path or identifier that no longer exists; when a change makes a line wrong, fix or delete it in the same change.
 
-**Request binding must use structs.** The custom binder uses mold and validator, which only work with structs, so never bind directly to a slice or array. See "Request binding must use structs" under API Conventions in `pkg/AGENTS.md`.
+## Subagent instructions
 
-**`CoverImageFilename` stores the filename only**, never a full path; use `filepath.Base()` when updating it. See "Cover Image System" in `pkg/AGENTS.md`.
+When dispatching subagents (implementation, review, or anything else), include this in the prompt:
 
-**JSON field naming is `snake_case`**, except the plugin manifest and repository-index passthrough fields. See "API Conventions" in `pkg/AGENTS.md`.
+> Read the root AGENTS.md, the AGENTS.md of every directory you will touch, and each topic doc whose pointer trigger matches your change. Reviewers also read CODING_STANDARDS.md and the standards files it points to for the touched areas. Violations of these rules are review failures.
 
-**API types are generated from Go via tygo: no anonymous responses and no hand-written TS.** Go is the single source of truth for every request and response shape. The rules (named structs in `types.go`, embedding with `tstype:",extends"`, `{Entity}Response`/`List{Entities}Response`/`{Entity}ListItem` naming, the bare-model and two-tier collection rules) live under API Conventions in `pkg/AGENTS.md`; frontend consumption is under API Integration in `app/AGENTS.md`. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`) for the rationale and its amendments.
+## Critical gotchas
 
-**Self password reset route must not require users permissions.** `/users/:id/reset-password` should only require authentication. The handler enforces that self-reset is allowed and resetting another user requires `users:write`. Adding `users:read`/`users:write` middleware to the route breaks self-service password changes for roles like Viewer, including forced password reset flows.
+- **`mise tygo` printing "skipping, outputs are up-to-date" is normal**: mise compares source and output timestamps. Still run `mise tygo` yourself, especially in worktrees where `mise start` is not running.
+- **Request binding must use structs**, never a slice or array: the custom binder runs mold and validator, which only handle structs.
+- **API types are generated from Go via tygo**: Go is the single source of truth for every request and response shape, so there are no anonymous responses and no hand-written TS types. Rules are under "API Conventions" in `pkg/AGENTS.md`; rationale in ADR 0004.
+- **JSON fields are `snake_case`**, except the plugin manifest and repository-index passthrough fields.
+- **Cover, page, download, and stream URLs come from helpers in `app/utils`**: image endpoints are cached as immutable and rely on a `?v=` key. ESLint rejects literal URLs; "Image URLs" in `app/AGENTS.md` explains the keys.
+- **The plugin SDK in `packages/plugin-sdk/` must stay in sync with Go plugin types without breaking changes.** `pkg/plugins/sdk_sync_test.go` checks most of it; the rest is under "Plugin SDK" in `pkg/plugins/AGENTS.md`.
 
-### Frontend
+## Development commands
 
-**Cover and page images require URL-based cache busting.** API cover endpoints and the CBZ/PDF page endpoint use `Cache-Control: immutable` so browsers cache forever, so every URL carries a `?v=` key that changes only when the image does. Build cover URLs with `bookCoverUrl`, `seriesCoverUrl`, and `fileCoverUrl` from `app/utils/coverUrl.ts` (keyed on the backend `cover_cache_key` for books and series, and on `file.updated_at` in epoch milliseconds for files) and page URLs with the function `useFilePageUrl()` returns (it wraps `filePageUrl` from `app/utils/pageUrl.ts` and adds the PDF render key). Download and stream URLs come from `app/utils/downloadUrl.ts`. ESLint rejects a literal `/api/.../cover`, `/page/`, `/download`, or `/stream` URL anywhere outside `app/utils`. See `app/AGENTS.md` for details.
+All tasks are in `mise.toml` (`mise tasks` lists them). The ones with non-obvious behavior:
 
-```tsx
-const coverUrl = bookCoverUrl(book);
-<CoverImage alt="Book cover" key={coverUrl} src={coverUrl} />;
-```
+- `mise setup` installs tools and dependencies and generates types. Run it after creating a worktree.
+- `mise start` runs the API with hot reload plus Vite. Several worktrees can run it at once, so each server may land on a different port than usual: read the URL it prints.
+- `mise build` is the only way to refresh the frontend embedded in the binary; `pnpm build` alone does not. Never overwrite the tracked `pkg/frontend/dist/placeholder.html` with build output: it lets plain `go build` and `go test ./...` work without a frontend build.
+- `mise check:quiet` runs every check except Firefox e2e (CI runs it) and serializes across worktrees via `flock` (`brew install flock` on macOS). Use it instead of `mise check`.
+- `app/types/generated/` is gitignored output of `mise tygo`; change the Go structs, never the generated files.
 
-### Plugins
+While iterating, run only the checks for what you touched. Separate mise tasks with `:::` (`mise lint test` passes `test` to the linter and silently skips the tests):
 
-**SDK must stay in sync with Go.** When modifying plugin-related Go types (`pkg/plugins/`, `pkg/mediafile/mediafile.go`), the TypeScript SDK in `packages/plugin-sdk/` MUST be updated to match. Breaking changes to the SDK should be avoided. See "Plugin SDK" in `pkg/plugins/AGENTS.md`.
+- Go → `mise run lint ::: test`
+- Frontend → `mise run lint:js ::: test:unit`
+- Scripts under `scripts/` → `mise test:scripts`
+- Migrations → also `mise db:rollback && mise db:migrate`
+- App E2E flows you touched → `mise e2e:chromium`; documentation theme flows → `mise e2e:docs`
 
-## Development Commands
+Run `mise check:quiet` once when the work is done, before pushing or opening a PR.
 
-### Setup
-- `mise setup` - Install all tools, JS dependencies, and generate types (one-command setup)
+**`package.json` dependency split is for Docker, not Node semantics**: `dependencies` holds everything `pnpm build` needs, including build tools and `@types/*`; `devDependencies` holds only test and lint tools, so the Dockerfile can `pnpm install --prod`. Place new packages by that rule.
 
-### Dev Server
-- `mise start` - Start development environment (API with hot reload + Vite frontend)
-- `mise start:air` - Start API with hot reload via Air only
-- `mise start:api` - Start API directly (no hot reload)
-- `mise start:web` - Start only Vite, proxying to the API this worktree started with `mise start:air` (waits for it)
-- `mise docs` - Start documentation dev server
+## Docs and config must move with behavior
 
-These tasks run `cmd/dev` (`internal/devtool`), so several worktrees can run them at once. Each server takes the first free port at or above its usual one (API `3689`, Vite `5173`, docs `3000`) and prints the URL it got. Ports are claimed with `flock` on files in the main worktree's `tmp/ports/`, which every linked worktree shares, so two worktrees starting together can't pick the same port. A port is also skipped when anything else is listening on it on `127.0.0.1`, `0.0.0.0`, `::1`, or `::`, including other projects; `::1` counts because browsers resolve `localhost` there first. The launcher passes the API port to air as `SERVER_PORT` and to Vite as `API_PORT`; `start:web` reads it from `tmp/api.port` instead, which the API writes on startup only when the launcher sets `SHISHO_DEV_PORT_FILE` (so an E2E API in the same worktree can't overwrite it). The API removes it on a graceful shutdown and the launcher removes it when it exits, so a killed API can't leave one behind. Browsers scope cookies by host but not port, so it also sets `SHISHO_COOKIE_NAMESPACE` in linked worktrees (the directory name plus a path hash), which renames the session cookie to `shisho_session_<namespace>` and keeps signing in to one worktree from signing you out of another. The main worktree keeps `shisho_session`. Don't hardcode a dev port in a new task: reserve it through `devtool`. E2E suites already pick their own free ports (see `e2e/AGENTS.md`).
+- **`website/docs/` holds only what an operator of Shisho needs to know**: how to deploy, configure, use, troubleshoot, or extend it through the supported plugin contract. A change that alters what an operator sees or does updates the page that owns that fact, in the same change, and plans for such changes include a docs task. How the feature works inside (endpoints the UI calls, the data model, package layout, internal behavior) stays out, however large the change. Read `website/AGENTS.md` before editing the site; its inclusion test decides what belongs.
+- **A new field in `config.Config`** (`pkg/config/config.go`) also updates `shisho.example.yaml` (field, env var, default, description), `website/docs/configuration.md`, and the Server Settings page in `app/components/pages/AdminSettings.tsx`. The yaml file and the docs page stay complete references; the few exempt fields say so in their comments. Validation and env parsing are under "Config" in `pkg/AGENTS.md`.
 
-### Build
-- `mise build` - Generate API types, build the frontend, copy it into `pkg/frontend/dist`, and compile a self-contained production binary
+## Tool versions
 
-`pkg/frontend` embeds the SPA. Keep `pkg/frontend/dist/placeholder.html` checked in so plain `go build` and `go test ./...` work without Node or a frontend build. Generated `index.html` and assets are gitignored; the handler serves the placeholder's "frontend not built" page only when `index.html` is absent. Do not overwrite the tracked placeholder with build output. Use `mise build` for a complete local binary; `pnpm build` alone does not refresh the embedded files.
+`mise.toml` is the source of truth for tool versions, but Docker does not use mise, so a bump also updates the copies in the `Dockerfile` and `package.json`; `mise lint` (`tools/checkversions`) names any that disagree.
 
-### Linting
-- `mise lint` - Run Go linting with golangci-lint
-- `mise lint:js` - Run all JS/TS linting (ESLint, Prettier, TypeScript) in parallel
-- `mise check` - Run all validation checks in parallel (tests, Go lint, JS lint)
-- `mise check:quiet` - Same as check but quieter, skips Firefox e2e (which still runs in CI), and serializes concurrent runs across worktrees via `flock`. Prefer this over `mise check` locally.
+## Testing
 
-### Testing
-- `mise test` - Run all Go tests with coverage
-- `mise test:race` - Run all Go tests with race detection and coverage (local; CI runs the same `-race` tests but sharded across parallel jobs in `.github/workflows/ci.yml`)
-- `mise test:js` - Run all JS tests (unit + E2E) in parallel
-- `mise test:js:fast` - Run JS tests with chromium e2e only (Firefox runs in CI); used by `mise check:quiet`
-- `mise test:unit` - Run JS unit tests only
-- `mise test:scripts` - Run the shell script tests (`scripts/changelog_test.sh`, the release changelog generator)
-- `mise test:e2e` - Run app E2E tests (Chromium + Firefox) in parallel
-- `mise e2e:docs` - Run documentation theme E2E tests in Chromium
+- Go tests get their database from `testdb.New(t)` (`pkg/testutils/testdb`); don't copy a `setupTestDB` into a package. Migration tests that need an older schema, and worker tests that share a cache-mode database across goroutines, open their own.
+- Run Go tests through `mise test`, or set `TZ=America/Chicago CI=true` as it does when calling `go test` directly.
+- New Go tests call `t.Parallel()` as their first line, unless they touch shared global state: `pkg/config` tests mutate global config, and `pkg/plugins/AGENTS.md` lists the plugin tests that can't run in parallel.
+- **Bug fixes and features follow Red-Green-Refactor**, in sequence: write the test and watch it fail, implement until it passes, then clean up with the tests still passing. A test never seen failing proves nothing.
 
-### Database
-- `mise db:migrate` - Run all pending migrations
-- `mise db:rollback` - Rollback last migration
-- `mise db:migrate:create <name>` - Create new migration
+## Git conventions
 
-### Type Generation
-- `mise tygo` - Generate TypeScript types from Go structs (skips if outputs are up-to-date)
-- Types are generated into `app/types/generated/` from Go packages via `tygo.yaml`
-- **IMPORTANT**: The `app/types/generated/` directory is gitignored - these files are auto-generated and cannot be `git add`ed. If you need to update types, modify the Go source structs and run `mise tygo`
+Commit subjects and PR titles use `[{Category}] {Change description}`. Categories drive the changelog: `[Frontend]`, `[Backend]`, `[Feature]`, `[Feat]` → Features; `[Fix]` → Bug Fixes; `[Docs]`, `[Doc]` → Documentation; `[Test]`, `[E2E]` → Testing; `[CI]`, `[CD]` → CI/CD; anything else → Other.
 
-### Frontend (leaf commands, called by mise tasks)
-- `pnpm start` - Start Vite dev server
-- `pnpm build` - Build production frontend
-- `pnpm lint:eslint` - ESLint only
-- `pnpm lint:types` - TypeScript type checking only
-- `pnpm lint:prettier` - Prettier formatting check only
+**Watch CI by run id** (`gh run view $RUN_ID --json jobs`), not by PR: `gh pr checks` follows the latest commit, and `gh run view` reports a run as in progress until the whole workflow finishes.
 
-**Dependency Structure:** The `dependencies` vs `devDependencies` split in `package.json` is optimized for Docker builds, not traditional Node.js semantics:
-- `dependencies`: Everything needed for `pnpm build` (React, UI libs, vite, typescript, @types/*)
-- `devDependencies`: Only test/lint tools (eslint, prettier, vitest, playwright, testing-library)
+**Breaking changes carry two markers**: `!` after the category in the PR title (`[Fix]! Replace ENVIRONMENT=test with SHISHO_TEST_MODE`), and a `## BREAKING CHANGES` section in the PR body with one upgrade-note bullet per change. A change is breaking when an operator must act before or after upgrading: a renamed or removed config key or env var, a changed default, a removed route or response field, new startup validation that can refuse an existing config, or a changed on-disk layout. The PR body is the only place to write the notes; `docs/agents/releases.md` covers how they reach the changelog. Reviewers treat a breaking change missing either marker as a review failure.
 
-This allows the Dockerfile to use `pnpm install --prod` to skip installing test/lint tools, reducing build time and image layer size. When adding new packages, put build-time dependencies in `dependencies` and test/lint tools in `devDependencies`.
+## Database
 
-## Architecture Overview
+Schema rules (foreign key actions and indexes, table naming, case-insensitive lookups) are enforced by `pkg/migrations/schema_invariants_test.go`, whose failures say what to do.
 
-### Stack
-- **Backend**: Go with Echo web framework, Bun ORM, SQLite database
-- **Frontend**: React 19 with TypeScript, TailwindCSS, Tanstack Query, Vite
-- **Development**: mise for tool/version management and task running, Air for Go hot reload
-
-### Public Demo
-
-`demo/` holds the derived Public Demo image (`Dockerfile`), the Fly.io config (`fly.toml`), the corpus authoring Compose file, and `demo/README.md` with the authoring loop and operator setup. `.github/workflows/demo.yml` deploys when the Release workflow calls it after publishing the image, on manual dispatch, and on `repository_dispatch` from `shishobooks/demo-corpus`; it refuses tags older than the first Demo Mode release. Media and the prepared database live only in that corpus repository; `demo/corpus/` is a gitignored CI checkout. Demo Mode behavior itself is documented in `pkg/AGENTS.md`.
-
-### Docker builds
-
-The type-generation, frontend, and backend Docker stages run on `$BUILDPLATFORM`. The backend uses `CGO_ENABLED=0` and cross-compiles with `$TARGETOS`/`$TARGETARCH`; declare target and version arguments only after dependency installation so they do not invalidate dependency layers. Keep the final Alpine stage on the target platform. Multiarch builders still need QEMU for its package installation and user setup, not for Go or Node compilation.
-
-Release publishing keeps parallel native AMD64 and ARM64 build jobs. The single-builder alternative passed native smoke tests but was slower in both cold and version-only GitHub benchmarks, so cross-compilation support does not mean consolidating the release runners.
+Not enforced, so read these:
 
-CI builds one multiarch OCI archive and runs that same artifact on native AMD64 and ARM64 runners. Smoke tests check architecture, startup, the embedded frontend and its assets, version injection, custom `PUID`/`PGID`, and graceful shutdown. Do not rebuild the image in smoke jobs or use emulation there.
-
-Only trusted `master` pushes export the shared GHA `image-smoke` cache. PRs and release tags may import it but must not export tag-local caches: exporting the intermediate layers can take longer than compiling, and the next release tag cannot reuse the previous tag's cache.
-
-### Production serving
-
-The Alpine image runs a single Go process through `su-exec` after resolving `PUID`/`PGID` and preparing `/config` ownership. It has no Caddy layer, startup health polling, or signal-forwarding shell. The image sets `SERVER_PORT=5173`; the application default stays `3689`. The listener honors `server_host`.
-
-The Go server owns `/api` directly. Vite forwards `/api` unchanged, without injecting `X-Forwarded-Prefix`. Keep `/health`, `/opds`, `/kobo`, `/ereader`, and `/e` at the root. Forwarded-header trust, compression exclusions, security headers, and frontend cache behavior belong to the Go server, not a bundled proxy. See ADR 0007 (`docs/adr/0007-single-binary-image.md`) for the trade-offs.
-
-For detailed architecture information, see:
-- **Backend details**: `pkg/AGENTS.md`
-- **Frontend details**: `app/AGENTS.md`
-
-## Development Workflow
-
-- Use `mise start` to run both API and frontend in development (air runs `mise tygo` automatically before each rebuild)
-- Database is SQLite file at `tmp/data.sqlite`
-- Sample library files in `tmp/library/` for testing
-- All Go files are formatted with `goimports` so all changes should continue that formatting
-- **While iterating, run only the targeted subset of checks relevant to what you changed.** `mise check:quiet` fans out four heavy parallel pipelines that peg CPU; running it between every iteration is wasteful when you only touched one stack. Subset cheat sheet:
-  - Go-only edits → `mise run lint ::: test`
-  - Frontend-only edits → `mise run lint:js ::: test:unit` (already runs `tygo`, eslint, prettier, tsc, and the SDK build)
-  - Separate tasks with `:::`. `mise lint test` passes `test` to the linter as an argument and silently skips the tests.
-  - Both → run both
-  - Release or changelog scripts under `scripts/` → `mise test:scripts`
-  - Migrations → also `mise db:rollback && mise db:migrate`
-  - App E2E flows → `mise e2e:chromium` only when you actually touched a flow (CI runs Firefox)
-  - Documentation theme flows → `mise e2e:docs`
-- **Run the full `mise check:quiet` once when the feature/fix is done, before pushing or opening a PR.** Concurrent runs from different worktrees serialize automatically via `flock` (install with `brew install flock` on macOS; built in on Linux), so you don't need to coordinate with other agents. Just kick it off and it'll wait its turn if another is in flight. Avoid plain `mise check`: its parallel verbose output is hard to follow and tempts you to re-run it.
-- **Keep docs up to date.** When making any user-facing change (new feature, changed behavior, new/changed config option, new API endpoint, modified UI), the corresponding page in `website/docs/` MUST be updated or created. **This applies to implementation plans too:** if a plan changes user-facing behavior, it MUST include a task for updating docs. If unsure which page, check the sidebar structure in `website/docs/`. This includes but is not limited to:
-  - New or changed config options → `website/docs/configuration.md`
-  - Plugin system changes → `website/docs/plugins/`
-  - Metadata, resource, or relationship changes → `website/docs/metadata.md`
-  - User/role/permission changes → `website/docs/users-and-permissions.md`
-  - Sidecar format changes → `website/docs/sidecar-files.md`
-  - Supplement discovery changes → `website/docs/supplement-files.md`
-  - Format support changes → `website/docs/supported-formats.md`
-  - New pages should cross-link to related pages (and vice versa)
-- **If a new field is added to `config.Config` in `pkg/config/config.go`**, update all three of these in the same change:
-  - `shisho.example.yaml`: the field, its env var name, default value, and a description.
-  - `website/docs/configuration.md`: the same reference for users.
-  - `app/components/pages/AdminSettings.tsx`: the Server Settings page shows every non-secret config field.
-
-  The yaml file and the docs page must always be a complete reference of all server config options. Exceptions: `shisho_test_mode` (env `SHISHO_TEST_MODE`, field `TestMode`) is test-only, so it is left out of `shisho.example.yaml` and `configuration.md` (the Server Settings page still shows it as Test Mode). It mounts the unauthenticated `/api/test/*` routes, so its name must stay one no other tool sets; never go back to a generic key such as `ENVIRONMENT=test`. `shisho_cookie_namespace` (env `SHISHO_COOKIE_NAMESPACE`, field `CookieNamespace`) is development-only and set by `mise start`, so it is left out of all three: it is tagged `json:"-"` to keep it out of the config API and the Server Settings page.
-  Validation errors name the config key, its env variable and the allowed range (`validationMessage` in `pkg/config/config.go`), so a new rule only needs a `validate` tag. List (`[]string`) fields split comma-separated env values automatically.
-
-## Tool Versions
-
-All tool versions are managed by mise via `mise.toml`. When updating versions, update these locations:
-
-- `mise.toml` - Single source of truth for Go, Node, pnpm, air, tygo, golangci-lint
-- `Dockerfile` - The `golang:X.X.X-alpine` and `node:X.X.X-alpine` images, and tygo version in `go install` (Docker doesn't use mise)
-- `package.json` - `@types/node` version (run `pnpm install` after)
-- `package.json` - `packageManager` field for pnpm (used by Docker via corepack)
-
-## Testing Strategy
-
-- Go tests use standard testing package with testify assertions
-- **Tests get their database from `testdb.New(t)`** (`pkg/testutils/testdb`): an in-memory database migrated to the latest schema, with foreign keys on, pinned to one connection as in production, and closed when the test ends. Do not copy a `setupTestDB` into a package. It lives outside `pkg/testutils` because `pkg/testutils` imports auth, apikeys, plugins, and search, whose own tests could not import it. Migration tests that need an older schema, and the worker tests that share a cache-mode database across goroutines, open their own.
-- Tests should use `TZ=America/Chicago CI=true` environment
-- **Always add `t.Parallel()` to new Go tests** to enable concurrent execution. Place it as the first line in each test function. Exception: tests that use shared global state (e.g., shared database connections, global singletons) cannot be parallelized. `pkg/plugins/AGENTS.md` records which plugin tests can run in parallel. In `pkg/config`, tests mutate global config state and should not be parallelized.
-- Frontend uses the same linting rules as backend for consistency
-- Database migrations tested via `mise db:rollback && mise db:migrate`
-- Tests should be added for any major pieces of functionality like workers or file parsers. If handler logic is also complex, it should be extracted out and tested separately.
-- **Follow Red-Green-Refactor TDD for bug fixes and new features.** Do NOT write the implementation and test at the same time. The steps must be sequential:
-  1. **Red:** Write the test first. Run it and confirm it **fails** (proving the test actually catches the bug or asserts the new behavior).
-  2. **Green:** Write the minimal implementation to make the test pass. Run the test and confirm it **passes**.
-  3. **Refactor:** Clean up the implementation if needed, re-running tests to ensure they still pass.
-
-  Skipping the Red step means you can't be sure the test is valid: it might pass regardless of the fix.
-
-## Git Conventions
-
-### Commit Message Format
-
-Each commit should be in the format of `[{Category}] {Change description}`
-
-**Categories** (used for changelog generation):
-- `[Frontend]`, `[Backend]`, `[Feature]`, `[Feat]` → Features section
-- `[Fix]` → Bug Fixes section
-- `[Docs]`, `[Doc]` → Documentation section
-- `[Test]`, `[E2E]` → Testing section
-- `[CI]`, `[CD]` → CI/CD section
-- Any other category → Other section
-
-**Examples:**
-```
-[Frontend] Add dark mode toggle to settings page
-[Backend] Add batch delete endpoint for books
-[Fix] Resolve race condition in job worker
-[E2E] Add tests for user authentication flow
-[CI] Add release automation with GitHub Actions
-```
-
-### Breaking Changes
-
-A change is breaking when an operator has to do something before or after upgrading: a renamed or removed config key or env var, a changed default, a removed route or response field, a new startup validation that can refuse an existing config, or a changed on-disk layout. Mark it in two places, both required:
-
-1. **Title marker.** Put `!` right after the category in the PR title, which becomes the squash commit subject: `[Fix]! Replace ENVIRONMENT=test with SHISHO_TEST_MODE`. The category still decides the changelog section; the `!` flags the change to anyone reading PR titles or `git log`, and on its own it still puts the commit in the changelog's Breaking Changes list when the body section is missing.
-2. **Upgrade notes.** Add a `## BREAKING CHANGES` section to the PR body with one bullet per change, written for an operator who is upgrading: what changed, what they must do, and what happens if they do not. Pull requests squash-merge with the PR body as the commit message, so these bullets end up in git history and `scripts/release.sh` copies them into the changelog under the commit's subject. List items (`-`, `*`, or `1.`, with their wrapped lines), plain paragraphs (each becomes a bullet), and fenced code blocks are copied; a `Closes #N` or `Fixes #N` line and trailers such as `Co-authored-by:` are dropped. The section ends at the next heading of the same level, and a deeper heading inside it becomes a bold bullet. The heading alone marks the commit as breaking even when the title has no `!`. A literal `{{` in the notes is escaped before it reaches GoReleaser's template renderer.
-
-Reviewers treat a breaking change without both markers as a review failure. There is no way to add notes at release time: the changelog is generated from commit subjects and bodies, so the PR is the only place to write them.
-
-### Releases
-
-- Use `mise release 0.2.0` to create a release (`mise release 0.2.0 --dry-run` prints the changelog entry without changing anything)
-- This runs `scripts/release.sh` which:
-  1. Generates the changelog entry from commits since the last tag with `scripts/lib/changelog.sh`: a `### Breaking Changes` block first (commits marked with `!` or carrying a `## BREAKING CHANGES` body section, with their upgrade notes nested under the subject), then the category sections
-  2. Updates `CHANGELOG.md`, `package.json`, and `packages/plugin-sdk/package.json`
-  3. Creates a commit `[Release] v0.2.0`
-  4. Tags and pushes to trigger GitHub Actions
-- The release workflow runs `scripts/release-notes-header.sh` to build the GitHub release header from the install block plus that version's `### Breaking Changes` block in `CHANGELOG.md`, and passes it to GoReleaser with `--release-header-tmpl`. That header is the only Breaking Changes section on the release page; GoReleaser's own commit list below it groups by category only, because it reads subjects and would repeat the headline without the notes.
-- `mise test:scripts` runs `scripts/changelog_test.sh`, which exercises the generator against a throwaway git repository. Run it after changing anything under `scripts/`.
-
-## Worktree Setup
-
-- Worktrees should be created in `~/.worktrees/shisho/`
-- After creating a new worktree, run `mise setup` to install tools and dependencies
-- Example: `git worktree add ~/.worktrees/shisho/my-feature -b feature/my-feature && cd ~/.worktrees/shisho/my-feature && mise setup`
-
-## Database Best Practices
-
-- **Migrations must only be marked applied after success.** Always construct Bun migrators through `pkg/migrations.NewMigrator`, not `migrate.NewMigrator` directly. The helper enables `migrate.WithMarkAppliedOnSuccess(true)`. Without it, Bun records a migration before running its body; a failed DDL/data migration can leave the DB half-mutated while future startups skip the migration as already applied.
-- **Column `DEFAULT`s never apply when Bun inserts a zero `time.Time` into a field without `nullzero`.** Bun writes the zero value (`0001-01-01 00:00:00`) instead of omitting the column, so `DEFAULT CURRENT_TIMESTAMP` in the migration does nothing. Every insert must set `CreatedAt`/`UpdatedAt` explicitly (the convention is `now := time.Now()` in the service's create method, see `CreateSeries` in `pkg/series/service.go`), or the field must be tagged `bun:",nullzero,notnull,default:current_timestamp"`. The same applies to updates: listing `updated_at` in `Column(...)` writes whatever the struct holds, so set `UpdatedAt = time.Now()` first or it writes back the stale value.
-- **`nullzero` on a non-pointer field writes NULL for its zero value**, on inserts and on updates that list the column. Against a `NOT NULL` column that rejects the row, which is only right when zero is invalid (IDs, required names, 1-based sort orders). Leave it off fields where zero is a real value, like `File.FilesizeBytes` for an empty file.
-- **Always consider indexes** when modifying database schema or query patterns
-- **SQLite table-rebuild migrations must recreate all indexes.** When recreating a table to drop/change columns, list every existing index for that table and recreate it on the replacement table. Dropping the old table drops its indexes too.
-- **Table rebuilds must turn foreign keys off first, outside the transaction.** With `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent runs an implicit DELETE that fires `ON DELETE CASCADE` into every child table and wipes their rows. The pragma is a no-op inside a transaction, so pin one connection, switch it off before BEGIN, and restore it afterwards. The helpers in `pkg/migrations/rebuild.go` do this (`20260928110000_rebuild_files_users_library_paths.go` shows the usage): `withForeignKeysOff` handles the pragma and transaction, and `rebuildTableInTx` copies rows by explicit column list, recreates every index and trigger read from `sqlite_master`, and restores the `sqlite_sequence` high-water mark so deleted AUTOINCREMENT ids are not reused. Reuse them for new rebuilds, finishing with `checkForeignKeys` on the rebuilt tables before commit. Do not copy `recreateTable` from `20260406100000`, which predates these rules.
-- For deletion queries, ensure indexes exist on the WHERE clause columns
-- For foreign key relationships, index the referencing column (e.g., `job_id` in `job_logs`). The index's leading column must be the foreign key: a composite index that leads with another column (like `ux_user_library_settings (user_id, library_id)` for `library_id`) does not count. Without one, every lookup of children by parent and every `ON DELETE` action on the parent scans the child table. This includes each `*_aliases` parent column, which the search reindex reads once per Book.
-- **Case-insensitive name lookups use `name = ? COLLATE NOCASE`, never `LOWER(name) = LOWER(?)`.** Resource and alias tables carry a `(name COLLATE NOCASE, library_id)` unique index, and only a `COLLATE NOCASE` comparison can search it; wrapping the column in `LOWER()` scans the alias table or every row in the library. Both forms fold ASCII letters only, so matching is unchanged. Keep the `library_id = ?` condition where the lookup is library-scoped, so it uses both index columns. Lookups narrowed by parent id instead, like removing one resource's alias, correctly have none.
-- Composite indexes should match query patterns (column order matters)
-- **The table for authors/narrators is named `persons`, NOT `people`.** This is a common mistake in raw SQL queries. The Go package is `pkg/people` and the model is `models.Person`, but the database table is `persons`.
-- **Table names must be plural.** All database tables use plural names (e.g., `plugins`, `plugin_configs`, `plugin_hook_configs`). When creating new tables or referencing existing ones in raw SQL, always use the plural form.
-- **Foreign key enforcement is enabled on every connection.** Pragmas such as `foreign_keys` and `busy_timeout` apply per connection, and `database/sql` replaces a connection whose query is canceled mid-statement, so running them once at startup is not enough: the replacement runs with SQLite defaults, and Book deletes stop cascading until restart. `pkg/sqliteconn.NewConnector` runs the pragmas on each connection the pool opens; `database.New` (production) and `testdb.New(t)` both use it. A test that opens its own database must use it too, or at least pin one connection and enable the pragma (the migration tests do this).
-- **All FK constraints must specify ON DELETE behavior.** Use `ON DELETE CASCADE` for child rows that have no meaning without the parent (e.g., `files.book_id`, `authors.book_id`). Use `ON DELETE SET NULL` for nullable references where the child should survive (e.g., `jobs.library_id`, `files.publisher_id`). Never leave a FK without an explicit ON DELETE action.
-- **CASCADE does not clean up FTS indexes**: When deleting books/series/persons/etc., their FTS entries (`books_fts`, `series_fts`, `persons_fts`) are NOT automatically removed by CASCADE, and the CASCADE also drops the links that say which other rows copied the deleted entity (a deleted Book's `book_series` rows). Collect the affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it. FTS rows are keyed by `rowid` equal to the entity id, so never insert FTS rows outside the search service without setting `rowid` (see "Search Index (FTS)" in `pkg/AGENTS.md`).
+- **The authors/narrators table is `persons`, not `people`**, even though the package is `pkg/people` and the model is `models.Person`.
+- **Column `DEFAULT`s never apply when Bun inserts a zero `time.Time` into a field without `nullzero`**: Bun writes `0001-01-01 00:00:00`. Set `CreatedAt`/`UpdatedAt` explicitly on insert or tag the field `bun:",nullzero,notnull,default:current_timestamp"`. Updates that list `updated_at` in `Column(...)` write whatever the struct holds, so set `UpdatedAt = time.Now()` first.
+- **`nullzero` on a non-pointer field writes NULL for its zero value**, which a `NOT NULL` column rejects. Use it only where zero is invalid (IDs, required names, 1-based sort orders), not where zero is real, like the size of an empty file.
+- **SQLite table rebuilds use the helpers in `pkg/migrations/rebuild.go`**, never a hand-rolled copy like the `recreateTable` inside an older migration: with `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent cascades deletes into every child, and the pragma is a no-op inside a transaction.
+- **Connection pragmas apply per connection**, and `database/sql` replaces a connection whose query is canceled, so a test that opens its own database uses `pkg/sqliteconn.NewConnector` as `database.New` and `testdb.New(t)` do (or pins one connection and enables the pragma).
+- **CASCADE does not clean up FTS indexes or the links that say which rows copied a deleted entity.** Collect affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it; see `docs/agents/backend/search-fts.md`.
 
 ## Agent skills
 
-### Issue tracker
-
-GitHub Issues on `shishobooks/shisho`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout. See `docs/agents/domain.md`.
+- **Issue tracker**: GitHub Issues on `shishobooks/shisho`. See `docs/agents/issue-tracker.md`.
+- **Triage labels**: see `docs/agents/triage-labels.md`.
+- **Domain docs**: single-context layout. See `docs/agents/domain.md`.
+- **Adding, removing, or significantly changing a metadata field** on books or files: follow `.claude/skills/metadata-field/SKILL.md`, because the field touches many places and agents miss some.

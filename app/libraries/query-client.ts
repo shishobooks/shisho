@@ -14,6 +14,8 @@ export const queryClient = new QueryClient({
             failureCount < 3 &&
             err.status !== 401 &&
             err.status !== 403 &&
+            // One of a list of statuses, not a Not Found branch.
+            // eslint-disable-next-line no-restricted-syntax
             err.status !== 404 &&
             err.status !== 422
           );

@@ -109,7 +109,7 @@ func TestDeleteSeries_RemovesBookSeriesAndFlipsReviewed(t *testing.T) {
 		AudioFields: nil,
 	}))
 
-	bookSvc := books.NewService(db).WithAppSettings(settings)
+	bookSvc := books.NewService(db, settings)
 	bookSvc.RecomputeReviewedForBook(ctx, book.ID)
 
 	var pre models.File
@@ -193,7 +193,7 @@ func TestDeleteSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	_, err = db.NewInsert().Model(bs).Exec(ctx)
 	require.NoError(t, err)
 
-	bookSvc := books.NewService(db).WithAppSettings(appsettings.NewService(db))
+	bookSvc := books.NewService(db, appsettings.NewService(db))
 	searchSvc := search.NewService(db)
 
 	// Seed the FTS state: index the book while the series association is alive.
@@ -288,7 +288,7 @@ func TestMergeSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	_, err = db.NewInsert().Model(bs).Exec(ctx)
 	require.NoError(t, err)
 
-	bookSvc := books.NewService(db).WithAppSettings(appsettings.NewService(db))
+	bookSvc := books.NewService(db, appsettings.NewService(db))
 	searchSvc := search.NewService(db)
 
 	// Seed FTS while the book is on the source series.

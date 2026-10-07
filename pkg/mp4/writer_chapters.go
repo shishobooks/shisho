@@ -81,6 +81,8 @@ func childBoxes(buf []byte) ([]childBox, error) {
 //
 // Returns ok=false (content unchanged) when the source has no chapter text track
 // to rebuild, in which case the caller keeps the chpl-only behavior.
+// Synthesizing a new track would mean editing the audio track's tref and the
+// mvhd next-track-id, which is out of scope.
 func rebuildChapterTextTrack(moovContent []byte, chapters []Chapter) (rebuiltChapterTrack, bool) {
 	boxes, err := childBoxes(moovContent)
 	if err != nil {

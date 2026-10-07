@@ -92,8 +92,10 @@ type searchIndexer interface {
 }
 
 // pageExtractor renders a page from a page-based file (CBZ/PDF) and writes
-// it as that file's cover image. Returns the cover filename (not a full path)
-// and the MIME type of the extracted image.
+// it as that file's cover image. Returns the cover filename (not a full path),
+// the MIME type of the extracted image, and the previous cover files the
+// caller removes only after the row is saved, so the working cover is never
+// deleted first. A test stub must return the stale paths it wants removed.
 type pageExtractor interface {
 	ExtractCoverPage(file *models.File, bookFilepath string, page int, log logger.Logger) (filename, mimeType string, stale []string, err error)
 }

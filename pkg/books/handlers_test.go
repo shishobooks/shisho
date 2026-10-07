@@ -237,7 +237,7 @@ func setupTestServerWithConfig(t *testing.T, db *bun.DB, configure func(*config.
 	// cache cleanups before the directory is removed.
 	t.Cleanup(downloadCache.Wait)
 	appSettingsSvc := appsettings.NewService(db)
-	RegisterRoutes(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, NewService(db).WithAppSettings(appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality), nil)
+	RegisterRoutes(g, db, cfg, authMiddleware, &mockScanner{}, nil, downloadCache, NewService(db, appSettingsSvc), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality), nil)
 
 	return e
 }
@@ -1991,7 +1991,7 @@ func TestUpdateFile_RejectsDuplicateIdentifierTypes(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	library, book := setupTestLibraryAndBook(t, db)
 	epubPath := createTestEPUBFile(t)
@@ -2025,7 +2025,7 @@ func TestUpdateFile_PreservesSourceForUnchangedIdentifiers(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	library, book := setupTestLibraryAndBook(t, db)
 	epubPath := createTestEPUBFile(t)
@@ -2064,7 +2064,7 @@ func TestUpdateFile_AssignsManualSourceWhenIdentifierValueChanges(t *testing.T) 
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 
 	library, book := setupTestLibraryAndBook(t, db)
 	epubPath := createTestEPUBFile(t)
@@ -2121,7 +2121,7 @@ func TestUpdateFile_RejectsBlankIdentifierTypeAndValue(t *testing.T) {
 			t.Parallel()
 			db := testdb.New(t)
 			ctx := context.Background()
-			svc := NewService(db)
+			svc := NewService(db, appsettings.NewService(db))
 
 			library, book := setupTestLibraryAndBook(t, db)
 			epubPath := createTestEPUBFile(t)
@@ -2686,7 +2686,7 @@ func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	book := seedBook(t, db, seedLibrary(t, db, "Library"), "Title", "Title", time.Now())
-	h := &handler{bookService: NewService(db), libraryService: libraries.NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), libraryService: libraries.NewService(db)}
 
 	e := newTestEchoBooks(t)
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle

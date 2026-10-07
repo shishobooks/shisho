@@ -34,6 +34,8 @@ export const isDemoModeError = (error: unknown): error is ShishoAPIError =>
 // True for a 404 from the API or a proxy in front of it. Detail pages show
 // their Not Found page for it and QueryError for any other failure.
 export const isNotFoundError = (error: unknown): error is ShishoAPIError =>
+  // This is the helper the inline-404 lint rule points to.
+  // eslint-disable-next-line no-restricted-syntax
   error instanceof ShishoAPIError && error.status === 404;
 
 interface QueryOutcome {
@@ -131,6 +133,9 @@ class ShishoAPI {
   //   otherwise get a string it cannot use.
   // - non-2xx without a Shisho error body rejects with a status-based message
   //   and an undefined code.
+  // A direct fetch to a JSON endpoint (a FormData upload, which request()
+  // would JSON-encode) passes its response here rather than calling
+  // response.json().
   async checkStatus<T = unknown>(response: Response): Promise<T> {
     // Read the body as text rather than trusting content-length or
     // content-type: chunked empty bodies have no content-length, and proxies

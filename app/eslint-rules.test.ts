@@ -1,11 +1,12 @@
 import { ESLint, type Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
-// The permission, query, URL and mutate rules in eslint.config.js are
-// selectors, so a typo in one would silently match nothing, and the local
-// mutateAsync rule in eslint-rules/ reads syntax in ways a refactor could
-// quietly change. This lints fixtures as if they sat in the app to prove each
-// rule still fires where it should.
+// The permission, query, URL, mutate, UI and e2e import rules in
+// eslint.config.js are selectors or path patterns, so a typo in one would
+// silently match nothing, and the local mutateAsync rule in eslint-rules/
+// reads syntax in ways a refactor could quietly change. This lints fixtures
+// as if they sat in the app or e2e/ to prove each rule still fires where it
+// should.
 
 const eslint = new ESLint();
 
@@ -359,5 +360,104 @@ describe("ESLint mutateAsync rule", () => {
         isMutateAsyncCheck,
       ),
     ).toEqual([]);
+  });
+});
+
+// Each UI convention rule flags its line; the lines after them are the
+// accepted forms and must stay clean.
+const UI_FIXTURE = `
+import { Tabs } from "@/components/ui/tabs";
+import { cn } from "@/libraries/utils";
+
+declare const error: { status: number };
+declare const c: string;
+export const Fixture = ({ n }: { n: number }) => {
+  void navigator.clipboard.writeText("x");
+  const { clipboard } = navigator;
+  const a = error.status === 404;
+  const b = 404 !== error.status;
+  const t = \`\${n} minutes ago\`;
+  const forbidden = error.status === 403;
+  return (
+    <div className={\`p-2 \${c}\`}>
+      <span>{n} days ago</span>
+      <Tabs defaultValue="x" />
+      <Tabs onValueChange={() => undefined} value="x" />
+      <span className={cn("p-2", c)}>{String(a && b && forbidden) + t}</span>
+      <span>{String(clipboard)} Chicago</span>
+    </div>
+  );
+};
+`;
+
+const uiMessages = async (filePath: string) => {
+  const [result] = await eslint.lintText(UI_FIXTURE, { filePath });
+  return result.messages
+    .filter(
+      (message) =>
+        message.ruleId === "no-restricted-syntax" ||
+        message.ruleId === "no-restricted-properties",
+    )
+    .map((message) => message.message);
+};
+
+describe("ESLint UI convention rules", () => {
+  it("rejects each convention once per violation", async () => {
+    const messages = await uiMessages("app/components/Fixture.tsx");
+    const count = (needle: string) =>
+      messages.filter((message) => message.includes(needle)).length;
+
+    expect(count("copyText")).toBe(2);
+    expect(count("isNotFoundError")).toBe(2);
+    expect(count("formatDistanceToNow")).toBe(2);
+    expect(count("cn()")).toBe(1);
+    expect(count("Deep-link tabs")).toBe(1);
+    expect(messages).toHaveLength(8);
+  });
+
+  it("allows them in tests", async () => {
+    expect(await uiMessages("app/components/Fixture.test.tsx")).toEqual([]);
+  });
+
+  it("lets copyText use the async clipboard", async () => {
+    const [result] = await eslint.lintText(
+      'export const copy = () => navigator.clipboard.writeText("x");\n',
+      { filePath: "app/utils/clipboard.ts" },
+    );
+
+    expect(
+      result.messages.filter(
+        (message) => message.ruleId === "no-restricted-properties",
+      ),
+    ).toEqual([]);
+  });
+});
+
+const playwrightImports = async (filePath: string) => {
+  const [result] = await eslint.lintText(
+    `import { test } from "@playwright/test";
+import { type Locator } from "@playwright/test";
+import type { Page } from "@playwright/test";
+export { expect } from "@playwright/test";
+
+export const run = (page: Page, locator: Locator) => test(String(page), () => void locator);
+`,
+    { filePath },
+  );
+  return result.messages
+    .filter(
+      (message) =>
+        message.ruleId === "@typescript-eslint/no-restricted-imports",
+    )
+    .map((message) => message.line);
+};
+
+describe("ESLint e2e fixture import rule", () => {
+  it("rejects value imports and re-exports of @playwright/test in e2e specs", async () => {
+    expect(await playwrightImports("e2e/fixture.spec.ts")).toEqual([1, 4]);
+  });
+
+  it("allows them in e2e/fixtures.ts", async () => {
+    expect(await playwrightImports("e2e/fixtures.ts")).toEqual([]);
   });
 });

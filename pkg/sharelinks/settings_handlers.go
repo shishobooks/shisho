@@ -21,6 +21,10 @@ func (h *settingsHandler) get(c echo.Context) error {
 	return c.JSON(http.StatusOK, SharingSettingsResponse(s))
 }
 
+// update merges the pointer fields into the saved settings so each switch
+// saves on its own. The load and save are not one transaction, so two admins
+// changing different switches at the same instant can lose one change, which
+// is accepted for rarely edited settings.
 func (h *settingsHandler) update(c echo.Context) error {
 	var payload UpdateSharingSettingsPayload
 	if err := c.Bind(&payload); err != nil {

@@ -36,7 +36,11 @@ const InteractivePdfiumTimeout = 30 * time.Second
 // parallel, so a few large PDFs can hold the instance well past the
 // interactive wait. Giving up there would store a File with no cover or
 // chapters, and later Scans skip unchanged Files, so the loss would stick.
-// It is a variable so tests can shorten it.
+// Parse waits separately for the cover and the outline, so one PDF can wait
+// twice this, and handlers that run a Scan inside the request inherit the
+// wait. An interactive caller of this package needs a variant that takes a
+// timeout instead of shortening this one. It is a variable so tests can
+// shorten it.
 var scanPdfiumTimeout = 5 * time.Minute
 
 // initPdfiumPool initializes the go-pdfium WASM pool. Called via sync.Once.

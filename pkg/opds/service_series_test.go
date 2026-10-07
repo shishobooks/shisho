@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -49,7 +50,7 @@ func TestOPDSLibrarySeriesBooks_SeriesFromOtherLibrary_Returns404(t *testing.T) 
 	_, err := db.NewInsert().Model(s).Exec(ctx)
 	require.NoError(t, err)
 
-	svc := NewService(db, books.NewService(db))
+	svc := NewService(db, books.NewService(db, appsettings.NewService(db)))
 	builders := map[string]func(libraryID int) (*Feed, error){
 		"plain": func(libraryID int) (*Feed, error) {
 			return svc.BuildLibrarySeriesBooksFeed(ctx, "http://x", "", libraryID, s.ID, 10, 0, nil)
@@ -104,7 +105,7 @@ func TestOPDSLibrarySeriesBooksHandlers_SeriesFromOtherLibrary_Returns404(t *tes
 	_, err := db.NewInsert().Model(s).Exec(ctx)
 	require.NoError(t, err)
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	h := &handler{
 		opdsService:     NewService(db, bookService),
 		bookService:     bookService,

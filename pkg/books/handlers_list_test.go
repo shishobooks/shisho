@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -78,7 +79,7 @@ func TestListHandler_ExplicitSortWins(t *testing.T) {
 	_, err := settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
-	h := &handler{bookService: NewService(db), settingsService: settingsSvc}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settingsSvc}
 
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID)+"&sort=title:asc", nil)
@@ -121,7 +122,7 @@ func TestListHandler_StoredPreferenceUsed(t *testing.T) {
 	_, err := settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
-	h := &handler{bookService: NewService(db), settingsService: settingsSvc}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settingsSvc}
 
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
@@ -151,7 +152,7 @@ func TestListHandler_InvalidSortReturns400(t *testing.T) {
 	lib := seedLibrary(t, db, "Library C")
 	user := seedUserWithLibAccess(t, db, "carol", lib)
 
-	h := &handler{bookService: NewService(db), settingsService: settings.NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
 
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(
@@ -192,7 +193,7 @@ func TestListHandler_NoLibraryIDSkipsStoredLookup(t *testing.T) {
 	_, err := settingsSvc.UpsertLibrarySort(context.Background(), user.ID, lib.ID, &stored)
 	require.NoError(t, err)
 
-	h := &handler{bookService: NewService(db), settingsService: settingsSvc}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settingsSvc}
 
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(http.MethodGet, "/books", nil) // no library_id
@@ -227,7 +228,7 @@ func TestListHandler_ResponseEnvelope(t *testing.T) {
 	now := time.Now()
 	apple := seedBook(t, db, lib, "Apple", "Apple", now)
 
-	h := &handler{bookService: NewService(db), settingsService: settings.NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()
@@ -290,7 +291,7 @@ func TestListHandler_IncludesCoverCacheKey(t *testing.T) {
 	book := seedBook(t, db, lib, "WithCover", "WithCover", now)
 	file := seedFile(t, db, book, models.FileTypeEPUB, true)
 
-	h := &handler{bookService: NewService(db), settingsService: settings.NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()
@@ -329,7 +330,7 @@ func TestListHandler_CoverCacheKeyEmptyWhenNoCover(t *testing.T) {
 	book := seedBook(t, db, lib, "NoCover", "NoCover", now)
 	seedFile(t, db, book, models.FileTypeEPUB, false)
 
-	h := &handler{bookService: NewService(db), settingsService: settings.NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
 	e := newTestEchoBooks(t)
 	req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
 	rec := httptest.NewRecorder()

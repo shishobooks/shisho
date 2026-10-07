@@ -14,6 +14,7 @@ import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
+import { cn } from "@/libraries/utils";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
 import { formatElapsed } from "@/utils/format";
 
@@ -140,7 +141,10 @@ const AdminJobs = () => {
               size="sm"
             >
               <RefreshCw
-                className={`h-4 w-4 sm:mr-2 ${createJobMutation.isPending ? "animate-spin" : ""}`}
+                className={cn(
+                  "h-4 w-4 sm:mr-2",
+                  createJobMutation.isPending && "animate-spin",
+                )}
               />
               <span className="hidden sm:inline">Trigger Scan</span>
             </Button>

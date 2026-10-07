@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -60,7 +61,7 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	bookDir := filepath.Join(t.TempDir(), "Test Book")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	book := &models.Book{
 		LibraryID:       library.ID,
 		Title:           "Test Book",
@@ -162,7 +163,7 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	bookDir := filepath.Join(t.TempDir(), "Test Book 304")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	book := &models.Book{
 		LibraryID:       library.ID,
 		Title:           "Test Book 304",

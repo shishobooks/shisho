@@ -35,6 +35,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Separate native amd64 and arm64 jobs, even though the Dockerfile
+  # cross-compiles: one multiarch builder was slower.
   docker-amd64:
     name: Docker (amd64)
     needs: validate

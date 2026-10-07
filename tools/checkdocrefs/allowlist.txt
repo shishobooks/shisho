@@ -1,0 +1,12 @@
+# Tokens that agent instruction files name on purpose although they do not
+# exist in the repo's source: things to avoid, placeholders, and third-party
+# APIs the repo does not call. One token per line, exactly as written between
+# the backticks (or the quoted section name). Keep this short; a stale
+# reference belongs in the doc fix, not here. The check fails on an entry no
+# instruction doc uses, so delete an entry with the mention it covered.
+
+setupTestDB          # AGENTS.md: "don't copy a setupTestDB into a package"
+api.AddKeywordsFile  # pdf/AGENTS.md: pdfcpu API to avoid
+useLatestVersion()   # website/AGENTS.md: Docusaurus API for a future hook
+CONTEXT-MAP.md       # domain.md: read it "if it exists"
+X.permissions.test.tsx  # app/AGENTS.md: placeholder file name

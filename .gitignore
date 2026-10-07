@@ -145,6 +145,8 @@ fabric.properties
 
 # Icon must end with two \r
 Icon
+# The Icon pattern also matches swizzled Docusaurus Icon/ directories. Add an
+# exception like these before creating another one, or Git ignores it silently.
 !website/src/theme/Icon/
 !website/src/theme/Icon/**
 !website/src/theme/Admonition/Icon/

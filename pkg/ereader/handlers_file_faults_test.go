@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -68,7 +69,7 @@ func newDownloadFixture(t *testing.T, title string) *downloadFixture {
 	t.Cleanup(cache.Wait)
 	return &downloadFixture{
 		t: t, db: db, lib: lib, book: book, dir: dir, cacheDir: cacheDir, apiKey: apiKey,
-		h: &handler{bookService: books.NewService(db), downloadCache: cache},
+		h: &handler{bookService: books.NewService(db, appsettings.NewService(db)), downloadCache: cache},
 	}
 }
 

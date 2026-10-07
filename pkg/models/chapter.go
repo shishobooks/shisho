@@ -18,7 +18,7 @@ type Chapter struct {
 	Title     string    `bun:",notnull" json:"title"`
 
 	// Position data (mutually exclusive based on file type)
-	StartPage        *int    `json:"start_page"`         // CBZ: 0-indexed page number
+	StartPage        *int    `json:"start_page"`         // CBZ/PDF: 0-indexed page number
 	StartTimestampMs *int64  `json:"start_timestamp_ms"` // M4B: milliseconds from start
 	Href             *string `json:"href"`               // EPUB: content document href
 

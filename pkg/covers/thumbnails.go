@@ -103,6 +103,9 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 	if err := ctx.Err(); err != nil {
 		return Thumbnail{}, errors.WithStack(err)
 	}
+	// The source version is the path, nanosecond mtime, byte size, and render
+	// key, plus the file ID in the key prefix, so a metadata-only updated_at
+	// change does not regenerate thumbnails.
 	source := FileCoverPath(file)
 	info, err := os.Stat(source)
 	if err != nil {
@@ -180,6 +183,12 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 	}
 }
 
+// resizeThumbnail decodes the cover (bounded to maxThumbnailSourcePixels),
+// applies a centered 2:3 (book) or square crop when aspect is set, and scales
+// it to fit size without upscaling. The crop matches the web UI's
+// object-cover, so a wide source does not become an undersized thumbnail in a
+// tall frame. Catmull-Rom averages fine detail during reduction rather than
+// dropping source pixels, and PNG keeps that detail and transparency.
 func resizeThumbnail(ctx context.Context, path string, size int, aspect string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, errors.WithStack(err)

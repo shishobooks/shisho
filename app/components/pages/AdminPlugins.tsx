@@ -1,8 +1,13 @@
 import { Settings } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { AdvancedPluginsDialog } from "@/components/plugins/AdvancedPluginsDialog";
+import {
+  ADVANCED_SECTIONS,
+  isAdvancedSection,
+  type AdvancedSection,
+} from "@/components/plugins/advancedSections";
 import { DiscoverTab } from "@/components/plugins/DiscoverTab";
 import { InstalledTab } from "@/components/plugins/InstalledTab";
 import { TabUpdatePill } from "@/components/plugins/TabUpdatePill";
@@ -33,23 +38,31 @@ const AdminPlugins = () => {
     [plugins],
   );
 
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [advancedDefault, setAdvancedDefault] = useState<
-    "order" | "repositories"
-  >("order");
+  // ?advanced=<section> is the dialog's state: present means open, and an
+  // unknown section falls back to the first tab.
+  const advancedParam = searchParams.get("advanced");
+  const advancedOpen = advancedParam !== null;
+  const advancedSection: AdvancedSection =
+    advancedParam !== null && isAdvancedSection(advancedParam)
+      ? advancedParam
+      : ADVANCED_SECTIONS[0];
 
-  // On mount: open dialog at the right section if ?advanced= param is present
-  useEffect(() => {
-    const adv = searchParams.get("advanced");
-    if (adv === "order" || adv === "repositories") {
-      setAdvancedDefault(adv);
-      setAdvancedOpen(true);
-      const next = new URLSearchParams(searchParams);
-      next.delete("advanced");
-      setSearchParams(next, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — only on mount
+  // Opening pushes a history entry; switching tabs and closing replace it,
+  // so Back after closing never reopens the dialog.
+  const setAdvanced = (section: AdvancedSection | null) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (section === null) {
+          next.delete("advanced");
+        } else {
+          next.set("advanced", section);
+        }
+        return next;
+      },
+      { replace: section === null || advancedOpen },
+    );
+  };
 
   const handleTabChange = (value: string) => {
     navigate(
@@ -72,7 +85,7 @@ const AdminPlugins = () => {
         <div className="shrink-0">
           <Button
             aria-label="Advanced plugin settings"
-            onClick={() => setAdvancedOpen(true)}
+            onClick={() => setAdvanced(ADVANCED_SECTIONS[0])}
             size="icon"
             variant="ghost"
           >
@@ -101,9 +114,10 @@ const AdminPlugins = () => {
       </Tabs>
 
       <AdvancedPluginsDialog
-        defaultSection={advancedDefault}
-        onOpenChange={setAdvancedOpen}
+        onOpenChange={(open) => setAdvanced(open ? advancedSection : null)}
+        onSectionChange={setAdvanced}
         open={advancedOpen}
+        section={advancedSection}
       />
     </div>
   );

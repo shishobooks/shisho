@@ -59,11 +59,23 @@ func (h *Handler) Handle(err error, c echo.Context) {
 	}
 }
 
-func (h *Handler) generatePayload(c echo.Context, err error) (int, map[string]interface{}) {
+// ErrorResponse is the JSON body of every API error.
+type ErrorResponse struct {
+	Error ErrorBody `json:"error"`
+}
+
+// ErrorBody carries an API error's wire code, message, and HTTP status.
+type ErrorBody struct {
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	StatusCode int    `json:"status_code"`
+}
+
+func (h *Handler) generatePayload(c echo.Context, err error) (int, ErrorResponse) {
 	return h.generateIndividualPayload(c, err)
 }
 
-func (h *Handler) generateIndividualPayload(_ echo.Context, err error) (int, map[string]interface{}) {
+func (h *Handler) generateIndividualPayload(_ echo.Context, err error) (int, ErrorResponse) {
 	code := ""
 	msg := ""
 	httpCode := http.StatusInternalServerError
@@ -90,11 +102,9 @@ func (h *Handler) generateIndividualPayload(_ echo.Context, err error) (int, map
 		msg = "Internal Server Error"
 	}
 
-	return httpCode, map[string]interface{}{
-		"error": map[string]interface{}{
-			"code":        code,
-			"message":     msg,
-			"status_code": httpCode,
-		},
-	}
+	return httpCode, ErrorResponse{Error: ErrorBody{
+		Code:       code,
+		Message:    msg,
+		StatusCode: httpCode,
+	}}
 }

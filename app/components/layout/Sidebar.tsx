@@ -70,6 +70,8 @@ const Sidebar = ({ items }: SidebarProps) => {
 
   const visibleItems = items.filter((item) => item.show !== false);
 
+  // Offsets below the Demo Mode banner and the top nav (TOP_NAV_ROW height
+  // plus TOP_NAV_WRAPPER's 1px border); update with topNavClasses.ts.
   return (
     <aside
       className={cn(

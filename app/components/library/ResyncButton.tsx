@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useCreateJob, useLatestScanJob } from "@/hooks/queries/jobs";
 import { toastRequestError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 
 interface ResyncButtonProps {
   libraryId: number;
@@ -80,7 +81,7 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
             variant="ghost"
           >
             <RefreshCw
-              className={`h-4 w-4 ${showSpinning ? "animate-spin" : ""}`}
+              className={cn("h-4 w-4", showSpinning && "animate-spin")}
             />
             {isFailed && (
               <AlertTriangle className="h-3 w-3 text-yellow-500 absolute -top-0.5 -right-0.5" />

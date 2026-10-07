@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 
 	// Create library
 	library := &models.Library{
@@ -100,7 +101,7 @@ func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 
 	library := &models.Library{
 		Name:                     "Test Library 304",
@@ -184,7 +185,7 @@ func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 	db := newSyncPointTestDB(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := books.NewService(db)
+	bookService := books.NewService(db, appsettings.NewService(db))
 
 	library := &models.Library{
 		Name:                     "Test Library Skip",

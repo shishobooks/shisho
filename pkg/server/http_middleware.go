@@ -37,6 +37,7 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if err := next(c); err != nil {
 			c.Error(err)
 		}
+		// "/*" is the frontend fallback pattern server.New registers.
 		if (c.Path() == "/*" || c.Path() == "/") && c.Response().Status < 400 {
 			return nil
 		}

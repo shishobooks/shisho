@@ -78,7 +78,7 @@ func newTestContext(t *testing.T) *testContext {
 
 	// Create services
 	appSettingsService := appsettings.NewService(db)
-	bookService := books.NewService(db).WithAppSettings(appSettingsService)
+	bookService := books.NewService(db, appSettingsService)
 	chapterService := chapters.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)
@@ -295,7 +295,7 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 
 	// Create services
 	appSettingsService := appsettings.NewService(db)
-	bookService := books.NewService(db).WithAppSettings(appSettingsService)
+	bookService := books.NewService(db, appSettingsService)
 	chapterService := chapters.NewService(db)
 	libraryService := libraries.NewService(db)
 	jobService := jobs.NewService(db)

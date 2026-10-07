@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -73,7 +74,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 		h := &handler{
@@ -165,7 +166,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 		h := &handler{
@@ -239,7 +240,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 		h := &handler{
@@ -313,7 +314,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pdfPageCache := pdfpages.NewCache(cfg.CacheDir, 150, 85)
 
 		h := &handler{
@@ -386,7 +387,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 		h := &handler{
@@ -457,7 +458,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		db := testdb.New(t)
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 		h := &handler{
@@ -485,7 +486,7 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		ctx := context.Background()
 		cfg := &config.Config{CacheDir: t.TempDir()}
 		e := echo.New()
-		bookService := NewService(db)
+		bookService := NewService(db, appsettings.NewService(db))
 		pageCache := cbzpages.NewCache(cfg.CacheDir)
 
 		h := &handler{
@@ -562,7 +563,7 @@ func TestUploadFileCover_RejectsFileWithCoverPage(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := NewService(db)
+	bookService := NewService(db, appsettings.NewService(db))
 
 	h := &handler{
 		bookService: bookService,
@@ -646,7 +647,7 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
-	bookService := NewService(db)
+	bookService := NewService(db, appsettings.NewService(db))
 
 	h := &handler{
 		bookService: bookService,
@@ -789,7 +790,7 @@ func assertUploadCoverUntouched(t *testing.T, db *bun.DB, fileID int, prevPath s
 	require.NoError(t, err, "the previous cover must still exist")
 	assert.Equal(t, prevBytes, got, "the previous cover bytes must be untouched")
 
-	stored, err := NewService(db).RetrieveFile(context.Background(), RetrieveFileOptions{ID: &fileID})
+	stored, err := NewService(db, appsettings.NewService(db)).RetrieveFile(context.Background(), RetrieveFileOptions{ID: &fileID})
 	require.NoError(t, err)
 	require.NotNil(t, stored.CoverImageFilename)
 	assert.Equal(t, "book.epub.cover.png", *stored.CoverImageFilename)

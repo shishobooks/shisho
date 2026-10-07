@@ -104,7 +104,10 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 		}
 	}
 
-	// Sort by filename for proper reading order
+	// Sort by filename for proper reading order. This natural order differs
+	// from the byte order pkg/cbz and pkg/cbzpages use for stored page
+	// numbers ("page2" before "page10" here, after it there), so a stored
+	// page index does not name the same image in this output.
 	sort.Slice(imageFiles, func(i, j int) bool {
 		return naturalLess(imageFiles[i].Name, imageFiles[j].Name)
 	})
@@ -786,6 +789,9 @@ type ProcessedImage struct {
 // - Grayscale images (like manga) are converted to grayscale JPEG for faster rendering
 // - PNG images are converted to JPEG for smaller file size
 // - Other formats (GIF, WebP) are passed through unchanged.
+//
+// pkg/filegen/cbz.go uses it too, so a change here also changes regular CBZ
+// downloads.
 func ProcessImageForEreader(data []byte, origExt string) *ProcessedImage {
 	ext := strings.ToLower(origExt)
 

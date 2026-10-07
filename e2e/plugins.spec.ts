@@ -107,8 +107,7 @@ test.describe("Plugins UI (redesigned)", () => {
       "aria-selected",
       "true",
     );
-    // The ?advanced= query param is cleared by the mount effect.
-    await expect(page).toHaveURL(/\/settings\/plugins$/);
+    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=order$/);
   });
 
   test("legacy /repositories opens Advanced dialog with Repositories tab active", async ({
@@ -124,7 +123,14 @@ test.describe("Plugins UI (redesigned)", () => {
     await expect(
       dialog.getByRole("tab", { name: "Repositories" }),
     ).toHaveAttribute("aria-selected", "true");
-    await expect(page).toHaveURL(/\/settings\/plugins$/);
+    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=repositories$/);
+
+    // The section stays in the URL, so a reload reopens the same tab.
+    await page.reload();
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("tab", { name: "Repositories" }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   test("gear button opens Advanced dialog with Order and Repositories tabs", async ({
@@ -145,6 +151,14 @@ test.describe("Plugins UI (redesigned)", () => {
     await expect(
       dialog.getByRole("tab", { name: "Repositories" }),
     ).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=order$/);
+
+    await dialog.getByRole("tab", { name: "Repositories" }).click();
+    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=repositories$/);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/\/settings\/plugins$/);
   });
 
   test("Installed tab shows empty state when no plugins installed", async ({

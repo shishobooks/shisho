@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -85,7 +86,7 @@ func TestGetFirstBookInSeriesByID_PrefersWholeNumberOverPrequel(t *testing.T) {
 		{Title: "Book Two", SeriesNumber: ptrFloat64(2)},
 	})
 
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	first, err := svc.GetFirstBookInSeriesByID(ctx, series.ID)
 	require.NoError(t, err)
 	assert.Equal(t, books[1].ID, first.ID, "should pick Book One (1) over Prequel (0.5)")
@@ -117,7 +118,7 @@ func TestGetFirstBookInSeriesByID_PrefersSingleNumberOverOmnibus(t *testing.T) {
 	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 3").Where("book_id = ?", books[0].ID).Exec(ctx)
 	require.NoError(t, err)
 
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	first, err := svc.GetFirstBookInSeriesByID(ctx, series.ID)
 	require.NoError(t, err)
 	assert.Equal(t, books[1].ID, first.ID)
@@ -146,7 +147,7 @@ func TestGetFirstBooksFilesForSeries_PrefersSingleNumberOverOmnibus(t *testing.T
 	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 3").Where("book_id = ?", books[0].ID).Exec(ctx)
 	require.NoError(t, err)
 
-	filesBySeries, err := NewService(db).GetFirstBooksFilesForSeries(ctx, []int{series.ID})
+	filesBySeries, err := NewService(db, appsettings.NewService(db)).GetFirstBooksFilesForSeries(ctx, []int{series.ID})
 	require.NoError(t, err)
 	require.Len(t, filesBySeries[series.ID], 1)
 	assert.Equal(t, "/fake/Book Two.epub", filesBySeries[series.ID][0].Filepath)
@@ -180,7 +181,7 @@ func TestGetFirstBookInSeriesByID_UsesRangeEndpointTieBreaker(t *testing.T) {
 	_, err = db.NewUpdate().Table("book_series").Set("series_number_end = 3").Where("book_id = ?", books[1].ID).Exec(ctx)
 	require.NoError(t, err)
 
-	first, err := NewService(db).GetFirstBookInSeriesByID(ctx, series.ID)
+	first, err := NewService(db, appsettings.NewService(db)).GetFirstBookInSeriesByID(ctx, series.ID)
 	require.NoError(t, err)
 	assert.Equal(t, books[1].ID, first.ID)
 }
@@ -210,7 +211,7 @@ func TestGetFirstBookInSeriesByID_FallsBackToFractionalWhenNoWholeNumbers(t *tes
 		{Title: "Novella 1.5", SeriesNumber: ptrFloat64(1.5)},
 	})
 
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	first, err := svc.GetFirstBookInSeriesByID(ctx, series.ID)
 	require.NoError(t, err)
 	assert.Equal(t, books[0].ID, first.ID, "should pick the earliest fractional (0.5) when no whole numbers exist")
@@ -242,7 +243,7 @@ func TestGetFirstBookInSeriesByID_PicksLowestWholeNumber(t *testing.T) {
 		{Title: "Book Three", SeriesNumber: ptrFloat64(3)},
 	})
 
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	first, err := svc.GetFirstBookInSeriesByID(ctx, series.ID)
 	require.NoError(t, err)
 	assert.Equal(t, books[0].ID, first.ID, "should pick the first whole number (1)")
@@ -273,7 +274,7 @@ func TestGetFirstBookInSeriesByID_NullSeriesNumberTreatedAsFractional(t *testing
 		{Title: "Book One", SeriesNumber: ptrFloat64(1)},
 	})
 
-	svc := NewService(db)
+	svc := NewService(db, appsettings.NewService(db))
 	first, err := svc.GetFirstBookInSeriesByID(ctx, series.ID)
 	require.NoError(t, err)
 	assert.Equal(t, books[1].ID, first.ID, "should prefer Book One (whole) over unnumbered (nil)")

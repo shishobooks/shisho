@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 )
@@ -81,7 +82,7 @@ func TestFileCover_SetsCacheControlImmutable(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
-	h := &handler{bookService: NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db))}
 
 	fileID := seedBookWithFileCover(ctx, t, db)
 
@@ -106,7 +107,7 @@ func TestFileCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	db := testdb.New(t)
 	ctx := context.Background()
 	e := echo.New()
-	h := &handler{bookService: NewService(db)}
+	h := &handler{bookService: NewService(db, appsettings.NewService(db))}
 
 	fileID := seedBookWithFileCover(ctx, t, db)
 
