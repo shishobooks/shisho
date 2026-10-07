@@ -9,6 +9,8 @@ import { cn } from "@/libraries/utils";
 // at 16px. Gradient ids are namespaced per instance because the logo renders
 // more than once per page. The useId output is stripped to id-safe characters
 // for the React 18 `:r0:` format; React 19 ids are already safe.
+// The docs site's website/src/components/ShishoLogo.tsx draws the same shelf
+// mark; change both together.
 const BOOKS = [
   { dim: false, h: 28, w: 7, x: 8, y: 12 },
   { dim: true, h: 32, w: 6, x: 17, y: 8 },

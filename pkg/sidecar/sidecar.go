@@ -327,6 +327,10 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 // anchoring the sidecar next to a file in the book (preferring a main file).
 // The cover always lives next to the file in that case, so co-locating the
 // book sidecar matches how the rest of the system resolves paths.
+//
+// The book needs Authors.Person, BookSeries.Series, BookGenres.Genre, and
+// BookTags.Tag loaded; a relation that is not loaded is silently written as
+// empty.
 func WriteBookSidecarFromModel(book *models.Book) error {
 	s := BookSidecarFromModel(book)
 	return WriteBookSidecar(resolveBookSidecarAnchor(book), s)
@@ -360,7 +364,10 @@ func resolveBookSidecarAnchor(book *models.Book) string {
 	return book.Filepath
 }
 
-// WriteFileSidecarFromModel writes a file sidecar from a File model.
+// WriteFileSidecarFromModel writes a file sidecar from a File model. The file
+// needs Narrators, Identifiers, Publisher, and Chapters loaded (use
+// books.Service.RetrieveFileWithRelations, not RetrieveFile); a relation that
+// is not loaded is silently written as empty.
 func WriteFileSidecarFromModel(file *models.File) error {
 	s := FileSidecarFromModel(file)
 	return WriteFileSidecar(file.Filepath, s)

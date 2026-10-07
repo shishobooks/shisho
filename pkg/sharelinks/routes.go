@@ -46,7 +46,10 @@ func RegisterBookRoutes(booksGroup *echo.Group, authMiddleware *auth.Middleware,
 }
 
 // RegisterPublicRoutes registers the unauthenticated recipient family under
-// /share/:token. The server skips it in Demo Mode.
+// /share/:token. The server skips it in Demo Mode. Every handler calls
+// publicHandler.resolve first, and none mounts a books handler: those require
+// an authenticated user, so they would 401 every recipient and skip the
+// refusal rules. A new refusal rule goes in resolve.
 func RegisterPublicRoutes(api *echo.Group, shareLinkService *Service, bookService *books.Service, dlCache *downloadcache.Cache, coverCache *covers.ThumbnailCache) {
 	h := &publicHandler{
 		service:            shareLinkService,

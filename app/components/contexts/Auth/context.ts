@@ -12,6 +12,10 @@ export interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   needsSetup: boolean;
+  /**
+   * From the unauthenticated GET /auth/status. Branch on this, never on the
+   * hostname or username.
+   */
   demoMode: boolean;
   /**
    * The server's PDF render settings key from GET /auth/status. PDF page

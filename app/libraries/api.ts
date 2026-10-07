@@ -133,6 +133,9 @@ class ShishoAPI {
   //   otherwise get a string it cannot use.
   // - non-2xx without a Shisho error body rejects with a status-based message
   //   and an undefined code.
+  // A direct fetch to a JSON endpoint (a FormData upload, which request()
+  // would JSON-encode) passes its response here rather than calling
+  // response.json().
   async checkStatus<T = unknown>(response: Response): Promise<T> {
     // Read the body as text rather than trusting content-length or
     // content-type: chunked empty bodies have no content-length, and proxies

@@ -105,6 +105,7 @@ func sortedJSONKeys(t *testing.T, raw json.RawMessage) []string {
 
 // TestSearchMetadata_ResponseWireShape pins the exact wire shape of
 // POST /plugins/search, the heaviest-consumed plugin response (Identify flow).
+// Extend this file when adding fields to a heavily consumed plugin response.
 func TestSearchMetadata_ResponseWireShape(t *testing.T) {
 	t.Parallel()
 

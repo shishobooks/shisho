@@ -2,6 +2,7 @@
 // navigator.clipboard exists only in secure contexts (HTTPS or localhost), and
 // many self-hosted servers are reached over plain HTTP on a LAN, so fall back
 // to a hidden textarea and execCommand there.
+// On false, toast an error rather than a success.
 export const copyText = async (text: string): Promise<boolean> => {
   if (navigator.clipboard?.writeText) {
     try {

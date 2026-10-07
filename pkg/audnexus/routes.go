@@ -7,8 +7,10 @@ import (
 )
 
 // RegisterRoutes wires the audnexus endpoint into the API group. The
-// endpoint is scoped to authenticated users with books:write (the only
-// legitimate use is staging data into an editable chapter form).
+// endpoint is scoped to authenticated users with books:write, not books:read
+// (the only legitimate use is staging data into an editable chapter form, so
+// read-only users gain nothing). Hiding the button is not enough; the
+// endpoint must reject the request too.
 func RegisterRoutes(e *echo.Group, svc *Service, authMiddleware *auth.Middleware) {
 	g := e.Group("/audnexus")
 	g.Use(authMiddleware.Authenticate)

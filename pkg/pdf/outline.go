@@ -16,7 +16,9 @@ type OutlineEntry struct {
 // a flat list of entries with their target page numbers.
 // Returns nil (not an error) if the PDF has no bookmarks.
 // It is part of the Scan path, so it waits scanPdfiumTimeout for the pdfium
-// instance.
+// instance. Outlines are read with PDFium, never pdfcpu: pdfcpu refuses an
+// outline containing /Dest [null ...], which some tooling writes on most
+// bookmarks.
 func ExtractOutline(path string) ([]OutlineEntry, error) {
 	instance, err := PdfiumInstance(scanPdfiumTimeout)
 	if err != nil {

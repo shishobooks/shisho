@@ -15,8 +15,8 @@ import {
 // Cover endpoints are served `private, max-age=31536000, immutable`, so the
 // browser never revalidates a cover URL it has seen. Every cover URL carries a
 // `?v=` cache key that changes when the cover does, and every one is built
-// here so no call site can leave the key off. See
-// docs/agents/frontend/image-urls.md.
+// here so no call site can leave the key off. See "Image URLs" in
+// app/AGENTS.md.
 
 /** The fields of a book a cover URL depends on. */
 export type CoverSourceBook = Pick<Book, "id" | "cover_cache_key">;
@@ -30,6 +30,12 @@ export type CoverSourceFile = Pick<File, "id" | "updated_at">;
 /**
  * The cache key for anything served from a file: its `updated_at` in epoch
  * milliseconds. File covers and page images share it.
+ *
+ * Every rescan that re-reads a changed file bumps `updated_at`, and the same
+ * scan drops the server's cached pages. Unrelated metadata edits also bump
+ * it, which only costs a refetch. A size-plus-mtime key would churn less but
+ * would not change on a forced refresh, the manual fix after a replacement
+ * that kept size and mtime.
  */
 export const fileCacheKey = (file: Pick<File, "updated_at">): number =>
   new Date(file.updated_at).getTime();

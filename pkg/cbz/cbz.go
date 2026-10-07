@@ -299,6 +299,11 @@ func ParseComicInfo(r io.ReadCloser) (*ComicInfo, error) {
 }
 
 // getSortedImageFiles returns a sorted list of image files from a zip reader.
+// Page N is the Nth entry after a plain byte-order sort of entry names, so
+// "page10" sorts before "page2". Stored page numbers (cover page, chapter
+// start pages) are 0-indexed into this order, and pkg/cbzpages serves pages
+// with its own copy of this function, so the two sorts must stay identical.
+// pkg/kepub orders pages with naturalLess instead.
 func getSortedImageFiles(zipReader *zip.Reader) []*zip.File {
 	var imageFiles []*zip.File
 	for _, file := range zipReader.File {

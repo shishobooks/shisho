@@ -1,3 +1,11 @@
+// Package ereader serves server-rendered HTML for stock Kobo and Kindle
+// browsers that cannot use OPDS or the React app. Those browsers have no
+// flexbox or modern CSS, minimal JavaScript, no Basic Auth, and (Kobo) clear
+// cookies on close, so pages use inline styles rather than attribute
+// selectors, block-level links stacked vertically at full width, 12px+
+// padding and explicit borders on tap targets, and <input type="submit">
+// rather than <button>. Every interpolated value goes through
+// html.EscapeString, since titles and names come straight from file metadata.
 package ereader
 
 import (

@@ -304,6 +304,9 @@ func ParseOPF(filename string, r io.ReadCloser) (*ParseOPFResult, error) {
 
 	coverFilepath := ""
 	coverMimeType := ""
+	// The writer (findCoverImage in pkg/filegen/epub.go) looks the cover up in
+	// the same order so it overwrites the image the parser read; change both
+	// together.
 	// 1. Preferred: <meta name="cover" content="ID"/> pointing at a manifest item.
 	if metaContent["cover"] != "" {
 		for _, item := range pkg.Manifest.Item {

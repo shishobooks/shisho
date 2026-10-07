@@ -1,6 +1,6 @@
 # Coding Standards
 
-Review-time rules for the code-review Standards reviewer. Apply them to the diff under review. Rules that lint or tests enforce (golangci-lint, ESLint, `scripts/check-emdash.sh`, `pkg/migrations/schema_invariants_test.go`, `pkg/plugins/sdk_sync_test.go`) are not repeated here; a green check settles them.
+Review-time rules for the code-review Standards reviewer. Apply them to the diff under review. Rules that lint or tests enforce are not repeated here; a green check settles them.
 
 Read the standards file for each area the diff touches:
 

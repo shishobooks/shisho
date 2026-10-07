@@ -64,7 +64,9 @@ type RepositoryManifest struct {
 	Plugins           []AvailablePlugin `json:"plugins"`
 }
 
-// AvailablePlugin describes a plugin available for installation from a repository.
+// AvailablePlugin describes a plugin available for installation from a
+// repository, as the repository index lists it. The HTTP response shape is
+// AvailablePluginResponse in types.go.
 type AvailablePlugin struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`

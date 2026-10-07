@@ -152,6 +152,8 @@ func ServeBookCover(c echo.Context, files []*models.File, coverAspectRatio, cach
 }
 
 // ServeFileCover serves an individual file's cover, optionally resized on demand.
+// Like ServeBookCover, callers must authorize the file before calling; no
+// thumbnail parameter bypasses authorization.
 func ServeFileCover(c echo.Context, file *models.File, cacheControl, resource string, thumbnails *ThumbnailCache) error {
 	if handled, err := serveThumbnail(c, file, cacheControl, resource, thumbnails); handled {
 		return err

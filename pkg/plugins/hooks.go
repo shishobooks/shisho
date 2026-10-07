@@ -717,7 +717,10 @@ func parseChapters(vm *goja.Runtime, val goja.Value) []mediafile.ParsedChapter {
 	return chapters
 }
 
-// parseChapter maps a single JS chapter object to ParsedChapter.
+// parseChapter maps a single JS chapter object to ParsedChapter. It does not
+// check the sign of startPage: chapter policy belongs to the scan
+// (dropNegativeStartPageChapters in pkg/worker), so keep sign checks out of
+// pkg/plugins and the SDK types.
 func parseChapter(vm *goja.Runtime, val goja.Value) mediafile.ParsedChapter {
 	obj := val.ToObject(vm)
 	ch := mediafile.ParsedChapter{

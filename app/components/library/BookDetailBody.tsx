@@ -721,7 +721,11 @@ interface BookDetailBodyProps {
 // and the file list with download and read controls, plus the action menus
 // and the dialogs behind them. The page supplies the book and library from
 // the authenticated query hooks; a share page supplies a share payload and a
-// `shareLink`. See docs/agents/frontend/share-links.md.
+// `shareLink`. Every new control here decides its Share Link behavior:
+// anything that links into the app or mutates data is hidden or rendered as
+// plain text when `isShareLink` is true, with a case in
+// BookDetailBody.test.tsx, and every query is disabled there so the body
+// makes no authenticated requests for the recipient.
 const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;

@@ -59,7 +59,8 @@ func (b *Broker) Close() {
 }
 
 // Subscribe returns a channel that receives all future published events.
-// The caller must call Unsubscribe when done.
+// The caller must call Unsubscribe when done. It is for tests: the stream
+// handler must use SubscribeFiltered so permission-gated events stay gated.
 func (b *Broker) Subscribe() chan Event {
 	return b.SubscribeFiltered(nil)
 }

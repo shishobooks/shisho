@@ -65,6 +65,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	}
 	e.Binder = b
 
+	// Forwarded-header sanitization runs before routing. The rest run after
+	// it, because demo enforcement and request logging read the matched route
+	// pattern (c.Path()).
 	e.Pre(forwardedHeadersMiddleware)
 	e.Use(requestLoggerMiddleware)
 	e.Use(recovery.Middleware())
@@ -94,7 +97,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 
 	// Services and caches that more than one route family uses are built once
 	// and injected. The books service carries app settings so every mutation
-	// through it recomputes Reviewed. See "Shared services" in pkg/AGENTS.md.
+	// through it recomputes Reviewed.
 	// Tests may pass nil page caches and a nil plugin service. Build them
 	// here, as the books routes did before the caches were injected, so page
 	// and plugin routes still work.

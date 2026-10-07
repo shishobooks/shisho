@@ -201,6 +201,8 @@ func (rt *Runtime) LoadWarning() string {
 
 // HookTypes returns the list of hook type strings this plugin provides,
 // sorted alphabetically for deterministic output.
+// reconcileHookOrder builds the hook order rows from it, so a new hook type
+// must be listed here.
 func (rt *Runtime) HookTypes() []string {
 	var hooks []string
 	if rt.inputConverter != nil {

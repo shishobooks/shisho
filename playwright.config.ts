@@ -142,7 +142,7 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
       //
       // Playwright spawns the webServer with `detached: true` (its own process
       // group) and, on teardown, force-kills it with `process.kill(-pid,
-      // "SIGKILL")` — a process-GROUP kill. For that to reap the API, the API
+      // "SIGKILL")`, a process-GROUP kill. For that to reap the API, the API
       // must live in the process group whose leader is the PID Playwright
       // spawned. Two things break that:
       //   1. `go run` spawns the real api binary as a child and does not

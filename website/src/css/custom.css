@@ -317,6 +317,9 @@ h3 {
 }
 
 .docs-home__title em {
+  /* background-image, not the background shorthand: the production build adds
+     Display P3 overrides, and an overriding shorthand resets background-clip,
+     leaving the text transparent. */
   background-image: linear-gradient(
     100deg,
     oklch(0.87 0.09 288),

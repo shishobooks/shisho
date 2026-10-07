@@ -81,6 +81,9 @@ const DemoBanner = () => {
 
   // z-40 keeps the banner above the top nav (z-30) and below the modal layer
   // (z-50), so sheets and dialogs cover it instead of being clipped by it.
+  // Modal surfaces are not offset for the banner; never raise it above z-50.
+  // Its height is not fixed (the notice wraps to two or three lines on
+  // phones), so consumers read --demo-banner-height, never a constant.
   return (
     <aside
       className="sticky top-0 z-40 border-b border-primary/20 bg-background text-sm"

@@ -52,6 +52,8 @@ func (h *handler) applyAuthors(ctx context.Context, book *models.Book, proposed 
 			}
 		}
 	}
+	// author_source is nullable, but the Go field is a nullzero string, so ""
+	// writes NULL.
 	book.AuthorSource = ""
 	if len(resolved) > 0 {
 		book.AuthorSource = attr.sourceFor("authors")
@@ -227,7 +229,8 @@ func equalStringPointers(a, b *string) bool {
 // from the submitted intent. Series identity is resolved through
 // FindOrCreateSeries, so an Alias of an attached Series is the same
 // membership. The source passed to FindOrCreateSeries only concerns the Series
-// name and is unchanged here.
+// name and is unchanged here; never read Series.NameSource as membership
+// provenance.
 func (h *handler) applySeries(ctx context.Context, book *models.Book, entries []SeriesEntry, attr applyAttribution) error {
 	resolved := make([]*models.BookSeries, 0, len(entries))
 	seen := make(map[int]struct{}, len(entries))

@@ -8,7 +8,7 @@ import tseslint from "typescript-eslint";
 import mutateAsyncHandled from "./eslint-rules/mutate-async-handled.js";
 
 // Permission checks take a typed requirement through useCan or can (see
-// docs/agents/frontend/permissions.md), so a typo fails to compile.
+// "Permissions" in app/AGENTS.md), so a typo fails to compile.
 // hasPermission takes plain strings, where a typo fails silently.
 const literalPermissionCheck = {
   selector:
@@ -88,7 +88,7 @@ const uiConventions = [
 
 // A mutation fired with mutate() reports a rejection only through onError, so
 // one without it fails silently. Toast it with toastRequestError (see
-// docs/agents/frontend/request-errors.md), or use mutateAsync in a
+// "Request errors" in app/AGENTS.md), or use mutateAsync in a
 // try/catch. The options must be an object literal passed straight to
 // mutate(), so an onError inside a nested call does not count, options held
 // in a variable are flagged because the rule cannot see into them, and

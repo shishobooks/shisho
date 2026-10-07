@@ -129,6 +129,11 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 }
 
 // Invalidate removes all cached pages for a file, at every render setting.
+// The cache does not notice a file replaced on disk, so whatever replaces a
+// file must call this (the scan does). Like Clear it is a plain RemoveAll: a
+// render that opened the old file before the swap can write one stale page
+// back afterwards. The window is one page render, so it is accepted rather
+// than locked.
 func (c *Cache) Invalidate(fileID int) error {
 	return os.RemoveAll(c.fileDir(fileID))
 }
@@ -169,8 +174,9 @@ func (c *Cache) SizeBytes() (int64, int, error) {
 //
 // A concurrent GetPage call may race the removal and fail with ENOENT as its
 // MkdirAll/WriteFile sequence hits the deleted tree; the next attempt recreates
-// the directory and succeeds. See pkg/pdfpages/AGENTS.md "Thread Safety" for
-// the full interaction with the pdfium pool.
+// the directory and succeeds. There is no mutex here: the pdfium pool
+// serializes renders, and the race is accepted rather than locked, so
+// callers must not assume Clear is invisible to concurrent readers.
 func (c *Cache) Clear() error {
 	if err := os.RemoveAll(c.rootDir()); err != nil {
 		return errors.Wrap(err, "failed to clear cache")

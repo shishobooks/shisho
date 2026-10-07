@@ -1,3 +1,6 @@
+// Re-exports the tygo-generated API types. Re-export a `List*Response` only
+// when its envelope differs from `{ items, total }` and a hook types its
+// return on it.
 export * from "./generated/covers";
 export * from "./generated/models";
 export {
@@ -146,6 +149,9 @@ export {
   type ListTemplate,
 } from "./generated/lists";
 
+// The generic `{ items, total }` prop type for list components such as
+// ResourceList. Some older hooks still type their envelopes with it; a new
+// query hook returns the generated `List*Response` instead.
 export interface ResourceListResponse<T> {
   items: T[];
   total: number;

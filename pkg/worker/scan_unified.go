@@ -178,6 +178,11 @@ type ScanResult struct {
 //
 // The public Scan method wraps this to implement books.Scanner.
 //
+// FilePath mode never organizes files (scanFileCore runs with isResync=false).
+// A caller in that mode must organize the returned books itself when the
+// library has OrganizeFileStructure on, as ProcessScanJob and the monitor do,
+// or new files stay where they landed.
+//
 //nolint:unparam // cache will be used in parallel scan mode (Task 2)
 func (w *Worker) scanInternal(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	// Count how many entry points are set

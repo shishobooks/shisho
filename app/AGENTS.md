@@ -1,94 +1,88 @@
 # Shisho Frontend Development
 
-React 19, TypeScript, Tailwind, TanStack Query, Vite, and Radix UI with shadcn/ui patterns. Server state lives in TanStack Query; there is no global client state library.
-
-**Bar for additions.** Add a rule here only if it applies beyond a single fix and neither the code nor a check can convey it. Prefer writing a check (an ESLint rule or a test) over a sentence. Detail for one area goes in its topic doc under `docs/agents/frontend/`, review judgement in `docs/agents/standards/frontend.md`, and history in the commit message.
+React 19, TypeScript, Tailwind, TanStack Query, Vite, and Radix UI with shadcn/ui patterns. Server state lives in TanStack Query; there is no global client state library. HTTP client functions live in `app/libraries/api.ts`; query and mutation hooks wrap them in `app/hooks/queries/`. Reviewers also read `docs/agents/standards/frontend.md`.
 
 ## Enforced by checks
 
-Each line is a rule a check already fails on; the check's message or test says how to comply.
+ESLint (`eslint.config.js`, local rules in `eslint-rules/`) and `app/hooks/queries/permissions.test.tsx` fail on these; their messages say how to comply:
 
-- Cover, page, download, and stream URLs come from the builders in `app/utils` (ESLint rejects a literal `/api/.../cover`, `/page/`, `/download`, or `/stream` URL elsewhere).
-- Permissions are checked through typed requirements (ESLint rejects `hasPermission(...)` with string literals).
-- Queries go through a gated hook in `app/hooks/queries` (ESLint rejects importing `useQuery`/`useQueries` and the other query hooks, or calling `fetchQuery`/`prefetchQuery`/`ensureQueryData`, anywhere else outside tests).
-- Every `mutate()` passes `onError`, and every `mutateAsync` promise is caught or handed to a caller that catches it (ESLint, plus `eslint-rules/mutate-async-handled.js`; both reject destructured, aliased, or uncalled `mutate`/`mutateAsync` references).
-- Every query hook gates its route's permission (`app/hooks/queries/permissions.test.tsx` fails a new hook until it is added to `QUERY_HOOKS` and its gate matches).
-- Dynamic class names compose with `cn()` from `@/libraries/utils`, not template literals (enforced by ESLint).
-- Clipboard writes go through `copyText` (`app/utils/clipboard.ts`), not `navigator.clipboard`, which is undefined over plain HTTP on a LAN (enforced by ESLint). `copyText` returns `false` on failure: toast an error then, not a success.
-- Relative times use `formatDistanceToNow(date, { addSuffix: true })` from `date-fns`, not a hand-appended "ago" (enforced by ESLint).
-- 404 checks use `isNotFoundError`/`isLoadFailure`, not an inline `status === 404` (enforced by ESLint).
-- `<Tabs>` never takes `defaultValue` (enforced by ESLint). Tab state held in `useState` is not checked; tabs stay deep-linked through the URL (see `docs/agents/standards/frontend.md`).
+- media URLs built outside `app/utils`; `hasPermission(...)` with string literals; query hooks used outside `app/hooks/queries`; a query hook missing from `QUERY_HOOKS` or gating the wrong permission
+- `mutate()` without `onError`, or an unhandled `mutateAsync` promise
+- template-literal class names instead of `cn()`; `navigator.clipboard` instead of `copyText`; a hand-appended "ago"; an inline `status === 404`; `<Tabs defaultValue>`
 
-`app/eslint-rules.test.ts` pins the local rules, including their known bypasses: a passing lint is a tripwire, not a guarantee.
+The rules have known bypasses, pinned in `app/eslint-rules.test.ts`: a passing lint is a tripwire, not a guarantee. Tab state in `useState` passes lint but is still wrong; tabs deep-link through the URL ("Every page" in `docs/agents/standards/frontend.md`).
 
 ## API types
 
-Every request and response shape is generated from Go by tygo into `app/types/generated/` (re-exported from `@/types`). Never hand-define a type with a Go counterpart: fix the Go struct in its package's `types.go` and run `mise tygo`. See ADR 0004 (`docs/adr/0004-tygo-generated-api-types.md`).
+Request and response shapes are generated from Go by tygo into `app/types/generated/` (re-exported from `@/types`). Never hand-define a type with a Go counterpart: fix the Go struct and run `mise tygo` (ADR 0004).
 
-- Query hooks type their return as the generated `{Entity}Response` (or `List{Entities}Response` for a list), not the bare model. A response may reshape a relation (`GenreResponse.aliases` is `string[]`); read it as typed, with no `as unknown as` cast and no `.map((a) => a.name)`. `app/hooks/queries/genres.ts` and `publishers.ts` (distinct `PublisherListItem` and `PublisherResponse`) are the references.
-- `ResourceListResponse<T>` (`app/types/index.ts`) is only the generic `{ items, total }` prop type for `ResourceList`, `BookGallerySection`, and `FileListSection`. Some hooks still type envelopes with it; new hooks use the generated envelope.
-- Re-export a `List*Response` from the barrel only when its envelope differs from `{ items, total }` and a hook types its return on it.
-
-HTTP client functions live in `app/libraries/api.ts`; query and mutation hooks wrap them in `app/hooks/queries/`.
+- A query hook types its return as the generated `{Entity}Response` or `List{Entities}Response`, not the bare model or `ResourceListResponse`, and reads a reshaped relation as typed, with no `as unknown as` cast. Older hooks are not the model; `app/hooks/queries/publishers.ts` is.
 
 ## Request errors
 
-- Report a failed request with `toastRequestError(error, fallback)` from `@/libraries/api`, where `fallback` names the action (`"Failed to delete book"`). It shows the server's message when there is one. Inline error text uses `requestErrorMessage(error, fallback)`. Both stay silent on Demo Mode rejections, which `checkStatus` already toasted. Plain `toast.error` is only for client-side validation.
-- Render a failed query with `<QueryError query={q} fallback="Failed to load X" />` from `@/components/library/QueryError`, only when `q.error && !q.data`. A query with neither data nor error is waiting on its permission gate: show the spinner or nothing.
-- Detail pages keep their Not Found page for a 404 and branch on `isLoadFailure(q)` for any other failure.
+- Report a failed request with `toastRequestError(error, fallback)` from `@/libraries/api`, where `fallback` names the action (`"Failed to delete book"`); inline error text uses `requestErrorMessage(error, fallback)`. Never hand-build wording from `error.message`. Plain `toast.error` is only for client-side validation that never reached the server.
+- Render a failed query with `<QueryError query={q} fallback="Failed to load X" />` only when `q.error && !q.data` (`firstFailedQuery` picks among several), so a failed background refetch keeps loaded content. A query with neither data nor error is waiting on its permission gate: show the spinner or nothing. A failed query never shows an empty state, nothing, or a full-page error heading.
+- Where it goes: list pages keep header, search, and filters and put it where results go (`Gallery` and `ResourceList` already do); detail pages keep their Not Found page for a 404 and branch on `isLoadFailure(q)` otherwise; dialogs and popovers render it in the body, and one that would save over what failed to load hides the selection and disables Save; settings pages put it below the header.
+- A direct `fetch` (a `FormData` upload) passes its response to `API.checkStatus`, never `response.json()`. `ShishoAPIError.code` is `undefined` when a proxy, not the server, answered.
 - A failed save keeps the dialog open and the draft intact.
 
-Where `QueryError` goes on each page type, what `checkStatus` and the retry policy do, and the mutation hand-off rules: `docs/agents/frontend/request-errors.md`.
+Mutation hand-offs the lint rules cannot verify:
+
+- A handler that returns its mutation promise to a callback prop (`onSave`, `onMerge`) makes the caller responsible for catching it, reporting, and staying open. An event handler (`onClick`, `onSubmit`) never catches, so returning to one is not a hand-off.
+- A dialog that treats a resolved `onCreate`/`onUpdate` promise as success needs its parent to rethrow after toasting. Test such flows through the caller: a caller that swallows the rejection is the bug.
+- Run mutations concurrently with `await Promise.all([...mutateAsync(...)])` inside the `try`; a promise stored and awaited later is flagged.
 
 ## Permissions
 
-Two layers, both built on the typed `Requirement` (one permission, an array for all of them, or `anyOf(...)`):
+Both layers take a typed `Requirement` (one permission, an array for all, or `anyOf(...)`):
 
-- **Query hooks gate themselves** with `useRequires(requirement, enabled)` from `app/hooks/queries/permissions.ts`, set after spreading caller options. Callers pass `enabled` only for their own state (`enabled: open` for a dialog), never a restated permission.
-- **Components hide controls** with `useCan(requirement)` from `@/hooks/useCan`, called before any early return; use `can` from `useAuth()` where a hook cannot run (loops, callbacks, props). Gate on the permission the backend route requires, not the page type.
+- **Query hooks gate themselves** with `useRequires` (`app/hooks/queries/permissions.ts`). Callers pass `enabled` only for their own state (`enabled: open` for a dialog), never a restated permission. `refetch()` runs even a disabled query, so check the result's `isEnabled` first.
+- **Components hide controls** with `useCan` (or `can` from `useAuth()` where a hook cannot run). Gate on the permission the backend route requires (find it in the handler package's `routes.go`), not on the page type.
 
-Hide a control the role cannot use, and skip mounting the dialogs behind it; do not disable it. The exception is a settings form a role can read but not save: disabled inputs, `<ReadOnlyNotice />`, and no Save button. Action menus gate each entry separately.
+Hide a control the role cannot use and skip mounting the dialogs behind it; do not disable it. The exception is a settings form a role can read but not save: disabled inputs, `<ReadOnlyNotice />`, no Save button. Action menus gate each entry on its own route's permission, not the whole menu.
 
-The control-to-permission table, what is never gated (list membership, selection, downloads), route and nav guards, library data for roles without Libraries Read, and permission tests: `docs/agents/frontend/permissions.md`.
+- Never gated on a write permission: list membership (it follows the list's own `permission` field), selection mode, and downloads.
+- A new route adds its requirement to `ROUTE_PERMISSIONS` (`@/utils/permissions`), which both the route guard and the nav hooks read.
+- A link to another page (a series or person name) renders as plain text when the target route would deny the role. A page part backed by a route the role lacks is hidden or replaced by a notice.
+- Reader pages read libraries through `useUserLibraries` and its siblings (`GET /user/libraries`), never the Libraries Read hooks `useLibrary`/`useLibraries`. User pickers outside admin pages use `useUserDirectory`.
+- `X.permissions.test.tsx` renders the real query hooks with a spied `API.request` and asserts which requests fire for a role; assert that no request fires, not which `enabled` a caller passed.
+
+## Demo Mode
+
+Branch on `demoMode` from `useAuth()`. `checkStatus` already toasts a Demo Mode rejection, and `toastRequestError` stays silent on it; new inline error UI skips it with `isDemoModeError(error)`. Test that through the real `API` with a `demo_mode` 403 and a real `<Toaster />`: a mocked rejection never reaches `checkStatus`. Demo Mode hides only a few controls (downloads, admin and Security entries); everything else the role may use stays visible and relies on the backend rejection. `useCan` and `can` know nothing about Demo Mode. Backend side: `docs/agents/backend/demo-mode.md`.
 
 ## Forms
 
-Every form that creates or updates data has unsaved changes protection: dialogs use `FormDialog` (`@/components/ui/form-dialog`) with `useFormDialogClose` to close after a save, and pages use `useUnsavedChanges` (`@/hooks/useUnsavedChanges`) with `UnsavedChangesDialog`. Both compare current state to an `initialValues` snapshot and reset the snapshot after a successful save. Wiring for child editors and tab switches: `docs/agents/frontend/forms.md`.
+Every form that creates or updates data has unsaved changes protection. Keep an `initialValues` snapshot, compute `hasChanges` against it (`fast-deep-equal` for arrays and objects), and reset the snapshot to the saved values after a successful save.
+
+- Dialogs use `FormDialog` (`@/components/ui/form-dialog`) and close after a save with `requestClose` from `useFormDialogClose`; calling `onOpenChange(false)` right after the reset prompts on the stale `hasChanges`. Initialize fields in an effect keyed on `open`. A confirmation launched from a form dialog renders beside the `FormDialog`, not inside it.
+- Pages use `useUnsavedChanges` with `UnsavedChangesDialog`, and initialize once per entity behind an `isInitialized` flag reset when the id changes, so a background refetch cannot overwrite edits.
+- A child editor with its own Save reports through `onHasChangesChange`, and the parent ORs it into its `hasChanges`. Tabs with inline editing intercept `onValueChange`: while `hasChanges`, hold the target tab and show `UnsavedChangesDialog`.
+
+## Image URLs
+
+Cover and page endpoints are cached `immutable`, and browsers also keep an in-memory image cache that reuses the bitmap for any `src` already rendered this session, so a changed image needs a changed URL. Every URL carries a `?v=` key built by the helpers in `app/utils` (`coverUrl.ts`, `pageUrl.ts`, `downloadUrl.ts`), which document their keys.
+
+- Components take the model (book, series, file) and call the helper, never a bare id or key. Page URLs come from `useFilePageUrl()`, which adds the PDF render key.
+- Render server covers with `CoverImage`, keyed `key={coverUrl}` where the cover can change while mounted; use a plain `<img>` for local previews, provider images, and CBZ/PDF pages. Tests rendering covers call `mockCoverDimensions()` (jsdom has no layout).
+- A cover-changing mutation invalidates the query whose data drives the key.
 
 ## Testing
 
-- Unit and component tests are colocated as `*.test.ts(x)` and run with Vitest and Testing Library (`mise test:unit`). E2E patterns live in `e2e/AGENTS.md`.
-- Anything that calls `useAuth()` throws outside `AuthProvider`. Use the shared mock and set the role per test; never hand-write a `useAuth` mock:
-
-  ```ts
-  vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
-  beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
-  ```
-
-- `vitest.setup.ts` turns on fake timers globally (`shouldAdvanceTime: true`), so `userEvent.setup()` needs `{ advanceTimers: vi.advanceTimersByTime }` or clicks and typing stall under load.
-- `testTimeout` is 15s because `mise check:quiet` runs the unit suite beside the Go tests, linters, and e2e. Keep it. A test that is slow on an idle machine gets cheaper (render one card, not a full page); a load-induced timeout is not fixed with a per-test timeout.
-- Mutation failure helpers (`rejectingMutate`, `watchUnhandledRejections`) are in `app/testing/mutations.ts`.
+- Unit and component tests are colocated as `*.test.ts(x)` and run with Vitest and Testing Library (`mise test:unit`). E2E patterns live in `e2e/AGENTS.md`. Test-only helpers go in `app/testing/`, which the production build excludes.
+- Anything that calls `useAuth()` throws outside `AuthProvider`. Never hand-write a `useAuth` mock: use `app/testing/auth.ts` (its header shows the `vi.mock` and `setAuth` lines).
+- `vitest.setup.ts` turns on fake timers globally, so `userEvent.setup()` needs `{ advanceTimers: vi.advanceTimersByTime }` or clicks and typing stall under load.
+- `testTimeout` is 15s because `mise check:quiet` runs the unit suite beside everything else. Keep it; make a slow test cheaper (render one card, not a page) rather than raising a per-test timeout.
+- Mutation failure helpers are in `app/testing/mutations.ts`.
 
 ## Gotchas
 
-- **Image URLs need `?v=` even with `immutable` caching.** Browsers keep an in-memory image cache separate from the HTTP cache and reuse the decoded bitmap for any `src` already rendered this session, so a changed image needs a changed URL. Components take the model (book, series, file) and call the builder; render server covers with `CoverImage`, keyed `key={coverUrl}` where the image can change while mounted. Detail: `docs/agents/frontend/image-urls.md`.
-- **A custom component used as a Radix `asChild` trigger must `forwardRef` and spread props** onto the underlying `Button`, with `displayName` set (see `SizeButton`, `SortButton`, `FilterButton`). Without the ref, floating content (`Popover`, `DropdownMenu`, `Tooltip`) anchors at `(0, 0)` and renders off-screen, and `Dialog`/`Sheet` cannot restore focus. jsdom runs no positioning, so unit tests pass; only a real browser shows it. A bare `<Button>` child is already forwardRef'd.
-- **Sortable lists need stable client-side row keys.** Index and content keys change on reorder and break dnd-kit's drag tracking (flicker, dropped drags, edits landing on the wrong row). Assign an id when a row enters the list and keep it: `FileChaptersTab` uses a monotonic counter (`nextEditKey()`), and `SortableEntityList` keys a `WeakMap` by item reference, so its callers must pass stable references (`useState` or `useMemo`, as `IdentifyReviewForm`'s `narratorItems` does). Server ids work only when every row, including unsaved ones, has one.
-- **CBZ and PDF page numbers are 0-indexed in storage and the API, 1-indexed on screen.** Convert at the display edge (`ChapterRow`, `PagePicker`, `CBZReader`, the uncovered-pages warning), never in what you send back.
-- **Dialogs focus their container, not the header close button.** `DialogContent` does this when the first tabbable element carries `data-dialog-header-close`; otherwise Radix focuses the first field. A caller's `onOpenAutoFocus` runs first and wins with `preventDefault()`. Close buttons keep `focus-visible:` rings.
-- **A dialog opened from a dropdown item**: the `Dialog` wrapper in `app/components/ui/dialog.tsx` already clears the `pointer-events: none` Radix can leave on `<body>`. Give the `DropdownMenuContent` `onCloseAutoFocus={(e) => e.preventDefault()}` so the two focus managers do not fight.
-- **File labels come from the server.** Render `fileLabel(file)` from `@/utils/format` (the Go-resolved `display_name`); a supplement's label is its filename, and the Share Link payload has no path to rebuild one from.
-- **`Button` defaults `type="button"`**, so a form's submit button must say `type="submit"`. Its kit also covers one-offs: `size="icon-sm"`/`"icon-xs"` for small icon buttons, `variant="link"` for inline text links (no `h-auto p-0` needed), `variant="unstyled"` for rows and tiles, and `BadgeRemoveButton` for the X in a `Badge`.
+- **A custom component used as a Radix `asChild` trigger must `forwardRef` and spread props** onto the underlying `Button`, with `displayName` set. Without the ref, floating content anchors at `(0, 0)` off-screen and `Dialog`/`Sheet` cannot restore focus. jsdom runs no positioning, so unit tests pass; only a real browser shows it.
+- **Sortable lists need stable client-side row keys** assigned when a row enters the list. Index and content keys change on reorder and break dnd-kit drag tracking; server ids work only if unsaved rows have one too.
+- **CBZ and PDF page numbers are 0-indexed in storage and the API, 1-indexed on screen.** Convert at the display edge, never in what you send back.
+- **A dialog opened from a dropdown item**: give the `DropdownMenuContent` `onCloseAutoFocus={(e) => e.preventDefault()}` so the two focus managers do not fight.
+- **File labels come from the server**: render `fileLabel(file)` from `@/utils/format`, never a label rebuilt from the name or path.
+- **`Button` defaults `type="button"`**, so a submit button says `type="submit"`. Before overriding its classes, use its other sizes and variants (`icon-sm`, `icon-xs`, `link`, `unstyled`) or `BadgeRemoveButton`.
+- **Full-height surfaces offset with `--demo-banner-height`**, never a fixed banner height; modals cover the banner instead. UI shared by library and admin pages (sidebar chrome, top-nav geometry, `UserMenu`) lives in `app/components/layout/` so the two cannot drift.
+- **M4B audio can hang silently.** Outside WebKit, xHE-AAC files pass `canPlayType` and then hang on any seek with no error, so a test file that plays fine never shows the bug. New code driving an `<audio>` element reuses `app/utils/audioCodec.ts` and follows its header comment (no `play()` before `canplay`, a timeout on every wait).
 - New shadcn components are added with `npx shadcn@latest add`.
-
-## Topic docs
-
-- `docs/agents/frontend/request-errors.md`: read when reporting a failed request or query, placing `QueryError` on a page, handing a mutation promise to a caller, or calling `fetch` directly.
-- `docs/agents/frontend/permissions.md`: read when adding a mutating control, query hook, route, nav entry, or entity link, or when a test depends on the role.
-- `docs/agents/frontend/forms.md`: read when building a form dialog, a settings or edit page, or a child editor with its own Save.
-- `docs/agents/frontend/image-urls.md`: read when rendering a cover or page image, adding a cover-changing action, or building a download or stream link.
-- `docs/agents/frontend/demo-mode.md`: read when touching write-error reporting, controls hidden in Demo Mode, or stored preferences.
-- `docs/agents/frontend/share-links.md`: read when changing `BookDetailBody`, the share dialog, or the `/share/:token` page.
-- `docs/agents/frontend/audio-playback.md`: read when changing the M4B player, the chapter audio preview, or `app/utils/audioCodec.ts`.
-- `app/components/layout/AGENTS.md`: read when touching the top nav, sidebars, `UserMenu`, or the Demo Mode banner.
-- Reviewers: `docs/agents/standards/frontend.md` holds the frontend judgement rules (tokens, layout, mobile, long text, tabs, page titles, forms, cache invalidation).

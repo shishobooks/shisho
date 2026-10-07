@@ -173,7 +173,10 @@ func convertChaptersToFingerprint(chapters []*models.Chapter, fileType string) [
 	return result
 }
 
-// ComputeFingerprint creates a fingerprint from a book and file.
+// ComputeFingerprint creates a fingerprint from a book and file. The file
+// needs Narrators, Identifiers, and Publisher loaded (RetrieveFile is not
+// enough); a relation that is not loaded silently drops out of the
+// fingerprint, so a stale cached download can be served.
 func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, error) {
 	fp := &Fingerprint{
 		GeneratorVersion: GeneratorVersion,

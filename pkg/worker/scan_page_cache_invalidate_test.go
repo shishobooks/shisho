@@ -36,10 +36,10 @@ const (
 // primeCachedPage writes page 0 where the page cache of the given kind
 // ("pdf" or "cbz") keeps it: {cacheDir}/cbz/{fileID}/page_0.jpg, or
 // {cacheDir}/pdf/{fileID}/{dpi}-{quality}/page_0.jpg at the render settings
-// the test worker's PDF cache uses (see pkg/pdfpages/AGENTS.md; cbzpages
-// matches any page_0.* extension). A real PDF render goes through the shared
-// pdfium WASM pool, which is slow to start and is not what these tests are
-// about.
+// the test worker's PDF cache uses (see the Cache doc comments in
+// pkg/pdfpages/cache.go; cbzpages matches any page_0.* extension). A real PDF
+// render goes through the shared pdfium WASM pool, which is slow to start and
+// is not what these tests are about.
 func primeCachedPage(t *testing.T, cacheDir, kind string, fileID int) string {
 	t.Helper()
 	pageDir := filepath.Join(cacheDir, kind, strconv.Itoa(fileID))

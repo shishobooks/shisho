@@ -27,8 +27,9 @@ interface QueryErrorProps {
  * The inline report of a failed query: the message requestErrorMessage
  * derives and, for an enabled query, a Retry button. Every page, section
  * and dialog that shows a query failure renders this, so a failure reads and
- * retries the same way everywhere (see "Failed queries: `QueryError`" in
- * docs/agents/frontend/request-errors.md).
+ * retries the same way everywhere (see "Request errors" in app/AGENTS.md).
+ * A disabled query gets no Retry, since `refetch()` would bypass the hook's
+ * permission gate.
  */
 const QueryError = ({ query, fallback, className }: QueryErrorProps) => (
   <div

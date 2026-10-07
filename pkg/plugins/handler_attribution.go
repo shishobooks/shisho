@@ -53,7 +53,9 @@ func validSourceIntent(intent string) bool {
 // validateSourceIntents rejects any intent outside the finite SourceIntent
 // set, in both the payload's sources map and the reserved per-entry "source"
 // on identifier objects, so no client-provided string can reach a source
-// column.
+// column. It overlaps the oneof tag on PluginApplyPayload.Sources on purpose:
+// the tag cannot express the identifier entries, and callers that bypass the
+// custom binder (most handler tests) skip the tag.
 func validateSourceIntents(payload *PluginApplyPayload) error {
 	for key, intent := range payload.Sources {
 		if !validSourceIntent(intent) {

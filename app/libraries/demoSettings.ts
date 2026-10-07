@@ -1,3 +1,7 @@
+// In Demo Mode, user and per-library settings stay in the browser: the query
+// hooks fetch the server defaults, merge the stored values over them, and
+// write Demo Mode mutations to local storage and the query cache without
+// sending a request.
 export const readDemoSettings = <T extends object>(
   key: string,
   serverDefaults: T,

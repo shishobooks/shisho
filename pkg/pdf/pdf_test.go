@@ -20,7 +20,9 @@ import (
 var testdataDir string
 
 func TestMain(m *testing.M) {
-	// Create test fixtures as raw PDF files with full control over the info dict.
+	// Create test fixtures as raw PDF files with full control over the info
+	// dict: pdfcpu's write path would overwrite CreationDate, ModDate, and
+	// Producer.
 	dir, err := os.MkdirTemp("", "pdf-test-*")
 	if err != nil {
 		panic("failed to create temp dir: " + err.Error())

@@ -86,7 +86,10 @@ func main() {
 	}
 
 	// Plugin system. The Manager, the worker, and the server share this one
-	// plugin service (see "Shared services" in pkg/AGENTS.md). worker.New and
+	// plugin service, and the server and worker share the download and page
+	// caches built below: the download cache's per-file lock lives on the
+	// instance, and a second page cache would drift from the one the cache
+	// admin routes size and clear and the scan invalidates. worker.New and
 	// server.New build their own when handed nil, which only tests should do.
 	pluginService := plugins.NewService(db)
 	pluginManager := plugins.NewManager(pluginService, cfg.PluginDir, cfg.PluginDataDir)

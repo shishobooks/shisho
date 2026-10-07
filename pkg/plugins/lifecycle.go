@@ -75,6 +75,9 @@ func validatePluginRef(scope, id string) error {
 }
 
 // lockPlugin takes the lifecycle lock of one plugin and returns its unlock.
+// Take it before Runtime.mu, never inside a hook or a database transaction,
+// and download or stage packages before taking it, so a slow download never
+// blocks a disable.
 func (m *Manager) lockPlugin(scope, id string) func() {
 	v, _ := m.locks.LoadOrStore(pluginKey(scope, id), &sync.Mutex{})
 	mu := v.(*sync.Mutex)

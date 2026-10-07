@@ -20,7 +20,7 @@ type OrderClause struct {
 }
 
 // OrderClauses maps a parsed sort spec to the SQL ORDER BY clauses
-// that implement it on the `books` table (aliased `b` per pkg/AGENTS.md).
+// that implement it on the `books` table (aliased `b` in models.Book's bun tag).
 //
 // Every clause includes a NULLS-LAST indicator (`<expr> IS NULL`) so
 // books missing the sort key always sit at the end regardless of
