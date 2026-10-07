@@ -78,10 +78,6 @@ Run `mise check:quiet` once when the work is done, before pushing or opening a P
 
 **`package.json` dependency split is for Docker, not Node semantics**: `dependencies` holds everything `pnpm build` needs, including build tools and `@types/*`; `devDependencies` holds only test and lint tools, so the Dockerfile can `pnpm install --prod`. Place new packages by that rule.
 
-## Architecture
-
-Go (Echo, Bun ORM, SQLite) backend in `pkg/`; React, TypeScript, Tailwind, Tanstack Query, and Vite frontend in `app/`; mise for tools and tasks, Air for hot reload. The production image is a single Go binary that serves `/api` and the embedded SPA; see `docs/agents/docker-and-deploy.md`.
-
 ## Docs and config must move with behavior
 
 - **`website/docs/` holds only what an operator of Shisho needs to know**: how to deploy, configure, use, troubleshoot, or extend it through the supported plugin contract. A change that alters what an operator sees or does updates the page that owns that fact, in the same change, and plans for such changes include a docs task. How the feature works inside (endpoints the UI calls, the data model, package layout, internal behavior) stays out, however large the change. Read `website/AGENTS.md` before editing the site; its inclusion test decides what belongs.
@@ -96,7 +92,6 @@ Go (Echo, Bun ORM, SQLite) backend in `pkg/`; React, TypeScript, Tailwind, Tanst
 - Go tests get their database from `testdb.New(t)` (`pkg/testutils/testdb`); don't copy a `setupTestDB` into a package. Migration tests that need an older schema, and worker tests that share a cache-mode database across goroutines, open their own.
 - Run Go tests through `mise test`, or set `TZ=America/Chicago CI=true` as it does when calling `go test` directly.
 - New Go tests call `t.Parallel()` as their first line, unless they touch shared global state: `pkg/config` tests mutate global config, and `pkg/plugins/AGENTS.md` lists the plugin tests that can't run in parallel.
-- Add tests for major functionality such as workers and file parsers; extract complex handler logic and test it separately.
 - **Bug fixes and features follow Red-Green-Refactor**, in sequence: write the test and watch it fail, implement until it passes, then clean up with the tests still passing. A test never seen failing proves nothing.
 
 ## Git conventions
@@ -119,11 +114,10 @@ Not enforced, so read these:
 - **SQLite table rebuilds use the helpers in `pkg/migrations/rebuild.go`**, never a hand-rolled copy like the `recreateTable` inside an older migration: with `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent cascades deletes into every child, and the pragma is a no-op inside a transaction.
 - **Connection pragmas apply per connection**, and `database/sql` replaces a connection whose query is canceled, so a test that opens its own database uses `pkg/sqliteconn.NewConnector` as `database.New` and `testdb.New(t)` do (or pins one connection and enables the pragma).
 - **CASCADE does not clean up FTS indexes or the links that say which rows copied a deleted entity.** Collect affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it; see `docs/agents/backend/search-fts.md`.
-- Index the columns in deletion `WHERE` clauses, and order composite index columns to match the query.
 
 ## Agent skills
 
 - **Issue tracker**: GitHub Issues on `shishobooks/shisho`. See `docs/agents/issue-tracker.md`.
 - **Triage labels**: see `docs/agents/triage-labels.md`.
 - **Domain docs**: single-context layout. See `docs/agents/domain.md`.
-- **Repo skills** in `.claude/skills/`: `favicon` (favicons, app and PWA icons), `splash` (README splash image), `metadata-field` (adding, removing, or significantly changing a metadata field on books or files).
+- **Adding, removing, or significantly changing a metadata field** on books or files: follow `.claude/skills/metadata-field/SKILL.md`, because the field touches many places and agents miss some.
