@@ -47,24 +47,24 @@ run = "pnpm -C website build"
 # === Dev Server ===
 
 [tasks.start]
-description = "Start development environment (API + web)"
-depends = ["start:air", "start:web"]
+description = "Start development environment (API + web) on free ports"
+run = "go run ./cmd/dev start"
 
 [tasks."start:air"]
-description = "Start API with hot reload via Air"
-run = "air"
+description = "Start API with hot reload via Air on a free port"
+run = "go run ./cmd/dev start air"
 
 [tasks."start:web"]
-description = "Start Vite dev server (waits for API)"
-run = "until nc -z localhost 3689 2>/dev/null; do sleep 0.5; done && pnpm start"
+description = "Start Vite dev server against this worktree's API (waits for it)"
+run = "go run ./cmd/dev start web"
 
 [tasks."start:api"]
-description = "Start API directly (no hot reload)"
-run = "go run ./cmd/api"
+description = "Start API directly (no hot reload) on a free port"
+run = "go run ./cmd/dev start api"
 
 [tasks.docs]
-description = "Start documentation dev server"
-run = "cd website && pnpm start"
+description = "Start documentation dev server on a free port"
+run = "go run ./cmd/dev docs"
 
 # === Type Generation ===
 

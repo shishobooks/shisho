@@ -138,7 +138,7 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
   return [
     {
       // Build the API binary and `exec` it directly. Do NOT route this through
-      // `mise start:api` (= `go run ./cmd/api`) or any other wrapper.
+      // `mise start:api` (which wraps `go run ./cmd/api` in the dev launcher) or any other wrapper.
       //
       // Playwright spawns the webServer with `detached: true` (its own process
       // group) and, on teardown, force-kills it with `process.kill(-pid,

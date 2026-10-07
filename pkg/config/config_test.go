@@ -394,3 +394,28 @@ func TestNew_UnparseableDurationNamesKeyAndFormat(t *testing.T) {
 		assert.Contains(t, err.Error(), "such as 500ms, 5s or 1m")
 	})
 }
+
+func TestNew_CookieNamespace(t *testing.T) {
+	t.Setenv("DATABASE_FILE_PATH", "/tmp/test.db")
+	t.Setenv("JWT_SECRET", testJWTSecret)
+	t.Setenv("CONFIG_FILE", "/nonexistent/config.yaml")
+
+	// A generic variable another tool might set must not rename the
+	// session cookie and sign everyone out.
+	t.Setenv("COOKIE_NAMESPACE", "other_tool")
+	cfg, err := New()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.CookieNamespace)
+
+	t.Setenv("SHISHO_COOKIE_NAMESPACE", "shisho_feature_1a2b3c4d")
+	cfg, err = New()
+	require.NoError(t, err)
+	assert.Equal(t, "shisho_feature_1a2b3c4d", cfg.CookieNamespace)
+
+	// A browser drops a cookie whose name has a separator in it, so
+	// sign-in would silently stop working.
+	t.Setenv("SHISHO_COOKIE_NAMESPACE", "feature;branch")
+	_, err = New()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid config shisho_cookie_namespace (env SHISHO_COOKIE_NAMESPACE): may only contain letters, digits, '-' and '_'")
+}

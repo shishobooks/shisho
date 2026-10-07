@@ -119,8 +119,8 @@ func main() {
 		actualPort := listener.Addr().(*net.TCPAddr).Port
 		log.Info("server started", logger.Data{"port": actualPort})
 
-		// Write port file for Vite to read
-		if err := writePortFile(actualPort); err != nil {
+		// Record the port for the dev launcher's mise start:web
+		if err := writePortFile(os.Getenv("SHISHO_DEV_PORT_FILE"), actualPort); err != nil {
 			log.Err(err).Error("failed to write port file")
 		}
 
@@ -174,6 +174,10 @@ func main() {
 	}
 	log.Info("server shutdown")
 
+	// Another worktree may take this port next, so the dev launcher must not
+	// find it in this worktree's port file.
+	removePortFile(os.Getenv("SHISHO_DEV_PORT_FILE"))
+
 	// Shutdown waits for worker goroutines, so only call it if Start ran.
 	if !cfg.DemoMode {
 		wrkr.Shutdown()
@@ -224,11 +228,23 @@ func initCacheDir(dir string) error {
 	return nil
 }
 
-// writePortFile writes the server's actual port to tmp/api.port for frontend dev server.
-// Skips silently if tmp/ directory doesn't exist (e.g., in Docker).
-func writePortFile(port int) error {
-	if _, err := os.Stat("tmp"); os.IsNotExist(err) {
+// writePortFile records the server's port at path for the dev launcher's
+// mise start:web. The launcher sets SHISHO_DEV_PORT_FILE; without it, as in
+// Docker or an E2E run from the same worktree, nothing is written, so an E2E
+// API can't overwrite the dev API's port.
+func writePortFile(path string, port int) error {
+	if path == "" {
 		return nil
 	}
-	return os.WriteFile("tmp/api.port", []byte(strconv.Itoa(port)), 0600)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(os.WriteFile(path, []byte(strconv.Itoa(port)), 0600))
+}
+
+// removePortFile deletes the file writePortFile wrote, if any.
+func removePortFile(path string) {
+	if path != "" {
+		_ = os.Remove(path)
+	}
 }

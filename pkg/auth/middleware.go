@@ -33,7 +33,7 @@ func (m *Middleware) Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ctx := c.Request().Context()
 
-		cookie, err := c.Cookie(CookieName)
+		cookie, err := c.Cookie(m.authService.cookieName)
 		if err != nil || cookie.Value == "" {
 			return errcodes.AuthenticationRequired()
 		}

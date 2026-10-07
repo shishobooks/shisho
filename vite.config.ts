@@ -14,7 +14,7 @@ const appVersion = packageJson.version || "dev";
 /**
  * Gets the API port with the following priority:
  * 1. API_PORT environment variable
- * 2. tmp/api.port file (written by the API server)
+ * 2. tmp/api.port file (written by an API the dev launcher started)
  * 3. Default port 3689
  */
 function getApiPort(): number {

@@ -124,7 +124,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	svcs.books = books.NewService(db).WithAppSettings(svcs.appSettings)
 
 	// Register auth routes. The auth middleware wraps the same service.
-	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())
+	authService := auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration(), auth.WithCookieNamespace(cfg.CookieNamespace))
 	auth.RegisterRoutes(api, authService, cfg.DemoMode, pdfpages.RenderKey(cfg.PDFRenderDPI, cfg.PDFRenderQuality))
 	authMiddleware := auth.NewMiddleware(authService)
 

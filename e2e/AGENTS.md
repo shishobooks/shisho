@@ -243,7 +243,7 @@ Playwright auto-starts servers via `webServer` config. When using `--project`, o
 
 ### webServer API command: inline `go build … && exec …`, never a wrapper
 
-The API webServer command (`playwright.config.ts`) inlines `go build -o ./build/api/api-e2e-<browser> ./cmd/api && exec ./build/api/api-e2e-<browser>`. Do NOT route it through `mise start:api` (= `go run ./cmd/api`) or a `mise` task wrapper.
+The API webServer command (`playwright.config.ts`) inlines `go build -o ./build/api/api-e2e-<browser> ./cmd/api && exec ./build/api/api-e2e-<browser>`. Do NOT route it through `mise start:api` (which wraps `go run ./cmd/api` in the dev launcher) or a `mise` task wrapper.
 
 Why: Playwright spawns the webServer with `detached: true` (its own process group) and, on teardown, force-kills it with `process.kill(-pid, "SIGKILL")`, a process-GROUP kill. For that to reap the API, the API must be in the process group led by the PID Playwright spawned. Two wrappers break that:
 
