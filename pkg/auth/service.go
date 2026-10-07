@@ -30,15 +30,31 @@ type Service struct {
 	db              *bun.DB
 	jwtSecret       []byte
 	sessionDuration time.Duration
+	cookieName      string
+}
+
+// ServiceOption configures optional Service behavior.
+type ServiceOption func(*Service)
+
+// WithCookieNamespace makes the session cookie name SessionCookieName(namespace).
+func WithCookieNamespace(namespace string) ServiceOption {
+	return func(s *Service) {
+		s.cookieName = SessionCookieName(namespace)
+	}
 }
 
 // NewService creates a new auth service.
-func NewService(db *bun.DB, jwtSecret string, sessionDuration time.Duration) *Service {
-	return &Service{
+func NewService(db *bun.DB, jwtSecret string, sessionDuration time.Duration, opts ...ServiceOption) *Service {
+	s := &Service{
 		db:              db,
 		jwtSecret:       []byte(jwtSecret),
 		sessionDuration: sessionDuration,
+		cookieName:      CookieName,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // CountUsers returns the total number of users.

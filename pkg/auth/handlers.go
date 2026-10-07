@@ -10,9 +10,19 @@ import (
 )
 
 const (
-	// CookieName is the name of the session cookie.
+	// CookieName is the name of the session cookie without a namespace.
 	CookieName = "shisho_session"
 )
+
+// SessionCookieName returns the session cookie name for a cookie namespace.
+// Browsers scope cookies by host but not port, so development worktrees on
+// one host each set a namespace to keep their sessions apart.
+func SessionCookieName(namespace string) string {
+	if namespace == "" {
+		return CookieName
+	}
+	return CookieName + "_" + namespace
+}
 
 type handler struct {
 	authService  *Service
@@ -67,7 +77,7 @@ func (h *handler) login(c echo.Context) error {
 
 	// Set HTTP-only cookie
 	cookie := &http.Cookie{
-		Name:     CookieName,
+		Name:     h.authService.cookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(h.authService.sessionDuration.Seconds()),
@@ -84,7 +94,7 @@ func (h *handler) login(c echo.Context) error {
 func (h *handler) logout(c echo.Context) error {
 	// Clear cookie by setting MaxAge to -1
 	cookie := &http.Cookie{
-		Name:     CookieName,
+		Name:     h.authService.cookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
@@ -102,7 +112,7 @@ func (h *handler) me(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Read the session cookie directly
-	cookie, err := c.Cookie(CookieName)
+	cookie, err := c.Cookie(h.authService.cookieName)
 	if err != nil || cookie.Value == "" {
 		return errcodes.AuthenticationRequired()
 	}
@@ -167,7 +177,7 @@ func (h *handler) setup(c echo.Context) error {
 
 	// Set HTTP-only cookie
 	cookie := &http.Cookie{
-		Name:     CookieName,
+		Name:     h.authService.cookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(h.authService.sessionDuration.Seconds()),

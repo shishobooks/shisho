@@ -88,6 +88,15 @@ type Config struct {
 	// left out of the public docs and the example config on purpose.
 	TestMode bool `koanf:"shisho_test_mode" json:"test_mode"`
 
+	// CookieNamespace is appended to the session cookie name. Browsers scope
+	// cookies by host but not port, so `mise start` sets it per worktree to
+	// keep sessions on localhost apart. It is development-only and, like
+	// TestMode, left out of the public docs and the example config. Unlike
+	// TestMode it is also kept out of the config API, so the Server Settings
+	// page does not show it. Its SHISHO_ prefix keeps a generic variable set
+	// for another tool from renaming the cookie and signing everyone out.
+	CookieNamespace string `koanf:"shisho_cookie_namespace" json:"-" validate:"omitempty,cookie_token"`
+
 	// DevLibraryPath is the computed path to tmp/library in the main git repo.
 	// Used by the frontend to create a default dev library.
 	// Computed at startup, not from config file. Only set in development.
@@ -329,6 +338,9 @@ func splitList(value string) []string {
 // allowed range.
 func validateConfig(cfg *Config) error {
 	validate := validator.New()
+	if err := validate.RegisterValidation("cookie_token", isCookieToken); err != nil {
+		return errors.WithStack(err)
+	}
 	validate.RegisterTagNameFunc(func(f reflect.StructField) string {
 		return f.Tag.Get("koanf")
 	})
@@ -376,6 +388,8 @@ func validationMessage(e validator.FieldError) string {
 	var rule string
 	lo, hi := ruleParams(field.Tag.Get("validate"))
 	switch {
+	case e.Tag() == "cookie_token":
+		rule = "may only contain letters, digits, '-' and '_'"
 	case isString && e.Tag() == "min":
 		rule = fmt.Sprintf("must be at least %s characters", e.Param())
 	case lo != "" && hi != "":
@@ -396,6 +410,17 @@ func validationMessage(e validator.FieldError) string {
 		msg += ". " + durationFormatHint + "; a bare number in YAML is nanoseconds"
 	}
 	return msg
+}
+
+// isCookieToken accepts names a browser keeps in a cookie name.
+func isCookieToken(fl validator.FieldLevel) bool {
+	for _, r := range fl.Field().String() {
+		valid := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_'
+		if !valid {
+			return false
+		}
+	}
+	return true
 }
 
 // ruleParams returns the min and max parameters of a validate tag.

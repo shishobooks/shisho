@@ -92,7 +92,10 @@ const coverUrl = bookCoverUrl(book);
 - `mise start` - Start development environment (API with hot reload + Vite frontend)
 - `mise start:air` - Start API with hot reload via Air only
 - `mise start:api` - Start API directly (no hot reload)
+- `mise start:web` - Start only Vite, proxying to the API this worktree started with `mise start:air` (waits for it)
 - `mise docs` - Start documentation dev server
+
+These tasks run `cmd/dev` (`internal/devtool`), so several worktrees can run them at once. Each server takes the first free port at or above its usual one (API `3689`, Vite `5173`, docs `3000`) and prints the URL it got. Ports are claimed with `flock` on files in the main worktree's `tmp/ports/`, which every linked worktree shares, so two worktrees starting together can't pick the same port. A port is also skipped when anything else is listening on it on `127.0.0.1`, `0.0.0.0`, `::1`, or `::`, including other projects; `::1` counts because browsers resolve `localhost` there first. The launcher passes the API port to air as `SERVER_PORT` and to Vite as `API_PORT`; `start:web` reads it from `tmp/api.port` instead, which the API writes on startup only when the launcher sets `SHISHO_DEV_PORT_FILE` (so an E2E API in the same worktree can't overwrite it). The API removes it on a graceful shutdown and the launcher removes it when it exits, so a killed API can't leave one behind. Browsers scope cookies by host but not port, so it also sets `SHISHO_COOKIE_NAMESPACE` in linked worktrees (the directory name plus a path hash), which renames the session cookie to `shisho_session_<namespace>` and keeps signing in to one worktree from signing you out of another. The main worktree keeps `shisho_session`. Don't hardcode a dev port in a new task: reserve it through `devtool`. E2E suites already pick their own free ports (see `e2e/AGENTS.md`).
 
 ### Build
 - `mise build` - Generate API types, build the frontend, copy it into `pkg/frontend/dist`, and compile a self-contained production binary
@@ -199,7 +202,7 @@ For detailed architecture information, see:
   - `website/docs/configuration.md`: the same reference for users.
   - `app/components/pages/AdminSettings.tsx`: the Server Settings page shows every non-secret config field.
 
-  The yaml file and the docs page must always be a complete reference of all server config options. Exception: `shisho_test_mode` (env `SHISHO_TEST_MODE`, field `TestMode`) is test-only, so it is left out of `shisho.example.yaml` and `configuration.md` (the Server Settings page still shows it as Test Mode). It mounts the unauthenticated `/api/test/*` routes, so its name must stay one no other tool sets; never go back to a generic key such as `ENVIRONMENT=test`.
+  The yaml file and the docs page must always be a complete reference of all server config options. Exceptions: `shisho_test_mode` (env `SHISHO_TEST_MODE`, field `TestMode`) is test-only, so it is left out of `shisho.example.yaml` and `configuration.md` (the Server Settings page still shows it as Test Mode). It mounts the unauthenticated `/api/test/*` routes, so its name must stay one no other tool sets; never go back to a generic key such as `ENVIRONMENT=test`. `shisho_cookie_namespace` (env `SHISHO_COOKIE_NAMESPACE`, field `CookieNamespace`) is development-only and set by `mise start`, so it is left out of all three: it is tagged `json:"-"` to keep it out of the config API and the Server Settings page.
   Validation errors name the config key, its env variable and the allowed range (`validationMessage` in `pkg/config/config.go`), so a new rule only needs a `validate` tag. List (`[]string`) fields split comma-separated env values automatically.
 
 ## Tool Versions

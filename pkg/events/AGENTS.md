@@ -56,7 +56,7 @@ The `useSSE` hook (`app/hooks/useSSE.ts`) opens an `EventSource` to `/api/events
 
 ## Authentication
 
-`EventSource` doesn't support custom headers, but the backend uses cookie-based auth (`shisho_session`). Since `EventSource` sends cookies automatically on same-origin requests, authentication works out of the box.
+`EventSource` doesn't support custom headers, but the backend uses cookie-based auth (`shisho_session`, or `shisho_session_<namespace>` when `shisho_cookie_namespace` is set). Since `EventSource` sends cookies automatically on same-origin requests, authentication works out of the box.
 
 ## Streaming and compression
 
