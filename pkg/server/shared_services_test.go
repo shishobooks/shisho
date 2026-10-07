@@ -55,7 +55,7 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 
 	f.request(http.MethodGet, fmt.Sprintf("/api/books/files/%d/page/0", file.ID), "", http.StatusOK)
 
-	injected, err := filepath.Glob(filepath.Join(injectedDir, "cbz", strconv.Itoa(file.ID), "page_0.*"))
+	injected, err := filepath.Glob(filepath.Join(injectedDir, "cbz", strconv.Itoa(file.ID), "page_0_*"))
 	require.NoError(t, err)
 	assert.Len(t, injected, 1, "the page is cached in the injected cache's directory")
 	var stray []string

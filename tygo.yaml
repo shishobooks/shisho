@@ -31,6 +31,10 @@ packages:
     output_path: "app/types/generated/covers.ts"
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/cbzpages"
+    output_path: "app/types/generated/cbzpages.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/models"
     output_path: "app/types/generated/models.ts"
   - path: "github.com/shishobooks/shisho/pkg/books"

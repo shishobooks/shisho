@@ -4153,17 +4153,7 @@ func extractCBZPageCover(cbzPath string, coverDir string, coverBaseName string, 
 		return "", "", nil, errors.WithStack(err)
 	}
 
-	// Get sorted image files
-	var imageFiles []*zip.File
-	for _, file := range zipReader.File {
-		ext := strings.ToLower(filepath.Ext(file.Name))
-		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
-			imageFiles = append(imageFiles, file)
-		}
-	}
-	sort.Slice(imageFiles, func(i, j int) bool {
-		return imageFiles[i].Name < imageFiles[j].Name
-	})
+	imageFiles := cbz.PageImages(zipReader)
 
 	if pageNum < 0 || pageNum >= len(imageFiles) {
 		return "", "", nil, errors.Errorf("page %d out of range (0-%d)", pageNum, len(imageFiles)-1)

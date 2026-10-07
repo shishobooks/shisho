@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -91,7 +92,7 @@ func TestGetPage_SetsPrivateCacheControl(t *testing.T) {
 	user := setupTestUser(t, db, library.ID, true)
 	e := setupTestServer(t, db)
 
-	req := httptest.NewRequest(http.MethodGet, "/books/files/"+strconv.Itoa(file.ID)+"/page/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/books/files/"+strconv.Itoa(file.ID)+"/page/1?r="+cbzpages.CBZPageKey, nil)
 	rr := executeRequestWithUser(t, e, req, user)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -163,6 +164,37 @@ func TestGetPage_PDFCachesOnlyUnderCurrentRenderKey(t *testing.T) {
 		{"current render key", "&r=200-85", "private, max-age=31536000, immutable"},
 		{"stale render key", "&r=100-85", "private, no-store"},
 		{"no render key", "", "private, no-store"},
+	}
+	for _, tt := range tests {
+		rr := executeRequestWithUser(t, e, httptest.NewRequest(http.MethodGet, base+tt.query, nil), user)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Equal(t, tt.want, rr.Header().Get("Cache-Control"), tt.name)
+	}
+}
+
+// CBZ page URLs carry cbzpages.CBZPageKey as r, so a change to which image a
+// page number names reaches browsers holding immutable copies of the old
+// pages. A tab loaded before such a change asks without the current key and
+// must not cache the page it gets under that URL.
+func TestGetPage_CBZCachesOnlyUnderCurrentPageKey(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	library, book := setupTestLibraryAndBook(t, db)
+	filePath := testgen.GenerateCBZ(t, t.TempDir(), "book.cbz", testgen.CBZOptions{PageCount: 2})
+	file := setupTestFile(t, db, book, models.FileTypeCBZ, filePath)
+	user := setupTestUser(t, db, library.ID, true)
+	e := setupTestServer(t, db)
+	base := "/books/files/" + strconv.Itoa(file.ID) + "/page/0?v=1"
+
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{"current page key", "&r=" + cbzpages.CBZPageKey, "private, max-age=31536000, immutable"},
+		{"stale page key", "&r=1", "private, no-store"},
+		{"no page key", "", "private, no-store"},
 	}
 	for _, tt := range tests {
 		rr := executeRequestWithUser(t, e, httptest.NewRequest(http.MethodGet, base+tt.query, nil), user)

@@ -34,10 +34,10 @@ const (
 )
 
 // primeCachedPage writes page 0 where the page cache of the given kind
-// ("pdf" or "cbz") keeps it: {cacheDir}/cbz/{fileID}/page_0.jpg, or
-// {cacheDir}/pdf/{fileID}/{dpi}-{quality}/page_0.jpg at the render settings
-// the test worker's PDF cache uses (see the Cache doc comments in
-// pkg/pdfpages/cache.go; cbzpages matches any page_0.* extension). A real PDF
+// ("pdf" or "cbz") keeps it: {cacheDir}/cbz/{fileID}/page_0_v{key}.jpg for
+// cbzpages.CBZPageKey, or {cacheDir}/pdf/{fileID}/{dpi}-{quality}/page_0.jpg
+// at the render settings the test worker's PDF cache uses (see the Cache doc
+// comments in pkg/pdfpages/cache.go and pkg/cbzpages/cache.go). A real PDF
 // render goes through the shared pdfium WASM pool, which is slow to start and
 // is not what these tests are about.
 func primeCachedPage(t *testing.T, cacheDir, kind string, fileID int) string {
@@ -47,7 +47,11 @@ func primeCachedPage(t *testing.T, cacheDir, kind string, fileID int) string {
 		pageDir = filepath.Join(pageDir, pdfpages.RenderKey(testPDFRenderDPI, testPDFRenderQuality))
 	}
 	require.NoError(t, os.MkdirAll(pageDir, 0755))
-	cachedPage := filepath.Join(pageDir, "page_0.jpg")
+	name := "page_0.jpg"
+	if kind == "cbz" {
+		name = "page_0_v" + cbzpages.CBZPageKey + ".jpg"
+	}
+	cachedPage := filepath.Join(pageDir, name)
 	require.NoError(t, os.WriteFile(cachedPage, []byte("old render"), 0600))
 	return cachedPage
 }

@@ -80,7 +80,7 @@ func TestCache_GetPage_ConcurrentReadersSeeCompletePage(t *testing.T) {
 	entries, err := os.ReadDir(c.pageDir(1))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	assert.Equal(t, "page_0.jpg", entries[0].Name())
+	assert.Equal(t, pageFileName(0, ".jpg"), entries[0].Name())
 }
 
 func TestCache_GetPage_IgnoresInProgressTempFiles(t *testing.T) {
@@ -101,7 +101,7 @@ func TestCache_GetPage_IgnoresInProgressTempFiles(t *testing.T) {
 
 	path, mime, err := c.GetPage(cbzPath, 1, 0)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(pageDir, "page_0.jpg"), path)
+	assert.Equal(t, filepath.Join(pageDir, pageFileName(0, ".jpg")), path)
 	assert.Equal(t, "image/jpeg", mime)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -209,5 +209,25 @@ func TestCache_GetPage_ReaderDuringExtractionGetsCompletePage(t *testing.T) {
 	entries, err := os.ReadDir(c.pageDir(1))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	assert.Equal(t, "page_0.jpg", entries[0].Name())
+	assert.Equal(t, pageFileName(0, ".jpg"), entries[0].Name())
+}
+
+// Pages cached before CBZPageKey changed may name a different image than the
+// page number now does, so they must never be served.
+func TestCache_GetPage_IgnoresPagesCachedUnderPreviousKey(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	page := []byte("current page bytes")
+	cbzPath := writeCBZ(t, dir, page)
+	c := NewCache(filepath.Join(dir, "cache"))
+
+	pageDir := c.pageDir(1)
+	require.NoError(t, os.MkdirAll(pageDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pageDir, "page_0.jpg"), []byte("page cached under key 1"), 0644))
+
+	path, _, err := c.GetPage(cbzPath, 1, 0)
+	require.NoError(t, err)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, page, data)
 }

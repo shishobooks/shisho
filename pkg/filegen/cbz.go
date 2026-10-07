@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/kepub"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/seriesnum"
@@ -61,7 +62,7 @@ func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 				existingComicInfo = nil
 			}
 			otherFiles = append(otherFiles, f)
-		} else if kepub.IsImageFile(f.Name) && !strings.HasPrefix(filepath.Base(f.Name), ".") {
+		} else if cbz.IsPageImage(f.Name) {
 			imageFiles = append(imageFiles, f)
 		} else {
 			otherFiles = append(otherFiles, f)

@@ -1,11 +1,10 @@
-import { FileTypePDF, type File } from "@/types";
+import { CBZPageKey, FileTypePDF, type File } from "@/types";
 
 import { fileCacheKey } from "./coverUrl";
 
 /**
  * The fields of a file that a page image URL depends on: the ones a file
- * cover is keyed by, plus the file type, since only PDF pages depend on the
- * server's render settings.
+ * cover is keyed by, plus the file type, which picks the page key.
  */
 export type PageSourceFile = Pick<File, "id" | "updated_at" | "file_type">;
 
@@ -18,11 +17,14 @@ export type PageSourceFile = Pick<File, "id" | "updated_at" | "file_type">;
  * `updated_at` and drops the server's cached pages, so the browser fetches
  * the new pages instead of reusing the old ones.
  *
- * PDF pages are rendered with the server's `pdf_render_dpi` and
- * `pdf_render_quality`, so their URLs also carry `pdfRenderKey` (from
- * GET /auth/status). A restart with new settings changes the URL, and the
- * browser fetches pages at the new settings. Components get this function,
- * with the key filled in, from `useFilePageUrl`, so no call site omits a key.
+ * The URL also carries, as `r`, what else decides the page image. PDF pages
+ * are rendered with the server's `pdf_render_dpi` and `pdf_render_quality`,
+ * so their key is `pdfRenderKey` (from GET /auth/status): a restart with new
+ * settings changes the URL, and the browser fetches pages at the new
+ * settings. CBZ pages carry `CBZPageKey`, which the server bumps when a page
+ * number starts naming a different image (a new page order). Components get
+ * this function, with the PDF key filled in, from `useFilePageUrl`, so no
+ * call site omits a key.
  */
 export const filePageUrl = (
   file: PageSourceFile,
@@ -30,7 +32,6 @@ export const filePageUrl = (
   pdfRenderKey: string,
 ): string => {
   const url = `/api/books/files/${file.id}/page/${page}?v=${fileCacheKey(file)}`;
-  return file.file_type === FileTypePDF
-    ? `${url}&r=${encodeURIComponent(pdfRenderKey)}`
-    : url;
+  const key = file.file_type === FileTypePDF ? pdfRenderKey : CBZPageKey;
+  return `${url}&r=${encodeURIComponent(key)}`;
 };

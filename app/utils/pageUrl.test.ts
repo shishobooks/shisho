@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FileTypeCBZ, FileTypePDF } from "@/types";
+import { CBZPageKey, FileTypeCBZ, FileTypePDF } from "@/types";
 
 import { filePageUrl, type PageSourceFile } from "./pageUrl";
 
@@ -18,8 +18,13 @@ const pdf: PageSourceFile = {
 describe("filePageUrl", () => {
   it("builds the page URL with the file's updated_at as the cache key", () => {
     expect(filePageUrl(cbz, 3, "200-85")).toBe(
-      "/api/books/files/42/page/3?v=1704067200000",
+      `/api/books/files/42/page/3?v=1704067200000&r=${CBZPageKey}`,
     );
+  });
+
+  it("keys CBZ pages on the server's page key, not the PDF render key", () => {
+    expect(filePageUrl(cbz, 3, "300-85")).toBe(filePageUrl(cbz, 3, "200-85"));
+    expect(filePageUrl(cbz, 3, "200-85")).toContain(`&r=${CBZPageKey}`);
   });
 
   it("changes the URL when the file's updated_at changes", () => {

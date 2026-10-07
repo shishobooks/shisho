@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -265,9 +266,9 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{
 			pages: []testPage{
-				{filename: "page2.jpg", width: 100, height: 100, format: "jpeg"},
-				{filename: "page10.jpg", width: 100, height: 100, format: "jpeg"},
-				{filename: "page1.jpg", width: 100, height: 100, format: "jpeg"},
+				{filename: "page2.jpg", width: 102, height: 100, format: "jpeg"},
+				{filename: "page10.jpg", width: 110, height: 100, format: "jpeg"},
+				{filename: "page1.jpg", width: 101, height: 100, format: "jpeg"},
 			},
 		})
 
@@ -277,17 +278,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
 		require.NoError(t, err)
 
-		// Read the OPF to check image order (page0001 = page1, page0002 = page2, page0003 = page10)
-		opfData := readFileFromKepub(t, destPath, "content.opf")
-		opfContent := string(opfData)
-
-		// Images should be in manifest in correct order
-		img1Pos := strings.Index(opfContent, "img0001")
-		img2Pos := strings.Index(opfContent, "img0002")
-		img3Pos := strings.Index(opfContent, "img0003")
-
-		assert.Less(t, img1Pos, img2Pos, "img0001 should come before img0002 in manifest")
-		assert.Less(t, img2Pos, img3Pos, "img0002 should come before img0003 in manifest")
+		// Each source page has its own width, so the width on each KePub
+		// page names the image it shows: page1, page2, then page10.
+		for i, width := range []int{101, 102, 110} {
+			pageContent := string(readFileFromKepub(t, destPath, fmt.Sprintf("page%04d.xhtml", i+1)))
+			assert.Contains(t, pageContent, fmt.Sprintf(`<img width="%d"`, width), "page %d", i+1)
+		}
 	})
 
 	t.Run("includes NCX navigation file", func(t *testing.T) {
@@ -497,32 +493,6 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 	})
 }
 
-func TestIsImageFile(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		expected bool
-	}{
-		{"page.jpg", true},
-		{"page.jpeg", true},
-		{"page.JPG", true},
-		{"page.png", true},
-		{"page.PNG", true},
-		{"page.gif", true},
-		{"page.webp", true},
-		{"readme.txt", false},
-		{"comic.cbz", false},
-		{"metadata.xml", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsImageFile(tt.name)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestImageMediaType(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -540,34 +510,6 @@ func TestImageMediaType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.ext, func(t *testing.T) {
 			result := imageMediaType(tt.ext)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestNaturalLess(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		a, b     string
-		expected bool
-	}{
-		{"page1", "page2", true},
-		{"page2", "page10", true},
-		{"page10", "page2", false},
-		{"1", "2", true},
-		{"page001", "page002", true},
-		// Filenames with a leading number (from the title) followed by the page number.
-		// Must compare ALL numeric runs, not just the first.
-		{"365 Days - c001 - p000.jpg", "365 Days - c001 - p001.jpg", true},
-		{"365 Days - c001 - p001.jpg", "365 Days - c001 - p000.jpg", false},
-		{"365 Days - c001 - p197.jpg", "365 Days - c002 - p000.jpg", true},
-		{"365 Days - c002 - p000.jpg", "365 Days - c001 - p197.jpg", false},
-		{"365 Days - c001 - p002-p003.jpg", "365 Days - c001 - p004.jpg", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
-			result := naturalLess(tt.a, tt.b)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

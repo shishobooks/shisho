@@ -6,11 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 )
 
@@ -43,7 +43,7 @@ var ErrPageOutOfRange = errors.New("page out of range")
 func (c *Cache) GetPage(cbzPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error) {
 	// Check if page is already cached
 	cacheDir := c.pageDir(fileID)
-	pattern := filepath.Join(cacheDir, fmt.Sprintf("page_%d.*", pageNum))
+	pattern := filepath.Join(cacheDir, pageFileName(pageNum, ".*"))
 	matches, _ := filepath.Glob(pattern)
 	if len(matches) > 0 {
 		return matches[0], mimeTypeFromPath(matches[0]), nil
@@ -71,8 +71,7 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 		return "", "", errors.WithStack(err)
 	}
 
-	// Get sorted image files
-	imageFiles := getSortedImageFiles(zipReader)
+	imageFiles := cbz.PageImages(zipReader)
 	if pageNum < 0 || pageNum >= len(imageFiles) {
 		return "", "", errors.Wrapf(ErrPageOutOfRange, "page %d (0-%d)", pageNum, len(imageFiles)-1)
 	}
@@ -87,7 +86,7 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 
 	// Extract the page
 	ext := strings.ToLower(filepath.Ext(targetFile.Name))
-	cachedPath = filepath.Join(cacheDir, fmt.Sprintf("page_%d%s", pageNum, ext))
+	cachedPath = filepath.Join(cacheDir, pageFileName(pageNum, ext))
 
 	r, err := c.openEntry(targetFile)
 	if err != nil {
@@ -120,8 +119,15 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 	return cachedPath, mimeTypeFromPath(cachedPath), nil
 }
 
+// pageFileName names a cached page. It carries CBZPageKey, so GetPage never
+// finds a page cached under a previous key; Invalidate and Clear still remove
+// those files.
+func pageFileName(pageNum int, ext string) string {
+	return fmt.Sprintf("page_%d_v%s%s", pageNum, CBZPageKey, ext)
+}
+
 // tempPagePattern is the fileutils.CreateTemp pattern for a page being extracted. It
-// must never match the page_<n>.* glob that GetPage treats as a cache hit.
+// must never match the pageFileName glob that GetPage treats as a cache hit.
 func tempPagePattern(pageNum int) string {
 	return fmt.Sprintf(".extracting-page_%d-*", pageNum)
 }
@@ -179,23 +185,6 @@ func (c *Cache) Clear() error {
 		return errors.Wrap(err, "failed to clear cache")
 	}
 	return nil
-}
-
-// getSortedImageFiles returns a sorted list of image files from a zip reader.
-func getSortedImageFiles(zipReader *zip.Reader) []*zip.File {
-	var imageFiles []*zip.File
-	for _, file := range zipReader.File {
-		ext := strings.ToLower(filepath.Ext(file.Name))
-		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
-			imageFiles = append(imageFiles, file)
-		}
-	}
-
-	sort.Slice(imageFiles, func(i, j int) bool {
-		return imageFiles[i].Name < imageFiles[j].Name
-	})
-
-	return imageFiles
 }
 
 // mimeTypeFromPath returns the MIME type based on file extension.

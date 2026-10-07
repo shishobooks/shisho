@@ -12,13 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"golang.org/x/image/draw"
 )
 
@@ -96,21 +96,7 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 		return errors.Wrap(err, "failed to read source CBZ as zip")
 	}
 
-	// Collect image files
-	var imageFiles []*zip.File
-	for _, f := range srcZip.File {
-		if IsImageFile(f.Name) && !strings.HasPrefix(filepath.Base(f.Name), ".") {
-			imageFiles = append(imageFiles, f)
-		}
-	}
-
-	// Sort by filename for proper reading order. This natural order differs
-	// from the byte order pkg/cbz and pkg/cbzpages use for stored page
-	// numbers ("page2" before "page10" here, after it there), so a stored
-	// page index does not name the same image in this output.
-	sort.Slice(imageFiles, func(i, j int) bool {
-		return naturalLess(imageFiles[i].Name, imageFiles[j].Name)
-	})
+	imageFiles := cbz.PageImages(srcZip)
 
 	if len(imageFiles) == 0 {
 		return errors.New("no images found in CBZ file")
@@ -275,16 +261,6 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 	}
 
 	return nil
-}
-
-// IsImageFile returns true if the file extension indicates an image.
-func IsImageFile(name string) bool {
-	ext := strings.ToLower(filepath.Ext(name))
-	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
-		return true
-	}
-	return false
 }
 
 // imageMediaType returns the MIME type for an image extension.
@@ -718,45 +694,6 @@ func generateUUID() string {
 		(now>>48)&0x0FFF|0x4000,
 		(now>>60)&0x3FFF|0x8000,
 		now&0xFFFFFFFFFFFF)
-}
-
-// naturalLess compares strings naturally by alternating non-digit and digit
-// runs: digit runs compare numerically (so "page2" < "page10"), non-digit runs
-// compare byte-wise. This correctly orders filenames with multiple numbers,
-// e.g. "Foo 365 - c001 - p000.jpg" < "Foo 365 - c001 - p001.jpg".
-func naturalLess(a, b string) bool {
-	i, j := 0, 0
-	for i < len(a) && j < len(b) {
-		aDigit := a[i] >= '0' && a[i] <= '9'
-		bDigit := b[j] >= '0' && b[j] <= '9'
-
-		if aDigit && bDigit {
-			aStart := i
-			for i < len(a) && a[i] >= '0' && a[i] <= '9' {
-				i++
-			}
-			bStart := j
-			for j < len(b) && b[j] >= '0' && b[j] <= '9' {
-				j++
-			}
-			aNum := strings.TrimLeft(a[aStart:i], "0")
-			bNum := strings.TrimLeft(b[bStart:j], "0")
-			if len(aNum) != len(bNum) {
-				return len(aNum) < len(bNum)
-			}
-			if aNum != bNum {
-				return aNum < bNum
-			}
-			continue
-		}
-
-		if a[i] != b[j] {
-			return a[i] < b[j]
-		}
-		i++
-		j++
-	}
-	return len(a)-i < len(b)-j
 }
 
 // Kobo Libra Color screen dimensions (from KCC profiles).
