@@ -1,12 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { ClearResponse, Info } from "@/types/generated/cache";
+import type {
+  ClearResponse,
+  Info,
+  SettingsResponse,
+  UpdateSettingsPayload,
+} from "@/types/generated/cache";
 
 import { useRequires } from "./permissions";
 
 export enum QueryKey {
   ListCaches = "ListCaches",
+  CacheSettings = "CacheSettings",
 }
 
 export const useCaches = () => {
@@ -15,6 +21,26 @@ export const useCaches = () => {
     queryKey: [QueryKey.ListCaches],
     queryFn: ({ signal }) => {
       return API.request("GET", "/cache", null, null, signal);
+    },
+  });
+};
+
+export const useCacheSettings = () =>
+  useQuery<SettingsResponse, ShishoAPIError>({
+    enabled: useRequires("config:read"),
+    queryKey: [QueryKey.CacheSettings],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/settings/cache", null, null, signal),
+  });
+
+export const useUpdateCacheSettings = () => {
+  const queryClient = useQueryClient();
+  return useMutation<SettingsResponse, ShishoAPIError, UpdateSettingsPayload>({
+    mutationFn: (payload) =>
+      API.request("PUT", "/settings/cache", payload, null),
+    onSuccess: (data) => {
+      queryClient.setQueryData([QueryKey.CacheSettings], data);
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListCaches] });
     },
   });
 };

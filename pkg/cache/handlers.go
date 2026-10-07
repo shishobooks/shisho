@@ -44,7 +44,7 @@ func (h *Handler) entries() []cacheEntry {
 		{
 			id:          "cover_thumbnails",
 			name:        "Cover Thumbnails",
-			description: "Cover sizes generated on demand for the web interface. Limited to 256 MiB; originals are kept in the library.",
+			description: "Cover sizes generated on demand for the web interface. Originals are kept in the library.",
 			provider:    h.coverThumbnails,
 		},
 		{

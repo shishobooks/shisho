@@ -95,6 +95,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		message string
 	}{
 		{
+			name:   "cache settings with a negative limit",
+			method: http.MethodPut, path: "/api/settings/cache",
+			body:   `{"cover_thumbnail_max_size_gb":-1}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "cover thumbnail with an unsupported size",
 			method: http.MethodGet, path: fmt.Sprintf("/api/books/%d/cover?size=300", seeded.bookID),
 			status: http.StatusUnprocessableEntity, code: "validation_error",

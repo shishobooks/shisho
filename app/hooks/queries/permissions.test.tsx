@@ -87,6 +87,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useBooksByIds: requires("books:read", [[1, 2]]),
   // cache
   useCaches: requires("config:read", []),
+  useCacheSettings: requires("config:read", []),
   // chapters
   useFileChapters: requires("books:read", [1, on]),
   // config

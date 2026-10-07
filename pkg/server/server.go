@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -106,14 +107,19 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	if pdfCache == nil {
 		pdfCache = pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 	}
+	appSettingsSvc := appsettings.NewService(db)
+	cacheSettings, err := cache.LoadSettings(context.Background(), appSettingsSvc)
+	if err != nil {
+		return nil, errors.Wrap(err, "load cache settings")
+	}
 	svcs := sharedServices{
-		appSettings: appsettings.NewService(db),
+		appSettings: appSettingsSvc,
 		plugins:     pluginService,
 		shareLinks:  sharelinks.NewService(db),
 		dlCache:     dlCache,
 		cbzCache:    cbzCache,
 		pdfCache:    pdfCache,
-		coverCache:  covers.NewThumbnailCache(cfg.CacheDir, covers.DefaultThumbnailCacheMaxBytes),
+		coverCache:  covers.NewThumbnailCache(cfg.CacheDir, int64(cacheSettings.CoverThumbnailMaxSizeGB*(1<<30))),
 	}
 	svcs.books = books.NewService(db).WithAppSettings(svcs.appSettings)
 
@@ -180,6 +186,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	// Cache management routes (admin only; requires config:read to list, config:write to clear)
 	cacheHandler := cache.NewHandler(svcs.dlCache, svcs.cbzCache, svcs.pdfCache, svcs.coverCache)
 	cache.RegisterRoutes(api, cacheHandler, authMiddleware)
+	cache.RegisterSettingsRoutes(api, authMiddleware, svcs.appSettings, svcs.coverCache)
 
 	// Echo's Group.Use adds authenticated not-found handlers. Unknown paths
 	// must return JSON 404 without running a route family's authentication.

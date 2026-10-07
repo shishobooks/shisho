@@ -24,6 +24,8 @@ Shisho checks every setting at startup and refuses to start when one is invalid.
 
 Share Links are not a configuration option. An admin turns them on under **Settings > Sharing** without a restart. See [Sharing](./sharing.md).
 
+The cover-thumbnail cache limit is saved in the database under **Settings > Cache** and defaults to 1 GiB. Changes apply without a restart. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for limits and eviction behavior.
+
 ## Settings
 
 ### Database

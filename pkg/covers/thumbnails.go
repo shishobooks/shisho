@@ -39,8 +39,8 @@ var ErrInvalidThumbnailSize = errors.New("thumbnail size must be 128, 256, 512, 
 // ErrUnsupportedThumbnail preserves originals the bounded raster decoder cannot resize.
 var ErrUnsupportedThumbnail = errors.New("cover cannot be resized")
 
-// DefaultThumbnailCacheMaxBytes bounds cached thumbnails to 256 MiB.
-const DefaultThumbnailCacheMaxBytes = 256 << 20
+// DefaultThumbnailCacheMaxBytes bounds cached thumbnails to 1 GiB.
+const DefaultThumbnailCacheMaxBytes = 1 << 30
 
 const maxThumbnailSourcePixels = 32_000_000
 
@@ -375,6 +375,18 @@ func (c *ThumbnailCache) SizeBytes() (int64, int, error) {
 		return 0, 0, err
 	}
 	return c.total, len(c.entries), nil
+}
+
+// SetMaxBytes changes the live quota and evicts the oldest thumbnails now.
+// In-flight generations use the new quota when they publish.
+func (c *ThumbnailCache) SetMaxBytes(maxBytes int64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.maxBytes = max(0, maxBytes)
+	if err := c.loadLocked(); err != nil {
+		return err
+	}
+	return c.evictLocked()
 }
 
 // Clear removes generated thumbnails; source covers are never modified.

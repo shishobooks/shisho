@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,7 +76,7 @@ func TestNew_ServerAddress(t *testing.T) {
 	cfg.TestMode = false
 	cfg.ServerHost = "::1"
 	cfg.ServerPort = 3689
-	srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
+	srv, err := New(cfg, testdb.New(t), &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "[::1]:3689", srv.Addr)
 }
@@ -146,7 +147,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			cfg.DemoMode = demo
 			cfg.TestMode = true
 			cfg.CacheDir = t.TempDir()
-			srv, err := New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
+			srv, err := New(cfg, testdb.New(t), &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 			require.NoError(t, err)
 			e := srv.Handler.(*echo.Echo)
 			routes := make(map[string]bool)
