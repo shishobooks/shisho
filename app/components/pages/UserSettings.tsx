@@ -32,20 +32,21 @@ const ThemeOption = ({
   icon,
   onSelect,
 }: ThemeOptionProps) => (
-  <button
+  <Button
+    aria-pressed={currentTheme === theme}
     className={cn(
-      "flex items-center gap-3 px-4 py-3 rounded-md border transition-colors w-full cursor-pointer",
+      "flex items-center gap-3 px-4 py-3 rounded-md border transition-colors w-full",
       currentTheme === theme
         ? "border-primary bg-primary/5 text-primary"
         : "border-border hover:bg-muted",
     )}
     onClick={() => onSelect(theme)}
-    type="button"
+    variant="unstyled"
   >
     {icon}
     <span className="flex-1 text-left font-medium">{label}</span>
     {currentTheme === theme && <Check className="h-4 w-4" />}
-  </button>
+  </Button>
 );
 
 const UserSettings = () => {
@@ -83,7 +84,7 @@ const UserSettings = () => {
           {/* Theme Settings */}
           <div className="border border-border rounded-md p-4 md:p-6">
             <h2 className="text-lg font-semibold mb-4">Appearance</h2>
-            <div className="space-y-3">
+            <div aria-label="Theme" className="space-y-3" role="group">
               <ThemeOption
                 currentTheme={theme}
                 icon={<Sun className="h-5 w-5" />}

@@ -79,6 +79,14 @@ const uiConventions = [
       "Use isNotFoundError(error) or isLoadFailure(query) from @/libraries/api, not an inline status check for 404 (see app/AGENTS.md).",
   })),
   {
+    // A raw button skips the shared focus ring, cursor, disabled state, and
+    // type="button" default. unstyled is the escape hatch for rows, cards,
+    // and tiles the caller styles itself.
+    selector: 'JSXOpeningElement[name.name="button"]',
+    message:
+      'Use Button from @/components/ui/button, not a raw <button>: size="icon", "icon-sm", or "icon-xs" for icon-only buttons (with an aria-label), variant="link" for inline text, variant="unstyled" for caller-styled rows, cards, and tiles (with aria-pressed inside a role="group" for segmented controls and single-select rows), BadgeRemoveButton for a Badge\'s X, or the ui Checkbox or RadioGroup for form toggles.',
+  },
+  {
     selector:
       'JSXOpeningElement[name.name="Tabs"] > JSXAttribute[name.name="defaultValue"]',
     message:

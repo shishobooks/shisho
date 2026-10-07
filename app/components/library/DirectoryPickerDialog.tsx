@@ -253,13 +253,13 @@ const DirectoryPickerDialog = ({
                 {index > 0 && (
                   <ChevronRight className="h-4 w-4 text-muted-foreground mx-1" />
                 )}
-                <button
-                  className="hover:text-primary hover:underline transition-colors px-1 py-0.5 rounded cursor-pointer"
+                <Button
+                  className="hover:text-primary hover:underline transition-colors px-1 py-0.5 rounded"
                   onClick={() => handleNavigate(segment.path)}
-                  type="button"
+                  variant="unstyled"
                 >
                   {segment.name}
-                </button>
+                </Button>
               </div>
             ))}
           </div>

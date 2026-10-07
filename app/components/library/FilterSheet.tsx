@@ -281,18 +281,20 @@ const FilterContent = ({
         {fileTypeOptions.map((option) => {
           const isSelected = selectedFileTypes.includes(option.value);
           return (
-            <button
+            <Button
+              aria-pressed={isSelected}
               className={cn(
-                "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium cursor-pointer transition-colors",
+                "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
                 isSelected
                   ? "border-primary bg-primary/5 text-primary"
                   : "border-border bg-card hover:bg-accent",
               )}
               key={option.value}
               onClick={() => onToggleFileType(option.value)}
+              variant="unstyled"
             >
               {option.label}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -459,12 +461,13 @@ export const FilterSheet = (props: FilterSheetProps) => {
               Filter books by file type, genre, tag, or language
             </SheetDescription>
             {hasActiveFilters && (
-              <button
-                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+              <Button
+                className="text-xs font-normal text-muted-foreground hover:text-foreground hover:no-underline"
                 onClick={onClearAll}
+                variant="link"
               >
                 Clear all
-              </button>
+              </Button>
             )}
           </SheetHeader>
           <div className="flex-1 overflow-y-auto pr-1">
@@ -495,12 +498,13 @@ export const FilterSheet = (props: FilterSheetProps) => {
             Filter books by file type, genre, tag, or language
           </DrawerDescription>
           {hasActiveFilters && (
-            <button
-              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            <Button
+              className="text-xs font-normal text-muted-foreground hover:text-foreground hover:no-underline"
               onClick={onClearAll}
+              variant="link"
             >
               Clear all
-            </button>
+            </Button>
           )}
         </DrawerHeader>
         <div className="overflow-y-auto px-4 pb-4 max-h-[70vh]">

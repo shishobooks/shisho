@@ -1,7 +1,6 @@
-import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -112,13 +111,13 @@ export function IdentifierEditor({
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium leading-none">Identifiers</span>
           {value.length > 1 && (
-            <button
-              className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+            <Button
+              className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
               onClick={handleClearAll}
-              type="button"
+              variant="link"
             >
               Clear all
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -135,25 +134,21 @@ export function IdentifierEditor({
               >
                 <span className="text-xs">{label}</span>:{" "}
                 <span>{row.value}</span>
-                <button
+                <BadgeRemoveButton
                   aria-label={`Remove ${label}`}
-                  className="ml-1 cursor-pointer hover:text-destructive shrink-0"
                   onClick={() => handleRemove(idx)}
-                  type="button"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+                />
               </Badge>
             );
           })}
           {hideHeader && value.length > 1 && (
-            <button
-              className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+            <Button
+              className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
               onClick={handleClearAll}
-              type="button"
+              variant="link"
             >
               Clear all
-            </button>
+            </Button>
           )}
         </div>
       )}

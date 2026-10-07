@@ -89,15 +89,15 @@ export function SortableEntityList<T extends object>({
 
           return (
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 aria-label={`Drag ${label}`}
                 className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
-                type="button"
+                variant="unstyled"
                 {...drag.attributes}
                 {...drag.listeners}
               >
                 <GripVertical className="h-4 w-4" />
-              </button>
+              </Button>
               <div
                 className="flex-1 truncate rounded-md border px-3 py-2 text-sm"
                 title={label}

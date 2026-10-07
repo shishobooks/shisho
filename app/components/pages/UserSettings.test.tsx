@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
@@ -106,6 +106,33 @@ describe("UserSettings – gallery size section", () => {
       { gallery_size: "xl" },
       expect.objectContaining({ onError: expect.any(Function) }),
     );
+  });
+});
+
+describe("UserSettings – theme section", () => {
+  it("marks the current theme as pressed within the Theme group", () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    renderPage();
+
+    const group = screen.getByRole("group", { name: "Theme" });
+    // The default Theme context value is "dark".
+    expect(within(group).getByRole("button", { name: "Dark" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      within(group).getByRole("button", { name: "Light" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(group).getByRole("button", { name: "System" }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 });
 

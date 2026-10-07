@@ -29,7 +29,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 
 ## Controls
 
-- **No raw `<button>` outside `app/components/ui`**: use `Button` and its variants. Overriding a variant's height, padding, or layout with `className` means a different variant fits better. Every clickable element shows `cursor-pointer`.
+- Overriding a `Button` variant's height, padding, or layout with `className` means a different size or variant fits better. Every clickable element shows `cursor-pointer`.
 - A region waiting for its content (page, section, dialog body, popover list) shows `LoadingSpinner`, not "Loading..." text, a skeleton, or a bare `Loader2`. A pending action inside a control (a Save button, a search input, a refetch over results already shown) uses `Loader2`.
 - Durations, sizes, counts, and dates use the formatters in `@/utils/format` rather than inline math. A date-only value says "today" or "yesterday" for the last two days and is relative past that.
 

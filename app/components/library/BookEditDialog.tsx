@@ -524,13 +524,13 @@ export function BookEditDialog({
             <div className="flex items-center justify-between">
               <Label>Authors</Label>
               {authors.length > 1 && (
-                <button
-                  className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                <Button
+                  className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
                   onClick={() => setAuthors([])}
-                  type="button"
+                  variant="link"
                 >
                   Clear all
-                </button>
+                </Button>
               )}
             </div>
             <SortableEntityList<AuthorInput>
@@ -602,13 +602,13 @@ export function BookEditDialog({
             <div className="flex items-center justify-between">
               <Label>Series</Label>
               {seriesEntries.length > 1 && (
-                <button
-                  className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                <Button
+                  className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
                   onClick={() => setSeriesEntries([])}
-                  type="button"
+                  variant="link"
                 >
                   Clear all
-                </button>
+                </Button>
               )}
             </div>
             <SortableEntityList<SeriesEntry>

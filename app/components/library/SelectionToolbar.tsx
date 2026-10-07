@@ -315,12 +315,12 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           {editableLists.map((list) => {
             const isAdding = addingToListId === list.id;
             return (
-              <button
-                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              <Button
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm"
                 disabled={isAdding}
                 key={list.id}
                 onClick={() => handleAddToList(list.id, list.name)}
-                type="button"
+                variant="unstyled"
               >
                 {isAdding ? (
                   <Loader2 className="h-4 w-4 animate-spin shrink-0" />
@@ -328,7 +328,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
                   <List className="h-4 w-4 shrink-0 text-muted-foreground" />
                 )}
                 <span className="truncate">{list.name}</span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -546,6 +546,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       </Button>
 
       <Button
+        aria-label="Exit selection"
         className="h-8 w-8"
         onClick={exitSelectionMode}
         size="icon"

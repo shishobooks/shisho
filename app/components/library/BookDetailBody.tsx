@@ -1,7 +1,6 @@
 import {
   ArrowRightLeft,
   BookOpen,
-  Check,
   ChevronDown,
   ChevronRight,
   Edit,
@@ -43,6 +42,7 @@ import { ReviewPanel } from "@/components/library/ReviewPanel";
 import { ShareLinkDialog } from "@/components/library/ShareLinkDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -272,38 +272,31 @@ const FileRow = ({
     <div className="py-3 flex gap-3">
       {/* Selection checkbox */}
       {isSelectMode && (
-        <button
-          className={cn(
-            "shrink-0 h-5 w-5 rounded border flex items-center justify-center self-start mt-1 cursor-pointer",
-            isFileSelected
-              ? "bg-primary border-primary"
-              : "border-muted-foreground/50 hover:border-primary/50",
-          )}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleSelect?.();
-          }}
-          type="button"
-        >
-          {isFileSelected && <Check className="h-3 w-3 text-white" />}
-        </button>
+        <Checkbox
+          aria-label={`Select ${displayName}`}
+          checked={isFileSelected}
+          className="mt-1 size-5 self-start"
+          onCheckedChange={() => onToggleSelect?.()}
+          onClick={(e) => e.stopPropagation()}
+        />
       )}
 
       {/* Chevron indicator - aligned to top */}
       {showChevron ? (
-        <button
+        <Button
           aria-expanded={isExpanded}
           aria-label={isExpanded ? "Hide file details" : "Show file details"}
-          className="p-0.5 rounded hover:bg-muted/50 shrink-0 cursor-pointer self-start mt-1"
+          className="mt-1 shrink-0 self-start"
           onClick={onToggleExpand}
-          type="button"
+          size="icon-xs"
+          variant="ghost"
         >
           {isExpanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-        </button>
+        </Button>
       ) : (
         <div className="w-5 shrink-0" /> // Spacer for alignment when no chevron
       )}

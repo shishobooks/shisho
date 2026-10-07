@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-import { FileTypeCBZ, FileTypeM4B, type Chapter } from "@/types";
+import { FileTypeCBZ, FileTypeEPUB, FileTypeM4B, type Chapter } from "@/types";
 
 import ChapterRow from "./ChapterRow";
 
@@ -44,9 +44,9 @@ describe("ChapterRow - M4B Playback", () => {
         />,
       );
 
-      // Play button should be present (not the stop/square icon)
-      const button = screen.getByRole("button");
-      expect(button).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Play 10s preview" }),
+      ).toBeInTheDocument();
     });
 
     it("shows stop state when this chapter is playing (matching index)", () => {
@@ -63,8 +63,9 @@ describe("ChapterRow - M4B Playback", () => {
         />,
       );
 
-      // Button should show stop tooltip when playing
-      expect(screen.getByRole("button")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Stop preview" }),
+      ).toBeInTheDocument();
     });
 
     it("shows play state when different chapter is playing", () => {
@@ -506,4 +507,45 @@ describe("ChapterRow - CBZ", () => {
       expect(onBlur).not.toHaveBeenCalled();
     });
   });
+});
+
+describe("ChapterRow - EPUB nesting", () => {
+  const child: Chapter = {
+    id: 2,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 100,
+    title: "Section 1.1",
+    sort_order: 0,
+    children: [],
+  };
+  const parent: Chapter = {
+    ...child,
+    id: 1,
+    title: "Part 1",
+    children: [child],
+  };
+
+  it.each([false, true])(
+    "names the subchapter toggle and reports its state (editing: %s)",
+    async (isEditing) => {
+      const user = createUser();
+      renderWithRouter(
+        <ChapterRow
+          chapter={parent}
+          depth={0}
+          fileType={FileTypeEPUB}
+          isEditing={isEditing}
+        />,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Hide subchapters" });
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+      await user.click(toggle);
+      expect(
+        screen.getByRole("button", { name: "Show subchapters" }),
+      ).toHaveAttribute("aria-expanded", "false");
+    },
+  );
 });

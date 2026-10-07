@@ -184,10 +184,11 @@ export function DeleteConfirmationDialog({
           {/* Expandable details */}
           {hasDetails && (
             <div>
-              <button
+              <Button
+                aria-expanded={showDetails}
                 className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                 onClick={() => setShowDetails(!showDetails)}
-                type="button"
+                variant="unstyled"
               >
                 {showDetails ? (
                   <ChevronDown className="h-4 w-4" />
@@ -195,7 +196,7 @@ export function DeleteConfirmationDialog({
                   <ChevronRight className="h-4 w-4" />
                 )}
                 {showDetails ? "Hide details" : "Show details"}
-              </button>
+              </Button>
 
               {showDetails && (
                 <div className="mt-2 max-h-48 rounded-md border p-3 overflow-y-auto overflow-x-hidden">

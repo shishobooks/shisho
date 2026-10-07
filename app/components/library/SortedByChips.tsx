@@ -52,10 +52,8 @@ const SortedByChips = ({
       })}
 
       <Button
-        className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground"
         onClick={onReset}
-        size="sm"
-        type="button"
         variant="link"
       >
         reset to default

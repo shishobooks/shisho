@@ -923,16 +923,16 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             const baseClass =
               "w-full flex items-center gap-3 py-2 px-3 mb-2 border border-amber-500/50 bg-amber-500/10 rounded-md text-left";
             return canEdit ? (
-              <button
+              <Button
                 className={cn(
                   baseClass,
-                  "hover:bg-amber-500/20 transition-colors cursor-pointer",
+                  "hover:bg-amber-500/20 transition-colors",
                 )}
                 onClick={handleAddChapterAtPageZero}
-                type="button"
+                variant="unstyled"
               >
                 {content}
-              </button>
+              </Button>
             ) : (
               <div className={baseClass}>{content}</div>
             );

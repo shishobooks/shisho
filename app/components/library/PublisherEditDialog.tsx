@@ -5,7 +5,7 @@ import {
   EntityCombobox,
   type EntityComboboxProps,
 } from "@/components/common/EntityCombobox";
-import { Badge } from "@/components/ui/badge";
+import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -288,14 +288,10 @@ export function PublisherEditDialog({
                   <span className="truncate" title={alias}>
                     {alias}
                   </span>
-                  <button
+                  <BadgeRemoveButton
                     aria-label={`Remove alias ${alias}`}
-                    className="shrink-0 ml-0.5 rounded-sm hover:bg-muted cursor-pointer"
                     onClick={() => handleRemoveAlias(index)}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  />
                 </Badge>
               ))}
               <input

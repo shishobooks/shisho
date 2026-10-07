@@ -1,8 +1,8 @@
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
-import { Badge } from "@/components/ui/badge";
+import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -285,14 +285,10 @@ export function MetadataEditDialog({
                   <span className="truncate" title={alias}>
                     {alias}
                   </span>
-                  <button
+                  <BadgeRemoveButton
                     aria-label={`Remove alias ${alias}`}
-                    className="shrink-0 ml-0.5 rounded-sm hover:bg-muted cursor-pointer"
                     onClick={() => handleRemoveAlias(index)}
-                    type="button"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  />
                 </Badge>
               ))}
               <input

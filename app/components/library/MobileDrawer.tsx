@@ -14,6 +14,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
+import { Button } from "@/components/ui/button";
 import { useMobileNav } from "@/contexts/MobileNav";
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
@@ -162,13 +163,15 @@ const MobileDrawer = () => {
         {/* Header */}
         <div className="flex items-center justify-between h-14 px-4 border-b border-border shrink-0">
           <span className="text-lg font-semibold text-foreground">Menu</span>
-          <button
+          <Button
             aria-label="Close navigation"
-            className="p-2 -mr-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="-mr-2 text-muted-foreground [&_svg]:size-5"
             onClick={close}
+            size="icon"
+            variant="ghost"
           >
-            <X className="h-5 w-5" />
-          </button>
+            <X />
+          </Button>
         </div>
 
         {/* Scrollable content */}
@@ -176,9 +179,11 @@ const MobileDrawer = () => {
           {/* Library/List Picker */}
           {(libraries.length > 0 || lists.length > 0) && (
             <div className="border-b border-border">
-              <button
+              <Button
+                aria-expanded={showLibraryPicker}
                 className="flex items-center justify-between w-full px-4 py-3.5 text-left hover:bg-muted transition-colors"
                 onClick={() => setShowLibraryPicker(!showLibraryPicker)}
+                variant="unstyled"
               >
                 <div className="flex items-center gap-3">
                   {isViewingList ? (
@@ -203,7 +208,7 @@ const MobileDrawer = () => {
                     showLibraryPicker && "rotate-90",
                   )}
                 />
-              </button>
+              </Button>
 
               {/* Library and List picker - expandable */}
               <div
@@ -222,7 +227,7 @@ const MobileDrawer = () => {
                       const isActive =
                         !isViewingList && library.id === Number(libraryId);
                       return (
-                        <button
+                        <Button
                           className={cn(
                             "flex items-center gap-3 w-full px-6 py-2.5 text-left transition-colors",
                             isActive
@@ -231,12 +236,13 @@ const MobileDrawer = () => {
                           )}
                           key={library.id}
                           onClick={() => handleLibrarySwitch(library.id)}
+                          variant="unstyled"
                         >
                           <span className="flex-1 truncate">
                             {library.name}
                           </span>
                           {isActive && <Check className="h-4 w-4 shrink-0" />}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -375,13 +381,14 @@ const MobileDrawer = () => {
               onClick={close}
               to="/user/settings"
             />
-            <button
+            <Button
               className="flex items-center gap-4 w-full px-4 py-3.5 text-base font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               onClick={handleLogout}
+              variant="unstyled"
             >
               <LogOut className="h-5 w-5" />
               Sign out
-            </button>
+            </Button>
             <div className="px-4 py-3">
               <a
                 className="flex items-center justify-center gap-1.5 py-2 rounded-md text-muted-foreground/60 hover:text-muted-foreground transition-colors"

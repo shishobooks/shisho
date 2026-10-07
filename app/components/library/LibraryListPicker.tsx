@@ -80,15 +80,16 @@ const LibraryListPicker = () => {
               const isActive =
                 !isViewingList && library.id === Number(libraryId);
               return (
-                <button
+                <Button
                   className={cn(
-                    "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer",
+                    "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
                     isActive
                       ? "bg-primary/10 text-primary"
                       : "text-foreground hover:bg-accent",
                   )}
                   key={library.id}
                   onClick={() => handleLibrarySwitch(library.id)}
+                  variant="unstyled"
                 >
                   <div
                     className={cn(
@@ -106,7 +107,7 @@ const LibraryListPicker = () => {
                   {isActive && (
                     <Check className="h-4 w-4 shrink-0 text-primary" />
                   )}
-                </button>
+                </Button>
               );
             })}
             {libraries.length === 0 && (

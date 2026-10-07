@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import type * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/libraries/utils";
 
@@ -38,13 +39,13 @@ export function IdentifySectionBanner({
         className,
       )}
     >
-      <button
+      <Button
         aria-controls={`identify-section-${label.toLowerCase()}`}
         aria-expanded={!collapsed}
         aria-label={`Toggle ${label} section`}
-        className="-m-1 flex flex-1 cursor-pointer items-center gap-3 rounded p-1 text-left"
+        className="-m-1 flex flex-1 items-center gap-3 rounded p-1 text-left"
         onClick={onToggleCollapse}
-        type="button"
+        variant="unstyled"
       >
         <ChevronDown
           aria-hidden
@@ -65,7 +66,7 @@ export function IdentifySectionBanner({
           <span className="font-semibold text-foreground">{selectedCount}</span>{" "}
           of {totalCount} selected
         </span>
-      </button>
+      </Button>
       <Checkbox
         aria-label={`Apply all ${label.toLowerCase()} fields`}
         checked={checkboxState}

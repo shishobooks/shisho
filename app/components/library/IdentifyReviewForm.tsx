@@ -493,21 +493,22 @@ function CollapsibleCurrentText({ text }: { text: string }) {
       >
         {text}
       </span>
-      <button
-        className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
+      <Button
+        aria-expanded={expanded}
+        className="gap-1 text-xs font-normal [&_svg]:size-3"
         onClick={() => setExpanded(!expanded)}
-        type="button"
+        variant="link"
       >
         {expanded ? (
           <>
-            Show less <ChevronUp className="h-3 w-3" />
+            Show less <ChevronUp />
           </>
         ) : (
           <>
-            Show full <ChevronDown className="h-3 w-3" />
+            Show full <ChevronDown />
           </>
         )}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1358,14 +1359,14 @@ export function IdentifyReviewForm({
         </DialogDescription>
         {/* Back button mirrors the close button's positioning (absolute, same
             offset and styling) so they appear symmetric across the header. */}
-        <button
+        <Button
           aria-label="Back"
-          className="absolute left-3 top-1/2 -translate-y-1/2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer"
+          className="absolute left-3 top-1/2 -translate-y-1/2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2"
           onClick={onBack}
-          type="button"
+          variant="unstyled"
         >
           <ArrowLeft className="h-4 w-4" />
-        </button>
+        </Button>
         <div className="min-w-0 flex-1">
           <h3 aria-hidden className="truncate text-sm font-semibold">
             Identify {book.title}
@@ -1399,32 +1400,32 @@ export function IdentifyReviewForm({
           of {totalVisible} selected
         </span>
         <div className="ml-auto flex items-center gap-1 rounded-md bg-background p-0.5">
-          <button
+          <Button
             aria-pressed={filterMode === "changed"}
             className={cn(
-              "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
+              "rounded px-2 py-1 text-[11px] font-medium transition-colors",
               filterMode === "changed"
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
             onClick={() => setFilterMode("changed")}
-            type="button"
+            variant="unstyled"
           >
             Changed
-          </button>
-          <button
+          </Button>
+          <Button
             aria-pressed={filterMode === "all"}
             className={cn(
-              "cursor-pointer rounded px-2 py-1 text-[11px] font-medium transition-colors",
+              "rounded px-2 py-1 text-[11px] font-medium transition-colors",
               filterMode === "all"
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
             onClick={() => setFilterMode("all")}
-            type="button"
+            variant="unstyled"
           >
             All
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1830,20 +1831,19 @@ export function IdentifyReviewForm({
                   >
                     <div className="flex gap-4">
                       {currentCoverUrl && (
-                        <button
+                        <Button
+                          aria-pressed={coverSelection === "current"}
                           className={cn(
-                            "relative cursor-pointer overflow-hidden rounded-md border-2 transition-colors",
+                            "relative overflow-hidden rounded-md border-2 transition-colors disabled:opacity-60",
                             coverSelection === "current"
                               ? "border-primary"
                               : "border-border hover:border-muted-foreground/50",
-                            isDisabled("cover") &&
-                              "cursor-not-allowed opacity-60",
                           )}
                           disabled={isDisabled("cover")}
                           onClick={() => {
                             setUserCoverSelection("current");
                           }}
-                          type="button"
+                          variant="unstyled"
                         >
                           <CoverImage
                             alt="Current cover"
@@ -1856,16 +1856,15 @@ export function IdentifyReviewForm({
                           <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[0.6rem] text-white">
                             Keep current
                           </span>
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
+                        aria-pressed={coverSelection === "new"}
                         className={cn(
-                          "relative cursor-pointer overflow-hidden rounded-md border-2 transition-colors",
+                          "relative overflow-hidden rounded-md border-2 transition-colors disabled:opacity-60",
                           coverSelection === "new"
                             ? "border-primary"
                             : "border-border hover:border-muted-foreground/50",
-                          isDisabled("cover") &&
-                            "cursor-not-allowed opacity-60",
                         )}
                         disabled={isDisabled("cover")}
                         onClick={() => {
@@ -1875,7 +1874,7 @@ export function IdentifyReviewForm({
                           // no-op when isDisabled, so no extra guard needed.
                           setDecision("cover", true);
                         }}
-                        type="button"
+                        variant="unstyled"
                       >
                         <img
                           alt="New cover"
@@ -1888,7 +1887,7 @@ export function IdentifyReviewForm({
                         <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[0.6rem] text-white">
                           Use new
                         </span>
-                      </button>
+                      </Button>
                     </div>
                     <div className="flex gap-4 text-xs text-muted-foreground">
                       {currentCoverUrl && (
