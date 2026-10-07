@@ -5,15 +5,9 @@ Judgement rules a reviewer applies to a frontend diff. Mechanical rules that ESL
 ## Design tokens
 
 - Colors use semantic tokens (`bg-muted`, `text-muted-foreground`, `border-primary`, `text-destructive`), whose CSS variables already handle dark mode. Hardcoded palette classes for neutrals or the primary color (`text-gray-*`, `bg-neutral-*`, `dark:bg-neutral-*`, `dark:text-violet-*`) drift from the theme. The theme has no success, warning, or info tokens, so status colors (green, amber, blue) legitimately use a palette class with a `dark:` variant.
-- Page titles: `text-2xl font-semibold`. Dialog titles: `text-sm font-semibold`. Section headings inside a page: `text-base md:text-lg font-semibold` in cards, `text-xl font-semibold mb-4` for full-width page sections.
-- Page header margin `mb-6 md:mb-8`; card and section padding `p-4 md:p-6`; dialog body `space-y-6`.
-- Page components use `rounded-md`, not `rounded-lg`. Hover backgrounds use `hover:bg-muted/50`.
-- Selected card: `border-primary bg-primary/5`, with `border-transparent` when unselected. Selected toggle chip: `border-primary bg-primary/5 text-primary`.
-- Inset inline warning: `rounded-md bg-destructive/10 border border-destructive/20 p-3`.
-- Full-width dialog error banner above the footer: `shrink-0 border-t border-destructive/20 bg-destructive/10 px-5 py-3 text-sm text-destructive`, square edges, no side borders.
-- Danger zone: `space-y-3 rounded-md border border-destructive/40 p-4 md:p-6` with a `text-lg font-semibold text-destructive` title (`PluginDangerZone.tsx`).
-- Muted status badge: `bg-muted text-muted-foreground`.
-- Responsive spacing scales up at `md:` (`gap-4 md:gap-8`, `space-y-4 md:space-y-6`, `py-3 md:py-4 px-4 md:px-6`). Breakpoints: `sm:` 640px, `md:` 768px (desktop sidebar appears), `lg:` 1024px.
+- Type scale, spacing, selected states, and warning boxes follow the nearest existing sibling rather than new classes: a full-width dialog error banner as in `BookEditDialog`, an inset warning as in `DeleteConfirmationDialog`, a selected card as in `BookSelectionList`, a danger zone as in `PluginDangerZone.tsx`. Flag a diff whose classes differ from its siblings for the same element.
+- Page components use `rounded-md`, not `rounded-lg`.
+- Responsive spacing scales up at `md:`, where the desktop sidebar appears.
 
 ## Page layout
 

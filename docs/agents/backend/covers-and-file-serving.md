@@ -38,16 +38,13 @@ Every route that serves a file from disk calls `httputil.ServeFile(c, path, errc
 
 **Set no `Cache-Control`, `Content-Type`, `Content-Disposition`, or `ETag` before the open.** Echo's error handler keeps preset headers, so a failure would go out cacheable for a year, typed `image/jpeg`, or as an attachment. A route that builds its own body (the Kobo cover resize) sets cache headers only after the image decodes.
 
-- `WithCacheControl(v)`: policy below. Covers use `covers.CacheControlImmutable` (API) and `covers.CacheControlNoCache` (external).
-- `WithContentType(ct)`: `models.FileTypeMimeType(file.FileType)` for a book file (`""` keeps the extension type), `books.KepubContentType` for KePub, or the page cache's type for a page. The host mime table is not used because the Alpine image has no entry for `.epub`, `.cbz`, or `.m4b`.
-- `WithAttachment(filename)`: `Content-Disposition` via `SetAttachmentFilename` (escaped ASCII `filename=` plus `filename*=UTF-8''`). It also drops the header from a 412 or 416 that `ServeContent` answers.
-- `WithETag(etag)`: the ETag becomes the only validator.
+Options (`WithCacheControl`, `WithContentType`, `WithAttachment`, `WithETag`) are in `pkg/httputil`. Book files pass an explicit content type (`models.FileTypeMimeType`, `books.KepubContentType`) because the Alpine image's mime table has no entry for `.epub`, `.cbz`, or `.m4b`.
 
 Before serving bytes, check existence with `books.RequireFileOnDisk(c, file, resource)`, not an inline `os.Stat`; it returns `NotFound(resource)` and warn-logs the ID and path (not on HEAD). The page handler checks before the page cache lookup so a cached page is not served for a missing source. The generated-download and KePub handlers pass `"Source file"`; everything else passes `"File"`.
 
 Ranges are `http.ServeContent`'s job, including the audio stream: never parse `Range` by hand. Malformed bytes ranges are 416, suffix ranges 206, a non-`bytes` unit is ignored with a 200 (RFC 9110 section 14.2).
 
-Each serving route has a test that `chmod 000`s the file and asserts a 500 with a JSON body and no success headers (`pkg/books/handlers_file_faults_test.go` and its siblings in `pkg/opds`, `pkg/ereader`, `pkg/kobo`, `pkg/jobs`, `pkg/server/share_links_file_serving_test.go`). A new serving route adds one.
+Each serving route has a test that `chmod 000`s the file and asserts a 500 with a JSON body and no success headers (`pkg/books/handlers_file_faults_test.go` is the model). A new serving route adds one.
 
 ## Cache-Control policy
 

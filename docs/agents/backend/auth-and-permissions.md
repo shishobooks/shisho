@@ -4,26 +4,10 @@ Two layers: global role permissions (resource plus `read`/`write`) and per-user 
 
 ## Attaching checks
 
-```go
-// Whole group
-booksGroup.Use(authMiddleware.Authenticate)
-booksGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-
-// One route
-g.POST("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
-
-// Any of several
-g.GET("/sharing", h.get, authMiddleware.RequireAnyPermission(
-    auth.Permission{Resource: models.ResourceShares, Operation: models.OperationRead},
-    auth.Permission{Resource: models.ResourceConfig, Operation: models.OperationRead},
-))
-
-// Library ID in the URL
-g.GET("/:id", h.retrieve, authMiddleware.RequireLibraryAccess("id"))
-```
+Route middleware is `RequirePermission`, `RequireAnyPermission`, and `RequireLibraryAccess(param)` in `pkg/auth/middleware.go`; any `routes.go` shows the usage.
 
 - **Any-of** fits two kinds of page reading the same data: review criteria take `books:read` (review panel) or `config:read` (settings); `GET /api/libraries` takes `libraries:read` or `users:write` (access picker). When only some routes of a family need the any-of, give them their own group (`libraryListGroup` in `pkg/server/server.go`) rather than weakening the family's group.
-- **Authenticated-only groups** run `Authenticate` and no permission, for the caller's own data or data every signed-in user may see: `/api/user/api-keys`, `/api/user/libraries` (`LibrarySummary`, no paths), `/api/users/directory` (`models.UserRef`), `/api/lists`, and Share Link management (whose `shares` checks sit on each route).
+- **Authenticated-only groups** run `Authenticate` and no permission, for the caller's own data or data every signed-in user may see. Share Link management is one, so its `shares` checks sit on each route.
 - **In a handler**, get the user with `auth.RequireUser(c)` (401 when none, so a route registered without its middleware fails closed). Check permissions with `user.HasPermission` and deny with `errcodes.PermissionDenied(resource, operation)`, which matches `RequirePermission`'s wording; `errcodes.AnyPermissionDenied` matches `RequireAnyPermission`.
 - **Library from fetched data:** `auth.RequireLibraryAccessFor(c, file.LibraryID)` returns 401 without a user and `errcodes.LibraryAccessDenied()` (403) without access.
 - **Lists of library data** filter by `user.GetAccessibleLibraryIDs()` on the user from `auth.RequireUser`. A nil user's filter is nil, which the queries read as every library.
@@ -35,8 +19,7 @@ Every user is loaded by `auth.LoadUser` (Role, Role.Permissions, LibraryAccess; 
 
 ## Route families with non-obvious guards
 
-- **`books:read`** also covers the OPDS catalog (mounted after `BasicAuth` in `pkg/opds/routes.go`), identifier types, hook order, and library languages. **`books:write`** covers plugin Identify and the Audnexus chapter lookup. Global search requires `books:read` and fills its `series` and `people` sections only for `series:read` and `people:read` (`search.GlobalSearchSections`); a withheld section is an empty array, not a missing key.
-- **`config:read`** covers config, caches, logs, the sharing settings and review criteria reads, and the plugin manager reads (`plugins.RegisterReadRoutes`, config secrets masked). **`config:write`** covers plugin mutations, cache clears, and settings edits.
+- **Global search** requires `books:read` and fills its `series` and `people` sections only for `series:read` and `people:read` (`search.GlobalSearchSections`); a withheld section is an empty array, not a missing key.
 - **Shared-page lookups** such as `GET /api/plugins/identifier-types` and `GET /api/plugins/order/:hookType` live in their own `books:read` group. Inside the `config:write` plugin group they would 403 editors and viewers and the frontend would fail silently.
 - **Jobs.** The `/api/jobs` group only authenticates. `GET /api/jobs` and `/:id/logs` need `jobs:read` per route; `POST /api/jobs` needs `jobs:read` and `jobs:write` in the handler, except `bulk_download`, which needs `books:read` plus library access to every existing requested file and stores only `file_ids` and `estimated_size_bytes`. `GET /api/jobs/:id` and `/:id/download` allow `jobs:read` or the creator of a `bulk_download` job (`canReadJob`) and 404 otherwise so IDs cannot be probed. A group-level `jobs:read` would break bulk download for editors and viewers.
 - **List sharing** needs no users permission. List handlers check `CanManage`; recipients come from `/api/users/directory`; `createShare` refuses an unknown or inactive `user_id` with one 422 so it cannot probe accounts. Every user embedded in a list payload (`List.User`, `ListShare.User`, `SharedByUser`, `ListBook.AddedByUser`) is a `models.UserRef`, because recipients of any role read those payloads. `GET /api/lists/:id/books` requires `books:read`. `users:read` on the share handlers would make sharing impossible for every stock role but Admin.

@@ -8,19 +8,10 @@ Cover and page endpoints are served `private, max-age=31536000, immutable`, and 
 
 ## Covers
 
-Build every cover URL with `app/utils/coverUrl.ts`:
-
-| Helper | Key |
-|--------|-----|
-| `bookCoverUrl(book)` | `book.cover_cache_key` (backend: `"<fileId>-<updatedAt.Unix()>"` of the cover's source file; empty when none) |
-| `seriesCoverUrl(series)` | `series.cover_cache_key` |
-| `fileCoverUrl(file)` | `fileCacheKey(file)`: `file.updated_at` in epoch ms, same as page images |
-| `shareBookCoverUrl`, `shareFileCoverUrl` | as above, on the Share Link routes |
-
-`fileCoverUploadUrl(fileId)` is the POST target for `useUploadFileCover`; it has no key, so never render it.
+Build every cover URL with a helper from `app/utils/coverUrl.ts`, each of which documents its key. `fileCoverUploadUrl` is the one without a key: it is a POST target, so never render it.
 
 - **Pass the model, not a key.** Components that render a cover take the book, series, or file and call the helper (`BookItem`, `SeriesCard`, `FileCoverThumbnail`, `CoverGalleryTabs`, `M4BReader`).
-- **Render server covers with `CoverImage`** (`app/components/library/CoverImage.tsx`), passing the base URL from a helper. It measures the image's CSS box before setting `src`, picks one size tier for the box and device pixel ratio, and calls `coverThumbnailUrl` to add `size`, the `book`/`square` `aspect` when applicable, and the render key `r`. Tiers, aspects, and the render key come from Go via `app/types/generated/covers.ts`; never duplicate them in TS. It re-measures on layout, window resize, and pixel-density changes, waits while the box is zero-size or hidden, lazy-loads by default, and uses the original URL for boxes beyond the largest tier.
+- **Render server covers with `CoverImage`** (`app/components/library/CoverImage.tsx`), passing the base URL from a helper; it measures its box and requests a sized thumbnail. Size tiers, aspects, and the render key come from Go via `app/types/generated/covers.ts`; never duplicate them in TS.
 - **Use a plain `<img>` for images that are not server covers**: local upload previews, provider image previews, and CBZ/PDF pages.
 - **Key `CoverImage` on the base URL** (`key={coverUrl}`) where the cover can change while mounted, so React remounts it and a failed load does not stick. Loading-state keys also use the base URL; `CoverImage` builds the sized request URL.
 - Tests that render cover components call `mockCoverDimensions()` from `app/testing/coverDimensions.ts`, because jsdom computes no layout.

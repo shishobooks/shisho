@@ -14,15 +14,7 @@ ESLint rejects `hasPermission(...)` with string literals. A permission held in a
 
 Gate a mutating control on the permission its backend route requires, not on the page's display type:
 
-| Control | Permission |
-|---------|------------|
-| Book and file metadata, covers, chapters, review state, Identify, rescan, merge, move, delete | `books:write` |
-| Genre, tag, and publisher edit/merge/delete/set-child | `books:write` |
-| Series edit/merge/delete | `series:write` |
-| Person edit/merge/delete | `people:write` |
-| Library settings and scans | `libraries:write`, or `jobs:read` and `jobs:write` |
-
-`writePermissionForEntity(entityType)` from `@/utils/permissions` maps metadata entities; `ResourceDetail` applies it itself. Detail pages fetch their merge dialog's candidate list only for a role that can merge.
+Genre, tag, and publisher actions need `books:write` (they have no resource of their own); series and person actions need `series:write` and `people:write`; a library scan needs `libraries:write`, or `jobs:read` and `jobs:write`. `writePermissionForEntity(entityType)` from `@/utils/permissions` maps metadata entities; `ResourceDetail` applies it itself. Detail pages fetch their merge dialog's candidate list only for a role that can merge.
 
 Never gated on a write permission:
 
@@ -43,12 +35,7 @@ Hide the whole control and skip mounting the dialogs behind it (`{canWriteBooks 
 
 ## Library data for roles without Libraries Read
 
-Reader pages never call the Libraries Read routes:
-
-- `useUserLibraries()` (`GET /user/libraries`, authenticated only) returns `LibrarySummary` rows; `useUserLibrary(libraryId)` selects one from the same cache. Breadcrumbs, cover aspect ratio, download preferences, and the Merge and Move dialogs read these.
-- `useNavLibraries()` is the same cache gated on Books Read, for the library picker, `MobileDrawer`, and `LibraryRedirect`.
-- `useLibrary`/`useLibraries` are for settings pages and user access assignment only. `GET /libraries` accepts `users:write` for the user forms, so a role with only `users:read` sees an empty library picker there.
-- User pickers outside admin pages use `useUserDirectory()` (`GET /users/directory`).
+Reader pages never call the Libraries Read routes. They read `LibrarySummary` rows from `useUserLibraries` and its siblings in `hooks/queries/libraries.ts` (`GET /user/libraries`, authenticated only); `useLibrary`/`useLibraries` are for settings pages and user access assignment only. `GET /libraries` accepts `users:write` for the user forms, so a role with only `users:read` sees an empty library picker there. User pickers outside admin pages use `useUserDirectory()`.
 
 ## Query hooks gate their own permissions
 
@@ -78,7 +65,6 @@ vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
 ```
 
-- `setAuth` also takes `demoMode` and `user` (`null` for signed out) and resets anything left out. State lives in the module for the whole file, so a file with several roles calls `setAuth` in `beforeEach`.
-- `ALL_PERMISSIONS` grants everything. A test rendering a real `AuthContext.Provider` passes `authValue()`.
+- `setAuth` resets anything it is not given, and its state lives in the module for the whole file, so a file with several roles calls it in `beforeEach`. Options and helpers are in `app/testing/auth.ts`.
 - `app/testing/` imports vitest and is excluded from the production build; test-only helpers go there.
 - `X.test.tsx` usually mocks query modules. `X.permissions.test.tsx` renders the real query hooks with a spied `API.request` and asserts which requests fire for a role or state (`BookDetailBody.permissions.test.tsx`; `MetadataDetail.permissions.test.tsx` covers a family of pages). Assert that no request fires, not which `enabled` value a caller passed: the hook owns the gate.

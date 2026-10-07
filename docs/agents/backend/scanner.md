@@ -33,7 +33,7 @@ Watches library paths with fsnotify, debounces events, and triggers targeted sin
 
 `scanFileCore` syncs `ParsedMetadata.Chapters` after file metadata is saved, through `chapterService.ReplaceChapters` (atomic); a failure fails the file's scan. Positions: `StartPage` (0-indexed) for CBZ and PDF, `StartTimestampMs` for M4B, `Href` for EPUB.
 
-- **Negative start pages are dropped, whatever the source.** Parsed chapters (built-in and plugin parsers) and sidecar chapters (via `convertSidecarChapters`) pass through `dropNegativeStartPageChapters`, which drops the chapter and its children and warn-logs path, source, count, and whether the rest was stored. Older scans wrote page-less PDF bookmarks to sidecars as -1, and plugins can return any negative. A stored negative page shows as "Page 0", is skipped by downloads, and makes `validateChapters` reject every save on the file. If all are dropped, existing chapters stay (`ShouldUpdateChapters` never applies an empty list).
+- **Negative start pages are dropped, whatever the source.** Parsed chapters (built-in and plugin parsers) and sidecar chapters (via `convertSidecarChapters`) pass through `dropNegativeStartPageChapters`, which drops the chapter and its children and warn-logs path, source, count, and whether the rest was stored. Old sidecars and plugins can carry negatives. A stored negative page shows as "Page 0", is skipped by downloads, and makes `validateChapters` reject every save on the file. If all are dropped, existing chapters stay (`ShouldUpdateChapters` never applies an empty list).
 - Enricher search results carry no chapters (`parseSearchResponse` never reads them).
 - The PUT route's `validateChapters` requires CBZ/PDF `start_page >= 0` and `< file.PageCount` when known, and M4B `start_timestamp_ms <= AudiobookDurationSeconds * 1000`.
 
@@ -50,26 +50,6 @@ When a path-affecting field changes and the library has `OrganizeFileStructure` 
 - For directory-backed books, folder organization owns the book sidecar, so rename the files inside with `RenameOrganizedFileOnly`, not `RenameOrganizedFile`. A file once moved from the library root can carry a leftover basename sidecar, and renaming it can overwrite the folder sidecar and restore stale metadata on the next scan.
 - Title comes from `file.Name` when set (see "File-level vs book-level fields" in `pkg/AGENTS.md`).
 
-```go
-if fieldChanged && library.OrganizeFileStructure {
-    organizeOpts := fileutils.OrganizedNameOptions{
-        AuthorNames:   authorNames,
-        NarratorNames: narratorNames,
-        Title:         title,
-        FileType:      file.FileType,
-        Claimed:       bookService.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID),
-    }
-    newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
-    if err != nil {
-        return errors.WithStack(err)
-    }
-    if newPath != file.Filepath {
-        // Moves the file back if the write fails.
-        if err := bookService.RecordOrganizedFilepath(ctx, file, file.Filepath, newPath, false); err != nil {
-            return errors.WithStack(err)
-        }
-    }
-}
-```
+`reorganizeFileAfterMetadataChange` in `pkg/books/handlers.go` is the pattern: `RenameOrganizedFileOnly` with `Claimed` set, then `RecordOrganizedFilepath`.
 
 **Folder renames** record the Book and all its files in one transaction and rename the folder back on failure (`recordRenamedBookFolder`). The same transaction rewrites every `books` and `files` row at or under the old folder, in any library, because a nested Book moves with it on disk; organize then reindexes those nested Books, since callers reindex only the organized Book. The prefix match is a byte range (`underFolder`), not LIKE, so a sibling `Foo 2/`, LIKE wildcards, and a case-only difference are left alone.

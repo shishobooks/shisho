@@ -6,10 +6,7 @@ Read this before writing code that reports a failed request, renders a failed qu
 
 `ShishoAPI.checkStatus` (`app/libraries/api.ts`) always rejects with a `ShishoAPIError`, never a JSON `SyntaxError`. It reads the body as text and then tries `JSON.parse`, because a non-JSON body can only come from a reverse proxy in front of the server.
 
-- A 2xx with an empty or whitespace-only body (including `204`) resolves to `undefined`.
-- A 2xx with a non-JSON body rejects: every endpoint returns JSON or nothing.
-- A non-2xx without the Go `{ error: { code, message } }` body rejects with a status message such as `Request failed with status 504 (Gateway Timeout)`, and `ShishoAPIError.code` is `undefined`. Code that reads `code` handles `undefined`.
-- `app/libraries/api.test.ts` pins the exact messages.
+The status-by-body cases are pinned in `app/libraries/api.test.ts`. One matters to callers: a non-2xx without the Go error body has `ShishoAPIError.code` `undefined`, so code that reads `code` handles `undefined`.
 
 A direct `fetch` to a JSON endpoint (a `FormData` upload, which `API.request` would JSON-encode) passes the response to `API.checkStatus` rather than calling `response.json()`. `useUploadFileCover` is the example.
 

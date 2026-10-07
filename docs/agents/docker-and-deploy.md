@@ -6,7 +6,7 @@ Read this before changing the `Dockerfile`, image smoke tests, the release or de
 
 The type-generation, frontend, and backend Docker stages run on `$BUILDPLATFORM`. The backend uses `CGO_ENABLED=0` and cross-compiles with `$TARGETOS`/`$TARGETARCH`; declare target and version arguments only after dependency installation so they do not invalidate dependency layers. Keep the final Alpine stage on the target platform. Multiarch builders still need QEMU for its package installation and user setup, not for Go or Node compilation.
 
-Release publishing keeps parallel native AMD64 and ARM64 build jobs. The single-builder alternative passed native smoke tests but was slower in both cold and version-only GitHub benchmarks, so cross-compilation support does not mean consolidating the release runners.
+Release publishing keeps parallel native AMD64 and ARM64 build jobs even though the stages cross-compile, because a single builder was slower.
 
 CI builds one multiarch OCI archive and runs that same artifact on native AMD64 and ARM64 runners. Smoke tests check architecture, startup, the embedded frontend and its assets, version injection, custom `PUID`/`PGID`, and graceful shutdown. Smoke jobs reuse that artifact on native runners: no rebuilds, no emulation.
 

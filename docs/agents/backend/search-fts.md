@@ -15,7 +15,7 @@ defer h.searchService.ReindexAffected(ctx, affected)
 affected.BookIDs = append(affected.BookIDs, newBook.ID)
 ```
 
-- `search.Affected` holds `BookIDs`, `SeriesIDs`, `PersonIDs`, `GenreIDs`, `TagIDs`, `PublisherIDs`. Name what the mutation touches; the service expands: a Person to the Books it authors or narrates, a Series to its Books, every Book to the Series holding it. Genres, Tags, and Publishers reindex only their own rows.
+- In `search.Affected`, name what the mutation touches; the service expands: a Person to the Books it authors or narrates, a Series to its Books, every Book to the Series holding it. Genres, Tags, and Publishers reindex only their own rows.
 - `CollectAffected` expands **before** the mutation, because a delete or relink drops the links (CASCADE removes a deleted Book's `book_series` rows). `ReindexAffected` expands again afterwards, rewrites each row once, and deletes rows of entities that no longer exist, so callers need no `DeleteFrom*Index` for ids they passed. Every resource delete handler collects the deleted id and defers `ReindexAffected`.
 - **The `defer` is required**: a rename commits before `SyncAliases` can reject, and a plugin apply commits the title before a duplicate series fails it, so the reindex must run on error paths. It detaches from ctx cancellation, logs failures, and never fails the request. Both methods are nil-safe.
 - Transaction boundaries and source stamps stay as they are; the reindex runs after them.

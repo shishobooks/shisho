@@ -1,6 +1,6 @@
 # Demo Mode in the frontend
 
-Read this before changing anything that reports a write failure, hides a control in Demo Mode, or stores preferences. Backend behavior is in `pkg/AGENTS.md`; the backend remains the write boundary.
+Read this before changing anything that reports a write failure, hides a control in Demo Mode, or stores preferences. Backend behavior is in `docs/agents/backend/demo-mode.md`; the backend remains the write boundary.
 
 ## The flag
 
