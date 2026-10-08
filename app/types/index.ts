@@ -1,6 +1,7 @@
 // Re-exports the tygo-generated API types. Re-export a `List*Response` only
 // when its envelope differs from `{ items, total }` and a hook types its
 // return on it.
+export * from "./generated/cbzpages";
 export * from "./generated/covers";
 export * from "./generated/models";
 export {

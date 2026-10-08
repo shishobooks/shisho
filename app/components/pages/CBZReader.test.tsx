@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { FileTypeCBZ, FileTypePDF, type File } from "@/types";
+import { CBZPageKey, FileTypeCBZ, FileTypePDF, type File } from "@/types";
 
 import CBZReader from "./CBZReader";
 import PDFReader from "./PDFReader";
@@ -27,12 +27,12 @@ const file = {
 } as File;
 
 describe("page readers", () => {
-  it("CBZReader requests pages with the file's cache key", () => {
+  it("CBZReader requests pages with the file's cache key and the page key", () => {
     render(
       <CBZReader file={{ ...file, file_type: FileTypeCBZ }} libraryId="1" />,
     );
     expect(pageReaderProps.current?.getPageUrl(3)).toBe(
-      "/api/books/files/42/page/3?v=1717200000000",
+      `/api/books/files/42/page/3?v=1717200000000&r=${CBZPageKey}`,
     );
   });
 

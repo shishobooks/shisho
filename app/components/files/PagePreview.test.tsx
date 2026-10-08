@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { FileTypeCBZ } from "@/types";
+import { CBZPageKey, FileTypeCBZ } from "@/types";
 
 import PagePreview from "./PagePreview";
 
@@ -21,7 +21,7 @@ describe("PagePreview", () => {
     );
     expect(screen.getByAltText("Page 5")).toHaveAttribute(
       "src",
-      "/api/books/files/100/page/4?v=1717200000000",
+      `/api/books/files/100/page/4?v=1717200000000&r=${CBZPageKey}`,
     );
   });
 
@@ -51,7 +51,7 @@ describe("PagePreview", () => {
     );
     expect(screen.getByAltText("Page 5")).toHaveAttribute(
       "src",
-      "/api/books/files/100/page/4?v=1717200000000",
+      `/api/books/files/100/page/4?v=1717200000000&r=${CBZPageKey}`,
     );
   });
 });

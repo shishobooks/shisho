@@ -58,6 +58,16 @@ mv "Book.repaired.epub" "Book.epub"
 
 Otherwise replace the file with a good copy. Shisho picks up the change on the next monitor event or scan, refreshes the metadata, and clears the badge. The book keeps its existing metadata and [sidecar](./sidecar-files.md) while the file is unreadable.
 
+## A Comic's Cover Page or Chapters Point at the Wrong Page
+
+**Symptom:** In a CBZ file, a chapter link opens the wrong page, **Select page** highlights a page other than the cover, a KePub download shows a different cover than Shisho does, or the last pages in the reader show a broken or blank image.
+
+**Likely cause:** The file was scanned by Shisho 0.1.1 or earlier. Those versions counted pages in plain character order, so `page10.jpg` came before `page2.jpg`, and counted macOS metadata files as pages. Shisho now counts pages as described in [Supported Formats](./supported-formats.md#cbz-page-images), so the reader shows the pages in order, but the cover page, chapter start pages, and page count recorded by the earlier scan keep their old values. A library scan does not change them, because it skips files that have not changed on disk.
+
+**Verify:** Run `unzip -l` on the file. Files that can be affected have page or folder names whose numbers are not zero-padded, such as `page1.jpg` through `page10.jpg`, or contain `._` files or a `__MACOSX` folder.
+
+**Fix:** On the book page, open the file's actions menu and choose **Rescan file**. **Scan for new metadata** corrects the page count and keeps your manual edits, but leaves the chapters as they are. **Refresh all metadata** also detects the chapters again. It replaces chapters you edited by hand, so edit them again afterward, and it does not change the cover page. To fix the cover page, open **Edit** on the file, choose **Select page**, and pick the cover again. **Reset to file metadata** recomputes both the cover page and the chapters, but it also removes the file's manual edits and plugin metadata; see [Metadata](./metadata.md#normal-scans-refresh-and-reset).
+
 ## A Background Job Failed
 
 **Symptom:** A scan, download, hash, or plugin-related job is marked **Failed**.

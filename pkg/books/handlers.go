@@ -1984,13 +1984,18 @@ func (h *handler) getPage(c echo.Context) error {
 	}
 
 	// Cache for 1 year since page content doesn't change. The route is
-	// authenticated, so private keeps shared caches from storing it. A PDF
-	// page also depends on the render settings, which the URL carries as r.
-	// A tab loaded before a restart with new settings asks for the old key;
-	// caching the new render under that URL would show it if the settings
-	// were reverted, so only the current key is cached.
+	// authenticated, so private keeps shared caches from storing it. The URL
+	// carries as r what else decides the image: the render settings for a PDF
+	// page, cbzpages.CBZPageKey for a CBZ page. A tab loaded before a restart
+	// with new settings or an upgrade asks for the old key; caching the new
+	// page under that URL would show it if the key reverted, so only the
+	// current key is cached.
+	currentKey := cbzpages.CBZPageKey
+	if file.FileType == models.FileTypePDF {
+		currentKey = h.pdfPageCache.RenderKey()
+	}
 	cacheControl := "private, max-age=31536000, immutable"
-	if file.FileType == models.FileTypePDF && c.QueryParam("r") != h.pdfPageCache.RenderKey() {
+	if c.QueryParam("r") != currentKey {
 		cacheControl = "private, no-store"
 	}
 
