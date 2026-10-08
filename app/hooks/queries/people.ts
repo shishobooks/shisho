@@ -6,7 +6,12 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, File, PersonResponse, ResourceListResponse } from "@/types";
+import type {
+  ListAuthoredBooksResponse,
+  ListNarratedFilesResponse,
+  ListPeopleResponse,
+  PersonResponse,
+} from "@/types";
 import type {
   ListPeopleQuery,
   SubResourceQuery,
@@ -24,7 +29,7 @@ export enum QueryKey {
   PersonNarratedFiles = "PersonNarratedFiles",
 }
 
-export type ListPeopleData = ResourceListResponse<PersonResponse>;
+export type ListPeopleData = ListPeopleResponse;
 
 export const usePeopleList = (
   query: ListPeopleQuery = {},
@@ -69,11 +74,11 @@ export const usePersonAuthoredBooks = (
   personId?: number,
   query: PersonSubResourceQuery = {},
   options: Omit<
-    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
+    UseQueryOptions<ListAuthoredBooksResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
+  return useQuery<ListAuthoredBooksResponse, ShishoAPIError>({
     ...options,
     enabled: useRequires("people:read", options.enabled ?? Boolean(personId)),
     queryKey: [QueryKey.PersonAuthoredBooks, personId, query],
@@ -93,11 +98,11 @@ export const usePersonNarratedFiles = (
   personId?: number,
   query: PersonSubResourceQuery = {},
   options: Omit<
-    UseQueryOptions<ResourceListResponse<File>, ShishoAPIError>,
+    UseQueryOptions<ListNarratedFilesResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ResourceListResponse<File>, ShishoAPIError>({
+  return useQuery<ListNarratedFilesResponse, ShishoAPIError>({
     ...options,
     enabled: useRequires("people:read", options.enabled ?? Boolean(personId)),
     queryKey: [QueryKey.PersonNarratedFiles, personId, query],

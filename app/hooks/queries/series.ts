@@ -6,7 +6,11 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, ResourceListResponse, SeriesResponse } from "@/types";
+import type {
+  ListSeriesBooksResponse,
+  ListSeriesResponse,
+  SeriesResponse,
+} from "@/types";
 import type {
   ListSeriesQuery,
   SubResourceQuery,
@@ -25,7 +29,7 @@ export enum QueryKey {
 
 export type { ListSeriesQuery };
 
-export type ListSeriesData = ResourceListResponse<SeriesResponse>;
+export type ListSeriesData = ListSeriesResponse;
 
 export const useSeriesList = (
   query: ListSeriesQuery = {},
@@ -70,11 +74,11 @@ export const useSeriesBooks = (
   seriesId?: number,
   query: SeriesBooksQuery = {},
   options: Omit<
-    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
+    UseQueryOptions<ListSeriesBooksResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
+  return useQuery<ListSeriesBooksResponse, ShishoAPIError>({
     ...options,
     enabled: useRequires("series:read", options.enabled ?? Boolean(seriesId)),
     queryKey: [QueryKey.SeriesBooks, seriesId, query],

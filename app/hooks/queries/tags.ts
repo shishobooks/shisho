@@ -8,7 +8,7 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   ListTagBooksResponse,
-  ResourceListResponse,
+  ListTagsResponse,
   TagResponse,
 } from "@/types";
 import type {
@@ -26,7 +26,7 @@ export enum QueryKey {
   TagBooks = "TagBooks",
 }
 
-export type ListTagsData = ResourceListResponse<TagResponse>;
+export type ListTagsData = ListTagsResponse;
 
 export const useTagsList = (
   query: ListTagsQuery = {},

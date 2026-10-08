@@ -6,7 +6,11 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Book, GenreResponse, ResourceListResponse } from "@/types";
+import type {
+  GenreResponse,
+  ListGenreBooksResponse,
+  ListGenresResponse,
+} from "@/types";
 import type {
   ListGenresQuery,
   SubResourceQuery,
@@ -22,7 +26,7 @@ export enum QueryKey {
   GenreBooks = "GenreBooks",
 }
 
-export type ListGenresData = ResourceListResponse<GenreResponse>;
+export type ListGenresData = ListGenresResponse;
 
 export const useGenresList = (
   query: ListGenresQuery = {},
@@ -67,11 +71,11 @@ export const useGenreBooks = (
   genreId?: number,
   query: GenreBooksQuery = {},
   options: Omit<
-    UseQueryOptions<ResourceListResponse<Book>, ShishoAPIError>,
+    UseQueryOptions<ListGenreBooksResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
-  return useQuery<ResourceListResponse<Book>, ShishoAPIError>({
+  return useQuery<ListGenreBooksResponse, ShishoAPIError>({
     ...options,
     enabled: useRequires("books:read", options.enabled ?? Boolean(genreId)),
     queryKey: [QueryKey.GenreBooks, genreId, query],

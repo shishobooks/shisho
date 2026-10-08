@@ -267,6 +267,26 @@ export default tseslint.config(
     },
   },
   {
+    // ResourceListResponse is the structural prop type for generic list
+    // components. A hook typed with it would not notice a change to the Go
+    // envelope, so hooks use the generated List*Response (ADR 0004).
+    files: ["app/hooks/queries/**/*.{ts,tsx}"],
+    ignores: ["app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["@/types", "@/types/index"].map((name) => ({
+            name,
+            importNames: ["ResourceListResponse"],
+            message:
+              "Type the hook with the generated List*Response for its endpoint, so a Go response change fails the typecheck (see app/AGENTS.md).",
+          })),
+        },
+      ],
+    },
+  },
+  {
     // app/utils holds the URL helpers, so it skips only the URL rule. This
     // replaces the app block's no-restricted-syntax list and keeps its
     // no-restricted-imports query ban.
