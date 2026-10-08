@@ -15,11 +15,11 @@ import type {
   DeleteFileResponse,
   File,
   ListBooksQuery,
+  ListBooksResponse,
   MergeBooksPayload,
   MergeBooksResponse,
   MoveFilesPayload,
   MoveFilesResponse,
-  ResourceListResponse,
   UpdateBookPayload,
   UpdateFileCoverPagePayload,
   UpdateFilePayload,
@@ -70,7 +70,7 @@ export const useBooksByIds = (ids: number[], enabled: boolean = true) => {
   });
 };
 
-export type ListBooksData = ResourceListResponse<Book>;
+export type ListBooksData = ListBooksResponse;
 
 export const useBooks = (
   query: ListBooksQuery = {},

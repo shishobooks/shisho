@@ -1,8 +1,8 @@
 import { ESLint, type Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 
-// The permission, query, URL, mutate, UI and e2e import rules in
-// eslint.config.js are selectors or path patterns, so a typo in one would
+// The permission, query, URL, mutate, UI, list envelope and e2e import rules
+// in eslint.config.js are selectors or path patterns, so a typo in one would
 // silently match nothing, and the local mutateAsync rule in eslint-rules/
 // reads syntax in ways a refactor could quietly change. This lints fixtures
 // as if they sat in the app or e2e/ to prove each rule still fires where it
@@ -472,5 +472,44 @@ describe("ESLint e2e fixture import rule", () => {
 
   it("allows them in e2e/fixtures.ts", async () => {
     expect(await playwrightImports("e2e/fixtures.ts")).toEqual([]);
+  });
+});
+
+const resourceListImports = async (filePath: string, source = "@/types") => {
+  const [result] = await eslint.lintText(
+    `import type { ResourceListResponse } from "${source}";\nexport type Data = ResourceListResponse<number>;\n`,
+    { filePath },
+  );
+  return result.messages.filter(
+    (message) => message.ruleId === "no-restricted-imports",
+  );
+};
+
+describe("ESLint generated list envelope rule", () => {
+  it("rejects ResourceListResponse in query hooks", async () => {
+    expect(
+      await resourceListImports("app/hooks/queries/fixture.ts"),
+    ).toHaveLength(1);
+  });
+
+  it("rejects it through the explicit index path too", async () => {
+    expect(
+      await resourceListImports(
+        "app/hooks/queries/fixture.ts",
+        "@/types/index",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("allows it in tests", async () => {
+    expect(
+      await resourceListImports("app/hooks/queries/fixture.test.ts"),
+    ).toHaveLength(0);
+  });
+
+  it("allows it in the generic list components", async () => {
+    expect(
+      await resourceListImports("app/components/library/Fixture.tsx"),
+    ).toHaveLength(0);
   });
 });

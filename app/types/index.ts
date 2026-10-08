@@ -1,6 +1,5 @@
 // Re-exports the tygo-generated API types. Re-export a `List*Response` only
-// when its envelope differs from `{ items, total }` and a hook types its
-// return on it.
+// when a hook types its return on it.
 export * from "./generated/cbzpages";
 export * from "./generated/covers";
 export * from "./generated/models";
@@ -12,6 +11,7 @@ export {
   type DeleteFileResponse,
   type IdentifierPayload,
   type ListBooksQuery,
+  type ListBooksResponse,
   type MergeBooksPayload,
   type MergeBooksResponse,
   type MoveFilesPayload,
@@ -39,18 +39,25 @@ export * from "./generated/roles";
 export * from "./generated/search";
 export {
   type SeriesResponse,
+  type ListSeriesResponse,
+  type ListSeriesBooksResponse,
   type ListSeriesQuery,
   type UpdateSeriesPayload,
   type MergeSeriesPayload,
 } from "./generated/series";
 export {
   type PersonResponse,
+  type ListPeopleResponse,
+  type ListAuthoredBooksResponse,
+  type ListNarratedFilesResponse,
   type ListPeopleQuery,
   type UpdatePersonPayload,
   type MergePeoplePayload,
 } from "./generated/people";
 export {
   type GenreResponse,
+  type ListGenresResponse,
+  type ListGenreBooksResponse,
   type ListGenresQuery,
   type UpdateGenrePayload,
   type MergeGenresPayload,
@@ -58,6 +65,7 @@ export {
 export {
   type TagResponse,
   type ListTagBooksResponse,
+  type ListTagsResponse,
   type ListTagsQuery,
   type UpdateTagPayload,
   type MergeTagsPayload,
@@ -151,8 +159,8 @@ export {
 } from "./generated/lists";
 
 // The generic `{ items, total }` prop type for list components such as
-// ResourceList. Some older hooks still type their envelopes with it; a new
-// query hook returns the generated `List*Response` instead.
+// ResourceList, which render whichever generated `List*Response` their
+// caller's hook returns. ESLint keeps it out of query hooks.
 export interface ResourceListResponse<T> {
   items: T[];
   total: number;
