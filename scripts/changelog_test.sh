@@ -160,11 +160,119 @@ commit "[Docs] Plain docs change (#6)"
 PLAIN=$(generate_changelog_section 0.0.3 HEAD~1..HEAD)
 assert_not_contains "$PLAIN" "### Breaking Changes" "unmarked commit"
 
+# Nested notes keep their hierarchy, two spaces per level whether the source
+# indented by 2, 3 or 4, with wrapped lines (lazy or indented) and fences kept
+# at their item's depth. A subheading still starts a new top-level bullet.
+commit "[Fix]! Order CBZ pages naturally (#9)" "## BREAKING CHANGES
+
+- CBZ pages are now counted in natural file name order, and macOS
+metadata is no longer counted as a page.
+  - **Affected files:** CBZ files whose page numbers are not
+    zero-padded.
+  - **If you do nothing:** on affected files:
+    - chapter links open the wrong pages
+    - **Select page** highlights a page other than the cover
+  - **To fix a file:** choose **Rescan file**.
+      - **Scan for new metadata** corrects the page count.
+      - **Refresh all metadata** also detects chapters again.
+  - Example sidecar:
+
+    \`\`\`json
+    {\"cover_page\": 0}
+    \`\`\`
+
+### Cache
+
+- Reader pages cached under the old order are no longer served.
+    - They stay on disk until the cache is cleared.
+        - Admins can clear it from the settings page.
+1. A numbered item with a child:
+   - three-space child under a numbered item
+
+Closes #638"
+NESTED=$(generate_changelog_section 0.0.4 HEAD~1..HEAD)
+EXPECTED_NESTED='### Breaking Changes
+- **Order CBZ pages naturally (#9)**
+  - CBZ pages are now counted in natural file name order, and macOS
+    metadata is no longer counted as a page.
+    - **Affected files:** CBZ files whose page numbers are not
+      zero-padded.
+    - **If you do nothing:** on affected files:
+      - chapter links open the wrong pages
+      - **Select page** highlights a page other than the cover
+    - **To fix a file:** choose **Rescan file**.
+      - **Scan for new metadata** corrects the page count.
+      - **Refresh all metadata** also detects chapters again.
+    - Example sidecar:
+      ```json
+      {"cover_page": 0}
+      ```
+  - **Cache**
+  - Reader pages cached under the old order are no longer served.
+    - They stay on disk until the cache is cleared.
+      - Admins can clear it from the settings page.
+  - A numbered item with a child:
+    - three-space child under a numbered item
+
+### Bug Fixes'
+assert_contains "$NESTED" "$EXPECTED_NESTED" "nested breaking notes"
+assert_not_contains "$NESTED" "Closes #" "Closes line copied from a nested note"
+NESTED_BLOCK=$(printf '%s\n' "$EXPECTED_NESTED" | sed '1d;$d')
+
+# Nesting follows CommonMark content columns, as the PR preview does: a child
+# must reach its parent's text, so a 1-space line under "- " and a 2-space line
+# under "1. " are siblings. An indented paragraph after a blank line belongs to
+# the open item it reaches, and text right after a fence continues the fence's
+# item rather than the deeper item before it.
+commit "[Fix]! Edge cases in nested notes (#10)" "## BREAKING CHANGES
+
+  - First item indented two spaces.
+- Dedented item is a sibling, not a parent.
+	- Tab-indented child.
+ - One-space line is a sibling.
+1. Numbered item.
+  - Two spaces is short of the number's text, so a sibling.
+- Item with a second paragraph:
+  - Its child.
+
+  The second paragraph belongs to the item, not the child.
+- Set the new key:
+  - On Docker:
+    - in compose.yaml
+  \`\`\`yaml
+  new_key: true
+  \`\`\`
+  Then restart the server."
+EDGES=$(generate_changelog_section 0.0.5 HEAD~1..HEAD)
+EXPECTED_EDGES='### Breaking Changes
+- **Edge cases in nested notes (#10)**
+  - First item indented two spaces.
+  - Dedented item is a sibling, not a parent.
+    - Tab-indented child.
+  - One-space line is a sibling.
+  - Numbered item.
+  - Two spaces is short of the number'"'"'s text, so a sibling.
+  - Item with a second paragraph:
+    - Its child.
+
+    The second paragraph belongs to the item, not the child.
+  - Set the new key:
+    - On Docker:
+      - in compose.yaml
+    ```yaml
+    new_key: true
+    ```
+    Then restart the server.
+
+### Bug Fixes'
+assert_contains "$EDGES" "$EXPECTED_EDGES" "nested note edge cases"
+
 # The release header picks the block back out of CHANGELOG.md for the right
 # version only.
 CHANGELOG="$REPO/CHANGELOG.md"
 {
     printf '# Changelog\n\n## [Unreleased]\n\n'
+    printf '%s\n\n' "$NESTED"
     printf '%s\n\n' "$SECTION"
     printf '## [0.0.20] - 2026-01-02\n\n### Breaking Changes\n- **Prefix neighbour**\n  - Must not be picked for 0.0.2.\n\n'
     printf '## [0.0.1] - 2026-01-01\n\n### Breaking Changes\n- **Old entry**\n  - Must not be picked for 0.0.2.\n'
@@ -175,6 +283,10 @@ assert_not_contains "$BLOCK" "Old entry" "changelog block picks another version"
 assert_not_contains "$BLOCK" "Prefix neighbour" "changelog block matches a version prefix"
 assert_not_contains "$BLOCK" "### " "changelog block keeps a heading"
 assert_not_contains "$BLOCK" "Add dark mode" "changelog block runs past the breaking block"
+# The reader passes nested lines through unchanged, at every depth.
+NESTED_FROM_FILE=$(breaking_changes_from_changelog 0.0.4 "$CHANGELOG")
+assert_contains "$NESTED_FROM_FILE" "$NESTED_BLOCK" "nested changelog block"
+assert_not_contains "$NESTED_FROM_FILE" "Rename the test mode key" "nested changelog block runs into the next version"
 NONE=$(breaking_changes_from_changelog 0.0.9 "$CHANGELOG")
 [[ -z "$NONE" ]] || fail "changelog block for a missing version should be empty"
 
@@ -184,6 +296,8 @@ assert_contains "$HEADER" $'### Breaking Changes\n\nRead these before upgrading.
 assert_contains "$HEADER" '`{{"{{"}} .Env.HOME }}`' "header escapes template braces"
 assert_not_contains "$HEADER" '`{{ .Env.HOME }}`' "header leaves a raw template action"
 assert_contains "$HEADER" 'ghcr.io/shishobooks/shisho:{{ trimprefix .Tag "v" }}' "header keeps its own template actions"
+NESTED_HEADER=$(cd "$SCRIPT_DIR/.." && ./scripts/release-notes-header.sh 0.0.4 "$CHANGELOG")
+assert_contains "$NESTED_HEADER" $'Read these before upgrading.\n\n'"$NESTED_BLOCK" "header carries the nested block"
 HEADER_NONE=$(cd "$SCRIPT_DIR/.." && ./scripts/release-notes-header.sh 0.0.9 "$CHANGELOG" 2> "$REPO/stderr.txt")
 assert_not_contains "$HEADER_NONE" "Breaking" "header without a block"
 assert_contains "$(cat "$REPO/stderr.txt")" "::warning::" "missing entry warning"
