@@ -158,9 +158,15 @@ describe("BookEditDialog series range editing", () => {
       }),
     );
     expect(screen.getByLabelText("End")).toHaveValue(3);
-    expect(
-      screen.getByText("Enter a start number before setting an end or unit."),
-    ).toBeInTheDocument();
+    // The message is announced and tied to Start, the input it is about.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a start number before setting an end or unit.",
+    );
+    expect(start).toHaveAttribute("aria-invalid", "true");
+    expect(start).toHaveAccessibleDescription(
+      "Enter a start number before setting an end or unit.",
+    );
+    expect(screen.getByLabelText("End")).not.toHaveAttribute("aria-invalid");
     expect(screen.getByLabelText("Unit")).toBeEnabled();
     await user.click(screen.getByLabelText("Unit"));
     await user.click(screen.getByRole("option", { name: "Unspecified" }));
@@ -244,17 +250,18 @@ describe("BookEditDialog series range editing", () => {
     const endInput = screen.getByLabelText("End");
     await user.type(endInput, "0");
 
-    expect(
-      screen.getByText("End must be greater than or equal to the start."),
-    ).toBeInTheDocument();
+    expect(endInput).toHaveAttribute("aria-invalid", "true");
+    expect(endInput).toHaveAccessibleDescription(
+      "End must be greater than or equal to the start.",
+    );
     expect(saveButton).toBeDisabled();
 
     await user.clear(endInput);
     await user.type(endInput, "3");
 
     expect(
-      screen.queryByText("End must be greater than or equal to the start."),
-    ).not.toBeInTheDocument();
+      screen.queryAllByText("End must be greater than or equal to the start."),
+    ).toHaveLength(0);
     expect(saveButton).toBeEnabled();
   });
 

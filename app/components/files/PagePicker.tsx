@@ -196,7 +196,10 @@ const PagePicker = ({
         <DialogHeader className="px-6 py-4 pr-14 border-b border-border/50 shrink-0">
           <DialogTitle className="flex items-center justify-between">
             <span>{title}</span>
-            <span className="text-sm font-normal text-muted-foreground tabular-nums">
+            <span
+              className="text-sm font-normal text-muted-foreground tabular-nums"
+              role="status"
+            >
               Page {focusedPage + 1} of {pageCount}
             </span>
           </DialogTitle>
@@ -299,6 +302,8 @@ const PagePicker = ({
               <div className="flex gap-2 py-1 px-1" ref={thumbnailStripRef}>
                 {visibleThumbnails.map((page) => (
                   <Button
+                    aria-current={page === currentPage ? "true" : undefined}
+                    aria-pressed={page === focusedPage}
                     className={cn(
                       "relative shrink-0 rounded overflow-hidden transition-all duration-150",
                       "border-2 bg-muted",

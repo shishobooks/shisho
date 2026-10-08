@@ -739,3 +739,136 @@ describe("ESLint form control name rule", () => {
     );
   });
 });
+
+// Each element carries its case number in data-case, and each rule has its
+// own range. Radio group names, cases 1 to 14: 1 to 5 have no name; 6 to 12
+// are the accepted forms and must stay clean; 13 and 14 are the known gaps.
+// aria-invalid messages, cases 15 to 27: 15 to 20 point at no message; 21 to
+// 26 are accepted; 27 is the known gap. Error borders, cases 28 to 47: 28 to
+// 35 and 45 to 47 show an error only by the border; 36 to 42 are accepted; 43
+// and 44 are the known gaps.
+const GROUP_STATE_FIXTURE = `
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
+
+import { Input } from "@/components/ui/input";
+import { RadioGroup } from "@/components/ui/radio-group";
+import { SelectTrigger } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/libraries/utils";
+
+declare const error: string | undefined;
+declare const label: string;
+declare const props: Record<string, string>;
+declare const Wrapper: (props: { className: string }) => null;
+export const Fixture = () => (
+  <div>
+    <RadioGroup data-case="1" value="a" />
+    <div data-case="2" role="radiogroup" />
+    <RadioGroup aria-label="" data-case="3" value="a" />
+    <div data-case="4" role={"radiogroup"} />
+    <RadioGroup aria-label={undefined} data-case="5" value="a" />
+    <RadioGroup aria-label="Action" data-case="6" value="a" />
+    <RadioGroup aria-labelledby="heading" data-case="7" value="a" />
+    <RadioGroup aria-label={label} data-case="8" value="a" />
+    <RadioGroup data-case="9" {...props} />
+    <fieldset><legend>Mode</legend><RadioGroup data-case="10" value="a" /></fieldset>
+    <div aria-label="Mode" data-case="11" role="radiogroup" />
+    <div data-case="12" role="group" />
+    {/* Known gaps: a fieldset counts even with no legend, and a Radix
+        primitive used directly (a member expression) is not checked. */}
+    <fieldset><RadioGroup data-case="13" value="a" /></fieldset>
+    <RadioGroupPrimitive.Root data-case="14" value="a" />
+    <Input aria-invalid data-case="15" />
+    <Input aria-invalid={Boolean(error)} data-case="16" />
+    <input aria-invalid="true" data-case="17" />
+    <Textarea aria-invalid data-case="18" />
+    <Input aria-describedby="" aria-invalid data-case="19" />
+    <Input aria-describedby={undefined} aria-invalid data-case="20" />
+    <Input aria-describedby={error ? "err" : undefined} aria-invalid={error ? true : undefined} data-case="21" />
+    <Input aria-errormessage="err" aria-invalid data-case="22" />
+    <Input aria-invalid={false} data-case="23" />
+    <Input aria-invalid="false" data-case="24" />
+    <Input aria-invalid data-case="25" {...props} />
+    <Input aria-invalid={undefined} data-case="26" />
+    {/* Known gap: an aria-describedby counts even when it points at nothing
+        or at text that is not the error. */}
+    <Input aria-describedby="hint" aria-invalid data-case="27" />
+    <Input className={cn("w-20", error && "border-red-500")} data-case="28" />
+    <Input className={cn("w-20", error ? "border-destructive" : "")} data-case="29" />
+    <input className={cn({ "border-destructive/50": error })} data-case="30" />
+    <Textarea className={\`w-20 \${error ? "border-red-500" : ""}\`} data-case="31" />
+    <SelectTrigger className={cn(error && "dark:border-red-400")} data-case="32" />
+    <Input className={cn(error && "!border-red-500")} data-case="33" />
+    <Input className={cn(error && "border-red-500!")} data-case="34" />
+    <Input className={cn(error && "md:border-red-500")} data-case="35" />
+    <Input aria-invalid={error ? true : undefined} aria-describedby="err" className={cn(error && "border-red-500")} data-case="36" />
+    <Input className="border-destructive" data-case="37" />
+    <Input className={cn("border-destructive", label)} data-case="38" />
+    <Input className={cn(error && "focus-visible:border-red-500")} data-case="39" />
+    <Input className={cn(error && "aria-invalid:border-destructive")} data-case="40" />
+    <Input className={cn(error && "border-red-500")} data-case="41" {...props} />
+    <div className={cn(error && "border-destructive")} data-case="42" />
+    {/* Known gaps: a wrapper component is not checked, and a ring or text
+        color alone is not an error border. */}
+    <Wrapper className={cn(error && "border-red-500")} data-case="43" />
+    <Input className={cn(error && "ring-red-500 text-destructive")} data-case="44" />
+    <Input aria-invalid={undefined} className={cn(error && "border-red-500")} data-case="45" />
+    <Input className={cn(error && "border-l-red-500")} data-case="46" />
+    <Textarea className={cn(error && "border-x-destructive/50")} data-case="47" />
+  </div>
+);
+`;
+
+const groupStateCases = async (filePath: string, ruleId: string) => {
+  const [result] = await eslint.lintText(GROUP_STATE_FIXTURE, { filePath });
+  const lines = GROUP_STATE_FIXTURE.split("\n");
+  return result.messages
+    .filter((message) => message.ruleId === ruleId)
+    .map((message) =>
+      Number(/data-case="(\d+)"/.exec(lines[message.line - 1])?.[1]),
+    );
+};
+
+describe("ESLint group and validation state rules", () => {
+  it("rejects radio groups with no name", async () => {
+    expect(
+      await groupStateCases(
+        "app/components/Fixture.tsx",
+        "shisho/radio-group-has-name",
+      ),
+    ).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("rejects aria-invalid with no message to point at", async () => {
+    expect(
+      await groupStateCases(
+        "app/components/Fixture.tsx",
+        "shisho/invalid-has-message",
+      ),
+    ).toEqual([15, 16, 17, 18, 19, 20]);
+  });
+
+  it("rejects a conditional error border with no aria-invalid", async () => {
+    expect(
+      await groupStateCases(
+        "app/components/Fixture.tsx",
+        "shisho/error-border-marks-invalid",
+      ),
+    ).toEqual([28, 29, 30, 31, 32, 33, 34, 35, 45, 46, 47]);
+  });
+
+  it("allows them in tests and the ui kit", async () => {
+    for (const ruleId of [
+      "shisho/radio-group-has-name",
+      "shisho/invalid-has-message",
+      "shisho/error-border-marks-invalid",
+    ]) {
+      expect(
+        await groupStateCases("app/components/Fixture.test.tsx", ruleId),
+      ).toEqual([]);
+      expect(
+        await groupStateCases("app/components/ui/fixture.tsx", ruleId),
+      ).toEqual([]);
+    }
+  });
+});

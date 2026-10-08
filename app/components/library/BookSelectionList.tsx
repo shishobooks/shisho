@@ -24,6 +24,8 @@ interface BookSelectionListProps {
   showCreateNew?: boolean;
   /** Whether the parent dialog is open (controls query enabled state) */
   enabled?: boolean;
+  /** Id of the visible label that names the radio group */
+  labelId: string;
 }
 
 export function BookSelectionList({
@@ -33,6 +35,7 @@ export function BookSelectionList({
   onSelectBook,
   showCreateNew = false,
   enabled = true,
+  labelId,
 }: BookSelectionListProps) {
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -49,38 +52,46 @@ export function BookSelectionList({
   const availableBooks =
     booksQuery.data?.items?.filter((book) => book.id !== excludeBookId) ?? [];
 
+  // The search input sits outside the radio group, so arrow keys in the
+  // group move between books and the group holds only its options.
   return (
-    <RadioGroup onValueChange={onSelectBook} value={selectedBookId}>
-      {showCreateNew && (
-        <label
-          className="flex items-center space-x-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-          htmlFor="new"
-        >
-          <RadioGroupItem className="shrink-0" id="new" value="new" />
-          <Plus className="h-4 w-4 shrink-0" />
-          <span>Create new book</span>
-        </label>
+    <div className="grid gap-2">
+      {!booksQuery.isLoading && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            aria-label="Search books"
+            className="pl-9"
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search books..."
+            value={searchInput}
+          />
+          {booksQuery.isFetching && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
       )}
 
-      {booksQuery.isLoading && <LoadingSpinner />}
+      <RadioGroup
+        aria-labelledby={labelId}
+        onValueChange={onSelectBook}
+        value={selectedBookId}
+      >
+        {showCreateNew && (
+          <label
+            className="flex items-center space-x-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+            htmlFor="new"
+          >
+            <RadioGroupItem className="shrink-0" id="new" value="new" />
+            <Plus className="h-4 w-4 shrink-0" />
+            <span>Create new book</span>
+          </label>
+        )}
 
-      {!booksQuery.isLoading && (
-        <>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              aria-label="Search books"
-              className="pl-9"
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search books..."
-              value={searchInput}
-            />
-            {booksQuery.isFetching && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-            )}
-          </div>
+        {booksQuery.isLoading && <LoadingSpinner />}
 
-          {booksQuery.error && !booksQuery.data ? (
+        {!booksQuery.isLoading &&
+          (booksQuery.error && !booksQuery.data ? (
             <QueryError fallback="Failed to load books" query={booksQuery} />
           ) : (
             <ScrollArea className="h-48 border rounded-md p-2">
@@ -100,10 +111,9 @@ export function BookSelectionList({
                 ))
               )}
             </ScrollArea>
-          )}
-        </>
-      )}
-    </RadioGroup>
+          ))}
+      </RadioGroup>
+    </div>
   );
 }
 

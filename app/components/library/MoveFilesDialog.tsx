@@ -113,11 +113,12 @@ export function MoveFilesDialog({
           )}
 
           <div className="space-y-2">
-            <Label>Destination</Label>
+            <Label id="move-files-destination-label">Destination</Label>
             <BookSelectionList
               enabled={open}
               excludeBookId={sourceBook.id}
               key={open ? "open" : "closed"}
+              labelId="move-files-destination-label"
               libraryId={library.id}
               onSelectBook={setSelectedBookId}
               selectedBookId={selectedBookId}

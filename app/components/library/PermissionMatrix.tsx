@@ -152,11 +152,10 @@ const PermissionMatrix = ({
                   <span>{op.label}</span>
                   <Checkbox
                     aria-label={`${op.label} all resources`}
-                    checked={isOperationFullyChecked(op.key)}
-                    className={
+                    checked={
                       isOperationPartiallyChecked(op.key)
-                        ? "data-[state=unchecked]:bg-primary/30"
-                        : ""
+                        ? "indeterminate"
+                        : isOperationFullyChecked(op.key)
                     }
                     disabled={disabled}
                     onCheckedChange={() => toggleOperation(op.key)}
@@ -176,11 +175,10 @@ const PermissionMatrix = ({
                 <div className="flex items-center gap-3">
                   <Checkbox
                     aria-label={`All ${resource.label} permissions`}
-                    checked={isResourceFullyChecked(resource.key)}
-                    className={
+                    checked={
                       isResourcePartiallyChecked(resource.key)
-                        ? "data-[state=unchecked]:bg-primary/30"
-                        : ""
+                        ? "indeterminate"
+                        : isResourceFullyChecked(resource.key)
                     }
                     disabled={disabled}
                     onCheckedChange={() => toggleResource(resource.key)}

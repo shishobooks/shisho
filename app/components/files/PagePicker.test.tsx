@@ -44,4 +44,36 @@ describe("PagePicker navigation", () => {
     await user.click(previous);
     expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
   });
+
+  it("marks the chosen thumbnail as pressed and announces the page", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <PagePicker
+        currentPage={0}
+        file={file}
+        onOpenChange={vi.fn()}
+        onSelect={vi.fn()}
+        open
+        pageCount={3}
+      />,
+    );
+
+    expect(screen.getByText("Page 1 of 3")).toHaveAttribute("role", "status");
+    const pressed = () =>
+      screen
+        .getAllByRole("button", { pressed: true })
+        .map((button) => button.textContent);
+    expect(pressed()).toEqual(["1"]);
+
+    // The saved start page stays marked while another page is chosen.
+    const current = () => document.querySelectorAll('[aria-current="true"]');
+    expect(current()).toHaveLength(1);
+    expect(current()[0]).toHaveTextContent("1");
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(pressed()).toEqual(["2"]);
+    expect(current()).toHaveLength(1);
+    expect(current()[0]).toHaveTextContent("1");
+    expect(screen.getByText("Page 2 of 3")).toHaveAttribute("role", "status");
+  });
 });

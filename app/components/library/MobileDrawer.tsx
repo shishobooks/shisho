@@ -34,6 +34,7 @@ interface NavItemProps {
 
 const NavItem = ({ to, icon, label, isActive, onClick }: NavItemProps) => (
   <Link
+    aria-current={isActive ? "page" : undefined}
     className={cn(
       "flex items-center gap-4 px-4 py-3.5 text-base font-medium transition-colors active:bg-muted/50",
       isActive
@@ -228,6 +229,7 @@ const MobileDrawer = () => {
                         !isViewingList && library.id === Number(libraryId);
                       return (
                         <Button
+                          aria-current={isActive ? "true" : undefined}
                           className={cn(
                             "flex items-center gap-3 w-full px-6 py-2.5 text-left transition-colors",
                             isActive
@@ -258,6 +260,7 @@ const MobileDrawer = () => {
                       const isActive = currentListId === list.id;
                       return (
                         <Link
+                          aria-current={isActive ? "page" : undefined}
                           className={cn(
                             "flex items-center gap-3 w-full px-6 py-2.5 text-left transition-colors",
                             isActive

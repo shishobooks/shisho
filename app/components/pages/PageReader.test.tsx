@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
@@ -60,6 +60,23 @@ describe("PageReader settings", () => {
     expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, {
       id: "reader-settings-error",
     });
+  });
+});
+
+describe("PageReader fit mode", () => {
+  it("groups the fit mode buttons under their label and marks the chosen one pressed", async () => {
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader();
+
+    await user.click(screen.getByRole("button", { name: "Reader settings" }));
+    const group = await screen.findByRole("group", { name: "Fit Mode" });
+    expect(
+      within(group).getByRole("button", { name: "Fit Height" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(group).getByRole("button", { name: "Fit Width" }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 });
 

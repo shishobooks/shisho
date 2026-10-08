@@ -647,7 +647,7 @@ export function FileEditDialog({
               </SelectContent>
             </Select>
             {showDowngradeConfirm && (
-              <p className="text-sm text-destructive">
+              <p className="text-sm text-destructive" role="alert">
                 Changing to supplement will clear all metadata (narrators,
                 identifiers, publisher, etc.). Click Save again to confirm.
               </p>

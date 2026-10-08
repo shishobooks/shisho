@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -131,6 +131,24 @@ describe("AdminReviewCriteria", () => {
     expect(
       screen.getByRole("checkbox", { name: "Description" }),
     ).not.toBeChecked();
+  });
+
+  it("names each checkbox group by its heading, which says the fields are required", () => {
+    mockCriteriaData.override_count = 0;
+    wrap(<AdminReviewCriteria />);
+
+    const universal = screen.getByRole("group", {
+      name: "Required for all books",
+    });
+    expect(
+      within(universal).getByRole("checkbox", { name: "Authors" }),
+    ).toBeChecked();
+    const audio = screen.getByRole("group", {
+      name: "Required for audiobooks (additional)",
+    });
+    expect(
+      within(audio).getByRole("checkbox", { name: "Narrators" }),
+    ).toBeChecked();
   });
 
   it("renders checked checkbox for current audio_fields", () => {

@@ -122,4 +122,30 @@ describe("LanguageCombobox", () => {
     await waitFor(() => expect(search).not.toBeInTheDocument());
     expect(badge).toHaveFocus();
   });
+
+  it("says which language is chosen in the open list, not only with a check icon", async () => {
+    vi.spyOn(API, "request").mockResolvedValue([]);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <LanguageCombobox
+          label="Language"
+          libraryId={5}
+          onChange={onChange}
+          value="en"
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Change language: English (en)" }),
+    );
+    await screen.findAllByRole("option");
+    const chosen = screen
+      .getAllByRole("option")
+      .filter((option) => option.textContent?.includes("(chosen)"));
+    expect(chosen.map((option) => option.textContent)).toEqual([
+      "English(chosen)en",
+    ]);
+  });
 });

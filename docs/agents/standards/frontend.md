@@ -31,6 +31,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 
 - Overriding a `Button` variant's height, padding, or layout with `className` means a different size or variant fits better. Every clickable element shows `cursor-pointer`.
 - Every clickable element is a `Button` (`variant="unstyled"` for rows, cards, and thumbnails), a link, or, where no `Button` fits (a slider), the matching ARIA role with `tabIndex` and key handling, so the keyboard can reach it. A toggle announces its state (`aria-pressed`, `aria-expanded`). Lint does not catch an `onClick` on a `div` or `span`.
+- State a sighted user reads from styling is exposed too: the current nav item or saved entry has `aria-current`, the chosen entry in a set of toggle buttons has `aria-pressed`, a partial checkbox is `checked="indeterminate"`, and a set of checkboxes, switches, or toggle buttons under a heading is a `role="group"` labelled by that heading.
 - A region waiting for its content (page, section, dialog body, popover list) shows `LoadingSpinner`, not "Loading..." text, a skeleton, or a bare `Loader2`. A pending action inside a control (a Save button, a search input, a refetch over results already shown) uses `Loader2`.
 - Durations, sizes, counts, and dates use the formatters in `@/utils/format` rather than inline math. A date-only value says "today" or "yesterday" for the last two days and is relative past that.
 

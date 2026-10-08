@@ -76,22 +76,36 @@ interface SeriesEntry {
   unit: "" | "volume" | "chapter"; // "" means unspecified
 }
 
-function getSeriesRangeError(entry: SeriesEntry): string | null {
+interface SeriesRangeError {
+  /** The input the message is about, which is marked invalid. */
+  field: "start" | "end";
+  message: string;
+}
+
+function getSeriesRangeError(entry: SeriesEntry): SeriesRangeError | null {
   if (entry.number === "") {
     if (entry.numberEnd !== "" || entry.unit !== "") {
-      return "Enter a start number before setting an end or unit.";
+      return {
+        field: "start",
+        message: "Enter a start number before setting an end or unit.",
+      };
     }
     return null;
   }
 
   const start = Number(entry.number);
   const end = Number(entry.numberEnd);
-  if (!Number.isFinite(start)) return "Start must be a valid number.";
+  if (!Number.isFinite(start)) {
+    return { field: "start", message: "Start must be a valid number." };
+  }
   if (entry.numberEnd !== "" && !Number.isFinite(end)) {
-    return "End must be a valid number.";
+    return { field: "end", message: "End must be a valid number." };
   }
   if (entry.numberEnd !== "" && end < start) {
-    return "End must be greater than or equal to the start.";
+    return {
+      field: "end",
+      message: "End must be greater than or equal to the start.",
+    };
   }
   return null;
 }
@@ -651,6 +665,9 @@ export function BookEditDialog({
                     ? undefined
                     : parseFloat(entry.numberEnd);
                 const rangeError = getSeriesRangeError(entry);
+                const rangeErrorId = `series-number-error-${idx}`;
+                const startInvalid = rangeError?.field === "start";
+                const endInvalid = rangeError?.field === "end";
                 const summary = Number.isFinite(parsedNumber)
                   ? formatSeriesNumber(
                       parsedNumber,
@@ -663,6 +680,8 @@ export function BookEditDialog({
                 return (
                   <>
                     <Input
+                      aria-describedby={startInvalid ? rangeErrorId : undefined}
+                      aria-invalid={startInvalid ? true : undefined}
                       aria-label={`Series number for ${entry.name}`}
                       className="w-16 sm:w-24"
                       onChange={(e) =>
@@ -673,6 +692,13 @@ export function BookEditDialog({
                       type="number"
                       value={entry.number}
                     />
+                    {/* The range error's copy outside the popover, so Start
+                        and End can point at it while the popover is closed. */}
+                    {rangeError && (
+                      <span className="sr-only" id={rangeErrorId} role="alert">
+                        {rangeError.message}
+                      </span>
+                    )}
                     {showSummary && summary && (
                       <Badge
                         className="max-w-20 sm:max-w-28"
@@ -702,11 +728,9 @@ export function BookEditDialog({
                           </Label>
                           <Input
                             aria-describedby={
-                              rangeError
-                                ? `series-number-error-${idx}`
-                                : undefined
+                              endInvalid ? rangeErrorId : undefined
                             }
-                            aria-invalid={rangeError ? true : undefined}
+                            aria-invalid={endInvalid ? true : undefined}
                             id={`series-number-end-${idx}`}
                             onChange={(e) =>
                               handleSeriesNumberEndChange(idx, e.target.value)
@@ -717,12 +741,14 @@ export function BookEditDialog({
                             value={entry.numberEnd}
                           />
                           {rangeError && (
+                            // No id: the copy beside Start holds it. The
+                            // modal popover hides that copy while open, so
+                            // this one is announced instead.
                             <p
                               className="text-xs text-destructive"
-                              id={`series-number-error-${idx}`}
                               role="alert"
                             >
-                              {rangeError}
+                              {rangeError.message}
                             </p>
                           )}
                         </div>

@@ -1,5 +1,12 @@
 import { Search, User, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import CoverImage from "@/components/library/CoverImage";
@@ -114,10 +121,37 @@ const SearchResultCover = ({
   );
 };
 
+interface ResultGroupProps {
+  id: string;
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}
+
+// A labelled group of results inside the listbox. The heading is hidden from
+// the accessibility tree, since it names the group rather than being an
+// option itself.
+const ResultGroup = ({ id, label, className, children }: ResultGroupProps) => (
+  <div aria-labelledby={id} className={cn("mb-2", className)} role="group">
+    <div
+      aria-hidden="true"
+      className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase"
+      id={id}
+    >
+      {label}
+    </div>
+    {children}
+  </div>
+);
+
 interface GlobalSearchProps {
   fullWidth?: boolean;
   onClose?: () => void;
 }
+
+// The id of the result at `index` in the flat list the arrow keys move through.
+const resultOptionId = (listboxId: string, index: number) =>
+  `${listboxId}-option-${index}`;
 
 type ResultItem =
   | { type: "book"; data: BookSearchResult }
@@ -134,6 +168,10 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLAnchorElement | null)[]>([]);
+  // The input is a combobox that keeps focus while the arrow keys move
+  // through the results, so each result needs an id the input can point at
+  // with aria-activedescendant.
+  const listboxId = useId();
 
   const canReadBooks = useCan("books:read");
   const libraryQuery = useUserLibrary(libraryId);
@@ -285,7 +323,11 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "ArrowDown") {
+      if (event.key === "Tab") {
+        // Results are not in the Tab order (the arrow keys reach them), so
+        // Tab leaves the combobox and closes its list.
+        setIsOpen(false);
+      } else if (event.key === "ArrowDown") {
         event.preventDefault();
         if (allResults.length > 0) {
           setSelectedIndex((prev) =>
@@ -332,15 +374,19 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       const thumbnailClasses = getSearchThumbnailClasses(variant);
       return (
         <Link
+          aria-selected={selectedIndex === index}
           className={cn(
             "flex items-center gap-3 px-3 py-2 rounded-md",
             selectedIndex === index ? "bg-muted" : "hover:bg-muted",
           )}
+          id={resultOptionId(listboxId, index)}
           key={`book-${book.id}`}
           onClick={handleResultClick}
           ref={(el) => {
             resultRefs.current[index] = el;
           }}
+          role="option"
+          tabIndex={-1}
           title={
             book.authors ? `${book.title}\nby ${book.authors}` : book.title
           }
@@ -367,6 +413,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     [
       handleResultClick,
       libraryId,
+      listboxId,
       coverAspectRatio,
       selectedIndex,
       searchQuery.dataUpdatedAt,
@@ -376,15 +423,19 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const renderSeriesResult = useCallback(
     (series: SeriesSearchResult, index: number) => (
       <Link
+        aria-selected={selectedIndex === index}
         className={cn(
           "flex items-center gap-3 px-3 py-2 rounded-md",
           selectedIndex === index ? "bg-muted" : "hover:bg-muted",
         )}
+        id={resultOptionId(listboxId, index)}
         key={`series-${series.id}`}
         onClick={handleResultClick}
         ref={(el) => {
           resultRefs.current[index] = el;
         }}
+        role="option"
+        tabIndex={-1}
         title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
         to={`/libraries/${libraryId}/series/${series.id}`}
       >
@@ -406,6 +457,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     [
       handleResultClick,
       libraryId,
+      listboxId,
       seriesThumbnailClasses,
       libraryVariant,
       selectedIndex,
@@ -416,15 +468,19 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const renderPersonResult = useCallback(
     (person: PersonSearchResult, index: number) => (
       <Link
+        aria-selected={selectedIndex === index}
         className={cn(
           "flex items-center gap-3 px-3 py-2 rounded-md",
           selectedIndex === index ? "bg-muted" : "hover:bg-muted",
         )}
+        id={resultOptionId(listboxId, index)}
         key={`person-${person.id}`}
         onClick={handleResultClick}
         ref={(el) => {
           resultRefs.current[index] = el;
         }}
+        role="option"
+        tabIndex={-1}
         title={person.name}
         to={`/libraries/${libraryId}/people/${person.id}`}
       >
@@ -434,7 +490,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         </div>
       </Link>
     ),
-    [handleResultClick, libraryId, selectedIndex],
+    [handleResultClick, libraryId, listboxId, selectedIndex],
   );
 
   // Search reads Books Read routes, so a role without it gets no search box.
@@ -442,11 +498,31 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
     return null;
   }
 
+  const isDropdownShown = isOpen && Boolean(debouncedQuery);
+  const isListShown = isDropdownShown && searchQuery.isSuccess && hasResults;
+  const statusText = !isDropdownShown
+    ? null
+    : searchQuery.isLoading
+      ? "Searching..."
+      : searchQuery.isSuccess && !hasResults
+        ? `No results found for "${debouncedQuery}"`
+        : null;
+  const booksCount = searchQuery.data?.books?.length ?? 0;
+  const seriesCount = searchQuery.data?.series?.length ?? 0;
+
   return (
     <div className="relative">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
+          aria-activedescendant={
+            isListShown && selectedIndex >= 0
+              ? resultOptionId(listboxId, selectedIndex)
+              : undefined
+          }
+          aria-autocomplete="list"
+          aria-controls={isListShown ? listboxId : undefined}
+          aria-expanded={Boolean(isListShown)}
           aria-label="Search library"
           className={cn(
             "pl-9 [&::-webkit-search-cancel-button]:hidden",
@@ -454,6 +530,13 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
               ? "w-full pr-3 focus-visible:ring-0 focus-visible:border-border"
               : "w-64 pr-8",
           )}
+          onBlur={(e) => {
+            // Leaving for anything but a result closes the list, so
+            // aria-expanded never claims a popup the user cannot reach.
+            if (!dropdownRef.current?.contains(e.relatedTarget as Node)) {
+              setIsOpen(false);
+            }
+          }}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
@@ -462,6 +545,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
           onKeyDown={handleKeyDown}
           placeholder="Search library..."
           ref={inputRef}
+          role="combobox"
           type="search"
           value={query}
         />
@@ -481,7 +565,14 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         )}
       </div>
 
-      {isOpen && debouncedQuery && (
+      {/* The announced copy of the dropdown's message. It stays mounted, so
+          a new message is announced; a region mounted with its text often is
+          not. */}
+      <div className="sr-only" role="status">
+        {statusText}
+      </div>
+
+      {isDropdownShown && (
         <div
           className={cn(
             "bg-background border border-border rounded-md shadow-lg z-50 max-h-96 overflow-y-auto",
@@ -489,61 +580,53 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
               ? "fixed left-4 right-4 top-28"
               : "absolute top-full mt-2 left-0 w-80",
           )}
+          // Keep focus in the input for clicks inside the list (a heading,
+          // padding, or a result), so its blur does not close the list.
+          onMouseDown={(e) => e.preventDefault()}
           ref={dropdownRef}
         >
-          {searchQuery.isLoading && (
-            <div className="p-4 text-center text-muted-foreground">
-              Searching...
+          {statusText && (
+            <div
+              aria-hidden="true"
+              className="p-4 text-center text-muted-foreground"
+            >
+              {statusText}
             </div>
           )}
 
-          {searchQuery.isSuccess && !hasResults && (
-            <div className="p-4 text-center text-muted-foreground">
-              No results found for &quot;{debouncedQuery}&quot;
-            </div>
-          )}
-
-          {searchQuery.isSuccess && hasResults && (
-            <div className="p-2">
-              {(searchQuery.data.books?.length ?? 0) > 0 && (
-                <div className="mb-2">
-                  <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase">
-                    Books
-                  </div>
+          {isListShown && (
+            <div
+              aria-label="Search results"
+              className="p-2"
+              id={listboxId}
+              role="listbox"
+            >
+              {booksCount > 0 && (
+                <ResultGroup id={`${listboxId}-books`} label="Books">
                   {searchQuery.data.books?.map((book, i) =>
                     renderBookResult(book, i),
                   )}
-                </div>
+                </ResultGroup>
               )}
 
-              {(searchQuery.data.series?.length ?? 0) > 0 && (
-                <div className="mb-2">
-                  <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase">
-                    Series
-                  </div>
+              {seriesCount > 0 && (
+                <ResultGroup id={`${listboxId}-series`} label="Series">
                   {searchQuery.data.series?.map((series, i) =>
-                    renderSeriesResult(
-                      series,
-                      (searchQuery.data.books?.length ?? 0) + i,
-                    ),
+                    renderSeriesResult(series, booksCount + i),
                   )}
-                </div>
+                </ResultGroup>
               )}
 
               {(searchQuery.data.people?.length ?? 0) > 0 && (
-                <div>
-                  <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase">
-                    People
-                  </div>
+                <ResultGroup
+                  className="mb-0"
+                  id={`${listboxId}-people`}
+                  label="People"
+                >
                   {searchQuery.data.people?.map((person, i) =>
-                    renderPersonResult(
-                      person,
-                      (searchQuery.data.books?.length ?? 0) +
-                        (searchQuery.data.series?.length ?? 0) +
-                        i,
-                    ),
+                    renderPersonResult(person, booksCount + seriesCount + i),
                   )}
-                </div>
+                </ResultGroup>
               )}
             </div>
           )}

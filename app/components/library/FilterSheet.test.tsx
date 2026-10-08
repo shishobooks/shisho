@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+
+import type { Genre } from "@/types";
 
 import { FilterSheet } from "./FilterSheet";
 
@@ -75,5 +77,64 @@ describe("FilterSheet", () => {
     expect(
       screen.getByRole("combobox", { name: "Search genres" }),
     ).toBeInTheDocument();
+  });
+
+  it("names the file type and review state groups and says which genres are chosen", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const genres = [
+      { id: 1, name: "Fantasy", book_count: 3 },
+      { id: 2, name: "Horror", book_count: 1 },
+    ] as unknown as Genre[];
+    render(
+      <FilterSheet
+        fileTypeOptions={[
+          { value: "epub", label: "EPUB" },
+          { value: "cbz", label: "CBZ" },
+        ]}
+        genreSearchInput=""
+        genres={genres}
+        genresLoading={false}
+        genresQuery={query}
+        hasActiveFilters
+        languageOptions={[]}
+        languageParam=""
+        onClearAll={vi.fn()}
+        onGenreSearchChange={vi.fn()}
+        onLanguageChange={vi.fn()}
+        onReviewedFilterChange={vi.fn()}
+        onTagSearchChange={vi.fn()}
+        onToggleFileType={vi.fn()}
+        onToggleGenre={vi.fn()}
+        onToggleTag={vi.fn()}
+        reviewedFilter="needs_review"
+        selectedFileTypes={["epub"]}
+        selectedGenreIds={[1]}
+        selectedGenres={[genres[0]]}
+        selectedTagIds={[]}
+        selectedTags={[]}
+        tagSearchInput=""
+        tags={[]}
+        tagsLoading={false}
+        tagsQuery={query}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Filter/ }));
+
+    const fileTypes = screen.getByRole("group", { name: "File type" });
+    expect(
+      within(fileTypes).getByRole("button", { name: "EPUB" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const review = screen.getByRole("radiogroup", { name: "Review state" });
+    expect(
+      within(review).getByRole("radio", { name: "Needs review" }),
+    ).toBeChecked();
+
+    await user.click(screen.getByRole("combobox", { name: "Genres" }));
+    expect(screen.getByRole("option", { name: /Fantasy/ })).toHaveTextContent(
+      "(chosen)",
+    );
+    expect(
+      screen.getByRole("option", { name: /Horror/ }),
+    ).not.toHaveTextContent("(chosen)");
   });
 });

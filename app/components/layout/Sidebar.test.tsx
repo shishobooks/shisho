@@ -124,4 +124,18 @@ describe("Sidebar", () => {
     ]);
     expect(screen.getByTestId("settings-icon")).toBeInTheDocument();
   });
+
+  it("marks the active item as the current page", () => {
+    renderSidebar([
+      buildItem({ to: "/a", label: "Alpha", isActive: true }),
+      buildItem({ to: "/b", label: "Bravo" }),
+    ]);
+    expect(screen.getByRole("link", { name: "Alpha" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Bravo" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
 });

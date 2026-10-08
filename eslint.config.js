@@ -6,8 +6,11 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 import controlHasName from "./eslint-rules/control-has-name.js";
+import errorBorderMarksInvalid from "./eslint-rules/error-border-marks-invalid.js";
 import formControlHasName from "./eslint-rules/form-control-has-name.js";
+import invalidHasMessage from "./eslint-rules/invalid-has-message.js";
 import mutateAsyncHandled from "./eslint-rules/mutate-async-handled.js";
+import radioGroupHasName from "./eslint-rules/radio-group-has-name.js";
 
 // Permission checks take a typed requirement through useCan or can (see
 // "Permissions" in app/AGENTS.md), so a typo fails to compile.
@@ -157,12 +160,17 @@ const mutationReferences = [
 // following ternaries and breakpoint classes through its children;
 // eslint-rules/control-has-name.js explains what counts as a name. Every
 // form control needs one too, which takes matching each id to a htmlFor
-// across the file; eslint-rules/form-control-has-name.js explains how.
+// across the file; eslint-rules/form-control-has-name.js explains how. A
+// radio group needs a name, an aria-invalid field needs its message, and a
+// red error border needs aria-invalid; each rule's file says what it accepts.
 const shishoPlugin = {
   rules: {
     "control-has-name": controlHasName,
+    "error-border-marks-invalid": errorBorderMarksInvalid,
     "form-control-has-name": formControlHasName,
+    "invalid-has-message": invalidHasMessage,
     "mutate-async-handled": mutateAsyncHandled,
+    "radio-group-has-name": radioGroupHasName,
   },
 };
 
@@ -233,6 +241,9 @@ export default tseslint.config(
       "shisho/mutate-async-handled": "error",
       "shisho/control-has-name": "error",
       "shisho/form-control-has-name": "error",
+      "shisho/radio-group-has-name": "error",
+      "shisho/invalid-has-message": "error",
+      "shisho/error-border-marks-invalid": "error",
       "no-restricted-properties": [
         "error",
         {

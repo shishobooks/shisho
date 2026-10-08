@@ -235,6 +235,11 @@ const FilterCombobox = ({
                         <Square className="mr-2 h-4 w-4" />
                       )}
                       {opt.name}
+                      {/* cmdk's aria-selected marks the highlighted option,
+                          so the chosen state is spoken as text. */}
+                      {selectedIds.has(opt.id) && (
+                        <span className="sr-only">(chosen)</span>
+                      )}
                       <span className="ml-auto text-xs text-muted-foreground">
                         {opt.book_count}
                       </span>
@@ -279,6 +284,8 @@ const FilterContent = ({
   const genresLabelId = useId();
   const tagsLabelId = useId();
   const languageLabelId = useId();
+  const fileTypeLabelId = useId();
+  const reviewLabelId = useId();
   return (
     <div className="space-y-6">
       {/* File Type */}
@@ -292,8 +299,13 @@ const FilterContent = ({
           }
           icon={<File className="h-3 w-3" />}
           label="File type"
+          labelId={fileTypeLabelId}
         />
-        <div className="flex flex-wrap gap-1.5">
+        <div
+          aria-labelledby={fileTypeLabelId}
+          className="flex flex-wrap gap-1.5"
+          role="group"
+        >
           {fileTypeOptions.map((option) => {
             const isSelected = selectedFileTypes.includes(option.value);
             return (
@@ -412,8 +424,10 @@ const FilterContent = ({
           colorClass="bg-chart-3/20 text-chart-3"
           icon={<Eye className="h-3 w-3" />}
           label="Review state"
+          labelId={reviewLabelId}
         />
         <RadioGroup
+          aria-labelledby={reviewLabelId}
           className="gap-2"
           onValueChange={onReviewedFilterChange}
           value={reviewedFilter || "all"}

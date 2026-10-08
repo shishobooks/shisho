@@ -493,12 +493,24 @@ describe("IdentifyReviewForm component", () => {
       "Series range end requires a start",
     );
     expect(apply).toBeDisabled();
+    // The message is tied to the input it is about.
+    const end = screen.getByRole("spinbutton", { name: "Series end" });
+    expect(start).toHaveAttribute("aria-invalid", "true");
+    expect(start).toHaveAccessibleDescription(
+      "Series range end requires a start.",
+    );
+    expect(end).not.toHaveAttribute("aria-invalid");
 
     await user.type(start, "3");
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Series range end must be greater than its start",
     );
     expect(apply).toBeDisabled();
+    expect(end).toHaveAttribute("aria-invalid", "true");
+    expect(end).toHaveAccessibleDescription(
+      "Series range end must be greater than its start.",
+    );
+    expect(start).not.toHaveAttribute("aria-invalid");
 
     expect(applyMock).not.toHaveBeenCalled();
   });

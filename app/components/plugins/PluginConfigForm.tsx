@@ -1,6 +1,6 @@
 import equal from "fast-deep-equal";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -44,6 +44,7 @@ export const PluginConfigForm = ({
   const { data, isLoading, dataUpdatedAt } = usePluginConfig(scope, id);
   const saveConfig = useSavePluginConfig();
   const saveFieldSettings = useSavePluginFieldSettings();
+  const metadataFieldsLabelId = useId();
 
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [fieldSettings, setFieldSettings] = useState<Record<string, boolean>>(
@@ -290,12 +291,18 @@ export const PluginConfigForm = ({
       {hasDeclaredFields && (
         <>
           <div>
-            <Label className="text-base">Metadata Fields</Label>
+            <Label className="text-base" id={metadataFieldsLabelId}>
+              Metadata Fields
+            </Label>
             <p className="mt-1 text-xs text-muted-foreground">
               Choose which fields this plugin can set during enrichment.
             </p>
           </div>
-          <div className="space-y-3">
+          <div
+            aria-labelledby={metadataFieldsLabelId}
+            className="space-y-3"
+            role="group"
+          >
             {data!.declaredFields!.map((field) => (
               <div className="flex items-center justify-between" key={field}>
                 <span className="text-sm" id={`plugin-field-${field}`}>

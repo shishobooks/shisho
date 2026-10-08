@@ -81,6 +81,7 @@ export function RescanDialog({
 
         <DialogBody>
           <RadioGroup
+            aria-label="Rescan mode"
             className="gap-3"
             onValueChange={(value) => setSelectedMode(value as ResyncMode)}
             value={selectedMode}
