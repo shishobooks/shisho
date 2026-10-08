@@ -58,7 +58,14 @@ describe("starting a library scan", () => {
         </QueryClientProvider>,
       );
       try {
+        // The icon-only button is named while it loads and once it is ready.
+        expect(
+          screen.getByRole("button", { name: "Resync library" }),
+        ).toBeDisabled();
         await waitFor(() => expect(screen.getByRole("button")).toBeEnabled());
+        expect(
+          screen.getByRole("button", { name: "Resync library" }),
+        ).toBeInTheDocument();
         await user.click(screen.getByRole("button"));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.getAllByText(message)).toHaveLength(1);

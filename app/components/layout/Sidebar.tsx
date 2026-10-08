@@ -26,8 +26,10 @@ interface NavItemProps {
 }
 
 const NavItem = ({ item, collapsed }: NavItemProps) => {
+  // Collapsed, the link shows only its icon, so the label names it.
   const linkContent = (
     <Link
+      aria-label={item.label}
       className={cn(
         "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         collapsed && "justify-center px-2",

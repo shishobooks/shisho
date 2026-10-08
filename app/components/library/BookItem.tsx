@@ -178,18 +178,22 @@ const BookItem = ({
       key={book.id}
       onClick={handleClick}
     >
-      {/* Selection checkbox overlay */}
+      {/* Selection checkbox overlay. It has no handler of its own: its
+          click, from a pointer or the keyboard, bubbles to the card's. */}
       {isSelectionMode && (
-        <div
+        <Button
+          aria-label={`Select ${book.title}`}
+          aria-pressed={isSelected}
           className={cn(
             "absolute top-1 left-1 z-10 h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all",
             isSelected
               ? "bg-primary border-primary"
               : "bg-black/50 border-white/50",
           )}
+          variant="unstyled"
         >
           {isSelected && <Check className="h-4 w-4 text-white" />}
-        </div>
+        </Button>
       )}
       {/* Context menu buttons - shows on hover (hidden in selection mode) */}
       {!isSelectionMode && (
@@ -198,6 +202,7 @@ const BookItem = ({
             bookId={book.id}
             trigger={
               <Button
+                aria-label="Add to list"
                 className="h-7 w-7 bg-black/50 hover:bg-black/70"
                 size="icon"
                 title="Add to list"
@@ -257,6 +262,8 @@ const BookItem = ({
             e.preventDefault();
           }
         }}
+        // In selection mode the overlay button is the card's one tab stop.
+        tabIndex={isSelectionMode ? -1 : undefined}
         to={`/libraries/${libraryId}/books/${book.id}`}
       >
         <div className={cn("relative", aspectClass)}>

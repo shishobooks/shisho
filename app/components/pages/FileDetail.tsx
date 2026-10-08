@@ -204,7 +204,11 @@ const FileDetail = () => {
             if (!action) return null;
             const isListen = action === "listen";
             return (
-              <Button asChild size="sm">
+              <Button
+                aria-label={isListen ? "Listen" : "Read"}
+                asChild
+                size="sm"
+              >
                 <Link
                   to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read`}
                 >
@@ -244,6 +248,7 @@ const FileDetail = () => {
           ) : canWriteBooks ? (
             <>
               <Button
+                aria-label="Edit"
                 onClick={() => {
                   if (activeTab === "details") {
                     setEditingFile(file);
@@ -258,6 +263,7 @@ const FileDetail = () => {
                 <span className="hidden sm:inline">Edit</span>
               </Button>
               <Button
+                aria-label="Delete"
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={() => setShowDeleteDialog(true)}
                 size="sm"

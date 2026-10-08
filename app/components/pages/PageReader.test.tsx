@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
@@ -60,5 +60,39 @@ describe("PageReader settings", () => {
     expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, {
       id: "reader-settings-error",
     });
+  });
+});
+
+describe("PageReader controls", () => {
+  it("seeks to the first and last page from the keyboard on the progress bar", async () => {
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader();
+
+    const progress = screen.getByRole("slider", { name: "Reading progress" });
+    expect(progress).toHaveAttribute("aria-valuetext", "Page 1 of 10");
+
+    act(() => progress.focus());
+    await user.keyboard("{End}");
+    expect(screen.getByText("Page 10 of 10")).toBeInTheDocument();
+    expect(progress).toHaveAttribute("aria-valuenow", "10");
+    await user.keyboard("{Home}");
+    expect(screen.getByText("Page 1 of 10")).toBeInTheDocument();
+  });
+
+  it("names the page buttons and the preload slider", async () => {
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader();
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Previous page" }));
+    expect(screen.getByText("Page 1 of 10")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Reader settings" }));
+    expect(
+      await screen.findByRole("slider", { name: "Preload count" }),
+    ).toHaveAttribute("aria-valuenow", "3");
   });
 });

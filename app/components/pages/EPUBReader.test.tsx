@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
@@ -58,6 +58,12 @@ const renderReader = () => {
     </QueryClientProvider>,
   );
 };
+
+// The invisible page-turn tap zones, which assistive tech skips.
+const pageTapZones = () =>
+  screen
+    .queryAllByRole("button", { hidden: true })
+    .filter((button) => button.getAttribute("aria-hidden") === "true");
 
 describe("EPUBReader", () => {
   it("shows a loading indicator while fetching the EPUB", () => {
@@ -128,7 +134,7 @@ describe("EPUBReader", () => {
     vi.useRealTimers();
   });
 
-  it("hides prev/next page buttons in scrolled flow mode", () => {
+  it("hides the page tap zones in scrolled flow mode", () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
         preload_count: 3,
@@ -149,15 +155,10 @@ describe("EPUBReader", () => {
     } as never);
 
     renderReader();
-    expect(
-      screen.queryByRole("button", { name: /previous page/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /next page/i }),
-    ).not.toBeInTheDocument();
+    expect(pageTapZones()).toHaveLength(0);
   });
 
-  it("shows prev/next page buttons in paginated flow mode", () => {
+  it("shows the page tap zones in paginated flow mode", () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
         preload_count: 3,
@@ -178,11 +179,18 @@ describe("EPUBReader", () => {
     } as never);
 
     renderReader();
+    expect(pageTapZones()).toHaveLength(2);
+    // A mouse press does not move focus onto a hidden tap zone.
+    for (const zone of pageTapZones()) {
+      expect(fireEvent.mouseDown(zone)).toBe(false);
+    }
+    // The tap zones are hidden from assistive tech, so each page button has
+    // one named control: the footer button.
     expect(
-      screen.getByRole("button", { name: /previous page/i }),
+      screen.getByRole("button", { name: "Previous page" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /next page/i }),
+      screen.getByRole("button", { name: "Next page" }),
     ).toBeInTheDocument();
   });
 
@@ -276,5 +284,67 @@ describe("EPUBReader", () => {
     await user.click(screen.getByRole("button", { name: /dark/i }));
 
     expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
+  });
+
+  it("seeks to the start and end from the keyboard on the progress bar", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: {
+        preload_count: 3,
+        fit_mode: "fit-height",
+        viewer_epub_font_size: 100,
+        viewer_epub_theme: "light",
+        viewer_epub_flow: "paginated",
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const progress = screen.getByRole("slider", { name: "Reading progress" });
+    expect(progress).toHaveAttribute("aria-valuenow", "0");
+    const view = document.querySelector("foliate-view") as unknown as {
+      goToFraction: ReturnType<typeof vi.fn>;
+    };
+
+    act(() => progress.focus());
+    await user.keyboard("{End}");
+    expect(view.goToFraction).toHaveBeenLastCalledWith(1);
+    await user.keyboard("{Home}");
+    expect(view.goToFraction).toHaveBeenLastCalledWith(0);
+  });
+
+  it("names the font size slider", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: {
+        preload_count: 3,
+        fit_mode: "fit-height",
+        viewer_epub_font_size: 100,
+        viewer_epub_theme: "light",
+        viewer_epub_flow: "paginated",
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(
+      await screen.findByRole("slider", { name: "Font size" }),
+    ).toHaveAttribute("aria-valuenow", "100");
   });
 });

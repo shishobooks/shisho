@@ -26,10 +26,11 @@ vi.mock("@/hooks/queries/plugins", () => ({
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-// The move buttons are unlabeled icon buttons, Move up then Move down for
-// each row, so Alpha's Move down is the second one.
+// Alpha is the first row, so its Move down is the first one.
 const moveAlphaDown = async (user: ReturnType<typeof createUser>) => {
-  await user.click(screen.getAllByRole("button", { name: "" })[1]);
+  await user.click(
+    screen.getAllByRole("button", { name: "Move plugin down" })[0],
+  );
 };
 
 describe("LibraryPluginsTab Save button", () => {

@@ -208,6 +208,7 @@ export function ShareListDialog({
                 </Select>
 
                 <Button
+                  aria-label="Share"
                   disabled={!selectedUserId || isPending}
                   onClick={handleAddShare}
                   size="default"
@@ -285,6 +286,7 @@ export function ShareListDialog({
                       </Select>
 
                       <Button
+                        aria-label={`Remove share for ${share.user?.username ?? `User ${share.user_id}`}`}
                         className="h-8 w-8"
                         disabled={isPending}
                         onClick={() => handleRemoveShare(share.id)}

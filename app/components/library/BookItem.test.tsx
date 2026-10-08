@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -313,5 +314,46 @@ describe("BookItem cover", () => {
       "src",
       "/api/books/1/cover?v=10-1704067200&size=512&aspect=book&r=1",
     );
+  });
+});
+
+describe("BookItem selection mode", () => {
+  it("toggles selection from the keyboard and announces the selected state", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onSelect = vi.fn();
+    const book = makeBook();
+    const { rerender } = render(
+      wrap(
+        <BookItem
+          book={book}
+          isSelected={false}
+          isSelectionMode
+          libraryId="1"
+          onSelect={onSelect}
+        />,
+      ),
+    );
+
+    const toggle = screen.getByRole("button", { name: "Select Test Book" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.tab();
+    expect(toggle).toHaveFocus();
+    await user.keyboard(" ");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+
+    rerender(
+      wrap(
+        <BookItem
+          book={book}
+          isSelected
+          isSelectionMode
+          libraryId="1"
+          onSelect={onSelect}
+        />,
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: "Select Test Book" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -1,5 +1,5 @@
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,9 @@ export function LanguageCombobox({
   disabled,
 }: LanguageComboboxProps) {
   const [open, setOpen] = useState(false);
+  // The language button opens the picker through a PopoverAnchor, not a
+  // trigger, so Radix cannot return focus to it on close.
+  const badgeButtonRef = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState("");
   // The languages route needs Books Read, which the hook checks. Without it
   // the curated list and custom tag entry still work, just without the
@@ -89,25 +92,36 @@ export function LanguageCombobox({
 
   const displayName = getLanguageName(value);
   const badgeLabel = displayName ? `${displayName} (${value})` : value;
+  const badgeText = (
+    <span className="truncate" title={badgeLabel}>
+      {badgeLabel}
+    </span>
+  );
 
   return (
     <Popover modal onOpenChange={disabled ? undefined : setOpen} open={open}>
       {value ? (
         <PopoverAnchor asChild>
           <div className="flex items-center gap-2">
+            {/* Clicking the language reopens the picker, so it is a button
+                unless the field is disabled. */}
             <Badge
-              className={cn(
-                "flex items-center gap-1 max-w-full",
-                !disabled && "cursor-pointer",
-              )}
-              onClick={() => {
-                if (!disabled) setOpen(true);
-              }}
+              asChild={!disabled}
+              className="flex items-center gap-1 max-w-full"
               variant="secondary"
             >
-              <span className="truncate" title={badgeLabel}>
-                {badgeLabel}
-              </span>
+              {disabled ? (
+                badgeText
+              ) : (
+                <Button
+                  aria-label={`Change language: ${badgeLabel}`}
+                  onClick={() => setOpen(true)}
+                  ref={badgeButtonRef}
+                  variant="unstyled"
+                >
+                  {badgeText}
+                </Button>
+              )}
             </Badge>
             {!disabled && (
               <Button
@@ -135,7 +149,15 @@ export function LanguageCombobox({
           </Button>
         </PopoverTrigger>
       )}
-      <PopoverContent align="start" className="w-full p-0">
+      <PopoverContent
+        align="start"
+        className="w-full p-0"
+        onCloseAutoFocus={(e) => {
+          if (!badgeButtonRef.current) return;
+          e.preventDefault();
+          badgeButtonRef.current.focus();
+        }}
+      >
         <Command shouldFilter={false}>
           <CommandInput
             onValueChange={setSearch}

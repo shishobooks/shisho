@@ -11,8 +11,9 @@ interface FileCoverThumbnailProps {
   className?: string;
   onClick?: () => void;
   /**
-   * Whether to apply interactive styles (cursor-pointer, hover:scale, hover:shadow).
-   * Defaults to true. Pass false for non-interactive contexts like file list rows.
+   * Whether to apply interactive styles (hover:scale, hover:shadow, and
+   * cursor-pointer when onClick is set). Defaults to true. Pass false for
+   * non-interactive contexts like file list rows.
    */
   interactive?: boolean;
   /**
@@ -65,7 +66,7 @@ function FileCoverThumbnail({
     <div
       className={cn(
         "relative overflow-hidden rounded border border-border shrink-0",
-        interactive && "cursor-pointer",
+        interactive && onClick && "cursor-pointer",
         interactive &&
           "transition-all duration-200 hover:scale-105 hover:shadow-md",
         aspectClass,

@@ -285,6 +285,14 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     view?.goToFraction?.(Math.max(0, Math.min(1, target)));
   };
 
+  const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    const view = viewRef.current as
+      (HTMLElement & { goToFraction?: (f: number) => void }) | null;
+    view?.goToFraction?.(e.key === "Home" ? 0 : 1);
+  };
+
   const progressPercent = useMemo(() => Math.round(fraction * 100), [fraction]);
 
   // A failed background refetch keeps an open book on screen.
@@ -362,6 +370,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                       commitSettings({ viewer_epub_font_size: value })
                     }
                     step={10}
+                    thumbLabel="Font size"
                     value={[fontSizeDraft]}
                   />
                 </div>
@@ -436,18 +445,25 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
           </div>
         )}
 
+        {/* Tap zones for page turns. They duplicate the labeled footer
+            buttons for pointer users only, so assistive tech, the tab
+            order, and mouse focus skip them. */}
         {flow !== "scrolled" && (
           <>
             <Button
-              aria-label="Previous page"
+              aria-hidden
               className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
               onClick={goPrev}
+              onMouseDown={(e) => e.preventDefault()}
+              tabIndex={-1}
               variant="ghost"
             />
             <Button
-              aria-label="Next page"
+              aria-hidden
               className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
               onClick={goNext}
+              onMouseDown={(e) => e.preventDefault()}
+              tabIndex={-1}
               variant="ghost"
             />
           </>
@@ -483,10 +499,20 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
           hideChrome && !chromeVisible && "translate-y-full",
         )}
       >
+        {/* The window's arrow-key handler already turns pages, so the bar
+            adds only Home and End for keyboard seeking. */}
         <div className="px-4 pt-3">
           <div
-            className="relative h-1.5 bg-muted rounded-full cursor-pointer"
+            aria-label="Reading progress"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={progressPercent}
+            aria-valuetext={`${progressPercent}%`}
+            className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
+            onKeyDown={handleProgressKeyDown}
+            role="slider"
+            tabIndex={0}
           >
             <div
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
@@ -501,13 +527,23 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         </div>
 
         <div className="flex items-center justify-between px-4 py-2">
-          <Button onClick={goPrev} size="icon" variant="ghost">
+          <Button
+            aria-label="Previous page"
+            onClick={goPrev}
+            size="icon"
+            variant="ghost"
+          >
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <span className="text-sm text-muted-foreground">
             {progressPercent}%
           </span>
-          <Button onClick={goNext} size="icon" variant="ghost">
+          <Button
+            aria-label="Next page"
+            onClick={goNext}
+            size="icon"
+            variant="ghost"
+          >
             <ChevronRight className="h-5 w-5" />
           </Button>
         </div>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -216,7 +216,9 @@ describe("ChapterRow - M4B Playback", () => {
       );
 
       // Find and click the minus button (decrements timestamp by 1 second)
-      const minusButton = screen.getByTitle("Subtract 1 second");
+      const minusButton = screen.getByRole("button", {
+        name: "Subtract 1 second",
+      });
       await user.click(minusButton);
 
       // Verify timestamp was decremented
@@ -312,7 +314,9 @@ describe("ChapterRow - M4B Playback", () => {
         />,
       );
 
-      const minusButton = screen.getByTitle("Subtract 1 second");
+      const minusButton = screen.getByRole("button", {
+        name: "Subtract 1 second",
+      });
       await user.click(minusButton);
 
       expect(onStartTimestampChange).toHaveBeenCalledWith(59000);
@@ -348,7 +352,7 @@ describe("ChapterRow - M4B Playback", () => {
         />,
       );
 
-      const plusButton = screen.getByTitle("Add 1 second");
+      const plusButton = screen.getByRole("button", { name: "Add 1 second" });
       await user.click(plusButton);
 
       expect(onStartTimestampChange).toHaveBeenCalledWith(61000);
@@ -464,7 +468,7 @@ describe("ChapterRow - CBZ", () => {
         />,
       );
 
-      const prevButton = screen.getByTitle("Previous page");
+      const prevButton = screen.getByRole("button", { name: "Previous page" });
       await user.click(prevButton);
 
       expect(onStartPageChange).toHaveBeenCalledWith(4);
@@ -500,11 +504,67 @@ describe("ChapterRow - CBZ", () => {
         />,
       );
 
-      const nextButton = screen.getByTitle("Next page");
+      const nextButton = screen.getByRole("button", { name: "Next page" });
       await user.click(nextButton);
 
       expect(onStartPageChange).toHaveBeenCalledWith(6);
       expect(onBlur).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("edit mode controls", () => {
+    const renderEditRow = () =>
+      renderWithRouter(
+        <ChapterRow
+          chapter={{ ...baseCbzChapter, start_page: 5 }}
+          depth={0}
+          file={{
+            id: 100,
+            updated_at: "2024-01-01T00:00:00Z",
+            file_type: FileTypeCBZ,
+          }}
+          fileType={FileTypeCBZ}
+          isEditing={true}
+          onDelete={vi.fn()}
+          onStartPageChange={vi.fn()}
+          onTitleChange={vi.fn()}
+          pageCount={20}
+        />,
+      );
+
+    it("names the icon buttons with an aria-label, not only a title", () => {
+      renderEditRow();
+
+      // jsdom falls back to title for the accessible name, which screen
+      // readers and touch users cannot rely on, so check the label itself.
+      for (const name of ["Previous page", "Next page", "Delete chapter"]) {
+        expect(screen.getByRole("button", { name })).toHaveAttribute(
+          "aria-label",
+          name,
+        );
+      }
+    });
+
+    it("opens the page picker from the keyboard through the thumbnail", async () => {
+      const user = createUser();
+      renderEditRow();
+
+      const thumbnail = screen.getByRole("button", {
+        name: "Change start page: page 6",
+      });
+      await user.tab();
+      expect(thumbnail).toHaveFocus();
+      await user.keyboard("{Enter}");
+
+      const dialog = await screen.findByRole("dialog", {
+        name: /Page 6 of 20/,
+      });
+      expect(dialog).toBeInTheDocument();
+
+      // Closing returns focus to the thumbnail, not to the page body.
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      expect(thumbnail).toHaveFocus();
     });
   });
 });

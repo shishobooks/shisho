@@ -513,3 +513,103 @@ describe("ESLint generated list envelope rule", () => {
     ).toHaveLength(0);
   });
 });
+
+// Each control carries its case number in data-case. Cases 1 to 13 and 28
+// to 32 have no name at some width; 14 to 27 and 33 are the accepted forms
+// and must stay clean; 34 to 41 are the known gaps (41 a false positive).
+const CONTROL_NAME_FIXTURE = `
+import { Link } from "react-router-dom";
+
+import { BadgeRemoveButton } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/libraries/utils";
+
+declare const X: () => null;
+declare const busy: boolean;
+declare const label: string;
+declare const item: { icon: React.ReactNode; label: string };
+declare const props: Record<string, string>;
+declare const statusIcon: React.ReactNode;
+declare const iconElement: React.ReactNode;
+declare const lexicon: string;
+declare const renderIcon: () => React.ReactNode;
+declare const IconButton: (props: { children: React.ReactNode }) => null;
+export const Fixture = () => (
+  <div>
+    <Button data-case="1" size="icon"><X /></Button>
+    <Button data-case="2" title="Delete"><X /></Button>
+    <Button data-case="3"><X /><span className="hidden sm:inline">Add</span></Button>
+    <Button data-case="4">{busy ? <X /> : <X />}</Button>
+    <Button data-case="5">{busy ? <X /> : "Share"}</Button>
+    <Link data-case="6" to="/">{item.icon}{busy && item.label}</Link>
+    <Button asChild data-case="7"><Link to="/"><X /></Link></Button>
+    <Button asChild={busy} data-case="8">{busy ? <a href="/x"><X /></a> : <span><X /></span>}</Button>
+    <BadgeRemoveButton data-case="9" onClick={() => undefined} />
+    <a data-case="10" href="/x"><X /></a>
+    <Button data-case="11"><span aria-hidden="true">x</span></Button>
+    <Button data-case="12"><X /><span className={cn("hidden", "sm:inline")}>Add</span></Button>
+    <Button aria-label="" data-case="13"><X /></Button>
+    <Button aria-label="Close" data-case="14" size="icon"><X /></Button>
+    <Button aria-labelledby="heading" data-case="15"><X /></Button>
+    <Link aria-hidden data-case="16" tabIndex={-1} to="/"><X /></Link>
+    <Button data-case="17" {...props}><X /></Button>
+    <Button data-case="18"><X /><span className="sr-only">Install</span></Button>
+    <Button data-case="19"><X />Save</Button>
+    <Button data-case="20">{busy ? "Saving" : "Save"}</Button>
+    <Button data-case="21">{label}</Button>
+    <Button asChild data-case="22"><Link aria-label="Settings" to="/"><X /></Link></Button>
+    <Button aria-label="Open" asChild={busy} data-case="23">{busy ? <a href="/x"><X /></a> : <span><X /></span>}</Button>
+    <Button aria-label="Add" data-case="24"><X /><span className="hidden sm:inline">Add</span></Button>
+    <Link data-case="25" to="/"><img alt="Cover" src="/x" /></Link>
+    <Link data-case="26" to="/"><span className={cn("overflow-hidden")}>{item.label}</span></Link>
+    <BadgeRemoveButton aria-label="Remove tag" data-case="27" onClick={() => undefined} />
+    <Button aria-hidden={false} data-case="28"><X /></Button>
+    <Button aria-hidden data-case="29"><X /></Button>
+    <Button data-case="30"><X /><span className="sm:hidden">Add</span></Button>
+    <Button data-case="31"><X /><span className="invisible sm:visible">Add</span></Button>
+    <Button data-case="32">{statusIcon}</Button>
+    <Button data-case="33">{lexicon}</Button>
+    {/* Known gaps, pinned so a change to them is deliberate: a call or map
+        is assumed to render text, an aria-hidden expression counts as
+        hidden, a wrapper component around Button is not checked, an
+        aria-label expression counts even when undefined, a hidden class
+        behind an arbitrary variant counts as visible, and a variable not
+        named like an icon counts as text. */}
+    <Button data-case="34">{renderIcon()}</Button>
+    <Button data-case="35">{[1].map(() => <X />)}</Button>
+    <Button aria-hidden={busy} data-case="36" tabIndex={-1}><X /></Button>
+    <IconButton data-case="37"><X /></IconButton>
+    <Button aria-label={undefined} data-case="38"><X /></Button>
+    <Button data-case="39"><X /><span className="data-[state=open]:hidden">Add</span></Button>
+    <Button data-case="40">{iconElement}</Button>
+    {/* A known false positive: complementary && branches always render
+        one label, but the rule sees no text in either. */}
+    <Button data-case="41">{busy && "Saving"}{!busy && "Save"}</Button>
+  </div>
+);
+`;
+
+const unnamedControls = async (filePath: string) => {
+  const [result] = await eslint.lintText(CONTROL_NAME_FIXTURE, { filePath });
+  const lines = CONTROL_NAME_FIXTURE.split("\n");
+  return result.messages
+    .filter((message) => message.ruleId === "shisho/control-has-name")
+    .map((message) =>
+      Number(/data-case="(\d+)"/.exec(lines[message.line - 1])?.[1]),
+    );
+};
+
+describe("ESLint control name rule", () => {
+  it("rejects buttons and links with no name at some width", async () => {
+    expect(await unnamedControls("app/components/Fixture.tsx")).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 41,
+    ]);
+  });
+
+  it("allows them in tests and the ui kit", async () => {
+    expect(await unnamedControls("app/components/Fixture.test.tsx")).toEqual(
+      [],
+    );
+    expect(await unnamedControls("app/components/ui/fixture.tsx")).toEqual([]);
+  });
+});

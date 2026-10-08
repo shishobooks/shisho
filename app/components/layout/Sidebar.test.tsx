@@ -93,6 +93,16 @@ describe("Sidebar", () => {
     ).toBeInTheDocument();
   });
 
+  it("names each nav link by its label when collapsed to icons", () => {
+    localStorage.setItem("shisho-sidebar-collapsed", "true");
+    renderSidebar([buildItem({ to: "/a", label: "Alpha" })]);
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Alpha" })).toHaveAttribute(
+      "href",
+      "/a",
+    );
+  });
+
   it("applies active styling to active items", () => {
     renderSidebar([
       buildItem({ to: "/a", label: "Alpha", isActive: true }),

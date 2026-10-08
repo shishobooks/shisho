@@ -192,6 +192,13 @@ export default function PageReader({
     goToPage(Math.max(0, Math.min(targetPage, totalPages - 1)));
   };
 
+  const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Home") goToPage(0);
+    else if (e.key === "End") goToPage(totalPages - 1);
+    else return;
+    e.preventDefault();
+  };
+
   return (
     <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col">
       {/* Header */}
@@ -251,6 +258,7 @@ export default function PageReader({
                       )
                     }
                     step={1}
+                    thumbLabel="Preload count"
                     value={[preloadDraft ?? preloadCount]}
                   />
                 </div>
@@ -307,18 +315,24 @@ export default function PageReader({
         )}
         ref={mainRef}
       >
-        {/* Tap zones for mobile navigation */}
+        {/* Tap zones for mobile navigation. They duplicate the labeled
+            footer buttons for pointer users only, so assistive tech, the
+            tab order, and mouse focus skip them. */}
         <Button
-          aria-label="Previous page"
+          aria-hidden
           className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
           disabled={currentPage === 0}
           onClick={() => goToPage(currentPage - 1)}
+          onMouseDown={(e) => e.preventDefault()}
+          tabIndex={-1}
           variant="ghost"
         />
         <Button
-          aria-label="Next page"
+          aria-hidden
           className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
           onClick={() => goToPage(currentPage + 1)}
+          onMouseDown={(e) => e.preventDefault()}
+          tabIndex={-1}
           variant="ghost"
         />
 
@@ -368,11 +382,20 @@ export default function PageReader({
           hideChrome && !chromeVisible && "translate-y-full",
         )}
       >
-        {/* Progress Bar */}
+        {/* Progress Bar. The window's arrow-key handler already turns pages,
+            so the bar adds only Home and End for keyboard seeking. */}
         <div className="px-4 pt-3">
           <div
-            className="relative h-1.5 bg-muted rounded-full cursor-pointer"
+            aria-label="Reading progress"
+            aria-valuemax={totalPages}
+            aria-valuemin={1}
+            aria-valuenow={currentPage + 1}
+            aria-valuetext={`Page ${currentPage + 1} of ${totalPages}`}
+            className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
+            onKeyDown={handleProgressKeyDown}
+            role="slider"
+            tabIndex={0}
           >
             <div
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
@@ -402,6 +425,7 @@ export default function PageReader({
         {/* Navigation buttons */}
         <div className="flex items-center justify-between px-4 py-2">
           <Button
+            aria-label="Previous page"
             disabled={currentPage === 0}
             onClick={() => goToPage(currentPage - 1)}
             size="icon"
@@ -413,6 +437,7 @@ export default function PageReader({
             Page {currentPage + 1} of {totalPages}
           </span>
           <Button
+            aria-label="Next page"
             onClick={() => goToPage(currentPage + 1)}
             size="icon"
             variant="ghost"

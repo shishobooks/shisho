@@ -180,4 +180,19 @@ describe("CreateLibrary", () => {
       // hasUnsavedChanges should be false again
     });
   });
+
+  it("names the icon-only browse and remove path buttons", async () => {
+    const user = createUser();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Add Path" }));
+
+    expect(
+      screen.getAllByRole("button", { name: "Browse directories" }),
+    ).toHaveLength(2);
+    await user.click(screen.getAllByRole("button", { name: "Remove path" })[1]);
+    expect(screen.getAllByPlaceholderText("Enter directory path")).toHaveLength(
+      1,
+    );
+  });
 });

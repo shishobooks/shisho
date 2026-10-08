@@ -252,17 +252,18 @@ const FileRow = ({
   const readButton = readingAction && (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Link
-          to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
-        >
-          <Button size="sm" variant="ghost">
+        <Button asChild size="sm" variant="ghost">
+          <Link
+            aria-label={isListen ? "Listen" : "Read"}
+            to={`/libraries/${libraryId}/books/${file.book_id}/files/${file.id}/read`}
+          >
             {isListen ? (
               <Headphones className="h-3 w-3" />
             ) : (
               <BookOpen className="h-3 w-3" />
             )}
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{isListen ? "Listen" : "Read"}</TooltipContent>
     </Tooltip>

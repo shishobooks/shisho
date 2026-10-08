@@ -94,6 +94,7 @@ export const AdvancedRepositoriesSection = () => {
                 {canWrite && (
                   <>
                     <Button
+                      aria-label="Sync repository"
                       disabled={syncRepository.isPending}
                       onClick={() =>
                         syncRepository.mutate(
@@ -121,6 +122,7 @@ export const AdvancedRepositoriesSection = () => {
                     </Button>
                     {!repo.is_official && (
                       <Button
+                        aria-label="Remove repository"
                         onClick={() => setRemoveTarget(repo.scope)}
                         size="sm"
                         variant="ghost"

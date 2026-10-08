@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   HoverCard,
   HoverCardContent,
@@ -24,6 +25,13 @@ export interface PagePreviewProps {
   className?: string;
   /** Click handler for the thumbnail */
   onClick?: () => void;
+  /** Ref to the thumbnail button rendered when onClick is set */
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  /**
+   * What clicking the thumbnail does, named before the current page in the
+   * button's label ("Change start page: page 6"). Default "Change page".
+   */
+  actionLabel?: string;
   /** Children to render as the trigger (if not provided, renders default thumbnail) */
   children?: React.ReactNode;
 }
@@ -42,6 +50,8 @@ const PagePreview = ({
   side = "right",
   className,
   onClick,
+  buttonRef,
+  actionLabel = "Change page",
   children,
 }: PagePreviewProps) => {
   const filePageUrl = useFilePageUrl();
@@ -72,20 +82,19 @@ const PagePreview = ({
   // Display is 1-indexed
   const displayPage = page + 1;
 
-  // Default thumbnail content
-  const defaultThumbnail = (
-    <div
-      className={cn(
-        "relative rounded border border-border overflow-hidden bg-muted flex items-center justify-center",
-        onClick && "cursor-pointer",
-        className,
-      )}
-      onClick={onClick}
-      style={{ height: `${thumbnailSize}px`, minWidth: `${thumbnailSize}px` }}
-    >
+  const thumbnailClassName = cn(
+    "relative rounded border border-border overflow-hidden bg-muted flex items-center justify-center",
+    className,
+  );
+  const thumbnailStyle = {
+    height: `${thumbnailSize}px`,
+    minWidth: `${thumbnailSize}px`,
+  };
+  const thumbnailContent = (
+    <>
       {/* Loading placeholder */}
       {isLoading && !hasError && (
-        <div className="absolute inset-0 bg-muted animate-pulse" />
+        <span className="absolute inset-0 bg-muted animate-pulse" />
       )}
 
       {/* Error state: show page number */}
@@ -105,6 +114,25 @@ const PagePreview = ({
           src={imageUrl}
         />
       )}
+    </>
+  );
+
+  // Default thumbnail: a button when clicking it does something, so the
+  // keyboard can reach it too.
+  const defaultThumbnail = onClick ? (
+    <Button
+      aria-label={`${actionLabel}: page ${displayPage}`}
+      className={thumbnailClassName}
+      onClick={onClick}
+      ref={buttonRef}
+      style={thumbnailStyle}
+      variant="unstyled"
+    >
+      {thumbnailContent}
+    </Button>
+  ) : (
+    <div className={thumbnailClassName} style={thumbnailStyle}>
+      {thumbnailContent}
     </div>
   );
 

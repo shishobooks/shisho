@@ -240,6 +240,7 @@ export const AdvancedOrderSection = () => {
                     </SelectContent>
                   </Select>
                   <Button
+                    aria-label="Move plugin up"
                     disabled={index === 0}
                     onClick={() => handleMove(index, "up")}
                     size="sm"
@@ -248,6 +249,7 @@ export const AdvancedOrderSection = () => {
                     <ArrowUp aria-hidden="true" className="h-4 w-4" />
                   </Button>
                   <Button
+                    aria-label="Move plugin down"
                     disabled={index === displayOrder.length - 1}
                     onClick={() => handleMove(index, "down")}
                     size="sm"

@@ -40,6 +40,7 @@ export const BulkDownloadToast = () => {
           </span>
         </div>
         <Button
+          aria-label="Dismiss"
           className="h-6 w-6 shrink-0"
           onClick={dismissDownload}
           size="icon"

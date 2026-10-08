@@ -113,7 +113,7 @@ const AdminUsers = () => {
           </div>
           {canWriteUsers && (
             <div className="flex items-center gap-2 shrink-0">
-              <Button asChild size="sm">
+              <Button aria-label="Add User" asChild size="sm">
                 <Link to="/settings/users/create">
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Add User</span>
@@ -149,7 +149,11 @@ const AdminUsers = () => {
           </div>
           {canWriteUsers && (
             <div className="flex items-center gap-2 shrink-0">
-              <Button onClick={() => handleOpenRoleDialog()} size="sm">
+              <Button
+                aria-label="Add Role"
+                onClick={() => handleOpenRoleDialog()}
+                size="sm"
+              >
                 <Plus className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Add Role</span>
               </Button>

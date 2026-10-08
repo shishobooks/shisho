@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,8 +9,9 @@ import TopNav from "./TopNav";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
+const mobileNav = vi.hoisted(() => ({ isOpen: false }));
 vi.mock("@/contexts/MobileNav", () => ({
-  useMobileNav: () => ({ toggle: vi.fn() }),
+  useMobileNav: () => ({ isOpen: mobileNav.isOpen, toggle: vi.fn() }),
 }));
 vi.mock("@/components/layout/UserMenu", () => ({ default: () => null }));
 vi.mock("@/components/library/GlobalSearch", () => ({ default: () => null }));
@@ -38,6 +40,7 @@ const settingsLink = () =>
 describe("TopNav", () => {
   beforeEach(() => {
     setAuth();
+    mobileNav.isOpen = false;
   });
 
   it("hides the resync button without Jobs Read, which its status query needs", () => {
@@ -67,6 +70,34 @@ describe("TopNav", () => {
     ).toBeInTheDocument();
   });
 
+  it("announces whether the mobile search is open", async () => {
+    setAuth({ permissions: ["books:read"] });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderNav();
+
+    const toggle = screen.getByRole("button", { name: "Open search" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "Close search" }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("announces whether the navigation drawer is open", () => {
+    setAuth({ permissions: ["books:read"] });
+    const { unmount } = renderNav();
+    expect(
+      screen.getByRole("button", { name: "Open navigation menu" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    unmount();
+
+    mobileNav.isOpen = true;
+    renderNav();
+    expect(
+      screen.getByRole("button", { name: "Open navigation menu" }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("hides the settings gear when no settings page is permitted", () => {
     setAuth({ permissions: ["books:read", "series:read", "people:read"] });
     renderNav();
@@ -79,5 +110,8 @@ describe("TopNav", () => {
     renderNav();
 
     expect(settingsLink()).toBeDefined();
+    expect(screen.getByRole("link", { name: "Global Settings" })).toBe(
+      settingsLink(),
+    );
   });
 });

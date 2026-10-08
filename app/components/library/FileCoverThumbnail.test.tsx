@@ -27,6 +27,16 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("FileCoverThumbnail", () => {
+  it("shows the pointer cursor only when clicking does something", () => {
+    const { container, rerender } = render(
+      <FileCoverThumbnail file={makeFile()} />,
+    );
+    expect(container.firstElementChild).not.toHaveClass("cursor-pointer");
+
+    rerender(<FileCoverThumbnail file={makeFile()} onClick={() => {}} />);
+    expect(container.firstElementChild).toHaveClass("cursor-pointer");
+  });
+
   it("renders the cover keyed on updated_at in epoch milliseconds", () => {
     const { container } = render(<FileCoverThumbnail file={makeFile()} />);
     const img = container.querySelector("img");
@@ -88,7 +98,9 @@ describe("FileCoverThumbnail", () => {
   });
 
   it("applies interactive styles by default", () => {
-    const { container } = render(<FileCoverThumbnail file={makeFile()} />);
+    const { container } = render(
+      <FileCoverThumbnail file={makeFile()} onClick={() => {}} />,
+    );
     const wrapper = container.firstElementChild as HTMLElement;
     expect(wrapper.className).toContain("cursor-pointer");
     expect(wrapper.className).toContain("hover:scale-105");
@@ -97,7 +109,11 @@ describe("FileCoverThumbnail", () => {
 
   it("applies interactive styles when interactive is explicitly true", () => {
     const { container } = render(
-      <FileCoverThumbnail file={makeFile()} interactive={true} />,
+      <FileCoverThumbnail
+        file={makeFile()}
+        interactive={true}
+        onClick={() => {}}
+      />,
     );
     const wrapper = container.firstElementChild as HTMLElement;
     expect(wrapper.className).toContain("cursor-pointer");

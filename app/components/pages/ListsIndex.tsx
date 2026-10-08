@@ -112,7 +112,11 @@ const ListsIndex = () => {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+            <Button
+              aria-label="Create List"
+              onClick={() => setCreateDialogOpen(true)}
+              size="sm"
+            >
               <Plus className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Create List</span>
             </Button>

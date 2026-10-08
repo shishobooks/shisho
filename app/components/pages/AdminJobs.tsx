@@ -124,6 +124,7 @@ const AdminJobs = () => {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button
+            aria-label="Refresh"
             onClick={() => {
               // refetch() runs even a disabled query, so respect its gate.
               if (isEnabled) refetch();
@@ -136,6 +137,7 @@ const AdminJobs = () => {
           </Button>
           {canCreateJobs && (
             <Button
+              aria-label="Trigger Scan"
               disabled={createJobMutation.isPending}
               onClick={handleTriggerSync}
               size="sm"

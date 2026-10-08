@@ -85,6 +85,7 @@ const FileDownloadControl = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Cancel download"
               className="h-6 w-6 p-0"
               onClick={onCancelDownload}
               size="sm"

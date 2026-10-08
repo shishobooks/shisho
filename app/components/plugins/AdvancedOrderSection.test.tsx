@@ -91,6 +91,31 @@ describe("AdvancedOrderSection save", () => {
     );
     expect(save).toBeDisabled();
   });
+
+  it("names the move buttons and enables Save Order after a move", async () => {
+    setAuth({ permissions: ["config:read", "config:write", "books:read"] });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      path === "/plugins/order/metadataEnricher"
+        ? [
+            { scope: "shisho", plugin_id: "first", mode: "enabled" },
+            { scope: "shisho", plugin_id: "second", mode: "enabled" },
+          ]
+        : [],
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    renderSection();
+
+    const save = await screen.findByRole("button", { name: "Save Order" });
+    const up = screen.getAllByRole("button", { name: "Move plugin up" });
+    const down = screen.getAllByRole("button", { name: "Move plugin down" });
+    expect(up).toHaveLength(2);
+    expect(up[0]).toBeDisabled();
+    expect(down[1]).toBeDisabled();
+
+    await user.click(down[0]);
+    expect(save).toBeEnabled();
+  });
 });
 
 describe("AdvancedOrderSection load failure", () => {
