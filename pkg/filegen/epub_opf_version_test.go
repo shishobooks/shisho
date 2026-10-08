@@ -1401,3 +1401,82 @@ func TestEPUBGenerator_LargeTOCDeletion(t *testing.T) {
 	assert.NotContains(t, nav, ">Entry 10000<")
 	assert.Contains(t, nav, ">Entry 10001<")
 }
+
+// TestEPUBGenerator_NCXCounterpartsAreOneToOne covers NCX entries that share
+// a path or a key with nav entries: each NCX entry follows at most one nav
+// entry and each nav entry is followed by at most one NCX entry.
+func TestEPUBGenerator_NCXCounterpartsAreOneToOne(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an extra NCX entry at the same path is left alone", func(t *testing.T) {
+		t.Parallel()
+		nav := simpleNav(`<li><a href="text/a.xhtml">Opening</a></li><li><a href="text/b.xhtml">B</a></li>`)
+		ncx := simpleNCX(navPoint("a", "Opening", "text/a.xhtml", "") + navPoint("a2", "Opening, continued", "text/a.xhtml", "") + navPoint("b", "B", "text/b.xhtml", ""))
+		for name, stored := range map[string][]tocChapter{
+			"rename": {{title: "Prologue", href: "text/a.xhtml"}, {title: "B", href: "text/b.xhtml"}},
+			"delete": {{title: "B", href: "text/b.xhtml"}},
+		} {
+			file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(stored)}
+			entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+			got := ncxTree(t, entries["OEBPS/toc.ncx"])
+			assert.Contains(t, got, tocChapter{title: "Opening, continued", href: "text/a.xhtml"}, name)
+		}
+	})
+
+	t.Run("duplicate entries pair in order", func(t *testing.T) {
+		t.Parallel()
+		nav := simpleNav(`<li><a href="text/a.xhtml">A</a></li><li><a href="text/a.xhtml">A</a><ol><li><a href="text/x.xhtml">X</a></li></ol></li><li><a href="text/b.xhtml">B</a></li>`)
+		ncx := simpleNCX(navPoint("a", "A", "text/a.xhtml", "") + navPoint("a2", "A", "text/a.xhtml", navPoint("x", "X", "text/x.xhtml", "")) + navPoint("b", "B", "text/b.xhtml", ""))
+		file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+			{title: "A", href: "text/a.xhtml", children: []tocChapter{{title: "X", href: "text/x.xhtml"}}},
+			{title: "B", href: "text/b.xhtml"},
+		})}
+		entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+		want := []tocChapter{
+			{title: "A", href: "text/a.xhtml", children: []tocChapter{{title: "X", href: "text/x.xhtml"}}},
+			{title: "B", href: "text/b.xhtml"},
+		}
+		assert.Equal(t, want, ncxTree(t, entries["OEBPS/toc.ncx"]))
+	})
+}
+
+// TestEPUBGenerator_TrailingBytesAfterNavRoot covers a nav document with junk
+// after its root element, which the parser ignores: its chapters still come
+// from the nav, so an unedited book keeps a richer NCX as written.
+func TestEPUBGenerator_TrailingBytesAfterNavRoot(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><a href="text/a.xhtml">A</a></li><li><a href="text/c.xhtml">C</a></li>`) + "\n</div>\n"
+	ncx := simpleNCX(navPoint("a", "A", "text/a.xhtml", "") + navPoint("b", "B", "text/b.xhtml", "") + navPoint("c", "C", "text/c.xhtml", ""))
+	src := tocSource("nav.xhtml", nav, ncx)
+
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "scanned.epub")
+	writeVersionedEPUB(t, srcPath, src)
+	scanned, err := epub.Parse(srcPath)
+	require.NoError(t, err)
+	require.Equal(t, []tocChapter{{title: "A", href: "text/a.xhtml"}, {title: "C", href: "text/c.xhtml"}}, navTree(scanned.Chapters))
+
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(navTree(scanned.Chapters))}
+	entries := zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))
+	assert.Equal(t, ncx, string(entries["OEBPS/toc.ncx"]))
+
+	file = &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{{title: "Aye", href: "text/a.xhtml"}, {title: "C", href: "text/c.xhtml"}})}
+	entries = zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))
+	assert.Contains(t, string(entries["OEBPS/nav.xhtml"]), ">Aye<")
+	assert.Equal(t, []tocChapter{{title: "Aye", href: "text/a.xhtml"}, {title: "B", href: "text/b.xhtml"}, {title: "C", href: "text/c.xhtml"}}, ncxTree(t, entries["OEBPS/toc.ncx"]))
+}
+
+// TestEPUBGenerator_NCXFollowsOnlyWrittenNavEdits covers edits the nav
+// cannot take (they would leave it without entries): the NCX keeps its
+// entries too, so the two documents never disagree.
+func TestEPUBGenerator_NCXFollowsOnlyWrittenNavEdits(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><span>Part</span><ol><li><a href="text/a.xhtml">A</a></li></ol></li>`)
+	ncx := simpleNCX(navPoint("p", "Part", "text/p.xhtml", navPoint("a", "A", "text/a.xhtml", "")))
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{{title: "Part"}})}
+	entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+	assert.Equal(t, nav, string(entries["OEBPS/nav.xhtml"]))
+	assert.Equal(t, ncx, string(entries["OEBPS/toc.ncx"]))
+}

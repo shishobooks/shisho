@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
-	"errors"
-	"io"
 	"net/url"
 	"path"
 	"slices"
@@ -31,23 +29,26 @@ import (
 // some renamed or deleted (chapters added, reordered, or supplied by a
 // sidecar or plugin) leaves both documents as written.
 
-const ncxMediaType = "application/x-dtbncx+xml"
-
 // maxAlignStates caps the alignment table so a huge table of contents with
 // thousands of deletions cannot exhaust memory.
 const maxAlignStates = 4_000_000
 
 // tocPaths returns the zip entry names of the EPUB 3 navigation document and
-// the NCX, or "" for the ones the package does not have. The NCX is the item
-// the spine names, falling back to any item with the NCX media type.
+// the NCX, or "" for the ones the package does not have. It finds them the
+// way pkg/epub findNavDocumentHref and findNCXHref do, quirks included,
+// because the primary must be the document the scan read.
 func tocPaths(pkg *opfPackage, opfPath string) (navPath, ncxPath string) {
+	base := path.Dir(opfPath) + "/"
+	if base == "./" {
+		base = ""
+	}
 	for _, item := range pkg.Manifest.Items {
 		properties, _ := item.Attrs.get("", "properties")
-		if navPath == "" && slices.Contains(strings.Fields(properties), "nav") {
-			navPath = opfEntryPath(opfPath, item.Href)
+		if navPath == "" && strings.Contains(properties, "nav") {
+			navPath = base + item.Href
 		}
-		if (pkg.Spine.Toc != "" && item.ID == pkg.Spine.Toc) || (ncxPath == "" && item.MediaType == ncxMediaType) {
-			ncxPath = opfEntryPath(opfPath, item.Href)
+		if ncxPath == "" && pkg.Spine.Toc != "" && item.ID == pkg.Spine.Toc {
+			ncxPath = base + item.Href
 		}
 	}
 	return navPath, ncxPath
@@ -126,9 +127,9 @@ func (n *xmlNode) attr(local string) string {
 	return ""
 }
 
-// parseXMLNodes reads data into an element tree. It fails on the same
-// malformed input xml.Unmarshal rejects, so a document the parser could not
-// read is never rewritten.
+// parseXMLNodes reads data into an element tree. Like xml.Unmarshal, it
+// stops at the end of the root element and fails on malformed input before
+// it, so it reads exactly the documents the parser reads.
 func parseXMLNodes(data []byte) (*xmlNode, error) {
 	d := xml.NewDecoder(bytes.NewReader(data))
 	var root *xmlNode
@@ -137,9 +138,6 @@ func parseXMLNodes(data []byte) (*xmlNode, error) {
 		offset := d.InputOffset()
 		tok, err := d.Token()
 		if err != nil {
-			if root != nil && len(stack) == 0 && errors.Is(err, io.EOF) {
-				return root, nil
-			}
 			return nil, err
 		}
 		switch t := tok.(type) {
@@ -157,6 +155,9 @@ func parseXMLNodes(data []byte) (*xmlNode, error) {
 			n.innerEnd = offset
 			n.end = d.InputOffset()
 			stack = stack[:len(stack)-1]
+			if len(stack) == 0 {
+				return root, nil
+			}
 		case xml.CharData:
 			if len(stack) > 0 {
 				stack[len(stack)-1].text.Write(t)
@@ -451,69 +452,77 @@ func align(all []*tocEntry, chapters []editedChapter) ([]tocMatch, int, bool) {
 	return matches, best[m][k].score, true
 }
 
-// carryChanges maps the primary's changes onto doc's entries. An entry
-// follows the primary entry with the same package path and title, else the
-// only one with its title, else the only one with its path. Entries with no
-// counterpart are left alone.
+// carryChanges maps the primary's changes onto doc's entries. Each entry
+// follows at most one primary entry and each primary entry is followed at
+// most once: entries with the same package path and title pair in order,
+// then an entry whose title, or else path, is the only one on both sides
+// pairs with that entry. Entries with no counterpart are left alone.
 func carryChanges(primary []*tocEntry, changes tocChanges, doc *tocDoc) tocChanges {
-	type key struct{ resolved, title string }
-	byKey := map[key][]*tocEntry{}
-	byTitle := map[string][]*tocEntry{}
-	byPath := map[string][]*tocEntry{}
-	gone := map[*tocEntry]bool{}
-	var index func(entries []*tocEntry, deleted bool)
-	index = func(entries []*tocEntry, deleted bool) {
-		for _, e := range entries {
-			if e.title == "" {
+	primaries, gone := titledEntries(primary, changes.deleted)
+	secondaries, _ := titledEntries(doc.entries, nil)
+
+	counterpart := map[*tocEntry]*tocEntry{}
+	claimed := map[*tocEntry]bool{}
+	pair := func(keyOf func(*tocEntry) string, unique bool) {
+		candidates := map[string][]*tocEntry{}
+		for _, p := range primaries {
+			if k := keyOf(p); k != "" {
+				candidates[k] = append(candidates[k], p)
+			}
+		}
+		seen := map[string]int{}
+		for _, e := range secondaries {
+			if k := keyOf(e); k != "" {
+				seen[k]++
+			}
+		}
+		for _, e := range secondaries {
+			k := keyOf(e)
+			if k == "" || counterpart[e] != nil || (unique && (seen[k] != 1 || len(candidates[k]) != 1)) {
 				continue
 			}
-			gone[e] = deleted || changes.deleted[e]
-			k := key{e.resolved, e.title}
-			byKey[k] = append(byKey[k], e)
-			byTitle[e.title] = append(byTitle[e.title], e)
-			if e.resolved != "" {
-				byPath[e.resolved] = append(byPath[e.resolved], e)
+			for _, p := range candidates[k] {
+				if !claimed[p] {
+					counterpart[e], claimed[p] = p, true
+					break
+				}
 			}
-			index(e.children, gone[e])
 		}
 	}
-	index(primary, false)
-
-	counterpart := func(e *tocEntry) *tocEntry {
-		if found := byKey[key{e.resolved, e.title}]; len(found) > 0 {
-			return found[0]
-		}
-		if found := byTitle[e.title]; len(found) == 1 {
-			return found[0]
-		}
-		if found := byPath[e.resolved]; e.resolved != "" && len(found) == 1 {
-			return found[0]
-		}
-		return nil
-	}
+	pair(func(e *tocEntry) string { return e.resolved + "\x00" + e.title }, false)
+	pair(func(e *tocEntry) string { return e.title }, true)
+	pair(func(e *tocEntry) string { return e.resolved }, true)
 
 	carried := newTOCChanges()
-	var walk func(entries []*tocEntry)
-	walk = func(entries []*tocEntry) {
-		for _, e := range entries {
-			if e.title == "" {
-				walk(e.children)
-				continue
-			}
-			if p := counterpart(e); p != nil {
-				if gone[p] {
-					carried.deleted[e] = true
-					continue
-				}
-				if title, ok := changes.renamed[p]; ok && title != e.title {
-					carried.renamed[e] = title
-				}
-			}
-			walk(e.children)
+	for e, p := range counterpart {
+		if gone[p] {
+			carried.deleted[e] = true
+		} else if title, ok := changes.renamed[p]; ok && title != e.title {
+			carried.renamed[e] = title
 		}
 	}
-	walk(doc.entries)
 	return carried
+}
+
+// titledEntries lists the entries the parser turns into chapters, in
+// document order, and which of them are deleted directly or with an
+// ancestor.
+func titledEntries(entries []*tocEntry, deleted map[*tocEntry]bool) ([]*tocEntry, map[*tocEntry]bool) {
+	var out []*tocEntry
+	gone := map[*tocEntry]bool{}
+	var walk func(entries []*tocEntry, parentGone bool)
+	walk = func(entries []*tocEntry, parentGone bool) {
+		for _, e := range entries {
+			if e.title == "" {
+				continue
+			}
+			gone[e] = parentGone || deleted[e]
+			out = append(out, e)
+			walk(e.children, gone[e])
+		}
+	}
+	walk(entries, false)
+	return out, gone
 }
 
 // byteEdit replaces source bytes [start, end) with text.
@@ -621,7 +630,7 @@ func rewriteTOCs(ctx context.Context, navPath string, navData []byte, ncxPath st
 	}
 
 	out := map[string][]byte{}
-	write := func(doc *tocDoc, changes tocChanges) {
+	write := func(doc *tocDoc, changes tocChanges) bool {
 		data, err := applyTOCChanges(doc, changes)
 		if err != nil {
 			log.Warn("failed to write EPUB chapter edits, leaving the table of contents as written", logger.Data{
@@ -630,12 +639,14 @@ func rewriteTOCs(ctx context.Context, navPath string, navData []byte, ncxPath st
 				"error":    err.Error(),
 			})
 		}
-		if data != nil {
-			out[doc.path] = data
+		if data == nil {
+			return false
 		}
+		out[doc.path] = data
+		return true
 	}
-	write(primary, changes)
-	if secondary != nil && !changes.empty() {
+	// The other document follows only edits the primary took.
+	if write(primary, changes) && secondary != nil {
 		write(secondary, carryChanges(primary.entries, changes, secondary))
 	}
 	return out
