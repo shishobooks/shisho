@@ -64,7 +64,7 @@ Select books, click **Download**, and choose from the available **EPUB**, **CBZ*
 
 Shisho generates download copies with format-specific metadata:
 
-- EPUB metadata and cover data are written into the EPUB.
+- EPUB metadata and cover data are written into the EPUB, and renamed or deleted chapters into its table of contents.
 - CBZ metadata is written to `ComicInfo.xml`.
 - M4B metadata and edited chapters are written into MP4 metadata and chapter structures.
 - PDF metadata and edited chapters are written into the PDF information and outline.

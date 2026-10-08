@@ -106,6 +106,9 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 		return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
 	}
 
+	navPath, ncxPath := tocPaths(pkg, opfPath)
+	chapters := chapterTree(file.Chapters)
+
 	// Process each file in the source EPUB
 	for _, srcZipFile := range srcZip.File {
 		select {
@@ -127,6 +130,12 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 			destFileContent, err = readZipFile(srcZipFile)
 			if err != nil {
 				return NewGenerationError(models.FileTypeEPUB, err, "failed to read file from source EPUB")
+			}
+			switch srcZipFile.Name {
+			case navPath:
+				destFileContent = rewriteTOC(destFileContent, chapters, navEntries)
+			case ncxPath:
+				destFileContent = rewriteTOC(destFileContent, chapters, ncxEntries)
 			}
 		}
 

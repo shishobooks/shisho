@@ -29,7 +29,9 @@ const (
 //   - 2: OPF regeneration preserves the Dublin Core namespace
 //     (pkg/filegen/epub.go). Pre-v2 cached EPUBs have `<title>` without a
 //     namespace, which strict readers (foliate-js, some e-readers) reject.
-const GeneratorVersion = 2
+//   - 3: EPUB downloads write renamed and deleted chapters into the nav
+//     document and NCX (pkg/filegen/epub_toc.go).
+const GeneratorVersion = 3
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.

@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/epub"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -929,4 +931,313 @@ func TestEPUBGenerator_EPUB3NonMARCRoleIsNotDuplicated(t *testing.T) {
 	assert.Equal(t, "aut", role.Text)
 	scheme, _ := role.attr("", "scheme")
 	assert.Equal(t, "marc:relators", scheme)
+}
+
+// tocOPF builds a package with a nav document (EPUB 3 only) and an NCX
+// referenced from the spine, both describing tocTree.
+func tocOPF(version string) string {
+	nav := ""
+	if version == "3.0" {
+		nav = `
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`
+	}
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="` + version + `" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="pub-id">urn:uuid:0b5e5b3c-1f4e-4a8e-9c1d-3f7c2a9e8b10</dc:identifier>
+    <dc:title>Source</dc:title>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>` + nav + `
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="part1" href="text/part1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx"><itemref idref="part1"/></spine>
+</package>`
+}
+
+// tocNav is the EPUB 3 navigation document. The heading span, the landmarks
+// nav, and the untitled list item are markup the parser does not turn into
+// chapters, so rewriting the table of contents must leave them as written.
+const tocNav = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Contents</title></head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>Contents</h1>
+    <ol>
+      <li class="part"><a href="text/part1.xhtml">Part One</a>
+        <ol>
+          <li><a href="text/ch1.xhtml">Chapter 1</a></li>
+          <li><a href="text/ch2.xhtml">Chapter 2</a></li>
+        </ol>
+      </li>
+      <li class="part"><span>Part Two</span>
+        <ol>
+          <li><a href="text/ch3.xhtml#start">Chapter 3</a></li>
+        </ol>
+      </li>
+      <li><a href="text/blank.xhtml"></a></li>
+      <li><a href="text/after.xhtml">Afterword</a></li>
+    </ol>
+  </nav>
+  <nav epub:type="landmarks" hidden="">
+    <ol><li><a epub:type="bodymatter" href="text/part1.xhtml">Start</a></li></ol>
+  </nav>
+</body>
+</html>`
+
+const tocNCX = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="urn:uuid:0b5e5b3c-1f4e-4a8e-9c1d-3f7c2a9e8b10"/></head>
+  <docTitle><text>Source</text></docTitle>
+  <navMap>
+    <navPoint id="np1" playOrder="1">
+      <navLabel><text>Part One</text></navLabel>
+      <content src="text/part1.xhtml"/>
+      <navPoint id="np2" playOrder="2">
+        <navLabel><text>Chapter 1</text></navLabel>
+        <content src="text/ch1.xhtml"/>
+      </navPoint>
+      <navPoint id="np3" playOrder="3">
+        <navLabel><text>Chapter 2</text></navLabel>
+        <content src="text/ch2.xhtml"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np4" playOrder="4">
+      <navLabel><text>Part Two</text></navLabel>
+      <content src="text/part2.xhtml"/>
+      <navPoint id="np5" playOrder="5">
+        <navLabel><text>Chapter 3</text></navLabel>
+        <content src="text/ch3.xhtml#start"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np6" playOrder="6">
+      <navLabel><text>Afterword</text></navLabel>
+      <content src="text/after.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>`
+
+func tocEPUB(version string) versionedEPUB {
+	files := map[string]string{
+		"OEBPS/toc.ncx":          tocNCX,
+		"OEBPS/text/part1.xhtml": coverChapter,
+	}
+	if version == "3.0" {
+		files["OEBPS/nav.xhtml"] = tocNav
+	}
+	return versionedEPUB{opfPath: "OEBPS/content.opf", opf: tocOPF(version), files: files}
+}
+
+// tocChapter is a stored chapter in a test tree.
+type tocChapter struct {
+	title    string
+	href     string // empty for a heading without a link
+	children []tocChapter
+}
+
+// storedChapters returns tree in the shape RetrieveFileWithRelations loads:
+// every chapter of the file in one flat list, ordered by sort order, each
+// with its direct children attached.
+func storedChapters(tree []tocChapter) []*models.Chapter {
+	var all []*models.Chapter
+	nextID := 1
+	var add func(nodes []tocChapter, parentID *int) []*models.Chapter
+	add = func(nodes []tocChapter, parentID *int) []*models.Chapter {
+		level := make([]*models.Chapter, 0, len(nodes))
+		for i, n := range nodes {
+			ch := &models.Chapter{ID: nextID, ParentID: parentID, SortOrder: i, Title: n.title}
+			nextID++
+			if n.href != "" {
+				href := n.href
+				ch.Href = &href
+			}
+			all = append(all, ch)
+			level = append(level, ch)
+			ch.Children = add(n.children, &ch.ID)
+		}
+		return level
+	}
+	add(tree, nil)
+	sort.SliceStable(all, func(i, j int) bool { return all[i].SortOrder < all[j].SortOrder })
+	return all
+}
+
+// navTree reads a parsed chapter tree as tocChapters for comparison.
+func navTree(chapters []mediafile.ParsedChapter) []tocChapter {
+	var out []tocChapter
+	for _, ch := range chapters {
+		n := tocChapter{title: ch.Title, children: navTree(ch.Children)}
+		if ch.Href != nil {
+			n.href = *ch.Href
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// ncxTree parses the generated NCX directly, since the parser only reads it
+// when a package has no usable nav document.
+func ncxTree(t *testing.T, raw []byte) []tocChapter {
+	t.Helper()
+	var ncx epub.NCX
+	require.NoError(t, xml.Unmarshal(raw, &ncx))
+	var walk func(points []epub.NCXNavPoint) []tocChapter
+	walk = func(points []epub.NCXNavPoint) []tocChapter {
+		var out []tocChapter
+		for _, p := range points {
+			out = append(out, tocChapter{title: p.NavLabel.Text, href: p.Content.Src, children: walk(p.Children)})
+		}
+		return out
+	}
+	return walk(ncx.NavMap.NavPoints)
+}
+
+// originalTOC is what a scan stores for tocEPUB: the nav and the NCX agree,
+// except that the nav's Part Two is a heading without a link.
+func originalTOC(version string) []tocChapter {
+	partTwoHref := "text/part2.xhtml"
+	if version == "3.0" {
+		partTwoHref = ""
+	}
+	return []tocChapter{
+		{title: "Part One", href: "text/part1.xhtml", children: []tocChapter{
+			{title: "Chapter 1", href: "text/ch1.xhtml"},
+			{title: "Chapter 2", href: "text/ch2.xhtml"},
+		}},
+		{title: "Part Two", href: partTwoHref, children: []tocChapter{
+			{title: "Chapter 3", href: "text/ch3.xhtml#start"},
+		}},
+		{title: "Afterword", href: "text/after.xhtml"},
+	}
+}
+
+// editedTOC renames Chapter 1, deletes Chapter 2, Part Two's only child,
+// and the Afterword.
+func editedTOC(version string) []tocChapter {
+	toc := originalTOC(version)
+	return []tocChapter{
+		{title: toc[0].title, href: toc[0].href, children: []tocChapter{
+			{title: "The <Beginning> & End", href: "text/ch1.xhtml"},
+		}},
+		{title: toc[1].title, href: toc[1].href},
+	}
+}
+
+func TestEPUBGenerator_WritesChapterEdits(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"2.0", "3.0"} {
+		t.Run("EPUB "+version, func(t *testing.T) {
+			t.Parallel()
+
+			file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(editedTOC(version))}
+			dest := generateVersioned(t, tocEPUB(version), coverBook(), file, nil, "")
+			entries := zipEntries(t, dest)
+
+			metadata, err := epub.Parse(dest)
+			require.NoError(t, err)
+			assert.Equal(t, editedTOC(version), navTree(metadata.Chapters), "the parsed table of contents carries the edits")
+
+			assert.Equal(t, editedTOC("2.0"), ncxTree(t, entries["OEBPS/toc.ncx"]), "the NCX carries the edits")
+			assertValidXML(t, entries["OEBPS/toc.ncx"])
+
+			if version == "3.0" {
+				nav := string(entries["OEBPS/nav.xhtml"])
+				assertValidXML(t, entries["OEBPS/nav.xhtml"])
+				assert.Contains(t, nav, `<h1>Contents</h1>`, "markup outside the entries is kept")
+				assert.Contains(t, nav, `<li><a href="text/blank.xhtml"></a></li>`, "an entry the parser skips is kept")
+				assert.Contains(t, nav, `<nav epub:type="landmarks" hidden="">`, "other nav elements are kept")
+				assert.Contains(t, nav, `<li class="part"><span>Part Two</span>`, "kept entries keep their attributes")
+				assert.Contains(t, nav, `The &lt;Beginning&gt; &amp; End`, "the new title is escaped")
+				assert.NotContains(t, nav, "Chapter 3", "a deleted entry is removed")
+				assert.Equal(t, 3, strings.Count(nav, "<ol>"), "a list left without entries is removed")
+			}
+			assertEPUBCheck(t, dest)
+		})
+	}
+}
+
+func TestEPUBGenerator_UneditedChaptersKeepTOCBytes(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"2.0", "3.0"} {
+		t.Run("EPUB "+version, func(t *testing.T) {
+			t.Parallel()
+
+			src := tocEPUB(version)
+			cases := map[string][]*models.Chapter{
+				"chapters as scanned": storedChapters(originalTOC(version)),
+				"no chapters":         nil,
+				// Adding and reordering chapters are not supported, so a
+				// tree that is not the original with entries renamed or
+				// deleted leaves the table of contents as written.
+				"added chapter": storedChapters(append(originalTOC(version), tocChapter{title: "New", href: "text/new.xhtml"})),
+				"reordered chapters": storedChapters([]tocChapter{
+					originalTOC(version)[2], originalTOC(version)[0], originalTOC(version)[1],
+				}),
+			}
+			for name, chapters := range cases {
+				file := &models.File{FileType: models.FileTypeEPUB, Chapters: chapters}
+				entries := zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))
+				assert.Equal(t, src.files["OEBPS/toc.ncx"], string(entries["OEBPS/toc.ncx"]), name)
+				assert.Equal(t, src.files["OEBPS/nav.xhtml"], string(entries["OEBPS/nav.xhtml"]), name)
+			}
+		})
+	}
+}
+
+func TestKepubEPUBGenerator_WritesChapterEdits(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "source.epub")
+	writeVersionedEPUB(t, srcPath, tocEPUB("3.0"))
+	file := &models.File{FileType: models.FileTypeEPUB, Filepath: srcPath, Chapters: storedChapters(editedTOC("3.0"))}
+
+	destPath := filepath.Join(tmpDir, "dest.kepub.epub")
+	require.NoError(t, NewKepubEPUBGenerator().Generate(context.Background(), srcPath, destPath, coverBook(), file))
+
+	// KePub wraps the body and every label in Kobo spans, so the nav is
+	// checked as text rather than parsed.
+	entries := zipEntries(t, destPath)
+	nav := string(entries["OEBPS/nav.xhtml"])
+	assert.Contains(t, nav, "The &lt;Beginning&gt; &amp; End")
+	for _, deleted := range []string{"Chapter 1", "Chapter 2", "Chapter 3", "Afterword"} {
+		assert.NotContains(t, nav, deleted)
+	}
+	assert.Equal(t, editedTOC("2.0"), ncxTree(t, entries["OEBPS/toc.ncx"]))
+}
+
+// TestEPUBGenerator_DeletesTheEditedEntryAmongSameHrefs covers entries that
+// point at the same file: deleting the first must not keep it under the
+// second one's title.
+func TestEPUBGenerator_DeletesTheEditedEntryAmongSameHrefs(t *testing.T) {
+	t.Parallel()
+
+	src := tocEPUB("2.0")
+	src.files["OEBPS/toc.ncx"] = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <navMap>
+    <navPoint id="a" playOrder="1">
+      <navLabel><text>Opening</text></navLabel>
+      <content src="text/ch1.xhtml"/>
+      <navPoint id="a1" playOrder="2"><navLabel><text>Scene</text></navLabel><content src="text/ch1.xhtml#s"/></navPoint>
+    </navPoint>
+    <navPoint id="b" playOrder="3">
+      <navLabel><text>Opening, continued</text></navLabel>
+      <content src="text/ch1.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>`
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+		{title: "Opening, continued", href: "text/ch1.xhtml"},
+	})}
+	entries := zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))
+
+	ncx := string(entries["OEBPS/toc.ncx"])
+	assert.Equal(t, []tocChapter{{title: "Opening, continued", href: "text/ch1.xhtml"}}, ncxTree(t, entries["OEBPS/toc.ncx"]))
+	assert.Contains(t, ncx, `<navPoint id="b" playOrder="3">`, "the second entry is the one kept")
 }

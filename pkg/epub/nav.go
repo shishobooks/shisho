@@ -47,6 +47,8 @@ type NavSpan struct {
 }
 
 // parseNavDocument parses an EPUB 3 navigation document and returns chapters.
+// pkg/filegen/epub_toc.go reads the document the same way to write chapter
+// edits back, so a change to which entries become chapters belongs there too.
 func parseNavDocument(r io.Reader) ([]mediafile.ParsedChapter, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -125,7 +127,8 @@ type NCXNavPoint struct {
 	Children []NCXNavPoint `xml:"navPoint"`
 }
 
-// parseNCX parses an EPUB 2 NCX file and returns chapters.
+// parseNCX parses an EPUB 2 NCX file and returns chapters. Like
+// parseNavDocument, it is mirrored by pkg/filegen/epub_toc.go.
 func parseNCX(r io.Reader) ([]mediafile.ParsedChapter, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {

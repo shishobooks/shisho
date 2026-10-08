@@ -124,6 +124,12 @@ A manual **Reviewed** or **Needs review** choice overrides automatic calculation
 
 Use the gallery's **Review state** filter to work through the queue. Bulk selection offers **Mark reviewed** and **Mark needs review**.
 
+## Chapters
+
+A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it.
+
+Renamed and deleted EPUB chapters appear in the web reader's table of contents and in every generated EPUB and KePub download. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
+
 ## Fetch Chapters from Audible
 
 For an M4B file with an Audible ASIN, a user whose role has Books Write can open chapter editing and choose **Fetch from Audible**. Shisho sends the ASIN to [Audnexus](https://audnex.us), an external service that provides Audible chapter data.
