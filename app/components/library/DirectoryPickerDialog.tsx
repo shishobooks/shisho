@@ -309,25 +309,31 @@ const DirectoryPickerDialog = ({
               )
             ) : (
               <div className="p-2">
-                {/* Directories */}
+                {/* Directories: the checkbox selects one, and the button
+                    filling the rest of the row opens it. */}
                 {directories.map((entry) => (
                   <div
-                    className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted cursor-pointer group"
+                    className="flex items-center gap-3 pl-3 rounded-md hover:bg-muted group"
                     key={entry.path}
-                    onClick={() => handleEntryClick(entry)}
                   >
                     <Checkbox
+                      aria-label={`Select ${entry.name}`}
                       checked={selectedPaths.has(entry.path)}
                       onCheckedChange={() => handleToggleSelect(entry.path)}
-                      onClick={(e) => e.stopPropagation()}
                     />
-                    {selectedPaths.has(entry.path) ? (
-                      <FolderOpen className="h-5 w-5 text-primary" />
-                    ) : (
-                      <Folder className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
-                    )}
-                    <span className="flex-1 truncate">{entry.name}</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    <Button
+                      className="flex flex-1 min-w-0 items-center gap-3 py-2 pr-3 text-left rounded-md"
+                      onClick={() => handleEntryClick(entry)}
+                      variant="unstyled"
+                    >
+                      {selectedPaths.has(entry.path) ? (
+                        <FolderOpen className="h-5 w-5 text-primary" />
+                      ) : (
+                        <Folder className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
+                      )}
+                      <span className="flex-1 truncate">{entry.name}</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    </Button>
                   </div>
                 ))}
 

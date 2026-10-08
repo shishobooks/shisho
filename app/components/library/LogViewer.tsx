@@ -79,6 +79,9 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
 
   return (
     <div className="py-1.5 px-3 border-b border-border/50 last:border-b-0 font-mono text-xs hover:bg-muted/50 transition-colors">
+      {/* The row stays plain text so its message can be selected and
+          copied; the chevron is the keyboard's disclosure button, and a
+          click anywhere else on the row toggles too. */}
       <div
         className={cn(
           "flex items-center gap-2 overflow-hidden",
@@ -87,11 +90,22 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
         onClick={() => hasExpandableContent && setExpanded(!expanded)}
       >
         {hasExpandableContent ? (
-          expanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-          )
+          <Button
+            aria-expanded={expanded}
+            aria-label="Details"
+            className="flex flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            variant="unstyled"
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </Button>
         ) : (
           <div className="w-3.5 flex-shrink-0" />
         )}

@@ -498,6 +498,32 @@ describe("BookDetailBody without Share Link context", () => {
     );
   });
 
+  it("renders each file's Read and Listen action as one named link", () => {
+    renderBody({ book: { ...book, files: [epub, m4b] } as Book });
+
+    // Each file row renders a phone and a desktop layout.
+    const reads = screen.getAllByRole("link", { name: "Read" });
+    const listens = screen.getAllByRole("link", { name: "Listen" });
+    expect(reads).toHaveLength(2);
+    expect(listens).toHaveLength(2);
+    for (const read of reads) {
+      expect(read).toHaveAttribute(
+        "href",
+        "/libraries/1/books/7/files/42/read",
+      );
+    }
+    for (const listen of listens) {
+      expect(listen).toHaveAttribute(
+        "href",
+        "/libraries/1/books/7/files/43/read",
+      );
+    }
+    // A button nested in the link would be a second tab stop with no name.
+    for (const link of [...reads, ...listens]) {
+      expect(within(link).queryByRole("button")).toBeNull();
+    }
+  });
+
   it("renders author and series names as text without People and Series Read", () => {
     setAuth({ permissions: ["books:read"] });
     renderBody();

@@ -218,6 +218,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
                     </SelectContent>
                   </Select>
                   <Button
+                    aria-label="Move plugin up"
                     disabled={index === 0}
                     onClick={() => handleMove(index, "up")}
                     size="sm"
@@ -226,6 +227,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
                     <ArrowUp className="h-4 w-4" />
                   </Button>
                   <Button
+                    aria-label="Move plugin down"
                     disabled={index === displayPlugins.length - 1}
                     onClick={() => handleMove(index, "down")}
                     size="sm"

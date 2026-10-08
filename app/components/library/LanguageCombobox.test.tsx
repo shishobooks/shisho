@@ -78,4 +78,29 @@ describe("LanguageCombobox", () => {
     expect(onChange).toHaveBeenCalledWith("tlh");
     expect(languagesRequests(request)).toHaveLength(0);
   });
+
+  it("reopens the picker from the keyboard through the chosen language", async () => {
+    vi.spyOn(API, "request").mockResolvedValue([]);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <LanguageCombobox libraryId={5} onChange={onChange} value="en" />
+      </QueryClientProvider>,
+    );
+
+    const badge = screen.getByRole("button", {
+      name: "Change language: English (en)",
+    });
+    await user.tab();
+    expect(badge).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    const search = await screen.findByPlaceholderText("Search languages...");
+    expect(search).toBeVisible();
+
+    // Closing returns focus to the language, not to the page body.
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(search).not.toBeInTheDocument());
+    expect(badge).toHaveFocus();
+  });
 });

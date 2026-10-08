@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import { emulatePhoneWidth } from "@/testing/phoneWidth";
 import type { Permission } from "@/utils/permissions";
 
 import AdminLibraries from "./AdminLibraries";
@@ -171,5 +172,26 @@ describe("AdminLibraries", () => {
         }
       },
     );
+  });
+
+  describe("on a phone", () => {
+    emulatePhoneWidth();
+
+    it("names the header and row actions whose labels are hidden", async () => {
+      setAuth({
+        permissions: ["libraries:read", "libraries:write", "books:read"],
+      });
+      vi.spyOn(API, "request").mockResolvedValue({
+        items: [{ id: 1, name: "Fiction", library_paths: [] }],
+        total: 1,
+      });
+      renderPage();
+
+      for (const name of ["Settings", "Add Library"]) {
+        const link = await screen.findByRole("link", { name });
+        expect(link).toBeVisible();
+        expect(within(link).getByText(name)).not.toBeVisible();
+      }
+    });
   });
 });

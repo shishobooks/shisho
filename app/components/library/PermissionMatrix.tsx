@@ -151,6 +151,7 @@ const PermissionMatrix = ({
                 <div className="flex flex-col items-center gap-1">
                   <span>{op.label}</span>
                   <Checkbox
+                    aria-label={`${op.label} all resources`}
                     checked={isOperationFullyChecked(op.key)}
                     className={
                       isOperationPartiallyChecked(op.key)
@@ -174,6 +175,7 @@ const PermissionMatrix = ({
               <td className="py-3 px-4 border-b border-border">
                 <div className="flex items-center gap-3">
                   <Checkbox
+                    aria-label={`All ${resource.label} permissions`}
                     checked={isResourceFullyChecked(resource.key)}
                     className={
                       isResourcePartiallyChecked(resource.key)
@@ -192,6 +194,7 @@ const PermissionMatrix = ({
                   key={op.key}
                 >
                   <Checkbox
+                    aria-label={`${op.label} ${resource.label}`}
                     checked={hasPermission(resource.key, op.key)}
                     disabled={disabled}
                     onCheckedChange={() =>

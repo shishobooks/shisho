@@ -43,7 +43,7 @@ const LibraryRow = ({ library, canOpen, canConfigure }: LibraryRowProps) => (
     </div>
     {canConfigure && (
       <div className="flex items-center gap-2 shrink-0">
-        <Button asChild size="sm" variant="ghost">
+        <Button aria-label="Settings" asChild size="sm" variant="ghost">
           <Link to={`/libraries/${library.id}/settings`}>
             <Settings className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Settings</span>
@@ -111,6 +111,7 @@ const AdminLibraries = () => {
         <div className="flex items-center gap-2 shrink-0">
           {isDevelopment && devLibraryPath && (
             <Button
+              aria-label="Create default library (dev)"
               disabled={createLibraryMutation.isPending}
               onClick={handleCreateDefaultLibrary}
               size="sm"
@@ -123,7 +124,7 @@ const AdminLibraries = () => {
             </Button>
           )}
           {canCreateLibraries && (
-            <Button asChild size="sm">
+            <Button aria-label="Add Library" asChild size="sm">
               <Link to="/libraries/create">
                 <Plus className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Add Library</span>

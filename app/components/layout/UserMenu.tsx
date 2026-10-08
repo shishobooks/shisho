@@ -32,7 +32,12 @@ const UserMenu = () => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="h-9 w-9" size="icon" variant="ghost">
+        <Button
+          aria-label="Account menu"
+          className="h-9 w-9"
+          size="icon"
+          variant="ghost"
+        >
           <User className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>

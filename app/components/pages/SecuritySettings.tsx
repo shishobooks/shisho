@@ -402,6 +402,7 @@ function EReaderKeyRow({ apiKey }: { apiKey: APIKey }) {
             Setup
           </Button>
           <Button
+            aria-label={`Remove device ${apiKey.name}`}
             onClick={() => setDeleteDialogOpen(true)}
             size="sm"
             variant="ghost"
@@ -668,6 +669,7 @@ function KoboKeyRow({ apiKey }: { apiKey: APIKey }) {
             Setup
           </Button>
           <Button
+            aria-label={`Remove Kobo device ${apiKey.name}`}
             onClick={() => setDeleteDialogOpen(true)}
             size="sm"
             variant="ghost"

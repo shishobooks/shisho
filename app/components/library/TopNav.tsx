@@ -28,7 +28,7 @@ import { cn } from "@/libraries/utils";
 const TopNav = () => {
   const { libraryId } = useParams();
   const { demoMode } = useAuth();
-  const { toggle } = useMobileNav();
+  const { isOpen: navOpen, toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   // The gear opens the first settings page the role may see.
@@ -50,6 +50,7 @@ const TopNav = () => {
           <div className="flex items-center gap-2 md:gap-8">
             {/* Mobile hamburger menu */}
             <Button
+              aria-expanded={navOpen}
               aria-label="Open navigation menu"
               className="md:hidden h-9 w-9 -ml-1"
               onClick={toggle}
@@ -83,6 +84,7 @@ const TopNav = () => {
             {/* Mobile search toggle */}
             {canSearch && (
               <Button
+                aria-expanded={mobileSearchOpen}
                 aria-label={mobileSearchOpen ? "Close search" : "Open search"}
                 className="md:hidden h-9 w-9"
                 onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
@@ -112,7 +114,7 @@ const TopNav = () => {
                       size="icon"
                       variant="ghost"
                     >
-                      <Link to="/settings">
+                      <Link aria-label="Global Settings" to="/settings">
                         <Settings className="h-4 w-4" />
                       </Link>
                     </Button>

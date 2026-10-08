@@ -2100,6 +2100,7 @@ export function IdentifyReviewForm({
                       value={url}
                     />
                     <Button
+                      aria-label="Open URL in a new tab"
                       asChild={!!url.trim()}
                       disabled={!url.trim()}
                       size="icon"

@@ -336,6 +336,7 @@ export function IdentifyBookDialog({
                 value={query}
               />
               <Button
+                aria-label="Search"
                 disabled={!query.trim()}
                 onClick={handleSearch}
                 variant="outline"

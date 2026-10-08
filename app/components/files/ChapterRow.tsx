@@ -8,7 +8,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -220,6 +220,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   const [localPageValue, setLocalPageValue] = useState(String(currentPage + 1));
   const [hasPageError, setHasPageError] = useState(false);
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
+  const thumbnailRef = useRef<HTMLButtonElement>(null);
 
   // M4B edit mode state: local timestamp value and validation
   const currentTimestampMs = chapter.start_timestamp_ms ?? 0;
@@ -388,6 +389,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
           {/* Delete button */}
           <Button
+            aria-label="Delete chapter"
             onClick={() => {
               if (hasDescendants) {
                 setDeleteDialogOpen(true);
@@ -467,6 +469,8 @@ const ChapterRow = (props: ChapterRowProps) => {
         {/* Small thumbnail with hover preview (clickable to open page picker) */}
         {file != null && (
           <PagePreview
+            actionLabel="Change start page"
+            buttonRef={thumbnailRef}
             file={file}
             onClick={() => setPagePickerOpen(true)}
             page={currentPage}
@@ -485,6 +489,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         {/* Start page input with -/+ buttons */}
         <div className="flex items-center gap-1">
           <Button
+            aria-label="Previous page"
             disabled={currentPage <= 0}
             onClick={handleDecrementPage}
             size="icon"
@@ -505,6 +510,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             value={localPageValue}
           />
           <Button
+            aria-label="Next page"
             disabled={currentPage >= pageCount - 1}
             onClick={handleIncrementPage}
             size="icon"
@@ -518,6 +524,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Delete button (immediate, no confirmation for page-based files) */}
         <Button
+          aria-label="Delete chapter"
           onClick={() => props.onDelete?.()}
           size="icon"
           title="Delete chapter"
@@ -537,6 +544,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             onSelect={handlePageSelect}
             open={pagePickerOpen}
             pageCount={pageCount}
+            returnFocusRef={thumbnailRef}
           />
         )}
       </div>
@@ -571,6 +579,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             onStop={() => onStop?.()}
           />
           <Button
+            aria-label="Subtract 1 second"
             disabled={currentTimestampMs <= 0}
             onClick={handleDecrementTimestamp}
             size="icon"
@@ -599,6 +608,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             </TooltipContent>
           </Tooltip>
           <Button
+            aria-label="Add 1 second"
             disabled={currentTimestampMs >= maxDurationMs}
             onClick={handleIncrementTimestamp}
             size="icon"
@@ -612,6 +622,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Delete button (immediate, no confirmation for M4B) */}
         <Button
+          aria-label="Delete chapter"
           onClick={() => props.onDelete?.()}
           size="icon"
           title="Delete chapter"

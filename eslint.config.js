@@ -5,6 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import controlHasName from "./eslint-rules/control-has-name.js";
 import mutateAsyncHandled from "./eslint-rules/mutate-async-handled.js";
 
 // Permission checks take a typed requirement through useCan or can (see
@@ -150,9 +151,15 @@ const mutationReferences = [
 
 // Every mutateAsync call on a mutation object must be caught. esquery cannot
 // express "within the nearest enclosing function", so this is a local rule;
-// eslint-rules/mutate-async-handled.js explains what it accepts.
+// eslint-rules/mutate-async-handled.js explains what it accepts. Every
+// button and link needs an accessible name at every width, which takes
+// following ternaries and breakpoint classes through its children;
+// eslint-rules/control-has-name.js explains what counts as a name.
 const shishoPlugin = {
-  rules: { "mutate-async-handled": mutateAsyncHandled },
+  rules: {
+    "control-has-name": controlHasName,
+    "mutate-async-handled": mutateAsyncHandled,
+  },
 };
 
 export default tseslint.config(
@@ -220,6 +227,7 @@ export default tseslint.config(
         ...uiConventions,
       ],
       "shisho/mutate-async-handled": "error",
+      "shisho/control-has-name": "error",
       "no-restricted-properties": [
         "error",
         {

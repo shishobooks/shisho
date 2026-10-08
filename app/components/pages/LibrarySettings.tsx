@@ -287,6 +287,7 @@ const LibrarySettings = () => {
                 value={path}
               />
               <Button
+                aria-label="Browse directories"
                 onClick={() => handleOpenPicker(index)}
                 size="icon"
                 title="Browse directories"
@@ -296,6 +297,7 @@ const LibrarySettings = () => {
               </Button>
               {libraryPaths.length > 1 && (
                 <Button
+                  aria-label="Remove path"
                   onClick={() => handleRemovePath(index)}
                   size="icon"
                   variant="outline"
@@ -446,6 +448,7 @@ const LibrarySettings = () => {
                 </p>
               </div>
               <Button
+                aria-label="Delete library"
                 className="shrink-0"
                 onClick={() => setDeleteDialogOpen(true)}
                 size="sm"

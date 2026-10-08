@@ -12,7 +12,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 ## Page layout
 
 - **Page headers with actions stack on mobile and sit side by side from a breakpoint**, with the title allowed to wrap and the action group not shrinking; copy `AdminUsers`.
-- Header buttons with text hide the label on phones and keep the icon. Icon-only buttons need an `aria-label`; disclosure toggles also need `aria-expanded` and a label that says what they do.
+- Header buttons with text hide the label on phones and keep the icon. An `aria-label` says what the control does ("Remove path"), or repeats the visible text when phones hide it.
 - **List pages** have the header, a search input, a "Showing X-Y of Z" line only when `total > 0`, `LoadingSpinner` while loading, `QueryError` where results go, and shadcn `Pagination`; book and series grids use `Gallery`. Empty states distinguish "no results matching your search" from "nothing here yet".
 - Searchable lists search server-side. List endpoints cap at 50 items, so client-side filtering hides everything past the first page.
 - **Detail pages** put the mutating buttons in the header for roles that can write.
@@ -30,6 +30,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 ## Controls
 
 - Overriding a `Button` variant's height, padding, or layout with `className` means a different size or variant fits better. Every clickable element shows `cursor-pointer`.
+- Every clickable element is a `Button` (`variant="unstyled"` for rows, cards, and thumbnails), a link, or, where no `Button` fits (a slider), the matching ARIA role with `tabIndex` and key handling, so the keyboard can reach it. A toggle announces its state (`aria-pressed`, `aria-expanded`). Lint does not catch an `onClick` on a `div` or `span`.
 - A region waiting for its content (page, section, dialog body, popover list) shows `LoadingSpinner`, not "Loading..." text, a skeleton, or a bare `Loader2`. A pending action inside a control (a Save button, a search input, a refetch over results already shown) uses `Loader2`.
 - Durations, sizes, counts, and dates use the formatters in `@/utils/format` rather than inline math. A date-only value says "today" or "yesterday" for the last two days and is relative past that.
 

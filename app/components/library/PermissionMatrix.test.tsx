@@ -25,4 +25,21 @@ describe("PermissionMatrix", () => {
       { resource: "shares", operation: "write" },
     ]);
   });
+
+  it("names every checkbox by its resource and operation", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    render(<PermissionMatrix onChange={onChange} permissions={[]} />);
+
+    await user.click(screen.getByRole("checkbox", { name: "Write Shares" }));
+    expect(onChange).toHaveBeenLastCalledWith([
+      { resource: "shares", operation: "write" },
+    ]);
+    expect(
+      screen.getByRole("checkbox", { name: "All Shares permissions" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Read all resources" }),
+    ).toBeInTheDocument();
+  });
 });

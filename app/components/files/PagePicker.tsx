@@ -28,6 +28,11 @@ export interface PagePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title?: string;
+  /**
+   * The control that opened the picker, focused again on close. Radix returns
+   * focus only to a DialogTrigger, so a picker opened any other way needs it.
+   */
+  returnFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -42,6 +47,7 @@ const PagePicker = ({
   open,
   onOpenChange,
   title = "Select Page",
+  returnFocusRef,
 }: PagePickerProps) => {
   const filePageUrl = useFilePageUrl();
   // Track the currently focused/previewed page (not necessarily the selected one)
@@ -179,7 +185,14 @@ const PagePicker = ({
       onOpenChange={handleOpenChange}
       open={open}
     >
-      <DialogContent className="max-w-4xl w-[95vw] h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+      <DialogContent
+        className="max-w-4xl w-[95vw] h-[90vh] flex flex-col gap-0 p-0 overflow-hidden"
+        onCloseAutoFocus={(e) => {
+          if (!returnFocusRef?.current) return;
+          e.preventDefault();
+          returnFocusRef.current.focus();
+        }}
+      >
         <DialogHeader className="px-6 py-4 pr-14 border-b border-border/50 shrink-0">
           <DialogTitle className="flex items-center justify-between">
             <span>{title}</span>
@@ -271,6 +284,7 @@ const PagePicker = ({
           {/* Jump buttons and scroll area */}
           <div className="flex items-center gap-2 px-3 py-3">
             <Button
+              aria-label="Jump back 10 pages"
               className="shrink-0 h-9 w-9 p-0"
               disabled={focusedPage < 10}
               onClick={jumpBackward}
@@ -336,6 +350,7 @@ const PagePicker = ({
             </ScrollArea>
 
             <Button
+              aria-label="Jump forward 10 pages"
               className="shrink-0 h-9 w-9 p-0"
               disabled={focusedPage >= pageCount - 10}
               onClick={jumpForward}

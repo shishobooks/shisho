@@ -42,6 +42,7 @@ const DownloadFormatPopover = ({
         <Loader2 className="h-3 w-3 animate-spin" />
         {onCancel && (
           <Button
+            aria-label="Cancel download"
             className="h-6 w-6 p-0"
             onClick={onCancel}
             size="sm"
@@ -58,7 +59,13 @@ const DownloadFormatPopover = ({
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
-        <Button disabled={disabled} size="sm" title="Download" variant="ghost">
+        <Button
+          aria-label="Download"
+          disabled={disabled}
+          size="sm"
+          title="Download"
+          variant="ghost"
+        >
           <Download className="h-3 w-3" />
         </Button>
       </PopoverTrigger>

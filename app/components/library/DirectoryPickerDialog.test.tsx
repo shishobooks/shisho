@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -128,8 +128,9 @@ describe("DirectoryPickerDialog", () => {
       screen.getByRole("button", { name: "Select folders" }),
     ).toBeDisabled();
 
-    // The first checkbox is "Show hidden files"; the next is entry-1.
-    const entryCheckbox = screen.getAllByRole("checkbox")[1];
+    const entryCheckbox = screen.getByRole("checkbox", {
+      name: "Select entry-1",
+    });
     await user.click(entryCheckbox);
     expect(
       screen.getByRole("button", { name: "Select 1 folder" }),
@@ -244,6 +245,31 @@ describe("DirectoryPickerDialog", () => {
     expect(screen.getByText("child-a")).toBeInTheDocument();
     expect(screen.queryByText("entry-50")).not.toBeInTheDocument();
     expect(screen.queryByText("entry-2")).not.toBeInTheDocument();
+  });
+
+  it("opens a folder from the keyboard", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    keyResponses["/root::0::::0"] = {
+      current_path: "/root",
+      entries: makeEntries(1, 2),
+      total: 2,
+      has_more: false,
+    };
+    settle("/root::0::::0");
+
+    renderDialog();
+
+    const folder = screen.getByRole("button", { name: "entry-2" });
+    act(() => folder.focus());
+    await user.keyboard("{Enter}");
+
+    // Navigating clears the old listing while the new one loads.
+    expect(screen.queryByText("entry-1")).not.toBeInTheDocument();
+    // The focused row is gone, so focus moves to the search box rather than
+    // falling back to the dialog.
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByPlaceholderText("Search...")).toHaveFocus();
   });
 
   it("does not retain previous results during a debounced search transition", async () => {

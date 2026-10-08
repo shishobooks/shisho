@@ -63,7 +63,13 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
 
   if (isLoading) {
     return (
-      <Button className="h-9 w-9" disabled size="icon" variant="ghost">
+      <Button
+        aria-label="Resync library"
+        className="h-9 w-9"
+        disabled
+        size="icon"
+        variant="ghost"
+      >
         <RefreshCw className="h-4 w-4" />
       </Button>
     );
@@ -74,6 +80,7 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Resync library"
             className="h-9 w-9 relative cursor-pointer"
             disabled={createJob.isPending}
             onClick={handleClick}

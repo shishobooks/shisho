@@ -118,7 +118,12 @@ const AddToListPopover = ({
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
         {trigger ?? (
-          <Button size="sm" title="Add to list" variant="ghost">
+          <Button
+            aria-label="Add to list"
+            size="sm"
+            title="Add to list"
+            variant="ghost"
+          >
             <List className="h-4 w-4" />
           </Button>
         )}

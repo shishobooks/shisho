@@ -201,6 +201,7 @@ const CreateLibrary = () => {
                   value={path}
                 />
                 <Button
+                  aria-label="Browse directories"
                   onClick={() => handleOpenPicker(index)}
                   size="icon"
                   title="Browse directories"
@@ -210,6 +211,7 @@ const CreateLibrary = () => {
                 </Button>
                 {libraryPaths.length > 1 && (
                   <Button
+                    aria-label="Remove path"
                     onClick={() => handleRemovePath(index)}
                     size="icon"
                     variant="outline"
