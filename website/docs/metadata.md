@@ -128,7 +128,7 @@ Use the gallery's **Review state** filter to work through the queue. Bulk select
 
 A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it.
 
-Renamed and deleted EPUB chapters appear in the web reader's table of contents and in every generated EPUB and KePub download. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
+Renamed and deleted EPUB chapters appear in the web reader's table of contents and in generated EPUB and KePub downloads. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
 
 ## Fetch Chapters from Audible
 

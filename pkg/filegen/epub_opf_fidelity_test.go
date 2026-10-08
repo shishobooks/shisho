@@ -312,3 +312,17 @@ func TestEPUBGenerator_RetitleDropsStaleTitleAttributes(t *testing.T) {
 	assert.Empty(t, pkg.Titles[0].Lang, "the source title's xml:lang does not describe the new title")
 	assert.Equal(t, "en", pkg.Lang, "the package language follows the file's language")
 }
+
+// TestEPUBGenerator_ChapterEditsLeaveOPFAlone checks that writing chapter
+// edits into the table of contents changes nothing in the package document.
+func TestEPUBGenerator_ChapterEditsLeaveOPFAlone(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"2.0", "3.0"} {
+		plain := zipEntries(t, generateVersioned(t, tocEPUB(version), coverBook(), nil, nil, ""))
+		file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(editedTOC(version))}
+		edited := zipEntries(t, generateVersioned(t, tocEPUB(version), coverBook(), file, nil, ""))
+		assert.Equal(t, string(plain["OEBPS/content.opf"]), string(edited["OEBPS/content.opf"]), version)
+		assert.NotEqual(t, string(plain["OEBPS/toc.ncx"]), string(edited["OEBPS/toc.ncx"]), version)
+	}
+}

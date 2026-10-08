@@ -107,7 +107,22 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	}
 
 	navPath, ncxPath := tocPaths(pkg, opfPath)
-	chapters := chapterTree(file.Chapters)
+	var navData, ncxData []byte
+	for _, f := range srcZip.File {
+		if f.Name != navPath && f.Name != ncxPath {
+			continue
+		}
+		data, err := readZipFile(f)
+		if err != nil {
+			return NewGenerationError(models.FileTypeEPUB, err, "failed to read table of contents from source EPUB")
+		}
+		if f.Name == navPath {
+			navData = data
+		} else {
+			ncxData = data
+		}
+	}
+	tocFiles := rewriteTOCs(ctx, navPath, navData, ncxPath, ncxData, file.Chapters)
 
 	// Process each file in the source EPUB
 	for _, srcZipFile := range srcZip.File {
@@ -122,6 +137,8 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 
 		if srcZipFile.Name == opfPath {
 			destFileContent = opfContent
+		} else if toc, ok := tocFiles[srcZipFile.Name]; ok {
+			destFileContent = toc
 		} else if coverInfo != nil && srcZipFile.Name == coverInfo.path && len(newCoverData) > 0 {
 			// Replace cover image
 			destFileContent = newCoverData
@@ -130,12 +147,6 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 			destFileContent, err = readZipFile(srcZipFile)
 			if err != nil {
 				return NewGenerationError(models.FileTypeEPUB, err, "failed to read file from source EPUB")
-			}
-			switch srcZipFile.Name {
-			case navPath:
-				destFileContent = rewriteTOC(destFileContent, chapters, navEntries)
-			case ncxPath:
-				destFileContent = rewriteTOC(destFileContent, chapters, ncxEntries)
 			}
 		}
 

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1114,15 +1115,15 @@ func originalTOC(version string) []tocChapter {
 	}
 }
 
-// editedTOC renames Chapter 1, deletes Chapter 2, Part Two's only child,
-// and the Afterword.
+// editedTOC deletes both of Part One's chapters, renames Chapter 3, and
+// deletes the Afterword.
 func editedTOC(version string) []tocChapter {
 	toc := originalTOC(version)
 	return []tocChapter{
-		{title: toc[0].title, href: toc[0].href, children: []tocChapter{
-			{title: "The <Beginning> & End", href: "text/ch1.xhtml"},
+		{title: toc[0].title, href: toc[0].href},
+		{title: toc[1].title, href: toc[1].href, children: []tocChapter{
+			{title: "The <Beginning> & End", href: "text/ch3.xhtml#start"},
 		}},
-		{title: toc[1].title, href: toc[1].href},
 	}
 }
 
@@ -1152,7 +1153,8 @@ func TestEPUBGenerator_WritesChapterEdits(t *testing.T) {
 				assert.Contains(t, nav, `<nav epub:type="landmarks" hidden="">`, "other nav elements are kept")
 				assert.Contains(t, nav, `<li class="part"><span>Part Two</span>`, "kept entries keep their attributes")
 				assert.Contains(t, nav, `The &lt;Beginning&gt; &amp; End`, "the new title is escaped")
-				assert.NotContains(t, nav, "Chapter 3", "a deleted entry is removed")
+				assert.NotContains(t, nav, "Chapter 2", "a deleted entry is removed")
+				assert.NotContains(t, nav, "Afterword", "a deleted entry is removed")
 				assert.Equal(t, 3, strings.Count(nav, "<ol>"), "a list left without entries is removed")
 			}
 			assertEPUBCheck(t, dest)
@@ -1240,4 +1242,162 @@ func TestEPUBGenerator_DeletesTheEditedEntryAmongSameHrefs(t *testing.T) {
 	ncx := string(entries["OEBPS/toc.ncx"])
 	assert.Equal(t, []tocChapter{{title: "Opening, continued", href: "text/ch1.xhtml"}}, ncxTree(t, entries["OEBPS/toc.ncx"]))
 	assert.Contains(t, ncx, `<navPoint id="b" playOrder="3">`, "the second entry is the one kept")
+}
+
+// tocSource builds an EPUB 3 package whose nav document lives at navHref
+// (relative to the OPF) with the given nav and NCX contents.
+func tocSource(navHref, nav, ncx string) versionedEPUB {
+	opf := strings.Replace(tocOPF("3.0"), `href="nav.xhtml"`, `href="`+navHref+`"`, 1)
+	return versionedEPUB{opfPath: "OEBPS/content.opf", opf: opf, files: map[string]string{
+		"OEBPS/" + navHref:       nav,
+		"OEBPS/toc.ncx":          ncx,
+		"OEBPS/text/part1.xhtml": coverChapter,
+	}}
+}
+
+func simpleNav(items string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Contents</title></head>
+<body><nav epub:type="toc"><ol>` + items + `</ol></nav></body>
+</html>`
+}
+
+func simpleNCX(points string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <navMap>` + points + `</navMap>
+</ncx>`
+}
+
+func navPoint(id, title, src, children string) string {
+	return `<navPoint id="` + id + `"><navLabel><text>` + title + `</text></navLabel><content src="` + src + `"/>` + children + `</navPoint>`
+}
+
+// TestEPUBGenerator_NCXFollowsNavEdits covers EPUB 3 packages whose NCX does
+// not mirror the nav document the chapters were read from: only the entries
+// that correspond to an edited nav entry change.
+func TestEPUBGenerator_NCXFollowsNavEdits(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><a href="text/a.xhtml">A</a></li><li><a href="text/b.xhtml">B</a></li><li><a href="text/c.xhtml">C</a></li>`)
+	ncx := simpleNCX(
+		navPoint("cover", "Cover", "text/cover.xhtml", "") +
+			navPoint("a", "Chapter 1: A", "text/a.xhtml", navPoint("a1", "Scene", "text/a.xhtml#s", "")) +
+			navPoint("b", "B", "text/b.xhtml", "") +
+			navPoint("c", "C", "text/c.xhtml", ""))
+	scanned := []tocChapter{{title: "A", href: "text/a.xhtml"}, {title: "B", href: "text/b.xhtml"}, {title: "C", href: "text/c.xhtml"}}
+
+	t.Run("unedited chapters leave a richer NCX as written", func(t *testing.T) {
+		t.Parallel()
+		file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(scanned)}
+		entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+		assert.Equal(t, ncx, string(entries["OEBPS/toc.ncx"]))
+		assert.Equal(t, nav, string(entries["OEBPS/nav.xhtml"]))
+	})
+
+	t.Run("edits reach the NCX entries that match", func(t *testing.T) {
+		t.Parallel()
+		file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+			{title: "Opening", href: "text/a.xhtml"},
+			{title: "C", href: "text/c.xhtml"},
+		})}
+		entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+		assert.Equal(t, []tocChapter{
+			{title: "Cover", href: "text/cover.xhtml"},
+			{title: "Opening", href: "text/a.xhtml", children: []tocChapter{{title: "Scene", href: "text/a.xhtml#s"}}},
+			{title: "C", href: "text/c.xhtml"},
+		}, ncxTree(t, entries["OEBPS/toc.ncx"]))
+	})
+
+	t.Run("hrefs are compared as package paths", func(t *testing.T) {
+		t.Parallel()
+		subNav := simpleNav(`<li><a href="../text/a.xhtml">A</a></li><li><a href="../text/b.xhtml">B</a></li><li><a href="../text/c.xhtml">C</a></li>`)
+		file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+			{title: "A", href: "../text/a.xhtml"},
+			{title: "Bee", href: "../text/b.xhtml"},
+		})}
+		entries := zipEntries(t, generateVersioned(t, tocSource("nav/nav.xhtml", subNav, ncx), coverBook(), file, nil, ""))
+		got := ncxTree(t, entries["OEBPS/toc.ncx"])
+		require.Len(t, got, 3)
+		assert.Equal(t, "Bee", got[2].title)
+		assert.NotContains(t, string(entries["OEBPS/toc.ncx"]), "text/c.xhtml")
+	})
+}
+
+// TestEPUBGenerator_RenameOntoDeletedTitleKeepsHref covers deleting A and
+// renaming B to "A": the entry kept is B's, so it still links to b.
+func TestEPUBGenerator_RenameOntoDeletedTitleKeepsHref(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><a href="text/a.xhtml">A</a></li><li><a href="text/b.xhtml">B</a></li>`)
+	ncx := simpleNCX(navPoint("a", "A", "text/a.xhtml", "") + navPoint("b", "B", "text/b.xhtml", ""))
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{{title: "A", href: "text/b.xhtml"}})}
+	dest := generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, "")
+
+	metadata, err := epub.Parse(dest)
+	require.NoError(t, err)
+	assert.Equal(t, []tocChapter{{title: "A", href: "text/b.xhtml"}}, navTree(metadata.Chapters))
+	assert.Equal(t, []tocChapter{{title: "A", href: "text/b.xhtml"}}, ncxTree(t, zipEntries(t, dest)["OEBPS/toc.ncx"]))
+}
+
+// TestEPUBGenerator_HeadingLeftWithoutEntriesIsRemoved covers a nav heading
+// (a span, which must be followed by a list) whose entries were all deleted.
+func TestEPUBGenerator_HeadingLeftWithoutEntriesIsRemoved(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><span>Part</span><ol><li><a href="text/a.xhtml">A</a></li></ol></li><li><a href="text/b.xhtml">B</a></li>`)
+	ncx := simpleNCX(navPoint("b", "B", "text/b.xhtml", ""))
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+		{title: "Part"},
+		{title: "B", href: "text/b.xhtml"},
+	})}
+	entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+	assert.Equal(t, simpleNav(`<li><a href="text/b.xhtml">B</a></li>`), string(entries["OEBPS/nav.xhtml"]))
+}
+
+// TestEPUBGenerator_NCXRenameUsesTheLabelTheParserReads covers an NCX
+// navPoint with a label per language; the parser reads the last one.
+func TestEPUBGenerator_NCXRenameUsesTheLabelTheParserReads(t *testing.T) {
+	t.Parallel()
+
+	src := tocEPUB("2.0")
+	src.files["OEBPS/toc.ncx"] = simpleNCX(`<navPoint id="a"><navLabel xml:lang="fr"><text>Un</text></navLabel><navLabel><text>One</text></navLabel><content src="text/a.xhtml"/></navPoint>`)
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{{title: "First", href: "text/a.xhtml"}})}
+	ncx := string(zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))["OEBPS/toc.ncx"])
+	assert.Contains(t, ncx, `<navLabel xml:lang="fr"><text>Un</text></navLabel><navLabel><text>First</text></navLabel>`)
+}
+
+// TestEPUBGenerator_EmptyChapterTitleKeepsLabel covers a chapter saved with
+// an empty title, which would leave a nav link with no text.
+func TestEPUBGenerator_EmptyChapterTitleKeepsLabel(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><a href="text/a.xhtml">A</a></li>`)
+	src := tocSource("nav.xhtml", nav, simpleNCX(navPoint("a", "A", "text/a.xhtml", "")))
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{{title: " ", href: "text/a.xhtml"}})}
+	entries := zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))
+	assert.Equal(t, nav, string(entries["OEBPS/nav.xhtml"]))
+}
+
+// TestEPUBGenerator_LargeTOCDeletion guards against alignment that grows with
+// the square of the entry count, which a reference work's TOC would exhaust.
+func TestEPUBGenerator_LargeTOCDeletion(t *testing.T) {
+	t.Parallel()
+
+	const n = 20000
+	var items strings.Builder
+	var stored []tocChapter
+	for i := range n {
+		title := "Entry " + strconv.Itoa(i)
+		items.WriteString(`<li><a href="text/a.xhtml">` + title + `</a></li>`)
+		if i != n/2 {
+			stored = append(stored, tocChapter{title: title, href: "text/a.xhtml"})
+		}
+	}
+	src := tocSource("nav.xhtml", simpleNav(items.String()), simpleNCX(""))
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(stored)}
+	nav := string(zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))["OEBPS/nav.xhtml"])
+	assert.NotContains(t, nav, ">Entry 10000<")
+	assert.Contains(t, nav, ">Entry 10001<")
 }

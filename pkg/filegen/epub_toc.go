@@ -2,12 +2,17 @@ package filegen
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"io"
+	"net/url"
+	"path"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -16,42 +21,36 @@ import (
 // XHTML nav document back without mangling its namespaces, and splicing
 // leaves everything a chapter edit does not touch exactly as written.
 //
-// The stored chapters are the parsed table of contents (pkg/epub nav.go)
-// after the Chapters tab renamed or deleted entries. Adding and reordering
-// are not supported, so a stored tree that is not the source's entries with
-// some renamed or deleted leaves the document as written.
+// A scan stores the chapters of one document, the primary: the nav document
+// when it has entries, otherwise the NCX (pkg/epub opf.go). The Chapters tab
+// only renames and deletes, so the stored chapters are aligned to the
+// primary's entries to find which were renamed or deleted, and the same
+// edits are carried to the matching entries of the other document. Entries
+// with no counterpart are left alone, so an NCX richer than the nav keeps
+// its extra entries. A stored tree that is not the primary's entries with
+// some renamed or deleted (chapters added, reordered, or supplied by a
+// sidecar or plugin) leaves both documents as written.
 
 const ncxMediaType = "application/x-dtbncx+xml"
 
+// maxAlignStates caps the alignment table so a huge table of contents with
+// thousands of deletions cannot exhaust memory.
+const maxAlignStates = 4_000_000
+
 // tocPaths returns the zip entry names of the EPUB 3 navigation document and
-// the NCX, or "" for the ones the package does not have.
+// the NCX, or "" for the ones the package does not have. The NCX is the item
+// the spine names, falling back to any item with the NCX media type.
 func tocPaths(pkg *opfPackage, opfPath string) (navPath, ncxPath string) {
 	for _, item := range pkg.Manifest.Items {
 		properties, _ := item.Attrs.get("", "properties")
-		if navPath == "" && hasField(properties, "nav") {
+		if navPath == "" && slices.Contains(strings.Fields(properties), "nav") {
 			navPath = opfEntryPath(opfPath, item.Href)
 		}
-	}
-	for _, item := range pkg.Manifest.Items {
-		if pkg.Spine.Toc != "" && item.ID == pkg.Spine.Toc {
-			return navPath, opfEntryPath(opfPath, item.Href)
+		if (pkg.Spine.Toc != "" && item.ID == pkg.Spine.Toc) || (ncxPath == "" && item.MediaType == ncxMediaType) {
+			ncxPath = opfEntryPath(opfPath, item.Href)
 		}
 	}
-	for _, item := range pkg.Manifest.Items {
-		if item.MediaType == ncxMediaType {
-			return navPath, opfEntryPath(opfPath, item.Href)
-		}
-	}
-	return navPath, ""
-}
-
-func hasField(s, field string) bool {
-	for _, f := range strings.Fields(s) {
-		if f == field {
-			return true
-		}
-	}
-	return false
+	return navPath, ncxPath
 }
 
 // editedChapter is a stored chapter reduced to what the table of contents
@@ -63,8 +62,8 @@ type editedChapter struct {
 }
 
 // chapterTree returns the file's chapters as a tree. A file loaded from the
-// database lists every chapter in one flat slice, nested ones included, with
-// only direct children attached, so the tree is rebuilt from ParentID.
+// database lists every chapter in one flat slice, nested ones included, so
+// the tree is rebuilt from ParentID.
 func chapterTree(chapters []*models.Chapter) []editedChapter {
 	byParent := map[int][]*models.Chapter{}
 	var roots []*models.Chapter
@@ -75,22 +74,16 @@ func chapterTree(chapters []*models.Chapter) []editedChapter {
 			byParent[*ch.ParentID] = append(byParent[*ch.ParentID], ch)
 		}
 	}
-	flat := len(byParent) > 0
 
 	var build func(level []*models.Chapter) []editedChapter
 	build = func(level []*models.Chapter) []editedChapter {
-		level = append([]*models.Chapter(nil), level...)
+		level = slices.Clone(level)
 		sort.SliceStable(level, func(i, j int) bool { return level[i].SortOrder < level[j].SortOrder })
 		out := make([]editedChapter, 0, len(level))
 		for _, ch := range level {
-			c := editedChapter{title: ch.Title}
+			c := editedChapter{title: ch.Title, children: build(byParent[ch.ID])}
 			if ch.Href != nil {
 				c.href = *ch.Href
-			}
-			if flat {
-				c.children = build(byParent[ch.ID])
-			} else {
-				c.children = build(ch.Children)
 			}
 			out = append(out, c)
 		}
@@ -111,19 +104,23 @@ type xmlNode struct {
 	children   []*xmlNode
 }
 
+// child returns the last child named name, the one xml.Unmarshal keeps for a
+// single-valued field.
 func (n *xmlNode) child(name string) *xmlNode {
-	for _, c := range n.children {
-		if c.name == name {
-			return c
+	for i := len(n.children) - 1; i >= 0; i-- {
+		if n.children[i].name == name {
+			return n.children[i]
 		}
 	}
 	return nil
 }
 
+// attr returns the last attribute named local in any namespace, as
+// xml.Unmarshal does for an attribute field without a namespace.
 func (n *xmlNode) attr(local string) string {
-	for _, a := range n.attrs {
-		if a.Name.Local == local {
-			return a.Value
+	for i := len(n.attrs) - 1; i >= 0; i-- {
+		if n.attrs[i].Name.Local == local {
+			return n.attrs[i].Value
 		}
 	}
 	return ""
@@ -174,14 +171,42 @@ type tocEntry struct {
 	node     *xmlNode
 	title    string   // as the parser reads it; "" when the parser skips the entry
 	href     string   // as the parser reads it
+	resolved string   // href as a package path, comparable across documents
 	label    *xmlNode // the element whose text is the title
 	list     *xmlNode // the nav ol holding children; nil for NCX
 	children []*tocEntry
 }
 
+// isHeading reports whether e is a nav heading, a span that the nav spec
+// requires to be followed by a list.
+func (e *tocEntry) isHeading() bool {
+	return e.label != nil && e.label.name == "span"
+}
+
+// resolveHref turns a document-relative href into a package path, keeping
+// any fragment.
+func resolveHref(docPath, href string) string {
+	if href == "" {
+		return ""
+	}
+	ref, fragment, hasFragment := strings.Cut(href, "#")
+	if unescaped, err := url.PathUnescape(ref); err == nil {
+		ref = unescaped
+	}
+	if ref == "" {
+		ref = docPath
+	} else {
+		ref = path.Join(path.Dir(docPath), ref)
+	}
+	if hasFragment {
+		return ref + "#" + fragment
+	}
+	return ref
+}
+
 // navEntries returns the entries of the first toc nav that has a list,
 // mirroring pkg/epub parseNavDocument.
-func navEntries(root *xmlNode) []*tocEntry {
+func navEntries(root *xmlNode, docPath string) []*tocEntry {
 	if root.name != "html" {
 		return nil
 	}
@@ -194,13 +219,13 @@ func navEntries(root *xmlNode) []*tocEntry {
 			continue
 		}
 		if ol := nav.child("ol"); ol != nil {
-			return navListEntries(ol)
+			return navListEntries(ol, docPath)
 		}
 	}
 	return nil
 }
 
-func navListEntries(ol *xmlNode) []*tocEntry {
+func navListEntries(ol *xmlNode, docPath string) []*tocEntry {
 	var entries []*tocEntry
 	for _, li := range ol.children {
 		if li.name != "li" {
@@ -216,8 +241,9 @@ func navListEntries(ol *xmlNode) []*tocEntry {
 		if e.label != nil {
 			e.title = strings.TrimSpace(e.label.text.String())
 		}
+		e.resolved = resolveHref(docPath, e.href)
 		if e.list = li.child("ol"); e.list != nil {
-			e.children = navListEntries(e.list)
+			e.children = navListEntries(e.list, docPath)
 		}
 		entries = append(entries, e)
 	}
@@ -225,7 +251,7 @@ func navListEntries(ol *xmlNode) []*tocEntry {
 }
 
 // ncxEntries returns the navMap's entries, mirroring pkg/epub parseNCX.
-func ncxEntries(root *xmlNode) []*tocEntry {
+func ncxEntries(root *xmlNode, docPath string) []*tocEntry {
 	if root.name != "ncx" {
 		return nil
 	}
@@ -233,10 +259,10 @@ func ncxEntries(root *xmlNode) []*tocEntry {
 	if navMap == nil {
 		return nil
 	}
-	return ncxPointEntries(navMap)
+	return ncxPointEntries(navMap, docPath)
 }
 
-func ncxPointEntries(parent *xmlNode) []*tocEntry {
+func ncxPointEntries(parent *xmlNode, docPath string) []*tocEntry {
 	var entries []*tocEntry
 	for _, point := range parent.children {
 		if point.name != "navPoint" {
@@ -251,30 +277,98 @@ func ncxPointEntries(parent *xmlNode) []*tocEntry {
 		if content := point.child("content"); content != nil {
 			e.href = content.attr("src")
 		}
-		e.children = ncxPointEntries(point)
+		e.resolved = resolveHref(docPath, e.href)
+		e.children = ncxPointEntries(point, docPath)
 		entries = append(entries, e)
 	}
 	return entries
 }
 
-// tocMatch pairs a source entry with the stored chapter it became.
+// tocDoc is a nav document or NCX read for rewriting.
+type tocDoc struct {
+	path    string
+	data    []byte
+	entries []*tocEntry
+}
+
+func readTOCDoc(docPath string, data []byte, entriesOf func(*xmlNode, string) []*tocEntry) *tocDoc {
+	if data == nil {
+		return nil
+	}
+	root, err := parseXMLNodes(data)
+	if err != nil {
+		return nil
+	}
+	return &tocDoc{path: docPath, data: data, entries: entriesOf(root, docPath)}
+}
+
+// hasChapters reports whether the parser gets any chapter from doc.
+func (doc *tocDoc) hasChapters() bool {
+	if doc == nil {
+		return false
+	}
+	return slices.ContainsFunc(doc.entries, func(e *tocEntry) bool { return e.title != "" })
+}
+
+// tocChanges records how a document's entries were edited: entries in
+// renamed get a new title, and entries in deleted are removed with their
+// descendants.
+type tocChanges struct {
+	renamed map[*tocEntry]string
+	deleted map[*tocEntry]bool
+}
+
+func newTOCChanges() tocChanges {
+	return tocChanges{renamed: map[*tocEntry]string{}, deleted: map[*tocEntry]bool{}}
+}
+
+func (c tocChanges) empty() bool {
+	return len(c.renamed) == 0 && len(c.deleted) == 0
+}
+
+// tocMatch pairs a primary entry with the stored chapter it became.
 type tocMatch struct {
 	entry    *tocEntry
 	chapter  editedChapter
 	children []tocMatch
 }
 
-// alignTOC matches stored chapters to the parser's entries, in order. Every
-// chapter must match an entry with the same href or the same title (it may
-// have been renamed, and the nav and NCX can disagree on hrefs), and their
-// children must align in turn. Entries left unmatched were deleted. Among
-// alignments it prefers the one with the most equal hrefs and titles, so
-// deleting one of two similar entries removes the right one.
-func alignTOC(entries []*tocEntry, chapters []editedChapter) ([]tocMatch, bool) {
+// alignTOC matches stored chapters to the primary's entries and returns the
+// edits that turn one into the other. Entries left unmatched were deleted.
+// A chapter saved with an empty title keeps the entry's label.
+func alignTOC(entries []*tocEntry, chapters []editedChapter) (tocChanges, bool) {
+	changes := newTOCChanges()
 	matches, _, ok := align(entries, chapters)
-	return matches, ok
+	if !ok {
+		return changes, false
+	}
+	var record func(entries []*tocEntry, matches []tocMatch)
+	record = func(entries []*tocEntry, matches []tocMatch) {
+		matched := make(map[*tocEntry]bool, len(matches))
+		for _, m := range matches {
+			matched[m.entry] = true
+			title := strings.TrimSpace(m.chapter.title)
+			if title != "" && title != m.entry.title {
+				changes.renamed[m.entry] = title
+			}
+			record(m.entry.children, m.children)
+		}
+		for _, e := range entries {
+			if e.title != "" && !matched[e] {
+				changes.deleted[e] = true
+			}
+		}
+	}
+	record(entries, matches)
+	return changes, true
 }
 
+// align finds the best order-preserving match of every chapter to a titled
+// entry: same href or same title, with children that align in turn. It
+// prefers equal hrefs, then equal titles, so deleting one of two similar
+// entries removes the right one. Edits only delete, so chapter j can only
+// match one of entries j to j+(n-m), and the table covers just that band:
+// linear when nothing was deleted.
 func align(all []*tocEntry, chapters []editedChapter) ([]tocMatch, int, bool) {
 	// Entries without a title never became chapters.
 	var entries []*tocEntry
@@ -284,70 +378,142 @@ func align(all []*tocEntry, chapters []editedChapter) ([]tocMatch, int, bool) {
 		}
 	}
 	n, m := len(entries), len(chapters)
-
-	type pair struct {
-		matches []tocMatch
-		score   int
-		ok      bool
+	if m > n {
+		return nil, 0, false
 	}
-	pairs := make([][]*pair, n)
-	pairFor := func(i, j int) *pair {
-		if pairs[i] == nil {
-			pairs[i] = make([]*pair, m)
-		}
-		if p := pairs[i][j]; p != nil {
-			return p
-		}
-		e, ch := entries[i], chapters[j]
-		p := &pair{}
-		sameHref, sameTitle := e.href == ch.href, e.title == ch.title
-		if sameHref || sameTitle {
-			p.matches, p.score, p.ok = align(e.children, ch.children)
-			if sameHref {
-				p.score++
-			}
-			if sameTitle {
-				p.score++
-			}
-		}
-		pairs[i][j] = p
-		return p
+	k := n - m
+	if (m+1)*(k+1) > maxAlignStates {
+		return nil, 0, false
 	}
 
-	// best[i][j] is the best score aligning the first i entries with the
-	// first j chapters, or -1 when they cannot align.
-	best := make([][]int, n+1)
-	for i := range best {
-		best[i] = make([]int, m+1)
-		for j := 1; j <= m; j++ {
-			best[i][j] = -1
+	// best[j][d] aligns the first j chapters with the first j+d entries.
+	// A negative score means they cannot align; matched means entry j+d-1
+	// matched chapter j-1, with children as its children's alignment.
+	type state struct {
+		score    int
+		matched  bool
+		children []tocMatch
+	}
+	best := make([][]state, m+1)
+	for j := range best {
+		best[j] = make([]state, k+1)
+		for d := range best[j] {
+			if j > 0 {
+				best[j][d].score = -1
+			}
 		}
 	}
-	for i := 1; i <= n; i++ {
-		for j := 1; j <= m; j++ {
-			best[i][j] = best[i-1][j]
-			if best[i-1][j-1] < 0 {
+	for j := 1; j <= m; j++ {
+		ch := chapters[j-1]
+		for d := 0; d <= k; d++ {
+			s := &best[j][d]
+			if d > 0 {
+				s.score = best[j][d-1].score
+			}
+			prev := best[j-1][d].score
+			if prev < 0 {
 				continue
 			}
-			if p := pairFor(i-1, j-1); p.ok && best[i-1][j-1]+p.score > best[i][j] {
-				best[i][j] = best[i-1][j-1] + p.score
+			e := entries[j-1+d]
+			sameHref, sameTitle := e.href == ch.href, e.title == ch.title
+			if !sameHref && !sameTitle {
+				continue
+			}
+			children, score, ok := align(e.children, ch.children)
+			if !ok {
+				continue
+			}
+			if sameHref {
+				score += 2
+			}
+			if sameTitle {
+				score++
+			}
+			if prev+score > s.score {
+				*s = state{score: prev + score, matched: true, children: children}
 			}
 		}
 	}
-	if best[n][m] < 0 {
+	if best[m][k].score < 0 {
 		return nil, 0, false
 	}
 
 	matches := make([]tocMatch, m)
-	for i, j := n, m; j > 0; i-- {
-		if best[i][j] == best[i-1][j] {
+	for j, d := m, k; j > 0; {
+		s := best[j][d]
+		if !s.matched {
+			d--
 			continue
 		}
-		p := pairFor(i-1, j-1)
-		matches[j-1] = tocMatch{entry: entries[i-1], chapter: chapters[j-1], children: p.matches}
+		matches[j-1] = tocMatch{entry: entries[j-1+d], chapter: chapters[j-1], children: s.children}
 		j--
 	}
-	return matches, best[n][m], true
+	return matches, best[m][k].score, true
+}
+
+// carryChanges maps the primary's changes onto doc's entries. An entry
+// follows the primary entry with the same package path and title, else the
+// only one with its title, else the only one with its path. Entries with no
+// counterpart are left alone.
+func carryChanges(primary []*tocEntry, changes tocChanges, doc *tocDoc) tocChanges {
+	type key struct{ resolved, title string }
+	byKey := map[key][]*tocEntry{}
+	byTitle := map[string][]*tocEntry{}
+	byPath := map[string][]*tocEntry{}
+	gone := map[*tocEntry]bool{}
+	var index func(entries []*tocEntry, deleted bool)
+	index = func(entries []*tocEntry, deleted bool) {
+		for _, e := range entries {
+			if e.title == "" {
+				continue
+			}
+			gone[e] = deleted || changes.deleted[e]
+			k := key{e.resolved, e.title}
+			byKey[k] = append(byKey[k], e)
+			byTitle[e.title] = append(byTitle[e.title], e)
+			if e.resolved != "" {
+				byPath[e.resolved] = append(byPath[e.resolved], e)
+			}
+			index(e.children, gone[e])
+		}
+	}
+	index(primary, false)
+
+	counterpart := func(e *tocEntry) *tocEntry {
+		if found := byKey[key{e.resolved, e.title}]; len(found) > 0 {
+			return found[0]
+		}
+		if found := byTitle[e.title]; len(found) == 1 {
+			return found[0]
+		}
+		if found := byPath[e.resolved]; e.resolved != "" && len(found) == 1 {
+			return found[0]
+		}
+		return nil
+	}
+
+	carried := newTOCChanges()
+	var walk func(entries []*tocEntry)
+	walk = func(entries []*tocEntry) {
+		for _, e := range entries {
+			if e.title == "" {
+				walk(e.children)
+				continue
+			}
+			if p := counterpart(e); p != nil {
+				if gone[p] {
+					carried.deleted[e] = true
+					continue
+				}
+				if title, ok := changes.renamed[p]; ok && title != e.title {
+					carried.renamed[e] = title
+				}
+			}
+			walk(e.children)
+		}
+	}
+	walk(doc.entries)
+	return carried
 }
 
 // byteEdit replaces source bytes [start, end) with text.
@@ -356,45 +522,41 @@ type byteEdit struct {
 	text       []byte
 }
 
-// tocEdits returns the edits that turn entries into the matched chapters:
-// renamed labels get the new title, and unmatched entries are removed. A nav
-// list left with no items is removed with them, since an empty ol is invalid.
-func tocEdits(data []byte, entries []*tocEntry, matches []tocMatch, list *xmlNode) []byteEdit {
-	matched := make(map[*tocEntry]tocMatch, len(matches))
-	for _, m := range matches {
-		matched[m.entry] = m
-	}
-
-	if list != nil && len(matches) == 0 && len(entries) > 0 {
-		allDeleted := true
-		for _, e := range entries {
-			if e.title == "" {
-				allDeleted = false
-			}
-		}
-		if allDeleted {
-			return []byteEdit{removal(data, list)}
-		}
-	}
-
+// tocEdits returns the byte edits that apply changes to entries, and how
+// many of entries remain. A nav list left with no items is removed, since an
+// empty ol is invalid, and so is a heading left with nothing under it.
+func tocEdits(data []byte, entries []*tocEntry, changes tocChanges) ([]byteEdit, int, error) {
 	var edits []byteEdit
+	remaining := 0
 	for _, e := range entries {
-		if e.title == "" {
-			continue
-		}
-		m, ok := matched[e]
-		if !ok {
+		if changes.deleted[e] {
 			edits = append(edits, removal(data, e.node))
 			continue
 		}
-		if m.chapter.title != e.title {
-			var title bytes.Buffer
-			_ = xml.EscapeText(&title, []byte(m.chapter.title))
-			edits = append(edits, byteEdit{start: e.label.innerStart, end: e.label.innerEnd, text: title.Bytes()})
+
+		children, childrenLeft, err := tocEdits(data, e.children, changes)
+		if err != nil {
+			return nil, 0, err
 		}
-		edits = append(edits, tocEdits(data, e.children, m.children, e.list)...)
+		if e.list != nil && len(e.children) > 0 && childrenLeft == 0 {
+			if e.isHeading() {
+				edits = append(edits, removal(data, e.node))
+				continue
+			}
+			children = []byteEdit{removal(data, e.list)}
+		}
+
+		remaining++
+		edits = append(edits, children...)
+		if title, ok := changes.renamed[e]; ok && e.label != nil {
+			var escaped bytes.Buffer
+			if err := xml.EscapeText(&escaped, []byte(title)); err != nil {
+				return nil, 0, err
+			}
+			edits = append(edits, byteEdit{start: e.label.innerStart, end: e.label.innerEnd, text: escaped.Bytes()})
+		}
 	}
-	return edits
+	return edits, remaining, nil
 }
 
 // removal deletes an element along with the whitespace that indents it.
@@ -406,39 +568,75 @@ func removal(data []byte, n *xmlNode) byteEdit {
 	return byteEdit{start: start, end: n.end}
 }
 
-func applyEdits(data []byte, edits []byteEdit) []byte {
+// applyTOCChanges returns doc's bytes with changes applied, or nil when
+// there is nothing to change or no entry would be left.
+func applyTOCChanges(doc *tocDoc, changes tocChanges) ([]byte, error) {
+	if changes.empty() {
+		return nil, nil
+	}
+	edits, remaining, err := tocEdits(doc.data, doc.entries, changes)
+	if err != nil || remaining == 0 {
+		return nil, err
+	}
 	sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
 	var out bytes.Buffer
 	var pos int64
 	for _, e := range edits {
-		out.Write(data[pos:e.start])
+		out.Write(doc.data[pos:e.start])
 		out.Write(e.text)
 		pos = e.end
 	}
-	out.Write(data[pos:])
-	return out.Bytes()
+	out.Write(doc.data[pos:])
+	return out.Bytes(), nil
 }
 
-// rewriteTOC applies chapter edits to a nav document or NCX. It returns data
-// unchanged when there are no stored chapters, the document cannot be read,
-// or the chapters are not the document's entries with some renamed or
-// deleted.
-func rewriteTOC(data []byte, chapters []editedChapter, entriesOf func(*xmlNode) []*tocEntry) []byte {
+// rewriteTOCs applies the file's chapter edits to the nav document and NCX,
+// given their paths and source bytes (nil when absent). It returns the
+// rewritten documents by path; a document missing from the result is copied
+// as written.
+func rewriteTOCs(ctx context.Context, navPath string, navData []byte, ncxPath string, ncxData []byte, stored []*models.Chapter) map[string][]byte {
+	chapters := chapterTree(stored)
 	if len(chapters) == 0 {
-		return data
+		return nil
 	}
-	root, err := parseXMLNodes(data)
-	if err != nil {
-		return data
+
+	nav := readTOCDoc(navPath, navData, navEntries)
+	ncx := readTOCDoc(ncxPath, ncxData, ncxEntries)
+	primary, secondary := nav, ncx
+	if !nav.hasChapters() {
+		primary, secondary = ncx, nil
 	}
-	entries := entriesOf(root)
-	matches, ok := alignTOC(entries, chapters)
+	if primary == nil {
+		return nil
+	}
+
+	log := logger.FromContext(ctx)
+	changes, ok := alignTOC(primary.entries, chapters)
 	if !ok {
-		return data
+		log.Warn("EPUB chapters do not match its table of contents, leaving it as written", logger.Data{
+			"category": "epub_toc_write",
+			"toc":      primary.path,
+		})
+		return nil
 	}
-	edits := tocEdits(data, entries, matches, nil)
-	if len(edits) == 0 {
-		return data
+
+	out := map[string][]byte{}
+	write := func(doc *tocDoc, changes tocChanges) {
+		data, err := applyTOCChanges(doc, changes)
+		if err != nil {
+			log.Warn("failed to write EPUB chapter edits, leaving the table of contents as written", logger.Data{
+				"category": "epub_toc_write",
+				"toc":      doc.path,
+				"error":    err.Error(),
+			})
+		}
+		if data != nil {
+			out[doc.path] = data
+		}
 	}
-	return applyEdits(data, edits)
+	write(primary, changes)
+	if secondary != nil && !changes.empty() {
+		write(secondary, carryChanges(primary.entries, changes, secondary))
+	}
+	return out
 }

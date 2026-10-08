@@ -11,6 +11,7 @@ import {
 
 import { QueryKey } from "./books";
 import { QueryKey as ChaptersQueryKey } from "./chapters";
+import { QueryKey as EpubQueryKey } from "./epub";
 
 export const useResyncFile = () => {
   const queryClient = useQueryClient();
@@ -41,6 +42,9 @@ export const useResyncFile = () => {
       queryClient.invalidateQueries({
         queryKey: [ChaptersQueryKey.FileChapters, fileId],
       });
+      queryClient.invalidateQueries({
+        queryKey: [EpubQueryKey.EpubBlob, fileId],
+      });
     },
   });
 };
@@ -70,6 +74,7 @@ export const useResyncBook = () => {
       queryClient.invalidateQueries({
         queryKey: [ChaptersQueryKey.FileChapters],
       });
+      queryClient.invalidateQueries({ queryKey: [EpubQueryKey.EpubBlob] });
     },
   });
 };
