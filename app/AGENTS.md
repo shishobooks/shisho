@@ -70,6 +70,7 @@ Cover and page endpoints are cached `immutable`, and browsers also keep an in-me
 - `vitest.setup.ts` turns on fake timers globally, so `userEvent.setup()` needs `{ advanceTimers: vi.advanceTimersByTime }` or clicks and typing stall under load.
 - `testTimeout` is 15s because `mise check:quiet` runs the unit suite beside everything else. Keep it; make a slow test cheaper (render one card, not a page) rather than raising a per-test timeout.
 - Mutation failure helpers are in `app/testing/mutations.ts`.
+- jsdom loads no Tailwind, so a label hidden on phones (`hidden sm:inline`) still names its button in tests. Assert the phone-width accessible name under `emulatePhoneWidth()` from `app/testing/phoneWidth.ts`.
 
 ## Gotchas
 

@@ -11,7 +11,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 
 ## Page layout
 
-- **Page headers with actions stack on mobile and sit side by side from a breakpoint**, with the title allowed to wrap and the action group not shrinking; copy `AdminUsers`. `ResourceDetail`, `SeriesDetail`, and `ListDetail` do not follow it and are not the model.
+- **Page headers with actions stack on mobile and sit side by side from a breakpoint**, with the title allowed to wrap and the action group not shrinking; copy `AdminUsers`.
 - Header buttons with text hide the label on phones and keep the icon. Icon-only buttons need an `aria-label`; disclosure toggles also need `aria-expanded` and a label that says what they do.
 - **List pages** have the header, a search input, a "Showing X-Y of Z" line only when `total > 0`, `LoadingSpinner` while loading, `QueryError` where results go, and shadcn `Pagination`; book and series grids use `Gallery`. Empty states distinguish "no results matching your search" from "nothing here yet".
 - Searchable lists search server-side. List endpoints cap at 50 items, so client-side filtering hides everything past the first page.

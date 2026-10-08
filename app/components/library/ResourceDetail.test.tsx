@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import { emulatePhoneWidth } from "@/testing/phoneWidth";
 import type { Permission } from "@/utils/permissions";
 
 import { ResourceDetail } from "./ResourceDetail";
@@ -415,6 +416,19 @@ describe("ResourceDetail", () => {
         wrap(<ResourceDetail {...defaultProps} entityType={entityType} />),
       );
       expect(screen.getByRole("button", { name: /Edit/ })).toBeInTheDocument();
+    });
+  });
+
+  describe("on a phone", () => {
+    emulatePhoneWidth();
+
+    it("names the icon-only Edit, Merge, and Delete buttons", () => {
+      render(wrap(<ResourceDetail {...defaultProps} />));
+      for (const name of ["Edit", "Merge", "Delete"]) {
+        const button = screen.getByRole("button", { name });
+        expect(button).toBeVisible();
+        expect(within(button).getByText(name)).not.toBeVisible();
+      }
     });
   });
 });

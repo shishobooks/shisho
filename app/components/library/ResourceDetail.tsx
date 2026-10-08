@@ -163,10 +163,12 @@ export function ResourceDetail({
 
       {/* Header */}
       <div className="mb-6 md:mb-8">
-        <div className="flex items-start justify-between gap-4 mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
           <div className="min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <h1 className="text-2xl font-semibold break-words">{name}</h1>
+              <h1 className="text-2xl font-semibold min-w-0 break-words">
+                {name}
+              </h1>
               {sortName && sortName !== name && (
                 <span className="text-sm text-muted-foreground">
                   <span className="text-muted-foreground/50">·</span> {sortName}
@@ -175,33 +177,36 @@ export function ResourceDetail({
             </div>
           </div>
           {canMutate && (
-            <div className="flex gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <Button
+                aria-label="Edit"
                 onClick={() =>
                   onEditClick ? onEditClick() : setEditOpen(true)
                 }
                 size="sm"
                 variant="outline"
               >
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
+                <Edit className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Edit</span>
               </Button>
               <Button
+                aria-label="Merge"
                 onClick={() => setMergeOpen(true)}
                 size="sm"
                 variant="outline"
               >
-                <GitMerge className="h-4 w-4 mr-2" />
-                Merge
+                <GitMerge className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Merge</span>
               </Button>
               {!deleteConfig.disabled && (
                 <Button
+                  aria-label="Delete"
                   onClick={() => setDeleteOpen(true)}
                   size="sm"
                   variant="outline"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+                  <Trash2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Delete</span>
                 </Button>
               )}
             </div>

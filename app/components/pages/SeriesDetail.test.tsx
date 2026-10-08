@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import { emulatePhoneWidth } from "@/testing/phoneWidth";
 import type { Permission } from "@/utils/permissions";
 
 import SeriesDetail from "./SeriesDetail";
@@ -140,6 +141,19 @@ describe("SeriesDetail write controls", () => {
     expect(
       screen.queryByRole("button", { name: /Delete/ }),
     ).not.toBeInTheDocument();
+  });
+
+  describe("on a phone", () => {
+    emulatePhoneWidth();
+
+    it("names the icon-only Edit, Merge, and Delete buttons", () => {
+      renderPage();
+      for (const name of ["Edit", "Merge", "Delete"]) {
+        const button = screen.getByRole("button", { name });
+        expect(button).toBeVisible();
+        expect(within(button).getByText(name)).not.toBeVisible();
+      }
+    });
   });
 });
 
