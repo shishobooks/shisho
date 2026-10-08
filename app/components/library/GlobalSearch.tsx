@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useGlobalSearch } from "@/hooks/queries/search";
@@ -464,16 +465,18 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
           value={query}
         />
         {query && !fullWidth && (
-          <button
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+          <Button
+            aria-label="Clear search"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
             onClick={() => {
               setQuery("");
               inputRef.current?.focus();
             }}
-            type="button"
+            size="icon-xs"
+            variant="ghost"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         )}
       </div>
 

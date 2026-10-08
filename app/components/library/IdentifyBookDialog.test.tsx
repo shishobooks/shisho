@@ -324,4 +324,25 @@ describe("IdentifyBookDialog search sequencing", () => {
 
     await waitFor(() => expect(abortedA).toBe(true));
   });
+
+  it("names each identifier chip's remove button", async () => {
+    const user = createUser();
+    renderDialog(
+      makeBook({
+        files: [
+          makeFile({
+            identifiers: [{ type: "isbn_13", value: "9780000000002" }],
+          } as Partial<File>),
+        ],
+      }),
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Remove identifier ISBN-13: 9780000000002",
+      }),
+    );
+
+    expect(screen.queryByText("9780000000002", { exact: false })).toBeNull();
+  });
 });

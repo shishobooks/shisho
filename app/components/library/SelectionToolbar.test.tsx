@@ -198,6 +198,18 @@ describe("SelectionToolbar bulk review actions in the More popover", () => {
   });
 });
 
+describe("SelectionToolbar exit button", () => {
+  it("is named and exits selection mode", async () => {
+    const user = createUser();
+    mockExitSelectionMode.mockClear();
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Exit selection" }));
+
+    expect(mockExitSelectionMode).toHaveBeenCalledOnce();
+  });
+});
+
 describe("SelectionToolbar download file-type selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();

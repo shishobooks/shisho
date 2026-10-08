@@ -110,14 +110,14 @@ export function LanguageCombobox({
               </span>
             </Badge>
             {!disabled && (
-              <button
+              <Button
                 aria-label="Clear language"
-                className="cursor-pointer text-muted-foreground hover:text-destructive shrink-0"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
                 onClick={handleClear}
-                type="button"
+                variant="unstyled"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             )}
           </div>
         </PopoverAnchor>

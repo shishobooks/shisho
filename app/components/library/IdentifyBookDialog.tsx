@@ -1,10 +1,10 @@
 import equal from "fast-deep-equal";
-import { AlertTriangle, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
-import { Badge } from "@/components/ui/badge";
+import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -248,11 +248,16 @@ export function IdentifyBookDialog({
                     publisher, etc.) will be applied to the selected file.
                   </p>
                 </div>
-                <div className="space-y-1.5">
+                <div
+                  aria-label="Apply to file"
+                  className="space-y-1.5"
+                  role="group"
+                >
                   {mainFiles.map((file) => (
-                    <button
+                    <Button
+                      aria-pressed={selectedFileId === file.id}
                       className={cn(
-                        "w-full text-left rounded-md border p-2.5 cursor-pointer transition-colors",
+                        "w-full text-left rounded-md border p-2.5 transition-colors",
                         "hover:bg-muted/50",
                         selectedFileId === file.id
                           ? "border-primary bg-primary/5"
@@ -281,7 +286,7 @@ export function IdentifyBookDialog({
                           });
                         }
                       }}
-                      type="button"
+                      variant="unstyled"
                     >
                       <div className="flex items-center gap-2">
                         <Badge className="shrink-0 text-xs" variant="outline">
@@ -311,7 +316,7 @@ export function IdentifyBookDialog({
                           </>
                         )}
                       </div>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -374,17 +379,14 @@ export function IdentifyBookDialog({
                           {formatIdentifierType(id.type, pluginIdentifierTypes)}
                           : {id.value}
                         </span>
-                        <button
-                          className="shrink-0 rounded-sm hover:bg-muted-foreground/20 p-0.5 cursor-pointer"
+                        <BadgeRemoveButton
+                          aria-label={`Remove identifier ${formatIdentifierType(id.type, pluginIdentifierTypes)}: ${id.value}`}
                           onClick={() =>
                             setIdentifiers(
                               identifiers.filter((_, j) => j !== i),
                             )
                           }
-                          type="button"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
+                        />
                       </Badge>
                     ))}
                   </div>
@@ -463,11 +465,16 @@ export function IdentifyBookDialog({
                   })()}
 
                 {searchQuery.isSuccess && results.length > 0 && (
-                  <div className="space-y-2">
+                  <div
+                    aria-label="Search results"
+                    className="space-y-2"
+                    role="group"
+                  >
                     {results.map((result, index) => (
-                      <button
+                      <Button
+                        aria-pressed={selectedResult === result}
                         className={cn(
-                          "w-full text-left rounded-lg border-2 p-3 cursor-pointer transition-colors",
+                          "w-full text-left rounded-lg border-2 p-3 transition-colors",
                           "hover:bg-muted/50",
                           selectedResult === result
                             ? "border-primary bg-primary/5"
@@ -475,7 +482,7 @@ export function IdentifyBookDialog({
                         )}
                         key={`${result.plugin_scope}-${result.plugin_id}-${index}`}
                         onClick={() => handleSelectResult(result)}
-                        type="button"
+                        variant="unstyled"
                       >
                         <div className="flex gap-3">
                           {/* Cover thumbnail */}
@@ -701,7 +708,7 @@ export function IdentifyBookDialog({
                             )}
                           </div>
                         </div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 )}

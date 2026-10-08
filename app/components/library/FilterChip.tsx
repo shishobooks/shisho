@@ -2,6 +2,7 @@ import { Bookmark, Eye, File, Languages, Tags, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export type FilterChipKind =
   "fileType" | "genre" | "tag" | "language" | "reviewState";
@@ -39,18 +40,18 @@ interface FilterChipProps {
 export const FilterChip = ({ kind, label, onRemove }: FilterChipProps) => {
   const { icon, color } = KIND_CONFIG[kind];
   return (
-    <Badge
-      asChild
-      className="cursor-pointer gap-1.5 max-w-full"
-      variant="secondary"
-    >
-      <button aria-label={`Remove ${label}`} onClick={onRemove} type="button">
+    <Badge asChild className="gap-1.5 max-w-full" variant="secondary">
+      <Button
+        aria-label={`Remove ${label}`}
+        onClick={onRemove}
+        variant="unstyled"
+      >
         <span className={color}>{icon}</span>
         <span className="truncate" title={label}>
           {label}
         </span>
         <X className="h-3 w-3 text-muted-foreground shrink-0" />
-      </button>
+      </Button>
     </Badge>
   );
 };

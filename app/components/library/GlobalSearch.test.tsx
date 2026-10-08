@@ -57,12 +57,28 @@ describe("GlobalSearch", () => {
       .mockImplementation(async (_method, path) =>
         path === "/search" ? { books: [], series: [], people: [] } : [],
       );
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     renderSearch();
     await user.type(screen.getByPlaceholderText("Search library..."), "dune");
     await flush();
 
     expect(searchRequests(request)).toHaveLength(1);
+  });
+
+  it("clears the query with a labeled button", async () => {
+    setAuth({ permissions: ["books:read"] });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      path === "/search" ? { books: [], series: [], people: [] } : [],
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    renderSearch();
+    const input = screen.getByPlaceholderText("Search library...");
+    await user.type(input, "dune");
+    await user.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
   });
 });

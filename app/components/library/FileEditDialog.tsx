@@ -843,13 +843,13 @@ export function FileEditDialog({
                   <div className="flex items-center justify-between">
                     <Label>Narrators</Label>
                     {narrators.length > 1 && (
-                      <button
-                        className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+                      <Button
+                        className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
                         onClick={() => setNarrators([])}
-                        type="button"
+                        variant="link"
                       >
                         Clear all
-                      </button>
+                      </Button>
                     )}
                   </div>
                   <SortableEntityList<NameOption>

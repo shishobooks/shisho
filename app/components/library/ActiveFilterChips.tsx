@@ -1,4 +1,5 @@
 import { FilterChip } from "@/components/library/FilterChip";
+import { Button } from "@/components/ui/button";
 import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
 import type { Genre, Tag } from "@/types";
@@ -83,12 +84,13 @@ export const ActiveFilterChips = ({
           onRemove={onClearReviewedFilter}
         />
       )}
-      <button
-        className="text-xs text-muted-foreground underline-offset-2 hover:underline hover:text-foreground ml-1 cursor-pointer"
+      <Button
+        className="ml-1 text-xs font-normal text-muted-foreground underline-offset-2 hover:text-foreground"
         onClick={onClearAll}
+        variant="link"
       >
         clear all
-      </button>
+      </Button>
     </div>
   );
 };

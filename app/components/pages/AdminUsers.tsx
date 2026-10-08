@@ -48,10 +48,10 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
   const permissionCount = role.permissions?.length ?? 0;
 
   return (
-    <button
-      className="w-full flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors text-left cursor-pointer gap-3"
+    <Button
+      className="w-full flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors text-left gap-3"
       onClick={onClick}
-      type="button"
+      variant="unstyled"
     >
       <div className="flex items-center gap-2 md:gap-3 flex-wrap">
         <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -63,7 +63,7 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
       <span className="text-xs md:text-sm text-muted-foreground shrink-0">
         {permissionCount} permission{permissionCount !== 1 ? "s" : ""}
       </span>
-    </button>
+    </Button>
   );
 };
 

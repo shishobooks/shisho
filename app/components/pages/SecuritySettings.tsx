@@ -761,10 +761,15 @@ function KoboSetupDialog({
           {/* Scope Selection */}
           <div className="space-y-3">
             <Label>Sync Scope</Label>
-            <div className="flex rounded-md border border-input">
-              <button
+            <div
+              aria-label="Sync scope"
+              className="flex rounded-md border border-input"
+              role="group"
+            >
+              <Button
+                aria-pressed={scopeType === "all"}
                 className={cn(
-                  "flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer",
+                  "flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md",
                   scopeType === "all"
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted",
@@ -773,13 +778,14 @@ function KoboSetupDialog({
                   setScopeType("all");
                   setScopeId("");
                 }}
-                type="button"
+                variant="unstyled"
               >
                 All Libraries
-              </button>
-              <button
+              </Button>
+              <Button
+                aria-pressed={scopeType === "library"}
                 className={cn(
-                  "flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                  "flex-1 border-x border-input px-3 py-2 text-sm font-medium transition-colors",
                   scopeType === "library"
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted",
@@ -788,13 +794,14 @@ function KoboSetupDialog({
                   setScopeType("library");
                   setScopeId("");
                 }}
-                type="button"
+                variant="unstyled"
               >
                 Library
-              </button>
-              <button
+              </Button>
+              <Button
+                aria-pressed={scopeType === "list"}
                 className={cn(
-                  "flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md cursor-pointer",
+                  "flex-1 px-3 py-2 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md",
                   scopeType === "list"
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted",
@@ -803,10 +810,10 @@ function KoboSetupDialog({
                   setScopeType("list");
                   setScopeId("");
                 }}
-                type="button"
+                variant="unstyled"
               >
                 List
-              </button>
+              </Button>
             </div>
             {scopeType === "library" && libraries && (
               <Select onValueChange={setScopeId} value={scopeId}>

@@ -69,16 +69,24 @@ const PlayButton = ({ isPlaying, onPlay, onStop }: PlayButtonProps) => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          className="relative p-1.5 rounded hover:bg-muted text-muted-foreground cursor-pointer"
+        <Button
+          aria-label={isPlaying ? "Stop preview" : "Play 10s preview"}
+          className="relative text-muted-foreground"
           onClick={isPlaying ? onStop : onPlay}
-          type="button"
+          size="icon-sm"
+          variant="ghost"
         >
-          {/* Circular progress ring */}
+          {/* Circular progress ring. Button sizes every svg inside it to
+              the icon size, so the inline size keeps the ring spanning the
+              whole button. */}
           {isPlaying && (
             <svg
-              className="absolute inset-0 w-full h-full"
-              style={{ transform: "rotate(-90deg)" }}
+              className="absolute inset-0"
+              style={{
+                height: "100%",
+                transform: "rotate(-90deg)",
+                width: "100%",
+              }}
               viewBox={`0 0 ${size} ${size}`}
             >
               {/* Background circle */}
@@ -126,7 +134,7 @@ const PlayButton = ({ isPlaying, onPlay, onStop }: PlayButtonProps) => {
           ) : (
             <Play className="h-4 w-4" />
           )}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{isPlaying ? "Stop" : "Play 10s preview"}</TooltipContent>
     </Tooltip>
@@ -351,17 +359,20 @@ const ChapterRow = (props: ChapterRowProps) => {
         >
           {/* Expand/collapse toggle for chapters with children */}
           {hasChildren ? (
-            <button
-              className="p-0.5 rounded hover:bg-muted text-muted-foreground cursor-pointer"
+            <Button
+              aria-expanded={expanded}
+              aria-label={expanded ? "Hide subchapters" : "Show subchapters"}
+              className="text-muted-foreground"
               onClick={() => setExpanded(!expanded)}
-              type="button"
+              size="icon-xs"
+              variant="ghost"
             >
               {expanded ? (
                 <ChevronDown className="h-4 w-4" />
               ) : (
                 <ChevronRight className="h-4 w-4" />
               )}
-            </button>
+            </Button>
           ) : (
             // Spacer for alignment when no toggle needed
             <div className="w-5" />
@@ -622,17 +633,20 @@ const ChapterRow = (props: ChapterRowProps) => {
       >
         {/* EPUB: Expand/collapse toggle for chapters with children */}
         {isEpub && hasChildren ? (
-          <button
-            className="p-0.5 rounded hover:bg-muted text-muted-foreground cursor-pointer"
+          <Button
+            aria-expanded={expanded}
+            aria-label={expanded ? "Hide subchapters" : "Show subchapters"}
+            className="text-muted-foreground"
             onClick={() => setExpanded(!expanded)}
-            type="button"
+            size="icon-xs"
+            variant="ghost"
           >
             {expanded ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
               <ChevronRight className="h-4 w-4" />
             )}
-          </button>
+          </Button>
         ) : isEpub ? (
           // Spacer for alignment when no toggle needed
           <div className="w-5" />

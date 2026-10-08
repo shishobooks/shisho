@@ -366,6 +366,7 @@ describe("ESLint mutateAsync rule", () => {
 // Each UI convention rule flags its line; the lines after them are the
 // accepted forms and must stay clean.
 const UI_FIXTURE = `
+import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { cn } from "@/libraries/utils";
 
@@ -385,6 +386,8 @@ export const Fixture = ({ n }: { n: number }) => {
       <Tabs onValueChange={() => undefined} value="x" />
       <span className={cn("p-2", c)}>{String(a && b && forbidden) + t}</span>
       <span>{String(clipboard)} Chicago</span>
+      <button type="button">x</button>
+      <Button type="button">x</Button>
     </div>
   );
 };
@@ -412,11 +415,21 @@ describe("ESLint UI convention rules", () => {
     expect(count("formatDistanceToNow")).toBe(2);
     expect(count("cn()")).toBe(1);
     expect(count("Deep-link tabs")).toBe(1);
-    expect(messages).toHaveLength(8);
+    expect(count("raw <button>")).toBe(1);
+    expect(messages).toHaveLength(9);
   });
 
   it("allows them in tests", async () => {
     expect(await uiMessages("app/components/Fixture.test.tsx")).toEqual([]);
+  });
+
+  it("lets the ui kit render raw buttons", async () => {
+    const [result] = await eslint.lintText(
+      'export const B = () => <button type="button" />;\n',
+      { filePath: "app/components/ui/fixture.tsx" },
+    );
+
+    expect(result.messages.filter((message) => message.ruleId)).toEqual([]);
   });
 
   it("lets copyText use the async clipboard", async () => {

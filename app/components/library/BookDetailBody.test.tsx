@@ -676,6 +676,20 @@ describe("BookDetailBody file rows", () => {
     ).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("selects files with labeled checkboxes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({ book: { ...book, files: [epub, m4b] } });
+
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    const checkboxes = screen.getAllByRole("checkbox", { name: /^Select / });
+    expect(checkboxes).toHaveLength(2);
+
+    await user.click(checkboxes[0]);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).not.toBeChecked();
+    expect(screen.getByText("1 file selected")).toBeInTheDocument();
+  });
+
   it("says Yes for an abridged file instead of repeating the label", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBody({ book: { ...book, files: [{ ...epub, abridged: true }] } });

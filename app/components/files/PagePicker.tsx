@@ -195,50 +195,56 @@ const PagePicker = ({
         {/* Main preview area - fixed height calculation */}
         <div className="relative flex-1 min-h-0 bg-black/95 flex items-center justify-center overflow-hidden">
           {/* Navigation buttons - large touch targets */}
-          <button
+          <Button
+            aria-label="Previous page"
             className={cn(
               "absolute left-2 top-1/2 -translate-y-1/2 z-10",
               "w-12 h-24 rounded-lg bg-black/40 hover:bg-black/60 backdrop-blur-sm",
-              "flex items-center justify-center transition-all duration-200 cursor-pointer",
+              "flex items-center justify-center transition-all duration-200",
               "text-white/70 hover:text-white",
-              "disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-black/40",
+              "disabled:opacity-20",
             )}
             disabled={!canGoPrevious}
             onClick={goToPrevious}
-            type="button"
+            variant="unstyled"
           >
             <ChevronLeft className="w-8 h-8" />
-          </button>
+          </Button>
 
-          <button
+          <Button
+            aria-label="Next page"
             className={cn(
               "absolute right-2 top-1/2 -translate-y-1/2 z-10",
               "w-12 h-24 rounded-lg bg-black/40 hover:bg-black/60 backdrop-blur-sm",
-              "flex items-center justify-center transition-all duration-200 cursor-pointer",
+              "flex items-center justify-center transition-all duration-200",
               "text-white/70 hover:text-white",
-              "disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-black/40",
+              "disabled:opacity-20",
             )}
             disabled={!canGoNext}
             onClick={goToNext}
-            type="button"
+            variant="unstyled"
           >
             <ChevronRight className="w-8 h-8" />
-          </button>
+          </Button>
 
-          {/* Tap zones for mobile navigation */}
-          <button
-            aria-label="Previous page"
-            className="absolute left-0 top-0 w-1/3 h-full z-20 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          {/* Tap zones for mobile navigation. They duplicate the labeled
+              buttons above for pointer users only, so assistive tech and the
+              tab order skip them. */}
+          <Button
+            aria-hidden
+            className="absolute left-0 top-0 w-1/3 h-full z-20 opacity-0"
             disabled={!canGoPrevious}
             onClick={goToPrevious}
-            type="button"
+            tabIndex={-1}
+            variant="unstyled"
           />
-          <button
-            aria-label="Next page"
-            className="absolute right-0 top-0 w-1/3 h-full z-20 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          <Button
+            aria-hidden
+            className="absolute right-0 top-0 w-1/3 h-full z-20 opacity-0"
             disabled={!canGoNext}
             onClick={goToNext}
-            type="button"
+            tabIndex={-1}
+            variant="unstyled"
           />
 
           {/* Main image container */}
@@ -278,9 +284,9 @@ const PagePicker = ({
             <ScrollArea className="flex-1">
               <div className="flex gap-2 py-1 px-1" ref={thumbnailStripRef}>
                 {visibleThumbnails.map((page) => (
-                  <button
+                  <Button
                     className={cn(
-                      "relative shrink-0 rounded overflow-hidden transition-all duration-150 cursor-pointer",
+                      "relative shrink-0 rounded overflow-hidden transition-all duration-150",
                       "border-2 bg-muted",
                       "hover:border-primary/50 hover:scale-105",
                       "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
@@ -300,7 +306,7 @@ const PagePicker = ({
                       }
                     }}
                     style={{ width: "72px", height: "96px" }}
-                    type="button"
+                    variant="unstyled"
                   >
                     {previewLoaded &&
                     Math.abs(page - focusedPage) <= thumbnailLoadRadius ? (
@@ -323,7 +329,7 @@ const PagePicker = ({
                     >
                       {page + 1}
                     </div>
-                  </button>
+                  </Button>
                 ))}
               </div>
               <ScrollBar orientation="horizontal" />

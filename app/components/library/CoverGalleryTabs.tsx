@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -168,19 +169,20 @@ function CoverGalleryTabs({
         {filesWithLabels.map((file) => (
           <Tooltip key={file.id}>
             <TooltipTrigger asChild>
-              <button
+              <Button
+                aria-pressed={file.id === selectedFileId}
                 className={cn(
-                  "px-2.5 py-1 text-xs font-medium rounded-full border cursor-pointer",
+                  "px-2.5 py-1 text-xs font-medium rounded-full border",
                   "transition-all duration-150",
                   file.id === selectedFileId
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
                 onClick={() => handleTabClick(file.id)}
-                type="button"
+                variant="unstyled"
               >
                 {file.label}
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent>{fileLabel(file)}</TooltipContent>
           </Tooltip>

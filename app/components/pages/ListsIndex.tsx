@@ -85,18 +85,18 @@ const ListsIndex = () => {
 
   const renderTemplateCard = (template: ListTemplate) => {
     return (
-      <button
-        className="flex flex-col items-start gap-2 p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      <Button
+        className="flex flex-col items-start gap-2 p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors text-left"
         disabled={createFromTemplateMutation.isPending}
         key={template.name}
         onClick={() => handleCreateFromTemplate(template)}
-        type="button"
+        variant="unstyled"
       >
         <span className="font-medium">{template.display_name}</span>
         <span className="text-sm text-muted-foreground">
           {template.description}
         </span>
-      </button>
+      </Button>
     );
   };
 
