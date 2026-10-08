@@ -27,7 +27,7 @@ const GenresList = () => {
         `/libraries/${libraryId}/genres/${genre.id}`
       }
       query={query}
-      searchPlaceholder="Search genres..."
+      searchLabel="Search genres"
       state={state}
       subtitle="Browse genres in your library"
       title="Genres"

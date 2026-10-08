@@ -481,6 +481,7 @@ function EReaderSetupDialog({
           <DialogBody className="space-y-6">
             <div className="flex gap-2">
               <Input
+                aria-label="Setup URL"
                 className="font-mono"
                 readOnly
                 value={`${window.location.origin}/e/${shortUrl.short_code}`}
@@ -819,7 +820,7 @@ function KoboSetupDialog({
             </div>
             {scopeType === "library" && libraries && (
               <Select onValueChange={setScopeId} value={scopeId}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Library">
                   <SelectValue placeholder="Select a library..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -833,7 +834,7 @@ function KoboSetupDialog({
             )}
             {scopeType === "list" && listsData && (
               <Select onValueChange={setScopeId} value={scopeId}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="List">
                   <SelectValue placeholder="Select a list..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -849,9 +850,14 @@ function KoboSetupDialog({
 
           {/* Generated URL */}
           <div className="space-y-2">
-            <Label>API Endpoint URL</Label>
+            <Label htmlFor="kobo-sync-url">API Endpoint URL</Label>
             <div className="flex gap-2">
-              <Input className="font-mono text-xs" readOnly value={syncURL} />
+              <Input
+                className="font-mono text-xs"
+                id="kobo-sync-url"
+                readOnly
+                value={syncURL}
+              />
               <Button
                 aria-label="Copy sync URL"
                 onClick={handleCopy}

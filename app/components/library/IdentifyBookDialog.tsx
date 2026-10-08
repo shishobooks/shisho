@@ -325,6 +325,7 @@ export function IdentifyBookDialog({
             {/* Search bar */}
             <div className="flex gap-2">
               <Input
+                aria-label="Search by title, author, or ISBN"
                 className="flex-1"
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -352,9 +353,15 @@ export function IdentifyBookDialog({
             {/* Author and identifier filters */}
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Author</Label>
+                <Label
+                  className="text-xs text-muted-foreground"
+                  htmlFor="identify-author-filter"
+                >
+                  Author
+                </Label>
                 <Input
                   className="h-8 text-sm"
+                  id="identify-author-filter"
                   onChange={(e) => setAuthor(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Author name (optional)"

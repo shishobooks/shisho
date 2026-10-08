@@ -121,6 +121,22 @@ describe("ReviewPanel", () => {
     expect(toggle).not.toBeChecked();
   });
 
+  it("names each switch when two panels are on the page", () => {
+    const files: File[] = [{ ...baseFile, reviewed: true }];
+
+    render(
+      <>
+        <ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />
+        <ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />
+      </>,
+      { wrapper },
+    );
+
+    const switches = screen.getAllByRole("switch", { name: "Reviewed" });
+    expect(switches).toHaveLength(2);
+    expect(switches[0].id).not.toBe(switches[1].id);
+  });
+
   it("renders status icon in green when book is reviewed", () => {
     const files: File[] = [
       { ...baseFile, reviewed: true, review_override: undefined },
@@ -130,8 +146,10 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Reviewed status");
-    expect(icon.getAttribute("class")).toMatch(/text-green/);
+    const icon = screen
+      .getByRole("button", { name: "Reviewed status" })
+      .querySelector("svg");
+    expect(icon?.getAttribute("class")).toMatch(/text-green/);
   });
 
   it("renders status icon in muted color when book needs review", () => {
@@ -143,8 +161,10 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Needs review status");
-    expect(icon.getAttribute("class")).toMatch(/text-muted-foreground/);
+    const icon = screen
+      .getByRole("button", { name: "Needs review status" })
+      .querySelector("svg");
+    expect(icon?.getAttribute("class")).toMatch(/text-muted-foreground/);
   });
 
   it("status icon has tooltip describing auto behavior when no overrides are set", async () => {
@@ -492,6 +512,29 @@ describe("ReviewPanel", () => {
       expect(screen.queryByRole("switch")).not.toBeInTheDocument();
       expect(screen.getByText("Reviewed")).toBeInTheDocument();
       expect(screen.getByLabelText("Reviewed status")).toBeInTheDocument();
+    });
+
+    it("opens the status tooltip from the keyboard", async () => {
+      const user = createUser();
+      const files: File[] = [{ ...baseFile, reviewed: true }];
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={files}
+          onChange={vi.fn()}
+          readOnly
+        />,
+        { wrapper },
+      );
+
+      await user.tab();
+      expect(
+        screen.getByRole("button", { name: "Reviewed status" }),
+      ).toHaveFocus();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        /determined automatically/,
+      );
     });
 
     it("does not tell a read-only user to toggle the state", async () => {

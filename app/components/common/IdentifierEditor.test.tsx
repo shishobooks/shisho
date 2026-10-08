@@ -28,6 +28,28 @@ describe("IdentifierEditor", () => {
     expect(isbn).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("names the value input and says why a type is disabled without hovering", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(
+      <IdentifierEditor
+        identifierTypes={TYPES}
+        onChange={vi.fn()}
+        value={[{ type: "isbn_13", value: "9780306406157" }]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Identifier value" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("combobox", { name: /Identifier type/i }),
+    );
+    expect(
+      screen.getByRole("option", { name: "ISBN-13 (already added)" }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("enables Add only once a value is typed and a type is free", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 

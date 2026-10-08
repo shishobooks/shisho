@@ -163,12 +163,21 @@ export function IdentifierEditor({
           <SelectContent>
             {identifierTypes.map(({ id, label }) => {
               const isPresent = presentTypes.has(id);
+              if (!isPresent) {
+                return (
+                  <SelectItem key={id} value={id}>
+                    {label}
+                  </SelectItem>
+                );
+              }
+              // Arrow keys skip a disabled option and Tab never enters the
+              // list, so the tooltip is pointer-only; the sr-only text tells
+              // a screen reader why the option is disabled.
               const item = (
-                <SelectItem disabled={isPresent} key={id} value={id}>
-                  {label}
+                <SelectItem disabled key={id} value={id}>
+                  {label} <span className="sr-only">(already added)</span>
                 </SelectItem>
               );
-              if (!isPresent) return item;
               return (
                 <Tooltip key={id}>
                   <TooltipTrigger asChild>
@@ -184,6 +193,7 @@ export function IdentifierEditor({
           </SelectContent>
         </Select>
         <Input
+          aria-label="Identifier value"
           className="flex-1"
           onChange={(e) => {
             setNewValue(e.target.value);

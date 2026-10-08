@@ -129,6 +129,16 @@ describe("PluginConfigForm", () => {
     expect(screen.getByLabelText(/max results/i)).toBeInTheDocument();
   });
 
+  it("names each field switch and the confidence threshold by their labels", () => {
+    render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
+    expect(screen.getByRole("switch", { name: "Title" })).toBeChecked();
+    expect(
+      screen.getByRole("spinbutton", {
+        name: "Auto-identify confidence threshold",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("calls save with updated values when the user clicks Save", async () => {
     render(wrap(<PluginConfigForm canWrite={true} id="test" scope="shisho" />));
     fireEvent.change(screen.getByLabelText(/api key/i), {

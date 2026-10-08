@@ -628,12 +628,12 @@ export function FileEditDialog({
 
           {/* File Role */}
           <div className="space-y-2">
-            <Label>File Role</Label>
+            <Label htmlFor="file-role">File Role</Label>
             <Select
               onValueChange={(v) => setFileRole(v as FileRole)}
               value={fileRole}
             >
-              <SelectTrigger>
+              <SelectTrigger id="file-role">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -841,7 +841,7 @@ export function FileEditDialog({
               {isM4b && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label>Narrators</Label>
+                    <Label id="file-narrators-label">Narrators</Label>
                     {narrators.length > 1 && (
                       <Button
                         className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
@@ -868,6 +868,7 @@ export function FileEditDialog({
                         return usePeopleSearch(file.library_id, open, q);
                       },
                       label: "Narrator",
+                      labelId: "file-narrators-label",
                     }}
                     items={narratorItems}
                     onAppend={(next) => {
@@ -899,8 +900,10 @@ export function FileEditDialog({
 
               {/* Language */}
               <div className="space-y-2">
-                <Label>Language</Label>
+                <Label id="file-language-label">Language</Label>
                 <LanguageCombobox
+                  label="Language"
+                  labelId="file-language-label"
                   libraryId={file.library_id}
                   onChange={setLanguage}
                   value={language}
@@ -929,7 +932,7 @@ export function FileEditDialog({
 
               {/* Publisher */}
               <div className="space-y-2">
-                <Label>Publisher</Label>
+                <Label id="file-publisher-label">Publisher</Label>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
                     <EntityCombobox<NameOption>
@@ -945,6 +948,7 @@ export function FileEditDialog({
                         return usePublisherSearch(file.library_id, open, q);
                       }}
                       label="Publisher"
+                      labelId="file-publisher-label"
                       onChange={(next) => {
                         const nextName =
                           "__create" in next ? next.__create : next.name;
@@ -970,8 +974,9 @@ export function FileEditDialog({
 
               {/* Release Date */}
               <div className="space-y-2">
-                <Label>Release Date</Label>
+                <Label htmlFor="release-date">Release Date</Label>
                 <Input
+                  id="release-date"
                   onChange={(e) => setReleaseDate(e.target.value)}
                   placeholder="YYYY-MM-DD"
                   value={releaseDate}

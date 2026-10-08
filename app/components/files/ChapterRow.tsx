@@ -381,6 +381,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
           {/* Title input */}
           <Input
+            aria-label="Chapter title"
             className="flex-1"
             onChange={(e) => props.onTitleChange?.(e.target.value)}
             placeholder="Chapter title"
@@ -480,6 +481,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
         {/* Title input */}
         <Input
+          aria-label="Chapter title"
           className="flex-1"
           onChange={(e) => props.onTitleChange?.(e.target.value)}
           placeholder="Chapter title"
@@ -500,6 +502,7 @@ const ChapterRow = (props: ChapterRowProps) => {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Input
+            aria-label="Start page"
             className={cn(
               "w-16 text-center",
               hasPageError && "border-red-500 focus-visible:ring-red-500",
@@ -557,6 +560,7 @@ const ChapterRow = (props: ChapterRowProps) => {
       <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
         {/* Title input */}
         <Input
+          aria-label="Chapter title"
           className="flex-1"
           onChange={(e) => props.onTitleChange?.(e.target.value)}
           placeholder="Chapter title"
@@ -592,6 +596,7 @@ const ChapterRow = (props: ChapterRowProps) => {
           <Tooltip open={hasTimestampError}>
             <TooltipTrigger asChild>
               <Input
+                aria-label="Start time"
                 className={cn(
                   "w-28 text-center font-mono",
                   hasTimestampError &&

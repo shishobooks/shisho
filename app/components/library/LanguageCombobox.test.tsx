@@ -17,6 +17,7 @@ const Harness = () => {
   const [value, setValue] = useState("");
   return (
     <LanguageCombobox
+      label="Language"
       libraryId={5}
       onChange={(next) => {
         onChange(next);
@@ -50,9 +51,22 @@ describe("LanguageCombobox", () => {
     setAuth({ permissions: ["books:read", "books:write"] });
   });
 
+  it("names the trigger and its search box by the field, not the prompt shown", async () => {
+    vi.spyOn(API, "request").mockResolvedValue([]);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderCombobox();
+
+    const trigger = screen.getByRole("combobox", { name: "Language" });
+    expect(trigger).toHaveTextContent("Select language...");
+    await user.click(trigger);
+    expect(
+      screen.getByRole("combobox", { name: "Search languages" }),
+    ).toBeInTheDocument();
+  });
+
   it("suggests the library's own language tags for a role with Books Read, without Libraries Read", async () => {
     const request = vi.spyOn(API, "request").mockResolvedValue(["tlh"]);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderCombobox();
 
     await waitFor(() => expect(languagesRequests(request)).toHaveLength(1));
@@ -66,7 +80,7 @@ describe("LanguageCombobox", () => {
   it("requests no library languages for a role without Books Read and still accepts a typed tag", async () => {
     setAuth({ permissions: ["books:write"] });
     const request = vi.spyOn(API, "request").mockResolvedValue(["tlh"]);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderCombobox();
 
     await user.click(screen.getByRole("combobox"));
@@ -84,7 +98,12 @@ describe("LanguageCombobox", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <LanguageCombobox libraryId={5} onChange={onChange} value="en" />
+        <LanguageCombobox
+          label="Language"
+          libraryId={5}
+          onChange={onChange}
+          value="en"
+        />
       </QueryClientProvider>,
     );
 

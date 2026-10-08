@@ -51,7 +51,7 @@ const PublishersList = () => {
         `/libraries/${libraryId}/publishers/${publisher.id}`
       }
       query={query}
-      searchPlaceholder="Search publishers..."
+      searchLabel="Search publishers"
       state={state}
       subtitle="Browse publishers in your library"
       title="Publishers"

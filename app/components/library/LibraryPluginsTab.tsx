@@ -206,7 +206,10 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
                     }
                     value={plugin.mode}
                   >
-                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                    <SelectTrigger
+                      aria-label={`Mode for ${plugin.name}`}
+                      className="w-[140px] h-8 text-xs"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

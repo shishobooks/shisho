@@ -142,7 +142,10 @@ const SortLevelRow = ({
         onValueChange={(value) => onChangeField(levelIndex, value as SortField)}
         value={level.field}
       >
-        <SelectTrigger className="flex-1">
+        <SelectTrigger
+          aria-label={`Sort level ${levelIndex + 1} field`}
+          className="flex-1"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

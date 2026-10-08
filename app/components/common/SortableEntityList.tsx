@@ -28,6 +28,7 @@ interface SortableEntityListProps<T extends object> {
     EntityComboboxProps<T>,
     | "hook"
     | "label"
+    | "labelId"
     | "getOptionLabel"
     | "getOptionKey"
     | "getOptionDescription"

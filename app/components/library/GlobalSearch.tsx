@@ -447,6 +447,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
+          aria-label="Search library"
           className={cn(
             "pl-9 [&::-webkit-search-cancel-button]:hidden",
             fullWidth

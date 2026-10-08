@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,8 @@ import { DataSourceManual, type DataSource } from "@/types";
 import { forPerson, forTitle } from "@/utils/sortname";
 
 interface SortNameInputProps {
+  /** The visible label, linked to the input ("Sort Title") */
+  label: string;
   /** The name/title being edited (for live preview) */
   nameValue: string;
   /** Current sort name/title value */
@@ -20,12 +22,15 @@ interface SortNameInputProps {
 }
 
 export function SortNameInput({
+  label,
   nameValue,
   sortValue,
   source,
   type,
   onChange,
 }: SortNameInputProps) {
+  const inputId = useId();
+  const checkboxId = useId();
   // Checkbox starts checked if source is not manual
   const [isAuto, setIsAuto] = useState(source !== DataSourceManual);
   // Track the manual value separately
@@ -64,26 +69,31 @@ export function SortNameInput({
     onChange(value);
   };
 
-  const label =
+  const autoLabel =
     type === "title" ? "Autogenerate sort title" : "Autogenerate sort name";
 
+  // A fragment, so the caller's spacing sits between the label and the rest.
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Checkbox
-          checked={isAuto}
-          id="autogenerate-sort"
-          onCheckedChange={handleCheckboxChange}
+    <>
+      <Label htmlFor={inputId}>{label}</Label>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={isAuto}
+            id={checkboxId}
+            onCheckedChange={handleCheckboxChange}
+          />
+          <Label className="font-normal" htmlFor={checkboxId}>
+            {autoLabel}
+          </Label>
+        </div>
+        <Input
+          disabled={isAuto}
+          id={inputId}
+          onChange={(e) => handleInputChange(e.target.value)}
+          value={displayValue}
         />
-        <Label className="font-normal" htmlFor="autogenerate-sort">
-          {label}
-        </Label>
       </div>
-      <Input
-        disabled={isAuto}
-        onChange={(e) => handleInputChange(e.target.value)}
-        value={displayValue}
-      />
-    </div>
+    </>
   );
 }

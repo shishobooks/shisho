@@ -219,6 +219,7 @@ const SeriesList = () => {
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <SearchInput
           initialValue={searchQuery}
+          label="Search series"
           onDebouncedChange={handleDebouncedSearchChange}
           placeholder="Search series..."
         />

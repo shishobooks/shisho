@@ -25,7 +25,14 @@ export type { EntityStatus };
 
 export interface EntityComboboxProps<T extends object> {
   hook: (query: string) => { data?: T[]; isLoading: boolean };
+  /** Names the search box ("Search publisher"), and the trigger too unless
+   * labelId is set. */
   label: string;
+  /**
+   * The id of the field's visible label, which then names the trigger, so
+   * the name is the text a user sees. Without one, `label` names it.
+   */
+  labelId?: string;
   value: T | { __create: string } | null;
   onChange: (next: T | { __create: string }) => void;
   getOptionLabel: (item: T) => string;
@@ -40,6 +47,7 @@ export interface EntityComboboxProps<T extends object> {
 export function EntityCombobox<T extends object>({
   hook,
   label,
+  labelId,
   value,
   onChange,
   getOptionLabel,
@@ -81,6 +89,8 @@ export function EntityCombobox<T extends object>({
         <PopoverTrigger asChild>
           <Button
             aria-expanded={open}
+            aria-label={labelId ? undefined : label}
+            aria-labelledby={labelId}
             className="w-full justify-between cursor-pointer"
             role="combobox"
             variant="outline"
@@ -90,7 +100,7 @@ export function EntityCombobox<T extends object>({
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-full p-0">
-          <Command shouldFilter={false}>
+          <Command label={`Search ${label.toLowerCase()}`} shouldFilter={false}>
             <CommandInput
               onValueChange={setSearch}
               placeholder={`Search ${label.toLowerCase()}...`}

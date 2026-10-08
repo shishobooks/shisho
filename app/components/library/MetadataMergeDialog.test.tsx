@@ -17,6 +17,34 @@ const entities = [
 ];
 
 describe("MetadataMergeDialog", () => {
+  it("names the source picker and its search box by what they pick", async () => {
+    const user = createUser();
+
+    render(
+      <MetadataMergeDialog
+        entities={entities}
+        entityType="genre"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={vi.fn()}
+        open={true}
+        targetId={1}
+        targetName="Fantasy"
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", {
+      name: "Genre to merge",
+    });
+    expect(trigger).toHaveTextContent("Select genre...");
+    await user.click(trigger);
+    expect(
+      screen.getByRole("combobox", { name: "Search genres" }),
+    ).toBeInTheDocument();
+  });
+
   it("enables Merge only once a source is picked", async () => {
     const user = createUser();
 

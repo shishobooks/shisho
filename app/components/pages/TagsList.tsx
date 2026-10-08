@@ -25,7 +25,7 @@ const TagsList = () => {
       itemLabel="tags"
       linkTo={(tag, libraryId) => `/libraries/${libraryId}/tags/${tag.id}`}
       query={query}
-      searchPlaceholder="Search tags..."
+      searchLabel="Search tags"
       state={state}
       subtitle="Browse tags in your library"
       title="Tags"

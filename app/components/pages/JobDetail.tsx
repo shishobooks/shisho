@@ -185,6 +185,7 @@ const JobDetail = () => {
       {/* Toolbar */}
       <div className="flex items-center gap-4 mb-4">
         <Input
+          aria-label="Search logs"
           className="max-w-xs"
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search logs..."
@@ -215,7 +216,7 @@ const JobDetail = () => {
             }
             value={pluginFilter || "all"}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger aria-label="Plugin" className="w-[180px]">
               <SelectValue placeholder="All Plugins" />
             </SelectTrigger>
             <SelectContent>

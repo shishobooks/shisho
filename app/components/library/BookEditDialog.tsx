@@ -486,8 +486,8 @@ export function BookEditDialog({
 
           {/* Sort Title */}
           <div className="space-y-2">
-            <Label>Sort Title</Label>
             <SortNameInput
+              label="Sort Title"
               nameValue={title}
               onChange={setSortTitle}
               sortValue={book.sort_title}
@@ -522,7 +522,7 @@ export function BookEditDialog({
           {/* Authors */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Authors</Label>
+              <Label id="book-authors-label">Authors</Label>
               {authors.length > 1 && (
                 <Button
                   className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
@@ -552,6 +552,7 @@ export function BookEditDialog({
                   return useAuthorSearch(book.library_id, open, q);
                 },
                 label: "Author",
+                labelId: "book-authors-label",
               }}
               items={authors}
               onAppend={handleAppendAuthor}
@@ -572,7 +573,10 @@ export function BookEditDialog({
                           }
                           value={author.role || "none"}
                         >
-                          <SelectTrigger className="cursor-pointer">
+                          <SelectTrigger
+                            aria-label={`Role for ${author.name}`}
+                            className="cursor-pointer"
+                          >
                             <SelectValue placeholder="Role" />
                           </SelectTrigger>
                           <SelectContent>
@@ -600,7 +604,7 @@ export function BookEditDialog({
           {/* Series */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Series</Label>
+              <Label id="book-series-label">Series</Label>
               {seriesEntries.length > 1 && (
                 <Button
                   className="text-xs font-normal text-muted-foreground hover:text-destructive hover:no-underline"
@@ -630,6 +634,7 @@ export function BookEditDialog({
                   };
                 },
                 label: "Series",
+                labelId: "book-series-label",
               }}
               items={seriesEntries}
               onAppend={handleAppendSeries}
@@ -781,7 +786,7 @@ export function BookEditDialog({
 
           {/* Genres */}
           <div className="space-y-2">
-            <Label>Genres</Label>
+            <Label id="book-genres-label">Genres</Label>
             <MultiSelectCombobox<NameWithBookCount>
               getOptionCount={(g) => g.book_count}
               getOptionDescription={(g) =>
@@ -792,6 +797,7 @@ export function BookEditDialog({
                 return useGenreSearch(book.library_id, open, q);
               }}
               label="Genre"
+              labelId="book-genres-label"
               onChange={setGenres}
               placeholder="Add genres..."
               useSelectedItemCounts={function useGenreCounts(v) {
@@ -803,7 +809,7 @@ export function BookEditDialog({
 
           {/* Tags */}
           <div className="space-y-2">
-            <Label>Tags</Label>
+            <Label id="book-tags-label">Tags</Label>
             <MultiSelectCombobox<NameWithBookCount>
               getOptionCount={(t) => t.book_count}
               getOptionDescription={(t) =>
@@ -814,6 +820,7 @@ export function BookEditDialog({
                 return useTagSearch(book.library_id, open, q);
               }}
               label="Tag"
+              labelId="book-tags-label"
               onChange={setTags}
               placeholder="Add tags..."
               useSelectedItemCounts={function useTagCounts(v) {

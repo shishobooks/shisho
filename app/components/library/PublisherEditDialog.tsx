@@ -239,7 +239,7 @@ export function PublisherEditDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Parent Publisher</Label>
+            <Label id="parent-publisher-label">Parent Publisher</Label>
             <div className="flex items-center gap-2">
               <div className="flex-1">
                 <EntityCombobox<PublisherIdOption>
@@ -250,6 +250,7 @@ export function PublisherEditDialog({
                   getOptionLabel={(item) => item.name}
                   hook={useParentSearch}
                   label="Publisher"
+                  labelId="parent-publisher-label"
                   onChange={(next) => {
                     setSelectedParent(next);
                     setParentCleared(false);

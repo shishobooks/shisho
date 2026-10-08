@@ -518,6 +518,7 @@ const HomeContent = () => {
         <div className="flex flex-wrap items-center gap-3">
           <SearchInput
             initialValue={searchQuery}
+            label="Search books"
             onDebouncedChange={handleDebouncedSearchChange}
             placeholder="Search books..."
           />

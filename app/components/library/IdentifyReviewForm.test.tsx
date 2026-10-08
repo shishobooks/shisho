@@ -353,6 +353,65 @@ describe("IdentifyReviewForm component", () => {
     ).toHaveLength(0);
   });
 
+  it("names each field's control by its row label, and per-entry selects by their entry", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({ files: [makeFile({ file_type: FileTypeCBZ })] }),
+      fileId: 1,
+      result: makeResult({
+        authors: [{ name: "New Author", role: "writer" }],
+        series: "Dune",
+        genres: ["Fantasy"],
+        publisher: "Ace",
+      }),
+    });
+    await user.click(screen.getByRole("button", { name: /^all$/i }));
+
+    for (const name of [
+      "Title",
+      "Subtitle",
+      "Description",
+      "Name",
+      "Release Date",
+      "URL",
+    ]) {
+      expect(screen.getByRole("textbox", { name })).toBeInTheDocument();
+    }
+    expect(
+      screen.getByRole("combobox", { name: "Role for New Author" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Series unit" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Genres" })).toHaveTextContent(
+      "Add genres...",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Authors" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Publisher" }),
+    ).toHaveTextContent("Ace");
+    expect(screen.getByRole("combobox", { name: "Language" })).toBeVisible();
+  });
+
+  it("focuses a row's control from its label only when the row is applied", async () => {
+    const user = createUser();
+    // A low-priority title source turns the incoming title on by default.
+    renderForm({
+      book: makeBook({ title_source: DataSourceFilepath }),
+      result: makeResult({ title: "New Title" }),
+    });
+    await user.click(screen.getByRole("button", { name: /^all$/i }));
+
+    // Subtitle is unchanged, so its row is not applied and looks locked.
+    await user.click(screen.getByText("Subtitle", { selector: "label" }));
+    expect(screen.getByRole("textbox", { name: "Subtitle" })).not.toHaveFocus();
+
+    await user.click(screen.getByText("Title", { selector: "label" }));
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus();
+  });
+
   it("hides the Narrators field for non-M4B files", () => {
     renderForm({
       book: makeBook({ files: [makeFile({ file_type: FileTypeEPUB })] }),

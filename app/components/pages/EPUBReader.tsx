@@ -336,6 +336,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         <div className="flex items-center gap-2">
           {toc.length > 0 && (
             <select
+              aria-label="Jump to chapter"
               className="text-sm bg-transparent border rounded px-2 py-1 cursor-pointer"
               onChange={(e) => handleTocChange(e.target.value)}
               value={currentTocHref ?? ""}

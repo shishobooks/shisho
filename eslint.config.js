@@ -6,6 +6,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 import controlHasName from "./eslint-rules/control-has-name.js";
+import formControlHasName from "./eslint-rules/form-control-has-name.js";
 import mutateAsyncHandled from "./eslint-rules/mutate-async-handled.js";
 
 // Permission checks take a typed requirement through useCan or can (see
@@ -154,10 +155,13 @@ const mutationReferences = [
 // eslint-rules/mutate-async-handled.js explains what it accepts. Every
 // button and link needs an accessible name at every width, which takes
 // following ternaries and breakpoint classes through its children;
-// eslint-rules/control-has-name.js explains what counts as a name.
+// eslint-rules/control-has-name.js explains what counts as a name. Every
+// form control needs one too, which takes matching each id to a htmlFor
+// across the file; eslint-rules/form-control-has-name.js explains how.
 const shishoPlugin = {
   rules: {
     "control-has-name": controlHasName,
+    "form-control-has-name": formControlHasName,
     "mutate-async-handled": mutateAsyncHandled,
   },
 };
@@ -228,6 +232,7 @@ export default tseslint.config(
       ],
       "shisho/mutate-async-handled": "error",
       "shisho/control-has-name": "error",
+      "shisho/form-control-has-name": "error",
       "no-restricted-properties": [
         "error",
         {

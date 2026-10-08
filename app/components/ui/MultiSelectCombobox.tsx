@@ -22,7 +22,14 @@ interface MultiSelectComboboxProps<T> {
   values: string[];
   onChange: (values: string[]) => void;
   hook: (query: string) => { data?: T[]; isLoading: boolean };
+  /** Names the search box ("Search genre"), and the trigger too unless
+   * labelId is set. */
   label: string;
+  /**
+   * The id of the field's visible label, which then names the trigger, so
+   * the name is the text a user sees. Without one, `label` names it.
+   */
+  labelId?: string;
   getOptionLabel: (item: T) => string;
   getOptionDescription?: (item: T) => string | undefined;
   getOptionCount?: (item: T) => number | undefined;
@@ -35,6 +42,7 @@ export function MultiSelectCombobox<T>({
   onChange,
   hook,
   label,
+  labelId,
   getOptionLabel,
   getOptionDescription,
   getOptionCount,
@@ -149,6 +157,8 @@ export function MultiSelectCombobox<T>({
         <PopoverTrigger asChild>
           <Button
             aria-expanded={open}
+            aria-label={labelId ? undefined : label}
+            aria-labelledby={labelId}
             className="w-full justify-between"
             role="combobox"
             variant="outline"
@@ -158,7 +168,7 @@ export function MultiSelectCombobox<T>({
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-full p-0">
-          <Command shouldFilter={false}>
+          <Command label={`Search ${label.toLowerCase()}`} shouldFilter={false}>
             <CommandInput
               onValueChange={setSearch}
               placeholder={`Search ${label.toLowerCase()}...`}

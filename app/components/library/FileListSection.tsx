@@ -151,7 +151,7 @@ export function FileListSection({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <FileMetaInfo file={file} />
-              <FileScanErrorBadge file={file} />
+              <FileScanErrorBadge file={file} interactive={false} />
               <Badge variant="outline">{file.file_type?.toUpperCase()}</Badge>
             </div>
           </Link>

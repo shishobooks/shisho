@@ -4,7 +4,7 @@ React 19, TypeScript, Tailwind, TanStack Query, Vite, and Radix UI with shadcn/u
 
 ## Enforced by checks
 
-ESLint (`eslint.config.js`, local rules in `eslint-rules/`) and `app/hooks/queries/permissions.test.tsx` enforce the mechanical frontend rules; their messages say how to comply. Among them: no raw `<button>` outside `app/components/ui`, so every control gets `Button`'s focus ring, cursor, and disabled state; and every button and link has an accessible name at every width (a `title` is not a name).
+ESLint (`eslint.config.js`, local rules in `eslint-rules/`) and `app/hooks/queries/permissions.test.tsx` enforce the mechanical frontend rules; their messages say how to comply. Among them: no raw `<button>` outside `app/components/ui`, so every control gets `Button`'s focus ring, cursor, and disabled state; every button and link has an accessible name at every width (a `title` is not a name); and every form control has one too, never its placeholder or the value it shows.
 
 The rules have known bypasses, pinned in `app/eslint-rules.test.ts`: a passing lint is a tripwire, not a guarantee. Tab state in `useState` passes lint but is still wrong; tabs deep-link through the URL ("Every page" in `docs/agents/standards/frontend.md`).
 

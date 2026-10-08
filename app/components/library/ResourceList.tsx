@@ -28,7 +28,10 @@ interface ItemConfig {
 interface ResourceListProps<T extends { id: number }> {
   title: string;
   subtitle: string;
-  searchPlaceholder: string;
+  /** Names the search box ("Search genres"). */
+  searchLabel: string;
+  /** Defaults to the label followed by "...". */
+  searchPlaceholder?: string;
   query: UseQueryResult<ResourceListResponse<T>>;
   state: ReturnType<typeof useResourceListState>;
   itemConfig: (item: T) => ItemConfig;
@@ -40,6 +43,7 @@ interface ResourceListProps<T extends { id: number }> {
 const ResourceList = <T extends { id: number }>({
   title,
   subtitle,
+  searchLabel,
   searchPlaceholder,
   query,
   state,
@@ -129,8 +133,9 @@ const ResourceList = <T extends { id: number }>({
       <div className="mb-6">
         <SearchInput
           initialValue={searchQuery}
+          label={searchLabel}
           onDebouncedChange={handleDebouncedSearchChange}
-          placeholder={searchPlaceholder}
+          placeholder={searchPlaceholder ?? `${searchLabel}...`}
         />
       </div>
 
