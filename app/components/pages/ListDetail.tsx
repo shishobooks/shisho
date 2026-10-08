@@ -188,13 +188,15 @@ const ListDetail = () => {
       <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
         {/* List Header */}
         <div className="mb-6 md:mb-8">
-          <div className="flex flex-col gap-3 mb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
             <h1 className="text-2xl font-semibold min-w-0 break-words">
               {list.name}
             </h1>
-            <div className="flex gap-2">
-              {canEdit && (
+            {/* Managers and owners can also edit, so canEdit covers every action. */}
+            {canEdit && (
+              <div className="flex items-center gap-2 shrink-0">
                 <Button
+                  aria-label="Edit"
                   onClick={() => setEditDialogOpen(true)}
                   size="sm"
                   variant="outline"
@@ -202,28 +204,30 @@ const ListDetail = () => {
                   <Edit className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Edit</span>
                 </Button>
-              )}
-              {canManage && (
-                <Button
-                  onClick={() => setShareDialogOpen(true)}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Share2 className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Share</span>
-                </Button>
-              )}
-              {isOwner && (
-                <Button
-                  onClick={() => setDeleteDialogOpen(true)}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Trash2 className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Delete</span>
-                </Button>
-              )}
-            </div>
+                {canManage && (
+                  <Button
+                    aria-label="Share"
+                    onClick={() => setShareDialogOpen(true)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Share2 className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Share</span>
+                  </Button>
+                )}
+                {isOwner && (
+                  <Button
+                    aria-label="Delete"
+                    onClick={() => setDeleteDialogOpen(true)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Trash2 className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Delete</span>
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
           {list.description && (
             <p className="text-sm md:text-base text-muted-foreground mb-2">
