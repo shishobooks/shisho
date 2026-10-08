@@ -363,20 +363,41 @@ function resolveAuthors(
   return { value: incoming, status: "changed" };
 }
 
-function validateSeriesEntries(entries: SeriesEntry[]): string | undefined {
-  for (const entry of entries) {
+interface SeriesValidationError {
+  /** The entry the message is about. */
+  index: number;
+  /** The input in that entry that is marked invalid. */
+  field: "start" | "end";
+  message: string;
+}
+
+function validateSeriesEntries(
+  entries: SeriesEntry[],
+): SeriesValidationError | undefined {
+  for (const [index, entry] of entries.entries()) {
     if (!entry.name.trim()) continue;
     const hasStart = entry.number !== "";
     const hasEnd = entry.numberEnd !== "";
-    if (hasEnd && !hasStart) return "Series range end requires a start.";
-    if (entry.unit !== "" && !hasStart)
-      return "Series number unit requires a start.";
-    if (hasStart && !Number.isFinite(Number(entry.number)))
-      return "Series numbers must be finite.";
-    if (hasEnd && !Number.isFinite(Number(entry.numberEnd)))
-      return "Series numbers must be finite.";
-    if (hasEnd && Number(entry.numberEnd) <= Number(entry.number))
-      return "Series range end must be greater than its start.";
+    const error = (field: "start" | "end", message: string) => ({
+      index,
+      field,
+      message,
+    });
+    if (hasEnd && !hasStart) {
+      return error("start", "Series range end requires a start.");
+    }
+    if (entry.unit !== "" && !hasStart) {
+      return error("start", "Series number unit requires a start.");
+    }
+    if (hasStart && !Number.isFinite(Number(entry.number))) {
+      return error("start", "Series numbers must be finite.");
+    }
+    if (hasEnd && !Number.isFinite(Number(entry.numberEnd))) {
+      return error("end", "Series numbers must be finite.");
+    }
+    if (hasEnd && Number(entry.numberEnd) <= Number(entry.number)) {
+      return error("end", "Series range end must be greater than its start.");
+    }
   }
   return undefined;
 }
@@ -971,9 +992,12 @@ export function IdentifyReviewForm({
 
   const [decisions, setDecisions] =
     useState<Record<FieldKey, boolean>>(initialDecisions);
-  const seriesValidationError = decisions.series
+  const seriesValidation = decisions.series
     ? validateSeriesEntries(seriesEntries)
     : undefined;
+  const seriesValidationError = seriesValidation?.message;
+  const isSeriesInputInvalid = (index: number, field: "start" | "end") =>
+    seriesValidation?.index === index && seriesValidation.field === field;
   const titleValidationError =
     decisions.title && !title.trim() ? "Title cannot be blank" : undefined;
 
@@ -1475,14 +1499,23 @@ export function IdentifyReviewForm({
                 >
                   <div className="space-y-1">
                     <Input
-                      aria-invalid={titleValidationError !== undefined}
+                      aria-describedby={
+                        titleValidationError
+                          ? `${fieldId}-title-error`
+                          : undefined
+                      }
+                      aria-invalid={titleValidationError ? true : undefined}
                       disabled={isDisabled("title")}
                       id={`${fieldId}-title`}
                       onChange={(e) => setTitle(e.target.value)}
                       value={title}
                     />
                     {titleValidationError && (
-                      <p className="text-xs text-destructive" role="alert">
+                      <p
+                        className="text-xs text-destructive"
+                        id={`${fieldId}-title-error`}
+                        role="alert"
+                      >
                         {titleValidationError}
                       </p>
                     )}
@@ -1681,6 +1714,16 @@ export function IdentifyReviewForm({
                     renderExtras={(entry, idx) => (
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Input
+                          aria-describedby={
+                            isSeriesInputInvalid(idx, "start")
+                              ? `${fieldId}-series-error`
+                              : undefined
+                          }
+                          aria-invalid={
+                            isSeriesInputInvalid(idx, "start")
+                              ? true
+                              : undefined
+                          }
                           aria-label="Series start"
                           className="w-20"
                           onChange={(e) => {
@@ -1693,6 +1736,14 @@ export function IdentifyReviewForm({
                           value={entry.number}
                         />
                         <Input
+                          aria-describedby={
+                            isSeriesInputInvalid(idx, "end")
+                              ? `${fieldId}-series-error`
+                              : undefined
+                          }
+                          aria-invalid={
+                            isSeriesInputInvalid(idx, "end") ? true : undefined
+                          }
                           aria-label="Series end"
                           className="w-20"
                           onChange={(e) => {
@@ -1734,7 +1785,11 @@ export function IdentifyReviewForm({
                     )}
                   />
                   {seriesValidationError && (
-                    <p className="text-sm text-destructive" role="alert">
+                    <p
+                      className="text-sm text-destructive"
+                      id={`${fieldId}-series-error`}
+                      role="alert"
+                    >
                       {seriesValidationError}
                     </p>
                   )}

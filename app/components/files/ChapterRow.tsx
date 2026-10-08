@@ -8,7 +8,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -227,7 +227,19 @@ const ChapterRow = (props: ChapterRowProps) => {
   const [localTimestampValue, setLocalTimestampValue] = useState(
     formatTimestamp(currentTimestampMs),
   );
-  const [hasTimestampError, setHasTimestampError] = useState(false);
+  // Why the typed timestamp was rejected, which picks the message shown.
+  const [timestampError, setTimestampError] = useState<
+    "unparseable" | "out-of-range" | null
+  >(null);
+  const hasTimestampError = timestampError !== null;
+  const timestampErrorMessage =
+    timestampError === "unparseable"
+      ? "Enter a time as HH:MM:SS.mmm"
+      : timestampError === "out-of-range"
+        ? "Timestamp exceeds audiobook duration"
+        : null;
+  const pageErrorId = useId();
+  const timestampErrorId = useId();
 
   // Sync local page value when chapter.start_page changes (e.g., from parent state)
   // Display is 1-indexed
@@ -239,7 +251,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   // Sync local timestamp value when chapter.start_timestamp_ms changes (e.g., from parent state)
   useEffect(() => {
     setLocalTimestampValue(formatTimestamp(chapter.start_timestamp_ms ?? 0));
-    setHasTimestampError(false);
+    setTimestampError(null);
   }, [chapter.start_timestamp_ms]);
 
   // Page helper: Validate page number (1-indexed display value)
@@ -314,13 +326,13 @@ const ChapterRow = (props: ChapterRowProps) => {
   const handleTimestampBlur = () => {
     const parsedMs = parseTimestampMs(localTimestampValue);
     if (parsedMs === null) {
-      setHasTimestampError(true);
+      setTimestampError("unparseable");
       props.onValidationChange?.(chapter.id, true);
     } else if (!validateTimestamp(parsedMs)) {
-      setHasTimestampError(true);
+      setTimestampError("out-of-range");
       props.onValidationChange?.(chapter.id, true);
     } else {
-      setHasTimestampError(false);
+      setTimestampError(null);
       props.onValidationChange?.(chapter.id, false);
       props.onStartTimestampChange?.(parsedMs);
     }
@@ -332,7 +344,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   const handleDecrementTimestamp = () => {
     const newMs = Math.max(0, currentTimestampMs - 1000);
     setLocalTimestampValue(formatTimestamp(newMs));
-    setHasTimestampError(false);
+    setTimestampError(null);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
   };
@@ -342,7 +354,7 @@ const ChapterRow = (props: ChapterRowProps) => {
   const handleIncrementTimestamp = () => {
     const newMs = Math.min(maxDurationMs, currentTimestampMs + 1000);
     setLocalTimestampValue(formatTimestamp(newMs));
-    setHasTimestampError(false);
+    setTimestampError(null);
     props.onValidationChange?.(chapter.id, false);
     props.onStartTimestampChange?.(newMs);
   };
@@ -466,76 +478,89 @@ const ChapterRow = (props: ChapterRowProps) => {
   // Page-based edit mode (CBZ, PDF)
   if (isEditing && isPageBased) {
     return (
-      <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
-        {/* Small thumbnail with hover preview (clickable to open page picker) */}
-        {file != null && (
-          <PagePreview
-            actionLabel="Change start page"
-            buttonRef={thumbnailRef}
-            file={file}
-            onClick={() => setPagePickerOpen(true)}
-            page={currentPage}
-            thumbnailSize={60}
-          />
-        )}
+      <div className="py-2 border-b border-border last:border-b-0">
+        <div className="flex items-center gap-3">
+          {/* Small thumbnail with hover preview (clickable to open page picker) */}
+          {file != null && (
+            <PagePreview
+              actionLabel="Change start page"
+              buttonRef={thumbnailRef}
+              file={file}
+              onClick={() => setPagePickerOpen(true)}
+              page={currentPage}
+              thumbnailSize={60}
+            />
+          )}
 
-        {/* Title input */}
-        <Input
-          aria-label="Chapter title"
-          className="flex-1"
-          onChange={(e) => props.onTitleChange?.(e.target.value)}
-          placeholder="Chapter title"
-          value={chapter.title}
-        />
-
-        {/* Start page input with -/+ buttons */}
-        <div className="flex items-center gap-1">
-          <Button
-            aria-label="Previous page"
-            disabled={currentPage <= 0}
-            onClick={handleDecrementPage}
-            size="icon"
-            title="Previous page"
-            type="button"
-            variant="ghost"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+          {/* Title input */}
           <Input
-            aria-label="Start page"
-            className={cn(
-              "w-16 text-center",
-              hasPageError && "border-red-500 focus-visible:ring-red-500",
-            )}
-            onBlur={() => props.onBlur?.()}
-            onChange={handlePageInputChange}
-            type="number"
-            value={localPageValue}
+            aria-label="Chapter title"
+            className="flex-1"
+            onChange={(e) => props.onTitleChange?.(e.target.value)}
+            placeholder="Chapter title"
+            value={chapter.title}
           />
+
+          {/* Start page input with -/+ buttons */}
+          <div className="flex items-center gap-1">
+            <Button
+              aria-label="Previous page"
+              disabled={currentPage <= 0}
+              onClick={handleDecrementPage}
+              size="icon"
+              title="Previous page"
+              type="button"
+              variant="ghost"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              aria-describedby={hasPageError ? pageErrorId : undefined}
+              aria-invalid={hasPageError ? true : undefined}
+              aria-label="Start page"
+              className={cn(
+                "w-16 text-center",
+                hasPageError && "border-red-500 focus-visible:ring-red-500",
+              )}
+              onBlur={() => props.onBlur?.()}
+              onChange={handlePageInputChange}
+              type="number"
+              value={localPageValue}
+            />
+            <Button
+              aria-label="Next page"
+              disabled={currentPage >= pageCount - 1}
+              onClick={handleIncrementPage}
+              size="icon"
+              title="Next page"
+              type="button"
+              variant="ghost"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Delete button (immediate, no confirmation for page-based files) */}
           <Button
-            aria-label="Next page"
-            disabled={currentPage >= pageCount - 1}
-            onClick={handleIncrementPage}
+            aria-label="Delete chapter"
+            onClick={() => props.onDelete?.()}
             size="icon"
-            title="Next page"
+            title="Delete chapter"
             type="button"
             variant="ghost"
           >
-            <ChevronRight className="h-4 w-4" />
+            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
           </Button>
         </div>
-
-        {/* Delete button (immediate, no confirmation for page-based files) */}
-        <Button
-          aria-label="Delete chapter"
-          onClick={() => props.onDelete?.()}
-          size="icon"
-          title="Delete chapter"
-          type="button"
-          variant="ghost"
-        >
-          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-        </Button>
+        {/* Always rendered, so the row keeps its height when the message
+            appears. No role="alert": it would interrupt on every keystroke,
+            and aria-describedby already reads it with the input. */}
+        <p className="mt-1 min-h-4 text-xs text-destructive" id={pageErrorId}>
+          {hasPageError &&
+            (pageCount > 0
+              ? `Enter a page from 1 to ${pageCount}`
+              : "Enter a valid page number")}
+        </p>
 
         {/* Page picker dialog */}
         {file != null && (
@@ -596,6 +621,10 @@ const ChapterRow = (props: ChapterRowProps) => {
           <Tooltip open={hasTimestampError}>
             <TooltipTrigger asChild>
               <Input
+                aria-describedby={
+                  hasTimestampError ? timestampErrorId : undefined
+                }
+                aria-invalid={hasTimestampError ? true : undefined}
                 aria-label="Start time"
                 className={cn(
                   "w-28 text-center font-mono",
@@ -609,9 +638,17 @@ const ChapterRow = (props: ChapterRowProps) => {
               />
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              Timestamp exceeds audiobook duration
+              {timestampErrorMessage}
             </TooltipContent>
           </Tooltip>
+          {/* The tooltip shows the message; this copy is what the input's
+              aria-describedby points at and what is announced. Radix
+              renders tooltip text twice, so it cannot hold the id. */}
+          {timestampErrorMessage && (
+            <span className="sr-only" id={timestampErrorId} role="alert">
+              {timestampErrorMessage}
+            </span>
+          )}
           <Button
             aria-label="Add 1 second"
             disabled={currentTimestampMs >= maxDurationMs}

@@ -27,16 +27,20 @@
 // `hidden` class with no variant that shows it), both aria-hidden and
 // tabIndex={-1} (a pointer-only duplicate of a named control), and a control
 // inside a menuitemcheckbox or menuitemradio row, whose children are
-// presentational (the row draws its checkbox). RadioGroup itself is not checked: group labels
-// are a separate rule. See "Enforced by checks" in app/AGENTS.md, and
+// presentational (the row draws its checkbox). RadioGroup itself is not
+// checked: radio-group-has-name.js names groups. See "Enforced by checks" in app/AGENTS.md, and
 // app/eslint-rules.test.ts for the pinned cases and known gaps.
 
 import {
   attribute,
   classStrings,
   elementName,
+  hasAriaName,
+  hasSpread,
+  hasValue,
   isAriaHidden,
   isUntabbable,
+  literalValue,
 } from "./control-has-name.js";
 
 const LABELLABLE = new Set([
@@ -66,38 +70,6 @@ const BUTTON_INPUT_TYPES = new Set(["submit", "button", "reset", "image"]);
 const BARE_HIDDEN = /(^|\s)hidden(\s|$)/;
 const SHOWN_SOMEWHERE =
   /(^|\s)([\w\-[\]=&>.]+:)+(block|inline|inline-block|flex|inline-flex|grid|inline-grid|table|contents)(\s|$)/;
-
-// The string an attribute holds when it is a literal (`id="x"`, `id={"x"}`,
-// or a template with no expressions), undefined when it is computed, and
-// null when the attribute is absent.
-const literalValue = (opening, name) => {
-  const attr = attribute(opening, name);
-  if (!attr) return null;
-  const value = attr.value;
-  if (!value) return "";
-  if (value.type === "Literal") return String(value.value);
-  const expression = value.expression;
-  if (expression?.type === "Literal") return String(expression.value);
-  if (
-    expression?.type === "TemplateLiteral" &&
-    expression.expressions.length === 0
-  ) {
-    return expression.quasis[0].value.cooked;
-  }
-  return undefined;
-};
-
-// Present and not the empty string.
-const hasValue = (opening, name) => {
-  const value = literalValue(opening, name);
-  return value !== null && value !== "";
-};
-
-const hasSpread = (opening) =>
-  opening.attributes.some((attr) => attr.type === "JSXSpreadAttribute");
-
-const hasAriaName = (opening) =>
-  hasValue(opening, "aria-label") || hasValue(opening, "aria-labelledby");
 
 const isHiddenEverywhere = (opening) => {
   if (attribute(opening, "hidden")) return true;

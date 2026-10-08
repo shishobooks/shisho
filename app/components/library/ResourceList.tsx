@@ -83,6 +83,8 @@ const ResourceList = <T extends { id: number }>({
 
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
+  // Loaded results for the current search, not a page still loading.
+  const showsResults = !query.isFetching && !isStaleData;
 
   const renderItem = (item: T) => {
     const config = itemConfig(item);
@@ -139,6 +141,25 @@ const ResourceList = <T extends { id: number }>({
         />
       </div>
 
+      {/* One live region that stays mounted while the results load and
+          change, so a new count or the empty state is announced. A region
+          mounted with its text is often not. */}
+      <div role="status">
+        {showsResults && query.data && total > 0 && (
+          <div className="mb-4 text-sm text-muted-foreground">
+            Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
+            {itemLabel}
+          </div>
+        )}
+        {showsResults && query.data?.items.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            {confirmedSearch
+              ? `No ${itemLabel} found matching your search.`
+              : `No ${itemLabel} in this library yet.`}
+          </div>
+        )}
+      </div>
+
       {(query.isLoading || query.isFetching || isStaleData) && (
         <LoadingSpinner />
       )}
@@ -147,22 +168,9 @@ const ResourceList = <T extends { id: number }>({
         <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
       )}
 
-      {query.data && !query.isFetching && !isStaleData && (
+      {showsResults && query.data && (
         <>
-          {total > 0 && (
-            <div className="mb-4 text-sm text-muted-foreground">
-              Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
-              {itemLabel}
-            </div>
-          )}
-
-          {query.data.items.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {confirmedSearch
-                ? `No ${itemLabel} found matching your search.`
-                : `No ${itemLabel} in this library yet.`}
-            </div>
-          ) : (
+          {query.data.items.length > 0 && (
             <div className="space-y-1 mb-6">
               {query.data.items.map(renderItem)}
             </div>

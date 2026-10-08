@@ -198,6 +198,9 @@ export function LanguageCombobox({
                   <span className="truncate" title={l.name}>
                     {l.name}
                   </span>
+                  {/* cmdk's aria-selected marks the highlighted option, so
+                      the chosen language is spoken as text. */}
+                  {value === l.tag && <span className="sr-only">(chosen)</span>}
                   <span className="ml-auto text-xs text-muted-foreground shrink-0">
                     {l.tag}
                   </span>

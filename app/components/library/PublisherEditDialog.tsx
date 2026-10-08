@@ -309,7 +309,9 @@ export function PublisherEditDialog({
               />
             </div>
             {serverError && (
-              <p className="text-sm text-destructive">{serverError}</p>
+              <p className="text-sm text-destructive" role="alert">
+                {serverError}
+              </p>
             )}
           </div>
         </DialogBody>

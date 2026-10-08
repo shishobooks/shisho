@@ -42,4 +42,42 @@ describe("PermissionMatrix", () => {
       screen.getByRole("checkbox", { name: "Read all resources" }),
     ).toBeInTheDocument();
   });
+
+  it("exposes a partly granted row or column as mixed, not unchecked", () => {
+    render(
+      <PermissionMatrix
+        onChange={vi.fn()}
+        permissions={[{ resource: "shares", operation: "read" }]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "All Shares permissions" }),
+    ).toHaveAttribute("aria-checked", "mixed");
+    expect(
+      screen.getByRole("checkbox", { name: "Read all resources" }),
+    ).toHaveAttribute("aria-checked", "mixed");
+    expect(
+      screen.getByRole("checkbox", { name: "Write all resources" }),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("grants the whole row when a partly granted row is toggled", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    render(
+      <PermissionMatrix
+        onChange={onChange}
+        permissions={[{ resource: "shares", operation: "read" }]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "All Shares permissions" }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith([
+      { resource: "shares", operation: "read" },
+      { resource: "shares", operation: "write" },
+    ]);
+  });
 });

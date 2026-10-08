@@ -376,10 +376,17 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Theme</label>
-                  <div className="flex gap-2 mt-2">
+                  <label className="text-sm font-medium" id="epub-theme-label">
+                    Theme
+                  </label>
+                  <div
+                    aria-labelledby="epub-theme-label"
+                    className="flex gap-2 mt-2"
+                    role="group"
+                  >
                     {(["light", "dark", "sepia"] as const).map((t) => (
                       <Button
+                        aria-pressed={theme === t}
                         disabled={!settingsReady}
                         key={t}
                         onClick={() => commitSettings({ viewer_epub_theme: t })}
@@ -392,10 +399,17 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Flow</label>
-                  <div className="flex gap-2 mt-2">
+                  <label className="text-sm font-medium" id="epub-flow-label">
+                    Flow
+                  </label>
+                  <div
+                    aria-labelledby="epub-flow-label"
+                    className="flex gap-2 mt-2"
+                    role="group"
+                  >
                     {(["paginated", "scrolled"] as const).map((f) => (
                       <Button
+                        aria-pressed={flow === f}
                         disabled={!settingsReady}
                         key={f}
                         onClick={() => commitSettings({ viewer_epub_flow: f })}

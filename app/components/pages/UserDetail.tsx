@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { useLibraries } from "@/hooks/queries/libraries";
@@ -316,17 +317,18 @@ const UserDetail = () => {
         <div className="space-y-4">
           <h2 className="text-lg font-medium">Role</h2>
           <div className="space-y-2">
-            <Label>Select Role</Label>
-            <div className="grid gap-2">
+            <Label id="select-role-label">Select Role</Label>
+            <RadioGroup
+              aria-labelledby="select-role-label"
+              disabled={!canWrite}
+              onValueChange={(value) => setRoleId(Number(value))}
+              value={roleId === null ? "" : String(roleId)}
+            >
               {roles.map((role) => (
                 <div className="flex items-center space-x-2" key={role.id}>
-                  <Checkbox
-                    checked={roleId === role.id}
-                    disabled={!canWrite}
+                  <RadioGroupItem
                     id={`role-${role.id}`}
-                    onCheckedChange={(checked) => {
-                      if (checked) setRoleId(role.id);
-                    }}
+                    value={String(role.id)}
                   />
                   <Label
                     className="text-sm font-normal cursor-pointer"
@@ -341,7 +343,7 @@ const UserDetail = () => {
                   </Label>
                 </div>
               ))}
-            </div>
+            </RadioGroup>
           </div>
         </div>
 
@@ -370,8 +372,12 @@ const UserDetail = () => {
 
           {!allLibraryAccess && (
             <div className="space-y-2 pl-6">
-              <Label>Select Libraries</Label>
-              <div className="grid gap-2">
+              <Label id="select-libraries-label">Select Libraries</Label>
+              <div
+                aria-labelledby="select-libraries-label"
+                className="grid gap-2"
+                role="group"
+              >
                 {libraries.map((library) => (
                   <div className="flex items-center space-x-2" key={library.id}>
                     <Checkbox

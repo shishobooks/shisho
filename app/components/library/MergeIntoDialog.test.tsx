@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -68,5 +68,20 @@ describe("MergeIntoDialog Merge button", () => {
     rerender(renderDialog());
 
     expect(mergeButton()).toBeDisabled();
+  });
+
+  it("names the book list by its label and keeps the search box out of it", () => {
+    render(renderDialog());
+
+    const group = screen.getByRole("radiogroup", {
+      name: "Select target book",
+    });
+    expect(within(group).getByRole("radio", { name: /Target/ })).toBeVisible();
+    expect(
+      within(group).queryByRole("textbox", { name: "Search books" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Search books" }),
+    ).toBeInTheDocument();
   });
 });

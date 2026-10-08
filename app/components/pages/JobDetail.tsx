@@ -192,10 +192,15 @@ const JobDetail = () => {
           type="text"
           value={searchTerm}
         />
-        <div className="flex items-center gap-2">
+        <div
+          aria-label="Log levels"
+          className="flex items-center gap-2"
+          role="group"
+        >
           {[LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelFatal].map(
             (level) => (
               <Button
+                aria-pressed={levelFilter.includes(level)}
                 className={
                   levelFilter.includes(level) ? getLevelColor(level) : ""
                 }

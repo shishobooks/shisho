@@ -151,7 +151,7 @@ export function MergeBooksDialog({
           <>
             <DialogBody className="space-y-6">
               <div className="space-y-2">
-                <Label>Select target book</Label>
+                <Label id="merge-books-target-label">Select target book</Label>
                 <p className="text-sm text-muted-foreground">
                   All files will be moved to this book. Other books will be
                   deleted.
@@ -160,6 +160,7 @@ export function MergeBooksDialog({
 
               <ScrollArea className="h-64 rounded-md border">
                 <RadioGroup
+                  aria-labelledby="merge-books-target-label"
                   className="p-3"
                   onValueChange={setSelectedTargetId}
                   value={selectedTargetId}

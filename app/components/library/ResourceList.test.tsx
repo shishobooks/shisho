@@ -117,7 +117,7 @@ describe("ResourceList", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       /^Failed to load genres/,
     );
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
   it("keeps the loaded results when a background refetch fails", () => {
@@ -131,5 +131,28 @@ describe("ResourceList", () => {
 
     expect(screen.getByText("Fantasy")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("announces the count and the empty state in one region that stays mounted", () => {
+    const { rerender } = render(
+      list({ ...settled, isLoading: true, isFetching: true }),
+    );
+    const region = screen
+      .getAllByRole("status")
+      .find((element) => !element.textContent?.includes("Loading"));
+    expect(region).toHaveTextContent(/^$/);
+
+    rerender(
+      list({
+        ...settled,
+        data: { items: [{ id: 1, name: "Fantasy" }], total: 1 },
+      }),
+    );
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent("Showing 1-1 of 1 genres");
+
+    rerender(list({ ...settled, data: { items: [], total: 0 } }));
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent("No genres in this library yet.");
   });
 });

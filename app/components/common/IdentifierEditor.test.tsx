@@ -109,6 +109,11 @@ describe("IdentifierEditor", () => {
     expect(
       screen.getByText(/Invalid ISBN-13|checksum|valid/i),
     ).toBeInTheDocument();
+    // The error is tied to the input and announced, not only shown.
+    const input = screen.getByRole("textbox", { name: "Identifier value" });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    const error = screen.getByRole("alert");
+    expect(input).toHaveAccessibleDescription(error.textContent!);
   });
 
   it("appends a valid identifier on Add", async () => {

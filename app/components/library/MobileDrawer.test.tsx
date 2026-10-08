@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
   afterEach,
   beforeAll,
@@ -165,5 +165,52 @@ describe("MobileDrawer library picker", () => {
     expect(
       within(getDrawer()).getByRole("link", { name: "Lists" }),
     ).toBeInTheDocument();
+  });
+
+  it("marks the current library, list, and page for screen readers", async () => {
+    setAuth({
+      permissions: ["books:read"],
+      user: { username: "reader", role_name: "Reader" },
+    });
+    server.libraries = [
+      { id: 1, name: "Fiction" },
+      { id: 2, name: "Comics" },
+    ];
+    isOpen = true;
+    stubRequests();
+    // The drawer reads the library from the route params.
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={["/libraries/1/books/7"]}>
+          <Routes>
+            <Route element={<MobileDrawer />} path="/libraries/:libraryId/*" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const drawer = getDrawer();
+    const fiction = await within(drawer).findByRole("button", {
+      name: "Fiction",
+    });
+    expect(fiction).toHaveAttribute("aria-current", "true");
+    expect(
+      within(drawer).getByRole("button", { name: "Comics" }),
+    ).not.toHaveAttribute("aria-current");
+    const current = within(drawer)
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(current.map((link) => link.textContent)).toEqual(getActiveLabels());
+    expect(current).toHaveLength(1);
+  });
+
+  it("marks the current list as the current page", async () => {
+    isOpen = true;
+    renderDrawer("/lists/3");
+
+    const link = await within(getDrawer()).findByRole("link", {
+      name: /To Read/,
+    });
+    expect(link).toHaveAttribute("aria-current", "page");
   });
 });

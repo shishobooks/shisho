@@ -77,6 +77,44 @@ export const isAriaHidden = (opening) => {
   return !(expression?.type === "Literal" && expression.value === false);
 };
 
+// The string an attribute holds when it is a literal (`id="x"`, `id={"x"}`,
+// or a template with no expressions), undefined when it is computed, and
+// null when the attribute is absent.
+export const literalValue = (opening, name) => {
+  const attr = attribute(opening, name);
+  if (!attr) return null;
+  const value = attr.value;
+  if (!value) return "";
+  if (value.type === "Literal") return String(value.value);
+  const expression = value.expression;
+  if (expression?.type === "Literal") return String(expression.value);
+  if (
+    expression?.type === "TemplateLiteral" &&
+    expression.expressions.length === 0
+  ) {
+    return expression.quasis[0].value.cooked;
+  }
+  return undefined;
+};
+
+// Present and not the empty string.
+export const hasValue = (opening, name) => {
+  const value = literalValue(opening, name);
+  return value !== null && value !== "";
+};
+
+export const hasSpread = (opening) =>
+  opening.attributes.some((attr) => attr.type === "JSXSpreadAttribute");
+
+export const hasAriaName = (opening) =>
+  hasValue(opening, "aria-label") || hasValue(opening, "aria-labelledby");
+
+// An attribute set to `{undefined}`, which React drops, so it is absent.
+export const isUndefinedValue = (opening, name) => {
+  const expression = attribute(opening, name)?.value?.expression;
+  return expression?.type === "Identifier" && expression.name === "undefined";
+};
+
 // tabIndex={-1} or tabIndex="-1".
 export const isUntabbable = (opening) => {
   const value = attribute(opening, "tabIndex")?.value;

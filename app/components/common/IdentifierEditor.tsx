@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ export function IdentifierEditor({
   );
   const [newValue, setNewValue] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const validationErrorId = useId();
 
   // Auto-switch the selected identifier type away from one that is already
   // present. Mirrors FileEditDialog's behavior so the dropdown never shows a
@@ -193,6 +194,8 @@ export function IdentifierEditor({
           </SelectContent>
         </Select>
         <Input
+          aria-describedby={validationError ? validationErrorId : undefined}
+          aria-invalid={validationError ? true : undefined}
           aria-label="Identifier value"
           className="flex-1"
           onChange={(e) => {
@@ -218,7 +221,13 @@ export function IdentifierEditor({
         </Button>
       </div>
       {validationError && (
-        <p className="text-xs text-destructive">{validationError}</p>
+        <p
+          className="text-xs text-destructive"
+          id={validationErrorId}
+          role="alert"
+        >
+          {validationError}
+        </p>
       )}
     </div>
   );

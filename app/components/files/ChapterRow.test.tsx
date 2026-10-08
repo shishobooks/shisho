@@ -620,3 +620,94 @@ describe("ChapterRow - EPUB nesting", () => {
     },
   );
 });
+
+describe("ChapterRow - validation errors", () => {
+  const chapter: Chapter = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 100,
+    title: "Chapter 1",
+    sort_order: 0,
+    start_page: 4,
+    start_timestamp_ms: 60000,
+    children: [],
+  };
+
+  it("ties an out-of-range page to a text message", async () => {
+    const user = createUser();
+    renderWithRouter(
+      <ChapterRow
+        chapter={chapter}
+        depth={0}
+        fileType={FileTypeCBZ}
+        isEditing={true}
+        onDelete={vi.fn()}
+        onStartPageChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        pageCount={20}
+      />,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Start page" });
+    expect(input).not.toHaveAttribute("aria-invalid");
+    await user.clear(input);
+    await user.type(input, "99");
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Enter a page from 1 to 20")).toBeVisible();
+    expect(input).toHaveAccessibleDescription("Enter a page from 1 to 20");
+
+    await user.clear(input);
+    await user.type(input, "3");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).toHaveAccessibleDescription("");
+  });
+
+  const renderM4bRow = () =>
+    renderWithRouter(
+      <ChapterRow
+        chapter={chapter}
+        chapterIndex={0}
+        depth={0}
+        fileType={FileTypeM4B}
+        isEditing={true}
+        maxDurationMs={3600000}
+        onDelete={vi.fn()}
+        onPlay={vi.fn()}
+        onStartTimestampChange={vi.fn()}
+        onStop={vi.fn()}
+        onTitleChange={vi.fn()}
+        onValidationChange={vi.fn()}
+        playingChapterIndex={null}
+      />,
+    );
+
+  it("says an unparseable timestamp is malformed, not too long", async () => {
+    const user = createUser();
+    renderM4bRow();
+
+    const input = screen.getByRole("textbox", { name: "Start time" });
+    await user.clear(input);
+    await user.type(input, "soon");
+    await user.tab();
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Enter a time as HH:MM:SS.mmm");
+  });
+
+  it("says a timestamp past the end exceeds the duration", async () => {
+    const user = createUser();
+    renderM4bRow();
+
+    const input = screen.getByRole("textbox", { name: "Start time" });
+    await user.clear(input);
+    await user.type(input, "02:00:00");
+    await user.tab();
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(
+      "Timestamp exceeds audiobook duration",
+    );
+  });
+});

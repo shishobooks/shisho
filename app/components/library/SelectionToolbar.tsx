@@ -11,7 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
@@ -63,6 +63,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const fileTypesLabelId = useId();
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
   const [actionsPopoverOpen, setActionsPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
@@ -241,10 +242,17 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
 
   const downloadContent = (onDownloadClick: () => void) => (
     <div className="p-3 space-y-3">
-      <p className="text-xs font-medium text-muted-foreground">
+      <p
+        className="text-xs font-medium text-muted-foreground"
+        id={fileTypesLabelId}
+      >
         File types to include
       </p>
-      <div className="space-y-2">
+      <div
+        aria-labelledby={fileTypesLabelId}
+        className="space-y-2"
+        role="group"
+      >
         {FILE_TYPE_OPTIONS.map((option) => {
           const isAvailable = availableFileTypes.includes(
             option.value as FileType,
@@ -273,7 +281,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         })}
       </div>
       {downloadInfo && downloadInfo.totalSize > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground" role="status">
           {downloadInfo.fileIds.length}{" "}
           {downloadInfo.fileIds.length === 1 ? "file" : "files"} &middot;{" "}
           {formatFileSize(downloadInfo.totalSize)}

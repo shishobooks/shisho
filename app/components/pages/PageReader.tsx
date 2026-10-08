@@ -264,9 +264,19 @@ export default function PageReader({
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Fit Mode</label>
-                  <div className="flex gap-2 mt-2">
+                  <label
+                    className="text-sm font-medium"
+                    id="page-fit-mode-label"
+                  >
+                    Fit Mode
+                  </label>
+                  <div
+                    aria-labelledby="page-fit-mode-label"
+                    className="flex gap-2 mt-2"
+                    role="group"
+                  >
                     <Button
+                      aria-pressed={fitMode === "fit-height"}
                       disabled={!settingsReady}
                       onClick={() => saveSetting({ fit_mode: "fit-height" })}
                       size="sm"
@@ -275,6 +285,7 @@ export default function PageReader({
                       Fit Height
                     </Button>
                     <Button
+                      aria-pressed={fitMode === "fit-width"}
                       disabled={!settingsReady}
                       onClick={() => saveSetting({ fit_mode: "fit-width" })}
                       size="sm"

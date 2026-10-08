@@ -280,8 +280,14 @@ const AdminReviewCriteria = () => {
           {!canSave && <ReadOnlyNotice />}
           {/* Universal fields */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium">Required for all books</h3>
-            <div className="space-y-2">
+            <h3 className="text-sm font-medium" id="review-universal-heading">
+              Required for all books
+            </h3>
+            <div
+              aria-labelledby="review-universal-heading"
+              className="space-y-2"
+              role="group"
+            >
               {universal_candidates.map((field) => (
                 <div className="flex items-center space-x-2" key={field}>
                   <Checkbox
@@ -311,14 +317,18 @@ const AdminReviewCriteria = () => {
           {/* Audio-specific fields */}
           <div className="space-y-3">
             <div>
-              <h3 className="text-sm font-medium">
+              <h3 className="text-sm font-medium" id="review-audio-heading">
                 Required for audiobooks (additional)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 These apply when a book has any audiobook file.
               </p>
             </div>
-            <div className="space-y-2">
+            <div
+              aria-labelledby="review-audio-heading"
+              className="space-y-2"
+              role="group"
+            >
               {audio_candidates.map((field) => (
                 <div className="flex items-center space-x-2" key={field}>
                   <Checkbox

@@ -99,11 +99,12 @@ export function MergeIntoDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Select target book</Label>
+            <Label id="merge-into-target-label">Select target book</Label>
             <BookSelectionList
               enabled={open}
               excludeBookId={sourceBook.id}
               key={open ? "open" : "closed"}
+              labelId="merge-into-target-label"
               libraryId={library.id}
               onSelectBook={setSelectedTargetId}
               selectedBookId={selectedTargetId}

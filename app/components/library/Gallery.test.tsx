@@ -37,7 +37,7 @@ describe("Gallery", () => {
   it("shows a spinner, not an error, while its query waits on its gate", () => {
     renderGallery({ isEnabled: false });
 
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -60,5 +60,36 @@ describe("Gallery", () => {
 
     expect(screen.getByText("Dune")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("announces the count and the empty state in one region that stays mounted", () => {
+    const gallery = (isLoading: boolean, items: string[]) => (
+      <MemoryRouter>
+        <Gallery
+          isLoading={isLoading}
+          itemLabel="books"
+          items={items}
+          query={{ ...query, data: { items: [], total: items.length } }}
+          renderItem={(item) => <div key={item}>{item}</div>}
+          total={items.length}
+        />
+      </MemoryRouter>
+    );
+    const { rerender } = render(gallery(true, []));
+    const region = screen
+      .getAllByRole("status")
+      .find((element) => !element.textContent?.includes("Loading"));
+    expect(region).toBeDefined();
+    expect(region).toHaveTextContent(/^$/);
+
+    rerender(gallery(false, ["Dune", "Emma"]));
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent("Showing 1-2 of 2 books");
+
+    rerender(gallery(true, []));
+    expect(region).toHaveTextContent(/^$/);
+    rerender(gallery(false, []));
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent("No books found.");
   });
 });
