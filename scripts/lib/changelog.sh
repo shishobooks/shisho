@@ -70,48 +70,89 @@ breaking_section_from_body() {
 }
 
 # indent_breaking_notes
-# Reads section lines on stdin and prints them nested under a parent bullet.
-# "-", "*" or "1." items become "  - text" and their wrapped continuation
-# lines are indented four spaces; a plain paragraph becomes its own "  - "
-# item (older PR bodies wrote the note as a paragraph). Fenced code blocks are
-# copied with a four-space indent so they stay inside the item. Issue
-# references such as "Closes #12" and trailers such as "Co-authored-by:" are
-# dropped, because squash bodies end with them and they are not upgrade notes.
+# Reads section lines on stdin and prints them nested under a parent bullet,
+# two spaces per level: a top-level item is printed as "  - text". Nesting
+# follows CommonMark, so the changelog matches the PR preview the author
+# checked: "-", "*" or "1." items become "- " items, and an item is a child of
+# the nearest open item whose content column (its indent plus the marker and
+# one space, so 2 for "- " and 3 for "1. ") its indent reaches; otherwise it is
+# a sibling. Tabs count to the next multiple of four. Wrapped continuation
+# lines, indented or not, stay with their item. After a blank line, an
+# indented paragraph that reaches an open item's content column stays in that
+# item: printed at the item's text column, so it joins the item's last
+# paragraph, or after a blank line as a separate paragraph when a child item
+# sits between them, so it does not join the child. Any other paragraph
+# becomes its own top-level item (older PR bodies wrote the note as a
+# paragraph). A "### Subheading" that breaking_section_from_body turned into
+# "- **Subheading**" is a top-level item like any other. Fenced code blocks
+# are copied inside the item their indent reaches. Other blank lines are
+# dropped so the list stays tight. Issue references such as "Closes #12" and
+# trailers such as "Co-authored-by:" are dropped, because squash bodies end
+# with them and they are not upgrade notes.
 indent_breaking_notes() {
-    local line trimmed lower
+    local line lead trimmed lower i indent
     local in_bullet=false
     local in_fence=false
-    local fence_indent=""
+    local fence_indent="" fence_pad=""
+    # Content column of each open item, outermost first; n of them are open.
+    local open_content=()
+    local n=0
+    # Depth of the current item and of the item the last printed line is in.
+    local depth=0 last_depth=0
+    local pad="  "
     # Kept in variables because a ")" inside a bracket expression confuses
     # the [[ ]] parser when the pattern is written inline.
     local item_re='^([-*]|[0-9]+[.)])[[:space:]]+(.*)$'
     local issue_ref_re='^(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?)[[:space:]:]+(#|https?://)'
     local trailer_re='^[a-z][a-z-]*-by:[[:space:]]'
     while IFS= read -r line; do
-        if [[ "$line" =~ ^[[:space:]]*(\`\`\`|~~~) ]]; then
-            if [[ "$in_fence" == "true" ]]; then
-                in_fence=false
-            else
-                in_fence=true
-                # The fence's own indentation is removed from its content so
-                # the block nests at the same depth wherever it was written.
-                fence_indent="${line%%[![:space:]]*}"
-            fi
-            printf '    %s\n' "${line#"${line%%[![:space:]]*}"}"
-            continue
-        fi
         if [[ "$in_fence" == "true" ]]; then
-            printf '    %s\n' "${line#"$fence_indent"}"
+            if [[ "$line" =~ ^[[:space:]]*(\`\`\`|~~~) ]]; then
+                in_fence=false
+                printf '%s%s\n' "$fence_pad" "${line#"${line%%[![:space:]]*}"}"
+            else
+                printf '%s%s\n' "$fence_pad" "${line#"$fence_indent"}"
+            fi
             continue
         fi
-        trimmed="${line#"${line%%[![:space:]]*}"}"
+        lead="${line%%[![:space:]]*}"
+        trimmed="${line#"$lead"}"
         if [[ -z "$trimmed" ]]; then
             in_bullet=false
             continue
         fi
-        if [[ "$trimmed" =~ $item_re ]]; then
-            printf '  - %s\n' "${BASH_REMATCH[2]}"
+        indent=0
+        for (( i = 0; i < ${#lead}; i++ )); do
+            if [[ "${lead:i:1}" == $'\t' ]]; then
+                indent=$(( (indent / 4 + 1) * 4 ))
+            else
+                indent=$(( indent + 1 ))
+            fi
+        done
+        if [[ "$trimmed" =~ ^(\`\`\`|~~~) ]]; then
+            # The fence's own indentation is removed from its content so the
+            # block nests inside its item wherever it was written. Text right
+            # after the closing fence continues that item.
+            in_fence=true
+            fence_indent="$lead"
+            while (( n > 0 )) && (( indent < open_content[n-1] )); do n=$(( n - 1 )); done
+            depth=$(( n > 0 ? n - 1 : 0 ))
+            printf -v pad '%*s' $(( 2 + depth * 2 )) ''
+            fence_pad="$pad  "
+            printf '%s%s\n' "$fence_pad" "$trimmed"
             in_bullet=true
+            last_depth=$depth
+            continue
+        fi
+        if [[ "$trimmed" =~ $item_re ]]; then
+            while (( n > 0 )) && (( indent < open_content[n-1] )); do n=$(( n - 1 )); done
+            depth=$n
+            open_content[n]=$(( indent + ${#BASH_REMATCH[1]} + 1 ))
+            n=$(( n + 1 ))
+            printf -v pad '%*s' $(( 2 + depth * 2 )) ''
+            printf '%s- %s\n' "$pad" "${BASH_REMATCH[2]}"
+            in_bullet=true
+            last_depth=$depth
             continue
         fi
         lower=$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')
@@ -120,11 +161,25 @@ indent_breaking_notes() {
             continue
         fi
         if [[ "$in_bullet" == "true" ]]; then
-            printf '    %s\n' "$trimmed"
-        else
-            printf '  - %s\n' "$trimmed"
-            in_bullet=true
+            printf '%s  %s\n' "$pad" "$trimmed"
+            continue
         fi
+        # A paragraph after a blank line.
+        while (( n > 0 )) && (( indent < open_content[n-1] )); do n=$(( n - 1 )); done
+        if (( n > 0 )); then
+            depth=$(( n - 1 ))
+            printf -v pad '%*s' $(( 2 + depth * 2 )) ''
+            if (( depth < last_depth )); then
+                printf '\n'
+            fi
+            printf '%s  %s\n' "$pad" "$trimmed"
+        else
+            depth=0
+            pad="  "
+            printf '  - %s\n' "$trimmed"
+        fi
+        in_bullet=true
+        last_depth=$depth
     done
 }
 
