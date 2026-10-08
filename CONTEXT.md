@@ -11,11 +11,11 @@ A logical work in the library, composed of one or more files.
 _Avoid_: title, item
 
 **File**:
-A single media file (EPUB, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to a book. MOBI covers the older Kindle files (`.mobi`, `.azw`, `.prc`); AZW3 is the modern Kindle format. KFX is not a supported format.
+A single media file (EPUB, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to a book. MOBI is the older Kindle format and AZW3 the newer KF8 one.
 _Avoid_: asset, media
 
 **Reflowable**:
-An ebook **File** whose text re-wraps to fit the screen (EPUB, MOBI, AZW3). Positions within it are locations in the text, not page numbers.
+An ebook **File** whose text re-wraps to fit the screen (EPUB, MOBI, AZW3). Classified by file type, so a fixed-layout EPUB is still reflowable. Positions within it are locations in the text, not page numbers.
 _Avoid_: text book, ebook (ebook also includes page-based files)
 
 **Page-based**:
