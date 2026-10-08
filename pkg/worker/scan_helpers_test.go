@@ -905,14 +905,27 @@ func TestHasNonPDFMainSibling(t *testing.T) {
 		assert.False(t, got)
 	})
 
+	for _, name := range []string{"book.mobi", "book.azw", "book.prc", "book.azw3"} {
+		t.Run(name+" sibling", func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "supplement.pdf"))
+			writeFile(t, filepath.Join(dir, name))
+
+			got, err := hasNonPDFMainSibling(dir, nil)
+			require.NoError(t, err)
+			assert.True(t, got)
+		})
+	}
+
 	t.Run("plugin-registered extension is a sibling", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, "supplement.pdf"))
-		writeFile(t, filepath.Join(dir, "book.azw3"))
+		writeFile(t, filepath.Join(dir, "book.fb2"))
 
 		// Plugin extensions are stored without leading dot, lowercase.
-		pluginExts := map[string]struct{}{"azw3": {}}
+		pluginExts := map[string]struct{}{"fb2": {}}
 		got, err := hasNonPDFMainSibling(dir, pluginExts)
 		require.NoError(t, err)
 		assert.True(t, got)

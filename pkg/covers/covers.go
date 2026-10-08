@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -25,6 +26,8 @@ const (
 // when the preferred kind has no covers — a book-only library still gets a
 // cover for an audiobook-only book, and vice versa. Supplements are excluded
 // from selection regardless of cover state — they don't represent the book.
+// Among ebook files with no Preferred Cover, EPUB comes first, then AZW3, then
+// MOBI, then the rest in their given order (models.EbookCoverRank).
 func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 	var bookFiles, audiobookFiles []*models.File
 	for _, f := range files {
@@ -34,13 +37,16 @@ func SelectFile(files []*models.File, coverAspectRatio string) *models.File {
 		if f.CoverImageFilename == nil || *f.CoverImageFilename == "" {
 			continue
 		}
-		switch f.FileType {
-		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF:
+		switch {
+		case models.IsEbookFileType(f.FileType):
 			bookFiles = append(bookFiles, f)
-		case models.FileTypeM4B:
+		case f.FileType == models.FileTypeM4B:
 			audiobookFiles = append(audiobookFiles, f)
 		}
 	}
+	slices.SortStableFunc(bookFiles, func(a, b *models.File) int {
+		return models.EbookCoverRank(a.FileType) - models.EbookCoverRank(b.FileType)
+	})
 
 	// Within each bucket, prefer a file with IsPreferredCover set.
 	pickFirst := func(files []*models.File) *models.File {

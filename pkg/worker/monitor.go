@@ -794,7 +794,7 @@ func (m *Monitor) tryDetectMove(ctx context.Context, path string, libraryID int)
 	// below: whichever row's stored path is gone from disk is treated as
 	// displaced, and the tiebreak picks among displaced candidates by
 	// FileModifiedAt.
-	newFileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	newFileType := models.FileTypeForPath(path)
 
 	// Walk matches, collecting every same-type candidate whose stored path
 	// is no longer on disk. Multiple displaced candidates can happen if the

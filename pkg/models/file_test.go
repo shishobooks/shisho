@@ -93,3 +93,64 @@ func TestResolveFileDisplayNames(t *testing.T) {
 	ResolveBookFileDisplayNames(books...)
 	assert.Equal(t, "a.pdf", books[0].Files[0].DisplayName)
 }
+
+func TestFileTypeForPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/lib/Book/book.epub", FileTypeEPUB},
+		{"/lib/Book/book.mobi", FileTypeMOBI},
+		{"/lib/Book/book.azw", FileTypeMOBI},
+		{"/lib/Book/book.PRC", FileTypeMOBI},
+		{"/lib/Book/book.azw3", FileTypeAZW3},
+		{"/lib/Book/book.AZW3", FileTypeAZW3},
+		{"/lib/Book/book.cbz", FileTypeCBZ},
+		{"/lib/Book/notes.TXT", "txt"},
+		{"/lib/Book/book.fb2", "fb2"},
+		{"/lib/Book/README", ""},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, FileTypeForPath(tt.path), tt.path)
+	}
+}
+
+func TestIsBuiltInFileType(t *testing.T) {
+	t.Parallel()
+
+	for _, ft := range []string{FileTypeEPUB, FileTypeCBZ, FileTypeM4B, FileTypePDF, FileTypeMOBI, FileTypeAZW3} {
+		assert.True(t, IsBuiltInFileType(ft), ft)
+	}
+	for _, ft := range []string{"azw", "prc", "txt", "fb2", ""} {
+		assert.False(t, IsBuiltInFileType(ft), ft)
+	}
+}
+
+func TestIsEbookFileType(t *testing.T) {
+	t.Parallel()
+
+	for _, ft := range []string{FileTypeEPUB, FileTypeAZW3, FileTypeMOBI, FileTypeCBZ, FileTypePDF} {
+		assert.True(t, IsEbookFileType(ft), ft)
+	}
+	for _, ft := range []string{FileTypeM4B, "txt", ""} {
+		assert.False(t, IsEbookFileType(ft), ft)
+	}
+}
+
+func TestEbookCoverRank(t *testing.T) {
+	t.Parallel()
+
+	assert.Less(t, EbookCoverRank(FileTypeEPUB), EbookCoverRank(FileTypeAZW3))
+	assert.Less(t, EbookCoverRank(FileTypeAZW3), EbookCoverRank(FileTypeMOBI))
+	assert.Less(t, EbookCoverRank(FileTypeMOBI), EbookCoverRank(FileTypeCBZ))
+	assert.Equal(t, EbookCoverRank(FileTypeCBZ), EbookCoverRank(FileTypePDF), "the other ebook formats keep their existing order")
+}
+
+func TestFileTypeMimeType_MOBI(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "application/x-mobipocket-ebook", FileTypeMimeType(FileTypeMOBI))
+	assert.Equal(t, "application/vnd.amazon.mobi8-ebook", FileTypeMimeType(FileTypeAZW3))
+}

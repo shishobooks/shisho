@@ -1,9 +1,9 @@
 import type { File } from "@/types";
+import { ebookCoverRank, isEbookFileType } from "@/utils/fileTypes";
 
 const isMainFile = (f: File): boolean => f.file_role !== "supplement";
 
-const isBookFile = (f: File): boolean =>
-  f.file_type === "epub" || f.file_type === "cbz" || f.file_type === "pdf";
+const isBookFile = (f: File): boolean => isEbookFileType(f.file_type);
 
 const isAudiobookFile = (f: File): boolean => f.file_type === "m4b";
 
@@ -18,7 +18,8 @@ const pickFirst = (bucket: File[]): File =>
  * preferred cover_aspect_ratio setting. Mirrors the backend's
  * pkg/covers.SelectFile logic. Supplements are excluded — they don't
  * represent the book. Within each bucket (ebook / audiobook), a file with
- * is_preferred_cover takes priority.
+ * is_preferred_cover takes priority; otherwise ebooks go EPUB, AZW3, MOBI,
+ * then the rest in their given order.
  */
 export const selectCoverFile = (
   files: File[] | undefined,
@@ -27,7 +28,9 @@ export const selectCoverFile = (
   if (!files) return null;
 
   const candidates = files.filter(isMainFile);
-  const bookFiles = candidates.filter((f) => isBookFile(f) && hasCover(f));
+  const bookFiles = candidates
+    .filter((f) => isBookFile(f) && hasCover(f))
+    .sort((a, b) => ebookCoverRank(a.file_type) - ebookCoverRank(b.file_type));
   const audiobookFiles = candidates.filter(
     (f) => isAudiobookFile(f) && hasCover(f),
   );

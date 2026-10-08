@@ -136,11 +136,9 @@ func (w *Worker) cleanupOrphanedFiles(
 
 	// Step 4: Handle full orphan books.
 	// Build supported types set for supplement promotion.
-	supportedTypes := map[string]struct{}{
-		models.FileTypeEPUB: {},
-		models.FileTypeCBZ:  {},
-		models.FileTypeM4B:  {},
-		models.FileTypePDF:  {},
+	supportedTypes := make(map[string]struct{})
+	for _, fileType := range models.BuiltInFileTypes {
+		supportedTypes[fileType] = struct{}{}
 	}
 	if w.pluginManager != nil {
 		for ext := range w.pluginManager.RegisteredFileExtensions() {

@@ -161,7 +161,8 @@ type DeleteFileResponse struct {
 }
 
 // ResyncFileResponse is returned by the file resync endpoint when the resync
-// determined the file no longer exists on disk. It reports the cascade
+// removed the file: it no longer exists on disk, or it was replaced by a
+// DRM-protected copy. It reports the cascade
 // consequences (the file was deleted, and possibly its parent book). When the
 // file still exists, the endpoint returns the refreshed File model instead.
 type ResyncFileResponse struct {

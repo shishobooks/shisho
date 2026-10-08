@@ -27,13 +27,21 @@ import (
 // may report for a genuine file of that format. M4B containers vary by the tool
 // that wrote them: the "M4A " brand detects as audio/x-m4a, the "M4B " brand as
 // audio/mp4, and generic "isom"/"mp42" brands as video/mp4. All three are real
-// audiobooks and must be accepted.
+// audiobooks and must be accepted. MOBI6, KF8, and combo files all detect as
+// application/x-mobipocket-ebook, DRM-protected ones included; the parser
+// declines those.
 var extensionsToScan = map[string]map[string]struct{}{
 	".epub": {"application/epub+zip": {}},
 	".m4b":  {"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}},
 	".cbz":  {"application/zip": {}},
 	".pdf":  {"application/pdf": {}},
+	".mobi": {mobiMimeType: {}},
+	".azw":  {mobiMimeType: {}},
+	".prc":  {mobiMimeType: {}},
+	".azw3": {mobiMimeType: {}},
 }
+
+const mobiMimeType = "application/x-mobipocket-ebook"
 
 // checkExpectedMimeType detects the mime type of a file with a built-in
 // extension and reports whether it is one the format's parser can handle.
@@ -186,8 +194,8 @@ func looksLikePDFSupplement(filename string, names []string) bool {
 }
 
 // hasNonPDFMainSibling returns true if dir (recursive) contains at least one
-// file with a non-PDF main-eligible extension. Main-eligible means EPUB / CBZ /
-// M4B or any extension in pluginExts (which comes from
+// file with a non-PDF main-eligible extension. Main-eligible means a built-in
+// file type or any extension in pluginExts (which comes from
 // pluginManager.RegisteredFileExtensions() — keys are extensions without the
 // leading dot, lowercase). pluginExts may be nil. Hidden subdirectories
 // (e.g. .git, .calibre, .stversions) are skipped so a stray ebook inside an
@@ -208,15 +216,15 @@ func hasNonPDFMainSibling(dir string, pluginExts map[string]struct{}) (bool, err
 			}
 			return nil
 		}
-		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
-		if ext == models.FileTypePDF {
+		fileType := models.FileTypeForPath(path)
+		if fileType == models.FileTypePDF {
 			return nil
 		}
-		switch ext {
-		case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypeM4B:
+		if models.IsBuiltInFileType(fileType) {
 			found = true
 			return filepath.SkipAll
 		}
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 		if pluginExts != nil {
 			if _, ok := pluginExts[ext]; ok {
 				found = true
@@ -569,7 +577,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 					sr := scanResult{Path: path}
 					if err != nil {
 						sr.Err = err
-					} else if result != nil && result.Book != nil {
+					} else if result != nil && result.Book != nil && !result.BookDeleted {
 						sr.BookID = result.Book.ID
 					}
 					resultChan <- sr

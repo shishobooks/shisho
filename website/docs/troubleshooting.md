@@ -40,6 +40,16 @@ Before enabling file organization, back up the library and test the setting on a
 
 **Fix:** Correct the mount or library path, wait for the configured monitor delay, or increase the Linux watch limit as documented in [Configuration](./configuration.md). For network filesystems that do not support reliable events, disable the real-time monitor and rely on scheduled or manual scans. See [Libraries](./libraries.md) and [Deployment and Maintenance](./deployment-and-maintenance.md).
 
+## A DRM-Protected MOBI or AZW3 File Never Appears
+
+**Symptom:** A `.mobi`, `.azw`, `.prc`, or `.azw3` file is in a library folder, but no book appears for it after a scan. If the file had been imported before, its book or file disappears after the file is replaced.
+
+**Likely cause:** The file is DRM-protected. Shisho never imports DRM-protected files and cannot read them. When an imported file is replaced on disk by a DRM-protected copy, the next scan removes it as if the file had been deleted.
+
+**Verify:** Open the scan job under **Settings > Jobs** and look for a `skipped DRM-protected file` warning naming the file. A `mime type is not expected for extension` warning for the same path means the file is not MOBI or AZW3 at all, for example a KFX book with an `.azw` extension; see [Supported Formats](./supported-formats.md#mobi-and-azw3).
+
+**Fix:** Replace the file with a DRM-free copy. A plugin [input converter](./plugins/manifest-hooks-reference.md#input-converter-capability) that declares `mobi` or `azw3` still receives DRM-protected files and can write a DRM-free copy beside them, which the scan then imports.
+
 ## A File Is Marked Unreadable
 
 **Symptom:** A file shows an **Unreadable** badge on the book page, or the file details page shows a "This file could not be read" notice. The scan job log contains `failed to parse file metadata` for the same path, often with `zip: not a valid zip file` for EPUB and CBZ files.

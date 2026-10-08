@@ -51,10 +51,7 @@ import { cn, isPageBasedFileType } from "@/libraries/utils";
 import {
   FileRoleMain,
   FileRoleSupplement,
-  FileTypeCBZ,
-  FileTypeEPUB,
   FileTypeM4B,
-  FileTypePDF,
   ReviewOverrideReviewed,
   type Book,
   type File,
@@ -62,6 +59,7 @@ import {
   type ReviewOverride,
 } from "@/types";
 import { fileCoverUrl } from "@/utils/coverUrl";
+import { isEbookFileType, isMainEligibleFileType } from "@/utils/fileTypes";
 
 interface FileEditDialogProps {
   file: File;
@@ -563,24 +561,16 @@ export function FileEditDialog({
   const isSupplement = file.file_role === FileRoleSupplement;
   const isM4b = file.file_type === FileTypeM4B;
 
-  // Check if file type can be a main file (cbz, epub, m4b, pdf are supported)
-  const canBeMainFile = [
-    FileTypeCBZ,
-    FileTypeEPUB,
-    FileTypeM4B,
-    FileTypePDF,
-  ].includes(file.file_type as typeof FileTypeCBZ);
+  const canBeMainFile = isMainEligibleFileType(file.file_type);
 
   // Determine if the preferred cover checkbox should be shown:
   // only when 2+ main (non-supplement) files of the same type category exist.
-  const isEbookCategory = (ft: string) =>
-    ft === FileTypeEPUB || ft === FileTypeCBZ || ft === FileTypePDF;
   const isAudiobookCategory = (ft: string) => ft === FileTypeM4B;
   const showPreferredCover = useMemo(() => {
     if (!book?.files) return false;
     const mainFiles = book.files.filter((f) => f.file_role === FileRoleMain);
     const sameCategoryCount = mainFiles.filter((f) =>
-      isM4b ? isAudiobookCategory(f.file_type) : isEbookCategory(f.file_type),
+      isM4b ? isAudiobookCategory(f.file_type) : isEbookFileType(f.file_type),
     ).length;
     return sameCategoryCount >= 2;
   }, [book?.files, isM4b]);

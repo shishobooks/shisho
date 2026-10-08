@@ -48,6 +48,9 @@ func TestSelectFile(t *testing.T) {
 	epubSupplement := supplementWithCover(8, models.FileTypeEPUB, "supp.cover.jpg")
 	preferredCBZ := preferredWithCover(9, models.FileTypeCBZ, "cbz2.cover.jpg")
 	preferredM4B := preferredWithCover(10, models.FileTypeM4B, "m4b2.cover.jpg")
+	mobi := withCover(11, models.FileTypeMOBI, "mobi.cover.jpg")
+	azw3 := withCover(12, models.FileTypeAZW3, "azw3.cover.jpg")
+	preferredMOBI := preferredWithCover(13, models.FileTypeMOBI, "mobi2.cover.jpg")
 
 	tests := []struct {
 		name           string
@@ -175,6 +178,42 @@ func TestSelectFile(t *testing.T) {
 			files:          []*models.File{epub, cbz, preferredM4B},
 			aspectRatio:    "book",
 			expectedFileID: epub.ID,
+		},
+		{
+			name:           "EPUB comes before AZW3 and MOBI",
+			files:          []*models.File{mobi, azw3, epub},
+			aspectRatio:    "book",
+			expectedFileID: epub.ID,
+		},
+		{
+			name:           "AZW3 comes before MOBI",
+			files:          []*models.File{mobi, azw3},
+			aspectRatio:    "book",
+			expectedFileID: azw3.ID,
+		},
+		{
+			name:           "MOBI comes before the other ebook formats",
+			files:          []*models.File{cbz, pdf, mobi},
+			aspectRatio:    "book",
+			expectedFileID: mobi.ID,
+		},
+		{
+			name:           "the other ebook formats keep their order",
+			files:          []*models.File{pdf, cbz},
+			aspectRatio:    "book",
+			expectedFileID: pdf.ID,
+		},
+		{
+			name:           "preferred MOBI wins over EPUB",
+			files:          []*models.File{epub, azw3, preferredMOBI},
+			aspectRatio:    "book",
+			expectedFileID: preferredMOBI.ID,
+		},
+		{
+			name:           "AZW3 is an ebook in audiobook mode fallback",
+			files:          []*models.File{azw3},
+			aspectRatio:    "audiobook",
+			expectedFileID: azw3.ID,
 		},
 		{
 			name:           "no preferred falls back to first file (existing behavior)",

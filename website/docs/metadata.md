@@ -6,11 +6,11 @@ Shisho combines metadata from file paths, embedded file data, plugins, sidecars,
 
 A **book** groups one or more main files. Its shared fields include title, sort title, subtitle, description, authors, series, genres, and tags.
 
-A **file** represents a particular EPUB, CBZ, M4B, or PDF edition. File fields include display name, narrators, publisher, release date, language, URL, identifiers, chapters, and abridged status. [Supplements](./supplement-files.md) belong to a book but are excluded from metadata review and most main-file behavior.
+A **file** represents a particular EPUB, AZW3, MOBI, CBZ, M4B, or PDF edition. File fields include display name, narrators, publisher, release date, language, URL, identifiers, chapters, and abridged status. [Supplements](./supplement-files.md) belong to a book but are excluded from metadata review and most main-file behavior.
 
 ### Preferred Covers
 
-When a book has multiple main files in the same cover category, edit a file and select **Preferred ebook cover** or **Preferred audiobook cover**. Ebook preference covers EPUB, CBZ, and PDF files; audiobook preference covers M4B files. The chosen file must have a cover. Choosing one clears the same preference from other files in that category.
+When a book has multiple main files in the same cover category, edit a file and select **Preferred ebook cover** or **Preferred audiobook cover**. Ebook preference covers EPUB, AZW3, MOBI, CBZ, and PDF files; audiobook preference covers M4B files. The chosen file must have a cover. Choosing one clears the same preference from other files in that category. Without a preferred ebook file, the book's ebook cover comes from an EPUB first, then an AZW3, then a MOBI, then the other ebook files.
 
 ## People and Roles
 

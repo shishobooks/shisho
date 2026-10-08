@@ -29,6 +29,7 @@ const SOURCE_PRIORITY: Record<string, number> = {
   cbz_metadata: 3,
   m4b_metadata: 3,
   pdf_metadata: 3,
+  mobi_metadata: 3,
   filepath: 4,
 };
 

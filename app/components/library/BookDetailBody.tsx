@@ -959,7 +959,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         payload: { mode },
       });
       if ("file_deleted" in result && result.file_deleted) {
-        toast.success("File removed (no longer exists on disk)");
+        toast.success("File removed (no longer on disk, or DRM-protected)");
       } else {
         toast.success("File rescanned");
       }

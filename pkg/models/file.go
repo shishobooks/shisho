@@ -2,19 +2,95 @@ package models
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/uptrace/bun"
 )
 
 const (
-	//tygo:emit export type FileType = typeof FileTypeCBZ | typeof FileTypeEPUB | typeof FileTypeM4B | typeof FileTypePDF;
+	//tygo:emit export type FileType = typeof FileTypeAZW3 | typeof FileTypeCBZ | typeof FileTypeEPUB | typeof FileTypeM4B | typeof FileTypeMOBI | typeof FileTypePDF;
+	FileTypeAZW3 = "azw3"
 	FileTypeCBZ  = "cbz"
 	FileTypeEPUB = "epub"
 	FileTypeM4B  = "m4b"
+	FileTypeMOBI = "mobi"
 	FileTypePDF  = "pdf"
 )
+
+// builtInFileTypesByExtension maps every extension Shisho parses itself
+// (lowercase, no dot) to its file type. A file type is not always its
+// extension: .azw and .prc files are MOBI.
+var builtInFileTypesByExtension = map[string]string{
+	"azw3": FileTypeAZW3,
+	"cbz":  FileTypeCBZ,
+	"epub": FileTypeEPUB,
+	"m4b":  FileTypeM4B,
+	"mobi": FileTypeMOBI,
+	"azw":  FileTypeMOBI,
+	"prc":  FileTypeMOBI,
+	"pdf":  FileTypePDF,
+}
+
+// FileTypeForPath returns the file type for a path: the built-in type its
+// extension maps to, or else the lowercase extension without the dot, which
+// is how plugin-parsed files and supplements are typed.
+func FileTypeForPath(path string) string {
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	if fileType, ok := builtInFileTypesByExtension[ext]; ok {
+		return fileType
+	}
+	return ext
+}
+
+// IsBuiltInFileExtension reports whether an extension (lowercase, no dot)
+// belongs to a built-in file type. Plugin file parsers cannot claim these.
+func IsBuiltInFileExtension(ext string) bool {
+	_, ok := builtInFileTypesByExtension[ext]
+	return ok
+}
+
+// BuiltInFileExtensions returns every extension (lowercase, no dot) of a
+// built-in file type, sorted.
+func BuiltInFileExtensions() []string {
+	return slices.Sorted(maps.Keys(builtInFileTypesByExtension))
+}
+
+// BuiltInFileTypes are the file types Shisho parses itself. Each is eligible
+// to be a main file.
+var BuiltInFileTypes = []string{FileTypeAZW3, FileTypeCBZ, FileTypeEPUB, FileTypeM4B, FileTypeMOBI, FileTypePDF}
+
+// IsBuiltInFileType reports whether Shisho parses this file type itself.
+func IsBuiltInFileType(fileType string) bool {
+	return slices.Contains(BuiltInFileTypes, fileType)
+}
+
+// EbookFileTypes are the file types in the ebook cover category, as opposed
+// to M4B audiobooks. Preferred Cover is exclusive within a category.
+var EbookFileTypes = []string{FileTypeEPUB, FileTypeAZW3, FileTypeMOBI, FileTypeCBZ, FileTypePDF}
+
+// IsEbookFileType reports whether a file type is in the ebook cover category.
+func IsEbookFileType(fileType string) bool {
+	return slices.Contains(EbookFileTypes, fileType)
+}
+
+// EbookCoverRank orders ebook files when no file is the Preferred Cover:
+// EPUB, then AZW3, then MOBI, then the other ebook formats, which share a rank
+// so a stable sort keeps their order. app/utils/coverSelection.ts mirrors it.
+func EbookCoverRank(fileType string) int {
+	switch fileType {
+	case FileTypeEPUB:
+		return 0
+	case FileTypeAZW3:
+		return 1
+	case FileTypeMOBI:
+		return 2
+	}
+	return 3
+}
 
 const (
 	//tygo:emit export type FileRole = typeof FileRoleMain | typeof FileRoleSupplement;
@@ -140,6 +216,10 @@ func FileTypeMimeType(fileType string) string {
 		return "audio/mp4"
 	case FileTypePDF:
 		return "application/pdf"
+	case FileTypeMOBI:
+		return "application/x-mobipocket-ebook"
+	case FileTypeAZW3:
+		return "application/vnd.amazon.mobi8-ebook"
 	}
 	return ""
 }
