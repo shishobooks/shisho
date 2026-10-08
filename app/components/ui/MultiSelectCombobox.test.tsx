@@ -18,6 +18,28 @@ function makeCountHook(items: NameWithCount[], isLoading = false) {
 }
 
 describe("MultiSelectCombobox", () => {
+  it("names the trigger and its search box by the field, not the prompt shown", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(
+      <MultiSelectCombobox
+        getOptionLabel={(s) => s}
+        hook={makeHook(["Sci-Fi"])}
+        label="Genre"
+        onChange={vi.fn()}
+        placeholder="Add genres..."
+        values={[]}
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Genre" });
+    expect(trigger).toHaveTextContent("Add genres...");
+    await user.click(trigger);
+    expect(
+      screen.getByRole("combobox", { name: "Search genre" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders chips for selected values", () => {
     render(
       <MultiSelectCombobox

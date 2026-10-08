@@ -58,8 +58,9 @@ const renderDialog = () => (
 const shareButton = () => screen.getByRole("button", { name: "Share" });
 
 const pickUser = async (user: ReturnType<typeof createUser>) => {
-  // The user picker is the first combobox; the second picks the permission.
-  await user.click(screen.getAllByRole("combobox")[0]);
+  await user.click(
+    screen.getByRole("combobox", { name: "User to share with" }),
+  );
   await user.click(screen.getByRole("option", { name: "bob" }));
 };
 
@@ -89,5 +90,26 @@ describe("ShareListDialog Share button", () => {
     rerender(renderDialog());
 
     expect(shareButton()).toBeDisabled();
+  });
+});
+
+describe("ShareListDialog controls", () => {
+  beforeEach(() => {
+    setAuth({ permissions: [], user: { id: 1 } });
+    updatePending = false;
+  });
+
+  it("names each picker, and each share's permission by its user", () => {
+    render(renderDialog());
+
+    expect(
+      screen.getByRole("combobox", { name: "User to share with" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Permission for the new share" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Permission for carol" }),
+    ).toHaveTextContent(/view/i);
   });
 });

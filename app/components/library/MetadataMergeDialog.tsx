@@ -64,6 +64,14 @@ interface MetadataMergeDialogProps {
   setChildConfig?: SetChildConfig;
 }
 
+const ENTITY_LABELS: Record<EntityType, string> = {
+  person: "Person",
+  series: "Series",
+  genre: "Genre",
+  tag: "Tag",
+  publisher: "Publisher",
+};
+
 const ENTITY_PLURALS: Record<EntityType, string> = {
   person: "people",
   series: "series",
@@ -164,6 +172,7 @@ export function MetadataMergeDialog({
             <PopoverTrigger asChild>
               <Button
                 aria-expanded={comboboxOpen}
+                aria-label={`${ENTITY_LABELS[entityType]} to merge`}
                 className="w-full justify-between min-w-0"
                 role="combobox"
                 variant="outline"
@@ -177,7 +186,10 @@ export function MetadataMergeDialog({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-full p-0">
-              <Command shouldFilter={false}>
+              <Command
+                label={`Search ${ENTITY_PLURALS[entityType]}`}
+                shouldFilter={false}
+              >
                 <CommandInput
                   onValueChange={handleSearchChange}
                   placeholder={`Search ${ENTITY_PLURALS[entityType]}...`}

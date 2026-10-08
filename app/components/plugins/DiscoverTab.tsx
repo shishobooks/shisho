@@ -133,13 +133,14 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            aria-label="Search plugins"
             className="max-w-xs"
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search plugins…"
             value={search}
           />
           <Select onValueChange={setCapability} value={capability}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger aria-label="Capability" className="w-[180px]">
               <SelectValue placeholder="Capability" />
             </SelectTrigger>
             <SelectContent>
@@ -153,7 +154,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
             </SelectContent>
           </Select>
           <Select onValueChange={setSource} value={source}>
-            <SelectTrigger className="w-[220px]">
+            <SelectTrigger aria-label="Source" className="w-[220px]">
               <SelectValue placeholder="Source" />
             </SelectTrigger>
             <SelectContent>

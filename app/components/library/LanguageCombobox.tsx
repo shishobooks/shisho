@@ -21,6 +21,14 @@ import { useLibraryLanguages } from "@/hooks/queries/libraries";
 import { cn } from "@/libraries/utils";
 
 interface LanguageComboboxProps {
+  /** Names the picker ("Language") unless labelId is set; its text shows
+   * the prompt instead. */
+  label: string;
+  /**
+   * The id of the field's visible label, which then names the trigger, so
+   * the name is the text a user sees. Without one, `label` names it.
+   */
+  labelId?: string;
   value: string;
   onChange: (value: string) => void;
   libraryId?: number;
@@ -28,6 +36,8 @@ interface LanguageComboboxProps {
 }
 
 export function LanguageCombobox({
+  label,
+  labelId,
   value,
   onChange,
   libraryId,
@@ -139,6 +149,8 @@ export function LanguageCombobox({
         <PopoverTrigger asChild>
           <Button
             aria-expanded={open}
+            aria-label={labelId ? undefined : label}
+            aria-labelledby={labelId}
             className="w-full justify-between"
             disabled={disabled}
             role="combobox"
@@ -158,7 +170,7 @@ export function LanguageCombobox({
           badgeButtonRef.current.focus();
         }}
       >
-        <Command shouldFilter={false}>
+        <Command label="Search languages" shouldFilter={false}>
           <CommandInput
             onValueChange={setSearch}
             placeholder="Search languages..."

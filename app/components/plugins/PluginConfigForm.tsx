@@ -298,10 +298,11 @@ export const PluginConfigForm = ({
           <div className="space-y-3">
             {data!.declaredFields!.map((field) => (
               <div className="flex items-center justify-between" key={field}>
-                <span className="text-sm">
+                <span className="text-sm" id={`plugin-field-${field}`}>
                   {formatMetadataFieldLabel(field)}
                 </span>
                 <Switch
+                  aria-labelledby={`plugin-field-${field}`}
                   checked={fieldSettings[field] ?? true}
                   disabled={!canWrite}
                   onCheckedChange={(checked) =>
@@ -314,7 +315,9 @@ export const PluginConfigForm = ({
 
           {/* Confidence threshold - only for enricher plugins */}
           <div className="space-y-2">
-            <Label>Auto-identify confidence threshold</Label>
+            <Label htmlFor="plugin-confidence-threshold">
+              Auto-identify confidence threshold
+            </Label>
             <p className="text-xs text-muted-foreground">
               During automatic scans, results with confidence below this
               threshold will be skipped. Leave empty to use the global default.
@@ -323,6 +326,7 @@ export const PluginConfigForm = ({
               <Input
                 className="w-24"
                 disabled={!canWrite}
+                id="plugin-confidence-threshold"
                 max={100}
                 min={0}
                 onChange={(e) => {

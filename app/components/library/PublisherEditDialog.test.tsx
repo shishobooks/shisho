@@ -24,9 +24,17 @@ vi.mock("@/hooks/useFormDialogClose", () => ({
 // The mock renders buttons that tests can click to trigger onChange with
 // either an existing option or a __create payload.
 let capturedOnChange: ((next: unknown) => void) | null = null;
+let capturedLabelId: string | undefined;
 vi.mock("@/components/common/EntityCombobox", () => ({
-  EntityCombobox: ({ onChange }: { onChange: (next: unknown) => void }) => {
+  EntityCombobox: ({
+    onChange,
+    labelId,
+  }: {
+    onChange: (next: unknown) => void;
+    labelId?: string;
+  }) => {
     capturedOnChange = onChange;
+    capturedLabelId = labelId;
     return <div data-testid="entity-combobox" />;
   },
 }));
@@ -49,6 +57,19 @@ describe("PublisherEditDialog", () => {
     isPending: false,
     useParentSearch: vi.fn(),
   };
+
+  it("names the parent picker by its visible Parent Publisher label", () => {
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <PublisherEditDialog {...defaultProps} />
+      </QueryClientProvider>,
+    );
+
+    expect(capturedLabelId).toBeTruthy();
+    expect(document.getElementById(capturedLabelId!)).toHaveTextContent(
+      "Parent Publisher",
+    );
+  });
 
   describe("pending alias input on save (no Enter)", () => {
     it("should include pending alias text in save payload without pressing Enter", async () => {

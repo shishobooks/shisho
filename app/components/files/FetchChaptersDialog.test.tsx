@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -238,6 +238,40 @@ describe("FetchChaptersDialog", () => {
         expect(applyTitlesBtn).toBeDisabled();
       });
     });
+  });
+
+  it("explains from the keyboard why 'Apply titles only' is disabled", async () => {
+    const user = createUser();
+    vi.spyOn(API, "request").mockResolvedValue(audnexusResponse);
+
+    renderWithClient(
+      <FetchChaptersDialog
+        {...defaultProps}
+        editedChapters={[
+          { title: "Only One", start_timestamp_ms: 0, children: [] },
+        ]}
+      />,
+    );
+
+    await user.type(screen.getByRole("textbox"), "B0AAAATEST");
+    await user.click(screen.getByRole("button", { name: /fetch chapters/i }));
+    const applyTitles = await screen.findByRole("button", {
+      name: /apply titles only/i,
+    });
+    expect(applyTitles).toBeDisabled();
+
+    // The disabled button cannot take focus, so its wrapper does: Tab from
+    // the button before it lands there.
+    act(() =>
+      screen
+        .getByRole("button", { name: /apply titles \+ timestamps/i })
+        .focus(),
+    );
+    await user.tab();
+    expect(applyTitles.parentElement).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      /chapter count/i,
+    );
   });
 
   describe("Overwrite warning", () => {

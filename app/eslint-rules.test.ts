@@ -613,3 +613,129 @@ describe("ESLint control name rule", () => {
     expect(await unnamedControls("app/components/ui/fixture.tsx")).toEqual([]);
   });
 });
+
+// Each control carries its case number in data-case. Cases 1 to 16 and 43
+// to 46 have no name; 17 to 37 and 47 to 52 are the accepted forms and must
+// stay clean; 38 to 42 and 53 are the known gaps.
+const FORM_CONTROL_NAME_FIXTURE = `
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Command, CommandInput } from "@/components/ui/command";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SelectTrigger } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+
+declare const id: string;
+declare const label: string;
+declare const props: Record<string, string>;
+declare const SearchBox: (props: { placeholder: string }) => null;
+export const Fixture = () => (
+  <div>
+    <Input data-case="1" placeholder="Search..." />
+    <Textarea data-case="2" />
+    <Checkbox data-case="3" />
+    <Switch data-case="4" />
+    <RadioGroupItem data-case="5" value="a" />
+    <SelectTrigger data-case="6"><span>Value</span></SelectTrigger>
+    <input data-case="7" type="text" />
+    <select data-case="8"><option>One</option></select>
+    <textarea data-case="9" />
+    <Input data-case="10" id="unlinked" />
+    <Slider aria-label="Volume" data-case="11" />
+    <Command><CommandInput aria-label="Search" data-case="12" /></Command>
+    <Button data-case="13" role="combobox">Pick an author</Button>
+    <Input aria-label="" data-case="14" />
+    <Input aria-hidden data-case="15" />
+    <Input className="hidden sm:block" data-case="16" />
+    <Input aria-label="Search" data-case="17" />
+    <Input aria-labelledby="heading" data-case="18" />
+    <Label>Title <Input data-case="19" /></Label>
+    <label><input data-case="20" type="checkbox" /></label>
+    <Label htmlFor="linked">Name</Label>
+    <Input data-case="21" id="linked" />
+    <Input data-case="22" id={id} />
+    <Input data-case="23" {...props} />
+    <input data-case="24" type="hidden" />
+    <Checkbox aria-hidden data-case="25" tabIndex={-1} />
+    <input className="hidden" data-case="26" type="file" />
+    <div role="menuitemcheckbox"><Checkbox data-case="27" /></div>
+    <Slider data-case="28" thumbLabel="Volume" />
+    <Command label="Search authors"><CommandInput data-case="29" /></Command>
+    <Command label={label}><div><CommandInput data-case="30" /></div></Command>
+    <Button aria-label="Author" data-case="31" role="combobox">Pick</Button>
+    <Button aria-labelledby="author-label" data-case="32" role="combobox">Pick</Button>
+    <SelectTrigger aria-label="Role" data-case="33"><span>Value</span></SelectTrigger>
+    <label htmlFor={"also-linked"}>Path</label>
+    <select data-case="34" id="also-linked" />
+    <Button data-case="35">Not a combobox</Button>
+    <RadioGroup data-case="36"><span /></RadioGroup>
+    <Switch aria-label="Allow" data-case="37" />
+    {/* Known gaps, pinned so a change to them is deliberate: a wrapper
+        component around Input is not checked where it is used, a
+        CommandInput with no Command in the file is assumed labelled
+        there, an aria-label expression counts even when undefined, a
+        non-literal id counts even when nothing points at it, and a hidden
+        attribute counts as hidden even when false. */}
+    <SearchBox data-case="38" placeholder="Search..." />
+    <CommandInput data-case="39" />
+    <Input aria-label={undefined} data-case="40" />
+    <Input data-case="41" id={\`\${id}-field\`} />
+    <Input data-case="42" hidden={false} />
+    <Label><Button data-case="43" role="combobox">Pick</Button></Label>
+    <div role="option"><Checkbox data-case="44" /></div>
+    <Input className="hidden data-[state=open]:block" data-case="45" />
+    <Input data-case="46" type="submit" />
+    <Label htmlFor="combo">Author</Label>
+    <Button data-case="47" id="combo" role="combobox">Pick</Button>
+    <Input data-case="48" id="later" />
+    <Label htmlFor="later">Named by a label after it</Label>
+    <Command {...props}><CommandInput data-case="49" /></Command>
+    <input data-case="50" type="submit" value="Go" />
+    <input data-case="51" type="button" value="Go" />
+    <div role="menuitemradio"><RadioGroupItem data-case="52" value="b" /></div>
+    {/* Known gap: a literal id inside a map, or in a component rendered more
+        than once, is duplicated on the page, and the rule cannot tell. */}
+    {[1, 2].map((n) => (
+      <div key={n}>
+        <Label htmlFor="repeated">Path</Label>
+        <Input data-case="53" id="repeated" />
+      </div>
+    ))}
+  </div>
+);
+`;
+
+const unnamedFormControls = async (filePath: string) => {
+  const [result] = await eslint.lintText(FORM_CONTROL_NAME_FIXTURE, {
+    filePath,
+  });
+  const lines = FORM_CONTROL_NAME_FIXTURE.split("\n");
+  return result.messages
+    .filter((message) => message.ruleId === "shisho/form-control-has-name")
+    .map((message) =>
+      Number(/data-case="(\d+)"/.exec(lines[message.line - 1])?.[1]),
+    );
+};
+
+describe("ESLint form control name rule", () => {
+  it("rejects form controls named only by a placeholder, value, or nothing", async () => {
+    expect(await unnamedFormControls("app/components/Fixture.tsx")).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 43, 44, 45, 46,
+    ]);
+  });
+
+  // A known gap: app/components/ui is not linted, so a composite there (such
+  // as MultiSelectCombobox) relies on a required label prop instead.
+  it("allows them in tests and the ui kit", async () => {
+    expect(
+      await unnamedFormControls("app/components/Fixture.test.tsx"),
+    ).toEqual([]);
+    expect(await unnamedFormControls("app/components/ui/fixture.tsx")).toEqual(
+      [],
+    );
+  });
+});

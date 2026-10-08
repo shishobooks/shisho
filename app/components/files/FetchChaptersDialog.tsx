@@ -318,9 +318,14 @@ const ResultStage = ({
             <Button onClick={handleTitlesAndTimestamps} type="button">
               Apply titles + timestamps
             </Button>
+            {/* The disabled button cannot take focus, so its wrapper does,
+                letting the keyboard open the tooltip that says why. */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex">
+                <span
+                  className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  tabIndex={0}
+                >
                   <Button
                     className="w-full"
                     disabled

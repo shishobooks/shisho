@@ -262,8 +262,8 @@ export function MetadataEditDialog({
 
           {hasSortName && (
             <div className="space-y-2">
-              <Label>Sort Name</Label>
               <SortNameInput
+                label="Sort Name"
                 nameValue={name}
                 onChange={setEditSortName}
                 sortValue={sortName || ""}

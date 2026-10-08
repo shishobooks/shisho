@@ -69,7 +69,7 @@ const AdminLogs = () => {
           onValueChange={(v) => setLevel(v === "all" ? "" : v)}
           value={level || "all"}
         >
-          <SelectTrigger className="w-32">
+          <SelectTrigger aria-label="Log level" className="w-32">
             <SelectValue placeholder="All levels" />
           </SelectTrigger>
           <SelectContent>
@@ -82,6 +82,7 @@ const AdminLogs = () => {
           </SelectContent>
         </Select>
         <Input
+          aria-label="Search messages"
           className="max-w-xs"
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Search messages..."

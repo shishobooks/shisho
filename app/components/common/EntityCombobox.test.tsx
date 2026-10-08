@@ -14,6 +14,27 @@ function makeHook(items: Person[], isLoading = false) {
 }
 
 describe("EntityCombobox", () => {
+  it("names the trigger and its search box by the field, not the value shown", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(
+      <EntityCombobox<Person>
+        getOptionLabel={(p) => p.name}
+        hook={makeHook([{ id: 1, name: "Tor Books" }])}
+        label="Publisher"
+        onChange={vi.fn()}
+        value={{ id: 1, name: "Tor Books" }}
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Publisher" });
+    expect(trigger).toHaveTextContent("Tor Books");
+    await user.click(trigger);
+    expect(
+      screen.getByRole("combobox", { name: "Search publisher" }),
+    ).toBeInTheDocument();
+  });
+
   it("calls onChange with an existing match when the user selects it", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();
@@ -33,6 +54,26 @@ describe("EntityCombobox", () => {
     await user.click(screen.getByText("Tor Books"));
 
     expect(onChange).toHaveBeenCalledWith({ id: 1, name: "Tor Books" });
+  });
+
+  it("takes its name from a linked visible label when given one", () => {
+    render(
+      <>
+        <span id="parent-label">Parent Publisher</span>
+        <EntityCombobox<Person>
+          getOptionLabel={(p) => p.name}
+          hook={makeHook([])}
+          label="Publisher"
+          labelId="parent-label"
+          onChange={vi.fn()}
+          value={null}
+        />
+      </>,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Parent Publisher" }),
+    ).toHaveTextContent("Add publisher");
   });
 
   it("shows 'In your library' heading when options are present", async () => {

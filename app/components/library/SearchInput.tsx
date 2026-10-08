@@ -5,6 +5,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 
 interface SearchInputProps {
+  /** Names the input ("Search books"); a placeholder is not a name. */
+  label: string;
   initialValue: string;
   onDebouncedChange: (value: string) => void;
   placeholder?: string;
@@ -18,6 +20,7 @@ interface SearchInputProps {
  * user input during typing.
  */
 export const SearchInput = ({
+  label,
   initialValue,
   onDebouncedChange,
   placeholder = "Search...",
@@ -47,6 +50,7 @@ export const SearchInput = ({
 
   return (
     <Input
+      aria-label={label}
       className={cn(
         className,
         "[&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",

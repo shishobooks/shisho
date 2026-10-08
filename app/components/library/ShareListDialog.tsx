@@ -171,7 +171,10 @@ export function ShareListDialog({
                   onValueChange={setSelectedUserId}
                   value={selectedUserId}
                 >
-                  <SelectTrigger className="flex-1">
+                  <SelectTrigger
+                    aria-label="User to share with"
+                    className="flex-1"
+                  >
                     <SelectValue
                       placeholder={
                         availableUsers.length === 0
@@ -195,7 +198,10 @@ export function ShareListDialog({
                   }
                   value={selectedPermission}
                 >
-                  <SelectTrigger className="w-28">
+                  <SelectTrigger
+                    aria-label="Permission for the new share"
+                    className="w-28"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -273,7 +279,10 @@ export function ShareListDialog({
                         }
                         value={share.permission}
                       >
-                        <SelectTrigger className="w-24 h-8">
+                        <SelectTrigger
+                          aria-label={`Permission for ${share.user?.username ?? `User ${share.user_id}`}`}
+                          className="w-24 h-8"
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

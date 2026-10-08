@@ -9,7 +9,7 @@ import {
   RefreshCcw,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EntityCombobox } from "@/components/common/EntityCombobox";
@@ -37,11 +37,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { getLanguageName } from "@/constants/languages";
 import {
   useGenreItemCounts,
@@ -414,6 +409,8 @@ function findFile(book: Book, fileId?: number): File | undefined {
 
 function FieldRow({
   label,
+  controlId,
+  labelId,
   status,
   decision,
   onDecisionChange,
@@ -424,6 +421,10 @@ function FieldRow({
   children,
 }: {
   label: string;
+  /** The id of the row's one control, which the label then names. */
+  controlId?: string;
+  /** The label's own id, for a control that names itself with it. */
+  labelId?: string;
   status: FieldStatus;
   decision: boolean;
   onDecisionChange: (v: boolean) => void;
@@ -455,7 +456,18 @@ function FieldRow({
       </div>
       <div className="min-w-0 space-y-2">
         <div className="flex h-6 items-center gap-2">
-          <Label className="text-sm font-semibold">{label}</Label>
+          {/* The label names the control, but clicking it must not focus a
+              control in a row that is not applied, which looks locked. */}
+          <Label
+            className="text-sm font-semibold"
+            htmlFor={controlId}
+            id={labelId}
+            onClick={(e) => {
+              if (!decision) e.preventDefault();
+            }}
+          >
+            {label}
+          </Label>
           <StatusBadge status={effectiveStatus} />
           <div className="ml-auto shrink-0">{inlineAction}</div>
         </div>
@@ -526,6 +538,8 @@ export function IdentifyReviewForm({
   onHasChangesChange,
 }: IdentifyReviewFormProps) {
   const filePageUrl = useFilePageUrl();
+  // Prefixes the ids that link each FieldRow label to its control.
+  const fieldId = useId();
   const file = findFile(book, fileId);
   const anyCBZ = hasAnyCBZFile(book);
   const applyMutation = usePluginApply();
@@ -1449,6 +1463,7 @@ export function IdentifyReviewForm({
               <div id="identify-section-book">
                 {/* Title */}
                 <FieldRow
+                  controlId={`${fieldId}-title`}
                   currentValue={book.title || undefined}
                   decision={decisions.title}
                   disabled={isDisabled("title")}
@@ -1462,6 +1477,7 @@ export function IdentifyReviewForm({
                     <Input
                       aria-invalid={titleValidationError !== undefined}
                       disabled={isDisabled("title")}
+                      id={`${fieldId}-title`}
                       onChange={(e) => setTitle(e.target.value)}
                       value={title}
                     />
@@ -1475,6 +1491,7 @@ export function IdentifyReviewForm({
 
                 {/* Subtitle */}
                 <FieldRow
+                  controlId={`${fieldId}-subtitle`}
                   currentValue={book.subtitle || undefined}
                   decision={decisions.subtitle}
                   disabled={isDisabled("subtitle")}
@@ -1485,6 +1502,7 @@ export function IdentifyReviewForm({
                 >
                   <Input
                     disabled={isDisabled("subtitle")}
+                    id={`${fieldId}-subtitle`}
                     onChange={(e) => setSubtitle(e.target.value)}
                     value={subtitle}
                   />
@@ -1506,6 +1524,7 @@ export function IdentifyReviewForm({
                   disabled={isDisabled("authors")}
                   hidden={!isRowVisible("authors")}
                   label={formatMetadataFieldLabel("authors")}
+                  labelId={`${fieldId}-authors-label`}
                   onDecisionChange={(v) => setDecision("authors", v)}
                   status={fieldStatus.authors}
                 >
@@ -1525,6 +1544,7 @@ export function IdentifyReviewForm({
                         return usePeopleSearch(book.library_id, true, q);
                       },
                       label: "Author",
+                      labelId: `${fieldId}-authors-label`,
                     }}
                     items={authors}
                     onAppend={(next) => {
@@ -1560,7 +1580,10 @@ export function IdentifyReviewForm({
                                 }}
                                 value={author.role || "none"}
                               >
-                                <SelectTrigger className="cursor-pointer">
+                                <SelectTrigger
+                                  aria-label={`Role for ${author.name}`}
+                                  className="cursor-pointer"
+                                >
                                   <SelectValue placeholder="Role" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1609,6 +1632,7 @@ export function IdentifyReviewForm({
                   disabled={isDisabled("series")}
                   hidden={!isRowVisible("series")}
                   label={formatMetadataFieldLabel("series")}
+                  labelId={`${fieldId}-series-label`}
                   onDecisionChange={(v) => setDecision("series", v)}
                   status={fieldStatus.series}
                 >
@@ -1635,6 +1659,7 @@ export function IdentifyReviewForm({
                         };
                       },
                       label: "Series",
+                      labelId: `${fieldId}-series-label`,
                     }}
                     items={seriesEntries}
                     onAppend={(next) => {
@@ -1693,7 +1718,7 @@ export function IdentifyReviewForm({
                               entry.unit === "" ? "unspecified" : entry.unit
                             }
                           >
-                            <SelectTrigger>
+                            <SelectTrigger aria-label="Series unit">
                               <SelectValue placeholder="Unit" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1726,6 +1751,7 @@ export function IdentifyReviewForm({
                   disabled={isDisabled("genres")}
                   hidden={!isRowVisible("genres")}
                   label={formatMetadataFieldLabel("genres")}
+                  labelId={`${fieldId}-genres-label`}
                   onDecisionChange={(v) => setDecision("genres", v)}
                   status={fieldStatus.genres}
                 >
@@ -1739,6 +1765,7 @@ export function IdentifyReviewForm({
                       return useGenreSearch(book.library_id, true, q);
                     }}
                     label="Genre"
+                    labelId={`${fieldId}-genres-label`}
                     onChange={setGenres}
                     placeholder="Add genres..."
                     useSelectedItemCounts={function useGenreCounts(v) {
@@ -1757,6 +1784,7 @@ export function IdentifyReviewForm({
                   disabled={isDisabled("tags")}
                   hidden={!isRowVisible("tags")}
                   label={formatMetadataFieldLabel("tags")}
+                  labelId={`${fieldId}-tags-label`}
                   onDecisionChange={(v) => setDecision("tags", v)}
                   status={fieldStatus.tags}
                 >
@@ -1770,6 +1798,7 @@ export function IdentifyReviewForm({
                       return useTagSearch(book.library_id, true, q);
                     }}
                     label="Tag"
+                    labelId={`${fieldId}-tags-label`}
                     onChange={setTags}
                     placeholder="Add tags..."
                     useSelectedItemCounts={function useTagCounts(v) {
@@ -1781,6 +1810,7 @@ export function IdentifyReviewForm({
 
                 {/* Description */}
                 <FieldRow
+                  controlId={`${fieldId}-description`}
                   decision={decisions.description}
                   disabled={isDisabled("description")}
                   hidden={!isRowVisible("description")}
@@ -1791,6 +1821,7 @@ export function IdentifyReviewForm({
                   <Textarea
                     className="min-h-[100px]"
                     disabled={isDisabled("description")}
+                    id={`${fieldId}-description`}
                     onChange={(e) => setDescription(e.target.value)}
                     value={description}
                   />
@@ -1914,6 +1945,7 @@ export function IdentifyReviewForm({
 
                 {/* Name (file.Name) */}
                 <FieldRow
+                  controlId={`${fieldId}-name`}
                   currentValue={file?.name || undefined}
                   decision={decisions.name}
                   disabled={isDisabled("name")}
@@ -1925,6 +1957,7 @@ export function IdentifyReviewForm({
                 >
                   <Input
                     disabled={isDisabled("name")}
+                    id={`${fieldId}-name`}
                     onChange={(e) => setName(e.target.value)}
                     value={name}
                   />
@@ -1942,6 +1975,7 @@ export function IdentifyReviewForm({
                     disabled={isDisabled("narrators")}
                     hidden={!isRowVisible("narrators")}
                     label={formatMetadataFieldLabel("narrators")}
+                    labelId={`${fieldId}-narrators-label`}
                     onDecisionChange={(v) => setDecision("narrators", v)}
                     status={fieldStatus.narrators}
                   >
@@ -1961,6 +1995,7 @@ export function IdentifyReviewForm({
                           return usePeopleSearch(book.library_id, true, q);
                         },
                         label: "Narrator",
+                        labelId: `${fieldId}-narrators-label`,
                       }}
                       items={narratorItems}
                       onAppend={(next) => {
@@ -1995,6 +2030,7 @@ export function IdentifyReviewForm({
                   disabled={isDisabled("publisher")}
                   hidden={!isRowVisible("publisher")}
                   label={formatMetadataFieldLabel("publisher")}
+                  labelId={`${fieldId}-publisher-label`}
                   onDecisionChange={(v) => setDecision("publisher", v)}
                   status={fieldStatus.publisher}
                 >
@@ -2013,6 +2049,7 @@ export function IdentifyReviewForm({
                           return usePublisherSearch(book.library_id, true, q);
                         }}
                         label="Publisher"
+                        labelId={`${fieldId}-publisher-label`}
                         onChange={(next) =>
                           setPublisher(
                             "__create" in next ? next.__create : next.name,
@@ -2049,11 +2086,14 @@ export function IdentifyReviewForm({
                   disabled={isDisabled("language")}
                   hidden={!isRowVisible("language")}
                   label={formatMetadataFieldLabel("language")}
+                  labelId={`${fieldId}-language-label`}
                   onDecisionChange={(v) => setDecision("language", v)}
                   status={fieldStatus.language}
                 >
                   <LanguageCombobox
                     disabled={isDisabled("language")}
+                    label={formatMetadataFieldLabel("language")}
+                    labelId={`${fieldId}-language-label`}
                     libraryId={book.library_id}
                     onChange={setLanguage}
                     value={language}
@@ -2062,6 +2102,7 @@ export function IdentifyReviewForm({
 
                 {/* Release date */}
                 <FieldRow
+                  controlId={`${fieldId}-release-date`}
                   currentValue={
                     file?.release_date
                       ? file.release_date.split("T")[0]
@@ -2076,6 +2117,7 @@ export function IdentifyReviewForm({
                 >
                   <Input
                     disabled={isDisabled("release_date")}
+                    id={`${fieldId}-release-date`}
                     onChange={(e) => setReleaseDate(e.target.value)}
                     placeholder="YYYY-MM-DD"
                     value={releaseDate}
@@ -2084,6 +2126,7 @@ export function IdentifyReviewForm({
 
                 {/* URL */}
                 <FieldRow
+                  controlId={`${fieldId}-url`}
                   currentValue={file?.url || undefined}
                   decision={decisions.url}
                   disabled={isDisabled("url")}
@@ -2096,6 +2139,7 @@ export function IdentifyReviewForm({
                     <Input
                       className="flex-1"
                       disabled={isDisabled("url")}
+                      id={`${fieldId}-url`}
                       onChange={(e) => setUrl(e.target.value)}
                       value={url}
                     />
@@ -2176,65 +2220,48 @@ export function IdentifyReviewForm({
                       restoring that proposal is a Proposal Acceptance)
                       from an Explicit Clear, which nulls the value and its
                       source so a later Scan may repopulate it. */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="w-40">
-                        <Select
-                          disabled={
-                            isDisabled("abridged") || !decisions.abridged
-                          }
-                          onValueChange={(value) =>
-                            setAbridged(
-                              value === "abridged"
-                                ? true
-                                : value === "unabridged"
-                                  ? false
-                                  : null,
-                            )
-                          }
-                          value={
-                            abridged === true
-                              ? "abridged"
-                              : abridged === false
-                                ? "unabridged"
-                                : "unset"
-                          }
+                  <div className="w-40">
+                    <Select
+                      disabled={isDisabled("abridged") || !decisions.abridged}
+                      onValueChange={(value) =>
+                        setAbridged(
+                          value === "abridged"
+                            ? true
+                            : value === "unabridged"
+                              ? false
+                              : null,
+                        )
+                      }
+                      value={
+                        abridged === true
+                          ? "abridged"
+                          : abridged === false
+                            ? "unabridged"
+                            : "unset"
+                      }
+                    >
+                      <SelectTrigger
+                        aria-label="Abridged value"
+                        className="cursor-pointer"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem className="cursor-pointer" value="abridged">
+                          Abridged
+                        </SelectItem>
+                        <SelectItem
+                          className="cursor-pointer"
+                          value="unabridged"
                         >
-                          <SelectTrigger
-                            aria-label="Abridged value"
-                            className="cursor-pointer"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem
-                              className="cursor-pointer"
-                              value="abridged"
-                            >
-                              Abridged
-                            </SelectItem>
-                            <SelectItem
-                              className="cursor-pointer"
-                              value="unabridged"
-                            >
-                              Unabridged
-                            </SelectItem>
-                            <SelectItem
-                              className="cursor-pointer"
-                              value="unset"
-                            >
-                              Not set
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </TooltipTrigger>
-                    {!decisions.abridged && (
-                      <TooltipContent>
-                        Apply this field first to edit
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
+                          Unabridged
+                        </SelectItem>
+                        <SelectItem className="cursor-pointer" value="unset">
+                          Not set
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </FieldRow>
               </div>
             )}

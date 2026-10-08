@@ -254,12 +254,17 @@ const ListDetail = () => {
         {/* Sort dropdown for unordered lists */}
         {!list.is_ordered && bookCount > 0 && canReadBooks && (
           <div className="mb-6 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Sort by:</span>
+            <span
+              className="text-sm text-muted-foreground"
+              id="list-sort-label"
+            >
+              Sort by:
+            </span>
             <Select
               onValueChange={(value) => setSort(value as ListSort)}
               value={sort ?? list.default_sort ?? ListSortAddedAtDesc}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger aria-labelledby="list-sort-label" className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

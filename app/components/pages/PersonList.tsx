@@ -51,6 +51,7 @@ const PersonList = () => {
         `/libraries/${libraryId}/people/${person.id}`
       }
       query={query}
+      searchLabel="Search people"
       searchPlaceholder="Search by name..."
       state={state}
       subtitle="Authors, narrators, and other contributors"

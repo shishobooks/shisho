@@ -33,16 +33,16 @@ const NAME_ATTRIBUTES = new Set(["aria-label", "aria-labelledby"]);
 const HIDDEN_SOMEWHERE = /(^|\s)([\w-]+:)*(hidden|invisible)(\s|$)/;
 const SR_ONLY = /(^|\s)sr-only(\s|$)/;
 
-const elementName = (opening) =>
+export const elementName = (opening) =>
   opening.name.type === "JSXIdentifier" ? opening.name.name : null;
 
-const attribute = (opening, name) =>
+export const attribute = (opening, name) =>
   opening.attributes.find(
     (attr) => attr.type === "JSXAttribute" && attr.name.name === name,
   );
 
 // The literal class strings of a className, including those passed to cn().
-const classStrings = (opening) => {
+export const classStrings = (opening) => {
   const attr = attribute(opening, "className");
   if (!attr?.value) return [];
   if (attr.value.type === "Literal") return [String(attr.value.value)];
@@ -68,7 +68,7 @@ const classStrings = (opening) => {
 const hasClass = (opening, pattern) =>
   classStrings(opening).some((value) => pattern.test(value));
 
-const isAriaHidden = (opening) => {
+export const isAriaHidden = (opening) => {
   const attr = attribute(opening, "aria-hidden");
   if (!attr) return false;
   if (!attr.value) return true;
@@ -78,7 +78,7 @@ const isAriaHidden = (opening) => {
 };
 
 // tabIndex={-1} or tabIndex="-1".
-const isUntabbable = (opening) => {
+export const isUntabbable = (opening) => {
   const value = attribute(opening, "tabIndex")?.value;
   if (value?.type === "Literal") return value.value === "-1";
   const expression = value?.expression;

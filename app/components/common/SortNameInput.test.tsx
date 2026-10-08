@@ -8,9 +8,30 @@ const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
 describe("SortNameInput", () => {
+  it("links its label to the sort input", () => {
+    render(
+      <SortNameInput
+        label="Sort Name"
+        nameValue="Stephen King"
+        onChange={() => {}}
+        sortValue=""
+        source="manual"
+        type="person"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Sort Name" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Autogenerate sort name" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows checkbox and input", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={() => {}}
         sortValue=""
@@ -26,6 +47,7 @@ describe("SortNameInput", () => {
   it("checkbox is checked when source is not manual", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={() => {}}
         sortValue="King, Stephen"
@@ -40,6 +62,7 @@ describe("SortNameInput", () => {
   it("checkbox is unchecked when source is manual", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={() => {}}
         sortValue="King, S."
@@ -54,6 +77,7 @@ describe("SortNameInput", () => {
   it("shows live preview when checkbox is checked", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={() => {}}
         sortValue=""
@@ -69,6 +93,7 @@ describe("SortNameInput", () => {
   it("updates preview when nameValue changes", () => {
     const { rerender } = render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={() => {}}
         sortValue=""
@@ -81,6 +106,7 @@ describe("SortNameInput", () => {
 
     rerender(
       <SortNameInput
+        label="Sort Name"
         nameValue="J.R.R. Tolkien"
         onChange={() => {}}
         sortValue=""
@@ -98,6 +124,7 @@ describe("SortNameInput", () => {
 
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={onChange}
         sortValue="King, S."
@@ -117,6 +144,7 @@ describe("SortNameInput", () => {
 
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={onChange}
         sortValue=""
@@ -140,6 +168,7 @@ describe("SortNameInput", () => {
   it("uses forTitle for title type", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="The Hobbit"
         onChange={() => {}}
         sortValue=""
@@ -154,6 +183,7 @@ describe("SortNameInput", () => {
   it("uses forPerson for person type", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Ludwig van Beethoven"
         onChange={() => {}}
         sortValue=""
@@ -168,6 +198,7 @@ describe("SortNameInput", () => {
   it("shows correct label for title type", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="The Hobbit"
         onChange={() => {}}
         sortValue=""
@@ -182,6 +213,7 @@ describe("SortNameInput", () => {
   it("shows correct label for person type", () => {
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={() => {}}
         sortValue=""
@@ -199,6 +231,7 @@ describe("SortNameInput", () => {
 
     render(
       <SortNameInput
+        label="Sort Name"
         nameValue="Stephen King"
         onChange={onChange}
         sortValue="Custom Sort"

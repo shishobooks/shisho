@@ -1,5 +1,7 @@
 import { CircleCheck } from "lucide-react";
+import { useId } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -189,6 +191,8 @@ export function ReviewPanel({
   readOnly = false,
 }: ReviewPanelProps) {
   const { data: criteria } = useReviewCriteria();
+  // Book detail and an edit dialog over it can both render a panel.
+  const toggleId = useId();
 
   // Only consider main files
   const mainFiles = files.filter((f) => f.file_role === FileRoleMain);
@@ -268,7 +272,7 @@ export function ReviewPanel({
               checked={allReviewed}
               className="cursor-pointer"
               disabled={isPending}
-              id="review-toggle"
+              id={toggleId}
               onCheckedChange={handleToggle}
             />
             <Label
@@ -276,7 +280,7 @@ export function ReviewPanel({
                 "cursor-pointer font-medium",
                 isPending && "opacity-50",
               )}
-              htmlFor="review-toggle"
+              htmlFor={toggleId}
             >
               Reviewed
             </Label>
@@ -284,18 +288,26 @@ export function ReviewPanel({
         )}
         <TooltipProvider delayDuration={0}>
           <Tooltip>
+            {/* A button, so the keyboard can open the tooltip, the only
+                place that says how the state was set. */}
             <TooltipTrigger asChild>
-              <CircleCheck
+              <Button
                 aria-label={
                   allReviewed ? "Reviewed status" : "Needs review status"
                 }
-                className={cn(
-                  "h-4 w-4 cursor-help",
-                  allReviewed
-                    ? "text-green-600 dark:text-green-500"
-                    : "text-muted-foreground",
-                )}
-              />
+                className="flex cursor-help rounded-sm"
+                variant="unstyled"
+              >
+                <CircleCheck
+                  aria-hidden="true"
+                  className={cn(
+                    "h-4 w-4",
+                    allReviewed
+                      ? "text-green-600 dark:text-green-500"
+                      : "text-muted-foreground",
+                  )}
+                />
+              </Button>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
               <p>{tooltipText}</p>

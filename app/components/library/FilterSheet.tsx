@@ -9,7 +9,7 @@ import {
   SquareCheckBig,
   Tags,
 } from "lucide-react";
-import { forwardRef, useState } from "react";
+import { forwardRef, useId, useState } from "react";
 
 import { FilterChip } from "@/components/library/FilterChip";
 import QueryError, {
@@ -99,11 +99,14 @@ const SectionHeader = ({
   icon,
   colorClass,
   label,
+  labelId,
   detail,
 }: {
   icon: React.ReactNode;
   colorClass: string;
   label: string;
+  /** Lets the section's control name itself with aria-labelledby. */
+  labelId?: string;
   detail?: string;
 }) => (
   <div className="flex items-center gap-2 mb-3">
@@ -115,7 +118,9 @@ const SectionHeader = ({
     >
       {icon}
     </span>
-    <div className="text-xs font-semibold">{label}</div>
+    <div className="text-xs font-semibold" id={labelId}>
+      {label}
+    </div>
     {detail && (
       <span className="ml-auto text-[10px] text-muted-foreground">
         {detail}
@@ -140,6 +145,8 @@ const FilterCombobox = ({
   searchInput,
   onSearchChange,
   onToggle,
+  label,
+  labelId,
   triggerLabel,
   searchPlaceholder,
   emptyText,
@@ -153,6 +160,10 @@ const FilterCombobox = ({
   searchInput: string;
   onSearchChange: (value: string) => void;
   onToggle: (id: number) => void;
+  /** Names the search box ("Search genres"). */
+  label: string;
+  /** The id of the section header, which names the trigger. */
+  labelId: string;
   triggerLabel: string;
   searchPlaceholder: string;
   emptyText: string;
@@ -178,6 +189,7 @@ const FilterCombobox = ({
         <PopoverTrigger asChild>
           <Button
             aria-expanded={open}
+            aria-labelledby={labelId}
             className="w-full justify-between font-normal text-muted-foreground"
             role="combobox"
             variant="outline"
@@ -190,7 +202,7 @@ const FilterCombobox = ({
           align="start"
           className="w-[var(--radix-popover-trigger-width)] p-0"
         >
-          <Command shouldFilter={false}>
+          <Command label={`Search ${label.toLowerCase()}`} shouldFilter={false}>
             <CommandInput
               onValueChange={onSearchChange}
               placeholder={searchPlaceholder}
@@ -263,160 +275,178 @@ const FilterContent = ({
   onLanguageChange,
   reviewedFilter,
   onReviewedFilterChange,
-}: Omit<FilterSheetProps, "onClearAll" | "hasActiveFilters">) => (
-  <div className="space-y-6">
-    {/* File Type */}
-    <div>
-      <SectionHeader
-        colorClass="bg-chart-5/20 text-chart-5"
-        detail={
-          selectedFileTypes.length > 0
-            ? `${selectedFileTypes.length} of ${fileTypeOptions.length}`
-            : undefined
-        }
-        icon={<File className="h-3 w-3" />}
-        label="File type"
-      />
-      <div className="flex flex-wrap gap-1.5">
-        {fileTypeOptions.map((option) => {
-          const isSelected = selectedFileTypes.includes(option.value);
-          return (
-            <Button
-              aria-pressed={isSelected}
-              className={cn(
-                "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
-                isSelected
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "border-border bg-card hover:bg-accent",
-              )}
-              key={option.value}
-              onClick={() => onToggleFileType(option.value)}
-              variant="unstyled"
-            >
-              {option.label}
-            </Button>
-          );
-        })}
-      </div>
-    </div>
-
-    {/* Genres */}
-    <div>
-      <SectionHeader
-        colorClass="bg-primary/20 text-primary"
-        detail={
-          selectedGenreIds.length > 0
-            ? `${selectedGenreIds.length} selected`
-            : undefined
-        }
-        icon={<Bookmark className="h-3 w-3" />}
-        label="Genres"
-      />
-      <FilterCombobox
-        chipKind="genre"
-        emptyText="No genres found."
-        errorFallback="Failed to load genres"
-        loading={genresLoading}
-        onSearchChange={onGenreSearchChange}
-        onToggle={onToggleGenre}
-        options={genres}
-        query={genresQuery}
-        searchInput={genreSearchInput}
-        searchPlaceholder="Search genres..."
-        selected={selectedGenres}
-        triggerLabel="Add genres..."
-      />
-    </div>
-
-    {/* Tags */}
-    <div>
-      <SectionHeader
-        colorClass="bg-chart-2/20 text-chart-2"
-        detail={
-          selectedTagIds.length > 0
-            ? `${selectedTagIds.length} selected`
-            : undefined
-        }
-        icon={<Tags className="h-3 w-3" />}
-        label="Tags"
-      />
-      <FilterCombobox
-        chipKind="tag"
-        emptyText="No tags found."
-        errorFallback="Failed to load tags"
-        loading={tagsLoading}
-        onSearchChange={onTagSearchChange}
-        onToggle={onToggleTag}
-        options={tags}
-        query={tagsQuery}
-        searchInput={tagSearchInput}
-        searchPlaceholder="Search tags..."
-        selected={selectedTags}
-        triggerLabel="Add tags..."
-      />
-    </div>
-
-    {/* Language */}
-    {languageOptions.length > 0 && (
+}: Omit<FilterSheetProps, "onClearAll" | "hasActiveFilters">) => {
+  const genresLabelId = useId();
+  const tagsLabelId = useId();
+  const languageLabelId = useId();
+  return (
+    <div className="space-y-6">
+      {/* File Type */}
       <div>
         <SectionHeader
           colorClass="bg-chart-5/20 text-chart-5"
-          icon={<Languages className="h-3 w-3" />}
-          label="Language"
+          detail={
+            selectedFileTypes.length > 0
+              ? `${selectedFileTypes.length} of ${fileTypeOptions.length}`
+              : undefined
+          }
+          icon={<File className="h-3 w-3" />}
+          label="File type"
         />
-        <Select onValueChange={onLanguageChange} value={languageParam || "all"}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Language" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Languages</SelectItem>
-            {languageOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
+        <div className="flex flex-wrap gap-1.5">
+          {fileTypeOptions.map((option) => {
+            const isSelected = selectedFileTypes.includes(option.value);
+            return (
+              <Button
+                aria-pressed={isSelected}
+                className={cn(
+                  "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
+                  isSelected
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border bg-card hover:bg-accent",
+                )}
+                key={option.value}
+                onClick={() => onToggleFileType(option.value)}
+                variant="unstyled"
+              >
                 {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              </Button>
+            );
+          })}
+        </div>
       </div>
-    )}
 
-    {/* Review state */}
-    <div>
-      <SectionHeader
-        colorClass="bg-chart-3/20 text-chart-3"
-        icon={<Eye className="h-3 w-3" />}
-        label="Review state"
-      />
-      <RadioGroup
-        className="gap-2"
-        onValueChange={onReviewedFilterChange}
-        value={reviewedFilter || "all"}
-      >
-        <div className="flex items-center gap-2">
-          <RadioGroupItem id="review-all" value="all" />
-          <Label className="cursor-pointer font-normal" htmlFor="review-all">
-            All
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <RadioGroupItem id="review-needs" value="needs_review" />
-          <Label className="cursor-pointer font-normal" htmlFor="review-needs">
-            Needs review
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <RadioGroupItem id="review-reviewed" value="reviewed" />
-          <Label
-            className="cursor-pointer font-normal"
-            htmlFor="review-reviewed"
+      {/* Genres */}
+      <div>
+        <SectionHeader
+          colorClass="bg-primary/20 text-primary"
+          detail={
+            selectedGenreIds.length > 0
+              ? `${selectedGenreIds.length} selected`
+              : undefined
+          }
+          icon={<Bookmark className="h-3 w-3" />}
+          label="Genres"
+          labelId={genresLabelId}
+        />
+        <FilterCombobox
+          chipKind="genre"
+          emptyText="No genres found."
+          errorFallback="Failed to load genres"
+          label="Genres"
+          labelId={genresLabelId}
+          loading={genresLoading}
+          onSearchChange={onGenreSearchChange}
+          onToggle={onToggleGenre}
+          options={genres}
+          query={genresQuery}
+          searchInput={genreSearchInput}
+          searchPlaceholder="Search genres..."
+          selected={selectedGenres}
+          triggerLabel="Add genres..."
+        />
+      </div>
+
+      {/* Tags */}
+      <div>
+        <SectionHeader
+          colorClass="bg-chart-2/20 text-chart-2"
+          detail={
+            selectedTagIds.length > 0
+              ? `${selectedTagIds.length} selected`
+              : undefined
+          }
+          icon={<Tags className="h-3 w-3" />}
+          label="Tags"
+          labelId={tagsLabelId}
+        />
+        <FilterCombobox
+          chipKind="tag"
+          emptyText="No tags found."
+          errorFallback="Failed to load tags"
+          label="Tags"
+          labelId={tagsLabelId}
+          loading={tagsLoading}
+          onSearchChange={onTagSearchChange}
+          onToggle={onToggleTag}
+          options={tags}
+          query={tagsQuery}
+          searchInput={tagSearchInput}
+          searchPlaceholder="Search tags..."
+          selected={selectedTags}
+          triggerLabel="Add tags..."
+        />
+      </div>
+
+      {/* Language */}
+      {languageOptions.length > 0 && (
+        <div>
+          <SectionHeader
+            colorClass="bg-chart-5/20 text-chart-5"
+            icon={<Languages className="h-3 w-3" />}
+            label="Language"
+            labelId={languageLabelId}
+          />
+          <Select
+            onValueChange={onLanguageChange}
+            value={languageParam || "all"}
           >
-            Reviewed
-          </Label>
+            <SelectTrigger aria-labelledby={languageLabelId} className="w-full">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Languages</SelectItem>
+              {languageOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </RadioGroup>
+      )}
+
+      {/* Review state */}
+      <div>
+        <SectionHeader
+          colorClass="bg-chart-3/20 text-chart-3"
+          icon={<Eye className="h-3 w-3" />}
+          label="Review state"
+        />
+        <RadioGroup
+          className="gap-2"
+          onValueChange={onReviewedFilterChange}
+          value={reviewedFilter || "all"}
+        >
+          <div className="flex items-center gap-2">
+            <RadioGroupItem id="review-all" value="all" />
+            <Label className="cursor-pointer font-normal" htmlFor="review-all">
+              All
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem id="review-needs" value="needs_review" />
+            <Label
+              className="cursor-pointer font-normal"
+              htmlFor="review-needs"
+            >
+              Needs review
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem id="review-reviewed" value="reviewed" />
+            <Label
+              className="cursor-pointer font-normal"
+              htmlFor="review-reviewed"
+            >
+              Reviewed
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // forwardRef so SheetTrigger/DrawerTrigger asChild can attach its DOM ref
 // onto the underlying button. See the Radix `asChild` trigger gotcha in

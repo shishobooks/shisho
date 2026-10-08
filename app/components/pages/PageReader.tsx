@@ -214,6 +214,7 @@ export default function PageReader({
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
             <select
+              aria-label="Jump to chapter"
               className="text-sm bg-transparent border rounded px-2 py-1"
               onChange={(e) => {
                 const ch = flatChapters.find(

@@ -287,7 +287,9 @@ test.describe("Alias workflows", () => {
     // is debounced and re-renders the list when results arrive, so wait for
     // the search response before clicking or the click can land on an item
     // that is about to be replaced.
-    await page.getByRole("combobox").click();
+    await page
+      .getByRole("combobox", { name: "Series to merge", exact: true })
+      .click();
     await Promise.all([
       page.waitForResponse(
         (r) =>
@@ -295,7 +297,9 @@ test.describe("Alias workflows", () => {
           r.url().includes("search=Dune") &&
           r.ok(),
       ),
-      page.getByPlaceholder("Search series...").fill("Dune Saga"),
+      page
+        .getByRole("combobox", { name: "Search series", exact: true })
+        .fill("Dune Saga"),
     ]);
     await page.locator("[cmdk-item]").filter({ hasText: "Dune Saga" }).click();
 

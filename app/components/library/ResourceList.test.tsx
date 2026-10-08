@@ -41,6 +41,7 @@ const list = (
       itemLabel="genres"
       linkTo={(item) => `/libraries/1/genres/${item.id}`}
       query={query as UseQueryResult<ResourceListResponse<Item>>}
+      searchLabel="Search genres"
       searchPlaceholder="Search genres..."
       state={{ ...state, debouncedSearch }}
       subtitle="Browse genres"

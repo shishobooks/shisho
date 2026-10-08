@@ -532,6 +532,17 @@ describe("ChapterRow - CBZ", () => {
         />,
       );
 
+    it("names the title and start page inputs, not only by placeholder", () => {
+      renderEditRow();
+
+      expect(
+        screen.getByRole("textbox", { name: "Chapter title" }),
+      ).toHaveValue("Chapter 1");
+      expect(
+        screen.getByRole("spinbutton", { name: "Start page" }),
+      ).toHaveValue(6);
+    });
+
     it("names the icon buttons with an aria-label, not only a title", () => {
       renderEditRow();
 
