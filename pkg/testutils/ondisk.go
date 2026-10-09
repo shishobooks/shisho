@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/internal/testgen/mobigen"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -21,7 +22,7 @@ func writeFileOnDisk(root, fileType, title string) (string, error) {
 	case models.FileTypeMOBI:
 		write = writeMinimalMOBI
 	default:
-		return "", errors.Errorf("withFileOnDisk does not support fileType %q", fileType)
+		return "", errcodes.ValidationError("withFileOnDisk requires fileType epub or mobi")
 	}
 	base, err := tempFilePath(root, title)
 	if err != nil {

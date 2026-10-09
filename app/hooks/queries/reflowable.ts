@@ -28,16 +28,22 @@ export const useReflowableBlob = (
     staleTime: 60 * 1000,
     gcTime: 60 * 1000,
     queryFn: async ({ signal }) => {
-      let response = await fetch(fileDownloadUrl(fileId), { signal });
-      // A 422 means the server has no generator for this type, so read the
-      // file as it sits on disk, as Download Original would.
-      if (response.status === 422) {
-        response = await fetch(fileOriginalDownloadUrl(fileId), { signal });
-      }
       // checkStatus rejects with the API's error; the body is a file
       // otherwise, so only a failure goes through it.
-      if (!response.ok) await API.checkStatus(response);
-      return response.blob();
+      const response = await fetch(fileDownloadUrl(fileId), { signal });
+      if (response.ok) return response.blob();
+      const error = await API.checkStatus(response).catch((e: unknown) => e);
+      // invalid_state means the server has no generator for this type (MOBI
+      // and AZW3 until #660), so read the file as it sits on disk, as
+      // Download Original would.
+      if (!(
+        error instanceof ShishoAPIError && error.code === "invalid_state"
+      )) {
+        throw error;
+      }
+      const original = await fetch(fileOriginalDownloadUrl(fileId), { signal });
+      if (!original.ok) await API.checkStatus(original);
+      return original.blob();
     },
   });
 };

@@ -126,4 +126,19 @@ describe("useReflowableBlob", () => {
 
     expect(result.current.error?.status).toBe(404);
   });
+
+  it("surfaces any other 422 instead of loading the original", async () => {
+    fetchSpy.mockResolvedValue(
+      Response.json(
+        { error: { code: "validation_error", message: "Bad request" } },
+        { status: 422 },
+      ),
+    );
+
+    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current.error?.code).toBe("validation_error");
+  });
 });

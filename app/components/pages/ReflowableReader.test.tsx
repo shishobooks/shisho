@@ -145,7 +145,7 @@ describe("ReflowableReader", () => {
     }
   });
 
-  it("shows a loading indicator while fetching the EPUB", () => {
+  it("shows a loading indicator while fetching the book", () => {
     vi.mocked(useReflowableBlob).mockReturnValue({
       data: undefined,
       isLoading: true,

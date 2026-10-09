@@ -235,9 +235,6 @@ func (h *handler) createBook(c echo.Context) error {
 		fileType = models.FileTypeEPUB
 	}
 	if req.WithFileOnDisk {
-		if fileType != models.FileTypeEPUB && fileType != models.FileTypeMOBI {
-			return errcodes.ValidationError("withFileOnDisk requires fileType epub or mobi")
-		}
 		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title)
 		if err != nil {
 			return err

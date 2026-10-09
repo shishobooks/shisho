@@ -63,23 +63,27 @@ test.describe("Reflowable reader", () => {
     await page.getByRole("link", { name: "Read", exact: true }).click();
     await page.waitForURL(/\/files\/\d+\/read$/);
 
+    // foliate's MOBI modules load on first use, which a cold dev server
+    // compiles on demand, so allow more than the default expect timeout.
+    await expect
+      .poll(
+        async () => {
+          for (const frame of page.frames()) {
+            const text = await frame
+              .locator("body")
+              .textContent({ timeout: 1000 })
+              .catch(() => null);
+            if (text?.includes("Hello world.")) return true;
+          }
+          return false;
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
     await expect(page.getByText("Preparing book…")).toBeHidden();
     await expect(page.getByText("We couldn't load this book.")).toHaveCount(0);
     await expect(
       page.getByRole("slider", { name: "Reading progress" }),
     ).toBeVisible();
-
-    await expect
-      .poll(async () => {
-        for (const frame of page.frames()) {
-          const text = await frame
-            .locator("body")
-            .textContent({ timeout: 1000 })
-            .catch(() => null);
-          if (text?.includes("Hello world.")) return true;
-        }
-        return false;
-      })
-      .toBe(true);
   });
 });
