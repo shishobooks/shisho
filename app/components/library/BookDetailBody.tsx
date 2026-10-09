@@ -95,7 +95,7 @@ import {
 } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
-import { getCoverFileType } from "@/utils/coverSelection";
+import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import {
   fileDownloadUrl,
@@ -958,7 +958,10 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         fileId,
         payload: { mode },
       });
-      if ("file_deleted" in result && result.file_deleted) {
+      if ("book_deleted" in result && result.book_deleted) {
+        toast.success("Book removed (no files remain)");
+        navigate("/");
+      } else if ("file_deleted" in result && result.file_deleted) {
         toast.success("File removed (no longer on disk, or DRM-protected)");
       } else {
         toast.success("File rescanned");
@@ -978,6 +981,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       });
       if ("book_deleted" in result && result.book_deleted) {
         toast.success("Book removed (no files remain)");
+        navigate("/");
       } else {
         toast.success("Book rescanned");
       }
@@ -1159,6 +1163,9 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
             <CoverGalleryTabs
               files={mainFiles}
               getCoverUrl={shareLink?.fileCoverUrl}
+              initialFileId={
+                selectCoverFile(mainFiles, libraryCoverAspectRatio)?.id
+              }
             />
           ) : (
             /* Single file - show book cover directly */

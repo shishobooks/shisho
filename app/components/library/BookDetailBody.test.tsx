@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import {
   afterEach,
@@ -85,18 +85,30 @@ vi.mock("@/components/library/ShareLinkDialog", () => ({
 beforeEach(() => {
   setAuth({ permissions: ALL_PERMISSIONS });
   sharing.settings = { enabled: false, require_expiration: false };
+  resync.file = undefined;
+  resync.book = undefined;
 });
 
-const { idle, review } = vi.hoisted(() => ({
+const { idle, review, resync } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
   review: { mutate: undefined as undefined | ((...args: never[]) => void) },
+  resync: {
+    file: undefined as undefined | ((...args: never[]) => Promise<unknown>),
+    book: undefined as undefined | ((...args: never[]) => Promise<unknown>),
+  },
 }));
 
 vi.mock("@/hooks/queries/books", () => ({
   useDeleteBook: idle,
   useDeleteFile: idle,
-  useResyncBook: idle,
-  useResyncFile: idle,
+  useResyncBook: () => ({
+    ...idle(),
+    ...(resync.book ? { mutateAsync: resync.book } : {}),
+  }),
+  useResyncFile: () => ({
+    ...idle(),
+    ...(resync.file ? { mutateAsync: resync.file } : {}),
+  }),
 }));
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
@@ -790,5 +802,98 @@ describe("BookDetailBody review toggle", () => {
 
     expect(review.mutate).toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
+  });
+});
+
+describe("BookDetailBody rescans that remove the book", () => {
+  const renderOnBookPage = () =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={["/libraries/1/books/1"]}>
+          <Routes>
+            <Route element={<div>Home page</div>} path="/" />
+            <Route element={<BookDetailBody book={book} />} path="*" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+  const rescanFirstFile = async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getAllByLabelText("File actions")[0]);
+    await user.click(screen.getByRole("menuitem", { name: "Rescan file" }));
+    await user.click(screen.getByRole("button", { name: "Rescan" }));
+  };
+
+  it("leaves the book page when a file rescan removes the book", async () => {
+    resync.file = vi.fn(async () => ({
+      file_deleted: true,
+      book_deleted: true,
+    }));
+    renderOnBookPage();
+
+    await rescanFirstFile();
+
+    expect(await screen.findByText("Home page")).toBeInTheDocument();
+  });
+
+  it("stays on the book page when a file rescan removes only the file", async () => {
+    resync.file = vi.fn(async () => ({
+      file_deleted: true,
+      book_deleted: false,
+    }));
+    renderOnBookPage();
+
+    await rescanFirstFile();
+
+    await waitFor(() => expect(resync.file).toHaveBeenCalled());
+    expect(screen.queryByText("Home page")).not.toBeInTheDocument();
+  });
+
+  it("leaves the book page when a book rescan removes the book", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    resync.book = vi.fn(async () => ({ book_deleted: true }));
+    renderOnBookPage();
+
+    await user.click(screen.getByLabelText("Book actions"));
+    await user.click(screen.getByRole("menuitem", { name: "Rescan book" }));
+    await user.click(screen.getByRole("button", { name: "Rescan" }));
+
+    expect(await screen.findByText("Home page")).toBeInTheDocument();
+  });
+});
+
+describe("BookDetailBody cover gallery", () => {
+  const withCover = (id: number, fileType: string, preferred = false): File =>
+    ({
+      ...epub,
+      id,
+      file_type: fileType,
+      cover_image_filename: `${fileType}.cover.jpg`,
+      is_preferred_cover: preferred,
+    }) as File;
+
+  const pressedTab = () =>
+    screen
+      .getAllByRole("button", { pressed: true })
+      .map((button) => button.textContent);
+
+  it("opens on the file whose cover represents the book", () => {
+    renderBody({
+      book: { ...book, files: [withCover(50, "mobi"), withCover(51, "azw3")] },
+    });
+
+    expect(pressedTab()).toEqual(["AZW3"]);
+  });
+
+  it("opens on the Preferred Cover file", () => {
+    renderBody({
+      book: {
+        ...book,
+        files: [withCover(50, "azw3"), withCover(51, "mobi", true)],
+      },
+    });
+
+    expect(pressedTab()).toEqual(["MOBI"]);
   });
 });

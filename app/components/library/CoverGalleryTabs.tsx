@@ -23,6 +23,9 @@ interface CoverGalleryTabsProps {
    * a cover.
    */
   getCoverUrl?: (file: File) => string | null;
+  /** The file whose tab opens first, normally the one whose cover represents
+   *  the book. Defaults to the first file. */
+  initialFileId?: number;
 }
 
 interface FileWithLabel extends File {
@@ -68,6 +71,7 @@ function CoverGalleryTabs({
   files,
   className,
   getCoverUrl,
+  initialFileId,
 }: CoverGalleryTabsProps) {
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [coverLoaded, setCoverLoaded] = useState(false);
@@ -75,12 +79,13 @@ function CoverGalleryTabs({
 
   const filesWithLabels = getFilesWithLabels(files);
 
-  // Initialize selected file to first file
+  // Initialize the selected file to initialFileId, or the first file
   useEffect(() => {
     if (files.length > 0 && selectedFileId === null) {
-      setSelectedFileId(files[0].id);
+      const initial = files.find((f) => f.id === initialFileId) ?? files[0];
+      setSelectedFileId(initial.id);
     }
-  }, [files, selectedFileId]);
+  }, [files, initialFileId, selectedFileId]);
 
   const selectedFile = filesWithLabels.find((f) => f.id === selectedFileId);
   const isAudiobook = selectedFile?.file_type === "m4b";
