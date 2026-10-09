@@ -84,10 +84,28 @@ func TestKindleFiles(t *testing.T) {
 			wantIDs: []int{2},
 		},
 		{
-			name: "neither",
+			name: "pdf next to azw3",
+			files: []*models.File{
+				{ID: 1, FileType: models.FileTypePDF, FileRole: models.FileRoleMain},
+				{ID: 2, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain},
+				{ID: 3, FileType: models.FileTypeAZW3, FileRole: models.FileRoleMain},
+			},
+			wantIDs: []int{3, 1},
+		},
+		{
+			name: "pdf alone",
 			files: []*models.File{
 				{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
 				{ID: 2, FileType: models.FileTypePDF, FileRole: models.FileRoleMain},
+			},
+			wantIDs: []int{2},
+		},
+		{
+			name: "none",
+			files: []*models.File{
+				{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
+				{ID: 2, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
+				{ID: 3, FileType: models.FileTypePDF, FileRole: models.FileRoleSupplement},
 			},
 			wantIDs: nil,
 		},
@@ -104,13 +122,14 @@ func TestKindleFiles(t *testing.T) {
 	}
 }
 
-// kindleFixture is the access fixture with three books in libA: one with an
-// EPUB, a MOBI, and an AZW3, one with an EPUB and a MOBI, and one with only
-// an EPUB.
+// kindleFixture is the access fixture with four books in libA: one with an
+// EPUB, a MOBI, an AZW3, and a PDF, one with an EPUB and a MOBI, one with an
+// EPUB and a PDF, and one with only an EPUB.
 type kindleFixture struct {
 	*eReaderAccessFixture
 	allFormats *models.Book
 	mobiOnly   *models.Book
+	epubPDF    *models.Book
 	epubOnly   *models.Book
 	files      map[string]*models.File
 }
@@ -148,8 +167,9 @@ func newKindleFixture(t *testing.T) *kindleFixture {
 		return book
 	}
 
-	f.allFormats = addBook("All Formats", models.FileTypeEPUB, models.FileTypeMOBI, models.FileTypeAZW3)
+	f.allFormats = addBook("All Formats", models.FileTypeEPUB, models.FileTypeMOBI, models.FileTypeAZW3, models.FileTypePDF)
 	f.mobiOnly = addBook("Has MOBI", models.FileTypeEPUB, models.FileTypeMOBI)
+	f.epubPDF = addBook("Has PDF", models.FileTypeEPUB, models.FileTypePDF)
 	f.epubOnly = addBook("EPUB Only", models.FileTypeEPUB)
 	return f
 }
@@ -168,7 +188,7 @@ func (f *kindleFixture) fileLink(title, fileType string) string {
 	return `/file/` + strconv.Itoa(f.files[title+"/"+fileType].ID) + `"`
 }
 
-func TestDownload_KindleGetsAZW3(t *testing.T) {
+func TestDownload_KindleGetsAZW3AndPDF(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
 
@@ -176,6 +196,8 @@ func TestDownload_KindleGetsAZW3(t *testing.T) {
 
 	assert.Contains(t, body, f.fileLink("All Formats", models.FileTypeAZW3))
 	assert.Contains(t, body, "Download AZW3")
+	assert.Contains(t, body, f.fileLink("All Formats", models.FileTypePDF))
+	assert.Contains(t, body, "Download PDF")
 	assert.NotContains(t, body, f.fileLink("All Formats", models.FileTypeMOBI))
 	assert.NotContains(t, body, f.fileLink("All Formats", models.FileTypeEPUB))
 	assert.NotContains(t, body, "Unavailable on Kindle")
@@ -190,6 +212,17 @@ func TestDownload_KindleGetsMOBIWithoutAZW3(t *testing.T) {
 	assert.Contains(t, body, f.fileLink("Has MOBI", models.FileTypeMOBI))
 	assert.Contains(t, body, "Download MOBI")
 	assert.NotContains(t, body, f.fileLink("Has MOBI", models.FileTypeEPUB))
+}
+
+func TestDownload_KindleGetsPDFWithoutMOBIOrAZW3(t *testing.T) {
+	t.Parallel()
+	f := newKindleFixture(t)
+
+	body := f.page(t, "/download/"+strconv.Itoa(f.epubPDF.ID), kindleUserAgent)
+
+	assert.Contains(t, body, f.fileLink("Has PDF", models.FileTypePDF))
+	assert.NotContains(t, body, f.fileLink("Has PDF", models.FileTypeEPUB))
+	assert.NotContains(t, body, "Unavailable on Kindle")
 }
 
 func TestDownload_KindleBookWithoutKindleFileIsUnavailable(t *testing.T) {

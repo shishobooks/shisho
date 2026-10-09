@@ -42,6 +42,7 @@ type ListBooksOptions struct {
 	SeriesID       *int
 	PersonID       *int     // Filter to books authored by this person (joins through authors)
 	FileTypes      []string // Filter by file types (e.g., ["epub", "cbz"])
+	MainFileTypes  []string // Filter by the types of main files only, ignoring supplements
 	GenreIDs       []int    // Filter by genre IDs
 	TagIDs         []int    // Filter by tag IDs
 	Language       *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
@@ -438,6 +439,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by file types
 	if len(opts.FileTypes) > 0 {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(opts.FileTypes))
+	}
+	if len(opts.MainFileTypes) > 0 {
+		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(opts.MainFileTypes), models.FileRoleMain)
 	}
 
 	// Filter by genre IDs

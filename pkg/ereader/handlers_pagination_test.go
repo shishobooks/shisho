@@ -99,12 +99,7 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 }
 
 // TestListBooksPaginated_TypeFilter confirms that an active type
-// filter switches to in-memory pagination and returns the filtered
-// total (not the unfiltered SQL total). This matches the
-// filter-then-paginate path used by LibraryAllBooks since the books
-// service's FileTypes filter is "any file matches", which disagrees
-// with the eReader's dominant-per-book display when a book has mixed
-// file types.
+// filter returns the filtered total (not the unfiltered count).
 func TestListBooksPaginated_TypeFilter(t *testing.T) {
 	t.Parallel()
 

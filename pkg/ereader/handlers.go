@@ -594,7 +594,7 @@ func (h *handler) Download(c echo.Context) error {
 	if kindle {
 		files := kindleFiles(mainFiles)
 		if len(files) == 0 {
-			content.WriteString(`<p><b>Unavailable on Kindle.</b> This book has no AZW3 or MOBI file.</p>`)
+			content.WriteString(`<p><b>Unavailable on Kindle.</b> This book has no AZW3, MOBI, or PDF file.</p>`)
 		}
 		for _, f := range files {
 			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, false))
@@ -749,21 +749,24 @@ func isKindle(userAgent string) bool {
 }
 
 // kindleFiles returns the main files a Kindle should download: the AZW3
-// files, or else the MOBI files, or nil when there are neither. AZW3 comes
-// first because it carries KF8 formatting that MOBI lacks.
+// files, or else the MOBI files, followed by the PDF files, which a Kindle
+// also reads. AZW3 comes before MOBI because it carries KF8 formatting that
+// MOBI lacks. It returns nil when the book has none of these.
 func kindleFiles(files []*models.File) []*models.File {
-	for _, fileType := range []string{models.FileTypeAZW3, models.FileTypeMOBI} {
+	mainFilesOfType := func(fileType string) []*models.File {
 		var matches []*models.File
 		for _, f := range files {
 			if f.FileRole == models.FileRoleMain && f.FileType == fileType {
 				matches = append(matches, f)
 			}
 		}
-		if len(matches) > 0 {
-			return matches
-		}
+		return matches
 	}
-	return nil
+	result := mainFilesOfType(models.FileTypeAZW3)
+	if len(result) == 0 {
+		result = mainFilesOfType(models.FileTypeMOBI)
+	}
+	return append(result, mainFilesOfType(models.FileTypePDF)...)
 }
 
 // getBookFileTypes returns a list of unique file types for a book (e.g., ["EPUB", "M4B"]).
@@ -852,24 +855,6 @@ func fileDownloadEntry(baseURL, bookTitle string, f *models.File, isKobo bool) s
 	return sb.String()
 }
 
-// filterBooksByType keeps the books with a main file of the given type.
-func filterBooksByType(books []*models.Book, fileType string) []*models.Book {
-	if fileType == "" || fileType == "all" {
-		return books
-	}
-
-	var filtered []*models.Book
-	for _, book := range books {
-		for _, f := range book.Files {
-			if f.FileRole == models.FileRoleMain && strings.EqualFold(f.FileType, fileType) {
-				filtered = append(filtered, book)
-				break
-			}
-		}
-	}
-	return filtered
-}
-
 // getBookCoverURL returns the cover URL for a book using the eReader cover endpoint.
 // Returns empty string if the book has no cover.
 func getBookCoverURL(baseURL string, book *models.Book) string {
@@ -905,31 +890,13 @@ func parsePageParam(raw string) int {
 	return 1
 }
 
-// listBooksPaginated fetches a single page of books, applying the
-// eReader's in-memory type filter (when active) before paginating.
+// listBooksPaginated fetches a single page of books, filtered to books
+// with a main file of typesFilter's type unless it is empty or "all".
 // Returns the books for the requested page and the total count used to
 // drive the pagination UI.
-//
-// When typesFilter is active, we fetch all books and filter in Go
-// because the books service's FileTypes filter also matches
-// supplements, which the eReader never offers.
 func (h *handler) listBooksPaginated(ctx context.Context, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
 	if typesFilter != "" && typesFilter != "all" {
-		allBooks, _, err := h.bookService.ListBooksWithTotal(ctx, opts)
-		if err != nil {
-			return nil, 0, errors.WithStack(err)
-		}
-		filtered := filterBooksByType(allBooks, typesFilter)
-		total := len(filtered)
-		offset := (page - 1) * defaultPageSize
-		if offset >= total {
-			return nil, total, nil
-		}
-		end := offset + defaultPageSize
-		if end > total {
-			end = total
-		}
-		return filtered[offset:end], total, nil
+		opts.MainFileTypes = []string{strings.ToLower(typesFilter)}
 	}
 
 	offset := (page - 1) * defaultPageSize

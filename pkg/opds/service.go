@@ -147,11 +147,11 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL, fileT
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -192,11 +192,11 @@ func (svc *Service) BuildLibraryAllBooksFeedKepub(ctx context.Context, baseURL, 
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -309,12 +309,12 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		SeriesID:  &seriesID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		SeriesID:      &seriesID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -360,12 +360,12 @@ func (svc *Service) BuildLibrarySeriesBooksFeedKepub(ctx context.Context, baseUR
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		SeriesID:  &seriesID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		SeriesID:      &seriesID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -515,12 +515,12 @@ func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, author
 	}
 
 	return svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		PersonID:  &person.ID,
-		FileTypes: fileTypes,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		PersonID:      &person.ID,
+		MainFileTypes: fileTypes,
+		Sort:          sort,
 	})
 }
 
@@ -616,12 +616,12 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTyp
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Search:    &query,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Search:        &query,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -666,12 +666,12 @@ func (svc *Service) BuildLibrarySearchFeedKepub(ctx context.Context, baseURL, fi
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Search:    &query,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Search:        &query,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -800,8 +800,11 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		entry.AddThumbnailLink(coverURL, mimeType)
 	}
 
-	// Acquisition links for each file
+	// Acquisition links for each main file. Supplements are not offered.
 	for _, file := range book.Files {
+		if file.FileRole == models.FileRoleSupplement {
+			continue
+		}
 		// If filtering by types, only include matching files
 		if len(types) > 0 && !containsString(types, file.FileType) {
 			continue

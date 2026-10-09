@@ -20,43 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFilterBooksByType_MatchesAnyMainFile confirms that a type filter
-// keeps a book when any of its main files has the type, ignoring
-// supplement files.
-func TestFilterBooksByType_MatchesAnyMainFile(t *testing.T) {
-	t.Parallel()
-
-	epubAndMOBI := &models.Book{ID: 1, Files: []*models.File{
-		{FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-		{FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain},
-	}}
-	cbzWithPDFSupplement := &models.Book{ID: 2, Files: []*models.File{
-		{FileType: models.FileTypePDF, FileRole: models.FileRoleSupplement},
-		{FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
-	}}
-	noFiles := &models.Book{ID: 3}
-	all := []*models.Book{epubAndMOBI, cbzWithPDFSupplement, noFiles}
-
-	tests := []struct {
-		fileType string
-		want     []*models.Book
-	}{
-		{"", all},
-		{"all", all},
-		{models.FileTypeEPUB, []*models.Book{epubAndMOBI}},
-		{models.FileTypeMOBI, []*models.Book{epubAndMOBI}},
-		{"MOBI", []*models.Book{epubAndMOBI}},
-		{models.FileTypeCBZ, []*models.Book{cbzWithPDFSupplement}},
-		{models.FileTypePDF, nil},
-	}
-	for _, tc := range tests {
-		t.Run(tc.fileType, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, filterBooksByType(all, tc.fileType))
-		})
-	}
-}
-
 // TestDownload_ShowsAllMainFiles confirms the Download handler renders
 // a download link for each main file and excludes supplement files.
 func TestDownload_ShowsAllMainFiles(t *testing.T) {

@@ -59,10 +59,10 @@ Covers are off by default. Leave them off on slow devices or networks to reduce 
 
 When the request's User-Agent contains `Kindle`, the browser adjusts to what a Kindle can open. Fire tablets, whose Silk browser also reports `Kindle`, see every download like any other browser.
 
-- A book's page offers only its AZW3 files, or its MOBI files when it has no AZW3.
-- A book with neither is marked **Unavailable on Kindle**, both in book lists and on the book's page, and offers no download.
+- A book's page offers only the files a Kindle can read: its AZW3 files, or its MOBI files when it has no AZW3, plus its PDF files.
+- A book with none of these is marked **Unavailable on Kindle**, both in book lists and on the book's page, and offers no download.
 
-To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book that has only an EPUB onto a Kindle, add a MOBI or AZW3 file to the book in Shisho.
+To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book that has only an EPUB onto a Kindle, add an AZW3 or MOBI file to the book in Shisho.
 
 ## Troubleshooting
 

@@ -152,3 +152,43 @@ func TestValidateFileTypes(t *testing.T) {
 		assert.Error(t, validateFileTypes(types), types)
 	}
 }
+
+// Supplements are not acquisitions: a supplement neither gets a download link
+// nor puts its book in a feed for its type. An .azw supplement is typed mobi.
+func TestOPDS_SupplementsAreNotAcquisitions(t *testing.T) {
+	t.Parallel()
+	f := newKindleFormatsFixture(t)
+	ctx := context.Background()
+	book := &models.Book{
+		LibraryID:       f.lib.ID,
+		Title:           "Has Supplement",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Has Supplement",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        "/books/supplement",
+	}
+	_, err := f.db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+	mainFile := &models.File{
+		LibraryID: f.lib.ID, BookID: book.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain,
+		Filepath: "/books/supplement/book.epub", FilesizeBytes: 1,
+	}
+	supplement := &models.File{
+		LibraryID: f.lib.ID, BookID: book.ID, FileType: models.FileTypeMOBI, FileRole: models.FileRoleSupplement,
+		Filepath: "/books/supplement/extras.azw", FilesizeBytes: 1,
+	}
+	for _, file := range []*models.File{mainFile, supplement} {
+		_, err = f.db.NewInsert().Model(file).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	code, body := f.get(t, fmt.Sprintf("/opds/v1/mobi/libraries/%d/all", f.lib.ID))
+	require.Equal(t, http.StatusOK, code, body)
+	assert.NotContains(t, body, "Has Supplement")
+
+	code, body = f.get(t, fmt.Sprintf("/opds/v1/epub+mobi/libraries/%d/all", f.lib.ID))
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, fmt.Sprintf("/opds/download/%d\"", mainFile.ID))
+	assert.NotContains(t, body, fmt.Sprintf("/opds/download/%d\"", supplement.ID))
+}
