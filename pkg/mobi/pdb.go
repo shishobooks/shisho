@@ -16,6 +16,7 @@ const (
 	pdbHeaderSize    = 78
 	pdbRecordEntry   = 8
 	pdbTypeOffset    = 60
+	pdbUniqueIDSeed  = 68
 	pdbRecordsOffset = 76
 )
 

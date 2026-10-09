@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/mobi"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -119,4 +120,45 @@ func TestUpdateFile_PreferredCoverIsExclusiveAcrossEbookTypes(t *testing.T) {
 	assert.Equal(t, []int{mobi.ID}, preferred(), "preferring the MOBI clears the EPUB")
 	prefer(azw3)
 	assert.Equal(t, []int{azw3.ID}, preferred(), "preferring the AZW3 clears the MOBI")
+}
+
+// The web app's Download writes the book's metadata into MOBI and AZW3 files,
+// as it does for EPUB, and leaves the file on disk alone.
+func TestDownloadFile_GeneratesMOBIAndAZW3(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		filename    string
+		fileType    string
+		kind        testgen.MOBIKind
+		contentType string
+		saveAs      string
+	}{
+		{"book.mobi", models.FileTypeMOBI, testgen.MOBIKindCombo, "application/x-mobipocket-ebook", "Test Book.mobi"},
+		{"book.azw", models.FileTypeMOBI, testgen.MOBIKindMOBI6, "application/x-mobipocket-ebook", "Test Book.mobi"},
+		{"book.azw3", models.FileTypeAZW3, testgen.MOBIKindKF8, "application/vnd.amazon.mobi8-ebook", "Test Book.azw3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			t.Parallel()
+			db := testdb.New(t)
+			library, book := setupTestLibraryAndBook(t, db)
+			content := testgen.BuildMOBI(t, testgen.MOBIOptions{Kind: tt.kind, Title: "Title In File", HasCover: true})
+			path := testgen.WriteFile(t, book.Filepath, tt.filename, content)
+			file := setupTestFile(t, db, book, tt.fileType, path)
+			user := setupTestUser(t, db, library.ID, true)
+
+			req := httptest.NewRequest(http.MethodGet, "/books/files/"+strconv.Itoa(file.ID)+"/download", nil)
+			rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
+
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			assert.Equal(t, tt.contentType, rr.Header().Get(echo.HeaderContentType))
+			assert.Contains(t, rr.Header().Get(echo.HeaderContentDisposition), tt.saveAs)
+
+			meta, err := mobi.Parse(testgen.WriteFile(t, t.TempDir(), tt.filename, rr.Body.Bytes()))
+			require.NoError(t, err)
+			assert.Equal(t, "Test Book", meta.Title)
+			assert.True(t, bytes.Equal(content, testgen.ReadFile(t, path)), "the file on disk is untouched")
+		})
+	}
 }

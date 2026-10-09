@@ -10,8 +10,8 @@ Shisho has native support for six main-file formats. See [Reading and Playback](
 | **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied |
 | **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
-| **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | None | None: use **Download Original** |
-| **AZW3** (`.azw3`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | None | None: use **Download Original** |
+| **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | None | MOBI with supported current metadata and cover applied |
+| **AZW3** (`.azw3`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | None | AZW3 with supported current metadata and cover applied |
 
 Generated downloads are format-specific. Each format can represent a different set of metadata, so Shisho cannot write every database field or replace a cover in every generated file. The source file is not modified.
 
@@ -37,6 +37,10 @@ A scan reads these fields from the file:
 - The embedded cover
 
 Series, tags, and author roles have no place in these formats. Set them through [sidecar files](./sidecar-files.md), [metadata plugins](./plugins/overview.md), or your own edits.
+
+Downloads write the same fields back into the file, with Shisho's current values: title, authors, description, publisher, release date, language, ISBN and ASIN, genres, and the cover. A field Shisho has no value for keeps the value already in the file. Series, tags, author roles, and narrators are not written, and the series is never added to the title. In a combo `.mobi`, both books get the new metadata, so a Kindle shows it whichever book it opens. A file with no cover gets one. Covers are written as JPEG, because older Kindles cannot show a PNG. Some older files store text as Windows-1252; a character that encoding cannot hold, such as one from a non-Latin script, is written as `?` in those files.
+
+A generated download is named with its file type, so an `.azw` or `.prc` file downloads as `.mobi`. **Download Original** keeps the file's own name.
 
 DRM-protected files are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-mobi-or-azw3-file-never-appears). KFX, Topaz, and other Kindle formats that are not MOBI or AZW3 are skipped, even when they use the `.azw` extension.
 

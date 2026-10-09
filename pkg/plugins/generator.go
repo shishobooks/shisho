@@ -13,7 +13,7 @@ type PluginGenerator struct {
 	manager  *Manager
 	scope    string
 	pluginID string
-	formatID string // The generator's format ID (e.g., "mobi")
+	formatID string // The generator's format ID (e.g., "fb2")
 }
 
 // NewPluginGenerator creates a new PluginGenerator.

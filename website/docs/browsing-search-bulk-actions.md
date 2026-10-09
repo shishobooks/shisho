@@ -60,7 +60,7 @@ Merge, delete, and the review actions require Books Write. Users without it stil
 
 ## Bulk Downloads
 
-Select books, click **Download**, and choose from the available **EPUB**, **CBZ**, **M4B**, and **PDF** types. Shisho includes every matching main file, so a book with multiple editions of the same type contributes each edition. Supplements and sidecar files are not included.
+Select books, click **Download**, and choose from the available **EPUB**, **AZW3**, **MOBI**, **M4B**, **CBZ**, and **PDF** types. Shisho includes every matching main file, so a book with multiple editions of the same type contributes each edition. Supplements and sidecar files are not included.
 
 Shisho generates download copies with format-specific metadata:
 
@@ -68,6 +68,7 @@ Shisho generates download copies with format-specific metadata:
 - CBZ metadata is written to `ComicInfo.xml`.
 - M4B metadata and edited chapters are written into MP4 metadata and chapter structures.
 - PDF metadata and edited chapters are written into the PDF information and outline.
+- MOBI and AZW3 metadata and cover data are written into the file; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for the fields.
 
 The source files in the library are not replaced by these generated copies. Shisho prepares the ZIP in a background job, and you can navigate elsewhere while it runs.
 
