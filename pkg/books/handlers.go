@@ -801,13 +801,7 @@ func (h *handler) updateFile(c echo.Context) error {
 
 		// When upgrading from supplement to main, validate file type is supported
 		if oldRole == models.FileRoleSupplement && newRole == models.FileRoleMain {
-			supportedTypes := map[string]bool{
-				models.FileTypeCBZ:  true,
-				models.FileTypeEPUB: true,
-				models.FileTypeM4B:  true,
-				models.FileTypePDF:  true,
-			}
-			if !supportedTypes[file.FileType] {
+			if !models.IsBuiltInFileType(file.FileType) {
 				return errcodes.InvalidState(fmt.Sprintf("Cannot upgrade to main file: file type '%s' is not supported as a main file.", file.FileType))
 			}
 		}
@@ -1151,12 +1145,12 @@ func (h *handler) updateFile(c echo.Context) error {
 				return errcodes.InvalidState("Cannot set preferred cover: file has no cover image.")
 			}
 			// Clear is_preferred_cover on other files of the same type category
-			// in the same book. EPUB/CBZ/PDF = ebook, M4B = audiobook.
+			// in the same book: the ebook types, or M4B audiobooks.
 			var sameCategory []string
-			switch file.FileType {
-			case models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF:
-				sameCategory = []string{models.FileTypeEPUB, models.FileTypeCBZ, models.FileTypePDF}
-			case models.FileTypeM4B:
+			switch {
+			case models.IsEbookFileType(file.FileType):
+				sameCategory = models.EbookFileTypes
+			case file.FileType == models.FileTypeM4B:
 				sameCategory = []string{models.FileTypeM4B}
 			}
 			if len(sameCategory) > 0 {
@@ -2403,11 +2397,9 @@ func (h *handler) deleteFile(c echo.Context) error {
 	}
 
 	// Build supported types map (native + plugin-registered)
-	supportedTypes := map[string]struct{}{
-		models.FileTypeEPUB: {},
-		models.FileTypeCBZ:  {},
-		models.FileTypeM4B:  {},
-		models.FileTypePDF:  {},
+	supportedTypes := make(map[string]struct{})
+	for _, fileType := range models.BuiltInFileTypes {
+		supportedTypes[fileType] = struct{}{}
 	}
 	if h.pluginManager != nil {
 		for ext := range h.pluginManager.RegisteredFileExtensions() {

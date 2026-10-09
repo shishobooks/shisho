@@ -142,4 +142,22 @@ describe("CoverGalleryTabs", () => {
     );
     expect(container.querySelector("img")).toBeNull();
   });
+
+  it("returns to the opening tab when the selected file goes away", () => {
+    const epub = makeFile({ id: 1, file_type: "epub" });
+    const mobi = makeFile({ id: 2, file_type: "mobi" });
+    const azw3 = makeFile({ id: 3, file_type: "azw3" });
+    const { getByRole, getAllByRole, rerender } = render(
+      <CoverGalleryTabs files={[epub, mobi, azw3]} initialFileId={3} />,
+    );
+    const pressed = () =>
+      getAllByRole("button", { pressed: true }).map((b) => b.textContent);
+    expect(pressed()).toEqual(["AZW3"]);
+
+    fireEvent.click(getByRole("button", { name: "MOBI" }));
+    expect(pressed()).toEqual(["MOBI"]);
+
+    rerender(<CoverGalleryTabs files={[epub, azw3]} initialFileId={3} />);
+    expect(pressed()).toEqual(["AZW3"]);
+  });
 });

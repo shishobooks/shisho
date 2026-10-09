@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -1482,6 +1483,54 @@ func TestScanWithPluginFileParser_ReservedExtensions(t *testing.T) {
 	// GetParserForType should return nil for reserved types
 	rt := tc.worker.pluginManager.GetParserForType("epub")
 	assert.Nil(t, rt, "plugin should not be able to claim reserved extension 'epub'")
+}
+
+// Every extension of the built-in MOBI and AZW3 types is reserved, so a
+// plugin parser installed for them before they were built in is superseded.
+func TestScanWithPluginFileParser_MOBIExtensionsReserved(t *testing.T) {
+	t.Parallel()
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "mobi-parser",
+  "name": "MOBI Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses Kindle files",
+      "types": ["mobi", "azw", "prc", "azw3"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Plugin Title - Should Not Happen" };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "mobi-parser", manifest, mainJS)
+	require.NoError(t, tc.worker.pluginManager.LoadAll(context.Background()))
+
+	exts := tc.worker.pluginManager.RegisteredFileExtensions()
+	for _, ext := range []string{"mobi", "azw", "prc", "azw3"} {
+		assert.NotContains(t, exts, ext)
+		assert.Nil(t, tc.worker.pluginManager.GetParserForType(ext), ext)
+	}
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+	dir := testgen.CreateSubDir(t, libraryPath, "Kindle Book")
+	testgen.GenerateMOBI(t, dir, "book.azw", testgen.MOBIOptions{Title: "Built-in Title"})
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	assert.Equal(t, "Built-in Title", allBooks[0].Title)
 }
 
 // TestScanWithPluginMetadataEnricher_IdentifiersMergedWithParser verifies that

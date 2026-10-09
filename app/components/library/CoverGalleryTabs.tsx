@@ -23,6 +23,11 @@ interface CoverGalleryTabsProps {
    * a cover.
    */
   getCoverUrl?: (file: File) => string | null;
+  /**
+   * The file whose tab opens first, normally the one whose cover represents
+   * the book. Defaults to the first file.
+   */
+  initialFileId?: number;
 }
 
 interface FileWithLabel extends File {
@@ -59,6 +64,13 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
   });
 }
 
+/** The tab to open: initialFileId when it names one of the files, else the first. */
+const openingFileId = (
+  files: File[],
+  initialFileId: number | undefined,
+): number | null =>
+  (files.find((f) => f.id === initialFileId) ?? files[0])?.id ?? null;
+
 /**
  * Cover gallery tabs that appear below the main cover image.
  * Allows switching between different file covers when a book has multiple files.
@@ -68,19 +80,23 @@ function CoverGalleryTabs({
   files,
   className,
   getCoverUrl,
+  initialFileId,
 }: CoverGalleryTabsProps) {
-  const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<number | null>(() =>
+    openingFileId(files, initialFileId),
+  );
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
 
   const filesWithLabels = getFilesWithLabels(files);
 
-  // Initialize selected file to first file
+  // Return to the opening tab when the selected file goes away, such as a
+  // file deleted or demoted while the page is open.
   useEffect(() => {
-    if (files.length > 0 && selectedFileId === null) {
-      setSelectedFileId(files[0].id);
+    if (!files.some((f) => f.id === selectedFileId)) {
+      setSelectedFileId(openingFileId(files, initialFileId));
     }
-  }, [files, selectedFileId]);
+  }, [files, initialFileId, selectedFileId]);
 
   const selectedFile = filesWithLabels.find((f) => f.id === selectedFileId);
   const isAudiobook = selectedFile?.file_type === "m4b";

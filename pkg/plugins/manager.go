@@ -14,14 +14,6 @@ import (
 	pkgversion "github.com/shishobooks/shisho/pkg/version"
 )
 
-// reservedExtensions are built-in file types that plugins cannot claim.
-var reservedExtensions = map[string]struct{}{
-	"epub": {},
-	"cbz":  {},
-	"m4b":  {},
-	"pdf":  {},
-}
-
 // Manager holds loaded Runtime instances indexed by "scope/id".
 // It coordinates loading at startup, unloading, and hot-reloading on install/update/enable.
 type Manager struct {
@@ -339,8 +331,8 @@ func (m *Manager) GetManualRuntimes(ctx context.Context, hookType string, librar
 
 // GetParserForType returns the first loaded runtime that has a fileParser for the given type.
 func (m *Manager) GetParserForType(fileType string) *Runtime {
-	// Skip reserved extensions
-	if _, reserved := reservedExtensions[fileType]; reserved {
+	// Built-in file types are reserved
+	if models.IsBuiltInFileExtension(fileType) {
 		return nil
 	}
 
@@ -360,8 +352,8 @@ func (m *Manager) GetParserForType(fileType string) *Runtime {
 	return nil
 }
 
-// RegisteredFileExtensions returns all file extensions registered by plugin fileParsers
-// (excluding reserved built-in extensions: epub, cbz, m4b, pdf).
+// RegisteredFileExtensions returns all file extensions registered by plugin fileParsers,
+// excluding the extensions of built-in file types, which plugins cannot claim.
 func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 	result := make(map[string]struct{})
 
@@ -373,7 +365,7 @@ func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 			continue
 		}
 		for _, t := range rt.manifest.Capabilities.FileParser.Types {
-			if _, reserved := reservedExtensions[t]; !reserved {
+			if !models.IsBuiltInFileExtension(t) {
 				result[t] = struct{}{}
 			}
 		}

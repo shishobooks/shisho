@@ -32,6 +32,7 @@ const shareLinkContext = (
   fileCoverUrl: (file) =>
     file.file_role === "supplement" ? null : shareFileCoverUrl(token, file),
   coverAspectRatio: shared.cover_aspect_ratio,
+  coverFileId: shared.cover_file_id,
 });
 
 // The one page for every link that cannot be used: unknown, mistyped,

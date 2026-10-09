@@ -36,6 +36,7 @@ Lower priority number wins (`pkg/models/data-source.go`).
 - **Code that replaces a file's bytes on disk invalidates its CBZ and PDF page caches**, as the scan does in `invalidatePageCaches`. The caches key on file id and never notice a swap, so the reader keeps serving the old pages.
 - **Find-or-create finishes with `database.RetrieveOnUniqueViolation`**, which returns the winner's row when a concurrent insert lost on the unique index. Detect UNIQUE violations elsewhere with `database.IsUniqueViolation`.
 - **Bun aliases are not always the table's first letter.** Read the `alias:` in the model's `bun:"table:..."` tag and use it in `Where`, `Order`, and other clauses; the table name gives "no such column".
+- **A file's type is not always its extension**: some extensions map to another type. Type a path with `models.FileTypeForPath`, and test types with the `models` helpers (`IsBuiltInFileType`, `IsEbookFileType`) instead of listing them, so a new format reaches every site.
 - **`models.LogLevel` is the one severity enum** for job logs and app logs. Reuse it (`tstype:"LogLevel"`) rather than adding level strings.
 
 ### File-level vs book-level fields

@@ -4,7 +4,7 @@ Supplement files are additional files associated with a book, such as companion 
 
 ## Main Files and Supplements
 
-Shisho's native main-file formats are EPUB, CBZ, M4B, and PDF. CBR is not native unless a [plugin](./plugins/overview.md) adds support. Files that are not recognized as main files can be linked to a nearby book as supplements.
+Shisho's native main-file formats are EPUB, AZW3, MOBI, CBZ, M4B, and PDF. CBR is not native unless a [plugin](./plugins/overview.md) adds support. Files that are not recognized as main files can be linked to a nearby book as supplements.
 
 A supplement is labeled with its current filename, including the extension, so the label follows the file when the book is renamed or reorganized. A name you set yourself in the file's edit dialog replaces the filename. Shisho does not extract embedded book or file metadata from supplements.
 
@@ -62,7 +62,7 @@ A newly created PDF is automatically imported as a supplement only when all of t
 
 1. It is part of a directory-based book, not a file at a configured library root.
 2. Its basename is an exact, case-insensitive match for a configured `pdf_supplement_filenames` value.
-3. The same book directory already has a Shisho book or contains a non-PDF main file, such as EPUB, CBZ, M4B, or a plugin-registered format.
+3. The same book directory already has a Shisho book or contains a non-PDF main file, such as EPUB, AZW3, MOBI, CBZ, M4B, or a plugin-registered format.
 
 For example, `Supplement.pdf` can be auto-demoted beside `Book.epub` when `supplement` is configured. `My Supplement.pdf` is not an exact match for `supplement`.
 
@@ -89,7 +89,7 @@ You can:
 - Promote a supported supplement to a main file. In the file's **Edit File** dialog, set **File Role** to **Main File** and select **Save Changes**. Promotion triggers metadata extraction for that format.
 - Demote a main file to a supplement. Set **File Role** to **Supplement**, then select **Save Changes** twice to confirm. Demotion clears its format-specific metadata.
 
-Supplements are excluded from Kobo Sync and normal bulk-download selection. They are also excluded from surfaces that distribute main reading files, even if the supplement itself uses EPUB, CBZ, M4B, or PDF.
+Supplements are excluded from Kobo Sync and normal bulk-download selection. They are also excluded from surfaces that distribute main reading files, even if the supplement itself uses EPUB, AZW3, MOBI, CBZ, M4B, or PDF.
 
 ## Troubleshooting
 

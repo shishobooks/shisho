@@ -30,6 +30,16 @@ const pdfMain = file({
   file_type: "pdf",
   cover_image_filename: "pdf.cover.jpg",
 });
+const mobiMain = file({
+  id: 20,
+  file_type: "mobi",
+  cover_image_filename: "mobi.cover.jpg",
+});
+const azw3Main = file({
+  id: 21,
+  file_type: "azw3",
+  cover_image_filename: "azw3.cover.jpg",
+});
 const m4bMain = file({
   id: 4,
   file_type: "m4b",
@@ -166,6 +176,31 @@ describe("selectCoverFile", () => {
   it("no preferred falls back to first file (existing behavior)", () => {
     expect(selectCoverFile([epubMain, cbzMain], "book")?.id).toBe(epubMain.id);
   });
+
+  it("orders EPUB, then AZW3, then MOBI, then the other ebook formats", () => {
+    expect(
+      selectCoverFile([cbzMain, mobiMain, azw3Main, epubMain], "book")?.id,
+    ).toBe(epubMain.id);
+    expect(selectCoverFile([cbzMain, mobiMain, azw3Main], "book")?.id).toBe(
+      azw3Main.id,
+    );
+    expect(selectCoverFile([pdfMain, cbzMain, mobiMain], "book")?.id).toBe(
+      mobiMain.id,
+    );
+    expect(selectCoverFile([pdfMain, cbzMain], "book")?.id).toBe(pdfMain.id);
+  });
+
+  it("preferred MOBI wins over EPUB", () => {
+    const preferredMobi = { ...mobiMain, is_preferred_cover: true };
+    expect(selectCoverFile([epubMain, preferredMobi], "book")?.id).toBe(
+      mobiMain.id,
+    );
+  });
+
+  it("treats MOBI and AZW3 as book files in audiobook fallback", () => {
+    expect(selectCoverFile([mobiMain], "audiobook")?.id).toBe(mobiMain.id);
+    expect(selectCoverFile([azw3Main], "audiobook")?.id).toBe(azw3Main.id);
+  });
 });
 
 describe("getCoverFileType", () => {
@@ -202,6 +237,11 @@ describe("getCoverFileType", () => {
     expect(getCoverFileType([m4bMainNoCover, epubSupplement], "book")).toBe(
       "audiobook",
     );
+  });
+
+  it("returns book when only a MOBI or AZW3 main exists", () => {
+    expect(getCoverFileType([mobiMain], "audiobook")).toBe("book");
+    expect(getCoverFileType([azw3Main], "audiobook")).toBe("book");
   });
 
   it("returns book when no main file exists at all", () => {

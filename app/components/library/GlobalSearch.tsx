@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { bookCoverUrl, seriesCoverUrl } from "@/utils/coverUrl";
+import { isEbookFileType } from "@/utils/fileTypes";
 
 const getSearchThumbnailClasses = (variant: "book" | "audiobook"): string => {
   // For search thumbnails, we use a fixed width and vary the aspect ratio
@@ -39,7 +40,7 @@ const getPlaceholderVariant = (
 ): "book" | "audiobook" => {
   if (!fileTypes || fileTypes.length === 0) return "book";
 
-  const hasBookFiles = fileTypes.some((ft) => ft === "epub" || ft === "cbz");
+  const hasBookFiles = fileTypes.some(isEbookFileType);
   const hasAudiobookFiles = fileTypes.some((ft) => ft === "m4b");
 
   switch (coverAspectRatio) {

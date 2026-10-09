@@ -76,6 +76,8 @@ A plugin can declare and implement any combination of the four hook capabilities
 - `targetType` is required and names the produced extension.
 - `mimeTypes` and `description` are optional.
 
+Input converters also receive files of built-in types. Shisho does not import DRM-protected MOBI and AZW3 files, but a converter that declares `mobi` or `azw3` still receives them, and a DRM-free copy it writes beside the source is imported like any other file. MOBI files can also have the `azw` or `prc` extension, so list those too to receive them.
+
 ### File Parser Capability
 
 ```json
@@ -92,7 +94,7 @@ A plugin can declare and implement any combination of the four hook capabilities
 
 - `types` is required and lists extensions without a leading dot.
 - `mimeTypes` and `description` are optional.
-- `epub`, `cbz`, `m4b`, and `pdf` are reserved built-in extensions and cannot be claimed by a file parser.
+- `epub`, `cbz`, `m4b`, `pdf`, `mobi`, `azw`, `prc`, and `azw3` are reserved built-in extensions and cannot be claimed by a file parser. A file parser that declares one is ignored for it, and Shisho's own parser reads those files.
 
 When MIME types are present, Shisho compares compatible MIME values rather than requiring byte-for-byte string equality, so registered aliases and MIME parameters can match.
 

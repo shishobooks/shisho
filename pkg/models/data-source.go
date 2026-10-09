@@ -3,7 +3,7 @@ package models
 import "strings"
 
 const (
-	//tygo:emit export type DataSource = typeof DataSourceManual | typeof DataSourceSidecar | typeof DataSourcePlugin | typeof DataSourceFileMetadata | typeof DataSourceExistingCover | typeof DataSourceEPUBMetadata | typeof DataSourceCBZMetadata | typeof DataSourceM4BMetadata | typeof DataSourcePDFMetadata | typeof DataSourceFilepath | `plugin:${string}`;
+	//tygo:emit export type DataSource = typeof DataSourceManual | typeof DataSourceSidecar | typeof DataSourcePlugin | typeof DataSourceFileMetadata | typeof DataSourceExistingCover | typeof DataSourceEPUBMetadata | typeof DataSourceCBZMetadata | typeof DataSourceM4BMetadata | typeof DataSourcePDFMetadata | typeof DataSourceMOBIMetadata | typeof DataSourceFilepath | `plugin:${string}`;
 	DataSourceManual        = "manual"
 	DataSourceSidecar       = "sidecar"
 	DataSourcePlugin        = "plugin"
@@ -13,6 +13,7 @@ const (
 	DataSourceCBZMetadata   = "cbz_metadata"
 	DataSourceM4BMetadata   = "m4b_metadata"
 	DataSourcePDFMetadata   = "pdf_metadata"
+	DataSourceMOBIMetadata  = "mobi_metadata" // MOBI and AZW3 files
 	DataSourceFilepath      = "filepath"
 
 	// DataSourcePluginPrefix is the prefix for plugin-specific data sources.
@@ -39,6 +40,7 @@ var dataSourcePriority = map[string]int{
 	DataSourceCBZMetadata:   DataSourceFileMetadataPriority,
 	DataSourceM4BMetadata:   DataSourceFileMetadataPriority,
 	DataSourcePDFMetadata:   DataSourceFileMetadataPriority,
+	DataSourceMOBIMetadata:  DataSourceFileMetadataPriority,
 	DataSourceFilepath:      DataSourceFilepathPriority,
 }
 

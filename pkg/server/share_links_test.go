@@ -421,6 +421,12 @@ func TestShareLinks_RecipientFetchesBookWithoutPaths(t *testing.T) {
 	assert.NotEmpty(t, shared.CoverCacheKey)
 	assert.Equal(t, "book", shared.CoverAspectRatio)
 	require.Len(t, shared.Files, 2)
+	require.NotNil(t, shared.CoverFileID, "the page opens its cover tabs on the file the cover comes from")
+	for _, file := range shared.Files {
+		if file.FileRole == models.FileRoleMain {
+			assert.Equal(t, file.ID, *shared.CoverFileID)
+		}
+	}
 	for _, file := range shared.Files {
 		assert.Empty(t, file.Filepath)
 		assert.Nil(t, file.CoverImageFilename)

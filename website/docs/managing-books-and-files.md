@@ -26,7 +26,7 @@ When organization is disabled, Shisho deletes each tracked file separately, alon
 
 Deleting a file removes the media file, its generated cover, and its file sidecar from disk. If other main files remain, the book remains.
 
-If you delete the last main file, Shisho promotes the oldest supported supplement, such as an EPUB, CBZ, M4B, or PDF, to become the new main file when possible. If no supplement can be promoted, Shisho deletes the remaining supplement files and the book record. Review the whole book before confirming deletion of its last main file.
+If you delete the last main file, Shisho promotes the oldest supported supplement, such as an EPUB, AZW3, MOBI, CBZ, M4B, or PDF, to become the new main file when possible. If no supplement can be promoted, Shisho deletes the remaining supplement files and the book record. Review the whole book before confirming deletion of its last main file.
 
 ## Main Files and Supplements
 

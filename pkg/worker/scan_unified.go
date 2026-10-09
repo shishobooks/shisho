@@ -28,6 +28,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/mobi"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/mp4"
 	"github.com/shishobooks/shisho/pkg/pdf"
@@ -148,7 +149,7 @@ type ScanOptions struct {
 // created: in FilePath mode, or in FileID mode when the file's Book was missing
 // and the file was imported again (see scanOrphanedFile). FileDeleted and
 // BookDeleted indicate whether records were removed because the file no longer
-// exists on disk.
+// exists on disk or was replaced by a DRM-protected copy.
 //
 // For book scans (BookID mode), the Files slice contains the results for each
 // individual file in the book. The top-level Book field contains the updated book
@@ -158,7 +159,7 @@ type ScanResult struct {
 	File        *models.File // The scanned/updated file (nil if deleted)
 	Book        *models.Book // The parent book (nil if deleted)
 	FileCreated bool         // True if file was newly created
-	FileDeleted bool         // True if file was deleted (no longer on disk)
+	FileDeleted bool         // True if the file record was deleted (gone from disk, or DRM-protected)
 	BookDeleted bool         // True if book was also deleted (was last file)
 
 	// For book scans (multiple files)
@@ -394,7 +395,8 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 }
 
 // scanFileByID handles single file resync - file already exists in DB.
-// If the file no longer exists on disk, deletes the file record (and book if it was the last file).
+// If the file no longer exists on disk, or was replaced by a DRM-protected
+// copy, deletes the file record (and book if it was the last file).
 func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *ScanCache) (*ScanResult, error) {
 	log := logger.FromContext(ctx)
 
@@ -411,10 +413,6 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 			opts.JobLog.Info(msg, data)
 		}
 	}
-
-	// Files that directory cleanup removes with an empty directory (Shisho
-	// covers and sidecars plus OS junk). Never the user's exclude patterns.
-	cleanupIgnoredPatterns := fileutils.DirectoryCleanupPatterns()
 
 	// Retrieve file with relations from DB
 	file, err := w.bookService.RetrieveFileWithRelations(ctx, opts.FileID)
@@ -435,125 +433,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	fileStat, err := os.Stat(file.Filepath)
 	if os.IsNotExist(err) {
 		logInfo("file no longer exists on disk, deleting record", logger.Data{"file_id": file.ID, "path": file.Filepath})
-
-		fileDir := filepath.Dir(file.Filepath)
-		bookPath := book.Filepath
-
-		// The book's books_fts row lists the file's path and narrators, and a
-		// promoted supplement changes them again. When no main file remains
-		// the book is deleted, and its book_series rows CASCADE away, so
-		// collect its Series first.
-		affected := w.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
-		defer w.searchService.ReindexAffected(ctx, affected)
-
-		// Delete the file record
-		if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
-			return nil, errors.Wrap(err, "failed to delete file record")
-		}
-
-		// Check if any main files remain for this book
-		var hasMainFiles bool
-		for _, f := range book.Files {
-			if f.ID != file.ID && f.FileRole == models.FileRoleMain {
-				hasMainFiles = true
-				break
-			}
-		}
-
-		bookDeleted := false
-		if hasMainFiles {
-			// Other main files exist, just clean up empty dirs
-			if fileDir != bookPath {
-				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
-					logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
-				}
-			}
-		} else {
-			// No main files remain - check if we can promote a supplement
-			supportedTypes := map[string]struct{}{
-				models.FileTypeEPUB: {},
-				models.FileTypeCBZ:  {},
-				models.FileTypeM4B:  {},
-				models.FileTypePDF:  {},
-			}
-			if w.pluginManager != nil {
-				for ext := range w.pluginManager.RegisteredFileExtensions() {
-					supportedTypes[ext] = struct{}{}
-				}
-			}
-
-			// Collect remaining supplements (excluding the deleted file)
-			var supplements []*models.File
-			for i := range book.Files {
-				f := book.Files[i]
-				if f.ID != file.ID && f.FileRole == models.FileRoleSupplement {
-					supplements = append(supplements, f)
-				}
-			}
-
-			// Try to promote a supplement with a supported file type
-			var promoted bool
-			for _, supp := range supplements {
-				if _, supported := supportedTypes[supp.FileType]; supported {
-					if err := w.bookService.PromoteSupplementToMain(ctx, supp.ID); err != nil {
-						logWarn("failed to promote supplement to main", logger.Data{"file_id": supp.ID, "error": err.Error()})
-					} else {
-						logInfo("promoted supplement to main file", logger.Data{"file_id": supp.ID, "book_id": book.ID})
-						promoted = true
-					}
-					break
-				}
-			}
-
-			if !promoted {
-				// No promotable supplements - delete remaining supplements and the book
-				bookDeleted = true
-				for _, supp := range supplements {
-					if err := w.bookService.DeleteFile(ctx, supp.ID); err != nil {
-						logWarn("failed to delete supplement file", logger.Data{"file_id": supp.ID, "error": err.Error()})
-					}
-				}
-			}
-
-			if bookDeleted {
-				if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
-					return nil, errors.Wrap(err, "failed to delete orphaned book")
-				}
-				logInfo("deleted orphaned book", logger.Data{"book_id": book.ID})
-
-				// Clean up empty directories up to library path
-				library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
-					ID: &book.LibraryID,
-				})
-				if libErr == nil && library != nil {
-					for _, libPath := range library.LibraryPaths {
-						if strings.HasPrefix(bookPath, libPath.Filepath) {
-							if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
-								logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
-							}
-							break
-						}
-					}
-				}
-			} else if fileDir != bookPath {
-				if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
-					logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
-				}
-			}
-		}
-
-		// Return a minimal Book stub so callers (e.g. the monitor) can track
-		// the deleted book's ID even though the row no longer exists. The
-		// deferred ReindexAffected above drops its search row.
-		var bookStub *models.Book
-		if bookDeleted {
-			bookStub = &models.Book{ID: book.ID}
-		}
-		return &ScanResult{
-			FileDeleted: true,
-			BookDeleted: bookDeleted,
-			Book:        bookStub,
-		}, nil
+		return w.removeFileRecord(ctx, file, book, cache, logInfo, logWarn)
 	}
 
 	// If stat returned an error other than NotExist, return it
@@ -618,6 +498,21 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	} else {
 		var err error
 		metadata, err = w.parseFileMetadata(ctx, file.Filepath, file.FileType)
+		if errors.Is(err, mobi.ErrDRMProtected) {
+			// A DRM-protected file is never in the library, however it got
+			// here, so the record goes as if the file had disappeared. Its
+			// cover and sidecar go too: a DRM-free copy put in its place
+			// would otherwise adopt the old cover instead of its own.
+			logDRMSkip(file.Filepath, logWarn)
+			logInfo("file was replaced by a DRM-protected copy, deleting record", logger.Data{"file_id": file.ID, "path": file.Filepath})
+			if file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+				if err := os.Remove(covers.FileCoverPath(file)); err != nil && !os.IsNotExist(err) {
+					logWarn("failed to delete cover of DRM-protected file", logger.Data{"path": file.Filepath, "error": err.Error()})
+				}
+			}
+			removeFileSidecar(file.Filepath, logWarn)
+			return w.removeFileRecord(ctx, file, book, cache, logInfo, logWarn)
+		}
 		if err != nil {
 			w.recordFileScanError(ctx, file, err, logWarn)
 			// A file that is on disk but unparseable is one the user must
@@ -724,6 +619,147 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	return result, nil
 }
 
+// removeFileRecord deletes the record of a file that can no longer be part of
+// the library: it is gone from disk, or it was replaced by a DRM-protected
+// copy. When it was the Book's last main file, a supplement of a main-eligible
+// type is promoted, or else the Book and its supplements are deleted. Empty
+// directories are cleaned up and the search index drops what was removed.
+func (w *Worker) removeFileRecord(ctx context.Context, file *models.File, book *models.Book, cache *ScanCache, logInfo, logWarn func(string, logger.Data)) (*ScanResult, error) {
+	// Files that directory cleanup removes with an empty directory (Shisho
+	// covers and sidecars plus OS junk). Never the user's exclude patterns.
+	cleanupIgnoredPatterns := fileutils.DirectoryCleanupPatterns()
+
+	// During a full scan another worker may be adding a file to this Book
+	// under the same lock. Hold it so the Book is not deleted underneath
+	// that file, and re-read the Book's files once it is held.
+	if cache != nil {
+		unlock := cache.LockBookPath(book.Filepath, book.LibraryID)
+		defer unlock()
+		reloaded, err := w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &book.ID})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to reload book before removing file")
+		}
+		book = reloaded
+	}
+
+	fileDir := filepath.Dir(file.Filepath)
+	bookPath := book.Filepath
+
+	// The book's books_fts row lists the file's path and narrators, and a
+	// promoted supplement changes them again. When no main file remains
+	// the book is deleted, and its book_series rows CASCADE away, so
+	// collect its Series first.
+	affected := w.searchService.CollectAffected(ctx, search.Affected{BookIDs: []int{book.ID}})
+	defer w.searchService.ReindexAffected(ctx, affected)
+
+	// Delete the file record
+	if err := w.bookService.DeleteFile(ctx, file.ID); err != nil {
+		return nil, errors.Wrap(err, "failed to delete file record")
+	}
+
+	// Check if any main files remain for this book
+	var hasMainFiles bool
+	for _, f := range book.Files {
+		if f.ID != file.ID && f.FileRole == models.FileRoleMain {
+			hasMainFiles = true
+			break
+		}
+	}
+
+	bookDeleted := false
+	if hasMainFiles {
+		// Other main files exist, just clean up empty dirs
+		if fileDir != bookPath {
+			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
+				logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
+			}
+		}
+	} else {
+		// No main files remain - check if we can promote a supplement
+		supportedTypes := make(map[string]struct{})
+		for _, fileType := range models.BuiltInFileTypes {
+			supportedTypes[fileType] = struct{}{}
+		}
+		if w.pluginManager != nil {
+			for ext := range w.pluginManager.RegisteredFileExtensions() {
+				supportedTypes[ext] = struct{}{}
+			}
+		}
+
+		// Collect remaining supplements (excluding the deleted file)
+		var supplements []*models.File
+		for i := range book.Files {
+			f := book.Files[i]
+			if f.ID != file.ID && f.FileRole == models.FileRoleSupplement {
+				supplements = append(supplements, f)
+			}
+		}
+
+		// Try to promote a supplement with a supported file type
+		var promoted bool
+		for _, supp := range supplements {
+			if _, supported := supportedTypes[supp.FileType]; supported {
+				if err := w.bookService.PromoteSupplementToMain(ctx, supp.ID); err != nil {
+					logWarn("failed to promote supplement to main", logger.Data{"file_id": supp.ID, "error": err.Error()})
+				} else {
+					logInfo("promoted supplement to main file", logger.Data{"file_id": supp.ID, "book_id": book.ID})
+					promoted = true
+				}
+				break
+			}
+		}
+
+		if !promoted {
+			// No promotable supplements - delete remaining supplements and the book
+			bookDeleted = true
+			for _, supp := range supplements {
+				if err := w.bookService.DeleteFile(ctx, supp.ID); err != nil {
+					logWarn("failed to delete supplement file", logger.Data{"file_id": supp.ID, "error": err.Error()})
+				}
+			}
+		}
+
+		if bookDeleted {
+			if err := w.bookService.DeleteBook(ctx, book.ID); err != nil {
+				return nil, errors.Wrap(err, "failed to delete orphaned book")
+			}
+			logInfo("deleted orphaned book", logger.Data{"book_id": book.ID})
+
+			// Clean up empty directories up to library path
+			library, libErr := w.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
+				ID: &book.LibraryID,
+			})
+			if libErr == nil && library != nil {
+				for _, libPath := range library.LibraryPaths {
+					if strings.HasPrefix(bookPath, libPath.Filepath) {
+						if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
+							logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
+						}
+						break
+					}
+				}
+			}
+		} else if fileDir != bookPath {
+			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
+				logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
+			}
+		}
+	}
+
+	// Return a minimal Book stub so callers (e.g. the monitor) can track
+	// the deleted book's ID even though the row no longer exists. The
+	// deferred ReindexAffected above drops its search row.
+	var bookStub *models.Book
+	if bookDeleted {
+		bookStub = &models.Book{ID: book.ID}
+	}
+	return &ScanResult{
+		FileDeleted: true,
+		BookDeleted: bookDeleted,
+		Book:        bookStub,
+	}, nil
+}
+
 // scanOrphanedFile handles a file row whose Book no longer exists, which a
 // Book delete leaves behind when it runs without foreign keys. The row is
 // deleted, and once the Book has no file rows left, so are its other rows
@@ -760,13 +796,19 @@ func (w *Worker) scanOrphanedFile(ctx context.Context, file *models.File, opts S
 	}
 
 	logInfo("importing file of a missing book as a new book", logger.Data{"path": file.Filepath})
-	return w.scanFileCreateNew(ctx, ScanOptions{
+	result, err := w.scanFileCreateNew(ctx, ScanOptions{
 		FilePath:     file.Filepath,
 		LibraryID:    file.LibraryID,
 		ForceRefresh: opts.ForceRefresh,
 		SkipPlugins:  opts.SkipPlugins,
 		JobLog:       opts.JobLog,
 	}, cache)
+	if err == nil && result == nil {
+		// The file was not imported (it is DRM-protected), so all that
+		// happened is the record's removal.
+		return &ScanResult{FileDeleted: true}, nil
+	}
+	return result, err
 }
 
 // scanBook handles book resync - scan all files belonging to the book.
@@ -2433,10 +2475,14 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 	}
 	size := stats.Size()
 	modTime := stats.ModTime()
-	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	fileType := models.FileTypeForPath(path)
 
 	// Parse metadata from file
 	metadata, err := w.parseFileMetadata(ctx, path, fileType)
+	if errors.Is(err, mobi.ErrDRMProtected) {
+		logDRMSkip(path, logWarn)
+		return nil, nil
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse file metadata")
 	}
@@ -2738,12 +2784,11 @@ func (w *Worker) discoverAndCreateSupplements(
 				continue
 			}
 
-			suppExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(suppPath)), ".")
 			suppFile := &models.File{
 				LibraryID:     libraryID,
 				BookID:        book.ID,
 				Filepath:      suppPath,
-				FileType:      suppExt,
+				FileType:      models.FileTypeForPath(suppPath),
 				FileRole:      models.FileRoleSupplement,
 				FilesizeBytes: suppStat.Size(),
 			}
@@ -2780,12 +2825,11 @@ func (w *Worker) discoverAndCreateSupplements(
 						continue
 					}
 
-					suppExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(suppPath)), ".")
 					suppFile := &models.File{
 						LibraryID:     libraryID,
 						BookID:        book.ID,
 						Filepath:      suppPath,
-						FileType:      suppExt,
+						FileType:      models.FileTypeForPath(suppPath),
 						FileRole:      models.FileRoleSupplement,
 						FilesizeBytes: suppStat.Size(),
 					}
@@ -2806,7 +2850,7 @@ func (w *Worker) discoverAndCreateSupplements(
 // and chapter indicators like "Ch.5" are normalized to "c005"; parenthesized
 // metadata like "(2020) (Digital) (group)" is removed.
 func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.ParsedMetadata) string {
-	fileType := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	fileType := models.FileTypeForPath(path)
 
 	// If metadata has a title, use it
 	if metadata != nil {
@@ -3280,7 +3324,7 @@ func (w *Worker) upgradeEnricherCover(
 }
 
 // parseFileMetadata extracts metadata from a file based on its type.
-// For built-in types (epub, cbz, m4b), uses the native parsers.
+// For built-in types, uses the native parsers.
 // For other types, falls back to plugin file parsers if available.
 func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (*mediafile.ParsedMetadata, error) {
 	var metadata *mediafile.ParsedMetadata
@@ -3295,6 +3339,8 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 		metadata, err = mp4.Parse(path)
 	case models.FileTypePDF:
 		metadata, err = pdf.Parse(path)
+	case models.FileTypeMOBI, models.FileTypeAZW3:
+		metadata, err = mobi.Parse(path)
 	default:
 		// Check for plugin file parser
 		if w.pluginManager != nil {
@@ -3333,6 +3379,15 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 	}
 
 	return metadata, nil
+}
+
+// logDRMSkip records in the job log that a DRM-protected file was left out of
+// the library, naming the file and the reason.
+func logDRMSkip(path string, logWarn func(string, logger.Data)) {
+	logWarn("skipped DRM-protected file", logger.Data{
+		"path":   path,
+		"reason": "the file is DRM-protected; Shisho does not import DRM-protected files, but a plugin input converter can produce a DRM-free copy",
+	})
 }
 
 // pluginParserError marks a failure inside a plugin's file parser, which is
