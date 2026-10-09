@@ -154,9 +154,11 @@ export interface ChapterRowProps {
   onValidationChange?: (chapterId: number, hasError: boolean) => void;
   // Page-based edit mode: called when page input loses focus (for reordering)
   onBlur?: () => void;
-  // EPUB edit mode: callbacks for child chapter editing (curried by index)
-  onChildTitleChange?: (childIndex: number) => (title: string) => void;
-  onChildDelete?: (childIndex: number) => () => void;
+  // EPUB edit mode: the row's child indexes from the top level down, and
+  // callbacks that edit the chapter at a path, used for nested rows
+  path?: number[];
+  onTitleChangeAt?: (path: number[], title: string) => void;
+  onDeleteAt?: (path: number[]) => void;
   // EPUB edit mode: whether a chapter is a heading left with no chapters
   isEmptiedHeading?: (chapter: Chapter) => boolean;
   // M4B playback - uses chapterIndex in edit mode (since chapter.id may not exist)
@@ -482,10 +484,17 @@ const ChapterRow = (props: ChapterRowProps) => {
               isEditing={isEditing}
               isEmptiedHeading={props.isEmptiedHeading}
               key={child.id ?? `new-${index}`}
-              onDelete={props.onChildDelete?.(index)}
+              onDelete={() =>
+                props.onDeleteAt?.([...(props.path ?? []), index])
+              }
+              onDeleteAt={props.onDeleteAt}
               onPlay={onPlay}
               onStop={onStop}
-              onTitleChange={props.onChildTitleChange?.(index)}
+              onTitleChange={(title) =>
+                props.onTitleChangeAt?.([...(props.path ?? []), index], title)
+              }
+              onTitleChangeAt={props.onTitleChangeAt}
+              path={[...(props.path ?? []), index]}
               playingChapterIndex={playingChapterIndex}
             />
           ))}

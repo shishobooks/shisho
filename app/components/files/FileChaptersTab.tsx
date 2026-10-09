@@ -643,61 +643,40 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     };
 
     /**
-     * Updates a child chapter's title within a parent chapter.
+     * Applies update to the chapter at path (child indexes from the top
+     * level down), replacing it with the result or removing it when the
+     * result is null. EPUB chapters nest to any depth.
      */
-    const updateChildTitle = (
+    const updateChapterAt = (
       chapters: EditedChapter[],
-      parentIndex: number,
-      childIndex: number,
-      title: string,
+      path: number[],
+      update: (chapter: EditedChapter) => EditedChapter | null,
     ): EditedChapter[] => {
-      return chapters.map((chapter, i) => {
-        if (i === parentIndex) {
-          return {
-            ...chapter,
-            children: updateChapterTitle(chapter.children, childIndex, title),
-          };
+      const [index, ...rest] = path;
+      return chapters.flatMap((chapter, i) => {
+        if (i !== index) return [chapter];
+        if (rest.length > 0) {
+          return [
+            {
+              ...chapter,
+              children: updateChapterAt(chapter.children, rest, update),
+            },
+          ];
         }
-        return chapter;
+        const updated = update(chapter);
+        return updated ? [updated] : [];
       });
     };
 
-    /**
-     * Deletes a child chapter from a parent chapter.
-     */
-    const deleteChildChapter = (
-      chapters: EditedChapter[],
-      parentIndex: number,
-      childIndex: number,
-    ): EditedChapter[] => {
-      return chapters.map((chapter, i) => {
-        if (i === parentIndex) {
-          return {
-            ...chapter,
-            children: deleteChapter(chapter.children, childIndex),
-          };
-        }
-        return chapter;
-      });
+    const handleTitleChangeAt = (path: number[], title: string) => {
+      setEditedChapters((prev) =>
+        updateChapterAt(prev, path, (chapter) => ({ ...chapter, title })),
+      );
     };
 
-    /**
-     * Creates callbacks for child chapter editing.
-     * These are curried functions that close over the parent index.
-     */
-    const createChildTitleChangeCallback =
-      (parentIndex: number) => (childIndex: number) => (title: string) => {
-        setEditedChapters((prev) =>
-          updateChildTitle(prev, parentIndex, childIndex, title),
-        );
-      };
-
-    const createChildDeleteCallback =
-      (parentIndex: number) => (childIndex: number) => () => {
-        setEditedChapters((prev) =>
-          deleteChildChapter(prev, parentIndex, childIndex),
-        );
-      };
+    const handleDeleteAt = (path: number[]) => {
+      setEditedChapters((prev) => updateChapterAt(prev, path, () => null));
+    };
 
     /**
      * Renders the edit-mode UI: optional EPUB notice, hidden audio element for
@@ -753,15 +732,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                     ? handleTimestampBlurReorder
                     : undefined
               }
-              onChildDelete={
-                isEpub ? createChildDeleteCallback(index) : undefined
-              }
-              onChildTitleChange={
-                isEpub ? createChildTitleChangeCallback(index) : undefined
-              }
               onDelete={() =>
                 setEditedChapters((prev) => deleteChapter(prev, index))
               }
+              onDeleteAt={isEpub ? handleDeleteAt : undefined}
               onPlay={isM4b ? handleChapterPlay : undefined}
               onStartPageChange={
                 isPageBased
@@ -785,6 +759,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                   updateChapterTitle(prev, index, title),
                 )
               }
+              onTitleChangeAt={isEpub ? handleTitleChangeAt : undefined}
               onValidationChange={
                 isM4b
                   ? (_chapterId, hasError) =>
@@ -792,6 +767,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                   : undefined
               }
               pageCount={isPageBased ? (file.page_count ?? 0) : undefined}
+              path={[index]}
               playingChapterIndex={isM4b ? playingChapterIndex : undefined}
             />
           ))}

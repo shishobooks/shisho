@@ -1031,3 +1031,85 @@ describe("FileChaptersTab - EPUB heading left without chapters", () => {
     await waitFor(() => expect(canSave()).toBe(true));
   });
 });
+
+describe("FileChaptersTab - EPUB chapters nested three deep", () => {
+  const mockEpubFile: File = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    book_id: 1,
+    library_id: 1,
+    file_type: FileTypeEPUB,
+    file_role: "main",
+    filepath: "/test/book.epub",
+    display_name: "book.epub",
+    filesize_bytes: 1000000,
+    is_preferred_cover: false,
+  };
+
+  const chapter = (
+    id: number,
+    title: string,
+    children: Chapter[] = [],
+  ): Chapter => ({
+    id,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 1,
+    title,
+    sort_order: id,
+    href: `${id}.xhtml`,
+    children,
+  });
+
+  beforeEach(() => {
+    mockUseFileChapters.mockReturnValue({
+      data: [
+        chapter(1, "Part", [
+          chapter(2, "Chapter", [
+            chapter(3, "Section A"),
+            chapter(4, "Section B"),
+          ]),
+        ]),
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useFileChapters>);
+  });
+
+  const renderEditing = () =>
+    renderWithProviders(
+      <FileChaptersTab
+        canEdit
+        file={mockEpubFile}
+        isEditing={true}
+        onEditingChange={vi.fn()}
+      />,
+    );
+
+  it("renames a chapter at the third level", async () => {
+    const user = createUser();
+    renderEditing();
+    const input = await screen.findByDisplayValue("Section A");
+
+    await user.clear(input);
+    await user.type(input, "Opening");
+
+    expect(screen.getByDisplayValue("Opening")).toBeInTheDocument();
+  });
+
+  it("deletes a chapter at the third level", async () => {
+    const user = createUser();
+    renderEditing();
+    await screen.findByDisplayValue("Section A");
+
+    // Rows in order: Part, Chapter, Section A, Section B.
+    await user.click(
+      screen.getAllByRole("button", { name: "Delete chapter" })[3],
+    );
+
+    expect(screen.queryByDisplayValue("Section B")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Section A")).toBeInTheDocument();
+  });
+});
