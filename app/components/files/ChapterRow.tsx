@@ -154,9 +154,16 @@ export interface ChapterRowProps {
   onValidationChange?: (chapterId: number, hasError: boolean) => void;
   // Page-based edit mode: called when page input loses focus (for reordering)
   onBlur?: () => void;
-  // EPUB edit mode: callbacks for child chapter editing (curried by index)
-  onChildTitleChange?: (childIndex: number) => (title: string) => void;
-  onChildDelete?: (childIndex: number) => () => void;
+  // EPUB edit mode: the row's child indexes from the top level down, and
+  // callbacks that edit the chapter at a path, used for nested rows
+  path?: number[];
+  onTitleChangeAt?: (path: number[], title: string) => void;
+  onDeleteAt?: (path: number[]) => void;
+  // EPUB edit mode: whether a chapter is a heading left with no chapters
+  isEmptiedHeading?: (chapter: Chapter) => boolean;
+  // Edit mode: a stable key for a chapter, so nested rows keep their state
+  // when a sibling is deleted
+  editKeyOf?: (chapter: Chapter) => string;
   // M4B playback - uses chapterIndex in edit mode (since chapter.id may not exist)
   chapterIndex?: number;
   playingChapterIndex?: number | null;
@@ -239,6 +246,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         ? "Timestamp exceeds audiobook duration"
         : null;
   const pageErrorId = useId();
+  const headingErrorId = useId();
   const timestampErrorId = useId();
 
   // Sync local page value when chapter.start_page changes (e.g., from parent state)
@@ -363,60 +371,74 @@ const ChapterRow = (props: ChapterRowProps) => {
   if (isEditing && isEpub) {
     const descendantCount = countDescendants(chapter);
     const hasDescendants = descendantCount > 0;
+    const emptiedHeading = props.isEmptiedHeading?.(chapter) ?? false;
 
     return (
       <>
         <div
-          className="flex items-center gap-3 py-2 border-b border-border last:border-b-0"
+          className="py-2 border-b border-border last:border-b-0"
           style={{ paddingLeft: `${indentPx}px` }}
         >
-          {/* Expand/collapse toggle for chapters with children */}
-          {hasChildren ? (
+          <div className="flex items-center gap-3">
+            {/* Expand/collapse toggle for chapters with children */}
+            {hasChildren ? (
+              <Button
+                aria-expanded={expanded}
+                aria-label={expanded ? "Hide subchapters" : "Show subchapters"}
+                className="text-muted-foreground"
+                onClick={() => setExpanded(!expanded)}
+                size="icon-xs"
+                variant="ghost"
+              >
+                {expanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            ) : (
+              // Spacer for alignment when no toggle needed
+              <div className="w-5" />
+            )}
+
+            {/* Title input */}
+            <Input
+              aria-describedby={emptiedHeading ? headingErrorId : undefined}
+              aria-label="Chapter title"
+              className="flex-1"
+              onChange={(e) => props.onTitleChange?.(e.target.value)}
+              placeholder="Chapter title"
+              value={chapter.title}
+            />
+
+            {/* Delete button */}
             <Button
-              aria-expanded={expanded}
-              aria-label={expanded ? "Hide subchapters" : "Show subchapters"}
-              className="text-muted-foreground"
-              onClick={() => setExpanded(!expanded)}
-              size="icon-xs"
+              aria-label="Delete chapter"
+              onClick={() => {
+                if (hasDescendants) {
+                  setDeleteDialogOpen(true);
+                } else {
+                  props.onDelete?.();
+                }
+              }}
+              size="icon"
+              title="Delete chapter"
+              type="button"
               variant="ghost"
             >
-              {expanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
+              <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
             </Button>
-          ) : (
-            // Spacer for alignment when no toggle needed
-            <div className="w-5" />
+          </div>
+          {emptiedHeading && (
+            <p
+              className="mt-1 ml-8 text-xs text-destructive"
+              id={headingErrorId}
+              role="status"
+            >
+              No chapters are left under this heading. Delete it before saving,
+              since downloads would drop an empty heading.
+            </p>
           )}
-
-          {/* Title input */}
-          <Input
-            aria-label="Chapter title"
-            className="flex-1"
-            onChange={(e) => props.onTitleChange?.(e.target.value)}
-            placeholder="Chapter title"
-            value={chapter.title}
-          />
-
-          {/* Delete button */}
-          <Button
-            aria-label="Delete chapter"
-            onClick={() => {
-              if (hasDescendants) {
-                setDeleteDialogOpen(true);
-              } else {
-                props.onDelete?.();
-              }
-            }}
-            size="icon"
-            title="Delete chapter"
-            type="button"
-            variant="ghost"
-          >
-            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-          </Button>
         </div>
 
         {/* Delete confirmation dialog for chapters with children */}
@@ -460,14 +482,23 @@ const ChapterRow = (props: ChapterRowProps) => {
             <ChapterRow
               chapter={child}
               depth={depth + 1}
+              editKeyOf={props.editKeyOf}
               file={file}
               fileType={fileType}
               isEditing={isEditing}
-              key={child.id ?? `new-${index}`}
-              onDelete={props.onChildDelete?.(index)}
+              isEmptiedHeading={props.isEmptiedHeading}
+              key={props.editKeyOf?.(child) ?? child.id ?? `new-${index}`}
+              onDelete={() =>
+                props.onDeleteAt?.([...(props.path ?? []), index])
+              }
+              onDeleteAt={props.onDeleteAt}
               onPlay={onPlay}
               onStop={onStop}
-              onTitleChange={props.onChildTitleChange?.(index)}
+              onTitleChange={(title) =>
+                props.onTitleChangeAt?.([...(props.path ?? []), index], title)
+              }
+              onTitleChangeAt={props.onTitleChangeAt}
+              path={[...(props.path ?? []), index]}
               playingChapterIndex={playingChapterIndex}
             />
           ))}

@@ -1,15 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useFileChapters } from "@/hooks/queries/chapters";
+import {
+  useFileChapters,
+  useUpdateFileChapters,
+} from "@/hooks/queries/chapters";
 import { ShishoAPIError } from "@/libraries/api";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
-import { FileTypeM4B, FileTypePDF, type Chapter, type File } from "@/types";
+import {
+  FileTypeEPUB,
+  FileTypeM4B,
+  FileTypePDF,
+  type Chapter,
+  type File,
+} from "@/types";
 
-import FileChaptersTab from "./FileChaptersTab";
+import FileChaptersTab, { type FileChaptersTabHandle } from "./FileChaptersTab";
 
 // Query hooks check the role's permissions; this test grants them all.
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
@@ -915,5 +925,348 @@ describe("FileChaptersTab - uncovered pages banner", () => {
       screen.queryByRole("button", { name: /not in any chapter/ }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Click to add chapter")).not.toBeInTheDocument();
+  });
+});
+
+describe("FileChaptersTab - EPUB heading left without chapters", () => {
+  const mockEpubFile: File = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    book_id: 1,
+    library_id: 1,
+    file_type: FileTypeEPUB,
+    file_role: "main",
+    filepath: "/test/book.epub",
+    display_name: "book.epub",
+    filesize_bytes: 1000000,
+    is_preferred_cover: false,
+  };
+
+  const chapter = (
+    id: number,
+    title: string,
+    href: string | undefined,
+    children: Chapter[] = [],
+  ): Chapter => ({
+    id,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 1,
+    title,
+    sort_order: id,
+    href,
+    children,
+  });
+
+  // Rows in order: Part One (heading), One A, Part Two (linked), Two A,
+  // Already Empty (a heading the book itself leaves empty).
+  const mockChapters: Chapter[] = [
+    chapter(1, "Part One", undefined, [chapter(2, "One A", "a.xhtml")]),
+    chapter(3, "Part Two", "p2.xhtml", [chapter(4, "Two A", "b.xhtml")]),
+    chapter(5, "Already Empty", undefined),
+  ];
+
+  beforeEach(() => {
+    mockUseFileChapters.mockReturnValue({
+      data: mockChapters,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useFileChapters>);
+  });
+
+  const renderEditing = () => {
+    const onActionStateChange = vi.fn();
+    renderWithProviders(
+      <FileChaptersTab
+        canEdit
+        file={mockEpubFile}
+        isEditing={true}
+        onActionStateChange={onActionStateChange}
+        onEditingChange={vi.fn()}
+      />,
+    );
+    const canSave = () =>
+      onActionStateChange.mock.lastCall?.[0]?.canSave as boolean | undefined;
+    return { canSave };
+  };
+
+  const deleteButtons = () =>
+    screen.getAllByRole("button", { name: "Delete chapter" });
+
+  it("blocks saving until a heading emptied in this edit is deleted", async () => {
+    const user = createUser();
+    const { canSave } = renderEditing();
+    await screen.findByDisplayValue("Part One");
+    expect(
+      screen.queryByText(/no chapters are left under this heading/i),
+    ).not.toBeInTheDocument();
+    expect(canSave()).toBe(true);
+
+    await user.click(deleteButtons()[1]); // One A
+
+    const message = await screen.findByText(
+      /no chapters are left under this heading/i,
+    );
+    expect(screen.getByDisplayValue("Part One")).toHaveAccessibleDescription(
+      message.textContent ?? "",
+    );
+    await waitFor(() => expect(canSave()).toBe(false));
+
+    await user.click(deleteButtons()[0]); // Part One, now without children
+
+    expect(
+      screen.queryByText(/no chapters are left under this heading/i),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(canSave()).toBe(true));
+  });
+
+  it("does not flag a linked entry left without chapters", async () => {
+    const user = createUser();
+    const { canSave } = renderEditing();
+    await screen.findByDisplayValue("Part Two");
+
+    await user.click(deleteButtons()[3]); // Two A
+
+    expect(
+      screen.queryByText(/no chapters are left under this heading/i),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(canSave()).toBe(true));
+  });
+});
+
+describe("FileChaptersTab - EPUB chapters nested three deep", () => {
+  const mockEpubFile: File = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    book_id: 1,
+    library_id: 1,
+    file_type: FileTypeEPUB,
+    file_role: "main",
+    filepath: "/test/book.epub",
+    display_name: "book.epub",
+    filesize_bytes: 1000000,
+    is_preferred_cover: false,
+  };
+
+  const chapter = (
+    id: number,
+    title: string,
+    children: Chapter[] = [],
+  ): Chapter => ({
+    id,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 1,
+    title,
+    sort_order: id,
+    href: `${id}.xhtml`,
+    children,
+  });
+
+  beforeEach(() => {
+    mockUseFileChapters.mockReturnValue({
+      data: [
+        chapter(1, "Part", [
+          chapter(2, "Chapter", [
+            chapter(3, "Section A"),
+            chapter(4, "Section B"),
+          ]),
+        ]),
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useFileChapters>);
+  });
+
+  const renderEditing = () =>
+    renderWithProviders(
+      <FileChaptersTab
+        canEdit
+        file={mockEpubFile}
+        isEditing={true}
+        onEditingChange={vi.fn()}
+      />,
+    );
+
+  it("renames a chapter at the third level", async () => {
+    const user = createUser();
+    renderEditing();
+    const input = await screen.findByDisplayValue("Section A");
+
+    await user.clear(input);
+    await user.type(input, "Opening");
+
+    expect(screen.getByDisplayValue("Opening")).toBeInTheDocument();
+  });
+
+  it("deletes a chapter at the third level", async () => {
+    const user = createUser();
+    renderEditing();
+    await screen.findByDisplayValue("Section A");
+
+    // Rows in order: Part, Chapter, Section A, Section B.
+    await user.click(
+      screen.getAllByRole("button", { name: "Delete chapter" })[3],
+    );
+
+    expect(screen.queryByDisplayValue("Section B")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Section A")).toBeInTheDocument();
+  });
+});
+
+describe("FileChaptersTab - EPUB edit state", () => {
+  const mockEpubFile: File = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    book_id: 1,
+    library_id: 1,
+    file_type: FileTypeEPUB,
+    file_role: "main",
+    filepath: "/test/book.epub",
+    display_name: "book.epub",
+    filesize_bytes: 1000000,
+    is_preferred_cover: false,
+  };
+
+  const chapter = (
+    id: number,
+    title: string,
+    href: string | undefined,
+    children: Chapter[] = [],
+  ): Chapter => ({
+    id,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 1,
+    title,
+    sort_order: id,
+    href,
+    children,
+  });
+
+  const useChapters = (chapters: Chapter[]) =>
+    mockUseFileChapters.mockReturnValue({
+      data: chapters,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useFileChapters>);
+
+  // Lets a test leave and re-enter edit mode the way the file page does.
+  const Harness = ({
+    tabRef,
+  }: {
+    tabRef?: React.Ref<FileChaptersTabHandle>;
+  }) => {
+    const [editing, setEditing] = useState(true);
+    return (
+      <>
+        <button onClick={() => setEditing((e) => !e)} type="button">
+          Toggle editing
+        </button>
+        <FileChaptersTab
+          canEdit
+          file={mockEpubFile}
+          isEditing={editing}
+          onEditingChange={setEditing}
+          ref={tabRef}
+        />
+      </>
+    );
+  };
+
+  const deleteButtons = () =>
+    screen.getAllByRole("button", { name: "Delete chapter" });
+
+  it("keeps each row's expanded state when a sibling above it is deleted", async () => {
+    useChapters([
+      chapter(1, "Part", "p.xhtml", [
+        chapter(2, "Ch1", "a.xhtml", [chapter(3, "S1", "a.xhtml#1")]),
+        chapter(4, "Ch2", "b.xhtml", [chapter(5, "S2", "b.xhtml#1")]),
+      ]),
+    ]);
+    const user = createUser();
+    renderWithProviders(<Harness />);
+    await screen.findByDisplayValue("Ch1");
+
+    // Collapse Ch1, then delete it (it has a subchapter, so confirm).
+    await user.click(
+      screen.getAllByRole("button", { name: "Hide subchapters" })[1],
+    );
+    await user.click(deleteButtons()[1]);
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(screen.queryByDisplayValue("Ch1")).not.toBeInTheDocument();
+    // Ch2 was expanded and stays expanded.
+    expect(screen.getByDisplayValue("S2")).toBeInTheDocument();
+  });
+
+  it("does not save while a heading is left without chapters", async () => {
+    const mutate = vi.fn();
+    vi.mocked(useUpdateFileChapters).mockReturnValue({
+      mutate,
+      isPending: false,
+    } as never);
+    useChapters([
+      chapter(1, "Part", undefined, [chapter(2, "Only", "a.xhtml")]),
+      chapter(3, "After", "b.xhtml"),
+    ]);
+    const user = createUser();
+    const tabRef = createRef<FileChaptersTabHandle>();
+    renderWithProviders(<Harness tabRef={tabRef} />);
+    await screen.findByDisplayValue("Only");
+
+    await user.click(deleteButtons()[1]); // Only
+    await screen.findByText(/no chapters are left under this heading/i);
+    act(() => tabRef.current?.save());
+    expect(mutate).not.toHaveBeenCalled();
+
+    await user.click(deleteButtons()[0]); // Part
+    act(() => tabRef.current?.save());
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags an emptied heading after leaving and re-entering edit mode", async () => {
+    useChapters([
+      chapter(1, "Part", undefined, [chapter(2, "Only", "a.xhtml")]),
+    ]);
+    const user = createUser();
+    renderWithProviders(<Harness />);
+    await screen.findByDisplayValue("Only");
+
+    const toggle = screen.getByRole("button", { name: "Toggle editing" });
+    await user.click(toggle);
+    await user.click(toggle);
+    await screen.findByDisplayValue("Only");
+
+    await user.click(deleteButtons()[1]);
+    expect(
+      await screen.findByText(/no chapters are left under this heading/i),
+    ).toBeInTheDocument();
+  });
+
+  it("flags a nested heading left without chapters", async () => {
+    useChapters([
+      chapter(1, "Part", "p.xhtml", [
+        chapter(2, "Section", undefined, [chapter(3, "Only", "a.xhtml")]),
+      ]),
+    ]);
+    const user = createUser();
+    renderWithProviders(<Harness />);
+    await screen.findByDisplayValue("Only");
+
+    await user.click(deleteButtons()[2]); // Only
+
+    const message = await screen.findByText(
+      /no chapters are left under this heading/i,
+    );
+    expect(screen.getByDisplayValue("Section")).toHaveAccessibleDescription(
+      message.textContent ?? "",
+    );
   });
 });

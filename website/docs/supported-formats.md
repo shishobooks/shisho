@@ -6,7 +6,7 @@ Shisho has native support for six main-file formats. See [Reading and Playback](
 
 | Format | Import | Metadata Extraction | In-App Reader or Player | Generated Download |
 |--------|--------|---------------------|-------------------------|--------------------|
-| **EPUB** | Yes | Package metadata, navigation, and embedded cover data | EPUB reader | EPUB with supported current metadata applied |
+| **EPUB** | Yes | Package metadata, navigation, and embedded cover data | EPUB reader | EPUB with supported current metadata and [edited chapters](./metadata.md#chapters) applied |
 | **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied |
 | **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |

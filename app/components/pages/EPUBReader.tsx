@@ -30,7 +30,9 @@ interface EPUBReaderProps {
 
 interface TocEntry {
   label: string;
+  // Empty for a heading, which has no location to jump to.
   href: string;
+  depth: number;
 }
 
 interface RelocateDetail {
@@ -39,20 +41,27 @@ interface RelocateDetail {
   cfi?: string;
 }
 
+// Flattens foliate's table of contents into menu entries, keeping headings
+// (entries without an href) so the menu shows the book's structure.
 const flattenToc = (
   nodes:
     Array<{ label: string; href: string; subitems?: unknown[] }> | undefined,
+  depth = 0,
 ): TocEntry[] => {
   if (!nodes) return [];
   const out: TocEntry[] = [];
   for (const n of nodes) {
-    if (n.href) out.push({ label: n.label, href: n.href });
+    out.push({ label: n.label, href: n.href ?? "", depth });
     if (Array.isArray(n.subitems)) {
-      out.push(...flattenToc(n.subitems as typeof nodes));
+      out.push(...flattenToc(n.subitems as typeof nodes, depth + 1));
     }
   }
   return out;
 };
+
+// A select cannot nest options, so nesting is shown with leading
+// non-breaking spaces, which the browser does not collapse.
+const tocIndent = (depth: number) => "\u00a0\u00a0\u00a0".repeat(depth);
 
 export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
   usePageTitle(bookTitle ? `Reading: ${bookTitle}` : "Reader");
@@ -271,6 +280,15 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [bookReady, goNext, goPrev]);
 
+  // The menu value for the current location. foliate reports a heading as
+  // the current item with no href, so a heading is found by its label.
+  const currentHeadingIndex = currentTocHref
+    ? -1
+    : toc.findIndex((e) => !e.href && e.label === currentTocLabel);
+  const currentTocValue =
+    currentTocHref ??
+    (currentHeadingIndex >= 0 ? `heading-${currentHeadingIndex}` : "");
+
   const handleTocChange = (href: string) => {
     const view = viewRef.current as
       (HTMLElement & { goTo?: (target: string) => void }) | null;
@@ -339,14 +357,20 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
               aria-label="Jump to chapter"
               className="text-sm bg-transparent border rounded px-2 py-1 cursor-pointer"
               onChange={(e) => handleTocChange(e.target.value)}
-              value={currentTocHref ?? ""}
+              value={currentTocValue}
             >
               {currentTocHref === null && <option value="">—</option>}
-              {toc.map((entry, index) => (
-                <option key={`${index}-${entry.href}`} value={entry.href}>
-                  {entry.label}
-                </option>
-              ))}
+              {toc.map((entry, index) =>
+                entry.href ? (
+                  <option key={`${index}-${entry.href}`} value={entry.href}>
+                    {tocIndent(entry.depth) + entry.label}
+                  </option>
+                ) : (
+                  <option disabled key={index} value={`heading-${index}`}>
+                    {tocIndent(entry.depth) + entry.label}
+                  </option>
+                ),
+              )}
             </select>
           )}
           <Popover>

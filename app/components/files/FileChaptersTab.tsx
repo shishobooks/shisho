@@ -81,6 +81,11 @@ interface EditedChapter extends ChapterInput {
 let editKeyCounter = 0;
 const nextEditKey = () => `ek-${++editKeyCounter}`;
 
+// ChapterRow types its chapter as Chapter, but in edit mode every chapter it
+// renders, nested ones included, is an EditedChapter carrying its edit key.
+const editKeyOf = (chapter: Chapter) =>
+  (chapter as unknown as EditedChapter)._editKey;
+
 const toEditedChapters = (chapters: ChapterInput[]): EditedChapter[] =>
   chapters.map((c) => ({
     ...c,
@@ -192,6 +197,42 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     const hasValidationErrors = Array.from(validationErrors.values()).some(
       (hasError) => hasError,
     );
+
+    // Edit keys of EPUB headings (chapters without an href) whose chapters
+    // were all deleted in this edit. A nav heading cannot stand with nothing
+    // under it, so downloads would drop it; saving waits until the user
+    // deletes it instead of the heading disappearing on its own. A heading
+    // the book already leaves empty is not flagged. Chapters from a sidecar
+    // or plugin can lack an href without being headings; they are flagged
+    // too, which only asks for an extra delete.
+    const emptiedHeadings = useMemo(() => {
+      const emptied = new Set<string>();
+      if (!isEditing || file.file_type !== FileTypeEPUB) return emptied;
+      const hadChildren = new Set<string>();
+      const index = (chapters: EditedChapter[]) => {
+        for (const c of chapters) {
+          if (c.children.length > 0) hadChildren.add(c._editKey);
+          index(c.children);
+        }
+      };
+      const walk = (chapters: EditedChapter[]) => {
+        for (const c of chapters) {
+          if (
+            !c.href &&
+            c.children.length === 0 &&
+            hadChildren.has(c._editKey)
+          ) {
+            emptied.add(c._editKey);
+          }
+          walk(c.children);
+        }
+      };
+      index(initialChapters);
+      walk(editedChapters);
+      return emptied;
+    }, [isEditing, file.file_type, initialChapters, editedChapters]);
+    const canSave =
+      isEditing && !hasValidationErrors && emptiedHeadings.size === 0;
 
     /**
      * Stops audio playback and clears the playback timeout.
@@ -415,6 +456,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * client-only `_editKey` fields before sending to the server.
      */
     const handleSave = () => {
+      if (!canSave) return;
       const normalized = normalizeChapterOrder(
         stripEditKeys(editedChapters),
         file.file_type,
@@ -450,7 +492,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         cancel: handleCancel,
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [editedChapters],
+      [editedChapters, canSave],
     );
 
     // Compute whether chapters have been modified
@@ -463,12 +505,12 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     useEffect(() => {
       onActionStateChange?.({
         isSaving: updateChaptersMutation.isPending,
-        canSave: isEditing && !hasValidationErrors,
+        canSave,
         hasChanges,
       });
     }, [
       updateChaptersMutation.isPending,
-      hasValidationErrors,
+      canSave,
       hasChanges,
       isEditing,
       onActionStateChange,
@@ -608,61 +650,40 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     };
 
     /**
-     * Updates a child chapter's title within a parent chapter.
+     * Applies update to the chapter at path (child indexes from the top
+     * level down), replacing it with the result or removing it when the
+     * result is null. EPUB chapters nest to any depth.
      */
-    const updateChildTitle = (
+    const updateChapterAt = (
       chapters: EditedChapter[],
-      parentIndex: number,
-      childIndex: number,
-      title: string,
+      path: number[],
+      update: (chapter: EditedChapter) => EditedChapter | null,
     ): EditedChapter[] => {
-      return chapters.map((chapter, i) => {
-        if (i === parentIndex) {
-          return {
-            ...chapter,
-            children: updateChapterTitle(chapter.children, childIndex, title),
-          };
+      const [index, ...rest] = path;
+      return chapters.flatMap((chapter, i) => {
+        if (i !== index) return [chapter];
+        if (rest.length > 0) {
+          return [
+            {
+              ...chapter,
+              children: updateChapterAt(chapter.children, rest, update),
+            },
+          ];
         }
-        return chapter;
+        const updated = update(chapter);
+        return updated ? [updated] : [];
       });
     };
 
-    /**
-     * Deletes a child chapter from a parent chapter.
-     */
-    const deleteChildChapter = (
-      chapters: EditedChapter[],
-      parentIndex: number,
-      childIndex: number,
-    ): EditedChapter[] => {
-      return chapters.map((chapter, i) => {
-        if (i === parentIndex) {
-          return {
-            ...chapter,
-            children: deleteChapter(chapter.children, childIndex),
-          };
-        }
-        return chapter;
-      });
+    const handleTitleChangeAt = (path: number[], title: string) => {
+      setEditedChapters((prev) =>
+        updateChapterAt(prev, path, (chapter) => ({ ...chapter, title })),
+      );
     };
 
-    /**
-     * Creates callbacks for child chapter editing.
-     * These are curried functions that close over the parent index.
-     */
-    const createChildTitleChangeCallback =
-      (parentIndex: number) => (childIndex: number) => (title: string) => {
-        setEditedChapters((prev) =>
-          updateChildTitle(prev, parentIndex, childIndex, title),
-        );
-      };
-
-    const createChildDeleteCallback =
-      (parentIndex: number) => (childIndex: number) => () => {
-        setEditedChapters((prev) =>
-          deleteChildChapter(prev, parentIndex, childIndex),
-        );
-      };
+    const handleDeleteAt = (path: number[]) => {
+      setEditedChapters((prev) => updateChapterAt(prev, path, () => null));
+    };
 
     /**
      * Renders the edit-mode UI: optional EPUB notice, hidden audio element for
@@ -701,9 +722,13 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               chapter={chapter as unknown as Chapter}
               chapterIndex={isM4b ? index : undefined}
               depth={0}
+              editKeyOf={editKeyOf}
               file={file}
               fileType={file.file_type}
               isEditing={true}
+              isEmptiedHeading={
+                isEpub ? (c) => emptiedHeadings.has(editKeyOf(c)) : undefined
+              }
               key={chapter._editKey}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
               onBlur={
@@ -713,15 +738,10 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                     ? handleTimestampBlurReorder
                     : undefined
               }
-              onChildDelete={
-                isEpub ? createChildDeleteCallback(index) : undefined
-              }
-              onChildTitleChange={
-                isEpub ? createChildTitleChangeCallback(index) : undefined
-              }
               onDelete={() =>
                 setEditedChapters((prev) => deleteChapter(prev, index))
               }
+              onDeleteAt={isEpub ? handleDeleteAt : undefined}
               onPlay={isM4b ? handleChapterPlay : undefined}
               onStartPageChange={
                 isPageBased
@@ -745,6 +765,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                   updateChapterTitle(prev, index, title),
                 )
               }
+              onTitleChangeAt={isEpub ? handleTitleChangeAt : undefined}
               onValidationChange={
                 isM4b
                   ? (_chapterId, hasError) =>
@@ -752,6 +773,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                   : undefined
               }
               pageCount={isPageBased ? (file.page_count ?? 0) : undefined}
+              path={[index]}
               playingChapterIndex={isM4b ? playingChapterIndex : undefined}
             />
           ))}
