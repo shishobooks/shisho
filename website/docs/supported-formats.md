@@ -10,8 +10,8 @@ Shisho has native support for six main-file formats. See [Reading and Playback](
 | **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied |
 | **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
-| **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | None | MOBI with supported current metadata and cover applied |
-| **AZW3** (`.azw3`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | None | AZW3 with supported current metadata and cover applied |
+| **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | Same reader as EPUB | MOBI with supported current metadata and cover applied |
+| **AZW3** (`.azw3`) | Yes | Embedded metadata and cover; see [MOBI and AZW3](#mobi-and-azw3) | Same reader as EPUB | AZW3 with supported current metadata and cover applied |
 
 Generated downloads are format-specific. Each format can represent a different set of metadata, so Shisho cannot write every database field or replace a cover in every generated file. The source file is not modified.
 

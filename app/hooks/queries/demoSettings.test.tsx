@@ -28,9 +28,9 @@ const userDefaults: UserSettingsResponse = {
   fit_mode: "fit-width",
   gallery_size: "m",
   preload_count: 2,
-  viewer_epub_flow: "paginated",
-  viewer_epub_font_size: 100,
-  viewer_epub_theme: "light",
+  viewer_reflowable_flow: "paginated",
+  viewer_reflowable_font_size: 100,
+  viewer_reflowable_theme: "light",
   viewer_hide_chrome: false,
   viewer_playback_speed: 1,
 };

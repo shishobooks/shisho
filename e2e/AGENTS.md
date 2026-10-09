@@ -13,7 +13,7 @@ Each browser project runs against its own API server and SQLite database, and te
 
 The routes in `pkg/testutils/routes.go` exist only when the server runs with `SHISHO_TEST_MODE=true`, which `playwright.config.ts` sets. Read the handlers for what each seed accepts. Traps:
 
-- Seeded books have no file on disk, so their downloads fail. `withEpubOnDisk` writes a real EPUB for one (see `share-link.spec.ts`).
+- Seeded books have no file on disk, so their downloads fail. `withFileOnDisk` writes a real EPUB or MOBI for one (see `share-link.spec.ts`).
 - Seeded books and series are indexed for search; seeded persons are not. A test that searches for a seeded row waits for the search response before clicking a result: debounced comboboxes replace their list when results arrive, so an early click can land on an item about to vanish (see the series merge test in `alias.spec.ts`).
 - The plugin seed route accepts any scope and id, but only the id `fixture` loads; any other id gets an Active row with a `load_error` and no runtime.
 - The fixture plugin (`pkg/testutils/plugin_fixture.go`) always proposes one result, so a seeded plugin plus a seeded EPUB book drives the Identify dialog end to end (see `identify.spec.ts`). Seed a fresh book per test: once a proposal is applied, its rows are unchanged and hidden by the Changed filter.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/mobi"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -46,9 +47,9 @@ func TestCreateUserSetsTimestamps(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), user.UpdatedAt, time.Minute)
 }
 
-// Each browser's E2E server gets its own EPUB directory, so one browser's
+// Each browser's E2E server gets its own file directory, so one browser's
 // wipe cannot delete a file another browser's test is downloading.
-func TestCreateBookWithEpubOnDiskUsesTheServersOwnDirectory(t *testing.T) {
+func TestCreateBookWithFileOnDiskUsesTheServersOwnDirectory(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ownRoot := filepath.Join(t.TempDir(), "own")
@@ -72,7 +73,7 @@ func TestCreateBookWithEpubOnDiskUsesTheServersOwnDirectory(t *testing.T) {
 	var lib createLibraryResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &lib))
 
-	rec = do(http.MethodPost, "/api/test/books", `{"libraryId":`+strconv.Itoa(lib.ID)+`,"title":"A/B","withEpubOnDisk":true}`)
+	rec = do(http.MethodPost, "/api/test/books", `{"libraryId":`+strconv.Itoa(lib.ID)+`,"title":"A/B","withFileOnDisk":true}`)
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	var book createBookResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &book))
@@ -87,7 +88,40 @@ func TestCreateBookWithEpubOnDiskUsesTheServersOwnDirectory(t *testing.T) {
 	rec = do(http.MethodDelete, "/api/test/ereader", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	_, err = os.Stat(ownRoot)
-	assert.True(t, os.IsNotExist(err), "the wipe removes this server's EPUBs")
+	assert.True(t, os.IsNotExist(err), "the wipe removes this server's files")
 	_, err = os.Stat(otherFile)
-	assert.NoError(t, err, "the wipe leaves another server's EPUBs alone")
+	assert.NoError(t, err, "the wipe leaves another server's files alone")
+}
+
+// The MOBI reader e2e test needs a real MOBI behind the seeded file.
+func TestCreateBookWithFileOnDiskWritesAMOBI(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+
+	e := echo.New()
+	RegisterRoutes(e.Group("/api"), db, nil, nil, t.TempDir())
+
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		return rec
+	}
+	rec := do(http.MethodPost, "/api/test/libraries", `{"name":"Lib"}`)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var lib createLibraryResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &lib))
+
+	rec = do(http.MethodPost, "/api/test/books", `{"libraryId":`+strconv.Itoa(lib.ID)+`,"title":"Kindle Book","fileType":"mobi","withFileOnDisk":true}`)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var book createBookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &book))
+
+	file := &models.File{}
+	require.NoError(t, db.NewSelect().Model(file).Where("id = ?", book.FileID).Scan(context.Background()))
+	assert.Equal(t, "Kindle Book.mobi", filepath.Base(file.Filepath))
+	parsed, err := mobi.Parse(file.Filepath)
+	require.NoError(t, err)
+	assert.Equal(t, "Kindle Book", parsed.Title)
 }

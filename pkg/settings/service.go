@@ -44,14 +44,14 @@ func (svc *Service) GetUserSettings(ctx context.Context, userID int) (*models.Us
 // persisted. This lets clients change one setting without having to read
 // and echo every other setting first.
 type UserSettingsUpdate struct {
-	PreloadCount  *int
-	FitMode       *string
-	EpubFontSize  *int
-	EpubTheme     *string
-	EpubFlow      *string
-	GallerySize   *string
-	HideChrome    *bool
-	PlaybackSpeed *float64
+	PreloadCount       *int
+	FitMode            *string
+	ReflowableFontSize *int
+	ReflowableTheme    *string
+	ReflowableFlow     *string
+	GallerySize        *string
+	HideChrome         *bool
+	PlaybackSpeed      *float64
 }
 
 // UpdateUserSettings applies a partial update to a user's settings,
@@ -89,14 +89,14 @@ func (svc *Service) UpdateUserSettings(
 		if update.FitMode != nil {
 			current.ViewerFitMode = *update.FitMode
 		}
-		if update.EpubFontSize != nil {
-			current.EpubFontSize = *update.EpubFontSize
+		if update.ReflowableFontSize != nil {
+			current.ReflowableFontSize = *update.ReflowableFontSize
 		}
-		if update.EpubTheme != nil {
-			current.EpubTheme = *update.EpubTheme
+		if update.ReflowableTheme != nil {
+			current.ReflowableTheme = *update.ReflowableTheme
 		}
-		if update.EpubFlow != nil {
-			current.EpubFlow = *update.EpubFlow
+		if update.ReflowableFlow != nil {
+			current.ReflowableFlow = *update.ReflowableFlow
 		}
 		if update.GallerySize != nil {
 			current.GallerySize = *update.GallerySize
@@ -121,9 +121,9 @@ func (svc *Service) UpdateUserSettings(
 			Set("updated_at = EXCLUDED.updated_at").
 			Set("viewer_preload_count = EXCLUDED.viewer_preload_count").
 			Set("viewer_fit_mode = EXCLUDED.viewer_fit_mode").
-			Set("viewer_epub_font_size = EXCLUDED.viewer_epub_font_size").
-			Set("viewer_epub_theme = EXCLUDED.viewer_epub_theme").
-			Set("viewer_epub_flow = EXCLUDED.viewer_epub_flow").
+			Set("viewer_reflowable_font_size = EXCLUDED.viewer_reflowable_font_size").
+			Set("viewer_reflowable_theme = EXCLUDED.viewer_reflowable_theme").
+			Set("viewer_reflowable_flow = EXCLUDED.viewer_reflowable_flow").
 			Set("gallery_size = EXCLUDED.gallery_size").
 			Set("viewer_hide_chrome = EXCLUDED.viewer_hide_chrome").
 			Set("viewer_playback_speed = EXCLUDED.viewer_playback_speed").

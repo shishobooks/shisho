@@ -7,9 +7,11 @@ describe("getReadingAction", () => {
     expect(getReadingAction("m4b")).toBe("listen");
   });
 
-  it("returns a Read action for cbz, epub, and pdf files", () => {
+  it("returns a Read action for every ebook type", () => {
     expect(getReadingAction("cbz")).toBe("read");
     expect(getReadingAction("epub")).toBe("read");
+    expect(getReadingAction("azw3")).toBe("read");
+    expect(getReadingAction("mobi")).toBe("read");
     expect(getReadingAction("pdf")).toBe("read");
   });
 

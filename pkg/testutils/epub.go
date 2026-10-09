@@ -4,8 +4,6 @@ import (
 	"archive/zip"
 	"html"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -72,22 +70,4 @@ func writeMinimalEPUB(path, title string) (err error) {
 		}
 	}
 	return errors.WithStack(zw.Close())
-}
-
-// tempEPUBPath returns the path, without extension, for a new EPUB in a fresh
-// directory under root. Path separators in the title are replaced so the file
-// lands in that directory.
-func tempEPUBPath(root, title string) (string, error) {
-	if root == "" {
-		return "", errors.New("no EPUB directory configured for withEpubOnDisk")
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return "", errors.WithStack(err)
-	}
-	dir, err := os.MkdirTemp(root, "book-")
-	if err != nil {
-		return "", errors.WithStack(err)
-	}
-	name := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(title)
-	return filepath.Join(dir, name), nil
 }

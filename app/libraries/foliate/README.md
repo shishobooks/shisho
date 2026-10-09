@@ -1,6 +1,6 @@
 # foliate-js (vendored)
 
-Vendored copy of [foliate-js](https://github.com/johnfactotum/foliate-js) used by the in-app EPUB reader.
+Vendored copy of [foliate-js](https://github.com/johnfactotum/foliate-js) used by the in-app reader for EPUB, MOBI, and AZW3 files.
 
 - **Source:** https://github.com/johnfactotum/foliate-js
 - **License:** MIT (see `LICENSE` in this directory)
@@ -35,7 +35,7 @@ view.js
 
 **`pdf.js` is intentionally stubbed — do not re-copy it from upstream.** Upstream foliate's `pdf.js` depends on a vendored pdfjs distribution under `vendor/pdfjs/` that we don't ship. PDFs are handled by the separate `PDFReader` component, so foliate's PDF path is never exercised at runtime — but Vite/Rolldown resolves dynamic imports at build time, so `pdf.js` must still exist *and* all of its own imports must resolve. That's why we keep a stub rather than deleting the file, and why replacing it with upstream's version without also vendoring `vendor/pdfjs/` breaks `pnpm build`.
 
-Some of the other files (e.g. `fb2.js`, `mobi.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
+Some of the other files (e.g. `fb2.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
 
 ## To update
 
@@ -60,4 +60,4 @@ Some of the other files (e.g. `fb2.js`, `mobi.js`, `progress.js`, `search.js`, `
    ```bash
    find app/libraries/foliate -type f -not -name README.md -not -name LICENSE | sort
    ```
-7. Run `mise check:quiet` and test with several real EPUBs in the reader — foliate-js's API occasionally shifts.
+7. Run `mise check:quiet` and test with several real EPUB, MOBI, and AZW3 files in the reader, since foliate-js's API occasionally shifts.

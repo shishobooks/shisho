@@ -12,26 +12,26 @@ import "github.com/shishobooks/shisho/pkg/models"
 // same types, same order) — the handler converts between them with
 // `UserSettingsUpdate(payload)`. Drifting either one breaks that cast.
 type UserSettingsPayload struct {
-	PreloadCount  *int     `json:"preload_count,omitempty"`
-	FitMode       *string  `json:"fit_mode,omitempty" tstype:"FitMode"`
-	EpubFontSize  *int     `json:"viewer_epub_font_size,omitempty"`
-	EpubTheme     *string  `json:"viewer_epub_theme,omitempty" tstype:"EpubTheme"`
-	EpubFlow      *string  `json:"viewer_epub_flow,omitempty" tstype:"EpubFlow"`
-	GallerySize   *string  `json:"gallery_size,omitempty" tstype:"GallerySize"`
-	HideChrome    *bool    `json:"viewer_hide_chrome,omitempty"`
-	PlaybackSpeed *float64 `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
+	PreloadCount       *int     `json:"preload_count,omitempty"`
+	FitMode            *string  `json:"fit_mode,omitempty" tstype:"FitMode"`
+	ReflowableFontSize *int     `json:"viewer_reflowable_font_size,omitempty"`
+	ReflowableTheme    *string  `json:"viewer_reflowable_theme,omitempty" tstype:"ReflowableTheme"`
+	ReflowableFlow     *string  `json:"viewer_reflowable_flow,omitempty" tstype:"ReflowableFlow"`
+	GallerySize        *string  `json:"gallery_size,omitempty" tstype:"GallerySize"`
+	HideChrome         *bool    `json:"viewer_hide_chrome,omitempty"`
+	PlaybackSpeed      *float64 `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
 }
 
 // UserSettingsResponse is the response for user settings.
 type UserSettingsResponse struct {
-	PreloadCount  int     `json:"preload_count"`
-	FitMode       string  `json:"fit_mode" tstype:"FitMode"`
-	EpubFontSize  int     `json:"viewer_epub_font_size"`
-	EpubTheme     string  `json:"viewer_epub_theme" tstype:"EpubTheme"`
-	EpubFlow      string  `json:"viewer_epub_flow" tstype:"EpubFlow"`
-	GallerySize   string  `json:"gallery_size" tstype:"GallerySize"`
-	HideChrome    bool    `json:"viewer_hide_chrome"`
-	PlaybackSpeed float64 `json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
+	PreloadCount       int     `json:"preload_count"`
+	FitMode            string  `json:"fit_mode" tstype:"FitMode"`
+	ReflowableFontSize int     `json:"viewer_reflowable_font_size"`
+	ReflowableTheme    string  `json:"viewer_reflowable_theme" tstype:"ReflowableTheme"`
+	ReflowableFlow     string  `json:"viewer_reflowable_flow" tstype:"ReflowableFlow"`
+	GallerySize        string  `json:"gallery_size" tstype:"GallerySize"`
+	HideChrome         bool    `json:"viewer_hide_chrome"`
+	PlaybackSpeed      float64 `json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
 }
 
 // ValidFitModes returns all valid fit mode values.
@@ -49,19 +49,19 @@ func IsValidFitMode(mode string) bool {
 	return false
 }
 
-// IsValidEpubTheme returns true if the theme is a supported EPUB theme.
-func IsValidEpubTheme(theme string) bool {
+// IsValidReflowableTheme returns true if the theme is a supported Reflowable reader theme.
+func IsValidReflowableTheme(theme string) bool {
 	switch theme {
-	case models.EpubThemeLight, models.EpubThemeDark, models.EpubThemeSepia:
+	case models.ReflowableThemeLight, models.ReflowableThemeDark, models.ReflowableThemeSepia:
 		return true
 	}
 	return false
 }
 
-// IsValidEpubFlow returns true if the flow is a supported EPUB flow mode.
-func IsValidEpubFlow(flow string) bool {
+// IsValidReflowableFlow returns true if the flow is a supported Reflowable reader flow mode.
+func IsValidReflowableFlow(flow string) bool {
 	switch flow {
-	case models.EpubFlowPaginated, models.EpubFlowScrolled:
+	case models.ReflowableFlowPaginated, models.ReflowableFlowScrolled:
 		return true
 	}
 	return false

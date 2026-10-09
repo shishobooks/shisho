@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { useEpubBlob } from "@/hooks/queries/epub";
+import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
@@ -23,7 +23,7 @@ import type { File, UserSettingsPayload } from "@/types";
 
 import "@/libraries/foliate/view.js";
 
-interface EPUBReaderProps {
+interface ReflowableReaderProps {
   file: File;
   bookTitle?: string;
 }
@@ -63,7 +63,10 @@ const flattenToc = (
 // non-breaking spaces, which the browser does not collapse.
 const tocIndent = (depth: number) => "\u00a0\u00a0\u00a0".repeat(depth);
 
-export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
+export default function ReflowableReader({
+  file,
+  bookTitle,
+}: ReflowableReaderProps) {
   usePageTitle(bookTitle ? `Reading: ${bookTitle}` : "Reader");
 
   const {
@@ -72,15 +75,16 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     error,
     isEnabled,
     refetch,
-  } = useEpubBlob(file.id);
+  } = useReflowableBlob(file.id);
+  const fileType = file.file_type;
 
   const { data: settings, isLoading: settingsLoading } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
   const settingsReady = !settingsLoading && settings != null;
 
-  const fontSize = settings?.viewer_epub_font_size ?? 100;
-  const theme = settings?.viewer_epub_theme ?? "light";
-  const flow = settings?.viewer_epub_flow ?? "paginated";
+  const fontSize = settings?.viewer_reflowable_font_size ?? 100;
+  const theme = settings?.viewer_reflowable_theme ?? "light";
+  const flow = settings?.viewer_reflowable_flow ?? "paginated";
   const hideChrome = settings?.viewer_hide_chrome ?? false;
 
   const { chromeVisible, toggleChrome } = useAutoHideChrome(hideChrome);
@@ -137,7 +141,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     if (typeof view.open !== "function") {
       setLoadError(
         new Error(
-          "EPUB renderer did not register — the <foliate-view> custom element is missing its open() method.",
+          "Book renderer did not register: the <foliate-view> custom element is missing its open() method.",
         ),
       );
       return;
@@ -158,9 +162,10 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     // Hardcoded name. foliate doesn't surface the synthetic File's name
     // anywhere user-visible — using bookTitle would just cause the effect
     // to re-fire when useBook resolves (undefined → real value), launching
-    // a second overlapping open() on the same element.
-    const bookFile = new globalThis.File([blob], "book.epub", {
-      type: "application/epub+zip",
+    // a second overlapping open() on the same element. foliate picks EPUB or
+    // MOBI from the bytes, so the name and type are only labels.
+    const bookFile = new globalThis.File([blob], `book.${fileType}`, {
+      type: blob.type,
     });
 
     (async () => {
@@ -178,7 +183,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     })().catch((err: unknown) => {
       if (cancelled) return;
       const asError = err instanceof Error ? err : new Error(String(err));
-      console.error("EPUBReader: foliate open() failed", err);
+      console.error("ReflowableReader: foliate open() failed", err);
       setLoadError(asError);
     });
 
@@ -197,7 +202,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         // no-op
       }
     };
-  }, [blob]);
+  }, [blob, fileType]);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {
@@ -392,7 +397,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                     min={50}
                     onValueChange={([value]) => setFontSizeDraft(value)}
                     onValueCommit={([value]) =>
-                      commitSettings({ viewer_epub_font_size: value })
+                      commitSettings({ viewer_reflowable_font_size: value })
                     }
                     step={10}
                     thumbLabel="Font size"
@@ -400,11 +405,14 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium" id="epub-theme-label">
+                  <label
+                    className="text-sm font-medium"
+                    id="reader-theme-label"
+                  >
                     Theme
                   </label>
                   <div
-                    aria-labelledby="epub-theme-label"
+                    aria-labelledby="reader-theme-label"
                     className="flex gap-2 mt-2"
                     role="group"
                   >
@@ -413,7 +421,9 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                         aria-pressed={theme === t}
                         disabled={!settingsReady}
                         key={t}
-                        onClick={() => commitSettings({ viewer_epub_theme: t })}
+                        onClick={() =>
+                          commitSettings({ viewer_reflowable_theme: t })
+                        }
                         size="sm"
                         variant={theme === t ? "default" : "outline"}
                       >
@@ -423,11 +433,11 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium" id="epub-flow-label">
+                  <label className="text-sm font-medium" id="reader-flow-label">
                     Flow
                   </label>
                   <div
-                    aria-labelledby="epub-flow-label"
+                    aria-labelledby="reader-flow-label"
                     className="flex gap-2 mt-2"
                     role="group"
                   >
@@ -436,7 +446,9 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                         aria-pressed={flow === f}
                         disabled={!settingsReady}
                         key={f}
-                        onClick={() => commitSettings({ viewer_epub_flow: f })}
+                        onClick={() =>
+                          commitSettings({ viewer_reflowable_flow: f })
+                        }
                         size="sm"
                         variant={flow === f ? "default" : "outline"}
                       >

@@ -13,16 +13,16 @@ const (
 )
 
 const (
-	//tygo:emit export type EpubTheme = typeof EpubThemeLight | typeof EpubThemeDark | typeof EpubThemeSepia;
-	EpubThemeLight = "light"
-	EpubThemeDark  = "dark"
-	EpubThemeSepia = "sepia"
+	//tygo:emit export type ReflowableTheme = typeof ReflowableThemeLight | typeof ReflowableThemeDark | typeof ReflowableThemeSepia;
+	ReflowableThemeLight = "light"
+	ReflowableThemeDark  = "dark"
+	ReflowableThemeSepia = "sepia"
 )
 
 const (
-	//tygo:emit export type EpubFlow = typeof EpubFlowPaginated | typeof EpubFlowScrolled;
-	EpubFlowPaginated = "paginated"
-	EpubFlowScrolled  = "scrolled"
+	//tygo:emit export type ReflowableFlow = typeof ReflowableFlowPaginated | typeof ReflowableFlowScrolled;
+	ReflowableFlowPaginated = "paginated"
+	ReflowableFlowScrolled  = "scrolled"
 )
 
 const (
@@ -59,9 +59,9 @@ type UserSettings struct {
 	UserID             int       `bun:",notnull,unique" json:"user_id"`
 	ViewerPreloadCount int       `bun:",notnull,default:3" json:"viewer_preload_count"`
 	ViewerFitMode      string    `bun:",notnull,default:'fit-height'" json:"viewer_fit_mode" tstype:"FitMode"`
-	EpubFontSize       int       `bun:"viewer_epub_font_size,notnull,default:100" json:"viewer_epub_font_size"`
-	EpubTheme          string    `bun:"viewer_epub_theme,notnull,default:'light'" json:"viewer_epub_theme" tstype:"EpubTheme"`
-	EpubFlow           string    `bun:"viewer_epub_flow,notnull,default:'paginated'" json:"viewer_epub_flow" tstype:"EpubFlow"`
+	ReflowableFontSize int       `bun:"viewer_reflowable_font_size,notnull,default:100" json:"viewer_reflowable_font_size"`
+	ReflowableTheme    string    `bun:"viewer_reflowable_theme,notnull,default:'light'" json:"viewer_reflowable_theme" tstype:"ReflowableTheme"`
+	ReflowableFlow     string    `bun:"viewer_reflowable_flow,notnull,default:'paginated'" json:"viewer_reflowable_flow" tstype:"ReflowableFlow"`
 	GallerySize        string    `bun:",notnull,default:'m'" json:"gallery_size" tstype:"GallerySize"`
 	ViewerHideChrome   bool      `bun:",notnull,default:false" json:"viewer_hide_chrome"`
 	PlaybackSpeed      float64   `bun:"viewer_playback_speed,notnull,default:1.0" json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
@@ -72,9 +72,9 @@ func DefaultUserSettings() *UserSettings {
 	return &UserSettings{
 		ViewerPreloadCount: 3,
 		ViewerFitMode:      FitModeHeight,
-		EpubFontSize:       100,
-		EpubTheme:          EpubThemeLight,
-		EpubFlow:           EpubFlowPaginated,
+		ReflowableFontSize: 100,
+		ReflowableTheme:    ReflowableThemeLight,
+		ReflowableFlow:     ReflowableFlowPaginated,
 		GallerySize:        GallerySizeMedium,
 		ViewerHideChrome:   false,
 		PlaybackSpeed:      PlaybackSpeedDefault,

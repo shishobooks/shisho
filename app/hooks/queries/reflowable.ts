@@ -1,15 +1,15 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import { fileDownloadUrl } from "@/utils/downloadUrl";
+import { fileDownloadUrl, fileOriginalDownloadUrl } from "@/utils/downloadUrl";
 
 import { useRequires } from "./permissions";
 
 export enum QueryKey {
-  EpubBlob = "EpubBlob",
+  ReflowableBlob = "ReflowableBlob",
 }
 
-export const useEpubBlob = (
+export const useReflowableBlob = (
   fileId: number,
   options: Omit<
     UseQueryOptions<Blob, ShishoAPIError>,
@@ -19,7 +19,7 @@ export const useEpubBlob = (
   return useQuery<Blob, ShishoAPIError>({
     ...options,
     enabled: useRequires("books:read", options.enabled ?? true),
-    queryKey: [QueryKey.EpubBlob, fileId],
+    queryKey: [QueryKey.ReflowableBlob, fileId],
     // staleTime matches gcTime: Blobs are a few MB and add up across books.
     // We want a short cache window (~60s — long enough for tab-switch-back
     // to feel instant, short enough not to hold multiple books in memory),
@@ -28,9 +28,12 @@ export const useEpubBlob = (
     staleTime: 60 * 1000,
     gcTime: 60 * 1000,
     queryFn: async ({ signal }) => {
-      const response = await fetch(fileDownloadUrl(fileId), {
-        signal,
-      });
+      let response = await fetch(fileDownloadUrl(fileId), { signal });
+      // A 422 means the server has no generator for this type, so read the
+      // file as it sits on disk, as Download Original would.
+      if (response.status === 422) {
+        response = await fetch(fileOriginalDownloadUrl(fileId), { signal });
+      }
       // checkStatus rejects with the API's error; the body is a file
       // otherwise, so only a failure goes through it.
       if (!response.ok) await API.checkStatus(response);

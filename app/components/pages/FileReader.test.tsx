@@ -21,8 +21,8 @@ vi.mock("./CBZReader", () => ({
 vi.mock("./PDFReader", () => ({
   default: () => <div>pdf-reader</div>,
 }));
-vi.mock("./EPUBReader", () => ({
-  default: () => <div>epub-reader</div>,
+vi.mock("./ReflowableReader", () => ({
+  default: () => <div>reflowable-reader</div>,
 }));
 
 const renderAt = (fileType: string) => {
@@ -60,6 +60,14 @@ describe("FileReader dispatch", () => {
     renderAt("cbz");
     expect(screen.getByText("cbz-reader")).toBeInTheDocument();
   });
+
+  it.each(["epub", "azw3", "mobi"])(
+    "renders the Reflowable reader for %s files",
+    (fileType) => {
+      renderAt(fileType);
+      expect(screen.getByText("reflowable-reader")).toBeInTheDocument();
+    },
+  );
 
   it("shows an unsupported message for unknown file types", () => {
     renderAt("txt");

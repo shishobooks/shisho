@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetUserSettings_ReturnsEpubDefaults(t *testing.T) {
+func TestGetUserSettings_ReturnsReflowableDefaults(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	user := createTestUser(t, db, "alice")
@@ -18,12 +18,12 @@ func TestGetUserSettings_ReturnsEpubDefaults(t *testing.T) {
 
 	settings, err := svc.GetUserSettings(context.Background(), user.ID)
 	require.NoError(t, err)
-	assert.Equal(t, 100, settings.EpubFontSize)
-	assert.Equal(t, models.EpubThemeLight, settings.EpubTheme)
-	assert.Equal(t, models.EpubFlowPaginated, settings.EpubFlow)
+	assert.Equal(t, 100, settings.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableThemeLight, settings.ReflowableTheme)
+	assert.Equal(t, models.ReflowableFlowPaginated, settings.ReflowableFlow)
 }
 
-func TestUpdateUserSettings_PersistsEpubFields(t *testing.T) {
+func TestUpdateUserSettings_PersistsReflowableFields(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	user := createTestUser(t, db, "bob")
@@ -32,31 +32,31 @@ func TestUpdateUserSettings_PersistsEpubFields(t *testing.T) {
 	preload := 5
 	fitMode := "fit-width"
 	fontSize := 140
-	theme := models.EpubThemeSepia
-	flow := models.EpubFlowScrolled
+	theme := models.ReflowableThemeSepia
+	flow := models.ReflowableFlowScrolled
 
 	updated, err := svc.UpdateUserSettings(
 		context.Background(),
 		user.ID,
 		UserSettingsUpdate{
-			PreloadCount: &preload,
-			FitMode:      &fitMode,
-			EpubFontSize: &fontSize,
-			EpubTheme:    &theme,
-			EpubFlow:     &flow,
+			PreloadCount:       &preload,
+			FitMode:            &fitMode,
+			ReflowableFontSize: &fontSize,
+			ReflowableTheme:    &theme,
+			ReflowableFlow:     &flow,
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 140, updated.EpubFontSize)
-	assert.Equal(t, models.EpubThemeSepia, updated.EpubTheme)
-	assert.Equal(t, models.EpubFlowScrolled, updated.EpubFlow)
+	assert.Equal(t, 140, updated.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableThemeSepia, updated.ReflowableTheme)
+	assert.Equal(t, models.ReflowableFlowScrolled, updated.ReflowableFlow)
 
 	// Re-read to confirm persistence
 	reloaded, err := svc.GetUserSettings(context.Background(), user.ID)
 	require.NoError(t, err)
-	assert.Equal(t, 140, reloaded.EpubFontSize)
-	assert.Equal(t, models.EpubThemeSepia, reloaded.EpubTheme)
-	assert.Equal(t, models.EpubFlowScrolled, reloaded.EpubFlow)
+	assert.Equal(t, 140, reloaded.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableThemeSepia, reloaded.ReflowableTheme)
+	assert.Equal(t, models.ReflowableFlowScrolled, reloaded.ReflowableFlow)
 }
 
 func TestGetUserSettings_DefaultsPlaybackSpeedToNormal(t *testing.T) {
@@ -105,26 +105,26 @@ func TestUpdateUserSettings_PartialUpdateDoesNotClobber(t *testing.T) {
 	preload := 7
 	fitMode := "fit-width"
 	fontSize := 130
-	theme := models.EpubThemeDark
-	flow := models.EpubFlowScrolled
+	theme := models.ReflowableThemeDark
+	flow := models.ReflowableFlowScrolled
 	_, err := svc.UpdateUserSettings(context.Background(), user.ID, UserSettingsUpdate{
-		PreloadCount: &preload,
-		FitMode:      &fitMode,
-		EpubFontSize: &fontSize,
-		EpubTheme:    &theme,
-		EpubFlow:     &flow,
+		PreloadCount:       &preload,
+		FitMode:            &fitMode,
+		ReflowableFontSize: &fontSize,
+		ReflowableTheme:    &theme,
+		ReflowableFlow:     &flow,
 	})
 	require.NoError(t, err)
 
 	// Now update just the theme; all other fields must keep their seeded value.
-	newTheme := models.EpubThemeSepia
+	newTheme := models.ReflowableThemeSepia
 	updated, err := svc.UpdateUserSettings(context.Background(), user.ID, UserSettingsUpdate{
-		EpubTheme: &newTheme,
+		ReflowableTheme: &newTheme,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 7, updated.ViewerPreloadCount)
 	assert.Equal(t, "fit-width", updated.ViewerFitMode)
-	assert.Equal(t, 130, updated.EpubFontSize)
-	assert.Equal(t, models.EpubThemeSepia, updated.EpubTheme)
-	assert.Equal(t, models.EpubFlowScrolled, updated.EpubFlow)
+	assert.Equal(t, 130, updated.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableThemeSepia, updated.ReflowableTheme)
+	assert.Equal(t, models.ReflowableFlowScrolled, updated.ReflowableFlow)
 }
