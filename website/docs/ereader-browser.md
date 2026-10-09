@@ -1,6 +1,6 @@
 # eReader Browser
 
-The eReader Browser is a lightweight, server-rendered interface for downloading books from simple e-ink web browsers. It uses minimal HTML and no JavaScript.
+The eReader Browser is a lightweight, server-rendered interface for downloading books from simple e-ink web browsers, such as the ones on Kobo and Kindle devices. It uses minimal HTML and no JavaScript.
 
 ## Setup
 
@@ -42,7 +42,7 @@ The current browser provides:
 
 - A list of libraries the device owner's user can access.
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
-- EPUB, CBZ, M4B, and PDF type filters.
+- EPUB, CBZ, M4B, PDF, MOBI, and AZW3 type filters. A filter shows the books with a main file of that type.
 - Book details and a separate download for every main-file edition.
 - The user's saved per-library [sort](./browsing-search-bulk-actions.md#gallery-sort) on **All Books**, author, and search results. Series books follow series-number order.
 - An optional cover toggle.
@@ -54,6 +54,15 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B and PDF remain generated downloads in their native formats.
 
 Covers are off by default. Leave them off on slow devices or networks to reduce page size and image requests.
+
+### On a Kindle
+
+When the request's User-Agent contains `Kindle`, the browser adjusts to what a Kindle can open. Fire tablets, whose Silk browser also reports `Kindle`, see every download like any other browser.
+
+- A book's page offers only its AZW3 files, or its MOBI files when it has no AZW3.
+- A book with neither is marked **Unavailable on Kindle**, both in book lists and on the book's page, and offers no download.
+
+To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book that has only an EPUB onto a Kindle, add a MOBI or AZW3 file to the book in Shisho.
 
 ## Troubleshooting
 

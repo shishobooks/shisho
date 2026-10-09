@@ -10,15 +10,18 @@ Use this root catalog URL:
 https://your-server/opds/v1/{types}/catalog
 ```
 
-Replace `{types}` with one or more of `epub`, `cbz`, `m4b`, and `pdf`. Join multiple types with `+`:
+Replace `{types}` with one or more of `epub`, `cbz`, `m4b`, `pdf`, `mobi`, and `azw3`. Join multiple types with `+`:
 
 ```text
 https://your-server/opds/v1/epub/catalog
 https://your-server/opds/v1/epub+cbz/catalog
-https://your-server/opds/v1/epub+cbz+m4b+pdf/catalog
+https://your-server/opds/v1/mobi+azw3/catalog
+https://your-server/opds/v1/epub+cbz+m4b+pdf+mobi+azw3/catalog
 ```
 
-Any non-empty combination of those four types is accepted. Order does not change the catalog behavior.
+Any non-empty combination of those six types is accepted. Order does not change the catalog behavior. `mobi` covers `.mobi`, `.azw`, and `.prc` files. For a reading app that opens only Kindle formats, use `mobi+azw3`.
+
+Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it.
 
 ### KePub Catalog
 
@@ -28,7 +31,7 @@ To request KePub downloads where conversion is supported, insert `/kepub` before
 https://your-server/opds/v1/kepub/epub+cbz/catalog
 ```
 
-In a KePub catalog, EPUB and CBZ files are converted to KePub. M4B and PDF files remain in their native formats. See [Supported Formats](./supported-formats.md) for generated-download limitations.
+In a KePub catalog, EPUB and CBZ files are converted to KePub. M4B and PDF files remain in their native formats. KePub catalogs are for Kobo devices, which cannot open MOBI or AZW3, so they skip `mobi` and `azw3` in the type selection and refuse a selection with no other type. See [Supported Formats](./supported-formats.md) for generated-download limitations.
 
 ## Authentication and Access
 

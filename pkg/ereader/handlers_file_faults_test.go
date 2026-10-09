@@ -172,6 +172,8 @@ func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 		{"supplement", "txt", models.FileRoleSupplement, false, "text/plain; charset=utf-8"},
 		{"plugin format", "fb2", models.FileRoleMain, false, ""},
 		{"m4b as kepub", models.FileTypeM4B, models.FileRoleMain, true, "audio/mp4"},
+		{"mobi as kepub", models.FileTypeMOBI, models.FileRoleMain, true, "application/x-mobipocket-ebook"},
+		{"azw3 as kepub", models.FileTypeAZW3, models.FileRoleMain, true, "application/vnd.amazon.mobi8-ebook"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -207,6 +209,26 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), "; filename*=UTF-8''")
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), "%C3%9Cn%C3%AFcode")
 	})
+	// Until MOBI and AZW3 have a generator these serve the original; either
+	// way the download keeps the type's media type and extension.
+	for _, tt := range []struct {
+		fileType    string
+		kind        testgen.MOBIKind
+		contentType string
+	}{
+		{models.FileTypeMOBI, testgen.MOBIKindMOBI6, "application/x-mobipocket-ebook"},
+		{models.FileTypeAZW3, testgen.MOBIKindKF8, "application/vnd.amazon.mobi8-ebook"},
+	} {
+		t.Run(tt.fileType, func(t *testing.T) {
+			t.Parallel()
+			f := newDownloadFixture(t, "Kindle Book")
+			file := f.addFile(tt.fileType, models.FileRoleMain, testgen.GenerateMOBI(t, f.dir, "book."+tt.fileType, testgen.MOBIOptions{Kind: tt.kind, Title: "Kindle Book"}))
+			rec := f.serve(file, false)
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			assert.Equal(t, tt.contentType, rec.Header().Get("Content-Type"))
+			assert.Contains(t, rec.Header().Get("Content-Disposition"), "."+tt.fileType+`"`)
+		})
+	}
 	t.Run("cbz", func(t *testing.T) {
 		t.Parallel()
 		f := newDownloadFixture(t, "Comic")

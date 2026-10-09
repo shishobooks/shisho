@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -46,6 +47,14 @@ func parseFileTypes(types string) []string {
 		return nil
 	}
 	return strings.Split(types, "+")
+}
+
+// kepubFileTypes parses the file types of a KePub feed, skipping MOBI and
+// AZW3: KePub feeds are for Kobo devices, which cannot open them.
+func kepubFileTypes(types string) []string {
+	return slices.DeleteFunc(parseFileTypes(types), func(t string) bool {
+		return t == models.FileTypeMOBI || t == models.FileTypeAZW3
+	})
 }
 
 // BuildCatalogFeed builds the root navigation feed listing all libraries.
@@ -173,7 +182,7 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL, fileT
 
 // BuildLibraryAllBooksFeedKepub builds an acquisition feed with all books using KePub download links.
 func (svc *Service) BuildLibraryAllBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -336,7 +345,7 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 
 // BuildLibrarySeriesBooksFeedKepub builds an acquisition feed with books in a series using KePub download links.
 func (svc *Service) BuildLibrarySeriesBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID, seriesID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -557,7 +566,7 @@ func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL, fi
 
 // BuildLibraryAuthorBooksFeedKepub builds an acquisition feed with books by an author using KePub download links.
 func (svc *Service) BuildLibraryAuthorBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID int, authorName string, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -647,7 +656,7 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTyp
 
 // BuildLibrarySearchFeedKepub builds an acquisition feed with search results using KePub download links.
 func (svc *Service) BuildLibrarySearchFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID int, query string, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,

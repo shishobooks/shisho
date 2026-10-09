@@ -20,68 +20,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGetBookFileType_UsesFirstMainFile confirms that getBookFileType
-// returns the type of the first main file (by order in the slice),
-// ignoring supplement files.
-func TestGetBookFileType_UsesFirstMainFile(t *testing.T) {
+// TestFilterBooksByType_MatchesAnyMainFile confirms that a type filter
+// keeps a book when any of its main files has the type, ignoring
+// supplement files.
+func TestFilterBooksByType_MatchesAnyMainFile(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		book *models.Book
-		want string
-	}{
-		{
-			name: "single main file",
-			book: &models.Book{
-				Files: []*models.File{
-					{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-				},
-			},
-			want: models.FileTypeEPUB,
-		},
-		{
-			name: "multiple main files returns first",
-			book: &models.Book{
-				Files: []*models.File{
-					{ID: 1, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
-					{ID: 2, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-				},
-			},
-			want: models.FileTypeCBZ,
-		},
-		{
-			name: "skips supplement files",
-			book: &models.Book{
-				Files: []*models.File{
-					{ID: 1, FileType: models.FileTypePDF, FileRole: models.FileRoleSupplement},
-					{ID: 2, FileType: models.FileTypeM4B, FileRole: models.FileRoleMain},
-				},
-			},
-			want: models.FileTypeM4B,
-		},
-		{
-			name: "no files returns empty",
-			book: &models.Book{
-				Files: []*models.File{},
-			},
-			want: "",
-		},
-		{
-			name: "only supplement files returns empty",
-			book: &models.Book{
-				Files: []*models.File{
-					{ID: 1, FileType: models.FileTypePDF, FileRole: models.FileRoleSupplement},
-				},
-			},
-			want: "",
-		},
-	}
+	epubAndMOBI := &models.Book{ID: 1, Files: []*models.File{
+		{FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
+		{FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain},
+	}}
+	cbzWithPDFSupplement := &models.Book{ID: 2, Files: []*models.File{
+		{FileType: models.FileTypePDF, FileRole: models.FileRoleSupplement},
+		{FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
+	}}
+	noFiles := &models.Book{ID: 3}
+	all := []*models.Book{epubAndMOBI, cbzWithPDFSupplement, noFiles}
 
+	tests := []struct {
+		fileType string
+		want     []*models.Book
+	}{
+		{"", all},
+		{"all", all},
+		{models.FileTypeEPUB, []*models.Book{epubAndMOBI}},
+		{models.FileTypeMOBI, []*models.Book{epubAndMOBI}},
+		{"MOBI", []*models.Book{epubAndMOBI}},
+		{models.FileTypeCBZ, []*models.Book{cbzWithPDFSupplement}},
+		{models.FileTypePDF, nil},
+	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.fileType, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, getBookFileType(tc.book))
+			assert.Equal(t, tc.want, filterBooksByType(all, tc.fileType))
 		})
 	}
 }

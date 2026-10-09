@@ -196,6 +196,25 @@ func TestGetScopedFiles_CBZFilesSyncToo(t *testing.T) {
 	assert.Equal(t, []int{epub.ID, cbz.ID}, scopedFileIDs(files))
 }
 
+func TestGetScopedFiles_MOBIAndAZW3Excluded(t *testing.T) {
+	t.Parallel()
+	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
+
+	book := createBook(ctx, t, bookSvc, library.ID, "EPUB, MOBI, and AZW3")
+	epub := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/kindle/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
+	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/kindle/book.mobi", models.FileTypeMOBI, models.FileRoleMain, 2000)
+	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/kindle/book.azw3", models.FileTypeAZW3, models.FileRoleMain, 3000)
+
+	kindleOnly := createBook(ctx, t, bookSvc, library.ID, "Kindle Only")
+	_ = createFile(ctx, t, bookSvc, library.ID, kindleOnly.ID, "/tmp/test/kindle-only/book.azw3", models.FileTypeAZW3, models.FileRoleMain, 3000)
+
+	scope := &SyncScope{Type: "all"}
+	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
+	require.NoError(t, err)
+
+	assert.Equal(t, []int{epub.ID}, scopedFileIDs(files))
+}
+
 // insertList creates a list owned by the user holding the given books.
 func insertList(ctx context.Context, t *testing.T, koboSvc *Service, userID int, bookIDs ...int) *models.List {
 	t.Helper()
