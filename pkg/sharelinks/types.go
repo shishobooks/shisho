@@ -48,11 +48,13 @@ type CreateShareLinkPayload struct {
 // SharedBookResponse is the book a recipient sees through a Share Link. It is
 // the Book shape the detail page already renders, with every filesystem path
 // and cover filename blanked and the library removed, plus who shared it,
-// when the link expires, and the library's cover aspect ratio so the cover
-// box keeps its shape.
+// when the link expires, the library's cover aspect ratio so the cover box
+// keeps its shape, and which file the book cover comes from (the page cannot
+// work that out without the blanked cover filenames).
 type SharedBookResponse struct {
 	models.Book      `tstype:",extends"`
 	SharedBy         string     `json:"shared_by"`
 	ExpiresAt        *time.Time `json:"expires_at"`
 	CoverAspectRatio string     `json:"cover_aspect_ratio" tstype:"CoverAspectRatio"`
+	CoverFileID      *int       `json:"cover_file_id"` // nil when the book has no cover
 }

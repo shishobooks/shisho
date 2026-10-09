@@ -139,6 +139,11 @@ export interface ShareLinkContext {
    * Defaults to "book" (2:3).
    */
   coverAspectRatio?: CoverAspectRatio;
+  /**
+   * The file the book cover comes from. The recipient's payload has no cover
+   * filenames, so the page cannot pick it itself.
+   */
+  coverFileId?: number;
 }
 
 interface DownloadError {
@@ -1164,7 +1169,9 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
               files={mainFiles}
               getCoverUrl={shareLink?.fileCoverUrl}
               initialFileId={
-                selectCoverFile(mainFiles, libraryCoverAspectRatio)?.id
+                shareLink
+                  ? shareLink.coverFileId
+                  : selectCoverFile(mainFiles, libraryCoverAspectRatio)?.id
               }
             />
           ) : (

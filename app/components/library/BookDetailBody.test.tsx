@@ -844,9 +844,14 @@ describe("BookDetailBody rescans that remove the book", () => {
     }));
     renderOnBookPage();
 
+    const success = vi.spyOn(toast, "success");
     await rescanFirstFile();
 
-    await waitFor(() => expect(resync.file).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        "File removed (no longer on disk, or DRM-protected)",
+      ),
+    );
     expect(screen.queryByText("Home page")).not.toBeInTheDocument();
   });
 
@@ -884,6 +889,19 @@ describe("BookDetailBody cover gallery", () => {
     });
 
     expect(pressedTab()).toEqual(["AZW3"]);
+  });
+
+  it("opens on the file the server names for a Share Link recipient", () => {
+    // A recipient's payload has no cover filenames, so the page cannot pick
+    // the cover file itself.
+    const blanked = (id: number, fileType: string) =>
+      ({ ...withCover(id, fileType), cover_image_filename: undefined }) as File;
+    renderBody({
+      book: { ...book, files: [blanked(50, "azw3"), blanked(51, "mobi")] },
+      shareLink: { ...shareLink, coverFileId: 51 },
+    });
+
+    expect(pressedTab()).toEqual(["MOBI"]);
   });
 
   it("opens on the Preferred Cover file", () => {

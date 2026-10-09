@@ -126,8 +126,13 @@ func (h *publicHandler) book(c echo.Context) error {
 	}
 	countAccess(c.Request().Context(), link, h.service.RecordOpen)
 	aspectRatio := coverAspectRatio(book)
-	// The cache key reads cover filenames, so compute it before blanking.
+	// The cache key and the cover file read cover filenames, so compute them
+	// before blanking.
 	book.CoverCacheKey = covers.CacheKey(book.Files, aspectRatio)
+	var coverFileID *int
+	if f := covers.SelectFile(book.Files, aspectRatio); f != nil {
+		coverFileID = &f.ID
+	}
 	blankForRecipient(book)
 
 	return errors.WithStack(c.JSON(http.StatusOK, SharedBookResponse{
@@ -135,6 +140,7 @@ func (h *publicHandler) book(c echo.Context) error {
 		SharedBy:         link.CreatedByUser.Username,
 		ExpiresAt:        link.ExpiresAt,
 		CoverAspectRatio: aspectRatio,
+		CoverFileID:      coverFileID,
 	}))
 }
 

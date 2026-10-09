@@ -23,8 +23,10 @@ interface CoverGalleryTabsProps {
    * a cover.
    */
   getCoverUrl?: (file: File) => string | null;
-  /** The file whose tab opens first, normally the one whose cover represents
-   *  the book. Defaults to the first file. */
+  /**
+   * The file whose tab opens first, normally the one whose cover represents
+   * the book. Defaults to the first file.
+   */
   initialFileId?: number;
 }
 
@@ -62,6 +64,13 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
   });
 }
 
+/** The tab to open: initialFileId when it names one of the files, else the first. */
+const openingFileId = (
+  files: File[],
+  initialFileId: number | undefined,
+): number | null =>
+  (files.find((f) => f.id === initialFileId) ?? files[0])?.id ?? null;
+
 /**
  * Cover gallery tabs that appear below the main cover image.
  * Allows switching between different file covers when a book has multiple files.
@@ -73,17 +82,19 @@ function CoverGalleryTabs({
   getCoverUrl,
   initialFileId,
 }: CoverGalleryTabsProps) {
-  const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<number | null>(() =>
+    openingFileId(files, initialFileId),
+  );
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
 
   const filesWithLabels = getFilesWithLabels(files);
 
-  // Initialize the selected file to initialFileId, or the first file
+  // Return to the opening tab when the selected file goes away, such as a
+  // file deleted or demoted while the page is open.
   useEffect(() => {
-    if (files.length > 0 && selectedFileId === null) {
-      const initial = files.find((f) => f.id === initialFileId) ?? files[0];
-      setSelectedFileId(initial.id);
+    if (!files.some((f) => f.id === selectedFileId)) {
+      setSelectedFileId(openingFileId(files, initialFileId));
     }
   }, [files, initialFileId, selectedFileId]);
 
