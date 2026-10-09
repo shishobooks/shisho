@@ -91,16 +91,17 @@ describe("EPUBReader", () => {
       const menu = await screen.findByRole("combobox", {
         name: "Jump to chapter",
       });
-      const options = Array.from(
-        menu.querySelectorAll("option"),
-      ) as HTMLOptionElement[];
+      // The first option is the placeholder shown before a location is known.
+      const options = (
+        Array.from(menu.querySelectorAll("option")) as HTMLOptionElement[]
+      ).slice(1);
       const labels = options.map((o) => o.textContent?.trim());
-      expect(labels).toEqual(["—", "Part Two", "Chapter 3", "Afterword"]);
-      expect(options[1].disabled).toBe(true);
-      expect(options[2].disabled).toBe(false);
+      expect(labels).toEqual(["Part Two", "Chapter 3", "Afterword"]);
+      expect(options[0].disabled).toBe(true);
+      expect(options[1].disabled).toBe(false);
       // Nested chapters are indented under their heading.
-      expect(options[2].textContent).toMatch(/^\u00a0+Chapter 3$/);
-      expect(options[3].textContent).toBe("Afterword");
+      expect(options[1].textContent).toMatch(/^\u00a0+Chapter 3$/);
+      expect(options[2].textContent).toBe("Afterword");
     } finally {
       mockToc = [];
     }
