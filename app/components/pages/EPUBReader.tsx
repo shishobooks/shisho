@@ -280,6 +280,15 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [bookReady, goNext, goPrev]);
 
+  // The menu value for the current location. foliate reports a heading as
+  // the current item with no href, so a heading is found by its label.
+  const currentHeadingIndex = currentTocHref
+    ? -1
+    : toc.findIndex((e) => !e.href && e.label === currentTocLabel);
+  const currentTocValue =
+    currentTocHref ??
+    (currentHeadingIndex >= 0 ? `heading-${currentHeadingIndex}` : "");
+
   const handleTocChange = (href: string) => {
     const view = viewRef.current as
       (HTMLElement & { goTo?: (target: string) => void }) | null;
@@ -348,7 +357,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
               aria-label="Jump to chapter"
               className="text-sm bg-transparent border rounded px-2 py-1 cursor-pointer"
               onChange={(e) => handleTocChange(e.target.value)}
-              value={currentTocHref ?? ""}
+              value={currentTocValue}
             >
               {currentTocHref === null && <option value="">—</option>}
               {toc.map((entry, index) =>

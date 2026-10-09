@@ -161,6 +161,9 @@ export interface ChapterRowProps {
   onDeleteAt?: (path: number[]) => void;
   // EPUB edit mode: whether a chapter is a heading left with no chapters
   isEmptiedHeading?: (chapter: Chapter) => boolean;
+  // Edit mode: a stable key for a chapter, so nested rows keep their state
+  // when a sibling is deleted
+  editKeyOf?: (chapter: Chapter) => string;
   // M4B playback - uses chapterIndex in edit mode (since chapter.id may not exist)
   chapterIndex?: number;
   playingChapterIndex?: number | null;
@@ -401,7 +404,6 @@ const ChapterRow = (props: ChapterRowProps) => {
             {/* Title input */}
             <Input
               aria-describedby={emptiedHeading ? headingErrorId : undefined}
-              aria-invalid={emptiedHeading ? true : undefined}
               aria-label="Chapter title"
               className="flex-1"
               onChange={(e) => props.onTitleChange?.(e.target.value)}
@@ -431,9 +433,10 @@ const ChapterRow = (props: ChapterRowProps) => {
             <p
               className="mt-1 ml-8 text-xs text-destructive"
               id={headingErrorId}
+              role="status"
             >
-              No chapters are left under this heading. A book can't keep an
-              empty heading, so delete it before saving.
+              No chapters are left under this heading. Delete it before saving,
+              since downloads would drop an empty heading.
             </p>
           )}
         </div>
@@ -479,11 +482,12 @@ const ChapterRow = (props: ChapterRowProps) => {
             <ChapterRow
               chapter={child}
               depth={depth + 1}
+              editKeyOf={props.editKeyOf}
               file={file}
               fileType={fileType}
               isEditing={isEditing}
               isEmptiedHeading={props.isEmptiedHeading}
-              key={child.id ?? `new-${index}`}
+              key={props.editKeyOf?.(child) ?? child.id ?? `new-${index}`}
               onDelete={() =>
                 props.onDeleteAt?.([...(props.path ?? []), index])
               }

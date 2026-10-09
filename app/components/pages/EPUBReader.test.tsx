@@ -69,6 +69,44 @@ const pageTapZones = () =>
     .filter((button) => button.getAttribute("aria-hidden") === "true");
 
 describe("EPUBReader", () => {
+  it("shows the heading as the current entry when the location is under it", async () => {
+    mockToc = [
+      {
+        label: "Part Two",
+        href: "",
+        subitems: [{ label: "Chapter 3", href: "ch3.xhtml" }],
+      },
+    ];
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    try {
+      const { container } = renderReader();
+      const menu = (await screen.findByRole("combobox", {
+        name: "Jump to chapter",
+      })) as HTMLSelectElement;
+      // foliate reports a heading as the current item with a null href.
+      act(() => {
+        container.querySelector("foliate-view")!.dispatchEvent(
+          new CustomEvent("relocate", {
+            detail: {
+              fraction: 0.1,
+              tocItem: { label: "Part Two", href: null },
+            },
+          }),
+        );
+      });
+      expect(menu.selectedOptions[0]?.textContent).toBe("Part Two");
+    } finally {
+      mockToc = [];
+    }
+  });
+
   it("lists headings in the chapter menu without making them selectable", async () => {
     mockToc = [
       {

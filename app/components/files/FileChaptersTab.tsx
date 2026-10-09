@@ -81,6 +81,11 @@ interface EditedChapter extends ChapterInput {
 let editKeyCounter = 0;
 const nextEditKey = () => `ek-${++editKeyCounter}`;
 
+// ChapterRow types its chapter as Chapter, but in edit mode every chapter it
+// renders, nested ones included, is an EditedChapter carrying its edit key.
+const editKeyOf = (chapter: Chapter) =>
+  (chapter as unknown as EditedChapter)._editKey;
+
 const toEditedChapters = (chapters: ChapterInput[]): EditedChapter[] =>
   chapters.map((c) => ({
     ...c,
@@ -193,13 +198,15 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       (hasError) => hasError,
     );
 
-    // EPUB headings (chapters without an href) whose chapters were all
-    // deleted in this edit. A book cannot keep a heading with nothing under
-    // it, so downloads would drop it; saving waits until the user deletes it
-    // instead of the heading disappearing on its own. A heading the book
-    // already leaves empty is not flagged.
+    // Edit keys of EPUB headings (chapters without an href) whose chapters
+    // were all deleted in this edit. A nav heading cannot stand with nothing
+    // under it, so downloads would drop it; saving waits until the user
+    // deletes it instead of the heading disappearing on its own. A heading
+    // the book already leaves empty is not flagged. Chapters from a sidecar
+    // or plugin can lack an href without being headings; they are flagged
+    // too, which only asks for an extra delete.
     const emptiedHeadings = useMemo(() => {
-      const emptied = new Set<EditedChapter>();
+      const emptied = new Set<string>();
       if (!isEditing || file.file_type !== FileTypeEPUB) return emptied;
       const hadChildren = new Set<string>();
       const index = (chapters: EditedChapter[]) => {
@@ -215,7 +222,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
             c.children.length === 0 &&
             hadChildren.has(c._editKey)
           ) {
-            emptied.add(c);
+            emptied.add(c._editKey);
           }
           walk(c.children);
         }
@@ -715,13 +722,12 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               chapter={chapter as unknown as Chapter}
               chapterIndex={isM4b ? index : undefined}
               depth={0}
+              editKeyOf={editKeyOf}
               file={file}
               fileType={file.file_type}
               isEditing={true}
               isEmptiedHeading={
-                isEpub
-                  ? (c) => emptiedHeadings.has(c as unknown as EditedChapter)
-                  : undefined
+                isEpub ? (c) => emptiedHeadings.has(editKeyOf(c)) : undefined
               }
               key={chapter._editKey}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
