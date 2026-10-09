@@ -22,6 +22,9 @@ vi.mock("@/hooks/queries/epub", () => ({
   useEpubBlob: vi.fn(),
 }));
 
+// The table of contents the mocked foliate view reports once a book opens.
+let mockToc: unknown[] = [];
+
 beforeAll(() => {
   if (!customElements.get("foliate-view")) {
     customElements.define(
@@ -32,7 +35,7 @@ beforeAll(() => {
         goRight = vi.fn();
         goTo = vi.fn();
         goToFraction = vi.fn();
-        book = { toc: [] };
+        book = { toc: mockToc };
       },
     );
   }
@@ -66,6 +69,43 @@ const pageTapZones = () =>
     .filter((button) => button.getAttribute("aria-hidden") === "true");
 
 describe("EPUBReader", () => {
+  it("lists headings in the chapter menu without making them selectable", async () => {
+    mockToc = [
+      {
+        label: "Part Two",
+        href: "",
+        subitems: [{ label: "Chapter 3", href: "ch3.xhtml" }],
+      },
+      { label: "Afterword", href: "after.xhtml" },
+    ];
+    vi.mocked(useEpubBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    try {
+      renderReader();
+      const menu = await screen.findByRole("combobox", {
+        name: "Jump to chapter",
+      });
+      const options = Array.from(
+        menu.querySelectorAll("option"),
+      ) as HTMLOptionElement[];
+      const labels = options.map((o) => o.textContent?.trim());
+      expect(labels).toEqual(["—", "Part Two", "Chapter 3", "Afterword"]);
+      expect(options[1].disabled).toBe(true);
+      expect(options[2].disabled).toBe(false);
+      // Nested chapters are indented under their heading.
+      expect(options[2].textContent).toMatch(/^\u00a0+Chapter 3$/);
+      expect(options[3].textContent).toBe("Afterword");
+    } finally {
+      mockToc = [];
+    }
+  });
+
   it("shows a loading indicator while fetching the EPUB", () => {
     vi.mocked(useEpubBlob).mockReturnValue({
       data: undefined,

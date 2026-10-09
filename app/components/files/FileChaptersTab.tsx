@@ -193,6 +193,40 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       (hasError) => hasError,
     );
 
+    // EPUB headings (chapters without an href) whose chapters were all
+    // deleted in this edit. A book cannot keep a heading with nothing under
+    // it, so downloads would drop it; saving waits until the user deletes it
+    // instead of the heading disappearing on its own. A heading the book
+    // already leaves empty is not flagged.
+    const emptiedHeadings = useMemo(() => {
+      const emptied = new Set<EditedChapter>();
+      if (!isEditing || file.file_type !== FileTypeEPUB) return emptied;
+      const hadChildren = new Set<string>();
+      const index = (chapters: EditedChapter[]) => {
+        for (const c of chapters) {
+          if (c.children.length > 0) hadChildren.add(c._editKey);
+          index(c.children);
+        }
+      };
+      const walk = (chapters: EditedChapter[]) => {
+        for (const c of chapters) {
+          if (
+            !c.href &&
+            c.children.length === 0 &&
+            hadChildren.has(c._editKey)
+          ) {
+            emptied.add(c);
+          }
+          walk(c.children);
+        }
+      };
+      index(initialChapters);
+      walk(editedChapters);
+      return emptied;
+    }, [isEditing, file.file_type, initialChapters, editedChapters]);
+    const canSave =
+      isEditing && !hasValidationErrors && emptiedHeadings.size === 0;
+
     /**
      * Stops audio playback and clears the playback timeout.
      */
@@ -415,6 +449,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
      * client-only `_editKey` fields before sending to the server.
      */
     const handleSave = () => {
+      if (!canSave) return;
       const normalized = normalizeChapterOrder(
         stripEditKeys(editedChapters),
         file.file_type,
@@ -450,7 +485,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
         cancel: handleCancel,
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [editedChapters],
+      [editedChapters, canSave],
     );
 
     // Compute whether chapters have been modified
@@ -463,12 +498,12 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     useEffect(() => {
       onActionStateChange?.({
         isSaving: updateChaptersMutation.isPending,
-        canSave: isEditing && !hasValidationErrors,
+        canSave,
         hasChanges,
       });
     }, [
       updateChaptersMutation.isPending,
-      hasValidationErrors,
+      canSave,
       hasChanges,
       isEditing,
       onActionStateChange,
@@ -704,6 +739,11 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               file={file}
               fileType={file.file_type}
               isEditing={true}
+              isEmptiedHeading={
+                isEpub
+                  ? (c) => emptiedHeadings.has(c as unknown as EditedChapter)
+                  : undefined
+              }
               key={chapter._editKey}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
               onBlur={
