@@ -9,7 +9,9 @@ import (
 )
 
 // writeMinimalEPUB writes a small valid EPUB at path so E2E tests can download
-// a generated file. It carries only a title, an identifier, and one chapter.
+// a generated file. It carries only a title, an identifier, and one chapter,
+// styled with a white body and black text the way Project Gutenberg EPUBs
+// are, so the reader e2e test can check that themes override book colors.
 func writeMinimalEPUB(path, title string) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -56,8 +58,9 @@ func writeMinimalEPUB(path, title string) (err error) {
 		{"OEBPS/chapter1.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>` + escaped + `</title></head>
-<body><p>Test chapter.</p></body>
+<head><title>` + escaped + `</title>
+<style>body { color: black; background-color: white; } a { color: blue; }</style></head>
+<body><p>Test chapter. <a href="#end">A link.</a></p><p id="end">The end.</p></body>
 </html>`},
 	}
 	for _, e := range entries {

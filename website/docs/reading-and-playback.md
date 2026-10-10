@@ -12,11 +12,11 @@ EPUB, MOBI, and AZW3 files open in the same reader, which provides:
 - Previous and next page controls
 - A progress bar that can jump within the book
 - **Paginated** and **Scrolled** flow modes
-- **Light**, **Dark**, and **Sepia** themes
+- **Light**, **Dark**, and **Sepia** themes. Light keeps the book's own text and background colors; Dark and Sepia replace them.
 - Font sizes from 50% to 200%
 - Optional automatic hiding of the header and footer
 
-Use the **Settings** button inside the reader to change font size, theme, flow, and control visibility. These settings apply to all three formats, so a theme chosen while reading a MOBI also applies to EPUBs. In paginated mode, click or tap the left and right sides to change pages. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward.
+Use the **Settings** button inside the reader to change font size, theme, flow, and control visibility. These settings apply to all three formats, so a theme chosen while reading a MOBI also applies to EPUBs. In paginated mode, click or tap the left and right sides to change pages. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page (paginated) or the text (scrolled).
 
 Reading position is not persisted. Reopening a book starts from the beginning.
 

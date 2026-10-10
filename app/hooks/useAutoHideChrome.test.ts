@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAutoHideChrome } from "./useAutoHideChrome";
 
+// jsdom has no PointerEvent constructor.
+const pointerMove = (pointerType: string) =>
+  Object.assign(new Event("pointermove"), { pointerType });
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -34,8 +38,38 @@ describe("useAutoHideChrome", () => {
     expect(result.current.chromeVisible).toBe(false);
 
     act(() => {
-      window.dispatchEvent(new Event("mousemove"));
+      window.dispatchEvent(pointerMove("mouse"));
     });
+    expect(result.current.chromeVisible).toBe(true);
+
+    act(() => vi.advanceTimersByTime(3000));
+    expect(result.current.chromeVisible).toBe(false);
+  });
+
+  // A tap sends compatibility mouse events before the click, so treating
+  // them as movement would show the chrome and the tap's toggle would hide
+  // it again in the same gesture.
+  it("lets a tap's toggle show hidden chrome", () => {
+    const { result } = renderHook(() => useAutoHideChrome(true));
+
+    act(() => vi.advanceTimersByTime(2000));
+    expect(result.current.chromeVisible).toBe(false);
+
+    act(() => {
+      window.dispatchEvent(pointerMove("touch"));
+      window.dispatchEvent(new Event("mousemove"));
+      result.current.toggleChrome();
+    });
+    expect(result.current.chromeVisible).toBe(true);
+  });
+
+  it("revealChrome shows chrome for movement the window never sees", () => {
+    const { result } = renderHook(() => useAutoHideChrome(true));
+
+    act(() => vi.advanceTimersByTime(2000));
+    expect(result.current.chromeVisible).toBe(false);
+
+    act(() => result.current.revealChrome());
     expect(result.current.chromeVisible).toBe(true);
 
     act(() => vi.advanceTimersByTime(3000));

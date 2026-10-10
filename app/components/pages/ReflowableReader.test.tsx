@@ -319,6 +319,91 @@ describe("ReflowableReader", () => {
     ).not.toBeInTheDocument();
   });
 
+  describe("clicks inside the book", () => {
+    // foliate reports each loaded section's document in a "load" event.
+    const loadSection = (container: HTMLElement) => {
+      const doc = document.implementation.createHTMLDocument("section");
+      doc.body.innerHTML = '<p>Text <a href="#n">note</a></p>';
+      act(() => {
+        container
+          .querySelector("foliate-view")!
+          .dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+      });
+      return doc;
+    };
+    const header = () => screen.getByRole("banner");
+
+    const renderWithAutoHide = (flow: "paginated" | "scrolled") => {
+      vi.mocked(useUserSettings).mockReturnValue({
+        data: {
+          viewer_reflowable_font_size: 100,
+          viewer_reflowable_theme: "light",
+          viewer_reflowable_flow: flow,
+          viewer_hide_chrome: true,
+        },
+        isLoading: false,
+      } as never);
+      vi.mocked(useReflowableBlob).mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as never);
+      return renderReader();
+    };
+
+    it("toggle the controls in scrolled flow", () => {
+      const { container } = renderWithAutoHide("scrolled");
+      const doc = loadSection(container);
+      expect(header()).not.toHaveClass("-translate-y-full");
+
+      act(() => doc.querySelector("p")!.click());
+      expect(header()).toHaveClass("-translate-y-full");
+
+      act(() => doc.querySelector("p")!.click());
+      expect(header()).not.toHaveClass("-translate-y-full");
+    });
+
+    it("show hidden controls on a tap in scrolled flow", () => {
+      vi.useFakeTimers();
+      const { container } = renderWithAutoHide("scrolled");
+      const doc = loadSection(container);
+      act(() => vi.advanceTimersByTime(2000));
+      expect(header()).toHaveClass("-translate-y-full");
+
+      // A tap sends compatibility mouse events before its click.
+      const p = doc.querySelector("p")!;
+      act(() => {
+        p.dispatchEvent(
+          Object.assign(new Event("pointermove", { bubbles: true }), {
+            pointerType: "touch",
+          }),
+        );
+        p.dispatchEvent(new Event("mousemove", { bubbles: true }));
+        p.click();
+      });
+      expect(header()).not.toHaveClass("-translate-y-full");
+      vi.useRealTimers();
+    });
+
+    it("leave the controls alone when following a link", () => {
+      const { container } = renderWithAutoHide("scrolled");
+      const doc = loadSection(container);
+
+      act(() => doc.querySelector("a")!.click());
+      expect(header()).not.toHaveClass("-translate-y-full");
+    });
+
+    it("leave the controls to the tap zones in paginated flow", () => {
+      const { container } = renderWithAutoHide("paginated");
+      const doc = loadSection(container);
+
+      act(() => doc.querySelector("p")!.click());
+      expect(header()).not.toHaveClass("-translate-y-full");
+    });
+  });
+
   it("updates settings when the theme button is clicked", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const mutate = vi.fn();
