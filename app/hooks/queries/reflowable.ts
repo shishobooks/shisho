@@ -33,9 +33,8 @@ export const useReflowableBlob = (
       const response = await fetch(fileDownloadUrl(fileId), { signal });
       if (response.ok) return response.blob();
       const error = await API.checkStatus(response).catch((e: unknown) => e);
-      // invalid_state means the server has no generator for this type (MOBI
-      // and AZW3 until #660), so read the file as it sits on disk, as
-      // Download Original would.
+      // invalid_state means the server has no generator for this type, so
+      // read the file as it sits on disk, as Download Original would.
       if (!(
         error instanceof ShishoAPIError && error.code === "invalid_state"
       )) {

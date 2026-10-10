@@ -211,6 +211,23 @@ describe("ReflowableReader", () => {
     expect(opened.type).toBe("application/x-mobipocket-ebook");
   });
 
+  // foliate throws if asked to turn a page before a book has opened.
+  it("disables the page buttons until the book is ready", () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    expect(
+      screen.getByRole("button", { name: "Previous page" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+  });
+
   it("shows the extended-wait hint after 10 seconds of loading", () => {
     vi.useFakeTimers();
     vi.mocked(useReflowableBlob).mockReturnValue({

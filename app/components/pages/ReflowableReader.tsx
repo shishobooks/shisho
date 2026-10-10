@@ -645,6 +645,7 @@ export default function ReflowableReader({
         <div className="flex items-center justify-between px-4 py-2">
           <Button
             aria-label="Previous page"
+            disabled={!bookReady}
             onClick={goPrev}
             size="icon"
             variant="ghost"
@@ -656,6 +657,7 @@ export default function ReflowableReader({
           </span>
           <Button
             aria-label="Next page"
+            disabled={!bookReady}
             onClick={goNext}
             size="icon"
             variant="ghost"
