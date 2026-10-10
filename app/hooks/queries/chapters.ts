@@ -8,8 +8,8 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { Chapter, ChapterInput, ReplaceChaptersPayload } from "@/types";
 
-import { QueryKey as EpubQueryKey } from "./epub";
 import { useRequires } from "./permissions";
+import { QueryKey as ReflowableQueryKey } from "./reflowable";
 
 export enum QueryKey {
   FileChapters = "FileChapters",
@@ -63,10 +63,10 @@ export const useUpdateFileChapters = (fileId: number) => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.FileChapters, fileId],
       });
-      // The reader's EPUB is the generated download, whose table of contents
+      // The reader's book is the generated download, whose table of contents
       // carries the chapters.
       queryClient.invalidateQueries({
-        queryKey: [EpubQueryKey.EpubBlob, fileId],
+        queryKey: [ReflowableQueryKey.ReflowableBlob, fileId],
       });
     },
   });
