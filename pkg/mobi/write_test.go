@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"math/rand/v2"
@@ -467,6 +468,84 @@ func TestRewrite_ExtendsLastContentRecord(t *testing.T) {
 	rec, err := db.record(0, maxHeaderRecord)
 	require.NoError(t, err)
 	h := headerAt(t, db, 0)
+	offset, _ := h.number(exthCoverOffset)
+	assert.Equal(t, int(h.firstImage+offset), int(binary.BigEndian.Uint16(rec[offLastContent:])))
+}
+
+// A file whose thumbnail record is its cover record keeps the full cover.
+func TestRewrite_ThumbnailSharedWithCover(t *testing.T) {
+	t.Parallel()
+
+	src := testgen.BuildMOBI(t, calibreOptions(testgen.MOBIKindMOBI6))
+	thumbRecord := []byte{0, 0, 0, 202, 0, 0, 0, 12, 0, 0, 0, 1}
+	require.Equal(t, 1, bytes.Count(src, thumbRecord))
+	copy(src[bytes.Index(src, thumbRecord)+11:], []byte{0})
+
+	cover := testImage(t, 400, 600, "image/jpeg")
+	var out bytes.Buffer
+	require.NoError(t, Rewrite(bytes.NewReader(src), int64(len(src)), &out, &Metadata{Cover: cover}))
+	assert.Equal(t, cover, parseBytes(t, out.Bytes()).CoverData)
+}
+
+// A source that ends early fails instead of writing a file whose record list
+// does not match its records.
+func TestRewrite_ShortSourceFails(t *testing.T) {
+	t.Parallel()
+
+	src := testgen.BuildMOBI(t, calibreOptions(testgen.MOBIKindKF8))
+	err := Rewrite(bytes.NewReader(src[:len(src)-2]), int64(len(src)), &bytes.Buffer{}, &Metadata{Title: "x"})
+	require.Error(t, err)
+}
+
+func TestRewrite_KeepsGapBytes(t *testing.T) {
+	t.Parallel()
+
+	src := testgen.BuildMOBI(t, calibreOptions(testgen.MOBIKindMOBI6))
+	db := openPDB(t, src)
+	gapStart := pdbHeaderSize + db.count()*pdbRecordEntry
+	copy(src[gapStart:db.offsets[0]], []byte{0xAB, 0xCD})
+
+	var out bytes.Buffer
+	require.NoError(t, Rewrite(bytes.NewReader(src), int64(len(src)), &out, &Metadata{Title: "x"}))
+	assert.Equal(t, []byte{0xAB, 0xCD}, out.Bytes()[gapStart:gapStart+2])
+}
+
+// A transparent GIF cover's thumbnail is flattened onto white, as the cover
+// would show on a page.
+func TestRewrite_TransparentGIFThumbnailIsWhite(t *testing.T) {
+	t.Parallel()
+
+	img := image.NewPaletted(image.Rect(0, 0, 400, 600), color.Palette{color.Transparent, color.Black})
+	var buf bytes.Buffer
+	require.NoError(t, gif.Encode(&buf, img, nil))
+
+	_, out := rewriteBuilt(t, calibreOptions(testgen.MOBIKindMOBI6), &Metadata{Cover: buf.Bytes()})
+	db := openPDB(t, out)
+	h := headerAt(t, db, 0)
+	thumbOffset, _ := h.number(exthThumbOffset)
+	thumb, err := db.record(int(h.firstImage+thumbOffset), maxImageRecord)
+	require.NoError(t, err)
+	decoded, err := jpeg.Decode(bytes.NewReader(thumb))
+	require.NoError(t, err)
+	r, g, b, _ := decoded.At(10, 10).RGBA()
+	assert.Greater(t, min(r, g, b), uint32(0xF000), "expected white, got %d %d %d", r, g, b)
+}
+
+// Records between the last image and the trailers, such as a font, leave the
+// inserted cover past the old last content record; it still becomes the last.
+func TestRewrite_LastContentReachesCoverPastOtherRecords(t *testing.T) {
+	t.Parallel()
+
+	src := testgen.BuildMOBI(t, withoutCover(calibreOptions(testgen.MOBIKindMOBI6)))
+	db := openPDB(t, src)
+	binary.BigEndian.PutUint16(src[db.offsets[0]+offLastContent:], 0) // before every text record
+
+	var out bytes.Buffer
+	require.NoError(t, Rewrite(bytes.NewReader(src), int64(len(src)), &out, &Metadata{Cover: testImage(t, 40, 60, "image/jpeg")}))
+	outDB := openPDB(t, out.Bytes())
+	rec, err := outDB.record(0, maxHeaderRecord)
+	require.NoError(t, err)
+	h := headerAt(t, outDB, 0)
 	offset, _ := h.number(exthCoverOffset)
 	assert.Equal(t, int(h.firstImage+offset), int(binary.BigEndian.Uint16(rec[offLastContent:])))
 }

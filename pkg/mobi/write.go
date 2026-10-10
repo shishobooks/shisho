@@ -169,7 +169,7 @@ func (f *pdbFile) placeCover(cover []byte, first, kf8 *header, kf8Index *int) (*
 		if index, ok := f.imageIndex(firstImage, offset, found); ok {
 			f.records[index] = cover
 			thumbOffset, found := numberIn(exthThumbOffset, first, kf8)
-			if thumb, ok := f.imageIndex(firstImage, thumbOffset, found); ok {
+			if thumb, ok := f.imageIndex(firstImage, thumbOffset, found); ok && thumb != index {
 				thumbnail, err := thumbnailOf(cover)
 				if err != nil {
 					return nil, err
@@ -295,11 +295,17 @@ func shiftIndexes(rec []byte, base, p int) {
 		}
 		return
 	}
-	// The last content record is the last image, so an image inserted right
-	// after it becomes the last content record.
+	// The last content record is the last image. The inserted record is an
+	// image placed after every other image, so it becomes the last content
+	// record unless that already lies beyond it.
 	if offLastContent+2 <= end {
-		if v := be.Uint16(rec[offLastContent:]); v != 0xFFFF && base+int(v) >= p-1 {
+		v := be.Uint16(rec[offLastContent:])
+		switch {
+		case v == 0xFFFF:
+		case base+int(v) >= p:
 			be.PutUint16(rec[offLastContent:], v+1)
+		default:
+			be.PutUint16(rec[offLastContent:], uint16(p-base)) //nolint:gosec // a Palm database has at most 65535 records
 		}
 	}
 }
@@ -327,8 +333,10 @@ func thumbnailOf(cover []byte) ([]byte, error) {
 	scale := min(float64(thumbnailWidth)/float64(cfg.Width), float64(thumbnailHeight)/float64(cfg.Height))
 	w := max(1, int(float64(cfg.Width)*scale+0.5))
 	h := max(1, int(float64(cfg.Height)*scale+0.5))
+	// JPEG has no transparency, so a transparent GIF is flattened onto white.
 	thumb := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.CatmullRom.Scale(thumb, thumb.Bounds(), img, img.Bounds(), draw.Src, nil)
+	draw.Draw(thumb, thumb.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.CatmullRom.Scale(thumb, thumb.Bounds(), img, img.Bounds(), draw.Over, nil)
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 90}); err != nil {
 		return nil, errors.Wrap(err, "encode thumbnail")
@@ -558,7 +566,7 @@ type pdbFile struct {
 	// entries holds each record's attributes and unique ID: the last four
 	// bytes of its record list entry.
 	entries [][4]byte
-	gap     int // bytes between the record list and the first record
+	gap     []byte // the bytes between the record list and the first record
 	// spans locate each record in the source; an inserted record has none.
 	spans []span
 	// records holds the records read or replaced; nil means the source's.
@@ -576,7 +584,7 @@ func readPDBFile(r io.ReaderAt, size int64) (*pdbFile, error) {
 	}
 	count := db.count()
 
-	head := make([]byte, pdbHeaderSize+count*pdbRecordEntry)
+	head := make([]byte, db.offsets[0])
 	if _, err := r.ReadAt(head, 0); err != nil {
 		return nil, errors.Wrap(err, "read record list")
 	}
@@ -586,7 +594,7 @@ func readPDBFile(r io.ReaderAt, size int64) (*pdbFile, error) {
 		entries: make([][4]byte, count),
 		spans:   make([]span, count),
 		records: make([][]byte, count),
-		gap:     int(db.offsets[0]) - len(head),
+		gap:     head[pdbHeaderSize+count*pdbRecordEntry:],
 	}
 	for i := range count {
 		copy(f.entries[i][:], head[pdbHeaderSize+i*pdbRecordEntry+4:])
@@ -660,7 +668,7 @@ func (f *pdbFile) writeTo(w io.Writer) error {
 	be.PutUint16(header[pdbRecordsOffset:], uint16(count))
 
 	list := make([]byte, count*pdbRecordEntry)
-	offset := int64(len(header) + len(list) + f.gap)
+	offset := int64(len(header) + len(list) + len(f.gap))
 	for i := range f.records {
 		if offset > 0xFFFFFFFF {
 			return errors.New("MOBI file is too large")
@@ -673,7 +681,7 @@ func (f *pdbFile) writeTo(w io.Writer) error {
 	bw := &errWriter{w: w}
 	bw.write(header)
 	bw.write(list)
-	bw.write(make([]byte, f.gap))
+	bw.write(f.gap)
 	for i, rec := range f.records {
 		if bw.err != nil {
 			break
@@ -683,7 +691,9 @@ func (f *pdbFile) writeTo(w io.Writer) error {
 			continue
 		}
 		sp := f.spans[i]
-		if _, err := io.Copy(w, io.NewSectionReader(f.src, sp.offset, sp.size)); err != nil {
+		// CopyN fails on a source that ends early, which would leave the
+		// record list pointing past the records.
+		if _, err := io.CopyN(w, io.NewSectionReader(f.src, sp.offset, sp.size), sp.size); err != nil {
 			bw.err = err
 		}
 	}
