@@ -115,19 +115,25 @@ func validateFileTypes(types string) error {
 		return errcodes.ValidationError("File types parameter is required")
 	}
 
-	validTypes := map[string]bool{
-		models.FileTypeEPUB: true,
-		models.FileTypeCBZ:  true,
-		models.FileTypeM4B:  true,
-		models.FileTypePDF:  true,
-	}
-
 	for _, t := range parseFileTypes(types) {
-		if !validTypes[t] {
+		if !models.IsBuiltInFileType(t) {
 			return errcodes.ValidationError("Invalid file type: " + t)
 		}
 	}
 
+	return nil
+}
+
+// validateKepubFileTypes validates the file types parameter of a KePub feed.
+// The feed skips MOBI and AZW3 (see kepubFileTypes), so it needs at least one
+// other type; with none, its book queries would apply no type filter at all.
+func validateKepubFileTypes(types string) error {
+	if err := validateFileTypes(types); err != nil {
+		return err
+	}
+	if len(kepubFileTypes(types)) == 0 {
+		return errcodes.ValidationError("KePub feeds need a file type other than mobi or azw3")
+	}
 	return nil
 }
 
@@ -431,7 +437,7 @@ func (h *handler) catalogKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -453,7 +459,7 @@ func (h *handler) libraryCatalogKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -480,7 +486,7 @@ func (h *handler) libraryAllBooksKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -514,7 +520,7 @@ func (h *handler) librarySeriesListKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -543,7 +549,7 @@ func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -582,7 +588,7 @@ func (h *handler) libraryAuthorsListKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -611,7 +617,7 @@ func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -650,7 +656,7 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 
@@ -688,7 +694,7 @@ func (h *handler) librarySearchKepub(c echo.Context) error {
 func (h *handler) libraryOpenSearchKepub(c echo.Context) error {
 	fileTypes := c.Param("types")
 
-	if err := validateFileTypes(fileTypes); err != nil {
+	if err := validateKepubFileTypes(fileTypes); err != nil {
 		return err
 	}
 

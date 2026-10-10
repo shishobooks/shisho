@@ -1,6 +1,6 @@
 # eReader Browser
 
-The eReader Browser is a lightweight, server-rendered interface for downloading books from simple e-ink web browsers. It uses minimal HTML and no JavaScript.
+The eReader Browser is a lightweight, server-rendered interface for downloading books from simple e-ink web browsers, such as the ones on Kobo and Kindle devices. It uses minimal HTML and no JavaScript.
 
 ## Setup
 
@@ -42,8 +42,8 @@ The current browser provides:
 
 - A list of libraries the device owner's user can access.
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
-- EPUB, CBZ, M4B, and PDF type filters.
-- Book details and a separate download for every main-file edition.
+- EPUB, CBZ, M4B, PDF, MOBI, and AZW3 type filters. A filter shows the books with a main file of that type.
+- Book details and a separate download for every main-file edition, except on a Kindle (see [On a Kindle](#on-a-kindle)).
 - The user's saved per-library [sort](./browsing-search-bulk-actions.md#gallery-sort) on **All Books**, author, and search results. Series books follow series-number order.
 - An optional cover toggle.
 
@@ -51,9 +51,22 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 
 ## Downloads
 
-Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B and PDF remain generated downloads in their native formats.
+Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B, PDF, MOBI, and AZW3 remain generated downloads in their native formats.
 
 Covers are off by default. Leave them off on slow devices or networks to reduce page size and image requests.
+
+### On a Kindle
+
+A Kindle's browser downloads only a few formats: MOBI on every model, and AZW3 only on firmware older than 5.16.4. It refuses EPUB, PDF, and everything else. When the request's User-Agent contains `Kindle/`, which every e-ink Kindle sends, the browser offers only what a Kindle can download:
+
+- A book's page offers its MOBI files. A book with no MOBI offers its AZW3 files instead, with a note that newer Kindles may refuse them.
+- A book with neither is marked **Unavailable on Kindle**, both in book lists and on the book's page, and offers no download.
+
+Fire tablets browse with Silk, which does not send `Kindle/`, so they see every download like any other browser.
+
+A MOBI or AZW3 download carries the book's current metadata and cover; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for what is written.
+
+To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book onto a Kindle when it has only an EPUB, or only an AZW3 and the Kindle refuses it, add a MOBI file to the book in Shisho.
 
 ## Troubleshooting
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -46,6 +47,12 @@ func parseFileTypes(types string) []string {
 		return nil
 	}
 	return strings.Split(types, "+")
+}
+
+// kepubFileTypes parses the file types of a KePub feed, skipping the Kindle
+// formats: KePub feeds are for Kobo devices, which cannot open them.
+func kepubFileTypes(types string) []string {
+	return slices.DeleteFunc(parseFileTypes(types), models.IsKindleFileType)
 }
 
 // BuildCatalogFeed builds the root navigation feed listing all libraries.
@@ -138,11 +145,11 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL, fileT
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -173,7 +180,7 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL, fileT
 
 // BuildLibraryAllBooksFeedKepub builds an acquisition feed with all books using KePub download links.
 func (svc *Service) BuildLibraryAllBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -183,11 +190,11 @@ func (svc *Service) BuildLibraryAllBooksFeedKepub(ctx context.Context, baseURL, 
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -300,12 +307,12 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		SeriesID:  &seriesID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		SeriesID:      &seriesID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -336,7 +343,7 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL, fi
 
 // BuildLibrarySeriesBooksFeedKepub builds an acquisition feed with books in a series using KePub download links.
 func (svc *Service) BuildLibrarySeriesBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID, seriesID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -351,12 +358,12 @@ func (svc *Service) BuildLibrarySeriesBooksFeedKepub(ctx context.Context, baseUR
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		SeriesID:  &seriesID,
-		FileTypes: types,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		SeriesID:      &seriesID,
+		MainFileTypes: types,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -506,12 +513,12 @@ func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, author
 	}
 
 	return svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		PersonID:  &person.ID,
-		FileTypes: fileTypes,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		PersonID:      &person.ID,
+		MainFileTypes: fileTypes,
+		Sort:          sort,
 	})
 }
 
@@ -557,7 +564,7 @@ func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL, fi
 
 // BuildLibraryAuthorBooksFeedKepub builds an acquisition feed with books by an author using KePub download links.
 func (svc *Service) BuildLibraryAuthorBooksFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID int, authorName string, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -607,12 +614,12 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTyp
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Search:    &query,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Search:        &query,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -647,7 +654,7 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL, fileTyp
 
 // BuildLibrarySearchFeedKepub builds an acquisition feed with search results using KePub download links.
 func (svc *Service) BuildLibrarySearchFeedKepub(ctx context.Context, baseURL, fileTypes string, libraryID int, query string, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
-	types := parseFileTypes(fileTypes)
+	types := kepubFileTypes(fileTypes)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
@@ -657,12 +664,12 @@ func (svc *Service) BuildLibrarySearchFeedKepub(ctx context.Context, baseURL, fi
 	}
 
 	booksResult, total, err := svc.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
-		Limit:     &limit,
-		Offset:    &offset,
-		LibraryID: &libraryID,
-		FileTypes: types,
-		Search:    &query,
-		Sort:      sort,
+		Limit:         &limit,
+		Offset:        &offset,
+		LibraryID:     &libraryID,
+		MainFileTypes: types,
+		Search:        &query,
+		Sort:          sort,
 	})
 	if err != nil {
 		return nil, err
@@ -791,8 +798,11 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		entry.AddThumbnailLink(coverURL, mimeType)
 	}
 
-	// Acquisition links for each file
+	// Acquisition links for each main file. Supplements are not offered.
 	for _, file := range book.Files {
+		if file.FileRole == models.FileRoleSupplement {
+			continue
+		}
 		// If filtering by types, only include matching files
 		if len(types) > 0 && !containsString(types, file.FileType) {
 			continue

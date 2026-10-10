@@ -77,6 +77,15 @@ func IsEbookFileType(fileType string) bool {
 	return slices.Contains(EbookFileTypes, fileType)
 }
 
+// KindleFileTypes are the Kindle formats. Kobo devices cannot open them, so
+// Kobo Sync and KePub feeds leave them out.
+var KindleFileTypes = []string{FileTypeAZW3, FileTypeMOBI}
+
+// IsKindleFileType reports whether a file type is a Kindle format.
+func IsKindleFileType(fileType string) bool {
+	return slices.Contains(KindleFileTypes, fileType)
+}
+
 // EbookCoverRank orders ebook files when no file is the Preferred Cover:
 // EPUB, then AZW3, then MOBI, then the other ebook formats, which share a rank
 // so a stable sort keeps their order. app/utils/coverSelection.ts mirrors it.

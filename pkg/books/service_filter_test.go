@@ -183,3 +183,42 @@ func TestListBooks_ReviewedFilter(t *testing.T) {
 	assert.NotContains(t, gotIDs, bookFalse)
 	assert.NotContains(t, gotIDs, bookNull)
 }
+
+// TestListBooks_MainFileTypesFilter confirms MainFileTypes matches books by
+// their main files only, so a supplement of the type does not count.
+func TestListBooks_MainFileTypesFilter(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db, appsettings.NewService(db))
+	lib := seedLibrary(t, db, "Books")
+	now := time.Now()
+
+	addFile := func(book *models.Book, fileType, role string) {
+		_, err := db.NewInsert().Model(&models.File{
+			LibraryID: lib.ID, BookID: book.ID, FileType: fileType, FileRole: role,
+			Filepath: book.Filepath + "/" + role + "." + fileType, FilesizeBytes: 1,
+		}).Exec(context.Background())
+		require.NoError(t, err)
+	}
+	mainMOBI := seedBook(t, db, lib, "Main MOBI", "Main MOBI", now)
+	addFile(mainMOBI, models.FileTypeMOBI, models.FileRoleMain)
+	supplementMOBI := seedBook(t, db, lib, "Supplement MOBI", "Supplement MOBI", now)
+	addFile(supplementMOBI, models.FileTypeEPUB, models.FileRoleMain)
+	addFile(supplementMOBI, models.FileTypeMOBI, models.FileRoleSupplement)
+
+	got, total, err := svc.ListBooksWithTotal(context.Background(), ListBooksOptions{
+		LibraryID:     &lib.ID,
+		MainFileTypes: []string{models.FileTypeMOBI},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, total)
+	assert.Equal(t, mainMOBI.ID, got[0].ID)
+
+	_, total, err = svc.ListBooksWithTotal(context.Background(), ListBooksOptions{
+		LibraryID:     &lib.ID,
+		MainFileTypes: []string{models.FileTypeMOBI, models.FileTypeEPUB},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+}

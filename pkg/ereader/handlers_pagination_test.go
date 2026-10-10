@@ -99,12 +99,7 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 }
 
 // TestListBooksPaginated_TypeFilter confirms that an active type
-// filter switches to in-memory pagination and returns the filtered
-// total (not the unfiltered SQL total). This matches the
-// filter-then-paginate path used by LibraryAllBooks since the books
-// service's FileTypes filter is "any file matches", which disagrees
-// with the eReader's dominant-per-book display when a book has mixed
-// file types.
+// filter returns the filtered total (not the unfiltered count).
 func TestListBooksPaginated_TypeFilter(t *testing.T) {
 	t.Parallel()
 
@@ -163,4 +158,85 @@ func TestListBooksPaginated_TypeFilter(t *testing.T) {
 	_, total, err = h.listBooksPaginated(ctx, opts, 1, "all")
 	require.NoError(t, err)
 	assert.Equal(t, 5, total, `"all" is equivalent to no filter`)
+}
+
+// TestListBooksPaginated_TypeFilterPagesAndMatching confirms a type filter
+// pages through the matching books, ignores the type's case, and matches a
+// book by any of its main files but never by a supplement.
+func TestListBooksPaginated_TypeFilterPagesAndMatching(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	lib := &models.Library{
+		Name:                     "Books",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(lib).Exec(ctx)
+	require.NoError(t, err)
+
+	// mkBook adds a book whose files are main files of mainTypes and
+	// supplements of supplementTypes.
+	mkBook := func(i int, mainTypes []string, supplementTypes ...string) {
+		b := &models.Book{
+			LibraryID:       lib.ID,
+			Title:           fmt.Sprintf("Book %03d", i),
+			TitleSource:     models.DataSourceFilepath,
+			SortTitle:       fmt.Sprintf("Book %03d", i),
+			SortTitleSource: models.DataSourceFilepath,
+			AuthorSource:    models.DataSourceFilepath,
+			Filepath:        fmt.Sprintf("/b/%d", i),
+		}
+		_, err := db.NewInsert().Model(b).Exec(ctx)
+		require.NoError(t, err)
+		add := func(fileType, role string) {
+			_, err := db.NewInsert().Model(&models.File{
+				LibraryID: lib.ID, BookID: b.ID, FileType: fileType, FileRole: role,
+				Filepath: fmt.Sprintf("/b/%d/%s.%s", i, role, fileType), FilesizeBytes: 1,
+			}).Exec(ctx)
+			require.NoError(t, err)
+		}
+		for _, ft := range mainTypes {
+			add(ft, models.FileRoleMain)
+		}
+		for _, ft := range supplementTypes {
+			add(ft, models.FileRoleSupplement)
+		}
+	}
+
+	// defaultPageSize + 3 books with an EPUB and a MOBI, two with only a
+	// CBZ, and one with an EPUB main file and a PDF supplement.
+	n := defaultPageSize + 3
+	for i := 0; i < n; i++ {
+		mkBook(i, []string{models.FileTypeEPUB, models.FileTypeMOBI})
+	}
+	mkBook(n, []string{models.FileTypeCBZ})
+	mkBook(n+1, []string{models.FileTypeCBZ})
+	mkBook(n+2, []string{models.FileTypeEPUB}, models.FileTypePDF)
+
+	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
+	opts := books.ListBooksOptions{LibraryID: &lib.ID}
+
+	got, total, err := h.listBooksPaginated(ctx, opts, 1, "mobi")
+	require.NoError(t, err)
+	assert.Equal(t, n, total)
+	assert.Len(t, got, defaultPageSize)
+
+	got, total, err = h.listBooksPaginated(ctx, opts, 2, "mobi")
+	require.NoError(t, err)
+	assert.Equal(t, n, total)
+	assert.Len(t, got, 3)
+
+	// The second type of a book's main files matches, in any case.
+	_, total, err = h.listBooksPaginated(ctx, opts, 1, "EPUB")
+	require.NoError(t, err)
+	assert.Equal(t, n+1, total)
+
+	// A supplement's type matches nothing.
+	got, total, err = h.listBooksPaginated(ctx, opts, 1, "pdf")
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	assert.Empty(t, got)
 }
