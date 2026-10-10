@@ -139,6 +139,15 @@ func TestIsEbookFileType(t *testing.T) {
 	}
 }
 
+func TestIsKindleFileType(t *testing.T) {
+	t.Parallel()
+	assert.True(t, IsKindleFileType(FileTypeMOBI))
+	assert.True(t, IsKindleFileType(FileTypeAZW3))
+	for _, ft := range []string{FileTypeEPUB, FileTypeCBZ, FileTypeM4B, FileTypePDF, "azw"} {
+		assert.False(t, IsKindleFileType(ft), ft)
+	}
+}
+
 func TestEbookCoverRank(t *testing.T) {
 	t.Parallel()
 

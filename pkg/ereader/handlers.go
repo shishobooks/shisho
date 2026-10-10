@@ -24,6 +24,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
+	"golang.org/x/text/unicode/norm"
 )
 
 const defaultPageSize = 50
@@ -165,7 +166,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := isKindle(c.Request().UserAgent())
+	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -262,7 +263,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := isKindle(c.Request().UserAgent())
+	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -377,7 +378,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := isKindle(c.Request().UserAgent())
+	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -406,13 +407,8 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	// Resolve sort once (so the type-filter branch and the SQL query use
-	// the same ordering) and fetch books for this author + library via
-	// the books service. Going through the books service applies the
-	// user's stored sort preference and lets SQL do the library/author
-	// filtering — the previous code fetched all books for the author
-	// across every library and filtered in Go, which both ignored sort
-	// and scanned more rows than necessary.
+	// Fetch books for this author and library through the books service,
+	// which applies the user's stored sort preference.
 	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
 	booksInLibrary, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
@@ -459,7 +455,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := isKindle(c.Request().UserAgent())
+	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -801,13 +797,18 @@ func kindleFiles(files []*models.File) []*models.File {
 }
 
 // kindleFilename returns the filename that ends a file's Kindle download
-// URL: its display name reduced to ASCII letters and digits joined by
-// underscores, plus its type as the extension. A Kindle checks the
-// extension and has failed on non-ASCII filenames.
+// URL: its display name with accents removed, reduced to ASCII letters and
+// digits joined by underscores, plus its type as the extension. A Kindle
+// checks the extension and has failed on non-ASCII filenames.
 func kindleFilename(bookTitle string, f *models.File) string {
 	name := bookTitle
 	if f.Name != nil && *f.Name != "" {
 		name = *f.Name
+	}
+	// Decompose accented letters so "É" keeps its "E".
+	name = norm.NFD.String(name)
+	if ext := "." + f.FileType; strings.HasSuffix(strings.ToLower(name), ext) {
+		name = name[:len(name)-len(ext)]
 	}
 	const maxLength = 100
 	var b strings.Builder
@@ -815,6 +816,10 @@ func kindleFilename(bookTitle string, f *models.File) string {
 	for _, r := range name {
 		if b.Len() >= maxLength {
 			break
+		}
+		if unicode.Is(unicode.Mn, r) {
+			// A decomposed accent; its letter was already written.
+			continue
 		}
 		if r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
 			if separate {

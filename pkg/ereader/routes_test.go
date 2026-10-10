@@ -37,6 +37,6 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 		"/ereader/key/:apiKey/file/:fileId/kindle/:filename",
 	} {
 		assert.True(t, methods[path][http.MethodGet], "GET %s should be registered", path)
-		assert.True(t, methods[path][http.MethodHead], "HEAD %s should be registered (HEAD-probing clients rely on it for Content-Disposition)", path)
+		assert.True(t, methods[path][http.MethodHead], "HEAD %s should be registered (clients probe downloads with HEAD for their headers)", path)
 	}
 }

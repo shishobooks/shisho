@@ -30,7 +30,10 @@ func TestIsKindle(t *testing.T) {
 		userAgent string
 		want      bool
 	}{
-		{"kindle 5.x and chromium firmware", "Mozilla/5.0 (X11; U; Linux armv7l like Android; en-us) AppleWebKit/531.2+ (KHTML, like Gecko) Version/5.0 Safari/533.2+ Kindle/3.0+", true},
+		// Firmware 5.x sends this, and the Chromium browser of 5.16.4 and
+		// later keeps it by passing it as a launch flag:
+		// https://user-agents.net/string/mozilla-5-0-x11-u-linux-armv7l-like-android-en-us-applewebkit-531-2-khtml-like-gecko-version-5-0-safari-533-2-kindle-3-0
+		{"kindle 5.x firmware, webkit and chromium browsers", "Mozilla/5.0 (X11; U; Linux armv7l like Android; en-us) AppleWebKit/531.2+ (KHTML, like Gecko) Version/5.0 Safari/533.2+ Kindle/3.0+", true},
 		{"kindle keyboard", kindleUserAgent, true},
 		{"kindle netfront", "Mozilla/4.0 (compatible; Linux 2.6.10) NetFront/3.3 Kindle/1.0 (screen 600x800)", true},
 		{"kobo", koboUserAgent, false},
@@ -119,7 +122,8 @@ func TestKindleFilename(t *testing.T) {
 		want string
 	}{
 		{"book title", &models.File{FileType: models.FileTypeMOBI}, "The_Book_s_Title.mobi"},
-		{"file name", &models.File{FileType: models.FileTypeAZW3, Name: strPtr("Édition Spéciale (2nd)")}, "dition_Sp_ciale_2nd.azw3"},
+		{"file name with accents", &models.File{FileType: models.FileTypeAZW3, Name: strPtr("Édition Spéciale (2nd)")}, "Edition_Speciale_2nd.azw3"},
+		{"name ending in its extension", &models.File{FileType: models.FileTypeMOBI, Name: strPtr("Some Book.MOBI")}, "Some_Book.mobi"},
 		{"nothing ascii", &models.File{FileType: models.FileTypeMOBI, Name: strPtr("日本語")}, "book.mobi"},
 	}
 	for _, tt := range tests {
@@ -300,8 +304,11 @@ func TestBookLists_FileTypesSkipSupplements(t *testing.T) {
 
 	body := f.page(t, "/libraries/"+strconv.Itoa(f.libA.ID)+"/all", "")
 
-	assert.Contains(t, body, `<div class="item-title">Has Supplement</div>
-  <div class="item-meta">EPUB</div>`)
+	_, row, found := strings.Cut(body, ">Has Supplement<")
+	require.True(t, found, body)
+	meta, _, _ := strings.Cut(row, "</a>")
+	assert.Contains(t, meta, ">EPUB<")
+	assert.NotContains(t, meta, "MOBI")
 }
 
 func TestFilterBar_IncludesMOBIAndAZW3(t *testing.T) {

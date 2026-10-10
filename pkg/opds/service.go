@@ -49,12 +49,10 @@ func parseFileTypes(types string) []string {
 	return strings.Split(types, "+")
 }
 
-// kepubFileTypes parses the file types of a KePub feed, skipping MOBI and
-// AZW3: KePub feeds are for Kobo devices, which cannot open them.
+// kepubFileTypes parses the file types of a KePub feed, skipping the Kindle
+// formats: KePub feeds are for Kobo devices, which cannot open them.
 func kepubFileTypes(types string) []string {
-	return slices.DeleteFunc(parseFileTypes(types), func(t string) bool {
-		return t == models.FileTypeMOBI || t == models.FileTypeAZW3
-	})
+	return slices.DeleteFunc(parseFileTypes(types), models.IsKindleFileType)
 }
 
 // BuildCatalogFeed builds the root navigation feed listing all libraries.

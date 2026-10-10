@@ -43,7 +43,7 @@ The current browser provides:
 - A list of libraries the device owner's user can access.
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
 - EPUB, CBZ, M4B, PDF, MOBI, and AZW3 type filters. A filter shows the books with a main file of that type.
-- Book details and a separate download for every main-file edition.
+- Book details and a separate download for every main-file edition, except on a Kindle (see [On a Kindle](#on-a-kindle)).
 - The user's saved per-library [sort](./browsing-search-bulk-actions.md#gallery-sort) on **All Books**, author, and search results. Series books follow series-number order.
 - An optional cover toggle.
 

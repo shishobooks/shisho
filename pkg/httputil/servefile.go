@@ -32,7 +32,8 @@ func WithContentType(contentType string) ServeOption {
 
 // WithAttachment sends the file as a download named filename, through
 // SetAttachmentFilename (an escaped ASCII fallback plus filename* for names
-// outside printable ASCII).
+// outside printable ASCII). An empty filename sends no Content-Disposition,
+// which overrides an earlier WithAttachment.
 func WithAttachment(filename string) ServeOption {
 	return func(o *serveOptions) { o.attachment = filename }
 }
