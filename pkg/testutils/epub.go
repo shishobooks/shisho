@@ -4,14 +4,14 @@ import (
 	"archive/zip"
 	"html"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/pkg/errors"
 )
 
 // writeMinimalEPUB writes a small valid EPUB at path so E2E tests can download
-// a generated file. It carries only a title, an identifier, and one chapter.
+// a generated file. It carries only a title, an identifier, and one chapter,
+// styled with a white body and black text the way Project Gutenberg EPUBs
+// are, so the reader e2e test can check that themes override book colors.
 func writeMinimalEPUB(path, title string) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -58,8 +58,9 @@ func writeMinimalEPUB(path, title string) (err error) {
 		{"OEBPS/chapter1.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>` + escaped + `</title></head>
-<body><p>Test chapter.</p></body>
+<head><title>` + escaped + `</title>
+<style>body { color: black; background-color: white; } a { color: blue; }</style></head>
+<body><p>Test chapter. <a href="#end">A link.</a></p><p id="end">The end.</p></body>
 </html>`},
 	}
 	for _, e := range entries {
@@ -72,22 +73,4 @@ func writeMinimalEPUB(path, title string) (err error) {
 		}
 	}
 	return errors.WithStack(zw.Close())
-}
-
-// tempEPUBPath returns the path, without extension, for a new EPUB in a fresh
-// directory under root. Path separators in the title are replaced so the file
-// lands in that directory.
-func tempEPUBPath(root, title string) (string, error) {
-	if root == "" {
-		return "", errors.New("no EPUB directory configured for withEpubOnDisk")
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return "", errors.WithStack(err)
-	}
-	dir, err := os.MkdirTemp(root, "book-")
-	if err != nil {
-		return "", errors.WithStack(err)
-	}
-	name := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(title)
-	return filepath.Join(dir, name), nil
 }

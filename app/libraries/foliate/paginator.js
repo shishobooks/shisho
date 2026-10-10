@@ -760,6 +760,14 @@ export class Paginator extends HTMLElement {
     }
     render() {
         if (!this.#view) return
+        // Shisho patch: skip renders while a section is still loading. The
+        // ResizeObserver can fire after the iframe starts loading a section
+        // but before its document has a <body>, and upstream then throws in
+        // View.columnize() ("Cannot destructure property 'style' of 'el' as
+        // it is null") or in #scrollToAnchor() (createTreeWalker on a null
+        // root). The view renders and scrolls the section itself once it
+        // loads, so skipping this render loses nothing.
+        if (!this.#view.document?.body) return
         this.#view.render(this.#beforeRender({
             vertical: this.#vertical,
             rtl: this.#rtl,

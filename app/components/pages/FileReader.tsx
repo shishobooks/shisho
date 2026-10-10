@@ -3,12 +3,19 @@ import { useParams } from "react-router-dom";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import CBZReader from "@/components/pages/CBZReader";
-import EPUBReader from "@/components/pages/EPUBReader";
 import M4BReader from "@/components/pages/M4BReader";
 import PDFReader from "@/components/pages/PDFReader";
+import ReflowableReader from "@/components/pages/ReflowableReader";
 import { useBook } from "@/hooks/queries/books";
 import { isLoadFailure } from "@/libraries/api";
-import { FileTypeCBZ, FileTypeEPUB, FileTypeM4B, FileTypePDF } from "@/types";
+import {
+  FileTypeAZW3,
+  FileTypeCBZ,
+  FileTypeEPUB,
+  FileTypeM4B,
+  FileTypeMOBI,
+  FileTypePDF,
+} from "@/types";
 
 // Covers the page below the Demo Mode banner, since readers render outside
 // the library layout.
@@ -71,7 +78,9 @@ export default function FileReader() {
         <PDFReader bookTitle={book?.title} file={file} libraryId={libraryId!} />
       );
     case FileTypeEPUB:
-      return <EPUBReader bookTitle={book?.title} file={file} />;
+    case FileTypeAZW3:
+    case FileTypeMOBI:
+      return <ReflowableReader bookTitle={book?.title} file={file} />;
     case FileTypeM4B:
       return <M4BReader book={book} file={file} libraryId={libraryId!} />;
     default:

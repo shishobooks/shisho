@@ -4,7 +4,7 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { QueryKey, useUpdateFileChapters } from "./chapters";
-import { QueryKey as EpubQueryKey } from "./epub";
+import { QueryKey as ReflowableQueryKey } from "./reflowable";
 
 vi.mock("@/libraries/api", async () => {
   const actual = await vi.importActual<object>("@/libraries/api");
@@ -23,12 +23,15 @@ const makeWrapper = (client: QueryClient) => {
 };
 
 describe("useUpdateFileChapters", () => {
-  it("invalidates the file's chapters and the reader's EPUB on success", async () => {
+  it("invalidates the file's chapters and the reader's book on success", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     client.setQueryData([QueryKey.FileChapters, 7], []);
-    client.setQueryData([EpubQueryKey.EpubBlob, 7], new Blob(["epub"]));
+    client.setQueryData(
+      [ReflowableQueryKey.ReflowableBlob, 7],
+      new Blob(["epub"]),
+    );
 
     const { result } = renderHook(() => useUpdateFileChapters(7), {
       wrapper: makeWrapper(client),
@@ -44,7 +47,8 @@ describe("useUpdateFileChapters", () => {
       ).toBe(true);
       // The generated EPUB carries the chapters as its table of contents.
       expect(
-        client.getQueryState([EpubQueryKey.EpubBlob, 7])?.isInvalidated,
+        client.getQueryState([ReflowableQueryKey.ReflowableBlob, 7])
+          ?.isInvalidated,
       ).toBe(true);
     });
   });

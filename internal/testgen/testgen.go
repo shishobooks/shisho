@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/shishobooks/shisho/internal/mobigen"
 )
 
 // EPUBOptions configures the generated EPUB file.
@@ -80,62 +82,26 @@ type M4BOptions struct {
 	Faststart bool
 }
 
+// MOBIOptions configures a generated MOBI file; see mobigen.Options.
+type MOBIOptions = mobigen.Options
+
 // MOBIKind is the layout of a generated MOBI file.
-type MOBIKind int
+type MOBIKind = mobigen.Kind
 
 const (
-	// MOBIKindMOBI6 is a Mobipocket file with only the old MOBI6 book (.mobi).
-	MOBIKindMOBI6 MOBIKind = iota
-	// MOBIKindKF8 is a file with only the KF8 book (.azw3).
-	MOBIKindKF8
-	// MOBIKindCombo is a .mobi holding a MOBI6 book, a BOUNDARY record, and
-	// a KF8 book, as Calibre writes with --mobi-file-type both.
-	MOBIKindCombo
+	MOBIKindMOBI6 = mobigen.KindMOBI6
+	MOBIKindKF8   = mobigen.KindKF8
+	MOBIKindCombo = mobigen.KindCombo
 )
 
 // MOBICompression is the text compression a generated MOBI file declares.
-type MOBICompression int
+type MOBICompression = mobigen.Compression
 
 const (
-	MOBICompressionPalmDOC MOBICompression = iota // what Calibre writes
-	MOBICompressionNone
-	MOBICompressionHuffCDIC // what kindlegen writes for large books
+	MOBICompressionPalmDOC  = mobigen.CompressionPalmDOC
+	MOBICompressionNone     = mobigen.CompressionNone
+	MOBICompressionHuffCDIC = mobigen.CompressionHuffCDIC
 )
-
-// MOBIOptions configures the generated MOBI file. Each string field is one
-// EXTH record and is left out when empty.
-type MOBIOptions struct {
-	Kind MOBIKind
-	// Title is the updated-title record (503). FullName is the title stored
-	// in the header and defaults to Title.
-	Title    string
-	FullName string
-	// MOBI6Title replaces Title in the MOBI6 half of a combo file, so a test
-	// can tell which half was read.
-	MOBI6Title     string
-	Authors        []string // one author record (100) each, written as given
-	Description    string   // 103, may hold HTML
-	Publisher      string   // 101
-	Imprint        string   // 102
-	PublishingDate string   // 106, e.g. "2021-03-04T06:00:00+00:00"
-	Language       string   // 524
-	ISBN           string   // 104
-	// Source is the source record (112). Calibre writes "calibre:<uuid>";
-	// it holds "urn:isbn:..." in some files.
-	Source string
-	// ASIN is the ASIN record (113). Calibre writes the book's UUID here.
-	ASIN     string
-	Subjects []string // one subject record (105) each, written as given
-	HasCover bool
-	// CoverMimeType is "image/jpeg" (default, what Calibre writes for MOBI6)
-	// or "image/png".
-	CoverMimeType string
-	// Encrypted marks every book in the file as DRM-protected.
-	Encrypted   bool
-	Compression MOBICompression
-	// CP1252 writes the header and EXTH text as Windows-1252 instead of UTF-8.
-	CP1252 bool
-}
 
 // TempDir creates a temporary directory for testing and registers cleanup.
 // The directory is automatically removed when the test completes.

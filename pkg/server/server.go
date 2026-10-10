@@ -91,8 +91,8 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 			"http://localhost:",
 		)
 		// Each E2E browser runs its own server with its own cache dir, so its
-		// seeded EPUBs never collide with another browser's.
-		testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir), filepath.Join(cfg.CacheDir, "e2e-epubs"))
+		// seeded files never collide with another browser's.
+		testutils.RegisterRoutes(api, db, pm, plugins.NewInstaller(cfg.PluginDir), filepath.Join(cfg.CacheDir, "e2e-files"))
 	}
 
 	// Services and caches that more than one route family uses are built once

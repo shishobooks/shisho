@@ -59,7 +59,7 @@ test.describe("Share Links", () => {
     libraryId = ((await libraryResp.json()) as { id: number }).id;
 
     const bookResp = await apiContext.post("/api/test/books", {
-      data: { libraryId, title: TITLE, withEpubOnDisk: true },
+      data: { libraryId, title: TITLE, withFileOnDisk: true },
     });
     bookId = ((await bookResp.json()) as { id: number }).id;
     await apiContext.dispose();

@@ -21,7 +21,7 @@ type handler struct {
 	db        *bun.DB
 	manager   *plugins.Manager
 	installer *plugins.Installer
-	epubRoot  string
+	fileRoot  string
 }
 
 // createUserRequest is the request body for creating a test user.
@@ -185,7 +185,7 @@ type createBookRequest struct {
 	LibraryID int    `json:"libraryId" validate:"required"`
 	Title     string `json:"title" validate:"required"`
 	Filepath  string `json:"filepath"`
-	FileType  string `json:"fileType"` // "epub", "cbz", "m4b", "pdf"
+	FileType  string `json:"fileType"` // a models.FileType*, default "epub"
 	AuthorID  *int   `json:"authorId"` // Optional author
 	SeriesID  *int   `json:"seriesId"` // Optional series
 	FileSize  *int64 `json:"fileSize"` // Optional file size in bytes
@@ -197,10 +197,10 @@ type createBookRequest struct {
 	AudiobookDurationSeconds *float64 `json:"audiobookDurationSeconds"`
 	AudiobookBitrateBps      *int     `json:"audiobookBitrateBps"`
 	AudiobookCodec           *string  `json:"audiobookCodec"`
-	// WithEpubOnDisk writes a minimal valid EPUB to a temporary directory and
-	// points the file at it, so downloads can generate a real file. Only for
-	// the default "epub" file type; filepath is ignored.
-	WithEpubOnDisk bool `json:"withEpubOnDisk"`
+	// WithFileOnDisk writes a minimal valid file to a temporary directory and
+	// points the file at it, so downloads and the reader get a real file.
+	// Only for the "epub" and "mobi" file types; filepath is ignored.
+	WithFileOnDisk bool `json:"withFileOnDisk"`
 }
 
 // createBookResponse is the response body for creating a test book.
@@ -234,15 +234,9 @@ func (h *handler) createBook(c echo.Context) error {
 	if fileType == "" {
 		fileType = models.FileTypeEPUB
 	}
-	if req.WithEpubOnDisk {
-		if fileType != models.FileTypeEPUB {
-			return errcodes.ValidationError("withEpubOnDisk requires fileType epub")
-		}
-		base, err := tempEPUBPath(h.epubRoot, req.Title)
+	if req.WithFileOnDisk {
+		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title)
 		if err != nil {
-			return err
-		}
-		if err := writeMinimalEPUB(base+".epub", req.Title); err != nil {
 			return err
 		}
 		filepath = base
@@ -524,9 +518,9 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 	_, _ = h.db.Exec("PRAGMA foreign_keys = OFF")
 	defer h.db.Exec("PRAGMA foreign_keys = ON") //nolint:errcheck
 
-	// Remove EPUBs written by POST /test/books with withEpubOnDisk.
-	if h.epubRoot != "" {
-		_ = os.RemoveAll(h.epubRoot)
+	// Remove files written by POST /test/books with withFileOnDisk.
+	if h.fileRoot != "" {
+		_ = os.RemoveAll(h.fileRoot)
 	}
 
 	// Delete API key permissions

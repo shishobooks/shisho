@@ -19,14 +19,14 @@ type handler struct {
 // added.
 func newUserSettingsResponse(settings *models.UserSettings) UserSettingsResponse {
 	return UserSettingsResponse{
-		PreloadCount:  settings.ViewerPreloadCount,
-		FitMode:       settings.ViewerFitMode,
-		EpubFontSize:  settings.EpubFontSize,
-		EpubTheme:     settings.EpubTheme,
-		EpubFlow:      settings.EpubFlow,
-		GallerySize:   settings.GallerySize,
-		HideChrome:    settings.ViewerHideChrome,
-		PlaybackSpeed: settings.PlaybackSpeed,
+		PreloadCount:       settings.ViewerPreloadCount,
+		FitMode:            settings.ViewerFitMode,
+		ReflowableFontSize: settings.ReflowableFontSize,
+		ReflowableTheme:    settings.ReflowableTheme,
+		ReflowableFlow:     settings.ReflowableFlow,
+		GallerySize:        settings.GallerySize,
+		HideChrome:         settings.ViewerHideChrome,
+		PlaybackSpeed:      settings.PlaybackSpeed,
 	}
 }
 
@@ -67,14 +67,14 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 	if payload.FitMode != nil && !IsValidFitMode(*payload.FitMode) {
 		return errcodes.ValidationError("fit_mode must be 'fit-height' or 'fit-width'")
 	}
-	if payload.EpubFontSize != nil && (*payload.EpubFontSize < 50 || *payload.EpubFontSize > 200) {
-		return errcodes.ValidationError("viewer_epub_font_size must be between 50 and 200")
+	if payload.ReflowableFontSize != nil && (*payload.ReflowableFontSize < 50 || *payload.ReflowableFontSize > 200) {
+		return errcodes.ValidationError("viewer_reflowable_font_size must be between 50 and 200")
 	}
-	if payload.EpubTheme != nil && !IsValidEpubTheme(*payload.EpubTheme) {
-		return errcodes.ValidationError("viewer_epub_theme must be 'light', 'dark', or 'sepia'")
+	if payload.ReflowableTheme != nil && !IsValidReflowableTheme(*payload.ReflowableTheme) {
+		return errcodes.ValidationError("viewer_reflowable_theme must be 'light', 'dark', or 'sepia'")
 	}
-	if payload.EpubFlow != nil && !IsValidEpubFlow(*payload.EpubFlow) {
-		return errcodes.ValidationError("viewer_epub_flow must be 'paginated' or 'scrolled'")
+	if payload.ReflowableFlow != nil && !IsValidReflowableFlow(*payload.ReflowableFlow) {
+		return errcodes.ValidationError("viewer_reflowable_flow must be 'paginated' or 'scrolled'")
 	}
 	if payload.GallerySize != nil && !IsValidGallerySize(*payload.GallerySize) {
 		return errcodes.ValidationError("gallery_size must be 's', 'm', 'l', or 'xl'")

@@ -5,21 +5,21 @@ import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { useEpubBlob } from "@/hooks/queries/epub";
+import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 
-import EPUBReader from "./EPUBReader";
+import ReflowableReader from "./ReflowableReader";
 
 // Prevent jsdom from trying to execute the real foliate view.js (it uses
 // browser-only module specifiers and dynamic imports that jsdom can't resolve).
 vi.mock("@/libraries/foliate/view.js", () => ({}));
 
-vi.mock("@/hooks/queries/epub", () => ({
-  useEpubBlob: vi.fn(),
+vi.mock("@/hooks/queries/reflowable", () => ({
+  useReflowableBlob: vi.fn(),
 }));
 
 // The table of contents the mocked foliate view reports once a book opens.
@@ -46,17 +46,17 @@ vi.mock("@/hooks/queries/settings", () => ({
   useUpdateUserSettings: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
-const renderReader = () => {
+const renderReader = (fileType = "epub") => {
   const client = new QueryClient();
   const file = {
     id: 7,
     book_id: 3,
-    file_type: "epub",
+    file_type: fileType,
   } as never;
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <EPUBReader bookTitle="Test Book" file={file} />
+        <ReflowableReader bookTitle="Test Book" file={file} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -68,7 +68,7 @@ const pageTapZones = () =>
     .queryAllByRole("button", { hidden: true })
     .filter((button) => button.getAttribute("aria-hidden") === "true");
 
-describe("EPUBReader", () => {
+describe("ReflowableReader", () => {
   it("shows the heading as the current entry when the location is under it", async () => {
     mockToc = [
       {
@@ -77,7 +77,7 @@ describe("EPUBReader", () => {
         subitems: [{ label: "Chapter 3", href: "ch3.xhtml" }],
       },
     ];
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -116,7 +116,7 @@ describe("EPUBReader", () => {
       },
       { label: "Afterword", href: "after.xhtml" },
     ];
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -145,8 +145,8 @@ describe("EPUBReader", () => {
     }
   });
 
-  it("shows a loading indicator while fetching the EPUB", () => {
-    vi.mocked(useEpubBlob).mockReturnValue({
+  it("shows a loading indicator while fetching the book", () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -160,7 +160,7 @@ describe("EPUBReader", () => {
 
   it("shows an error state with a retry button on fetch failure", () => {
     const refetch = vi.fn();
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
@@ -179,7 +179,7 @@ describe("EPUBReader", () => {
   });
 
   it("keeps an open book on screen when a background refetch fails", () => {
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: true,
@@ -192,9 +192,45 @@ describe("EPUBReader", () => {
     expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument();
   });
 
+  it("opens a MOBI file in foliate under its own type", async () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/x-mobipocket-ebook" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    const { container } = renderReader("mobi");
+    const view = container.querySelector("foliate-view");
+    await act(async () => {});
+
+    expect(view).not.toBeNull();
+    const opened = vi.mocked(view!.open).mock.calls[0][0] as globalThis.File;
+    expect(opened.name).toBe("book.mobi");
+    expect(opened.type).toBe("application/x-mobipocket-ebook");
+  });
+
+  // foliate throws if asked to turn a page before a book has opened.
+  it("disables the page buttons until the book is ready", () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    expect(
+      screen.getByRole("button", { name: "Previous page" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+  });
+
   it("shows the extended-wait hint after 10 seconds of loading", () => {
     vi.useFakeTimers();
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -218,14 +254,14 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "scrolled",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "scrolled",
       },
       isLoading: false,
     } as never);
 
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -242,14 +278,14 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "paginated",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "paginated",
       },
       isLoading: false,
     } as never);
 
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -278,15 +314,15 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "scrolled",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "scrolled",
         viewer_hide_chrome: true,
       },
       isLoading: false,
     } as never);
 
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -300,6 +336,91 @@ describe("EPUBReader", () => {
     ).not.toBeInTheDocument();
   });
 
+  describe("clicks inside the book", () => {
+    // foliate reports each loaded section's document in a "load" event.
+    const loadSection = (container: HTMLElement) => {
+      const doc = document.implementation.createHTMLDocument("section");
+      doc.body.innerHTML = '<p>Text <a href="#n">note</a></p>';
+      act(() => {
+        container
+          .querySelector("foliate-view")!
+          .dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+      });
+      return doc;
+    };
+    const header = () => screen.getByRole("banner");
+
+    const renderWithAutoHide = (flow: "paginated" | "scrolled") => {
+      vi.mocked(useUserSettings).mockReturnValue({
+        data: {
+          viewer_reflowable_font_size: 100,
+          viewer_reflowable_theme: "light",
+          viewer_reflowable_flow: flow,
+          viewer_hide_chrome: true,
+        },
+        isLoading: false,
+      } as never);
+      vi.mocked(useReflowableBlob).mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as never);
+      return renderReader();
+    };
+
+    it("toggle the controls in scrolled flow", () => {
+      const { container } = renderWithAutoHide("scrolled");
+      const doc = loadSection(container);
+      expect(header()).not.toHaveClass("-translate-y-full");
+
+      act(() => doc.querySelector("p")!.click());
+      expect(header()).toHaveClass("-translate-y-full");
+
+      act(() => doc.querySelector("p")!.click());
+      expect(header()).not.toHaveClass("-translate-y-full");
+    });
+
+    it("show hidden controls on a tap in scrolled flow", () => {
+      vi.useFakeTimers();
+      const { container } = renderWithAutoHide("scrolled");
+      const doc = loadSection(container);
+      act(() => vi.advanceTimersByTime(2000));
+      expect(header()).toHaveClass("-translate-y-full");
+
+      // A tap sends compatibility mouse events before its click.
+      const p = doc.querySelector("p")!;
+      act(() => {
+        p.dispatchEvent(
+          Object.assign(new Event("pointermove", { bubbles: true }), {
+            pointerType: "touch",
+          }),
+        );
+        p.dispatchEvent(new Event("mousemove", { bubbles: true }));
+        p.click();
+      });
+      expect(header()).not.toHaveClass("-translate-y-full");
+      vi.useRealTimers();
+    });
+
+    it("leave the controls alone when following a link", () => {
+      const { container } = renderWithAutoHide("scrolled");
+      const doc = loadSection(container);
+
+      act(() => doc.querySelector("a")!.click());
+      expect(header()).not.toHaveClass("-translate-y-full");
+    });
+
+    it("leave the controls to the tap zones in paginated flow", () => {
+      const { container } = renderWithAutoHide("paginated");
+      const doc = loadSection(container);
+
+      act(() => doc.querySelector("p")!.click());
+      expect(header()).not.toHaveClass("-translate-y-full");
+    });
+  });
+
   it("updates settings when the theme button is clicked", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const mutate = vi.fn();
@@ -307,15 +428,15 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "paginated",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "paginated",
       },
       isLoading: false,
     } as never);
     vi.mocked(useUpdateUserSettings).mockReturnValue({ mutate } as never);
 
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -328,7 +449,7 @@ describe("EPUBReader", () => {
     await user.click(await screen.findByRole("button", { name: /settings/i }));
     await user.click(screen.getByRole("button", { name: /dark/i }));
     expect(mutate).toHaveBeenCalledWith(
-      expect.objectContaining({ viewer_epub_theme: "dark" }),
+      expect.objectContaining({ viewer_reflowable_theme: "dark" }),
       expect.anything(),
     );
   });
@@ -340,16 +461,16 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "paginated",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "paginated",
       },
       isLoading: false,
     } as never);
     vi.mocked(useUpdateUserSettings).mockReturnValue({
       mutate: rejectingMutate(),
     } as never);
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -370,13 +491,13 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "paginated",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "paginated",
       },
       isLoading: false,
     } as never);
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -404,13 +525,13 @@ describe("EPUBReader", () => {
       data: {
         preload_count: 3,
         fit_mode: "fit-height",
-        viewer_epub_font_size: 100,
-        viewer_epub_theme: "light",
-        viewer_epub_flow: "paginated",
+        viewer_reflowable_font_size: 100,
+        viewer_reflowable_theme: "light",
+        viewer_reflowable_flow: "paginated",
       },
       isLoading: false,
     } as never);
-    vi.mocked(useEpubBlob).mockReturnValue({
+    vi.mocked(useReflowableBlob).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,

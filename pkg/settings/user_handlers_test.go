@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdateUserSettings_RejectsBadEpubFontSize(t *testing.T) {
+func TestUpdateUserSettings_RejectsBadReflowableFontSize(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	user := createTestUser(t, db, "alice")
@@ -27,9 +27,9 @@ func TestUpdateUserSettings_RejectsBadEpubFontSize(t *testing.T) {
 	body := `{
 		"preload_count": 3,
 		"fit_mode": "fit-height",
-		"viewer_epub_font_size": 999,
-		"viewer_epub_theme": "light",
-		"viewer_epub_flow": "paginated"
+		"viewer_reflowable_font_size": 999,
+		"viewer_reflowable_theme": "light",
+		"viewer_reflowable_flow": "paginated"
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -39,10 +39,10 @@ func TestUpdateUserSettings_RejectsBadEpubFontSize(t *testing.T) {
 
 	err := h.updateUserSettings(c)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "viewer_epub_font_size")
+	assert.Contains(t, err.Error(), "viewer_reflowable_font_size")
 }
 
-func TestUpdateUserSettings_AcceptsValidEpubPayload(t *testing.T) {
+func TestUpdateUserSettings_AcceptsValidReflowablePayload(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	user := createTestUser(t, db, "bob")
@@ -53,9 +53,9 @@ func TestUpdateUserSettings_AcceptsValidEpubPayload(t *testing.T) {
 	body := `{
 		"preload_count": 3,
 		"fit_mode": "fit-height",
-		"viewer_epub_font_size": 130,
-		"viewer_epub_theme": "dark",
-		"viewer_epub_flow": "scrolled"
+		"viewer_reflowable_font_size": 130,
+		"viewer_reflowable_theme": "dark",
+		"viewer_reflowable_flow": "scrolled"
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -68,9 +68,9 @@ func TestUpdateUserSettings_AcceptsValidEpubPayload(t *testing.T) {
 
 	var resp UserSettingsResponse
 	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
-	assert.Equal(t, 130, resp.EpubFontSize)
-	assert.Equal(t, models.EpubThemeDark, resp.EpubTheme)
-	assert.Equal(t, models.EpubFlowScrolled, resp.EpubFlow)
+	assert.Equal(t, 130, resp.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableThemeDark, resp.ReflowableTheme)
+	assert.Equal(t, models.ReflowableFlowScrolled, resp.ReflowableFlow)
 }
 
 // TestUpdateUserSettings_EmptyBodyIsNoop verifies the explicit no-op
@@ -100,9 +100,9 @@ func TestUpdateUserSettings_EmptyBodyIsNoop(t *testing.T) {
 	// All fields are at their defaults — no prior row existed.
 	assert.Equal(t, 3, resp.PreloadCount)
 	assert.Equal(t, models.FitModeHeight, resp.FitMode)
-	assert.Equal(t, 100, resp.EpubFontSize)
-	assert.Equal(t, models.EpubThemeLight, resp.EpubTheme)
-	assert.Equal(t, models.EpubFlowPaginated, resp.EpubFlow)
+	assert.Equal(t, 100, resp.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableThemeLight, resp.ReflowableTheme)
+	assert.Equal(t, models.ReflowableFlowPaginated, resp.ReflowableFlow)
 }
 
 // TestUpdateUserSettings_AcceptsSingleFieldPayload verifies that a payload
@@ -116,8 +116,8 @@ func TestUpdateUserSettings_AcceptsSingleFieldPayload(t *testing.T) {
 	e := newTestEcho(t)
 	h := &handler{settingsService: NewService(db)}
 
-	// Only send viewer_epub_theme. Everything else must keep its default.
-	body := `{"viewer_epub_theme": "sepia"}`
+	// Only send viewer_reflowable_theme. Everything else must keep its default.
+	body := `{"viewer_reflowable_theme": "sepia"}`
 	req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -129,12 +129,12 @@ func TestUpdateUserSettings_AcceptsSingleFieldPayload(t *testing.T) {
 
 	var resp UserSettingsResponse
 	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
-	assert.Equal(t, models.EpubThemeSepia, resp.EpubTheme)
+	assert.Equal(t, models.ReflowableThemeSepia, resp.ReflowableTheme)
 	// Other fields stay at defaults
 	assert.Equal(t, 3, resp.PreloadCount)
 	assert.Equal(t, models.FitModeHeight, resp.FitMode)
-	assert.Equal(t, 100, resp.EpubFontSize)
-	assert.Equal(t, models.EpubFlowPaginated, resp.EpubFlow)
+	assert.Equal(t, 100, resp.ReflowableFontSize)
+	assert.Equal(t, models.ReflowableFlowPaginated, resp.ReflowableFlow)
 }
 
 func TestUpdateUserSettings_AcceptsValidGallerySize(t *testing.T) {

@@ -1,4 +1,11 @@
-import { FileTypeCBZ, FileTypeEPUB, FileTypeM4B, FileTypePDF } from "@/types";
+import {
+  FileTypeAZW3,
+  FileTypeCBZ,
+  FileTypeEPUB,
+  FileTypeM4B,
+  FileTypeMOBI,
+  FileTypePDF,
+} from "@/types";
 
 /**
  * The in-app reading action a file type supports, surfaced as a button on the
@@ -13,8 +20,10 @@ export function getReadingAction(fileType: string): ReadingAction | null {
   switch (fileType) {
     case FileTypeM4B:
       return "listen";
+    case FileTypeAZW3:
     case FileTypeCBZ:
     case FileTypeEPUB:
+    case FileTypeMOBI:
     case FileTypePDF:
       return "read";
     default:

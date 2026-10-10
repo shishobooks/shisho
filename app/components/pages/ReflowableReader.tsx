@@ -10,12 +10,12 @@ import {
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { useEpubBlob } from "@/hooks/queries/epub";
+import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
+import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
@@ -23,7 +23,7 @@ import type { File, UserSettingsPayload } from "@/types";
 
 import "@/libraries/foliate/view.js";
 
-interface EPUBReaderProps {
+interface ReflowableReaderProps {
   file: File;
   bookTitle?: string;
 }
@@ -63,7 +63,10 @@ const flattenToc = (
 // non-breaking spaces, which the browser does not collapse.
 const tocIndent = (depth: number) => "\u00a0\u00a0\u00a0".repeat(depth);
 
-export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
+export default function ReflowableReader({
+  file,
+  bookTitle,
+}: ReflowableReaderProps) {
   usePageTitle(bookTitle ? `Reading: ${bookTitle}` : "Reader");
 
   const {
@@ -72,18 +75,28 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     error,
     isEnabled,
     refetch,
-  } = useEpubBlob(file.id);
+  } = useReflowableBlob(file.id);
+  const fileType = file.file_type;
 
   const { data: settings, isLoading: settingsLoading } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
   const settingsReady = !settingsLoading && settings != null;
 
-  const fontSize = settings?.viewer_epub_font_size ?? 100;
-  const theme = settings?.viewer_epub_theme ?? "light";
-  const flow = settings?.viewer_epub_flow ?? "paginated";
+  const fontSize = settings?.viewer_reflowable_font_size ?? 100;
+  const theme = settings?.viewer_reflowable_theme ?? "light";
+  const flow = settings?.viewer_reflowable_flow ?? "paginated";
   const hideChrome = settings?.viewer_hide_chrome ?? false;
 
-  const { chromeVisible, toggleChrome } = useAutoHideChrome(hideChrome);
+  const { chromeVisible, revealChrome, toggleChrome } =
+    useAutoHideChrome(hideChrome);
+
+  // Events inside the book's iframe never reach the window, so the listeners
+  // that foliate's "load" event adds to each section read the latest values
+  // through this ref.
+  const bookEventsRef = useRef({ flow, revealChrome, toggleChrome });
+  useEffect(() => {
+    bookEventsRef.current = { flow, revealChrome, toggleChrome };
+  });
 
   // Local draft state lets the slider thumb and label update live while the
   // user drags, without firing a PUT on every tick. We only commit to the API
@@ -137,7 +150,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     if (typeof view.open !== "function") {
       setLoadError(
         new Error(
-          "EPUB renderer did not register — the <foliate-view> custom element is missing its open() method.",
+          "Book renderer did not register: the <foliate-view> custom element is missing its open() method.",
         ),
       );
       return;
@@ -158,9 +171,10 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     // Hardcoded name. foliate doesn't surface the synthetic File's name
     // anywhere user-visible — using bookTitle would just cause the effect
     // to re-fire when useBook resolves (undefined → real value), launching
-    // a second overlapping open() on the same element.
-    const bookFile = new globalThis.File([blob], "book.epub", {
-      type: "application/epub+zip",
+    // a second overlapping open() on the same element. foliate picks EPUB or
+    // MOBI from the bytes, so the name and type are only labels.
+    const bookFile = new globalThis.File([blob], `book.${fileType}`, {
+      type: blob.type,
     });
 
     (async () => {
@@ -178,7 +192,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     })().catch((err: unknown) => {
       if (cancelled) return;
       const asError = err instanceof Error ? err : new Error(String(err));
-      console.error("EPUBReader: foliate open() failed", err);
+      console.error("ReflowableReader: foliate open() failed", err);
       setLoadError(asError);
     });
 
@@ -197,7 +211,35 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         // no-op
       }
     };
-  }, [blob]);
+  }, [blob, fileType]);
+
+  // Pointer movement over the book shows auto-hidden controls, as it does
+  // over the rest of the page. In scrolled flow there are no tap zones over
+  // the book, so a click on its text (not a link or a selection) toggles them.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    const handleLoad = (evt: Event) => {
+      const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
+      doc.addEventListener("pointermove", (e) => {
+        if (isMouseMove(e)) bookEventsRef.current.revealChrome();
+      });
+      doc.addEventListener("click", (e) => {
+        const events = bookEventsRef.current;
+        if (events.flow !== "scrolled") return;
+        // The target comes from the iframe's realm, so `instanceof Element`
+        // is false for it; check for closest() instead.
+        const target = e.target as Element | null;
+        if (target?.closest?.("a[href]")) return;
+        if (doc.getSelection()?.isCollapsed === false) return;
+        events.toggleChrome();
+      });
+    };
+
+    view.addEventListener("load", handleLoad);
+    return () => view.removeEventListener("load", handleLoad);
+  }, []);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {
@@ -230,12 +272,12 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     const renderer = view?.renderer;
     if (!renderer) return;
 
-    const { fg, bg } =
+    const { fg, bg, link } =
       theme === "dark"
-        ? { fg: "#e8e8e8", bg: "#1a1a1a" }
+        ? { fg: "#e8e8e8", bg: "#1a1a1a", link: "#8ab4f8" }
         : theme === "sepia"
-          ? { fg: "#5b4636", bg: "#f4ecd8" }
-          : { fg: "#111111", bg: "#ffffff" };
+          ? { fg: "#5b4636", bg: "#f4ecd8", link: "#8a4b08" }
+          : { fg: "#111111", bg: "#ffffff", link: null };
 
     // foliate's `setStyles` takes a CSS string (or [beforeStyle, style] tuple).
     // See app/libraries/foliate/paginator.js `setStyles(styles)`. Books ship
@@ -243,6 +285,33 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
     // user-visible theme properties as `!important` to ensure the selected
     // theme overrides book-provided styles. This mirrors foliate's own theming
     // (`setStylesImportant` in paginator.js).
+    //
+    // Many books (Project Gutenberg's among them) set a white background and
+    // black text on <body> or deeper, which would leave a white page inside
+    // a dark reader. Dark and Sepia replace the book's colors below <html>;
+    // Light keeps the book's own colors.
+    const replaceBookColors = link
+      ? `
+      body {
+        color: inherit !important;
+        background: none !important;
+      }
+      body * {
+        color: inherit !important;
+        background-color: transparent !important;
+      }
+      a:any-link, a:any-link * {
+        color: ${link} !important;
+      }
+      ${
+        // Transparent images often hold black line art (diagrams, drop
+        // caps) that would vanish on a dark page.
+        theme === "dark"
+          ? "img, svg { background-color: #fff !important; }"
+          : ""
+      }
+    `
+      : "";
     const css = `
       @namespace epub "http://www.idpf.org/2007/ops";
       html {
@@ -252,6 +321,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
       html, body {
         font-size: ${fontSize}% !important;
       }
+      ${replaceBookColors}
     `;
     renderer.setStyles?.(css);
     renderer.setAttribute?.("flow", flow);
@@ -392,7 +462,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                     min={50}
                     onValueChange={([value]) => setFontSizeDraft(value)}
                     onValueCommit={([value]) =>
-                      commitSettings({ viewer_epub_font_size: value })
+                      commitSettings({ viewer_reflowable_font_size: value })
                     }
                     step={10}
                     thumbLabel="Font size"
@@ -400,11 +470,14 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium" id="epub-theme-label">
+                  <label
+                    className="text-sm font-medium"
+                    id="reader-theme-label"
+                  >
                     Theme
                   </label>
                   <div
-                    aria-labelledby="epub-theme-label"
+                    aria-labelledby="reader-theme-label"
                     className="flex gap-2 mt-2"
                     role="group"
                   >
@@ -413,7 +486,9 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                         aria-pressed={theme === t}
                         disabled={!settingsReady}
                         key={t}
-                        onClick={() => commitSettings({ viewer_epub_theme: t })}
+                        onClick={() =>
+                          commitSettings({ viewer_reflowable_theme: t })
+                        }
                         size="sm"
                         variant={theme === t ? "default" : "outline"}
                       >
@@ -423,11 +498,11 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium" id="epub-flow-label">
+                  <label className="text-sm font-medium" id="reader-flow-label">
                     Flow
                   </label>
                   <div
-                    aria-labelledby="epub-flow-label"
+                    aria-labelledby="reader-flow-label"
                     className="flex gap-2 mt-2"
                     role="group"
                   >
@@ -436,7 +511,9 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
                         aria-pressed={flow === f}
                         disabled={!settingsReady}
                         key={f}
-                        onClick={() => commitSettings({ viewer_epub_flow: f })}
+                        onClick={() =>
+                          commitSettings({ viewer_reflowable_flow: f })
+                        }
                         size="sm"
                         variant={flow === f ? "default" : "outline"}
                       >
@@ -568,6 +645,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
         <div className="flex items-center justify-between px-4 py-2">
           <Button
             aria-label="Previous page"
+            disabled={!bookReady}
             onClick={goPrev}
             size="icon"
             variant="ghost"
@@ -579,6 +657,7 @@ export default function EPUBReader({ file, bookTitle }: EPUBReaderProps) {
           </span>
           <Button
             aria-label="Next page"
+            disabled={!bookReady}
             onClick={goNext}
             size="icon"
             variant="ghost"
