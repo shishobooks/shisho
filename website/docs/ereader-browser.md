@@ -51,7 +51,7 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 
 ## Downloads
 
-Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B and PDF remain generated downloads in their native formats.
+Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B, PDF, MOBI, and AZW3 remain generated downloads in their native formats.
 
 Covers are off by default. Leave them off on slow devices or networks to reduce page size and image requests.
 
@@ -63,6 +63,8 @@ A Kindle's browser downloads only a few formats: MOBI on every model, and AZW3 o
 - A book with neither is marked **Unavailable on Kindle**, both in book lists and on the book's page, and offers no download.
 
 Fire tablets browse with Silk, which does not send `Kindle/`, so they see every download like any other browser.
+
+A MOBI or AZW3 download carries the book's current metadata and cover; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for what is written.
 
 To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book onto a Kindle when it has only an EPUB, or only an AZW3 and the Kindle refuses it, add a MOBI file to the book in Shisho.
 

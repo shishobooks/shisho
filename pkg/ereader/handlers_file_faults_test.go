@@ -209,8 +209,8 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), "; filename*=UTF-8''")
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), "%C3%9Cn%C3%AFcode")
 	})
-	// Until MOBI and AZW3 have a generator these serve the original; either
-	// way the download keeps the type's media type and extension.
+	// MOBI and AZW3 downloads are generated with the book's metadata and
+	// keep the type's media type and extension.
 	for _, tt := range []struct {
 		fileType    string
 		kind        testgen.MOBIKind

@@ -21,7 +21,7 @@ https://your-server/opds/v1/epub+cbz+m4b+pdf+mobi+azw3/catalog
 
 Any non-empty combination of those six types is accepted. Order does not change the catalog behavior. `mobi` covers `.mobi`, `.azw`, and `.prc` files. For a reading app that opens only Kindle formats, use `mobi+azw3`.
 
-Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it.
+Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it. Downloads are generated with the book's current metadata, as that page describes for each format.
 
 ### KePub Catalog
 
