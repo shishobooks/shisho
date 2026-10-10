@@ -660,9 +660,9 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 
 // DownloadFileKindle handles downloads for a Kindle's browser, whose URL ends
 // in the filename (see kindleFilename). A Kindle accepts a download only when
-// its filename has an extension it knows, and calibre found it rejecting
-// some Content-Disposition filenames, so this route sends none and the
-// Kindle names the file from the URL.
+// its filename has an extension it knows, and Kindles have been reported
+// rejecting some Content-Disposition filenames, so this route sends none and
+// the Kindle names the file from the URL.
 func (h *handler) DownloadFileKindle(c echo.Context) error {
 	return h.serveDownload(c, false, httputil.WithAttachment(""))
 }
