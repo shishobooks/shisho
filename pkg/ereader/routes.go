@@ -44,4 +44,6 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	ereader.HEAD("/file/:fileId", h.DownloadFile)
 	ereader.GET("/file/:fileId/kepub", h.DownloadFileKepub)
 	ereader.HEAD("/file/:fileId/kepub", h.DownloadFileKepub)
+	ereader.GET("/file/:fileId/kindle/:filename", h.DownloadFileKindle)
+	ereader.HEAD("/file/:fileId/kindle/:filename", h.DownloadFileKindle)
 }

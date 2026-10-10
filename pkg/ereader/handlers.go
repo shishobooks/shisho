@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -551,10 +552,7 @@ func (h *handler) Download(c echo.Context) error {
 		return errcodes.NotFound("File")
 	}
 
-	// Detect Kobo and Kindle devices from User-Agent
-	userAgent := c.Request().Header.Get("User-Agent")
-	isKobo := strings.Contains(strings.ToLower(userAgent), "kobo")
-	kindle := isKindle(userAgent)
+	dev := detectDevice(c.Request().UserAgent())
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
@@ -589,19 +587,23 @@ func (h *handler) Download(c echo.Context) error {
 		content.WriteString(descriptionHTML(*book.Description))
 	}
 
-	// A Kindle cannot open most formats, so it gets only the book's best
-	// Kindle files. Everything else gets a download entry for each main file.
-	if kindle {
+	// A Kindle's browser downloads only a few formats, so it gets only the
+	// book's Kindle files. Everything else gets a download entry for each
+	// main file.
+	if dev == deviceKindle {
 		files := kindleFiles(mainFiles)
-		if len(files) == 0 {
-			content.WriteString(`<p><b>Unavailable on Kindle.</b> This book has no AZW3, MOBI, or PDF file.</p>`)
+		switch {
+		case len(files) == 0:
+			content.WriteString(`<p><b>Unavailable on Kindle.</b> This book has no MOBI or AZW3 file.</p>`)
+		case files[0].FileType == models.FileTypeAZW3:
+			content.WriteString(`<p><i>Newer Kindles may refuse AZW3 downloads. If yours does, add a MOBI file to this book.</i></p>`)
 		}
 		for _, f := range files {
-			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, false))
+			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, dev))
 		}
 	} else {
 		for _, f := range mainFiles {
-			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, isKobo))
+			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, dev))
 		}
 	}
 
@@ -660,9 +662,19 @@ func (h *handler) DownloadFileKepub(c echo.Context) error {
 	return h.serveDownload(c, true)
 }
 
+// DownloadFileKindle handles downloads for a Kindle's browser, whose URL ends
+// in the filename (see kindleFilename). A Kindle accepts a download only when
+// its filename has an extension it knows, and calibre found it rejecting
+// some Content-Disposition filenames, so this route sends none and the
+// Kindle names the file from the URL.
+func (h *handler) DownloadFileKindle(c echo.Context) error {
+	return h.serveDownload(c, false, httputil.WithAttachment(""))
+}
+
 // serveDownload serves the file named by the fileId param, generated or as
-// the original, per books.ResolveFallbackDownload.
-func (h *handler) serveDownload(c echo.Context, kepub bool) error {
+// the original, per books.ResolveFallbackDownload. opts apply after the
+// download's defaults.
+func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.ServeOption) error {
 	ctx := c.Request().Context()
 	_, err := apikeys.RequireKey(c)
 	if err != nil {
@@ -711,7 +723,7 @@ func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 	if err != nil {
 		return err
 	}
-	return download.Serve(c)
+	return download.Serve(c, opts...)
 }
 
 // Helper functions
@@ -740,41 +752,94 @@ func formatBookMeta(book *models.Book, kindle bool) string {
 	return strings.Join(parts, " • ")
 }
 
-// isKindle reports whether a User-Agent is an e-ink Kindle's browser. Fire
-// tablets also say "Kindle" but browse with Silk and have apps for other
-// formats, so they are not treated as Kindles.
-func isKindle(userAgent string) bool {
-	ua := strings.ToLower(userAgent)
-	return strings.Contains(ua, "kindle") && !strings.Contains(ua, "silk")
+// device is the kind of e-reader a request comes from, which decides the
+// downloads a book page offers.
+type device int
+
+const (
+	deviceOther device = iota
+	deviceKobo
+	deviceKindle
+)
+
+// detectDevice reads the device from a User-Agent.
+func detectDevice(userAgent string) device {
+	switch {
+	case isKindle(userAgent):
+		return deviceKindle
+	case strings.Contains(strings.ToLower(userAgent), "kobo"):
+		return deviceKobo
+	}
+	return deviceOther
 }
 
-// kindleFiles returns the main files a Kindle should download: the AZW3
-// files, or else the MOBI files, followed by the PDF files, which a Kindle
-// also reads. AZW3 comes before MOBI because it carries KF8 formatting that
-// MOBI lacks. It returns nil when the book has none of these.
+// isKindle reports whether a User-Agent is an e-ink Kindle's browser, which
+// every firmware reports as "Kindle/<version>". Fire tablets browse with
+// Silk, whose User-Agent never has "Kindle/", and have apps for other
+// formats, so they are not treated as Kindles.
+func isKindle(userAgent string) bool {
+	return strings.Contains(strings.ToLower(userAgent), "kindle/")
+}
+
+// kindleFiles returns the main files a Kindle should download: the MOBI
+// files, or else the AZW3 files, or nil when there are neither. A Kindle's
+// browser refuses every other format, PDF included. MOBI comes first because
+// every firmware downloads it, while firmware from 5.16.4 on refuses AZW3.
 func kindleFiles(files []*models.File) []*models.File {
-	mainFilesOfType := func(fileType string) []*models.File {
+	for _, fileType := range []string{models.FileTypeMOBI, models.FileTypeAZW3} {
 		var matches []*models.File
 		for _, f := range files {
 			if f.FileRole == models.FileRoleMain && f.FileType == fileType {
 				matches = append(matches, f)
 			}
 		}
-		return matches
+		if len(matches) > 0 {
+			return matches
+		}
 	}
-	result := mainFilesOfType(models.FileTypeAZW3)
-	if len(result) == 0 {
-		result = mainFilesOfType(models.FileTypeMOBI)
-	}
-	return append(result, mainFilesOfType(models.FileTypePDF)...)
+	return nil
 }
 
-// getBookFileTypes returns a list of unique file types for a book (e.g., ["EPUB", "M4B"]).
+// kindleFilename returns the filename that ends a file's Kindle download
+// URL: its display name reduced to ASCII letters and digits joined by
+// underscores, plus its type as the extension. A Kindle checks the
+// extension and has failed on non-ASCII filenames.
+func kindleFilename(bookTitle string, f *models.File) string {
+	name := bookTitle
+	if f.Name != nil && *f.Name != "" {
+		name = *f.Name
+	}
+	const maxLength = 100
+	var b strings.Builder
+	separate := false
+	for _, r := range name {
+		if b.Len() >= maxLength {
+			break
+		}
+		if r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			if separate {
+				b.WriteByte('_')
+				separate = false
+			}
+			b.WriteRune(r)
+		} else if b.Len() > 0 {
+			separate = true
+		}
+	}
+	slug := b.String()
+	if slug == "" {
+		slug = "book"
+	}
+	return slug + "." + f.FileType
+}
+
+// getBookFileTypes returns the unique types of a book's main files (e.g.,
+// ["EPUB", "M4B"]). Supplements are not offered, so they are not listed.
 func getBookFileTypes(book *models.Book) []string {
 	seen := make(map[string]bool)
 	var types []string
 	for _, f := range book.Files {
-		if f.FileType != "" && !seen[f.FileType] {
+		if f.FileRole == models.FileRoleMain && f.FileType != "" && !seen[f.FileType] {
 			seen[f.FileType] = true
 			types = append(types, strings.ToUpper(f.FileType))
 		}
@@ -813,19 +878,24 @@ func formatFileSize(bytes int64) string {
 // fileDownloadEntry renders a single file's download block with file name,
 // type badge, file size, and download link. Uses block-level elements with
 // large tap targets for eReader compatibility (no flexbox).
-func fileDownloadEntry(baseURL, bookTitle string, f *models.File, isKobo bool) string {
+func fileDownloadEntry(baseURL, bookTitle string, f *models.File, dev device) string {
 	// Determine display name: file name if set, otherwise book title
 	displayName := bookTitle
 	if f.Name != nil && *f.Name != "" {
 		displayName = *f.Name
 	}
 
-	// Build download URL (KePub for Kobo when applicable)
+	// Build download URL (KePub for Kobo when applicable, and a URL ending
+	// in the filename for a Kindle)
 	supportsKepub := f.FileType == models.FileTypeEPUB || f.FileType == models.FileTypeCBZ
+	isKobo := dev == deviceKobo
 	var downloadURL string
-	if isKobo && supportsKepub {
+	switch {
+	case isKobo && supportsKepub:
 		downloadURL = fmt.Sprintf("%s/file/%d/kepub", baseURL, f.ID)
-	} else {
+	case dev == deviceKindle:
+		downloadURL = fmt.Sprintf("%s/file/%d/kindle/%s", baseURL, f.ID, kindleFilename(bookTitle, f))
+	default:
 		downloadURL = fmt.Sprintf("%s/file/%d", baseURL, f.ID)
 	}
 

@@ -202,6 +202,7 @@ func TestEReaderDownload_FileOutsideAccess_Returns404(t *testing.T) {
 	for _, path := range []string{
 		fmt.Sprintf("/file/%d", file.ID),
 		fmt.Sprintf("/file/%d/kepub", file.ID),
+		fmt.Sprintf("/file/%d/kindle/secret.mobi", file.ID),
 		fmt.Sprintf("/download/%d", book.ID),
 		fmt.Sprintf("/cover/%d", book.ID),
 	} {
