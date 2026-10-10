@@ -1,7 +1,8 @@
 // Package mobigen builds MOBI, AZW3, and combo files shaped like Calibre's
 // output. It returns errors instead of failing a test so the test-mode seed
 // route can use it without linking the testing package into the server;
-// tests call it through testgen.BuildMOBI.
+// tests call it through testgen.BuildMOBI. It lives outside internal/testgen
+// because .dockerignore leaves that directory out of the image build.
 package mobigen
 
 import (

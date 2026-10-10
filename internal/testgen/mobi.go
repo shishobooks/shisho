@@ -3,7 +3,7 @@ package testgen
 import (
 	"testing"
 
-	"github.com/shishobooks/shisho/internal/testgen/mobigen"
+	"github.com/shishobooks/shisho/internal/mobigen"
 )
 
 // GenerateMOBI writes a MOBI, AZW3, or combo file shaped like Calibre's

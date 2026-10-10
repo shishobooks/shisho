@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shishobooks/shisho/internal/testgen/mobigen"
+	"github.com/shishobooks/shisho/internal/mobigen"
 )
 
 // EPUBOptions configures the generated EPUB file.

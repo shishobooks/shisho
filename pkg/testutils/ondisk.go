@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/internal/testgen/mobigen"
+	"github.com/shishobooks/shisho/internal/mobigen"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 )
