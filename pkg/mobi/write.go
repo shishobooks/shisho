@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"image/jpeg"
 	_ "image/png" // decode PNG and WebP covers before re-encoding them as JPEG
 	"io"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/identifiers"
+	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // see image/png
 	"golang.org/x/text/encoding/charmap"
 )
@@ -115,7 +115,9 @@ func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
 		if err != nil {
 			return err
 		}
-		newCover = f.placeCover(cover, first, kf8, &kf8Index)
+		if newCover, err = f.placeCover(cover, first, kf8, &kf8Index); err != nil {
+			return err
+		}
 	}
 
 	hasKF8 := first.isKF8() || kf8Index >= 0
@@ -143,15 +145,15 @@ type coverRecords struct {
 }
 
 // placeCover puts the cover into the file. It replaces the record the file
-// names as its cover, and the thumbnail record too, since a Kindle shows the
-// thumbnail in its library. A file with no cover gets a new record after its
+// names as its cover, and the thumbnail record with a small copy, since a
+// Kindle shows the thumbnail in its library. A file with no cover gets a new record after its
 // last image, and the record indexes that follow it are shifted; it returns
 // the offset to record in the EXTH block then, and nil when the offsets the
 // file holds still apply. kf8Index is moved with the KF8 header record.
 //
 // In a combo file the images belong to the MOBI6 book, so the cover is placed
 // through the MOBI6 header and the new record goes in the MOBI6 half.
-func (f *pdbFile) placeCover(cover []byte, first, kf8 *header, kf8Index *int) *coverRecords {
+func (f *pdbFile) placeCover(cover []byte, first, kf8 *header, kf8Index *int) (*coverRecords, error) {
 	// end is where the book that owns the images ends.
 	end := len(f.records)
 	if *kf8Index >= 0 {
@@ -168,9 +170,13 @@ func (f *pdbFile) placeCover(cover []byte, first, kf8 *header, kf8Index *int) *c
 			f.records[index] = cover
 			thumbOffset, found := numberIn(exthThumbOffset, first, kf8)
 			if thumb, ok := f.imageIndex(firstImage, thumbOffset, found); ok {
-				f.records[thumb] = cover
+				thumbnail, err := thumbnailOf(cover)
+				if err != nil {
+					return nil, err
+				}
+				f.records[thumb] = thumbnail
 			}
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -205,7 +211,7 @@ func (f *pdbFile) placeCover(cover []byte, first, kf8 *header, kf8Index *int) *c
 		firstImage = uint32(p) //nolint:gosec // a Palm database has at most 65535 records
 		binary.BigEndian.PutUint32(f.records[0][offFirstImage:], firstImage)
 	}
-	return &coverRecords{offset: uint32(p) - firstImage, inserted: true} //nolint:gosec // as above
+	return &coverRecords{offset: uint32(p) - firstImage, inserted: true}, nil //nolint:gosec // as above
 }
 
 // coverOffset returns the cover's offset from the first image: the
@@ -296,6 +302,38 @@ func shiftIndexes(rec []byte, base, p int) {
 			be.PutUint16(rec[offLastContent:], v+1)
 		}
 	}
+}
+
+// Calibre's thumbnails fit in 180 by 240 pixels.
+const (
+	thumbnailWidth  = 180
+	thumbnailHeight = 240
+)
+
+// thumbnailOf returns the cover scaled down to fit a thumbnail, as a JPEG,
+// or the cover itself when it already fits.
+func thumbnailOf(cover []byte) ([]byte, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(cover))
+	if err != nil {
+		return nil, errors.Wrap(err, "decode cover image")
+	}
+	if cfg.Width <= thumbnailWidth && cfg.Height <= thumbnailHeight {
+		return cover, nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(cover))
+	if err != nil {
+		return nil, errors.Wrap(err, "decode cover image")
+	}
+	scale := min(float64(thumbnailWidth)/float64(cfg.Width), float64(thumbnailHeight)/float64(cfg.Height))
+	w := max(1, int(float64(cfg.Width)*scale+0.5))
+	h := max(1, int(float64(cfg.Height)*scale+0.5))
+	thumb := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.CatmullRom.Scale(thumb, thumb.Bounds(), img, img.Bounds(), draw.Src, nil)
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 90}); err != nil {
+		return nil, errors.Wrap(err, "encode thumbnail")
+	}
+	return buf.Bytes(), nil
 }
 
 // normalizeCover returns the cover as a JPEG or GIF.

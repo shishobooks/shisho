@@ -256,18 +256,37 @@ func TestRewrite_NoCoverInsertsImageRecord(t *testing.T) {
 	}
 }
 
+// The thumbnail record gets a small copy of the cover, the size Calibre
+// writes, so the file does not carry the cover twice.
 func TestRewrite_ReplacesThumbnail(t *testing.T) {
 	t.Parallel()
 
-	cover := testImage(t, 40, 60, "image/jpeg")
-	_, out := rewriteBuilt(t, calibreOptions(testgen.MOBIKindMOBI6), &Metadata{Cover: cover})
-	db := openPDB(t, out)
-	h := headerAt(t, db, 0)
-	thumb, ok := h.number(exthThumbOffset)
-	require.True(t, ok)
-	got, err := db.record(int(h.firstImage+thumb), maxImageRecord)
-	require.NoError(t, err)
-	assert.Equal(t, cover, got)
+	for name, tc := range map[string]struct {
+		w, h         int
+		wantW, wantH int
+	}{
+		"large cover is scaled to fit": {400, 600, 160, 240},
+		"wide cover is scaled to fit":  {900, 300, 180, 60},
+		"small cover is not enlarged":  {40, 60, 40, 60},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cover := testImage(t, tc.w, tc.h, "image/jpeg")
+			_, out := rewriteBuilt(t, calibreOptions(testgen.MOBIKindMOBI6), &Metadata{Cover: cover})
+			db := openPDB(t, out)
+			h := headerAt(t, db, 0)
+			thumb, ok := h.number(exthThumbOffset)
+			require.True(t, ok)
+			got, err := db.record(int(h.firstImage+thumb), maxImageRecord)
+			require.NoError(t, err)
+
+			cfg, err := jpeg.DecodeConfig(bytes.NewReader(got))
+			require.NoError(t, err)
+			assert.Equal(t, [2]int{tc.wantW, tc.wantH}, [2]int{cfg.Width, cfg.Height})
+			assert.Less(t, len(got), len(cover)+1)
+		})
+	}
 }
 
 func TestRewrite_PNGCoverBecomesJPEG(t *testing.T) {
