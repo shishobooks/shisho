@@ -132,9 +132,9 @@ abridged
 {
   "capabilities": {
     "outputGenerator": {
-      "description": "Generates MOBI downloads",
-      "id": "mobi",
-      "name": "MOBI",
+      "description": "Generates FB2 downloads",
+      "id": "fb2",
+      "name": "FB2",
       "sourceTypes": ["epub"]
     }
   }

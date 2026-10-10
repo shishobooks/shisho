@@ -60,6 +60,8 @@ func GetGenerator(fileType string) (Generator, error) {
 		return &CBZGenerator{}, nil
 	case models.FileTypePDF:
 		return &PDFGenerator{}, nil
+	case models.FileTypeMOBI, models.FileTypeAZW3:
+		return &MOBIGenerator{fileType: fileType}, nil
 	default:
 		return nil, errors.Wrapf(ErrNotImplemented, "unsupported file type: %s", fileType)
 	}

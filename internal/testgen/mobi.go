@@ -109,9 +109,13 @@ func buildMOBIBook(t *testing.T, opts MOBIOptions, version uint32, base int, ima
 		firstImage = uint32(base)
 	}
 	after = append(after, images...)
+	// Trailer indexes count from the book's own header record.
+	fdstIndex := uint32(mobiNullIndex)
 	if version == 8 {
+		fdstIndex = u32(1 + len(textRecords) + len(after))
 		after = append(after, fdstRecord(len(text)))
 	}
+	flisIndex := u32(1 + len(textRecords) + len(after))
 	after = append(after, flisRecord(), fcisRecord(len(text)))
 
 	header := buildMOBIHeaderRecord(t, opts, mobiHeaderSpec{
@@ -123,6 +127,9 @@ func buildMOBIBook(t *testing.T, opts MOBIOptions, version uint32, base int, ima
 		hasImages:    len(images) > 0 || (version == 8 && base > 0 && opts.HasCover),
 		huffIndex:    huffIndex,
 		huffCount:    huffCount,
+		fdstIndex:    fdstIndex,
+		flisIndex:    flisIndex,
+		fcisIndex:    flisIndex + 1,
 		kf8Index:     kf8Index,
 	})
 
@@ -140,6 +147,9 @@ type mobiHeaderSpec struct {
 	hasImages    bool
 	huffIndex    uint32
 	huffCount    uint32
+	fdstIndex    uint32
+	flisIndex    uint32
+	fcisIndex    uint32
 	kf8Index     int
 }
 
@@ -226,9 +236,17 @@ func buildMOBIHeaderRecord(t *testing.T, opts MOBIOptions, spec mobiHeaderSpec) 
 	} else {
 		be.PutUint32(h[168:], mobiNullIndex)
 	}
-	be.PutUint16(h[192:], 1)
-	be.PutUint16(h[194:], spec.textRecords)
+	if spec.version == 8 {
+		be.PutUint32(h[192:], spec.fdstIndex)
+	} else {
+		be.PutUint16(h[192:], 1) // first and last content records
+		be.PutUint16(h[194:], spec.textRecords)
+	}
 	be.PutUint32(h[196:], 1)
+	be.PutUint32(h[200:], spec.fcisIndex)
+	be.PutUint32(h[204:], 1)
+	be.PutUint32(h[208:], spec.flisIndex)
+	be.PutUint32(h[212:], 1)
 	be.PutUint32(h[224:], mobiNullIndex)
 	be.PutUint32(h[232:], mobiNullIndex)
 	be.PutUint32(h[236:], mobiNullIndex)

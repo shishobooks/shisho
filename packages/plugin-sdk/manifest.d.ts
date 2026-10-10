@@ -21,9 +21,9 @@ export interface FileParserCap {
 /** Output generator capability declaration. */
 export interface OutputGeneratorCap {
   description?: string;
-  /** Unique format identifier (e.g., "mobi"). */
+  /** Unique format identifier (e.g., "fb2"). */
   id: string;
-  /** Display name (e.g., "MOBI"). */
+  /** Display name (e.g., "FB2"). */
   name: string;
   /** Source file types this generator can convert from. */
   sourceTypes: string[];

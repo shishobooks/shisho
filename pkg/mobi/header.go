@@ -18,11 +18,27 @@ const (
 	offHeaderLength   = 20
 	offTextEncoding   = 28
 	offVersion        = 36
+	offFirstNonBook   = 80
 	offFullNameOffset = 84
 	offFullNameLength = 88
 	offFirstImage     = 108
+	offHuffRecord     = 112
 	offEXTHFlags      = 128
 	minHeaderRecord   = offEXTHFlags + 4
+
+	// Record indexes past the EXTH flags. A MOBI6 header has the last
+	// content record (a uint16) where a KF8 header has the FDST record, and
+	// only a KF8 header has the fragment, skeleton, DATP, and guide indexes.
+	offFDST        = 192
+	offLastContent = 194
+	offFCIS        = 200
+	offFLIS        = 208
+	offSRCS        = 224
+	offNCX         = 244
+	offFragment    = 248
+	offSkeleton    = 252
+	offDATP        = 256
+	offGuide       = 260
 
 	exthFlagPresent = 0x40
 	nullIndex       = 0xFFFFFFFF
@@ -54,7 +70,10 @@ const (
 	exthSource         = 112
 	exthASIN           = 113
 	exthKF8Boundary    = 121
+	exthResourceCount  = 125
 	exthCoverOffset    = 201
+	exthThumbOffset    = 202
+	exthFakeCover      = 203
 	exthKF8CoverURI    = 129
 	exthUpdatedTitle   = 503
 	exthLanguage       = 524
@@ -101,16 +120,36 @@ func parseHeader(rec []byte) (*header, error) {
 	return h, nil
 }
 
-// parseEXTH reads the EXTH block at start: "EXTH", the block length, the
-// record count, and then each record's type, length (including its 8-byte
-// header), and data.
+// exthRecord is one EXTH record, in file order.
+type exthRecord struct {
+	typ  uint32
+	data []byte
+}
+
+// parseEXTH reads the EXTH block at start into a map of each record type's
+// values.
 func parseEXTH(rec []byte, start int64) (map[uint32][][]byte, error) {
+	records, err := parseEXTHRecords(rec, start)
+	if err != nil {
+		return nil, err
+	}
+	exth := make(map[uint32][][]byte)
+	for _, r := range records {
+		exth[r.typ] = append(exth[r.typ], r.data)
+	}
+	return exth, nil
+}
+
+// parseEXTHRecords reads the EXTH block at start: "EXTH", the block length,
+// the record count, and then each record's type, length (including its
+// 8-byte header), and data.
+func parseEXTHRecords(rec []byte, start int64) ([]exthRecord, error) {
 	be := binary.BigEndian
 	if start < 0 || start+12 > int64(len(rec)) || string(rec[start:start+4]) != "EXTH" {
 		return nil, errors.New("EXTH block is missing")
 	}
 	count := be.Uint32(rec[start+8:])
-	exth := make(map[uint32][][]byte)
+	var records []exthRecord
 	pos := start + 12
 	for i := uint32(0); i < count; i++ {
 		if pos+8 > int64(len(rec)) {
@@ -121,10 +160,10 @@ func parseEXTH(rec []byte, start int64) (map[uint32][][]byte, error) {
 		if length < 8 || pos+length > int64(len(rec)) {
 			return nil, errors.Errorf("EXTH record %d has an invalid length", typ)
 		}
-		exth[typ] = append(exth[typ], rec[pos+8:pos+length])
+		records = append(records, exthRecord{typ: typ, data: rec[pos+8 : pos+length]})
 		pos += length
 	}
-	return exth, nil
+	return records, nil
 }
 
 // decode turns header or EXTH text into a trimmed UTF-8 string.
