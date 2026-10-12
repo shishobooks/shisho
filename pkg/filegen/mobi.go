@@ -1,8 +1,8 @@
 package filegen
 
 import (
-	"bufio"
 	"context"
+	"io"
 	"os"
 	"sort"
 
@@ -29,46 +29,47 @@ func (g *MOBIGenerator) SupportedType() string {
 // Generate writes a copy of the MOBI or AZW3 file at srcPath to destPath
 // with updated metadata. The source file is never modified.
 func (g *MOBIGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
+	return generateFile(ctx, g, g.fileType, srcPath, destPath, book, file)
+}
+
+// Prepare builds the header records, EXTH blocks, cover, thumbnail, and
+// table of contents edits and computes every record offset, so Write only
+// emits the header, the record list, and the records.
+func (g *MOBIGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
 	fileType := g.fileType
 	if err := ctx.Err(); err != nil {
-		return NewGenerationError(fileType, err, "context cancelled")
-	}
-
-	src, err := os.Open(srcPath)
-	if err != nil {
-		return NewGenerationError(fileType, err, "failed to open source file")
-	}
-	defer src.Close()
-	stat, err := src.Stat()
-	if err != nil {
-		return NewGenerationError(fileType, err, "failed to stat source file")
+		return nil, NewGenerationError(fileType, err, "context cancelled")
 	}
 
 	meta, err := mobiMetadata(book, file)
 	if err != nil {
-		return NewGenerationError(fileType, err, "failed to read cover image")
+		return nil, NewGenerationError(fileType, err, "failed to read cover image")
 	}
-	meta.TOC = mobiTOCEdits(ctx, src, stat.Size(), file.Chapters)
+	meta.TOC = mobiTOCEdits(ctx, src, src.Size(), file.Chapters)
 	meta.OnTOCSkipped = logSkippedMOBITOC(ctx)
 	if err := ctx.Err(); err != nil {
-		return NewGenerationError(fileType, err, "context cancelled")
+		return nil, NewGenerationError(fileType, err, "context cancelled")
 	}
 
-	dest, err := os.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	rewritten, err := mobi.PrepareRewrite(src, src.Size(), meta)
 	if err != nil {
-		return NewGenerationError(fileType, err, "failed to create destination file")
+		return nil, NewGenerationError(fileType, err, "failed to write MOBI metadata")
 	}
-	w := bufio.NewWriter(dest)
-	err = mobi.Rewrite(src, stat.Size(), w, meta)
-	if err == nil {
-		err = w.Flush()
-	}
-	if closeErr := dest.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		os.Remove(destPath)
-		return NewGenerationError(fileType, err, "failed to write MOBI metadata")
+	return &mobiPrepared{fileType: fileType, rewritten: rewritten}, nil
+}
+
+type mobiPrepared struct {
+	fileType  string
+	rewritten *mobi.Rewritten
+}
+
+func (p *mobiPrepared) Size() (int64, bool) {
+	return p.rewritten.Size(), true
+}
+
+func (p *mobiPrepared) Write(ctx context.Context, w io.Writer) error {
+	if err := p.rewritten.WriteTo(ctx, w); err != nil {
+		return NewGenerationError(p.fileType, err, "failed to write MOBI metadata")
 	}
 	return nil
 }

@@ -101,6 +101,10 @@ type Options struct {
 	// index over several data and CNCX records, as a large book's is.
 	NCXEntriesPerRecord int
 	NCXLabelsPerCNCX    int
+	// ExtraImageBytes, when positive, adds an image record of that many
+	// bytes after the cover and thumbnail, making the file larger without
+	// changing what it says about itself.
+	ExtraImageBytes int
 }
 
 // TOCEntry is one entry of a generated table of contents.
@@ -127,6 +131,11 @@ func Build(opts Options) ([]byte, error) {
 			return nil, err
 		}
 		images = [][]byte{cover, cover} // cover, then thumbnail
+	}
+	if opts.ExtraImageBytes > 0 {
+		extra := bytes.Repeat([]byte{0xA5}, opts.ExtraImageBytes)
+		copy(extra, []byte{0xFF, 0xD8, 0xFF}) // a JPEG's magic, so it reads as an image
+		images = append(images, extra)
 	}
 
 	var records [][]byte

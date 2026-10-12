@@ -2,12 +2,14 @@ package filegen
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -24,15 +26,22 @@ func (g *M4BGenerator) SupportedType() string {
 
 // Generate creates a modified M4B at destPath with updated metadata.
 func (g *M4BGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	// Check context cancellation
+	return generateFile(ctx, g, models.FileTypeM4B, srcPath, destPath, book, file)
+}
+
+// Prepare parses the source and plans the rewrite: the new moov with its
+// metadata, chapters, cover, and rebuilt chapter track, and the exact output
+// size. Only the box headers and moov are read; the audio is copied by
+// Write.
+func (g *M4BGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
 	if err := ctx.Err(); err != nil {
-		return NewGenerationError(models.FileTypeM4B, err, "context cancelled")
+		return nil, NewGenerationError(models.FileTypeM4B, err, "context cancelled")
 	}
 
 	// Parse source file to preserve existing metadata (description, genre, chapters, etc.)
-	srcMeta, err := mp4.ParseFullContext(ctx, srcPath)
+	srcMeta, err := mp4.ParseFullReaderContext(ctx, src, src.Size())
 	if err != nil {
-		return NewGenerationError(models.FileTypeM4B, err, "failed to parse source file")
+		return nil, NewGenerationError(models.FileTypeM4B, err, "failed to parse source file")
 	}
 
 	// Build new metadata from book/file models
@@ -40,20 +49,40 @@ func (g *M4BGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 
 	// Handle cover replacement
 	if err := g.loadCover(file, newMeta); err != nil {
-		return NewGenerationError(models.FileTypeM4B, err, "failed to load cover image")
+		return nil, NewGenerationError(models.FileTypeM4B, err, "failed to load cover image")
 	}
 
-	// Check context cancellation before write
-	if err := ctx.Err(); err != nil {
-		return NewGenerationError(models.FileTypeM4B, err, "context cancelled")
+	rewrite, err := mp4.PrepareRewrite(ctx, src, src.Size(), newMeta)
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeM4B, err, "failed to write file")
 	}
+	return &m4bPrepared{rewrite: rewrite, src: src}, nil
+}
 
-	// Write to destination using an atomic, cancellation-aware pattern.
-	if err := mp4.WriteToFileContext(ctx, srcPath, destPath, newMeta); err != nil {
+type m4bPrepared struct {
+	rewrite *mp4.Rewrite
+	src     Source
+}
+
+func (p *m4bPrepared) Size() (int64, bool) {
+	return p.rewrite.Size(), true
+}
+
+// Write writes the rewritten file, copying the audio from the source. A
+// source that changed while it was copied fails the write before its last
+// byte, so neither a download nor the cache ends up with a file mixing the
+// old and new audio.
+func (p *m4bPrepared) Write(ctx context.Context, w io.Writer) error {
+	held := &holdLastByte{w: w}
+	if err := p.rewrite.WriteTo(ctx, held); err != nil {
 		return NewGenerationError(models.FileTypeM4B, err, "failed to write file")
 	}
-
-	return nil
+	if checked, ok := p.src.(interface{ Unchanged() error }); ok {
+		if err := checked.Unchanged(); err != nil {
+			return NewGenerationError(models.FileTypeM4B, err, "source file changed during M4B rewrite")
+		}
+	}
+	return errors.WithStack(held.release())
 }
 
 // buildMetadata constructs new Metadata from book/file models while preserving source metadata.

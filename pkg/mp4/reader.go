@@ -51,8 +51,11 @@ func readMetadataContext(ctx context.Context, path string) (*rawMetadata, error)
 		return nil, errors.WithStack(err)
 	}
 	defer f.Close()
+	return readMetadataSeekerContext(ctx, f)
+}
 
-	reader := &contextReadSeeker{ctx: ctx, ReadSeeker: f}
+func readMetadataSeekerContext(ctx context.Context, r io.ReadSeeker) (*rawMetadata, error) {
+	reader := &contextReadSeeker{ctx: ctx, ReadSeeker: r}
 	meta, err := readMetadataFromReader(reader)
 	if err != nil {
 		return nil, err
