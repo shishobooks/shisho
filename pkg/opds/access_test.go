@@ -26,7 +26,7 @@ import (
 
 // newOPDSUser inserts an active user with access to every library, a role
 // holding only the given permissions, and the password "secret".
-func newOPDSUser(t *testing.T, db *bun.DB, username string, permissions ...models.Permission) {
+func newOPDSUser(t *testing.T, db *bun.DB, username string, permissions ...models.Permission) *models.User {
 	t.Helper()
 	ctx := context.Background()
 	role := &models.Role{Name: username + "-role", CreatedAt: time.Now(), UpdatedAt: time.Now()}
@@ -44,6 +44,7 @@ func newOPDSUser(t *testing.T, db *bun.DB, username string, permissions ...model
 	require.NoError(t, err)
 	_, err = db.NewInsert().Model(&models.UserLibraryAccess{UserID: user.ID}).Exec(ctx)
 	require.NoError(t, err)
+	return user
 }
 
 func serveOPDS(t *testing.T, db *bun.DB, username, method, path string) *httptest.ResponseRecorder {
@@ -110,8 +111,16 @@ func TestOPDSHandlers_NoUserInContext_Returns401(t *testing.T) {
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	e.GET("/opds/v1/:types/catalog", h.catalog)
 	e.GET("/opds/v1/:types/libraries/:libraryID/all", h.libraryAllBooks)
+	e.GET("/opds/v1/:types/lists", h.lists)
+	e.GET("/opds/v1/:types/lists/:listID", h.listBooks)
 
-	for _, path := range []string{"/opds/v1/epub/catalog", fmt.Sprintf("/opds/v1/epub/libraries/%d/all", lib.ID)} {
+	for _, path := range []string{
+		"/opds/v1/epub/catalog",
+		fmt.Sprintf("/opds/v1/epub/libraries/%d/all", lib.ID),
+		"/opds/v1/epub/lists",
+		"/opds/v1/epub/lists/1",
+		"/opds/v1/epub/lists/not-an-id",
+	} {
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusUnauthorized, rec.Code, path)

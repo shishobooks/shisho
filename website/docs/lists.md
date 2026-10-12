@@ -74,4 +74,8 @@ The one exception is Books Read. A list's books are book data, so seeing them re
 
 Each viewer sees only list books from libraries they can access. Hidden books remain members of the list and reappear if the viewer later gains access. List sharing never grants access to a library.
 
+## Reading Apps
+
+Lists you own or that are shared with you also appear in the [OPDS catalog](./opds.md#catalog-structure), so a reading app can browse and download a list's books. The same library access filtering applies there.
+
 See [Users and Permissions](./users-and-permissions.md) for global roles and library grants, and [Browsing, Search, and Bulk Actions](./browsing-search-bulk-actions.md) for gallery selection and size controls.

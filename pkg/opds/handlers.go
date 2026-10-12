@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
@@ -31,6 +32,7 @@ type handler struct {
 	opdsService     *Service
 	bookService     *books.Service
 	libraryService  *libraries.Service
+	listsService    *lists.Service
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
 }
@@ -137,17 +139,6 @@ func validateKepubFileTypes(types string) error {
 	return nil
 }
 
-// accessibleLibraryIDs returns the library IDs the Basic Auth user can
-// access, or nil for all of them. With no user in context it returns 401
-// rather than nil, which the feed queries would read as every library.
-func accessibleLibraryIDs(c echo.Context) ([]int, error) {
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return nil, err
-	}
-	return user.GetAccessibleLibraryIDs(), nil
-}
-
 // catalog handles the root catalog feed (lists libraries).
 func (h *handler) catalog(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -158,11 +149,11 @@ func (h *handler) catalog(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	libraryIDs, err := accessibleLibraryIDs(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, libraryIDs)
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, user.ID, user.GetAccessibleLibraryIDs())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -442,11 +433,11 @@ func (h *handler) catalogKepub(c echo.Context) error {
 	}
 
 	baseURL := getBaseURLKepub(c)
-	libraryIDs, err := accessibleLibraryIDs(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, libraryIDs)
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, user.ID, user.GetAccessibleLibraryIDs())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -822,6 +813,145 @@ func truncateFeedAuthors(feed *Feed) {
 			feed.Entries[i].Authors = feed.Entries[i].Authors[:1]
 		}
 	}
+}
+
+// lists handles the feed of the user's own and shared lists.
+func (h *handler) lists(c echo.Context) error {
+	if err := validateFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	return h.serveLists(c, getBaseURL(c))
+}
+
+// listsKepub handles the lists feed in a KePub catalog.
+func (h *handler) listsKepub(c echo.Context) error {
+	if err := validateKepubFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	return h.serveLists(c, getBaseURLKepub(c))
+}
+
+func (h *handler) serveLists(c echo.Context, baseURL string) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+
+	limit, offset := getPaginationParams(c)
+	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), baseURL, c.Param("types"), user.ID, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+// listBooks handles the books feed of a list the user can view.
+func (h *handler) listBooks(c echo.Context) error {
+	if err := validateFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	return h.serveListBooks(c, getBaseURL(c), "", false)
+}
+
+// listBooksKepub handles a list's books feed with KePub links.
+func (h *handler) listBooksKepub(c echo.Context) error {
+	if err := validateKepubFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	return h.serveListBooks(c, getBaseURLKepub(c), "", true)
+}
+
+// listSearch handles search within a list.
+func (h *handler) listSearch(c echo.Context) error {
+	if err := validateFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	query, err := requireSearchQuery(c)
+	if err != nil {
+		return err
+	}
+	return h.serveListBooks(c, getBaseURL(c), query, false)
+}
+
+// listSearchKepub handles search within a list with KePub links.
+func (h *handler) listSearchKepub(c echo.Context) error {
+	if err := validateKepubFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	query, err := requireSearchQuery(c)
+	if err != nil {
+		return err
+	}
+	return h.serveListBooks(c, getBaseURLKepub(c), query, true)
+}
+
+// listOpenSearch handles the OpenSearch description for a list.
+func (h *handler) listOpenSearch(c echo.Context) error {
+	if err := validateFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	return h.serveListOpenSearch(c, getBaseURL(c))
+}
+
+// listOpenSearchKepub handles the OpenSearch description for a list in a
+// KePub catalog.
+func (h *handler) listOpenSearchKepub(c echo.Context) error {
+	if err := validateKepubFileTypes(c.Param("types")); err != nil {
+		return err
+	}
+	return h.serveListOpenSearch(c, getBaseURLKepub(c))
+}
+
+// requireViewableList returns the listID param and the user, or a 404 when
+// the user cannot view the list, so the id does not confirm the list exists.
+func (h *handler) requireViewableList(c echo.Context) (int, *models.User, error) {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	listID, err := httputil.ParamID(c, "listID", "List")
+	if err != nil {
+		return 0, nil, err
+	}
+
+	canView, err := h.listsService.CanView(c.Request().Context(), listID, user.ID)
+	if err != nil {
+		return 0, nil, errors.WithStack(err)
+	}
+	if !canView {
+		return 0, nil, errcodes.NotFound("List")
+	}
+
+	return listID, user, nil
+}
+
+func (h *handler) serveListBooks(c echo.Context, baseURL, query string, kepubMode bool) error {
+	listID, user, err := h.requireViewableList(c)
+	if err != nil {
+		return err
+	}
+
+	limit, offset := getPaginationParams(c)
+	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), baseURL, c.Param("types"), listID, user.GetAccessibleLibraryIDs(), query, limit, offset, kepubMode)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return respondXML(c, feed)
+}
+
+func (h *handler) serveListOpenSearch(c echo.Context, baseURL string) error {
+	listID, _, err := h.requireViewableList(c)
+	if err != nil {
+		return err
+	}
+
+	desc := h.opdsService.BuildListOpenSearchDescription(baseURL, c.Param("types"), listID)
+
+	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
+	return c.XML(http.StatusOK, desc)
 }
 
 // respondXML sends an XML response with the correct content type.

@@ -6,6 +6,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
@@ -19,6 +20,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 		opdsService:     opdsService,
 		bookService:     bookService,
 		libraryService:  libraries.NewService(db),
+		listsService:    lists.NewService(db),
 		downloadCache:   cache,
 		settingsService: settings.NewService(db),
 	}
@@ -46,6 +48,12 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 	v1.GET("/:types/libraries/:libraryID/search", h.librarySearch)
 	v1.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
 
+	// The user's own and shared lists, across every library they can access
+	v1.GET("/:types/lists", h.lists)
+	v1.GET("/:types/lists/:listID", h.listBooks)
+	v1.GET("/:types/lists/:listID/search", h.listSearch)
+	v1.GET("/:types/lists/:listID/opensearch.xml", h.listOpenSearch)
+
 	// Book covers stay under /opds for Basic Auth. The /api/books routes
 	// require session authentication, while bare /books paths serve the SPA.
 	v1.GET("/books/:id/cover", h.bookCover)
@@ -63,6 +71,10 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 	v1Kepub.GET("/:types/libraries/:libraryID/authors/:authorName", h.libraryAuthorBooksKepub)
 	v1Kepub.GET("/:types/libraries/:libraryID/search", h.librarySearchKepub)
 	v1Kepub.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearchKepub)
+	v1Kepub.GET("/:types/lists", h.listsKepub)
+	v1Kepub.GET("/:types/lists/:listID", h.listBooksKepub)
+	v1Kepub.GET("/:types/lists/:listID/search", h.listSearchKepub)
+	v1Kepub.GET("/:types/lists/:listID/opensearch.xml", h.listOpenSearchKepub)
 
 	// File downloads (version-agnostic, shared across OPDS versions).
 	// Also requires Basic Auth and books:read. HEAD is registered alongside GET so OPDS

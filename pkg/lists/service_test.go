@@ -2,9 +2,11 @@ package lists
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -716,4 +718,98 @@ func TestService_ListBooks_SortByAuthor(t *testing.T) {
 		assert.Equal(t, book1.ID, listBooks[0].BookID, "Zebra's book should be first")
 		assert.Equal(t, book2.ID, listBooks[1].BookID, "Alice's book should be second")
 	})
+}
+
+func TestService_ListBooks_FileTypeAndSearchFilters(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	user := createTestUser(t, db, "testuser")
+	library := createTestLibrary(t, db, "testlib")
+	list, err := svc.CreateList(ctx, CreateListOptions{UserID: user.ID, Name: "Filters", DefaultSort: models.ListSortTitleAsc})
+	require.NoError(t, err)
+
+	var bookIDs []int
+	for _, b := range []struct{ title, fileType, role string }{
+		{"Moon Garden", models.FileTypeEPUB, models.FileRoleMain},
+		{"Moon Comic", models.FileTypeCBZ, models.FileRoleMain},
+		{"Sun Garden", models.FileTypeEPUB, models.FileRoleMain},
+		// An EPUB supplement does not make a CBZ book an EPUB book.
+		{"Moon Extras", models.FileTypeCBZ, models.FileRoleMain},
+	} {
+		book := createTestBook(t, db, library.ID, b.title)
+		_, err := db.NewInsert().Model(&models.File{
+			LibraryID: library.ID, BookID: book.ID, FileType: b.fileType, FileRole: b.role,
+			Filepath: "/test/" + b.title + "." + b.fileType, FilesizeBytes: 1,
+		}).Exec(ctx)
+		require.NoError(t, err)
+		if b.title == "Moon Extras" {
+			_, err = db.NewInsert().Model(&models.File{
+				LibraryID: library.ID, BookID: book.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleSupplement,
+				Filepath: "/test/Moon Extras/extra.epub", FilesizeBytes: 1,
+			}).Exec(ctx)
+			require.NoError(t, err)
+		}
+		require.NoError(t, search.NewService(db).ReindexBookByID(ctx, book.ID))
+		bookIDs = append(bookIDs, book.ID)
+	}
+	require.NoError(t, svc.AddBooks(ctx, AddBooksOptions{ListID: list.ID, BookIDs: bookIDs, AddedByUserID: user.ID}))
+
+	titles := func(opts ListBooksOptions) []string {
+		t.Helper()
+		opts.ListID = list.ID
+		opts.Sort = models.ListSortTitleAsc
+		listBooks, total, err := svc.ListBooksWithTotal(ctx, opts)
+		require.NoError(t, err)
+		var result []string
+		for _, lb := range listBooks {
+			result = append(result, lb.Book.Title)
+		}
+		assert.Len(t, result, total)
+		return result
+	}
+
+	assert.Equal(t, []string{"Moon Garden", "Sun Garden"}, titles(ListBooksOptions{MainFileTypes: []string{models.FileTypeEPUB}}))
+	assert.Equal(t, []string{"Moon Comic", "Moon Extras", "Moon Garden"}, titles(ListBooksOptions{Search: "moon"}))
+	assert.Equal(t, []string{"Moon Garden"}, titles(ListBooksOptions{Search: "moon", MainFileTypes: []string{models.FileTypeEPUB}}))
+	assert.Len(t, titles(ListBooksOptions{}), 4)
+}
+
+// Books added in one call share an added_at, so the list's sorts break ties
+// by list membership id to keep offset paging from repeating or skipping a
+// book.
+func TestService_ListBooks_PagesWithoutRepeatsOnTies(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	user := createTestUser(t, db, "testuser")
+	library := createTestLibrary(t, db, "testlib")
+	list, err := svc.CreateList(ctx, CreateListOptions{UserID: user.ID, Name: "Ties"})
+	require.NoError(t, err)
+
+	var bookIDs []int
+	for i := range 7 {
+		bookIDs = append(bookIDs, createTestBook(t, db, library.ID, fmt.Sprintf("Same Title %d", i)).ID)
+	}
+	require.NoError(t, svc.AddBooks(ctx, AddBooksOptions{ListID: list.ID, BookIDs: bookIDs, AddedByUserID: user.ID}))
+	_, err = db.NewUpdate().Model((*models.Book)(nil)).Set("sort_title = ?", "Same").Where("library_id = ?", library.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	for _, sort := range []string{models.ListSortAddedAtDesc, models.ListSortAddedAtAsc, models.ListSortTitleAsc, models.ListSortTitleDesc} {
+		seen := map[int]bool{}
+		for offset := 0; offset < len(bookIDs); offset += 2 {
+			limit := 2
+			page, err := svc.ListBooks(ctx, ListBooksOptions{ListID: list.ID, Sort: sort, Limit: &limit, Offset: &offset})
+			require.NoError(t, err)
+			for _, lb := range page {
+				assert.False(t, seen[lb.BookID], "%s repeated book %d", sort, lb.BookID)
+				seen[lb.BookID] = true
+			}
+		}
+		assert.Len(t, seen, len(bookIDs), sort)
+	}
 }
