@@ -17,6 +17,7 @@ var validPluginModes = map[string]bool{
 	models.PluginModeDisabled:   true,
 }
 
+// validHookTypes lists every hook type Runtime.HookTypes can report.
 var validHookTypes = map[string]bool{
 	models.PluginHookInputConverter:   true,
 	models.PluginHookFileParser:       true,
@@ -28,7 +29,7 @@ var validHookTypes = map[string]bool{
 func hookTypeParam(c echo.Context) (string, error) {
 	hookType := c.Param("hookType")
 	if !validHookTypes[hookType] {
-		return "", errcodes.ValidationError(fmt.Sprintf("unknown hook type %q", hookType))
+		return "", errcodes.ValidationError(fmt.Sprintf("Unknown hook type %q.", hookType))
 	}
 	return hookType, nil
 }
