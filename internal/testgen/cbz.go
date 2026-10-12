@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,6 +60,47 @@ func GenerateCBZ(t *testing.T, dir, filename string, opts CBZOptions) string {
 		if err := writeZipFile(zw, imgName, imgData); err != nil {
 			t.Fatalf("failed to write page %s: %v", imgName, err)
 		}
+	}
+
+	return path
+}
+
+// GenerateCorruptCBZ creates a CBZ of pageCount stored PNG pages (000.png,
+// 001.png, etc.) where page bad fails its checksum when read. Opening the
+// archive and listing its pages succeeds; only reading that page fails.
+func GenerateCorruptCBZ(t *testing.T, dir, filename string, pageCount, bad int) string {
+	t.Helper()
+
+	path := filepath.Join(dir, filename)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create CBZ file: %v", err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	img := generateImage(t, "image/png")
+	for i := 0; i < pageCount; i++ {
+		crc := crc32.ChecksumIEEE(img)
+		if i == bad {
+			crc++
+		}
+		w, err := zw.CreateRaw(&zip.FileHeader{
+			Name:               fmt.Sprintf("%03d.png", i),
+			Method:             zip.Store,
+			CRC32:              crc,
+			CompressedSize64:   uint64(len(img)),
+			UncompressedSize64: uint64(len(img)),
+		})
+		if err != nil {
+			t.Fatalf("failed to create page %d: %v", i, err)
+		}
+		if _, err := w.Write(img); err != nil {
+			t.Fatalf("failed to write page %d: %v", i, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to finalize CBZ: %v", err)
 	}
 
 	return path

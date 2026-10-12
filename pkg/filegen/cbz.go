@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -32,119 +31,15 @@ func (g *CBZGenerator) SupportedType() string {
 // Generate creates a modified CBZ at destPath with updated metadata.
 // Images are processed to optimize for e-readers (resized, grayscale optimization).
 func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	// Open source CBZ
-	srcFile, err := os.Open(srcPath)
+	src, err := OpenSource(srcPath)
 	if err != nil {
 		return NewGenerationError(models.FileTypeCBZ, err, "failed to open source file")
 	}
-	defer srcFile.Close()
+	defer src.Close()
 
-	srcStat, err := srcFile.Stat()
+	prepared, err := g.Prepare(ctx, src, book, file)
 	if err != nil {
-		return NewGenerationError(models.FileTypeCBZ, err, "failed to stat source file")
-	}
-
-	srcZip, err := zip.NewReader(srcFile, srcStat.Size())
-	if err != nil {
-		return NewGenerationError(models.FileTypeCBZ, err, "failed to read source CBZ as zip")
-	}
-
-	// Find existing ComicInfo.xml and separate image files from other files
-	var existingComicInfo *cbzComicInfo
-	var imageFiles []*zip.File
-	var otherFiles []*zip.File
-
-	for _, f := range srcZip.File {
-		lowerName := strings.ToLower(f.Name)
-		if lowerName == "comicinfo.xml" {
-			existingComicInfo, err = parseComicInfoFromZip(f)
-			if err != nil {
-				existingComicInfo = nil
-			}
-			otherFiles = append(otherFiles, f)
-		} else if cbz.IsPageImage(f.Name) {
-			imageFiles = append(imageFiles, f)
-		} else {
-			otherFiles = append(otherFiles, f)
-		}
-	}
-
-	// Process images in parallel for better performance
-	type processedFile struct {
-		name string
-		data []byte
-		err  error
-	}
-	processedImages := make([]processedFile, len(imageFiles))
-
-	// Use a worker pool with NumCPU workers
-	numWorkers := runtime.NumCPU()
-	if numWorkers > len(imageFiles) {
-		numWorkers = len(imageFiles)
-	}
-	if numWorkers == 0 {
-		numWorkers = 1
-	}
-
-	var wg sync.WaitGroup
-	jobs := make(chan int, len(imageFiles))
-
-	// Start workers
-	for w := 0; w < numWorkers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range jobs {
-				// Check for context cancellation
-				select {
-				case <-ctx.Done():
-					processedImages[i] = processedFile{err: ctx.Err()}
-					continue
-				default:
-				}
-
-				imgFile := imageFiles[i]
-				data, err := readCBZZipFile(imgFile)
-				if err != nil {
-					processedImages[i] = processedFile{err: fmt.Errorf("failed to read image %s: %w", imgFile.Name, err)}
-					continue
-				}
-
-				// Process image for e-reader optimization
-				ext := strings.ToLower(filepath.Ext(imgFile.Name))
-				processed := kepub.ProcessImageForEreader(data, ext)
-
-				// Determine the new filename (may change extension if PNG→JPEG)
-				newName := imgFile.Name
-				if processed.Ext != ext {
-					newName = strings.TrimSuffix(imgFile.Name, filepath.Ext(imgFile.Name)) + processed.Ext
-				}
-
-				processedImages[i] = processedFile{
-					name: newName,
-					data: processed.Data,
-				}
-			}
-		}()
-	}
-
-	// Send jobs
-	for i := range imageFiles {
-		jobs <- i
-	}
-	close(jobs)
-
-	// Wait for all workers to complete
-	wg.Wait()
-
-	// Check for errors
-	for i, pf := range processedImages {
-		if pf.err != nil {
-			if errors.Is(pf.err, context.Canceled) || errors.Is(pf.err, context.DeadlineExceeded) {
-				return NewGenerationError(models.FileTypeCBZ, pf.err, "generation cancelled")
-			}
-			return NewGenerationError(models.FileTypeCBZ, pf.err, fmt.Sprintf("failed to process image %d", i+1))
-		}
+		return err
 	}
 
 	// Create temporary output file
@@ -158,79 +53,8 @@ func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 		os.Remove(tmpPath) // Clean up temp file if we don't rename it
 	}()
 
-	destZip := zip.NewWriter(destFile)
-
-	// Prepare the modified ComicInfo
-	comicInfo := modifyCBZComicInfo(existingComicInfo, book, file)
-
-	// Track if we need to add ComicInfo.xml (if it didn't exist)
-	comicInfoWritten := false
-
-	// Process non-image files (including existing ComicInfo.xml)
-	for _, srcZipFile := range otherFiles {
-		var destFileContent []byte
-
-		if strings.ToLower(srcZipFile.Name) == "comicinfo.xml" {
-			// Write modified ComicInfo.xml
-			destFileContent, err = marshalComicInfo(comicInfo)
-			if err != nil {
-				return NewGenerationError(models.FileTypeCBZ, err, "failed to marshal ComicInfo.xml")
-			}
-			comicInfoWritten = true
-		} else {
-			// Copy file unchanged
-			destFileContent, err = readCBZZipFile(srcZipFile)
-			if err != nil {
-				return NewGenerationError(models.FileTypeCBZ, err, "failed to read file from source CBZ")
-			}
-		}
-
-		// Write to destination
-		destZipFile, err := destZip.CreateHeader(&zip.FileHeader{
-			Name:   srcZipFile.Name,
-			Method: srcZipFile.Method,
-		})
-		if err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to create file in destination CBZ")
-		}
-
-		if _, err := destZipFile.Write(destFileContent); err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to write file to destination CBZ")
-		}
-	}
-
-	// Write processed images
-	for _, pf := range processedImages {
-		destZipFile, err := destZip.Create(pf.name)
-		if err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to create image file in destination CBZ")
-		}
-
-		if _, err := destZipFile.Write(pf.data); err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to write image file to destination CBZ")
-		}
-	}
-
-	// If no ComicInfo.xml existed, add one
-	if !comicInfoWritten {
-		destFileContent, err := marshalComicInfo(comicInfo)
-		if err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to marshal new ComicInfo.xml")
-		}
-
-		destZipFile, err := destZip.Create("ComicInfo.xml")
-		if err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to create ComicInfo.xml in destination CBZ")
-		}
-
-		if _, err := destZipFile.Write(destFileContent); err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to write ComicInfo.xml to destination CBZ")
-		}
-	}
-
-	// Close the zip writer
-	if err := destZip.Close(); err != nil {
-		return NewGenerationError(models.FileTypeCBZ, err, "failed to finalize destination CBZ")
+	if err := prepared.Write(ctx, destFile); err != nil {
+		return err
 	}
 
 	// Close the file before renaming
@@ -244,6 +68,226 @@ func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 	}
 
 	return nil
+}
+
+// Prepare reads the source's zip directory and ComicInfo.xml and builds the
+// rewritten ComicInfo.xml. Pages are read only while writing.
+func (g *CBZGenerator) Prepare(_ context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
+	srcZip, err := zip.NewReader(src, src.Size())
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeCBZ, err, "failed to read source CBZ as zip")
+	}
+
+	// Find existing ComicInfo.xml and separate image files from other files
+	p := &cbzPrepared{}
+	var existingComicInfo *cbzComicInfo
+	hasComicInfo := false
+	for _, f := range srcZip.File {
+		lowerName := strings.ToLower(f.Name)
+		if lowerName == "comicinfo.xml" {
+			existingComicInfo, err = parseComicInfoFromZip(f)
+			if err != nil {
+				existingComicInfo = nil
+			}
+			hasComicInfo = true
+			p.otherFiles = append(p.otherFiles, f)
+		} else if cbz.IsPageImage(f.Name) {
+			p.imageFiles = append(p.imageFiles, f)
+		} else {
+			p.otherFiles = append(p.otherFiles, f)
+		}
+	}
+
+	p.comicInfo, err = marshalComicInfo(modifyCBZComicInfo(existingComicInfo, book, file))
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeCBZ, err, "failed to marshal ComicInfo.xml")
+	}
+	p.appendComicInfo = !hasComicInfo
+	return p, nil
+}
+
+// cbzPrepared writes a CBZ: the non-image entries with ComicInfo.xml
+// replaced, then the processed pages in order, then ComicInfo.xml if the
+// source had none.
+type cbzPrepared struct {
+	otherFiles      []*zip.File
+	imageFiles      []*zip.File
+	comicInfo       []byte
+	appendComicInfo bool
+}
+
+// Size reports no size: processed pages are only measured once written.
+func (p *cbzPrepared) Size() (int64, bool) {
+	return 0, false
+}
+
+// Write writes the CBZ to w. The zip writer is flushed after every entry so
+// bytes reach a download about once per page.
+func (p *cbzPrepared) Write(ctx context.Context, w io.Writer) error {
+	destZip := zip.NewWriter(w)
+
+	// Process non-image files (including existing ComicInfo.xml)
+	for _, srcZipFile := range p.otherFiles {
+		destZipFile, err := destZip.CreateHeader(&zip.FileHeader{
+			Name:   srcZipFile.Name,
+			Method: srcZipFile.Method,
+		})
+		if err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to create file in destination CBZ")
+		}
+		if strings.ToLower(srcZipFile.Name) == "comicinfo.xml" {
+			_, err = destZipFile.Write(p.comicInfo)
+		} else {
+			var data []byte
+			if data, err = readCBZZipFile(srcZipFile); err == nil {
+				_, err = destZipFile.Write(data)
+			}
+		}
+		if err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to write file to destination CBZ")
+		}
+		if err := destZip.Flush(); err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to write file to destination CBZ")
+		}
+	}
+
+	if err := p.writePages(ctx, destZip); err != nil {
+		return err
+	}
+
+	// If no ComicInfo.xml existed, add one
+	if p.appendComicInfo {
+		destZipFile, err := destZip.Create("ComicInfo.xml")
+		if err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to create ComicInfo.xml in destination CBZ")
+		}
+		if _, err := destZipFile.Write(p.comicInfo); err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to write ComicInfo.xml to destination CBZ")
+		}
+	}
+
+	if err := destZip.Close(); err != nil {
+		return NewGenerationError(models.FileTypeCBZ, err, "failed to finalize destination CBZ")
+	}
+	return nil
+}
+
+// processedPage is a page ready to be written, or why it is not.
+type processedPage struct {
+	name string
+	data []byte
+	err  error
+}
+
+// writePages processes pages in parallel and writes them in order. Each page
+// gets a slot in pending before a worker starts on it, and pending holds as
+// many slots as there are workers, so workers never run more than that many
+// pages ahead of the writer and memory stays bounded however many pages the
+// book has.
+func (p *cbzPrepared) writePages(ctx context.Context, destZip *zip.Writer) error {
+	numWorkers := min(runtime.NumCPU(), len(p.imageFiles))
+	if numWorkers == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	type job struct {
+		file *zip.File
+		out  chan<- processedPage
+	}
+	jobs := make(chan job)
+	pending := make(chan chan processedPage, numWorkers)
+	var wg sync.WaitGroup
+	// Stop the dispatcher and workers, and wait for them, before returning,
+	// so nothing reads the source once Write is done with it.
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(jobs)
+		defer close(pending)
+		for _, f := range p.imageFiles {
+			out := make(chan processedPage, 1)
+			select {
+			case pending <- out:
+			case <-ctx.Done():
+				return
+			}
+			select {
+			case jobs <- job{file: f, out: out}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	for range numWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				if err := ctx.Err(); err != nil {
+					j.out <- processedPage{err: err}
+					continue
+				}
+				j.out <- processCBZPage(j.file)
+			}
+		}()
+	}
+
+	i := 0
+	for out := range pending {
+		var page processedPage
+		select {
+		case page = <-out:
+		case <-ctx.Done():
+			return NewGenerationError(models.FileTypeCBZ, ctx.Err(), "generation cancelled")
+		}
+		if page.err != nil {
+			if ctx.Err() != nil {
+				return NewGenerationError(models.FileTypeCBZ, ctx.Err(), "generation cancelled")
+			}
+			return NewGenerationError(models.FileTypeCBZ, page.err, fmt.Sprintf("failed to process image %d", i+1))
+		}
+		destZipFile, err := destZip.Create(page.name)
+		if err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to create image file in destination CBZ")
+		}
+		if _, err := destZipFile.Write(page.data); err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to write image file to destination CBZ")
+		}
+		if err := destZip.Flush(); err != nil {
+			return NewGenerationError(models.FileTypeCBZ, err, "failed to write image file to destination CBZ")
+		}
+		i++
+	}
+	// The dispatcher stops early only when ctx is done.
+	if err := ctx.Err(); err != nil {
+		return NewGenerationError(models.FileTypeCBZ, err, "generation cancelled")
+	}
+	return nil
+}
+
+// processCBZPage reads a page and processes it for e-readers.
+func processCBZPage(imgFile *zip.File) processedPage {
+	data, err := readCBZZipFile(imgFile)
+	if err != nil {
+		return processedPage{err: fmt.Errorf("failed to read image %s: %w", imgFile.Name, err)}
+	}
+
+	ext := strings.ToLower(filepath.Ext(imgFile.Name))
+	processed := kepub.ProcessImageForEreader(data, ext)
+
+	// Determine the new filename (may change extension if PNG→JPEG)
+	newName := imgFile.Name
+	if processed.Ext != ext {
+		newName = strings.TrimSuffix(imgFile.Name, filepath.Ext(imgFile.Name)) + processed.Ext
+	}
+	return processedPage{name: newName, data: processed.Data}
 }
 
 // cbzComicInfo represents ComicInfo.xml structure for CBZ generation.

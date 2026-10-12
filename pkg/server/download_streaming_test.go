@@ -29,9 +29,10 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// streamingFixture serves the real route table over a real HTTP server, with
-// a download cache whose every generator is a filegentest.Pausing the test
-// releases.
+// streamingFixture serves the real route table over a real HTTP server.
+// From newStreamingFixture, every generator of its download cache is a
+// filegentest.Pausing the test releases; from newDownloadFixture, the cache
+// uses the real generators.
 type streamingFixture struct {
 	t        *testing.T
 	db       *bun.DB
@@ -50,6 +51,23 @@ const streamingPassword = "test-password-123"
 
 func newStreamingFixture(t *testing.T, gen *filegentest.Pausing) *streamingFixture {
 	t.Helper()
+	f := newDownloadFixture(t, func(dir string) (string, string) {
+		return testgen.GenerateEPUB(t, dir, "Streamed.epub", testgen.EPUBOptions{Title: "Streamed"}), models.FileTypeEPUB
+	}, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+		return gen, nil
+	}))
+	f.gen = gen
+	// Cleanups run last first: release the generator so jobs end before
+	// the fixture waits for them.
+	t.Cleanup(gen.Release)
+	return f
+}
+
+// newDownloadFixture serves the real route table with one book whose only
+// file addFile writes into the book's directory, returning its path and
+// type. Without cache options the cache uses the real generators.
+func newDownloadFixture(t *testing.T, addFile func(dir string) (path, fileType string), opts ...downloadcache.Option) *streamingFixture {
+	t.Helper()
 	ctx := context.Background()
 	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
@@ -60,17 +78,14 @@ func newStreamingFixture(t *testing.T, gen *filegentest.Pausing) *streamingFixtu
 	require.NoError(t, err)
 
 	cacheDir := t.TempDir()
-	cache := downloadcache.NewCache(cacheDir, 1<<30, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
-		return gen, nil
-	}))
+	cache := downloadcache.NewCache(cacheDir, 1<<30, opts...)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, cache, nil, nil, nil)
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.Handler)
-	// Cleanups run last first: release the generator so jobs end, stop the
-	// server, then wait for the jobs before the directories go.
+	// Cleanups run last first: stop the server, then wait for the jobs
+	// before the directories go.
 	t.Cleanup(cache.Wait)
 	t.Cleanup(ts.Close)
-	t.Cleanup(gen.Release)
 
 	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
 	_, err = db.NewInsert().Model(lib).Exec(ctx)
@@ -87,15 +102,15 @@ func newStreamingFixture(t *testing.T, gen *filegentest.Pausing) *streamingFixtu
 	}
 	_, err = db.NewInsert().Model(book).Exec(ctx)
 	require.NoError(t, err)
-	path := testgen.GenerateEPUB(t, dir, "Streamed.epub", testgen.EPUBOptions{Title: "Streamed"})
-	file := &models.File{LibraryID: lib.ID, BookID: book.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, Filepath: path, FilesizeBytes: 1}
+	path, fileType := addFile(dir)
+	file := &models.File{LibraryID: lib.ID, BookID: book.ID, FileType: fileType, FileRole: models.FileRoleMain, Filepath: path, FilesizeBytes: 1}
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 	original, err := os.ReadFile(path)
 	require.NoError(t, err)
 
 	return &streamingFixture{
-		t: t, db: db, ts: ts, gen: gen, cache: cache, cacheDir: cacheDir,
+		t: t, db: db, ts: ts, cache: cache, cacheDir: cacheDir,
 		admin: admin, token: token, book: book, file: file, original: original,
 	}
 }
@@ -442,5 +457,40 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 				assert.Equal(t, 2, gen.Writes())
 			})
 		}
+	}
+}
+
+// A real CBZ with a page that cannot be read midway fails partway through
+// its first download: the client sees a cut download, device routes then
+// serve the Original File, and web UI routes return the error.
+func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
+	t.Parallel()
+	for _, r := range []route{opdsRoute(), webRoute()} {
+		t.Run(r.name, func(t *testing.T) {
+			t.Parallel()
+			f := newDownloadFixture(t, func(dir string) (string, string) {
+				return testgen.GenerateCorruptCBZ(t, dir, "Streamed.cbz", 40, 20), models.FileTypeCBZ
+			})
+
+			res := f.request(r, http.MethodGet)
+			require.Equal(t, http.StatusOK, res.StatusCode)
+			assert.Empty(t, res.Header.Get("Content-Length"))
+			body, err := io.ReadAll(res.Body)
+			require.Error(t, err, "the cut download looked complete")
+			assert.NotEmpty(t, body, "the download failed before any page was sent")
+			require.NoError(t, res.Body.Close())
+			f.cache.Wait()
+
+			again := f.request(r, http.MethodGet)
+			body, err = io.ReadAll(again.Body)
+			require.NoError(t, err)
+			require.NoError(t, again.Body.Close())
+			if r.device {
+				require.Equal(t, http.StatusOK, again.StatusCode)
+				assert.Equal(t, f.original, body)
+			} else {
+				require.Equal(t, http.StatusInternalServerError, again.StatusCode)
+			}
+		})
 	}
 }
