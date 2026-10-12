@@ -112,4 +112,5 @@ Run `cd website && pnpm build` (it catches broken links) and, when theme or navi
 ## Theme Gotchas
 
 - Use `background-image`, not the `background` shorthand, for gradients clipped to text. The production CSS pipeline adds Display P3 overrides, and an overriding shorthand resets `background-clip` while the text stays transparent, so the bug shows only in production builds.
+- Write `backdrop-filter` without the `-webkit-` copy; the build adds the prefix. When a rule lists both, the production minifier keeps only the prefixed one, so Chromium silently loses the filter.
 - The root `.gitignore` ignores macOS `Icon` files, which also matches swizzled `Icon/` directories. Add an exception there before creating another one, or Git silently ignores it.

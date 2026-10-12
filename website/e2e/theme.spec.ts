@@ -118,6 +118,12 @@ test("keeps the mobile layout readable", async ({ page }) => {
     .locator(".navbar-sidebar")
     .evaluate((element) => getComputedStyle(element).backgroundColor);
   expect(background).toMatch(/^rgb\(/);
+
+  await expect(
+    page
+      .locator(".navbar-sidebar")
+      .getByRole("link", { name: "Getting Started", exact: true }),
+  ).toBeInViewport({ ratio: 1 });
 });
 
 test("stays dark when a theme query attribute is supplied", async ({
