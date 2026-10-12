@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -98,6 +99,15 @@ type ListListsOptions struct {
 func (svc *Service) ListListsWithTotal(ctx context.Context, opts ListListsOptions) ([]*models.List, int, error) {
 	opts.includeTotal = true
 	return svc.listListsWithTotal(ctx, opts)
+}
+
+// HasLists reports whether userID owns or has been shared any list.
+func (svc *Service) HasLists(ctx context.Context, userID int) (bool, error) {
+	exists, err := svc.db.NewSelect().
+		Model((*models.List)(nil)).
+		Where("l.user_id = ? OR l.id IN (SELECT list_id FROM list_shares WHERE user_id = ?)", userID, userID).
+		Exists(ctx)
+	return exists, errors.WithStack(err)
 }
 
 func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOptions) ([]*models.List, int, error) {
@@ -292,8 +302,14 @@ func (svc *Service) GetListBookCount(ctx context.Context, listID int, libraryIDs
 }
 
 type ListBooksOptions struct {
-	ListID       int
-	LibraryIDs   []int // Filter by user's accessible libraries (nil = all)
+	ListID     int
+	LibraryIDs []int // Filter by user's accessible libraries (nil = all)
+	// MainFileTypes keeps only books with a main file of one of these types.
+	// Empty means no filter.
+	MainFileTypes []string
+	// Search keeps only books matching this full-text query. Empty means no
+	// filter.
+	Search       string
 	Sort         string
 	Limit        *int
 	Offset       *int
@@ -323,9 +339,14 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 			return sq.Order("a.sort_order ASC")
 		}).
 		Relation("Book.Authors.Person").
-		Relation("Book.BookSeries").
+		Relation("Book.BookSeries", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("bs.sort_order ASC")
+		}).
 		Relation("Book.BookSeries.Series").
-		Relation("Book.Files").
+		Relation("Book.Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.Order("f.file_type ASC")
+		}).
+		Relation("Book.Files.Publisher").
 		Relation("Book.Library").
 		Relation("AddedByUser").
 		Where("lb.list_id = ?", opts.ListID)
@@ -334,6 +355,14 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	if opts.LibraryIDs != nil {
 		q = q.Join("JOIN books b ON b.id = lb.book_id").
 			Where("b.library_id IN (?)", bun.List(opts.LibraryIDs))
+	}
+
+	if len(opts.MainFileTypes) > 0 {
+		q = q.Where("lb.book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(opts.MainFileTypes), models.FileRoleMain)
+	}
+
+	if ftsQuery := search.BuildPrefixQuery(opts.Search); ftsQuery != "" {
+		q = q.Where("lb.book_id IN (SELECT book_id FROM books_fts WHERE books_fts MATCH ?)", ftsQuery)
 	}
 
 	// Apply sort
@@ -353,6 +382,10 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	default: // added_at_desc
 		q = q.Order("lb.added_at DESC")
 	}
+	// Books added in one call share an added_at, and titles and authors can
+	// tie, so a final unique key keeps offset paging from repeating or
+	// skipping a book.
+	q = q.Order("lb.id ASC")
 
 	if opts.Limit != nil {
 		q = q.Limit(*opts.Limit)

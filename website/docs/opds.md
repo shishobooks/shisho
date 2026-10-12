@@ -39,7 +39,7 @@ OPDS uses HTTP Basic Authentication. Add the catalog with the same Shisho userna
 
 The user's role needs Books Read. Without it, every catalog feed, cover, and download returns `403 Forbidden`, the same rule [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs follow.
 
-The root catalog lists only libraries the authenticated user can access. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client.
+The root catalog lists only libraries the authenticated user can access, followed by a **Lists** entry when the user owns or has been shared at least one [list](./lists.md). Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client.
 
 ## Catalog Structure
 
@@ -54,14 +54,17 @@ After the root catalog, clients follow these routes under `/opds/v1/{types}`:
 | Authors list | `/libraries/{libraryID}/authors` |
 | Books by an author | `/libraries/{libraryID}/authors/{authorName}` |
 | Search | `/libraries/{libraryID}/search?q={query}` |
+| Lists the user owns or has been shared | `/lists` |
+| Books in a list | `/lists/{listID}` |
+| Search within a list | `/lists/{listID}/search?q={query}` |
 
-KePub catalogs use the same routes under `/opds/v1/kepub/{types}`. There are no separate genre, tag, recently added, or cross-library book routes.
+KePub catalogs use the same routes under `/opds/v1/kepub/{types}`. There are no separate genre, tag, or recently added routes. A list can hold books from several libraries; its feed shows only the books in libraries the user can access, and a list the user neither owns nor has been shared returns `404 Not Found`.
 
 ## Search and Sort
 
-Catalog search matches book titles, subtitles, book and file paths, authors, narrators, and series. Author, narrator, and series aliases are searchable. It does not search genres, tags, or descriptions.
+Search inside a library covers that library's books, and search inside a list covers only that list's books. Either search matches book titles, subtitles, book and file paths, authors, narrators, and series. Author, narrator, and series aliases are searchable. It does not search genres, tags, or descriptions.
 
-The **All Books**, author, and search book feeds use the authenticated user's [saved sort](./browsing-search-bulk-actions.md#gallery-sort) for that library. Books within a series follow series-number order.
+The **All Books**, author, and search book feeds use the authenticated user's [saved sort](./browsing-search-bulk-actions.md#gallery-sort) for that library. Books within a series follow series-number order. Books in a list follow the list's default sort.
 
 ## Client Compatibility
 

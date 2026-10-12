@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
@@ -26,6 +27,7 @@ type Service struct {
 	db             *bun.DB
 	bookService    *books.Service
 	libraryService *libraries.Service
+	listsService   *lists.Service
 	seriesService  *series.Service
 	peopleService  *people.Service
 }
@@ -36,6 +38,7 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 		db:             db,
 		bookService:    bookService,
 		libraryService: libraries.NewService(db),
+		listsService:   lists.NewService(db),
 		seriesService:  series.NewService(db),
 		peopleService:  people.NewService(db),
 	}
@@ -55,9 +58,10 @@ func kepubFileTypes(types string) []string {
 	return slices.DeleteFunc(parseFileTypes(types), models.IsKindleFileType)
 }
 
-// BuildCatalogFeed builds the root navigation feed listing all libraries.
+// BuildCatalogFeed builds the root navigation feed listing all libraries,
+// followed by a Lists entry when userID owns or has been shared any list.
 // If libraryIDs is non-nil, only libraries with those IDs are included.
-func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL, fileTypes string, libraryIDs []int) (*Feed, error) {
+func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL, fileTypes string, userID int, libraryIDs []int) (*Feed, error) {
 	opts := libraries.ListLibrariesOptions{}
 	if libraryIDs != nil {
 		opts.LibraryIDs = libraryIDs
@@ -87,6 +91,121 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL, fileTypes str
 		entry.Content = &Content{Type: "text", Value: "Browse " + lib.Name}
 		entry.AddLink(RelSubsection, fmt.Sprintf("%s/%s/libraries/%d", baseURL, fileTypes, lib.ID), MimeTypeNavigation)
 		feed.AddEntry(entry)
+	}
+
+	hasLists, err := svc.listsService.HasLists(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if hasLists {
+		listsURL := baseURL + "/" + fileTypes + "/lists"
+		entry := NewEntry(listsURL, "Lists")
+		entry.Content = &Content{Type: "text", Value: "Browse your lists"}
+		entry.AddLink(RelSubsection, listsURL, MimeTypeNavigation)
+		feed.AddEntry(entry)
+	}
+
+	return feed, nil
+}
+
+// BuildListsFeed builds a navigation feed of the lists userID owns or has
+// been shared.
+func (svc *Service) BuildListsFeed(ctx context.Context, baseURL, fileTypes string, userID, limit, offset int) (*Feed, error) {
+	userLists, total, err := svc.listsService.ListListsWithTotal(ctx, lists.ListListsOptions{
+		UserID: userID,
+		Limit:  &limit,
+		Offset: &offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	catalogURL := baseURL + "/" + fileTypes + "/catalog"
+	listsURL := baseURL + "/" + fileTypes + "/lists"
+
+	feed := NewFeed(listsURL, "Lists")
+	feed.Author = &Author{Name: "Shisho"}
+
+	feed.AddLink(RelSelf, fmt.Sprintf("%s?limit=%d&offset=%d", listsURL, limit, offset), MimeTypeNavigation)
+	feed.AddLink(RelStart, catalogURL, MimeTypeNavigation)
+	feed.AddLink(RelUp, catalogURL, MimeTypeNavigation)
+
+	addPaginationLinks(feed, listsURL, limit, offset, total)
+
+	for _, list := range userLists {
+		listURL := fmt.Sprintf("%s/%d", listsURL, list.ID)
+		entry := NewEntry(listURL, list.Name)
+		entry.Updated = list.UpdatedAt
+		if list.Description != nil && *list.Description != "" {
+			entry.Content = &Content{Type: "text", Value: *list.Description}
+		}
+		entry.AddLink(RelSubsection, listURL, MimeTypeAcquisition)
+		feed.AddEntry(entry)
+	}
+
+	return feed, nil
+}
+
+// BuildListBooksFeed builds an acquisition feed of a list's books in the
+// list's default sort, or of the books matching query when it is non-empty.
+// Only books in libraryIDs are included (nil means every library). The
+// caller checks that the user can view the list.
+func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL, fileTypes string, listID int, libraryIDs []int, query string, limit, offset int, kepubMode bool) (*Feed, error) {
+	types := parseFileTypes(fileTypes)
+	if kepubMode {
+		types = kepubFileTypes(fileTypes)
+	}
+
+	list, err := svc.listsService.RetrieveList(ctx, lists.RetrieveListOptions{ID: &listID})
+	if err != nil {
+		return nil, err
+	}
+
+	listBooks, total, err := svc.listsService.ListBooksWithTotal(ctx, lists.ListBooksOptions{
+		ListID:        listID,
+		LibraryIDs:    libraryIDs,
+		MainFileTypes: types,
+		Search:        query,
+		Sort:          list.DefaultSort,
+		Limit:         &limit,
+		Offset:        &offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	catalogURL := baseURL + "/" + fileTypes + "/catalog"
+	listsURL := baseURL + "/" + fileTypes + "/lists"
+	listURL := fmt.Sprintf("%s/%d", listsURL, listID)
+
+	var feed *Feed
+	if query == "" {
+		feed = NewFeed(listURL, list.Name)
+		feed.AddLink(RelSelf, fmt.Sprintf("%s?limit=%d&offset=%d", listURL, limit, offset), MimeTypeAcquisition)
+		feed.AddLink(RelUp, listsURL, MimeTypeNavigation)
+		addPaginationLinks(feed, listURL, limit, offset, total)
+	} else {
+		encodedQuery := url.QueryEscape(query)
+		feed = NewFeed(fmt.Sprintf("%s/search?q=%s", listURL, encodedQuery), "Search: "+query+" - "+list.Name)
+		feed.AddLink(RelSelf, fmt.Sprintf("%s/search?q=%s&limit=%d&offset=%d", listURL, encodedQuery, limit, offset), MimeTypeAcquisition)
+		feed.AddLink(RelUp, listURL, MimeTypeAcquisition)
+		addPaginationLinksWithQuery(feed, listURL+"/search", "q="+encodedQuery, limit, offset, total)
+	}
+	feed.Author = &Author{Name: "Shisho"}
+	feed.AddLink(RelStart, catalogURL, MimeTypeNavigation)
+	feed.AddLink(RelSearch, listURL+"/opensearch.xml", MimeTypeOpenSearch)
+
+	// A list spans libraries, so each book takes its own library's cover
+	// aspect ratio.
+	for _, lb := range listBooks {
+		if lb.Book == nil {
+			continue
+		}
+		aspectRatio := ""
+		if lb.Book.Library != nil {
+			aspectRatio = lb.Book.Library.CoverAspectRatio
+		}
+		feed.AddEntry(svc.bookToEntryWithKepub(baseURL, lb.Book, aspectRatio, types, kepubMode))
 	}
 
 	return feed, nil
@@ -709,6 +828,17 @@ func (svc *Service) BuildLibraryOpenSearchDescription(baseURL, fileTypes string,
 		"Shisho",
 		"Search the Shisho catalog",
 		libBase+"/search?q={searchTerms}",
+	)
+}
+
+// BuildListOpenSearchDescription builds an OpenSearch description for
+// searching within a list.
+func (svc *Service) BuildListOpenSearchDescription(baseURL, fileTypes string, listID int) *OpenSearchDescription {
+	listURL := fmt.Sprintf("%s/%s/lists/%d", baseURL, fileTypes, listID)
+	return NewOpenSearchDescription(
+		"Shisho",
+		"Search this list",
+		listURL+"/search?q={searchTerms}",
 	)
 }
 
