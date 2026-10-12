@@ -776,13 +776,12 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 		assert.Equal(t, "Just in", result[0].Title)
 	})
 
-	t.Run("pageCount 0 disables upper-bound filter", func(t *testing.T) {
+	t.Run("no pages drops every chapter", func(t *testing.T) {
 		t.Parallel()
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
-			{Title: "A", SortOrder: 0, StartPage: &startPage5},
+			{Title: "A", SortOrder: 0, StartPage: &startPage0},
 		}, 0, noParentPage)
-		require.Len(t, result, 1)
-		assert.Equal(t, 6, result[0].PageFrom)
+		assert.Empty(t, result)
 	})
 
 	t.Run("preserves nested chapters", func(t *testing.T) {

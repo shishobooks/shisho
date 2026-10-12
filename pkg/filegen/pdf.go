@@ -41,7 +41,16 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 // trailer), the catalog, and the page tree when there are chapters, and
 // builds the update. An encrypted PDF, or one whose cross-reference data
 // cannot be read, fails here, so device routes serve the Original File.
-func (g *PDFGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
+func (g *PDFGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (prepared Prepared, err error) {
+	// The reader parses files Shisho did not write. A bug it trips on must
+	// still fail preparation cleanly, so device routes serve the Original
+	// File instead of failing the download.
+	defer func() {
+		if r := recover(); r != nil {
+			prepared = nil
+			err = NewGenerationError(models.FileTypePDF, errors.Errorf("panic: %v", r), "failed to read PDF")
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, NewGenerationError(models.FileTypePDF, err, "context cancelled")
 	}
@@ -69,6 +78,10 @@ func (g *PDFGenerator) buildUpdate(ctx context.Context, doc *incremental.Documen
 	}
 	u := doc.NewUpdate()
 	newCatalog := catalog.Clone()
+	// /Metadata and /Lang arrived in PDF 1.4.
+	if !doc.AtLeastVersion("1.4") {
+		newCatalog["Version"] = incremental.Name("1.4")
+	}
 
 	// Entries Shisho does not set, such as Creator and CreationDate, are
 	// kept from the original Info dictionary.
@@ -291,15 +304,12 @@ func (p *pdfPrepared) Write(ctx context.Context, w io.Writer) error {
 		if err := ctx.Err(); err != nil {
 			return errors.WithStack(err)
 		}
-		n, err := io.CopyN(w, original, copyChunk)
+		_, err := io.CopyN(w, original, copyChunk)
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return errors.WithStack(err)
-		}
-		if n < copyChunk {
-			break
 		}
 	}
 	_, err := w.Write(p.update)
@@ -335,9 +345,9 @@ type pdfBookmark struct {
 // sidecar- or plugin-supplied nested chapters.
 //
 // Pages are converted from the 0-indexed storage format to 1-indexed page
-// numbers. pageCount == 0 disables the upper-bound filter (used when
-// the file's PageCount is unknown). parentPage is the parent bookmark's
-// 0-indexed StartPage, or noParentPage at the top level.
+// numbers. pageCount is the number of pages in the PDF itself, so every
+// bookmark points at a page that exists. parentPage is the parent
+// bookmark's 0-indexed StartPage, or noParentPage at the top level.
 func convertModelChaptersToPDFBookmarks(chapters []*models.Chapter, pageCount int, parentPage int) []pdfBookmark {
 	if len(chapters) == 0 {
 		return nil
@@ -353,7 +363,7 @@ func convertModelChaptersToPDFBookmarks(chapters []*models.Chapter, pageCount in
 		if page < 0 {
 			continue
 		}
-		if pageCount > 0 && page >= pageCount {
+		if page >= pageCount {
 			continue
 		}
 		if parentPage != noParentPage && page < parentPage {

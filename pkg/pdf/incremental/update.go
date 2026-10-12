@@ -25,6 +25,49 @@ func (d *Document) Catalog() (Ref, Dict, error) {
 	return ref, catalog, nil
 }
 
+// version returns the PDF version the file declares, such as "1.4": the
+// later of its header and the catalog's /Version. It is empty when
+// neither can be read.
+func (d *Document) version() string {
+	header := make([]byte, 16)
+	n, _ := d.r.ReadAt(header, 0)
+	version := ""
+	if i := bytes.Index(header[:n], []byte("%PDF-")); i >= 0 {
+		v := header[i+len("%PDF-"):]
+		end := bytes.IndexFunc(v, func(r rune) bool { return (r < '0' || r > '9') && r != '.' })
+		if end < 0 {
+			end = len(v)
+		}
+		version = string(v[:end])
+	}
+	if _, catalog, err := d.Catalog(); err == nil {
+		if v, ok := catalog["Version"].(Name); ok && compareVersions(string(v), version) > 0 {
+			version = string(v)
+		}
+	}
+	return version
+}
+
+// compareVersions compares PDF versions of the form major.minor.
+func compareVersions(a, b string) int {
+	parse := func(v string) (int, int) {
+		var major, minor int
+		_, _ = fmt.Sscanf(v, "%d.%d", &major, &minor)
+		return major, minor
+	}
+	am, an := parse(a)
+	bm, bn := parse(b)
+	if am != bm {
+		return am - bm
+	}
+	return an - bn
+}
+
+// AtLeastVersion reports whether the file declares version v or later.
+func (d *Document) AtLeastVersion(v string) bool {
+	return compareVersions(d.version(), v) >= 0
+}
+
 // Pages returns a reference to every page, in page order.
 func (d *Document) Pages() ([]Ref, error) {
 	_, catalog, err := d.Catalog()

@@ -217,3 +217,117 @@ func TestObject_ReferenceCycle(t *testing.T) {
 	_, err = doc.Pages()
 	require.Error(t, err)
 }
+
+// xrefStreamPDF returns a PDF whose only cross-reference section is a
+// stream with the given dictionary entries and (already encoded) data.
+func xrefStreamPDF(t *testing.T, dict string, data []byte) []byte {
+	t.Helper()
+	p := newPDF()
+	p.obj(1, "<< /Type /Catalog /Pages 2 0 R >>")
+	xref := p.b.Len()
+	p.stream(3, "/Type /XRef /Root 1 0 R "+dict, data)
+	fmt.Fprintf(&p.b, "startxref\n%d\n%%%%EOF\n", xref)
+	return p.b.Bytes()
+}
+
+// A tiny cross-reference stream that inflates to millions of entries is
+// refused instead of filling memory.
+func TestOpen_RefusesTooManyEntries(t *testing.T) {
+	t.Parallel()
+	rows := maxEntries + 1
+	data := xrefStreamPDF(t, fmt.Sprintf("/Size %d /W [1 0 0] /Filter /FlateDecode", rows), deflate(t, make([]byte, rows)))
+	_, err := Open(bytes.NewReader(data), int64(len(data)))
+	require.ErrorIs(t, err, ErrUnreadable)
+}
+
+// Absurd predictor parameters are refused, not multiplied into an
+// overflowing row length.
+func TestOpen_RefusesHugePredictorParameters(t *testing.T) {
+	t.Parallel()
+	data := xrefStreamPDF(t, "/Size 2 /W [1 1 1] /Filter /FlateDecode /DecodeParms << /Predictor 12 /Colors 2147483648 /BitsPerComponent 2147483648 /Columns 2 >>", deflate(t, make([]byte, 8)))
+	_, err := Open(bytes.NewReader(data), int64(len(data)))
+	require.ErrorIs(t, err, ErrUnreadable)
+}
+
+// An object stream whose header gives a negative offset fails cleanly.
+func TestObject_NegativeObjectStreamOffset(t *testing.T) {
+	t.Parallel()
+	p := newPDF()
+	p.obj(1, "<< /Type /Catalog /Pages 2 0 R >>")
+	p.stream(4, "/Type /ObjStm /N 1 /First 6", []byte("2 -50 << >>"))
+	xref := p.b.Len()
+	rows := []byte{1, 0, byte(p.offsets[1]), 0, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, byte(p.offsets[4]), 0}
+	require.Less(t, p.offsets[4], 256)
+	p.stream(5, "/Type /XRef /Root 1 0 R /Size 5 /Index [1 4] /W [1 2 1]", rows)
+	fmt.Fprintf(&p.b, "startxref\n%d\n%%%%EOF\n", xref)
+
+	doc, err := Open(bytes.NewReader(p.b.Bytes()), int64(p.b.Len()))
+	require.NoError(t, err)
+	_, err = doc.Object(Ref{Num: 2})
+	require.Error(t, err)
+}
+
+// "stream" followed by CRLF still finds the data when the CR is the last
+// byte of the first read window.
+func TestIndirectAt_StreamCRLFAcrossWindow(t *testing.T) {
+	t.Parallel()
+	rows := []byte{0, 0, 0, 255, 1, 0, 9, 0, 1, 0, 0, 0}
+	p := newPDF()
+	p.obj(1, "<< /Type /Catalog /Pages 2 0 R >>")
+	xref := p.b.Len()
+	head := fmt.Sprintf("3 0 obj\n<< /Type /XRef /Root 1 0 R /Size 3 /W [1 2 1] /Length %d ", len(rows))
+	pad := firstWindow - len(head) - len(">>\nstream\r")
+	require.Positive(t, pad)
+	p.b.WriteString(head + strings.Repeat(" ", pad) + ">>\nstream\r\n")
+	require.Equal(t, byte('\r'), p.b.Bytes()[xref+firstWindow-1], "the CR is the window's last byte")
+	rows[6] = byte(p.offsets[1])
+	rows[10] = byte(xref >> 8)
+	rows[11] = byte(xref)
+	p.b.Write(rows)
+	fmt.Fprintf(&p.b, "\nendstream\nendobj\nstartxref\n%d\n%%%%EOF\n", xref)
+
+	doc, err := Open(bytes.NewReader(p.b.Bytes()), int64(p.b.Len()))
+	require.NoError(t, err)
+	_, catalog, err := doc.Catalog()
+	require.NoError(t, err)
+	assert.Equal(t, Name("Catalog"), catalog["Type"])
+}
+
+func TestAtLeastVersion(t *testing.T) {
+	t.Parallel()
+	doc := func(header, catalog string) *Document {
+		p := &pdfBuilder{offsets: map[int]int{}}
+		p.b.WriteString(header + "\n")
+		p.obj(1, catalog)
+		xref := p.b.Len()
+		fmt.Fprintf(&p.b, "xref\n0 2\n0000000000 65535 f\r\n%010d 00000 n\r\ntrailer\n<< /Size 2 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", p.offsets[1], xref)
+		d, err := Open(bytes.NewReader(p.b.Bytes()), int64(p.b.Len()))
+		require.NoError(t, err)
+		return d
+	}
+	assert.False(t, doc("%PDF-1.3", "<< /Type /Catalog >>").AtLeastVersion("1.4"))
+	assert.True(t, doc("%PDF-1.4", "<< /Type /Catalog >>").AtLeastVersion("1.4"))
+	assert.True(t, doc("%PDF-1.3", "<< /Type /Catalog /Version /1.7 >>").AtLeastVersion("1.4"), "the catalog's /Version overrides an older header")
+	assert.True(t, doc("%PDF-2.0", "<< /Type /Catalog >>").AtLeastVersion("1.4"))
+}
+
+// Open and the reads a download makes never panic, whatever the bytes.
+func FuzzOpen(f *testing.F) {
+	p := newPDF()
+	p.obj(1, "<< /Type /Catalog /Pages 2 0 R >>")
+	p.obj(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	p.obj(3, "<< /Type /Page /Parent 2 0 R >>")
+	xref := p.b.Len()
+	fmt.Fprintf(&p.b, "xref\n0 4\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", p.offsets[1], p.offsets[2], p.offsets[3], xref)
+	f.Add(p.b.Bytes())
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		doc, err := Open(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			return
+		}
+		_, _, _ = doc.Catalog()
+		_, _ = doc.Pages()
+		_ = doc.AtLeastVersion("1.4")
+		_, _ = doc.NewUpdate().Bytes()
+	})
+}

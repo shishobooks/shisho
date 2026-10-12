@@ -1,6 +1,6 @@
 # PDF Format
 
-`pkg/pdf` reads PDFs with pdfcpu (metadata) and PDFium (cover rendering and outlines). Downloads (`pkg/filegen/pdf.go`) are the original bytes plus an incremental update built by `pkg/pdf/incremental`, which reads only the cross-reference data and the objects it is asked for. Page numbers are 0-indexed everywhere except the 1-indexed `PageFrom` of download bookmarks.
+`pkg/pdf` reads PDFs with pdfcpu (metadata) and PDFium (cover rendering and outlines). Downloads (`pkg/filegen/pdf.go`) are the original bytes plus an incremental update built by `pkg/pdf/incremental`. Page numbers are 0-indexed.
 
 - **Get PDFium only through `PdfiumInstance(timeout)`** and `defer instance.Close()`. The shared pool holds one instance on purpose (see `initPdfiumPool`); raise it only after measuring per-instance memory and seeing real contention in the warn logs.
 - **Pick the timeout for where the caller runs; never change a shared default.** User-facing requests pass `InteractivePdfiumTimeout`; Scan-time work in this package uses `scanPdfiumTimeout`, whose comment explains why it is long.

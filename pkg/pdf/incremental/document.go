@@ -26,6 +26,18 @@ const (
 	// maxDecoded bounds a decoded stream, so a hostile file cannot expand
 	// into all of memory.
 	maxDecoded = 256 << 20
+	// maxEntries bounds the cross-reference entries read from all
+	// sections. Real books have thousands of objects; a tiny stream can
+	// otherwise inflate into hundreds of millions of entries.
+	maxEntries = 4_000_000
+	// maxWindow bounds how much is read to parse one object or
+	// cross-reference table, so an unterminated object cannot pull the
+	// whole file into memory.
+	maxWindow = 64 << 20
+	// maxObjStreamCache bounds the decoded object streams kept for reuse.
+	maxObjStreamCache = 64 << 20
+	// maxRefDepth bounds nested Object calls.
+	maxRefDepth = 32
 	// firstWindow is how much is read to parse an object; the read grows
 	// when the object is larger.
 	firstWindow = 1 << 10
@@ -68,6 +80,11 @@ type Document struct {
 	endsWithEOL bool
 
 	objStreams map[int]*objStream
+	// objStreamBytes is the decoded size of the cached object streams.
+	objStreamBytes int
+	// entryCount counts the cross-reference entries read, against
+	// maxEntries.
+	entryCount int
 	// depth counts nested Object calls (a stream's /Length can be a
 	// reference), so a reference cycle fails instead of recursing forever.
 	depth int
@@ -100,11 +117,6 @@ func Open(r io.ReaderAt, size int64) (*Document, error) {
 		return nil, errors.Wrap(ErrUnreadable, "trailer has no /Root")
 	}
 	return d, nil
-}
-
-// Size returns the size of the original file.
-func (d *Document) Size() int64 {
-	return d.size
 }
 
 // Trailer returns the merged trailer: each key from the newest section
@@ -190,7 +202,7 @@ func (d *Document) readSection(off int64, maxNum *int) (Dict, bool, error) {
 			return nil
 		}
 		var err error
-		table, trailer, err = parseTable(p)
+		table, trailer, err = parseTable(p, d.countEntries)
 		return err
 	})
 	if err != nil {
@@ -227,6 +239,15 @@ type tableEntry struct {
 	xrefEntry
 }
 
+// countEntries charges n entries against maxEntries before they are read.
+func (d *Document) countEntries(n int64) error {
+	if n < 0 || n > maxEntries || d.entryCount+int(n) > maxEntries {
+		return errors.New("too many cross-reference entries")
+	}
+	d.entryCount += int(n)
+	return nil
+}
+
 func (d *Document) addEntries(entries []tableEntry, maxNum *int, keep func(tableEntry) bool) {
 	for _, e := range entries {
 		if keep != nil && !keep(e) {
@@ -242,7 +263,7 @@ func (d *Document) addEntries(entries []tableEntry, maxNum *int, keep func(table
 }
 
 // parseTable reads a classic cross-reference table and its trailer.
-func parseTable(p *parser) ([]tableEntry, Dict, error) {
+func parseTable(p *parser, count func(n int64) error) ([]tableEntry, Dict, error) {
 	p.pos += len("xref")
 	var entries []tableEntry
 	for {
@@ -269,11 +290,14 @@ func parseTable(p *parser) ([]tableEntry, Dict, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		count, ok := c.(Integer)
-		if !ok || count < 0 {
+		n, ok := c.(Integer)
+		if !ok || n < 0 {
 			return nil, nil, errors.Errorf("invalid subsection count %v", c)
 		}
-		for i := 0; i < int(count); i++ {
+		if err := count(int64(n)); err != nil {
+			return nil, nil, err
+		}
+		for i := 0; i < int(n); i++ {
 			offTok, err := p.object()
 			if err != nil {
 				return nil, nil, err
@@ -355,6 +379,9 @@ func (d *Document) readXRefStream(off int64) ([]tableEntry, Dict, error) {
 		if !ok1 || !ok2 || start < 0 || count < 0 {
 			return nil, nil, errors.New("cross-reference stream has an invalid /Index")
 		}
+		if err := d.countEntries(int64(count)); err != nil {
+			return nil, nil, err
+		}
 		for j := 0; j < int(count); j++ {
 			if (row+1)*rowLen > len(data) {
 				return nil, nil, errors.New("cross-reference stream is shorter than its /Index")
@@ -400,6 +427,9 @@ func readField(b []byte) int64 {
 // parseAt runs fn over the file from off, growing the window it reads
 // until fn has the bytes it needs.
 func (d *Document) parseAt(off int64, fn func(p *parser) error) error {
+	if off < 0 || off >= d.size {
+		return errors.Errorf("offset %d is outside the file", off)
+	}
 	window := int64(firstWindow)
 	for {
 		n := min(window, d.size-off)
@@ -411,7 +441,10 @@ func (d *Document) parseAt(off int64, fn func(p *parser) error) error {
 		if !errors.Is(err, errShort) {
 			return err
 		}
-		window *= 4
+		if n >= maxWindow {
+			return errors.Errorf("object at offset %d is too large", off)
+		}
+		window = min(window*4, maxWindow)
 	}
 }
 
@@ -464,6 +497,10 @@ func (d *Document) indirectAt(off int64) (Ref, Object, error) {
 		// The keyword is followed by CRLF or LF; tolerate a bare CR.
 		if p.pos < len(p.buf) && p.buf[p.pos] == '\r' {
 			p.pos++
+			if p.pos == len(p.buf) && !p.final {
+				// The LF that may follow is past the window.
+				return errShort
+			}
 		}
 		if p.pos < len(p.buf) && p.buf[p.pos] == '\n' {
 			p.pos++
@@ -531,7 +568,7 @@ func (d *Document) Resolve(o Object) (Object, error) {
 // Object returns the object ref refers to, or Null when the file has no
 // such object, as the specification requires.
 func (d *Document) Object(ref Ref) (Object, error) {
-	if d.depth > maxDepth {
+	if d.depth > maxRefDepth {
 		return nil, errors.New("PDF references nested too deeply")
 	}
 	d.depth++
@@ -569,7 +606,12 @@ func (d *Document) compressed(num int, e xrefEntry) (Object, error) {
 		if stm, err = d.loadObjStream(e.stream, se.offset); err != nil {
 			return nil, errors.Wrapf(err, "object stream %d", e.stream)
 		}
+		if d.objStreamBytes+len(stm.data) > maxObjStreamCache {
+			d.objStreams = map[int]*objStream{}
+			d.objStreamBytes = 0
+		}
 		d.objStreams[e.stream] = stm
+		d.objStreamBytes += len(stm.data)
 	}
 	i := e.index
 	if i < 0 || i >= len(stm.offsets) || stm.nums[i] != num {
@@ -621,7 +663,7 @@ func (d *Document) loadObjStream(num int, off int64) (*objStream, error) {
 		if err != nil {
 			return nil, err
 		}
-		if int(first)+int(objOff) > len(data) {
+		if objOff < 0 || int(first)+int(objOff) > len(data) {
 			return nil, errors.New("object offset is past the end of the stream")
 		}
 		stm.nums = append(stm.nums, int(objNum))
@@ -721,7 +763,7 @@ func unpredict(data []byte, params Dict) ([]byte, error) {
 	if v, ok := params["Columns"].(Integer); ok {
 		columns = v
 	}
-	if colors < 1 || bpc < 1 || columns < 1 || colors*bpc*columns > 1<<20 {
+	if colors < 1 || colors > 32 || bpc < 1 || bpc > 16 || columns < 1 || columns > 1<<20 {
 		return nil, errors.New("invalid predictor parameters")
 	}
 	bpp := int(max((colors*bpc+7)/8, 1))

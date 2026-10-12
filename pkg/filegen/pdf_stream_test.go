@@ -3,6 +3,7 @@ package filegen_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -301,5 +301,48 @@ func TestPDFGenerator_UnreadableXRefServedAsOriginal(t *testing.T) {
 	require.Error(t, err)
 	var genErr *filegen.GenerationError
 	require.ErrorAs(t, err, &genErr)
-	assert.True(t, errors.Is(err, incremental.ErrUnreadable))
+	assert.ErrorIs(t, err, incremental.ErrUnreadable)
+}
+
+// Chapters on a PDF whose page tree is empty are dropped instead of
+// pointing at pages that do not exist.
+func TestPDFGenerator_EmptyPageTreeSkipsBookmarks(t *testing.T) {
+	t.Parallel()
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.4\n")
+	catalog := b.Len()
+	b.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	pages := b.Len()
+	b.WriteString("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n")
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 3\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\ntrailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", catalog, pages, xref)
+	srcPath := filepath.Join(t.TempDir(), "empty.pdf")
+	require.NoError(t, os.WriteFile(srcPath, b.Bytes(), 0o600))
+
+	book, file := pdfTestBook()
+	out, _, err := generatePDF(t, srcPath, book, file)
+	require.NoError(t, err)
+	assert.NotContains(t, string(out[b.Len():]), "/Outlines")
+}
+
+// A PDF older than 1.4 is declared 1.4 by the update, which adds the
+// /Metadata and /Lang entries that version introduced.
+func TestPDFGenerator_RaisesVersionForMetadata(t *testing.T) {
+	t.Parallel()
+	srcPath := writeSourcePDF(t, t.TempDir(), classicXRef)
+	data, err := os.ReadFile(srcPath)
+	require.NoError(t, err)
+	require.True(t, bytes.HasPrefix(data, []byte("%PDF-1.4")))
+	copy(data, "%PDF-1.3")
+	require.NoError(t, os.WriteFile(srcPath, data, 0o600))
+
+	book, file := pdfTestBook()
+	out, _, err := generatePDF(t, srcPath, book, file)
+	require.NoError(t, err)
+	doc, err := incremental.Open(bytes.NewReader(out), int64(len(out)))
+	require.NoError(t, err)
+	_, catalog, err := doc.Catalog()
+	require.NoError(t, err)
+	assert.Equal(t, incremental.Name("1.4"), catalog["Version"])
+	checkPDFOutput(t, out)
 }
