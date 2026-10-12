@@ -2,6 +2,7 @@ package mobi
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -77,26 +78,45 @@ func isTrailerRecord(head []byte, size int64) bool {
 }
 
 // Rewrite copies the MOBI or AZW3 file in src to dst with meta written into
-// it. Both header records of a combo file are rewritten. Only header records,
-// the cover and thumbnail records, and the records of an edited table of
-// contents change (with the text records' trailing index data when entries
-// are deleted); every other record is copied byte for byte.
+// it. See PrepareRewrite.
 func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
-	f, err := readPDBFile(src, size)
+	r, err := PrepareRewrite(src, size, meta)
 	if err != nil {
 		return err
+	}
+	return r.WriteTo(context.Background(), dst)
+}
+
+// Rewritten is a MOBI or AZW3 file with its header, cover, and table of
+// contents records rebuilt and every record offset computed, ready to be
+// written front to back.
+type Rewritten struct {
+	f    *pdbFile
+	size int64
+}
+
+// PrepareRewrite rebuilds the records meta changes in the MOBI or AZW3 file
+// in src. Both header records of a combo file are rewritten. Only header
+// records, the cover and thumbnail records, and the records of an edited
+// table of contents change (with the text records' trailing index data when
+// entries are deleted); every other record is copied byte for byte by
+// WriteTo. Everything that can fail on a malformed file fails here.
+func PrepareRewrite(src io.ReaderAt, size int64, meta *Metadata) (*Rewritten, error) {
+	f, err := readPDBFile(src, size)
+	if err != nil {
+		return nil, err
 	}
 
 	rec0, err := f.load(0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	first, err := parseHeader(rec0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if first.encrypted {
-		return errors.WithStack(ErrDRMProtected)
+		return nil, errors.WithStack(ErrDRMProtected)
 	}
 
 	kf8Index := -1
@@ -105,11 +125,11 @@ func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
 		if index, ok := first.number(exthKF8Boundary); ok && index > 0 && int64(index) < int64(len(f.records)) {
 			rec, err := f.load(int(index))
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if h, err := parseHeader(rec); err == nil && h.isKF8() {
 				if h.encrypted {
-					return errors.WithStack(ErrDRMProtected)
+					return nil, errors.WithStack(ErrDRMProtected)
 				}
 				kf8Index, kf8 = int(index), h
 			}
@@ -120,23 +140,23 @@ func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
 	if meta.Cover != nil {
 		cover, err := normalizeCover(meta.Cover)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if newCover, err = f.placeCover(cover, first, kf8, &kf8Index); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	hasKF8 := first.isKF8() || kf8Index >= 0
 	rec, err := rebuildHeaderRecord(f.records[0], first, meta, headerEdits{cover: newCover, kf8Index: kf8Index, kf8URI: hasKF8, countsImages: true})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f.records[0] = rec
 	if kf8Index >= 0 {
 		rec, err := rebuildHeaderRecord(f.records[kf8Index], kf8, meta, headerEdits{cover: newCover, kf8Index: -1, kf8URI: true})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		f.records[kf8Index] = rec
 	}
@@ -156,7 +176,22 @@ func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
 		}
 	}
 
-	return f.writeTo(dst)
+	outSize, _, err := f.layout()
+	if err != nil {
+		return nil, err
+	}
+	return &Rewritten{f: f, size: outSize}, nil
+}
+
+// Size returns the exact number of bytes WriteTo writes.
+func (r *Rewritten) Size() int64 {
+	return r.size
+}
+
+// WriteTo writes the file to w: the header, the record list, and the
+// records.
+func (r *Rewritten) WriteTo(ctx context.Context, w io.Writer) error {
+	return r.f.writeTo(ctx, w)
 }
 
 // coverRecords is where the cover sits after Rewrite places it: its offset
@@ -680,31 +715,41 @@ func (f *pdbFile) insert(p int, data []byte) {
 	}
 }
 
-func (f *pdbFile) writeTo(w io.Writer) error {
+// layout returns the size of the file writeTo writes, and its record list.
+func (f *pdbFile) layout() (int64, []byte, error) {
 	count := len(f.records)
 	if count > 0xFFFF {
-		return errors.New("MOBI file has too many records")
+		return 0, nil, errors.New("MOBI file has too many records")
 	}
-	be := binary.BigEndian
-	header := append([]byte(nil), f.header...)
-	be.PutUint16(header[pdbRecordsOffset:], uint16(count))
-
 	list := make([]byte, count*pdbRecordEntry)
-	offset := int64(len(header) + len(list) + len(f.gap))
+	offset := int64(len(f.header) + len(list) + len(f.gap))
 	for i := range f.records {
 		if offset > 0xFFFFFFFF {
-			return errors.New("MOBI file is too large")
+			return 0, nil, errors.New("MOBI file is too large")
 		}
-		be.PutUint32(list[i*pdbRecordEntry:], uint32(offset)) //nolint:gosec // checked against 0xFFFFFFFF above
+		binary.BigEndian.PutUint32(list[i*pdbRecordEntry:], uint32(offset)) //nolint:gosec // checked against 0xFFFFFFFF above
 		copy(list[i*pdbRecordEntry+4:], f.entries[i][:])
 		offset += f.size(i)
 	}
+	return offset, list, nil
+}
+
+func (f *pdbFile) writeTo(ctx context.Context, w io.Writer) error {
+	_, list, err := f.layout()
+	if err != nil {
+		return err
+	}
+	header := append([]byte(nil), f.header...)
+	binary.BigEndian.PutUint16(header[pdbRecordsOffset:], uint16(len(f.records))) //nolint:gosec // layout caps the count at 0xFFFF
 
 	bw := &errWriter{w: w}
 	bw.write(header)
 	bw.write(list)
 	bw.write(f.gap)
 	for i, rec := range f.records {
+		if bw.err == nil {
+			bw.err = ctx.Err()
+		}
 		if bw.err != nil {
 			break
 		}

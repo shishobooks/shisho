@@ -542,7 +542,7 @@ func (c *Cache) stream(ctx context.Context, e *entry, gen filegen.StreamGenerato
 		defer stopOnClose()
 		defer stopOnDone()
 		out := &clientWriter{w: pw}
-		err := writeRecovering(buildCtx, prepared, size, out)
+		err := writeRecovering(buildCtx, prepared, src, size, out)
 		if err != nil && !out.gone && !stopped(buildCtx, err) {
 			c.failedPartway(ctx, e, err)
 		}
@@ -567,20 +567,21 @@ func (cw *clientWriter) Write(p []byte) (int, error) {
 
 // writeRecovering runs writeChecked, turning a panic into an error, for
 // writes outside a job.
-func writeRecovering(ctx context.Context, prepared filegen.Prepared, size int64, w io.Writer) (err error) {
+func writeRecovering(ctx context.Context, prepared filegen.Prepared, src *filegen.FileSource, size int64, w io.Writer) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = errors.Errorf("generator panicked: %v\n%s", r, debug.Stack())
 		}
 	}()
-	return writeChecked(ctx, prepared, size, w)
+	return writeChecked(ctx, prepared, src, size, w)
 }
 
-// writeChecked runs prepared's writing step into w and checks that it wrote
-// the size it reported, or -1 for no size.
-func writeChecked(ctx context.Context, prepared filegen.Prepared, size int64, w io.Writer) error {
+// writeChecked runs prepared's writing step into w and checks that src did
+// not change while it was copied and that it wrote the size it reported, or
+// -1 for no size.
+func writeChecked(ctx context.Context, prepared filegen.Prepared, src *filegen.FileSource, size int64, w io.Writer) error {
 	cw := &countingWriter{w: w}
-	if err := prepared.Write(ctx, cw); err != nil {
+	if err := filegen.WriteFromSource(ctx, prepared, src, cw); err != nil {
 		return err
 	}
 	if size >= 0 && cw.n != size {
@@ -694,7 +695,7 @@ func (c *Cache) build(ctx context.Context, e *entry, j *job, gen filegen.StreamG
 		j.size = size
 	}
 	close(j.prepared)
-	return writeChecked(ctx, prepared, j.size, j)
+	return writeChecked(ctx, prepared, src, j.size, j)
 }
 
 // publish renames j's complete partial file into place and writes its
