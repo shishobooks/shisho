@@ -29,6 +29,14 @@ func writeTestPDF(t *testing.T, outPath string, infoEntries map[string]string) {
 // with the given info dict entries.
 func writeTestPDFWithPages(t *testing.T, outPath string, pageCount int, infoEntries map[string]string) {
 	t.Helper()
+	writeTestPDFWithContent(t, outPath, pageCount, infoEntries, 0)
+}
+
+// writeTestPDFWithContent writes a PDF like writeTestPDFWithPages whose
+// pages each have a content stream of contentBytes bytes, so the file is
+// mostly page content, as real PDFs are.
+func writeTestPDFWithContent(t *testing.T, outPath string, pageCount int, infoEntries map[string]string, contentBytes int) {
+	t.Helper()
 	require.Positive(t, pageCount, "pageCount must be > 0")
 
 	var b strings.Builder
@@ -66,8 +74,23 @@ func writeTestPDFWithPages(t *testing.T, outPath string, pageCount int, infoEntr
 	// Write each Page
 	for i := 0; i < pageCount; i++ {
 		offsets = append(offsets, b.Len())
-		b.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Page /Parent %d 0 R >>\nendobj\n",
-			pageObjNums[i], pagesObj))
+		contents := ""
+		if contentBytes > 0 {
+			contents = fmt.Sprintf(" /Contents %d 0 R", objNum+i)
+		}
+		b.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Page /Parent %d 0 R%s >>\nendobj\n",
+			pageObjNums[i], pagesObj, contents))
+	}
+
+	// Each page's content stream: a comment, which draws nothing.
+	if contentBytes > 0 {
+		content := "%" + strings.Repeat("x", contentBytes-1)
+		for i := 0; i < pageCount; i++ {
+			offsets = append(offsets, b.Len())
+			b.WriteString(fmt.Sprintf("%d 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n",
+				objNum, len(content), content))
+			objNum++
+		}
 	}
 
 	// Info dict object (optional)
@@ -358,9 +381,8 @@ func TestPDFGenerator_Generate_ReleaseDate(t *testing.T) {
 	err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 	require.NoError(t, err)
 
-	// pdfcpu always overwrites CreationDate with the current time when writing,
-	// so the release date is deliberately not written. Generation must still
-	// succeed.
+	// CreationDate is when the file was made, so the release date is
+	// deliberately not written. Generation must still succeed.
 	_, err = os.Stat(destPath)
 	require.NoError(t, err)
 	assert.NotContains(t, gen.buildProperties(book, file), "CreationDate")
@@ -419,8 +441,6 @@ func TestPDFGenerator_PreservesCreator(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read the destination info dict directly via pdfcpu to check Creator is preserved.
-	// Note: pdfcpu always overwrites Producer with its own identifier when writing,
-	// so Producer is not preserved. Creator, however, is not touched by pdfcpu.
 	f, err := os.Open(destPath)
 	require.NoError(t, err)
 	defer f.Close()
@@ -478,11 +498,8 @@ func TestPDFGenerator_Generate_Chapters(t *testing.T) {
 func TestPDFGenerator_Generate_Chapters_OutOfOrder(t *testing.T) {
 	t.Parallel()
 
-	// Regression: pdfcpu rejects sibling bookmarks whose PageFrom is not
-	// monotonically non-decreasing, which made Generate fatally error for
-	// any DB state where SortOrder disagreed with StartPage order. The
-	// converter now sorts by StartPage, so this must round-trip in page
-	// order regardless of the input ordering.
+	// The converter sorts by StartPage, so bookmarks round-trip in page
+	// order whatever order SortOrder gives them.
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "source.pdf")
 	writeTestPDFWithPages(t, srcPath, 10, nil)
@@ -520,9 +537,8 @@ func TestPDFGenerator_Generate_Chapters_OutOfOrder(t *testing.T) {
 func TestPDFGenerator_Generate_Chapters_EmptyAndDuplicateTitles(t *testing.T) {
 	t.Parallel()
 
-	// pdfcpu must accept empty-title and duplicate-title bookmarks — it
-	// disambiguates duplicates internally. We just pin that they round-trip
-	// without errors and all three bookmarks appear in the output.
+	// Empty-title and duplicate-title bookmarks round-trip without errors,
+	// and all three appear in the output.
 	tmpDir := t.TempDir()
 	srcPath := filepath.Join(tmpDir, "source.pdf")
 	writeTestPDFWithPages(t, srcPath, 5, nil)
@@ -548,8 +564,7 @@ func TestPDFGenerator_Generate_Chapters_EmptyAndDuplicateTitles(t *testing.T) {
 	entries, err := pdf.ExtractOutline(destPath)
 	require.NoError(t, err)
 	require.Len(t, entries, 3, "all three bookmarks must be written")
-	// The three target pages should appear in order, regardless of how pdfcpu
-	// disambiguated the duplicate/empty titles.
+	// The three target pages appear in order.
 	assert.Equal(t, 0, entries[0].StartPage)
 	assert.Equal(t, 1, entries[1].StartPage)
 	assert.Equal(t, 3, entries[2].StartPage)
@@ -791,8 +806,8 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 
 	t.Run("sorts siblings by StartPage even when SortOrder disagrees", func(t *testing.T) {
 		t.Parallel()
-		// SortOrder says First, Second, Third but pages are 5, 0, 2 — the
-		// PDF outline must be in page order to satisfy pdfcpu's constraint.
+		// SortOrder says First, Second, Third but pages are 5, 0, 2, and
+		// the outline reads in page order.
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{Title: "page 5", SortOrder: 0, StartPage: &startPage5},
 			{Title: "page 0", SortOrder: 1, StartPage: &startPage0},
@@ -820,8 +835,8 @@ func TestConvertModelChaptersToPDFBookmarks(t *testing.T) {
 
 	t.Run("drops children whose StartPage is before their parent", func(t *testing.T) {
 		t.Parallel()
-		// pdfcpu rejects a nested bookmark whose PageFrom is less than the
-		// parent's, so we drop such children.
+		// A nested bookmark whose PageFrom is less than the parent's would
+		// break page order, so such children are dropped.
 		result := convertModelChaptersToPDFBookmarks([]*models.Chapter{
 			{
 				Title:     "Parent",

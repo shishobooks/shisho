@@ -76,3 +76,31 @@ func (s *FileSource) Size() int64 {
 func (s *FileSource) Close() error {
 	return s.f.Close()
 }
+
+// generateToPath writes gen's Generated File for the file at srcPath to
+// destPath, for callers that need a whole file rather than a stream.
+func generateToPath(ctx context.Context, gen StreamGenerator, srcPath, destPath string, book *models.Book, file *models.File) error {
+	src, err := OpenSource(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	prepared, err := gen.Prepare(ctx, src, book, file)
+	if err != nil {
+		return err
+	}
+	out, err := os.Create(destPath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := prepared.Write(ctx, out); err != nil {
+		out.Close()
+		os.Remove(destPath)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(destPath)
+		return errors.WithStack(err)
+	}
+	return nil
+}
