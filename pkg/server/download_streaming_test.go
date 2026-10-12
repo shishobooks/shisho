@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -468,12 +469,18 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 	for _, r := range []route{opdsRoute(), webRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
+			gen := &gatedGenerator{StreamGenerator: &filegen.CBZGenerator{}, gate: make(chan struct{})}
 			f := newDownloadFixture(t, func(dir string) (string, string) {
 				return testgen.GenerateCorruptCBZ(t, dir, "Streamed.cbz", 40, 20), models.FileTypeCBZ
-			})
+			}, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+				return gen, nil
+			}))
+			t.Cleanup(gen.release)
 
 			res := f.request(r, http.MethodGet)
 			require.Equal(t, http.StatusOK, res.StatusCode)
+			// The download is attached, so the failure reaches it partway.
+			gen.release()
 			assert.Empty(t, res.Header.Get("Content-Length"))
 			body, err := io.ReadAll(res.Body)
 			require.Error(t, err, "the cut download looked complete")
@@ -493,4 +500,51 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 			}
 		})
 	}
+}
+
+// gatedGenerator is a real generator whose output after its first write
+// waits until the test releases it, so a download is attached before the
+// build gets far.
+type gatedGenerator struct {
+	filegen.StreamGenerator
+	gate chan struct{}
+	once sync.Once
+}
+
+func (g *gatedGenerator) release() { g.once.Do(func() { close(g.gate) }) }
+
+func (g *gatedGenerator) Prepare(ctx context.Context, src filegen.Source, book *models.Book, file *models.File) (filegen.Prepared, error) {
+	p, err := g.StreamGenerator.Prepare(ctx, src, book, file)
+	if err != nil {
+		return nil, err
+	}
+	return gatedPrepared{Prepared: p, gate: g.gate}, nil
+}
+
+type gatedPrepared struct {
+	filegen.Prepared
+	gate chan struct{}
+}
+
+func (p gatedPrepared) Write(ctx context.Context, w io.Writer) error {
+	return p.Prepared.Write(ctx, &gatedWriter{ctx: ctx, w: w, gate: p.gate})
+}
+
+type gatedWriter struct {
+	ctx    context.Context
+	w      io.Writer
+	gate   chan struct{}
+	passed bool
+}
+
+func (g *gatedWriter) Write(b []byte) (int, error) {
+	if g.passed {
+		select {
+		case <-g.gate:
+		case <-g.ctx.Done():
+			return 0, g.ctx.Err()
+		}
+	}
+	g.passed = true
+	return g.w.Write(b)
 }

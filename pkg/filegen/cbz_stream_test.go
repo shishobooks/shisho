@@ -153,8 +153,8 @@ func (s *pageSource) pagesRead() int {
 	return s.read
 }
 
-// pageCounter counts the pages written to the output so far by their local
-// file headers.
+// pageCounter counts the entries written to the output so far by their
+// local file headers.
 type pageCounter struct {
 	out    bytes.Buffer
 	onPage func(written int)
@@ -162,7 +162,7 @@ type pageCounter struct {
 
 func (w *pageCounter) Write(p []byte) (int, error) {
 	w.out.Write(p)
-	w.onPage(strings.Count(w.out.String(), ".jpg"))
+	w.onPage(strings.Count(w.out.String(), "PK\x03\x04"))
 	return len(p), nil
 }
 
@@ -203,7 +203,6 @@ func TestCBZGenerator_CancelStopsWorkers(t *testing.T) {
 	src.closed.Store(true)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Less(t, src.pagesRead(), manyPages(), "every page was read despite the cancellation")
-	runtime.Gosched()
 	assert.False(t, src.late.Load(), "a page was read after Write returned")
 }
 
@@ -223,4 +222,37 @@ func TestCBZGenerator_CorruptPageFailsWhileWriting(t *testing.T) {
 	err = prepared.Write(context.Background(), &out)
 	require.ErrorIs(t, err, zip.ErrChecksum)
 	assert.Positive(t, out.Len(), "nothing was written before the corrupt page")
+}
+
+// A CBZ with an entry the zip reader cannot open is rejected in preparation,
+// so the download falls back before any byte is sent instead of failing
+// partway.
+func TestCBZGenerator_UnreadableEntryFailsPreparation(t *testing.T) {
+	t.Parallel()
+	for name, header := range map[string]zip.FileHeader{
+		"unsupported compression": {Name: "001.png", Method: 99},
+		"encrypted":               {Name: "001.png", Method: zip.Store, Flags: 0x1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "unreadable.cbz")
+			f, err := os.Create(path)
+			require.NoError(t, err)
+			zw := zip.NewWriter(f)
+			h := header
+			h.CompressedSize64, h.UncompressedSize64 = 4, 4
+			w, err := zw.CreateRaw(&h)
+			require.NoError(t, err)
+			_, err = w.Write([]byte("data"))
+			require.NoError(t, err)
+			require.NoError(t, zw.Close())
+			require.NoError(t, f.Close())
+
+			src, err := filegen.OpenSource(path)
+			require.NoError(t, err)
+			defer src.Close()
+			_, err = (&filegen.CBZGenerator{}).Prepare(context.Background(), src, &models.Book{Title: "Book"}, &models.File{FileType: models.FileTypeCBZ})
+			require.Error(t, err)
+		})
+	}
 }

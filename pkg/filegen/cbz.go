@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/kepub"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -83,6 +85,11 @@ func (g *CBZGenerator) Prepare(_ context.Context, src Source, book *models.Book,
 	var existingComicInfo *cbzComicInfo
 	hasComicInfo := false
 	for _, f := range srcZip.File {
+		// An entry the zip reader cannot open would otherwise only fail once
+		// the download has started.
+		if f.Method != zip.Store && f.Method != zip.Deflate || f.Flags&0x1 != 0 {
+			return nil, NewGenerationError(models.FileTypeCBZ, zip.ErrAlgorithm, fmt.Sprintf("cannot read %s from source CBZ", f.Name))
+		}
 		lowerName := strings.ToLower(f.Name)
 		if lowerName == "comicinfo.xml" {
 			existingComicInfo, err = parseComicInfoFromZip(f)
@@ -138,10 +145,7 @@ func (p *cbzPrepared) Write(ctx context.Context, w io.Writer) error {
 		if strings.ToLower(srcZipFile.Name) == "comicinfo.xml" {
 			_, err = destZipFile.Write(p.comicInfo)
 		} else {
-			var data []byte
-			if data, err = readCBZZipFile(srcZipFile); err == nil {
-				_, err = destZipFile.Write(data)
-			}
+			err = copyCBZZipFile(destZipFile, srcZipFile)
 		}
 		if err != nil {
 			return NewGenerationError(models.FileTypeCBZ, err, "failed to write file to destination CBZ")
@@ -234,7 +238,7 @@ func (p *cbzPrepared) writePages(ctx context.Context, destZip *zip.Writer) error
 					j.out <- processedPage{err: err}
 					continue
 				}
-				j.out <- processCBZPage(j.file)
+				j.out <- processCBZPageRecovering(j.file)
 			}
 		}()
 	}
@@ -270,6 +274,18 @@ func (p *cbzPrepared) writePages(ctx context.Context, destZip *zip.Writer) error
 		return NewGenerationError(models.FileTypeCBZ, err, "generation cancelled")
 	}
 	return nil
+}
+
+// processCBZPageRecovering is processCBZPage with a panic, from an image
+// decoder for example, returned as the page's error. Workers run outside the
+// download cache's own recovery, so a panic would otherwise end the process.
+func processCBZPageRecovering(imgFile *zip.File) (page processedPage) {
+	defer func() {
+		if r := recover(); r != nil {
+			page = processedPage{err: errors.Errorf("panic processing image %s: %v\n%s", imgFile.Name, r, debug.Stack())}
+		}
+	}()
+	return processCBZPage(imgFile)
 }
 
 // processCBZPage reads a page and processes it for e-readers.
@@ -561,6 +577,19 @@ func marshalComicInfo(comicInfo *cbzComicInfo) ([]byte, error) {
 	// Add XML declaration
 	result := append([]byte(xml.Header), output...)
 	return result, nil
+}
+
+// copyCBZZipFile copies the contents of a zip file entry to w.
+func copyCBZZipFile(w io.Writer, f *zip.File) error {
+	r, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	// The zip reader fails an entry longer than its declared size.
+	_, err = io.CopyN(w, r, int64(f.UncompressedSize64)) //nolint:gosec // a zip entry's size fits in int64
+	return err
 }
 
 // readCBZZipFile reads the contents of a zip file entry.
