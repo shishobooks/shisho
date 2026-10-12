@@ -54,6 +54,11 @@ type Cache struct {
 	publishMu sync.Mutex
 }
 
+// ErrFailedPartway is the cause of the error returned for a Generated File
+// whose earlier build failed partway. The failure was logged when it
+// happened, so callers that answer it with an error need not log it again.
+var ErrFailedPartway = errors.New("an earlier download failed partway")
+
 // GeneratorLookup returns the generator for a file type, or its KePub
 // generator when kepub is set.
 type GeneratorLookup func(fileType string, kepub bool) (filegen.StreamGenerator, error)
@@ -462,6 +467,9 @@ func (c *Cache) run(ctx context.Context, e *entry, j *job, gen filegen.StreamGen
 		close(j.prepared)
 	} else if err != nil && !j.readersGone && !stopped(ctx, err) {
 		c.failedPartway(ctx, e, err)
+		// A download that joined in time but attaches only now gets the
+		// failure as later ones will, rather than the build's own error.
+		err = partwayError(e, err.Error())
 	}
 	j.finish(err)
 
@@ -640,11 +648,6 @@ func (c *Cache) rememberFailure(e *entry, err error) error {
 	return e.writeMeta(meta)
 }
 
-// ErrFailedPartway is the cause of the error returned for a Generated File
-// whose earlier build failed partway. The failure was logged when it
-// happened, so callers that answer it with an error need not log it again.
-var ErrFailedPartway = errors.New("an earlier download failed partway")
-
 // rememberedFailure returns the failure recorded against e's fingerprint
 // as a generation error, so device routes serve the Original File and the
 // web UI shows the error, or nil when there is none.
@@ -657,7 +660,17 @@ func (c *Cache) rememberedFailure(e *entry) error {
 	if meta == nil || meta.Failure == nil || meta.Failure.FingerprintHash != e.hash || meta.Failure.Version != version.Version {
 		return nil
 	}
-	return filegen.NewGenerationError(e.file.FileType, ErrFailedPartway, "an earlier download failed partway: "+meta.Failure.Message)
+	return partwayError(e, meta.Failure.Message)
+}
+
+// partwayError is what a download of e gets for a build that failed
+// partway: a generation error, so device routes serve the Original File,
+// whose cause is ErrFailedPartway, so web UI routes answer without logging
+// the failure again.
+func partwayError(e *entry, message string) error {
+	// Only the first line: a panic's message carries its stack.
+	message, _, _ = strings.Cut(message, "\n")
+	return filegen.NewGenerationError(e.file.FileType, ErrFailedPartway, "an earlier download failed partway: "+message)
 }
 
 // buildRecovering runs build, turning a panic into an error. The job runs
