@@ -25,13 +25,16 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return err
 		}
 		c.Set("id", id.String())
-		version := c.Request().Header.Get("X-Version")
-		if version == "" {
-			version = "unknown"
+		// The web app sends the version of the bundle it runs, which lags
+		// the server's in a tab left open across an upgrade. Devices send
+		// nothing.
+		clientVersion := c.Request().Header.Get("X-Version")
+		if clientVersion == "" {
+			clientVersion = "unknown"
 		}
 		log := logger.NewWithLevel(c.Request().Header.Get("X-Log-Level")).ID(id.String()).Root(logger.Data{
 			"method": c.Request().Method, "path": c.Request().URL.Path,
-			"route": c.Path(), "version": version,
+			"route": c.Path(), "client_version": clientVersion,
 		})
 		c.SetRequest(c.Request().WithContext(log.WithContext(c.Request().Context())))
 		if err := next(c); err != nil {

@@ -77,12 +77,18 @@ func (p *copyPrepared) Write(ctx context.Context, w io.Writer) error {
 // the source. Write writes First, then waits for Release (or for its
 // context to end) before writing Rest, so a test can observe a download
 // while generation is still running.
+//
+// Setting WriteErr makes Write fail after First instead of writing Rest:
+// the failure after bytes have been sent.
 type Pausing struct {
 	First, Rest []byte
 	// UnknownSize makes the generator report no size up front.
 	UnknownSize bool
 	// PrepareErr, when set, is returned from every Prepare.
 	PrepareErr error
+	// WriteErr, when set, is returned from Write once it is released, in
+	// place of writing Rest.
+	WriteErr error
 
 	started     chan struct{}
 	startOnce   sync.Once
@@ -156,6 +162,9 @@ func (p pausingPrepared) Write(ctx context.Context, w io.Writer) error {
 	case <-g.release:
 	case <-ctx.Done():
 		return errors.WithStack(ctx.Err())
+	}
+	if g.WriteErr != nil {
+		return g.WriteErr
 	}
 	_, err := w.Write(g.Rest)
 	return errors.WithStack(err)

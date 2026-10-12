@@ -313,9 +313,21 @@ func TestCache_SizeMismatchFailsTheBuild(t *testing.T) {
 	_, _, err := cache.GetOrGenerate(context.Background(), book, file)
 	require.ErrorContains(t, err, "reported 100 bytes and wrote 5")
 	cache.Wait()
+	assertOnlyFailureRemembered(t, cache, file)
+}
+
+// assertOnlyFailureRemembered checks that a failed build left no file in the
+// cache, only the record of its failure.
+func assertOnlyFailureRemembered(t *testing.T, cache *Cache, file *models.File) {
+	t.Helper()
 	entries, err := os.ReadDir(cache.Dir())
 	require.NoError(t, err)
-	assert.Empty(t, entries)
+	require.Len(t, entries, 1)
+	assert.Equal(t, filepath.Base(metadataFilename(cache.Dir(), file.ID)), entries[0].Name())
+	meta, err := ReadMetadata(cache.Dir(), file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, meta.Failure)
+	assert.Empty(t, meta.FingerprintHash)
 }
 
 type wrongSize struct{}
@@ -438,6 +450,10 @@ func TestCache_GeneratorPanicFailsTheBuild(t *testing.T) {
 		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
 		require.ErrorContains(t, err, "generator panicked")
 		cache.Wait()
+		if step == "write" {
+			assertOnlyFailureRemembered(t, cache, file)
+			continue
+		}
 		entries, err := os.ReadDir(cache.Dir())
 		require.NoError(t, err)
 		assert.Empty(t, entries)
@@ -477,8 +493,8 @@ func TestCache_Open_JoinAfterFinishServesPublishedFile(t *testing.T) {
 
 	gen.Release()
 	<-j.finished
-	_, ok := j.reader(context.Background())
-	require.False(t, ok)
+	_, state := j.reader(context.Background())
+	require.Equal(t, jobEnded, state)
 	got, err := cache.served(context.Background(), e, j)
 	require.NoError(t, err)
 	require.NotEmpty(t, got.Path)

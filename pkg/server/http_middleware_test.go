@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRequestLoggingSkipsSuccessfulFrontendResponses(t *testing.T) {
@@ -149,5 +151,32 @@ func TestForwardedHeadersTrustDirectPeer(t *testing.T) {
 			}
 			e.ServeHTTP(httptest.NewRecorder(), req)
 		})
+	}
+}
+
+// The access log names the version the web app sends in X-Version as the
+// client's, since it is the bundle's version rather than the server's.
+func TestRequestLoggingClientVersion(t *testing.T) {
+	// This test changes the process-wide logger output.
+	var output bytes.Buffer
+	previous := logger.Output()
+	logger.SetOutput(&output)
+	t.Cleanup(func() { logger.SetOutput(previous) })
+	e := echo.New()
+	e.Use(requestLoggerMiddleware)
+	e.GET("/api/books", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+
+	for header, want := range map[string]string{"0.0.9": "0.0.9", "": "unknown"} {
+		output.Reset()
+		req := httptest.NewRequest(http.MethodGet, "/api/books", nil)
+		if header != "" {
+			req.Header.Set("X-Version", header)
+		}
+		e.ServeHTTP(httptest.NewRecorder(), req)
+
+		var line map[string]any
+		require.NoError(t, json.Unmarshal(output.Bytes(), &line), output.String())
+		assert.Equal(t, want, line["client_version"])
+		assert.NotContains(t, line, "version")
 	}
 }

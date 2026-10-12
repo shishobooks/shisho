@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -384,4 +385,62 @@ func TestGeneratedDownload_ShareLinkCountedWhenStarted(t *testing.T) {
 	_, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count())
+}
+
+// A build that fails after bytes have been sent cuts the connection, with or
+// without a Content-Length, so the client sees a failed download rather than
+// a short file that ends cleanly. The failure is remembered: device routes
+// then serve the Original File and web UI routes return the error, for GET
+// and HEAD, without building again, until the book's metadata changes.
+func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
+	t.Parallel()
+	for _, r := range []route{opdsRoute(), shareRoute(), webRoute()} {
+		for _, unknownSize := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s unknown size %t", r.name, unknownSize), func(t *testing.T) {
+				t.Parallel()
+				gen := filegentest.NewPausing("first bytes,", " the rest")
+				gen.UnknownSize = unknownSize
+				gen.WriteErr = errors.New("page 3 is corrupt")
+				f := newStreamingFixture(t, gen)
+
+				res := f.request(r, http.MethodGet)
+				require.Equal(t, http.StatusOK, res.StatusCode)
+				assert.Equal(t, "first bytes,", readExactly(t, res.Body, len(gen.First)))
+				gen.Release()
+				_, err := io.ReadAll(res.Body)
+				require.Error(t, err, "the cut download looked complete")
+				require.NoError(t, res.Body.Close())
+				f.cache.Wait()
+
+				for _, method := range []string{http.MethodGet, http.MethodHead} {
+					again := f.request(r, method)
+					body, err := io.ReadAll(again.Body)
+					require.NoError(t, err)
+					require.NoError(t, again.Body.Close())
+					if r.device {
+						require.Equal(t, http.StatusOK, again.StatusCode, method)
+						assert.Contains(t, again.Header.Get("Content-Disposition"), "Streamed.epub")
+						if method == http.MethodGet {
+							assert.Equal(t, f.original, body)
+						}
+					} else {
+						require.Equal(t, http.StatusInternalServerError, again.StatusCode, method)
+						assert.Empty(t, again.Header.Get("Content-Disposition"))
+					}
+				}
+				assert.Equal(t, 1, gen.Writes(), "a remembered failure was built again")
+
+				_, err = f.db.NewUpdate().Model((*models.Book)(nil)).Set("title = ?", "Fixed").Where("id = ?", f.book.ID).Exec(context.Background())
+				require.NoError(t, err)
+				gen.WriteErr = nil
+				fixed := f.request(r, http.MethodGet)
+				body, err := io.ReadAll(fixed.Body)
+				require.NoError(t, err)
+				require.NoError(t, fixed.Body.Close())
+				require.Equal(t, http.StatusOK, fixed.StatusCode)
+				assert.Equal(t, gen.Output(), body)
+				assert.Equal(t, 2, gen.Writes())
+			})
+		}
+	}
 }

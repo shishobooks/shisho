@@ -108,6 +108,10 @@ Do not delete the database or its related files to clear a lock. Back it up befo
 
 **Likely cause:** The cache path is full or not writable, the source media is no longer readable, generation failed in a background job, or cached generated output needs to be rebuilt after its producer changed. A file or cached copy that exists but cannot be read, such as one whose permissions deny the Shisho user, returns `500 Internal Server Error`; `404 Not Found` means the file is missing from disk. When a generated copy cannot be made from a file's contents, OPDS, eReader, Kobo Sync, and Share Link downloads send the original file instead and log a warning, so an unchanged download on a device can also point to a generation failure.
 
+A generated file that fails after its download has started ends that download with a connection error, so no truncated file is saved, and logs a warning naming the file. Shisho remembers the failure, even across restarts: later downloads on devices and Share Links get the original file, and the web app shows the error with **Download Original**. Editing the book's metadata, or clearing the download cache, makes the next download try again.
+
+A download cache that is full or not writable does not stop downloads. Each download is generated straight to the client without being cached, and a warning is logged; the next download of the same file is generated again.
+
 **Verify:** Check **Settings > Jobs** for the generation job, **Settings > Cache** for cache size, the current-session server logs for request errors, and available space and permissions at `cache_dir`. Confirm that the original file remains readable.
 
 **Fix:** Correct storage or permissions first. Clear only the affected cache from **Settings > Cache** when regeneration is appropriate. Clearing cache removes generated copies, which Shisho rebuilds on demand, and may make the next request slower. See [Supported Formats](./supported-formats.md), [Deployment and Maintenance](./deployment-and-maintenance.md), and the cache settings in [Configuration](./configuration.md).

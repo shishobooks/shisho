@@ -132,7 +132,9 @@ func ServeFile(c echo.Context, path string, notFound error, opts ...ServeOption)
 // buffer. A nil body, as for HEAD, sends the headers alone.
 //
 // Call it only once body is ready to read: the headers are sent first, so an
-// error from body can only cut the response short.
+// error from body can only cut the response short. It does that by closing
+// the connection, since a chunked response that simply ended would look
+// complete to the client.
 func ServeStream(c echo.Context, body io.Reader, size int64, opts ...ServeOption) error {
 	var o serveOptions
 	for _, opt := range opts {
@@ -176,7 +178,22 @@ func ServeStream(c echo.Context, body io.Reader, size int64, opts ...ServeOption
 			return nil
 		}
 		if err != nil {
+			abortResponse(flusher)
 			return errors.WithStack(err)
 		}
 	}
+}
+
+// abortResponse closes the connection under a response that is already
+// under way, so the client sees it fail. Returning the error is not enough:
+// net/http ends a chunked response cleanly when the handler returns, and a
+// panic with http.ErrAbortHandler would be caught by the recovery
+// middleware. A writer that cannot be hijacked (HTTP/2, a test recorder) is
+// left as it is.
+func abortResponse(rc *http.ResponseController) {
+	conn, _, err := rc.Hijack()
+	if err != nil {
+		return
+	}
+	_ = conn.Close()
 }
