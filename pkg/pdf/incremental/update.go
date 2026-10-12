@@ -157,8 +157,8 @@ func (u *Update) Set(ref Ref, o Object) {
 	u.objects[ref] = o
 }
 
-// SetTrailer sets a trailer entry, such as /Info. /Size, /Prev, /Root, and
-// /ID are set from the original file.
+// SetTrailer sets a trailer entry, such as /Info. /Size, /Prev, /Root,
+// /ID, and /Encrypt are set from the original file.
 func (u *Update) SetTrailer(key Name, o Object) {
 	u.trailer[key] = o
 }
@@ -182,8 +182,15 @@ func (u *Update) Bytes() ([]byte, error) {
 	offsets := map[Ref]int64{}
 	for _, r := range refs {
 		offsets[r] = base + int64(b.Len())
+		o := u.objects[r]
+		if sec := u.doc.sec; sec != nil {
+			var err error
+			if o, err = sec.crypt(r, o, sec.encrypt); err != nil {
+				return nil, errors.Wrapf(err, "object %d", r.Num)
+			}
+		}
 		fmt.Fprintf(&b, "%d %d obj\n", r.Num, r.Gen)
-		if err := writeObject(&b, u.objects[r]); err != nil {
+		if err := writeObject(&b, o); err != nil {
 			return nil, errors.Wrapf(err, "object %d", r.Num)
 		}
 		b.WriteString("\nendobj\n")
@@ -192,8 +199,12 @@ func (u *Update) Bytes() ([]byte, error) {
 	trailer := u.trailer.Clone()
 	trailer["Prev"] = Integer(u.doc.startxref)
 	trailer["Root"] = u.doc.trailer["Root"]
-	if id, ok := u.doc.trailer["ID"]; ok {
-		trailer["ID"] = id
+	// An encrypted file's update is encrypted the same way, and the key
+	// depends on the /ID.
+	for _, k := range []Name{"ID", "Encrypt"} {
+		if v, ok := u.doc.trailer[k]; ok {
+			trailer[k] = v
+		}
 	}
 
 	xrefOff := base + int64(b.Len())

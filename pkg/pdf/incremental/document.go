@@ -9,8 +9,10 @@ import (
 )
 
 var (
-	// ErrEncrypted is returned by Open for an encrypted PDF.
-	ErrEncrypted = errors.New("PDF is encrypted")
+	// ErrCannotDecrypt is returned by Open for an encrypted PDF that needs
+	// a password to open, or that is encrypted other than by the standard
+	// security handler.
+	ErrCannotDecrypt = errors.New("PDF is encrypted in a way Shisho cannot open")
 	// ErrUnreadable wraps every failure to read the cross-reference data
 	// Open needs.
 	ErrUnreadable = errors.New("PDF cross-reference data cannot be read")
@@ -85,6 +87,9 @@ type Document struct {
 	// entryCount counts the cross-reference entries read, against
 	// maxEntries.
 	entryCount int
+	// sec decrypts the objects of an encrypted PDF; nil when it is not
+	// encrypted.
+	sec *security
 	// depth counts nested Object calls (a stream's /Length can be a
 	// reference), so a reference cycle fails instead of recursing forever.
 	depth int
@@ -97,8 +102,10 @@ type objStream struct {
 }
 
 // Open reads the cross-reference sections and trailers of the PDF in r.
-// It returns ErrEncrypted for an encrypted PDF and an error wrapping
-// ErrUnreadable when the cross-reference data cannot be read.
+// An encrypted PDF that opens without a password is decrypted as it is
+// read; one that needs a password returns an error wrapping
+// ErrCannotDecrypt. It returns an error wrapping ErrUnreadable when the
+// cross-reference data cannot be read.
 func Open(r io.ReaderAt, size int64) (*Document, error) {
 	d := &Document{
 		r:          r,
@@ -110,8 +117,12 @@ func Open(r io.ReaderAt, size int64) (*Document, error) {
 	if err := d.readXRef(); err != nil {
 		return nil, errors.Wrap(ErrUnreadable, err.Error())
 	}
-	if _, ok := d.trailer["Encrypt"]; ok {
-		return nil, ErrEncrypted
+	if enc, ok := d.trailer["Encrypt"]; ok {
+		sec, err := d.openSecurity(enc)
+		if err != nil {
+			return nil, errors.Wrap(ErrCannotDecrypt, err.Error())
+		}
+		d.sec = sec
 	}
 	if _, ok := d.trailer["Root"].(Ref); !ok {
 		return nil, errors.Wrap(ErrUnreadable, "trailer has no /Root")
@@ -586,6 +597,9 @@ func (d *Document) Object(ref Ref) (Object, error) {
 		if got.Num != ref.Num {
 			return nil, errors.Errorf("object %d is listed at offset %d, which holds object %d", ref.Num, e.offset, got.Num)
 		}
+		if d.sec != nil {
+			return d.sec.crypt(got, obj, d.sec.decrypt)
+		}
 		return obj, nil
 	case entryCompressed:
 		return d.compressed(ref.Num, e)
@@ -635,6 +649,11 @@ func (d *Document) loadObjStream(num int, off int64) (*objStream, error) {
 	got, o, err := d.indirectAt(off)
 	if err != nil {
 		return nil, err
+	}
+	if d.sec != nil {
+		if o, err = d.sec.crypt(got, o, d.sec.decrypt); err != nil {
+			return nil, err
+		}
 	}
 	s, ok := o.(*Stream)
 	if !ok || got.Num != num {

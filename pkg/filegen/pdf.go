@@ -39,8 +39,10 @@ func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, b
 
 // Prepare reads the end of the PDF (its cross-reference data and
 // trailer), the catalog, and the page tree when there are chapters, and
-// builds the update. An encrypted PDF, or one whose cross-reference data
-// cannot be read, fails here, so device routes serve the Original File.
+// builds the update. A permission-restricted PDF, which opens without a
+// password, gets an update encrypted the same way as the original. A PDF
+// that needs a password to open, or one whose cross-reference data cannot
+// be read, fails here, so device routes serve the Original File.
 func (g *PDFGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (prepared Prepared, err error) {
 	// The reader parses files Shisho did not write. A bug it trips on must
 	// still fail preparation cleanly, so device routes serve the Original
@@ -55,8 +57,8 @@ func (g *PDFGenerator) Prepare(ctx context.Context, src Source, book *models.Boo
 		return nil, NewGenerationError(models.FileTypePDF, err, "context cancelled")
 	}
 	doc, err := incremental.Open(src, src.Size())
-	if errors.Is(err, incremental.ErrEncrypted) {
-		return nil, NewGenerationError(models.FileTypePDF, err, "encrypted PDFs cannot be updated")
+	if errors.Is(err, incremental.ErrCannotDecrypt) {
+		return nil, NewGenerationError(models.FileTypePDF, err, "PDF is encrypted in a way Shisho cannot open")
 	}
 	if err != nil {
 		return nil, NewGenerationError(models.FileTypePDF, err, "failed to read PDF cross-reference data")
