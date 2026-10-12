@@ -70,18 +70,37 @@ func (svc *Service) ListChapters(ctx context.Context, fileID int) ([]*models.Cha
 // ReplaceChapters deletes all existing chapters for a file and inserts new ones.
 func (svc *Service) ReplaceChapters(ctx context.Context, fileID int, chapters []mediafile.ParsedChapter) error {
 	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		// Delete existing chapters
-		_, err := tx.NewDelete().
-			Model((*models.Chapter)(nil)).
-			Where("file_id = ?", fileID).
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Insert new chapters
-		return insertChapters(ctx, tx, fileID, nil, chapters)
+		return replaceChapters(ctx, tx, fileID, chapters)
 	})
+}
+
+// ReplaceChaptersWithSource replaces a file's chapters and records their
+// source in one transaction, so the chapters are never stored under a source
+// that would let a scan replace them.
+func (svc *Service) ReplaceChaptersWithSource(ctx context.Context, fileID int, chapters []mediafile.ParsedChapter, source string) error {
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if err := replaceChapters(ctx, tx, fileID, chapters); err != nil {
+			return err
+		}
+		_, err := tx.NewUpdate().
+			Model((*models.File)(nil)).
+			Set("chapter_source = ?", source).
+			Set("updated_at = ?", time.Now()).
+			Where("id = ?", fileID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
+func replaceChapters(ctx context.Context, tx bun.Tx, fileID int, chapters []mediafile.ParsedChapter) error {
+	_, err := tx.NewDelete().
+		Model((*models.Chapter)(nil)).
+		Where("file_id = ?", fileID).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return insertChapters(ctx, tx, fileID, nil, chapters)
 }
 
 // DeleteChaptersForFile deletes all chapters for a file.

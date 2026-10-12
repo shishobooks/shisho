@@ -351,6 +351,67 @@ func TestMoveFilesToBook_CreateNewBook_UsesFileMetadataName(t *testing.T) {
 	assert.Equal(t, models.DataSourceFileMetadata, result.TargetBook.TitleSource)
 }
 
+func TestMoveFilesToBook_CreateNewBook_TitleKeepsFileNameSource(t *testing.T) {
+	t.Parallel()
+
+	// The new Book's title is the file's name, so it carries that name's
+	// source: a name the user set stays manual, and a later scan in scan
+	// mode cannot replace it with the file's embedded title.
+	tests := []struct {
+		name       string
+		nameSource *string
+		want       string
+		wantSort   string // a derived sort title is never manual
+	}{
+		{"manual", strPtr(models.DataSourceManual), models.DataSourceManual, models.DataSourceFilepath},
+		{"plugin", strPtr("plugin:shisho/goodreads"), "plugin:shisho/goodreads", "plugin:shisho/goodreads"},
+		{"file", strPtr(models.DataSourceEPUBMetadata), models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata},
+		{"no source", nil, models.DataSourceFileMetadata, models.DataSourceFileMetadata},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db := testdb.New(t)
+			ctx := context.Background()
+			library := setupTestLibrary(t, db)
+			libraryPath := t.TempDir()
+			_, err := db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryPath}).Exec(ctx)
+			require.NoError(t, err)
+			sourceBook, _ := setupTestBookWithFile(t, db, library, "Source Book")
+
+			dir := filepath.Join(libraryPath, "New Book Dir")
+			require.NoError(t, os.MkdirAll(dir, 0755))
+			path := filepath.Join(dir, "file.epub")
+			require.NoError(t, os.WriteFile(path, []byte("epub"), 0644))
+			fileName := "My Own Edition Name"
+			file := &models.File{
+				LibraryID:     library.ID,
+				BookID:        sourceBook.ID,
+				FileType:      models.FileTypeEPUB,
+				FileRole:      models.FileRoleMain,
+				Filepath:      path,
+				FilesizeBytes: 4,
+				Name:          &fileName,
+				NameSource:    tc.nameSource,
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+			}
+			_, err = db.NewInsert().Model(file).Exec(ctx)
+			require.NoError(t, err)
+
+			result, err := NewService(db, appsettings.NewService(db)).MoveFilesToBook(ctx, MoveFilesOptions{
+				FileIDs:   []int{file.ID},
+				LibraryID: library.ID,
+			})
+			require.NoError(t, err)
+			require.True(t, result.NewBookCreated)
+			assert.Equal(t, fileName, result.TargetBook.Title)
+			assert.Equal(t, tc.want, result.TargetBook.TitleSource)
+			assert.Equal(t, tc.wantSort, result.TargetBook.SortTitleSource)
+		})
+	}
+}
+
 func TestMoveFilesToBook_DifferentLibraries(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

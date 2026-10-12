@@ -970,6 +970,39 @@ func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 	assert.Equal(t, 0, count)
 }
 
+func TestUpdateFile_DowngradeMainToSupplement_DeletesChapters(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	path := filepath.Join(book.Filepath, "book.epub")
+	require.NoError(t, os.WriteFile(path, []byte("epub"), 0644))
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, path)
+	manual := models.DataSourceManual
+	file.ChapterSource = &manual
+	_, err := db.NewUpdate().Model(file).Column("chapter_source").WherePK().Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Chapter{FileID: file.ID, Title: "Edited", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Exec(ctx)
+	require.NoError(t, err)
+
+	user := setupTestUser(t, db, library.ID, true)
+	require.NoError(t, db.NewSelect().Model(user).Relation("Role").Relation("Role.Permissions").Where("u.id = ?", user.ID).Scan(ctx))
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(`{"file_role": "supplement"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// Demoting clears the extracted chapters with their source, so a file
+	// promoted again reads its chapters afresh.
+	count, err := db.NewSelect().Model((*models.Chapter)(nil)).Where("file_id = ?", file.ID).Count(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+	var updated models.File
+	require.NoError(t, db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx))
+	assert.Nil(t, updated.ChapterSource)
+}
+
 func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 	t.Parallel()
 

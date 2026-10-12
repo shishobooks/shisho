@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/joblogs"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
@@ -495,4 +496,39 @@ func TestProcessScanJob_MOBIAndAZW3Chapters(t *testing.T) {
 	chapters, err := tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
 	require.NoError(t, err)
 	assert.Equal(t, want, chapterTitleTree(chapters))
+}
+
+func TestScanFileByID_ManualChaptersSurviveRescanWithoutSidecar(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	opts := fullMOBIOptions(testgen.MOBIKindKF8, "Edited Book")
+	opts.TOC = []testgen.MOBITOCEntry{{Title: "One"}, {Title: "Two"}}
+	testgen.GenerateMOBI(t, testgen.CreateSubDir(t, libraryPath, "Edited Book"), "book.azw3", opts)
+	require.NoError(t, tc.runScan())
+	file := tc.listFiles()[0]
+
+	// The state saving the Chapters tab leaves (pkg/chapters handler,
+	// covered by its own test): the edited chapters, marked manual. The
+	// sidecar that would also hold them is gone.
+	require.NoError(t, tc.worker.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{{Title: "Renamed One"}}))
+	manual := models.DataSourceManual
+	file.ChapterSource = &manual
+	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}))
+	require.NoError(t, os.Remove(sidecar.FileSidecarPath(file.Filepath)))
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID}, nil)
+	require.NoError(t, err)
+	chapters, err := tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Renamed One"}, chapterTitleTree(chapters))
+
+	// A forced refresh takes the file's own chapters again.
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID, ForceRefresh: true}, nil)
+	require.NoError(t, err)
+	chapters, err = tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"One", "Two"}, chapterTitleTree(chapters))
 }

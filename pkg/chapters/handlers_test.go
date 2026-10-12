@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 func newTestEcho(t *testing.T) *echo.Echo {
@@ -32,6 +34,66 @@ func newTestEcho(t *testing.T) *echo.Echo {
 	return e
 }
 
+// seedChapterFile inserts a library, a book, and a main file of fileType
+// with the given chapter source, and returns the library and file.
+func seedChapterFile(t *testing.T, db *bun.DB, fileType string, chapterSource *string) (*models.Library, *models.File) {
+	t.Helper()
+	ctx := context.Background()
+	library := &models.Library{
+		Name:                     "Test Library",
+		CoverAspectRatio:         "book",
+		DownloadFormatPreference: models.DownloadFormatOriginal,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		Filepath:        t.TempDir(),
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+	file := &models.File{
+		LibraryID:     library.ID,
+		BookID:        book.ID,
+		FileType:      fileType,
+		FileRole:      models.FileRoleMain,
+		Filepath:      filepath.Join(book.Filepath, "test."+fileType), // the handler writes a sidecar beside it
+		FilesizeBytes: 1,
+		ChapterSource: chapterSource,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+	return library, file
+}
+
+// putChapters sends a replace request for file's chapters as a user with
+// access to library, and returns the response and the handler's error.
+func putChapters(t *testing.T, h *handler, library *models.Library, file *models.File, payload ReplaceChaptersPayload) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := newTestEcho(t).NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(file.ID))
+	auth.SetUser(c, &models.User{
+		Username:      "testuser",
+		PasswordHash:  "hash",
+		RoleID:        1,
+		IsActive:      true,
+		LibraryAccess: []*models.UserLibraryAccess{{LibraryID: &library.ID}},
+	})
+	err = h.replace(c)
+	return rec, err
+}
+
 // TestReplaceChapters_TriggersReviewRecompute verifies that a successful PUT
 // chapters request calls RecomputeReviewedForFile so that files.reviewed is
 // refreshed when "chapters" is in the active audio_fields criteria.
@@ -41,83 +103,28 @@ func TestReplaceChapters_TriggersReviewRecompute(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 
-	// Seed library, book, and an M4B file (chapters only apply to audio_fields)
-	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-	}
-	_, err := db.NewInsert().Model(library).Exec(ctx)
-	require.NoError(t, err)
-
-	book := &models.Book{
-		LibraryID:       library.ID,
-		Title:           "Test Audiobook",
-		Filepath:        t.TempDir(),
-		TitleSource:     models.DataSourceFilepath,
-		SortTitle:       "Test Audiobook",
-		SortTitleSource: models.DataSourceFilepath,
-		AuthorSource:    models.DataSourceFilepath,
-	}
-	_, err = db.NewInsert().Model(book).Exec(ctx)
-	require.NoError(t, err)
-
-	file := &models.File{
-		LibraryID:     library.ID,
-		BookID:        book.ID,
-		FileType:      models.FileTypeM4B,
-		FileRole:      models.FileRoleMain,
-		Filepath:      "/tmp/test.m4b",
-		FilesizeBytes: 1,
-	}
-	_, err = db.NewInsert().Model(file).Exec(ctx)
-	require.NoError(t, err)
+	// An M4B file, since chapters only apply to audio_fields
+	library, file := seedChapterFile(t, db, models.FileTypeM4B, nil)
 
 	// Configure criteria: only "chapters" required so adding one chapter makes the file complete
 	appSettingsSvc := appsettings.NewService(db)
-	err = review.Save(ctx, appSettingsSvc, review.Criteria{
+	err := review.Save(ctx, appSettingsSvc, review.Criteria{
 		BookFields:  []string{},
 		AudioFields: []string{review.FieldChapters},
 	})
 	require.NoError(t, err)
 
 	// Build handler with appSettings wired so recompute is active
-	bookSvc := books.NewService(db, appSettingsSvc)
 	h := &handler{
 		chapterService: NewService(db),
-		bookService:    bookSvc,
+		bookService:    books.NewService(db, appSettingsSvc),
 	}
 
-	// Build PUT request with one chapter
 	dur := int64(0)
-	payload := ReplaceChaptersPayload{
-		Chapters: []ChapterInput{
-			{Title: "Chapter 1", StartTimestampMs: &dur},
-		},
-	}
-	body, err := json.Marshal(payload)
+	rec, err := putChapters(t, h, library, file, ReplaceChaptersPayload{
+		Chapters: []ChapterInput{{Title: "Chapter 1", StartTimestampMs: &dur}},
+	})
 	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-
-	e := newTestEcho(t)
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues(strconv.Itoa(file.ID))
-
-	// Inject a user with library access
-	user := &models.User{
-		Username:      "testuser",
-		PasswordHash:  "hash",
-		RoleID:        1,
-		IsActive:      true,
-		LibraryAccess: []*models.UserLibraryAccess{{UserID: 0, LibraryID: &library.ID}},
-	}
-	auth.SetUser(c, user)
-
-	require.NoError(t, h.replace(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify reviewed was recomputed to true (chapters criterion is now satisfied)
@@ -125,6 +132,28 @@ func TestReplaceChapters_TriggersReviewRecompute(t *testing.T) {
 	require.NoError(t, db.NewSelect().Model(&after).Where("f.id = ?", file.ID).Scan(ctx))
 	require.NotNil(t, after.Reviewed, "reviewed should not be nil after recompute")
 	assert.True(t, *after.Reviewed, "file should be reviewed=true after chapters added with chapters-only criteria")
+}
+
+// TestReplaceChapters_MarksChaptersManual verifies that saved chapters
+// record a manual source, as every other edited field does, so a later scan
+// in scan mode does not put the file's own chapters back over them.
+func TestReplaceChapters_MarksChaptersManual(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := testdb.New(t)
+	fileSource := models.DataSourceMOBIMetadata
+	library, file := seedChapterFile(t, db, models.FileTypeAZW3, &fileSource)
+
+	h := &handler{chapterService: NewService(db), bookService: books.NewService(db, appsettings.NewService(db))}
+	rec, err := putChapters(t, h, library, file, ReplaceChaptersPayload{Chapters: []ChapterInput{{Title: "Renamed"}}})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var after models.File
+	require.NoError(t, db.NewSelect().Model(&after).Where("f.id = ?", file.ID).Scan(ctx))
+	require.NotNil(t, after.ChapterSource)
+	assert.Equal(t, models.DataSourceManual, *after.ChapterSource)
 }
 
 // TestValidateChapters_StartPage verifies that start_page must fall within

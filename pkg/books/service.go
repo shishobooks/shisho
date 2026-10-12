@@ -1690,6 +1690,17 @@ func (svc *Service) DeleteNarratorsForFile(ctx context.Context, fileID int) (int
 	return int(n), nil
 }
 
+// DeleteChaptersForFile deletes all chapters for a file. It repeats
+// chapters.Service.DeleteChaptersForFile because pkg/chapters imports this
+// package, so this one cannot import it.
+func (svc *Service) DeleteChaptersForFile(ctx context.Context, fileID int) error {
+	_, err := svc.db.NewDelete().
+		Model((*models.Chapter)(nil)).
+		Where("file_id = ?", fileID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // DeleteIdentifiersForFile deletes all identifiers for a file.
 func (svc *Service) DeleteIdentifiersForFile(ctx context.Context, fileID int) (int, error) {
 	result, err := svc.db.NewDelete().
