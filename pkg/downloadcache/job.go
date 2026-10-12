@@ -190,7 +190,7 @@ func (r *jobReader) Close() error {
 }
 
 // pathGenerator writes a whole file to a path: the built-in generators that
-// do not stream yet, and plugin output generators.
+// do not stream yet.
 type pathGenerator interface {
 	Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error
 }

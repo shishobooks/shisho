@@ -154,7 +154,6 @@ Useful unit cases include:
 - XML, HTML, or YAML fixture variations
 - malformed or incomplete source metadata
 - correct `ParsedMetadata` and confidence values
-- output fingerprint changes when relevant inputs change
 
 Also type-check the project and build the final bundle during CI:
 

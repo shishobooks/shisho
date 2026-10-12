@@ -899,3 +899,41 @@ func TestTransitionsWaitForThePluginLock(t *testing.T) {
 		})
 	}
 }
+
+// outputGenerator was removed from the plugin contract. A plugin that still
+// declares and exports it loads like one with any other unknown key, and
+// the hook gets no hook-order rows.
+func TestInstallStaged_IgnoresRemovedOutputGeneratorHook(t *testing.T) {
+	t.Parallel()
+	e := newLifecycleEnv(t)
+	ctx := context.Background()
+
+	manifest := `{
+  "manifestVersion": 1, "id": "og", "name": "Plugin og", "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {"types": ["ogx"]},
+    "outputGenerator": {"id": "og-format", "name": "OG Format", "sourceTypes": ["epub"]}
+  }
+}`
+	mainJS := `var plugin = (function() { return {
+  fileParser: { parse: function() { return { title: "T" }; } },
+  outputGenerator: { generate: function() {}, fingerprint: function() { return "fp"; } }
+}; })();`
+	dir := filepath.Join(e.pluginDir, "test", stagingDirName, "pkg")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(manifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.js"), []byte(mainJS), 0o644))
+	m, err := ParseManifest([]byte(manifest))
+	require.NoError(t, err)
+
+	require.NoError(t, e.mgr.installStaged(ctx, &models.Plugin{Scope: "test", ID: "og", InstalledAt: time.Now()}, &stagedPackage{dir: dir, manifest: m}))
+
+	row := e.row(t, "og")
+	assert.Equal(t, models.PluginStatusActive, row.Status)
+	assert.Nil(t, row.LoadError)
+	rt := e.mgr.GetRuntime("test", "og")
+	require.NotNil(t, rt)
+	assert.Equal(t, []string{"fileParser"}, rt.HookTypes())
+	assert.Zero(t, e.count(t, "plugin_hook_configs", "og", "hook_type = 'outputGenerator'"))
+	assert.Equal(t, 1, e.count(t, "plugin_hook_configs", "og", "hook_type = 'fileParser'"))
+}

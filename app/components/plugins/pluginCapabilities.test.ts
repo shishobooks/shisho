@@ -29,7 +29,6 @@ const converterCap = {
   targetType: "",
 };
 const parserCap = { description: "", mimeTypes: [], types: [] };
-const generatorCap = { description: "", id: "", name: "", sourceTypes: [] };
 
 describe("deriveCapabilityLabels", () => {
   it("returns [] for null caps", () => {
@@ -44,18 +43,16 @@ describe("deriveCapabilityLabels", () => {
     expect(deriveCapabilityLabels(caps())).toEqual([]);
   });
 
-  it("returns all four labels when all display-worthy capabilities are set", () => {
+  it("returns all three labels when all display-worthy capabilities are set", () => {
     const all = caps({
       metadataEnricher: enricherCap,
       inputConverter: converterCap,
       fileParser: parserCap,
-      outputGenerator: generatorCap,
     });
     expect(deriveCapabilityLabels(all)).toEqual([
       "Metadata enricher",
       "Input converter",
       "File parser",
-      "Output generator",
     ]);
   });
 
@@ -69,7 +66,7 @@ describe("deriveCapabilityLabels", () => {
   });
 
   it("ignores capabilities that don't produce display labels (httpAccess, shellAccess, etc.)", () => {
-    // Only metadataEnricher/inputConverter/fileParser/outputGenerator should
+    // Only metadataEnricher/inputConverter/fileParser should
     // produce labels; access-style capabilities should not.
     const accessOnly = caps({
       httpAccess: { description: "", domains: ["example.com"] },
@@ -138,7 +135,7 @@ describe("resolveInstalledPluginCapabilities", () => {
   });
 
   it("falls back to versions[0] capabilities when installed version is not in the list", () => {
-    const latestCaps = caps({ outputGenerator: generatorCap });
+    const latestCaps = caps({ metadataEnricher: enricherCap });
     const available = makeAvailable([
       makeVersion("2.0.0", latestCaps),
       makeVersion("1.0.0", caps({ fileParser: parserCap })),

@@ -27,7 +27,6 @@ import { cn } from "@/libraries/utils";
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
   { label: "Input Converter", value: "inputConverter" },
   { label: "File Parser", value: "fileParser" },
-  { label: "Output Generator", value: "outputGenerator" },
   { label: "Metadata Enricher", value: "metadataEnricher" },
 ];
 

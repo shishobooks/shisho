@@ -201,7 +201,7 @@ func TestPluginSDK_HookNamesMatchGo(t *testing.T) {
 
 	// HookTypes reports each hook that has a manifest capability; every one
 	// of them must be a ShishoPlugin member.
-	all := &Runtime{inputConverter: goja.Undefined(), fileParser: goja.Undefined(), outputGenerator: goja.Undefined(), metadataEnricher: goja.Undefined()}
+	all := &Runtime{inputConverter: goja.Undefined(), fileParser: goja.Undefined(), metadataEnricher: goja.Undefined()}
 	assert.Subset(t, sdkNames, all.HookTypes())
 }
 

@@ -18,17 +18,6 @@ export interface FileParserCap {
   mimeTypes?: string[];
 }
 
-/** Output generator capability declaration. */
-export interface OutputGeneratorCap {
-  description?: string;
-  /** Unique format identifier (e.g., "fb2"). */
-  id: string;
-  /** Display name (e.g., "FB2"). */
-  name: string;
-  /** Source file types this generator can convert from. */
-  sourceTypes: string[];
-}
-
 /** Valid metadata field names for enricher declarations. */
 export type MetadataField =
   | "title"
@@ -102,7 +91,6 @@ export interface ShellAccessCap {
 export interface Capabilities {
   inputConverter?: InputConverterCap;
   fileParser?: FileParserCap;
-  outputGenerator?: OutputGeneratorCap;
   metadataEnricher?: MetadataEnricherCap;
   identifierTypes?: IdentifierTypeCap[];
   httpAccess?: HTTPAccessCap;

@@ -1,6 +1,6 @@
 # Using Plugins
 
-Plugins extend Shisho with file conversion, file parsing, metadata lookup, and additional output formats. This page covers installing and managing plugins. To create one, start with [Developing Plugins](./development.md).
+Plugins extend Shisho with file conversion, file parsing, and metadata lookup. This page covers installing and managing plugins. To create one, start with [Developing Plugins](./development.md).
 
 ## Open the Plugin Manager
 

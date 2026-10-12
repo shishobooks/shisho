@@ -50,7 +50,7 @@ func (h *Handler) entries() []cacheEntry {
 		{
 			id:          "downloads",
 			name:        "Downloads",
-			description: "Generated format conversions (e.g. kepub), plugin-generated files, and bulk-download zips.",
+			description: "Generated format conversions (e.g. kepub) and bulk-download zips.",
 			provider:    h.downloads,
 		},
 		{

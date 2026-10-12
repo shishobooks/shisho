@@ -1,6 +1,5 @@
 import {
   ArrowRightLeft,
-  FileOutput,
   FileSearch,
   FolderOpen,
   Globe,
@@ -49,16 +48,6 @@ export const CAPABILITY_DEFS: CapabilityDef[] = [
     detail: (cap) =>
       cap.fileParser?.types?.length
         ? cap.fileParser.types.join(", ")
-        : undefined,
-  },
-  {
-    key: "outputGenerator",
-    icon: FileOutput,
-    label: "Output Generation",
-    description: "Generates files in additional formats",
-    detail: (cap) =>
-      cap.outputGenerator?.sourceTypes?.length && cap.outputGenerator?.name
-        ? `${cap.outputGenerator.sourceTypes.join(", ")} \u2192 ${cap.outputGenerator.name}`
         : undefined,
   },
   {

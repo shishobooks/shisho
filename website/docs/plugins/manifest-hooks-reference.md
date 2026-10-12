@@ -55,7 +55,7 @@ A JavaScript hook without its corresponding capability causes plugin loading to 
 
 ## Hook Capabilities
 
-A plugin can declare and implement any combination of the four hook capabilities.
+A plugin can declare and implement any combination of the three hook capabilities.
 
 ### Input Converter Capability
 
@@ -125,23 +125,6 @@ abridged
 ```
 
 `seriesNumber` is an alias for the full `series` group. `cover` and series grouping rules are described under [Grouped Metadata](#grouped-metadata).
-
-### Output Generator Capability
-
-```json
-{
-  "capabilities": {
-    "outputGenerator": {
-      "description": "Generates FB2 downloads",
-      "id": "fb2",
-      "name": "FB2",
-      "sourceTypes": ["epub"]
-    }
-  }
-}
-```
-
-`id`, `name`, and `sourceTypes` are required. The ID is the stable output format identifier; name is its display label.
 
 ## Permission Capabilities
 
@@ -360,58 +343,6 @@ During automatic scans:
 5. File-parsed metadata fills fields that no enricher supplied.
 
 Interactive identification lets the user review candidate fields before applying them.
-
-## Output Generator Hook
-
-Output generation must complete within five minutes.
-
-```typescript
-interface OutputGeneratorContext {
-  sourcePath: string;
-  destPath: string;
-  book: {
-    id?: number;
-    title?: string;
-    subtitle?: string;
-    description?: string;
-    authors?: Array<{ name: string; role?: string }>;
-    series?: Array<{ name: string; number?: number }>;
-    genres?: string[];
-    tags?: string[];
-  };
-  file: {
-    id?: number;
-    filepath?: string;
-    fileType?: string;
-    fileRole?: string;
-    filesizeBytes?: number;
-    name?: string;
-    url?: string;
-    publisher?: string;
-    releaseDate?: string;
-    narrators?: string[];
-    identifiers?: Array<{ type: string; value: string }>;
-  };
-}
-```
-
-`outputGenerator.generate(context)` writes the output to `destPath` and returns nothing. `outputGenerator.fingerprint(context)` returns a string used to decide whether cached output remains valid:
-
-```javascript
-plugin = {
-  outputGenerator: {
-    generate: function (context) {
-      // Write context.destPath.
-    },
-    fingerprint: function (context) {
-      return String(context.book.title || "") + ":" +
-        String(context.file.fileType || "");
-    },
-  },
-};
-```
-
-Include every input that should invalidate generated output in the fingerprint.
 
 ## Parsed Metadata
 

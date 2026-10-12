@@ -171,7 +171,7 @@ Repository capabilities mirror the artifact manifest's `capabilities` object. In
 
 Keep the index and artifact identical for:
 
-- four hook capabilities and their extensions, formats, file types, and enricher fields
+- three hook capabilities and their extensions, formats, file types, and enricher fields
 - custom identifier types
 - HTTP domains
 - filesystem access level
@@ -213,7 +213,7 @@ After committing the index, test the exact raw URL without authentication. In Sh
 
 - [ ] Remove unused HTTP domains, file access, FFmpeg access, and shell commands.
 - [ ] Set `minShishoVersion` from the oldest Shisho release actually tested.
-- [ ] Verify each declared hook, enricher field, and output format.
+- [ ] Verify each declared hook and enricher field.
 - [ ] Review logs to ensure secrets and book content are not exposed.
 
 ### GitHub Release

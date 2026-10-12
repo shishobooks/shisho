@@ -38,29 +38,28 @@ const GeneratorVersion = 4
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
 type Fingerprint struct {
-	GeneratorVersion  int                     `json:"generator_version"`
-	Title             string                  `json:"title"`
-	Subtitle          *string                 `json:"subtitle,omitempty"`
-	Description       *string                 `json:"description,omitempty"`
-	Authors           []FingerprintAuthor     `json:"authors"`
-	Narrators         []FingerprintNarrator   `json:"narrators"`
-	Series            []FingerprintSeries     `json:"series"`
-	Genres            []string                `json:"genres"`
-	Tags              []string                `json:"tags"`
-	Identifiers       []FingerprintIdentifier `json:"identifiers,omitempty"`
-	URL               *string                 `json:"url,omitempty"`
-	Publisher         *string                 `json:"publisher,omitempty"`
-	ReleaseDate       *time.Time              `json:"release_date,omitempty"`
-	Cover             *FingerprintCover       `json:"cover,omitempty"`
-	CoverPage         *int                    `json:"cover_page,omitempty"` // For page-based files (CBZ, PDF): page index of cover
-	Chapters          []FingerprintChapter    `json:"chapters,omitempty"`
-	Format            string                  `json:"format,omitempty"`             // Download format: original, kepub, or plugin:<id>
-	Name              *string                 `json:"name,omitempty"`               // File name (edition name)
-	PluginFingerprint string                  `json:"plugin_fingerprint,omitempty"` // Plugin-specific fingerprint for cache invalidation
-	Language          *string                 `json:"language,omitempty"`
-	Abridged          *bool                   `json:"abridged,omitempty"`
-	SourceModTime     time.Time               `json:"source_mod_time"`
-	SourceSize        int64                   `json:"source_size"`
+	GeneratorVersion int                     `json:"generator_version"`
+	Title            string                  `json:"title"`
+	Subtitle         *string                 `json:"subtitle,omitempty"`
+	Description      *string                 `json:"description,omitempty"`
+	Authors          []FingerprintAuthor     `json:"authors"`
+	Narrators        []FingerprintNarrator   `json:"narrators"`
+	Series           []FingerprintSeries     `json:"series"`
+	Genres           []string                `json:"genres"`
+	Tags             []string                `json:"tags"`
+	Identifiers      []FingerprintIdentifier `json:"identifiers,omitempty"`
+	URL              *string                 `json:"url,omitempty"`
+	Publisher        *string                 `json:"publisher,omitempty"`
+	ReleaseDate      *time.Time              `json:"release_date,omitempty"`
+	Cover            *FingerprintCover       `json:"cover,omitempty"`
+	CoverPage        *int                    `json:"cover_page,omitempty"` // For page-based files (CBZ, PDF): page index of cover
+	Chapters         []FingerprintChapter    `json:"chapters,omitempty"`
+	Format           string                  `json:"format,omitempty"` // Download format: original or kepub
+	Name             *string                 `json:"name,omitempty"`   // File name (edition name)
+	Language         *string                 `json:"language,omitempty"`
+	Abridged         *bool                   `json:"abridged,omitempty"`
+	SourceModTime    time.Time               `json:"source_mod_time"`
+	SourceSize       int64                   `json:"source_size"`
 }
 
 // FingerprintAuthor represents author information for fingerprinting.

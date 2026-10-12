@@ -26,7 +26,6 @@ type Manifest struct {
 type Capabilities struct {
 	InputConverter   *InputConverterCap   `json:"inputConverter"`
 	FileParser       *FileParserCap       `json:"fileParser"`
-	OutputGenerator  *OutputGeneratorCap  `json:"outputGenerator"`
 	MetadataEnricher *MetadataEnricherCap `json:"metadataEnricher"`
 	IdentifierTypes  []IdentifierTypeCap  `json:"identifierTypes"`
 	HTTPAccess       *HTTPAccessCap       `json:"httpAccess"`
@@ -46,13 +45,6 @@ type FileParserCap struct {
 	Description string   `json:"description"`
 	Types       []string `json:"types"`
 	MIMETypes   []string `json:"mimeTypes"`
-}
-
-type OutputGeneratorCap struct {
-	Description string   `json:"description"`
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	SourceTypes []string `json:"sourceTypes"`
 }
 
 // ValidMetadataFields lists all valid field names for enricher declarations.

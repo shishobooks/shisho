@@ -14,7 +14,7 @@ import (
 // It controls what filesystem operations a plugin can perform.
 //
 // allowedPaths grants read+write on hook-provided paths (e.g. a file parser's
-// sourcePath, an output generator's destPath). Callers pass a file path for
+// sourcePath, an input converter's targetDir). Callers pass a file path for
 // file-only scope or a directory for subtree scope — there is no third option,
 // because isPathWithin does prefix matching against a trailing separator.
 //

@@ -203,7 +203,6 @@ shisho.fs.tempDir(): string;
 | `shisho.fs.tempDir()` | Yes | Yes |
 | Input converter `sourcePath` and `targetDir` | Yes | Yes |
 | File parser `filePath` | Yes | Yes |
-| Output generator `sourcePath` and `destPath` | Yes | Yes |
 | Metadata enricher target `filePath` | Yes | No |
 | Other paths | With `fileAccess: read` or `readwrite` | With `fileAccess: readwrite` |
 
@@ -216,9 +215,9 @@ When `writeFile` or `writeTextFile` creates a new file, the mode depends on wher
 | Path | Mode requested |
 |------|----------------|
 | Plugin artifact directory, `shisho.dataDir`, or `shisho.fs.tempDir()` | `0600` (owner only) |
-| Any other permitted path, such as a hook's `targetDir` or `destPath`, or a path allowed by `fileAccess: readwrite` | `0644` (readable by other users) |
+| Any other permitted path, such as an input converter's `targetDir`, or a path allowed by `fileAccess: readwrite` | `0644` (readable by other users) |
 
-Files in the plugin's own directories stay private to the account running Shisho. Files written anywhere else, such as converted books and generated downloads, can be read by other users and tools on the host, like the rest of the files Shisho creates. The umask still applies, so a stricter umask gives stricter modes. Overwriting an existing file keeps its current mode. The mode cannot be chosen per write. This rule covers `writeFile` and `writeTextFile` only: `shisho.archive.extractZip` gives each extracted file the permission bits stored in its ZIP entry plus owner read and write, dropping any setuid, setgid, or sticky bit, and `shisho.archive.createZip` creates the archive like `os.Create` (`0666` before the umask, so `0644` under the usual `022`).
+Files in the plugin's own directories stay private to the account running Shisho. Files written anywhere else, such as converted books, can be read by other users and tools on the host, like the rest of the files Shisho creates. The umask still applies, so a stricter umask gives stricter modes. Overwriting an existing file keeps its current mode. The mode cannot be chosen per write. This rule covers `writeFile` and `writeTextFile` only: `shisho.archive.extractZip` gives each extracted file the permission bits stored in its ZIP entry plus owner read and write, dropping any setuid, setgid, or sticky bit, and `shisho.archive.createZip` creates the archive like `os.Create` (`0666` before the umask, so `0644` under the usual `022`).
 
 ## ZIP Archives
 
