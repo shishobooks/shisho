@@ -13,4 +13,4 @@ A Generated File used to be built in full before the download sent its first byt
 - HEAD runs only the cheap preparation step and does not generate, so the web UI's pre-download check returns at once.
 - A failure after bytes have been sent cuts the connection. The cache remembers it for that file's current metadata: device routes then serve the Original File, and the web UI shows its error with Download Original.
 - An incrementally updated PDF keeps its original bytes, so it is not re-optimized and keeps any digital signature valid. Permission-restricted PDFs get an encrypted update; PDFs that need a password to open get the Original File.
-- Plugin output generators write a whole file to a path, so they cannot stream without a change to the plugin contract.
+- Plugin output generators write a whole file to a path, so they cannot stream without a change to the plugin contract. The plugin output generator hook was later removed instead of given a download route (#675).
