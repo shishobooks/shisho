@@ -51,9 +51,11 @@ func TestCache_MidStreamFailureIsRemembered(t *testing.T) {
 	var genErr *filegen.GenerationError
 	_, err := cache.Open(ctx, book, file, false)
 	require.ErrorAs(t, err, &genErr)
+	require.ErrorIs(t, err, ErrFailedPartway)
 	assert.Contains(t, err.Error(), "page 3 is corrupt")
 	_, err = cache.Head(ctx, book, file, false)
 	require.ErrorAs(t, err, &genErr)
+	require.ErrorIs(t, err, ErrFailedPartway)
 	_, _, err = cache.GetOrGenerate(ctx, book, file)
 	require.ErrorAs(t, err, &genErr)
 	assert.Equal(t, 1, gen.Writes(), "a remembered failure was built again")

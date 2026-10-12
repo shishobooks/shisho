@@ -51,7 +51,7 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 
 ## Downloads
 
-Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B, PDF, MOBI, and AZW3 remain generated downloads in their native formats.
+Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B, PDF, MOBI, and AZW3 remain generated downloads in their native formats. The first download of some formats shows no progress or size on the device; later downloads of the same book do.
 
 Covers are off by default. Leave them off on slow devices or networks to reduce page size and image requests.
 

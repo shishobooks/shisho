@@ -1687,12 +1687,16 @@ func (h *handler) downloadFile(c echo.Context) error {
 
 	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, false)
 	if err != nil {
-		// A type with no generator is one the user can work around with
-		// Download Original (422); any other generation failure is a server
-		// fault. The device routes fall back to the original instead
+		// A type with no generator, and a file whose earlier build failed
+		// partway (logged when it happened), are ones the user can work
+		// around with Download Original (422); any other generation failure
+		// is a server fault. The device routes fall back to the original instead
 		// (ResolveFallbackDownload), since a device has no such button.
 		if errors.Is(err, filegen.ErrNotImplemented) {
 			return errcodes.InvalidState("Generated downloads are not supported for " + file.FileType + " files")
+		}
+		if errors.Is(err, downloadcache.ErrFailedPartway) {
+			return errcodes.InvalidState(FailedPartwayMessage)
 		}
 		return errors.WithStack(err)
 	}
@@ -1779,10 +1783,15 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 
 	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, true)
 	if err != nil {
-		// A file type KePub cannot convert is the one failure the user can
-		// work around; any other generation failure is a server fault.
+		// A file type KePub cannot convert, and a file whose earlier build
+		// failed partway (logged when it happened), are the failures the
+		// user can work around; any other generation failure is a server
+		// fault.
 		if errors.Is(err, filegen.ErrKepubNotSupported) {
 			return errcodes.InvalidState("KePub conversion is not supported for " + file.FileType + " files")
+		}
+		if errors.Is(err, downloadcache.ErrFailedPartway) {
+			return errcodes.InvalidState(FailedPartwayMessage)
 		}
 		return errors.WithStack(err)
 	}

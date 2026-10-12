@@ -11,13 +11,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -29,9 +32,10 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// streamingFixture serves the real route table over a real HTTP server, with
-// a download cache whose every generator is a filegentest.Pausing the test
-// releases.
+// streamingFixture serves the real route table over a real HTTP server.
+// From newStreamingFixture, every generator of its download cache is a
+// filegentest.Pausing the test releases; from newDownloadFixture, the cache
+// uses the real generators.
 type streamingFixture struct {
 	t        *testing.T
 	db       *bun.DB
@@ -50,6 +54,23 @@ const streamingPassword = "test-password-123"
 
 func newStreamingFixture(t *testing.T, gen *filegentest.Pausing) *streamingFixture {
 	t.Helper()
+	f := newDownloadFixture(t, func(dir string) (string, string) {
+		return testgen.GenerateEPUB(t, dir, "Streamed.epub", testgen.EPUBOptions{Title: "Streamed"}), models.FileTypeEPUB
+	}, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+		return gen, nil
+	}))
+	f.gen = gen
+	// Cleanups run last first: release the generator so jobs end before
+	// the fixture waits for them.
+	t.Cleanup(gen.Release)
+	return f
+}
+
+// newDownloadFixture serves the real route table with one book whose only
+// file addFile writes into the book's directory, returning its path and
+// type. Without cache options the cache uses the real generators.
+func newDownloadFixture(t *testing.T, addFile func(dir string) (path, fileType string), opts ...downloadcache.Option) *streamingFixture {
+	t.Helper()
 	ctx := context.Background()
 	db := testdb.New(t)
 	cfg := newPermissionTestConfig(t)
@@ -60,17 +81,14 @@ func newStreamingFixture(t *testing.T, gen *filegentest.Pausing) *streamingFixtu
 	require.NoError(t, err)
 
 	cacheDir := t.TempDir()
-	cache := downloadcache.NewCache(cacheDir, 1<<30, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
-		return gen, nil
-	}))
+	cache := downloadcache.NewCache(cacheDir, 1<<30, opts...)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, cache, nil, nil, nil)
 	require.NoError(t, err)
 	ts := httptest.NewServer(srv.Handler)
-	// Cleanups run last first: release the generator so jobs end, stop the
-	// server, then wait for the jobs before the directories go.
+	// Cleanups run last first: stop the server, then wait for the jobs
+	// before the directories go.
 	t.Cleanup(cache.Wait)
 	t.Cleanup(ts.Close)
-	t.Cleanup(gen.Release)
 
 	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
 	_, err = db.NewInsert().Model(lib).Exec(ctx)
@@ -87,15 +105,15 @@ func newStreamingFixture(t *testing.T, gen *filegentest.Pausing) *streamingFixtu
 	}
 	_, err = db.NewInsert().Model(book).Exec(ctx)
 	require.NoError(t, err)
-	path := testgen.GenerateEPUB(t, dir, "Streamed.epub", testgen.EPUBOptions{Title: "Streamed"})
-	file := &models.File{LibraryID: lib.ID, BookID: book.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, Filepath: path, FilesizeBytes: 1}
+	path, fileType := addFile(dir)
+	file := &models.File{LibraryID: lib.ID, BookID: book.ID, FileType: fileType, FileRole: models.FileRoleMain, Filepath: path, FilesizeBytes: 1}
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 	original, err := os.ReadFile(path)
 	require.NoError(t, err)
 
 	return &streamingFixture{
-		t: t, db: db, ts: ts, gen: gen, cache: cache, cacheDir: cacheDir,
+		t: t, db: db, ts: ts, cache: cache, cacheDir: cacheDir,
 		admin: admin, token: token, book: book, file: file, original: original,
 	}
 }
@@ -394,7 +412,7 @@ func TestGeneratedDownload_ShareLinkCountedWhenStarted(t *testing.T) {
 // and HEAD, without building again, until the book's metadata changes.
 func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsRoute(), shareRoute(), webRoute()} {
+	for _, r := range []route{opdsRoute(), shareRoute(), webRoute(), webKepubRoute()} {
 		for _, unknownSize := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s unknown size %t", r.name, unknownSize), func(t *testing.T) {
 				t.Parallel()
@@ -424,8 +442,13 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 							assert.Equal(t, f.original, body)
 						}
 					} else {
-						require.Equal(t, http.StatusInternalServerError, again.StatusCode, method)
+						// The failure was logged when it happened, so the
+						// web UI gets a 422 rather than another server error.
+						require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode, method)
 						assert.Empty(t, again.Header.Get("Content-Disposition"))
+						if method == http.MethodGet {
+							assertFailedPartwayBody(t, body)
+						}
 					}
 				}
 				assert.Equal(t, 1, gen.Writes(), "a remembered failure was built again")
@@ -443,4 +466,103 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A real CBZ with a page that cannot be read midway fails partway through
+// its first download: the client sees a cut download, device routes then
+// serve the Original File, and web UI routes return the error.
+func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
+	t.Parallel()
+	for _, r := range []route{opdsRoute(), webRoute()} {
+		t.Run(r.name, func(t *testing.T) {
+			t.Parallel()
+			gen := &gatedGenerator{StreamGenerator: &filegen.CBZGenerator{}, gate: make(chan struct{})}
+			f := newDownloadFixture(t, func(dir string) (string, string) {
+				return testgen.GenerateCorruptCBZ(t, dir, "Streamed.cbz", 40, 20), models.FileTypeCBZ
+			}, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+				return gen, nil
+			}))
+			t.Cleanup(gen.release)
+
+			res := f.request(r, http.MethodGet)
+			require.Equal(t, http.StatusOK, res.StatusCode)
+			// The download is attached, so the failure reaches it partway.
+			gen.release()
+			assert.Empty(t, res.Header.Get("Content-Length"))
+			body, err := io.ReadAll(res.Body)
+			require.Error(t, err, "the cut download looked complete")
+			assert.NotEmpty(t, body, "the download failed before any page was sent")
+			require.NoError(t, res.Body.Close())
+			f.cache.Wait()
+
+			again := f.request(r, http.MethodGet)
+			body, err = io.ReadAll(again.Body)
+			require.NoError(t, err)
+			require.NoError(t, again.Body.Close())
+			if r.device {
+				require.Equal(t, http.StatusOK, again.StatusCode)
+				assert.Equal(t, f.original, body)
+			} else {
+				require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode)
+				assertFailedPartwayBody(t, body)
+			}
+		})
+	}
+}
+
+// gatedGenerator is a real generator whose output after its first write
+// waits until the test releases it, so a download is attached before the
+// build gets far.
+type gatedGenerator struct {
+	filegen.StreamGenerator
+	gate chan struct{}
+	once sync.Once
+}
+
+func (g *gatedGenerator) release() { g.once.Do(func() { close(g.gate) }) }
+
+func (g *gatedGenerator) Prepare(ctx context.Context, src filegen.Source, book *models.Book, file *models.File) (filegen.Prepared, error) {
+	p, err := g.StreamGenerator.Prepare(ctx, src, book, file)
+	if err != nil {
+		return nil, err
+	}
+	return gatedPrepared{Prepared: p, gate: g.gate}, nil
+}
+
+type gatedPrepared struct {
+	filegen.Prepared
+	gate chan struct{}
+}
+
+func (p gatedPrepared) Write(ctx context.Context, w io.Writer) error {
+	return p.Prepared.Write(ctx, &gatedWriter{ctx: ctx, w: w, gate: p.gate})
+}
+
+type gatedWriter struct {
+	ctx    context.Context
+	w      io.Writer
+	gate   chan struct{}
+	passed bool
+}
+
+func (g *gatedWriter) Write(b []byte) (int, error) {
+	if g.passed {
+		select {
+		case <-g.gate:
+		case <-g.ctx.Done():
+			return 0, g.ctx.Err()
+		}
+	}
+	g.passed = true
+	return g.w.Write(b)
+}
+
+// assertFailedPartwayBody checks a web UI route's answer to a remembered
+// failure: an invalid_state error whose message the download dialog shows.
+func assertFailedPartwayBody(t *testing.T, body []byte) {
+	t.Helper()
+	var res errcodes.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &res), string(body))
+	assert.Equal(t, "invalid_state", res.Error.Code)
+	assert.Equal(t, books.FailedPartwayMessage, res.Error.Message)
 }
