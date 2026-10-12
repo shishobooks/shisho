@@ -58,8 +58,7 @@ const ResourceList = <T extends { id: number }>({
     libraryId,
     currentPage,
     searchQuery,
-    debouncedSearch,
-    handleDebouncedSearchChange,
+    setSearchQuery,
     limit,
     offset,
     handlePageChange,
@@ -73,13 +72,13 @@ const ResourceList = <T extends { id: number }>({
 
   useEffect(() => {
     if (settled && !query.isFetching) {
-      setConfirmedSearch(debouncedSearch);
+      setConfirmedSearch(searchQuery);
     }
-  }, [settled, query.isFetching, debouncedSearch]);
+  }, [settled, query.isFetching, searchQuery]);
 
   // Data is stale if search changed but query hasn't completed yet
   const isStaleData =
-    confirmedSearch !== null && debouncedSearch !== confirmedSearch;
+    confirmedSearch !== null && searchQuery !== confirmedSearch;
 
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
@@ -136,7 +135,7 @@ const ResourceList = <T extends { id: number }>({
         <SearchInput
           initialValue={searchQuery}
           label={searchLabel}
-          onDebouncedChange={handleDebouncedSearchChange}
+          onDebouncedChange={setSearchQuery}
           placeholder={searchPlaceholder ?? `${searchLabel}...`}
         />
       </div>

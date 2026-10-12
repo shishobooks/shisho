@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
-import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 
 interface SearchInputProps {
@@ -27,9 +26,9 @@ export const SearchInput = ({
   className = "max-w-xs",
 }: SearchInputProps) => {
   const [value, setValue] = useState(initialValue);
-  const debouncedValue = useDebounce(value, 300);
   const prevInitialValue = useRef(initialValue);
   const lastReportedValue = useRef(initialValue);
+  const reportChange = useEffectEvent(onDebouncedChange);
 
   // Sync from parent when external navigation changes the URL
   useEffect(() => {
@@ -37,16 +36,25 @@ export const SearchInput = ({
       // Only sync if this wasn't caused by our own debounced report
       if (initialValue !== lastReportedValue.current) {
         setValue(initialValue);
+        // The parent already has this value, so don't report it back.
+        lastReportedValue.current = initialValue;
       }
       prevInitialValue.current = initialValue;
     }
   }, [initialValue]);
 
-  // Report debounced changes to parent
+  // Report typed text once it settles. The timer is keyed on the input text,
+  // not a debounced copy of it: after back navigation a debounced copy still
+  // holds the old query, and would either push it back into the URL or, if
+  // that query is retyped, never change and so never report.
   useEffect(() => {
-    lastReportedValue.current = debouncedValue;
-    onDebouncedChange(debouncedValue);
-  }, [debouncedValue, onDebouncedChange]);
+    if (value === lastReportedValue.current) return;
+    const timer = setTimeout(() => {
+      lastReportedValue.current = value;
+      reportChange(value);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [value]);
 
   return (
     <Input

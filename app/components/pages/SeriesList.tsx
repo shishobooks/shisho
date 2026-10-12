@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
@@ -22,6 +22,7 @@ import { useSeriesList } from "@/hooks/queries/series";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { cn } from "@/libraries/utils";
 import type { GallerySize, SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -129,26 +130,7 @@ const SeriesList = () => {
   usePageTitle("Series");
 
   const { libraryId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const searchQuery = searchParams.get("search") ?? "";
-
-  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
-
-  const handleDebouncedSearchChange = (value: string) => {
-    setDebouncedSearch(value);
-    if (value !== searchQuery) {
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        if (value) {
-          newParams.set("search", value);
-        } else {
-          newParams.delete("search");
-        }
-        newParams.set("page", "1");
-        return newParams;
-      });
-    }
-  };
+  const { searchQuery, setSearchQuery } = useSearchQueryParam();
 
   const {
     savedSize,
@@ -170,7 +152,7 @@ const SeriesList = () => {
       limit: itemsPerPage,
       offset,
       library_id: libraryId ? parseInt(libraryId, 10) : undefined,
-      search: debouncedSearch || undefined,
+      search: searchQuery || undefined,
     },
     { enabled: userSettingsResolved },
   );
@@ -183,13 +165,13 @@ const SeriesList = () => {
   const seriesSettled = seriesQuery.isSuccess || seriesQuery.isError;
   useEffect(() => {
     if (seriesSettled && !seriesQuery.isFetching) {
-      setConfirmedSearch(debouncedSearch);
+      setConfirmedSearch(searchQuery);
     }
-  }, [seriesSettled, seriesQuery.isFetching, debouncedSearch]);
+  }, [seriesSettled, seriesQuery.isFetching, searchQuery]);
 
   // Data is stale if search changed but query hasn't completed yet
   const isStaleData =
-    confirmedSearch !== null && debouncedSearch !== confirmedSearch;
+    confirmedSearch !== null && searchQuery !== confirmedSearch;
 
   const renderSeriesItem = (seriesItem: SeriesResponse) => {
     const aspectClass = getSeriesAspectRatioClass(coverAspectRatio);
@@ -220,7 +202,7 @@ const SeriesList = () => {
         <SearchInput
           initialValue={searchQuery}
           label="Search series"
-          onDebouncedChange={handleDebouncedSearchChange}
+          onDebouncedChange={setSearchQuery}
           placeholder="Search series..."
         />
         <div className="hidden sm:flex">

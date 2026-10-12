@@ -23,8 +23,7 @@ const state = {
   libraryId: "1",
   currentPage: 1,
   searchQuery: "",
-  debouncedSearch: "",
-  handleDebouncedSearchChange: vi.fn(),
+  setSearchQuery: vi.fn(),
   queryParams: { limit: 50, offset: 0 },
   limit: 50,
   offset: 0,
@@ -33,7 +32,7 @@ const state = {
 
 const list = (
   query: Partial<UseQueryResult<ResourceListResponse<Item>>>,
-  debouncedSearch = "",
+  searchQuery = "",
 ) => (
   <MemoryRouter>
     <ResourceList<Item>
@@ -43,7 +42,7 @@ const list = (
       query={query as UseQueryResult<ResourceListResponse<Item>>}
       searchLabel="Search genres"
       searchPlaceholder="Search genres..."
-      state={{ ...state, debouncedSearch }}
+      state={{ ...state, searchQuery }}
       subtitle="Browse genres"
       title="Genres"
     />
