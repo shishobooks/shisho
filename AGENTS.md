@@ -89,7 +89,7 @@ Run `mise check:quiet` once when the work is done, before pushing or opening a P
 
 ## Testing
 
-- Go tests get their database from `testdb.New(t)` (`pkg/testutils/testdb`); don't copy a `setupTestDB` into a package. Migration tests that need an older schema, and worker tests that share a cache-mode database across goroutines, open their own.
+- Go tests get their database from `testdb.New(t)` (`pkg/testutils/testdb`), or `testdb.NewShared(t)` when the code under test queries from several goroutines at once, as the worker does; don't copy a `setupTestDB` into a package. Only migration tests that need an older schema open their own.
 - Run Go tests through `mise test`, or set `TZ=America/Chicago CI=true` as it does when calling `go test` directly.
 - New Go tests call `t.Parallel()` as their first line, unless they touch shared global state: `pkg/config` tests mutate global config, and `pkg/plugins/AGENTS.md` lists the plugin tests that can't run in parallel.
 - **Bug fixes and features follow Red-Green-Refactor**, in sequence: write the test and watch it fail, implement until it passes, then clean up with the tests still passing. A test never seen failing proves nothing.
@@ -112,7 +112,7 @@ Not enforced, so read these:
 - **Column `DEFAULT`s never apply when Bun inserts a zero `time.Time` into a field without `nullzero`**: Bun writes `0001-01-01 00:00:00`. Set `CreatedAt`/`UpdatedAt` explicitly on insert or tag the field `bun:",nullzero,notnull,default:current_timestamp"`. Updates that list `updated_at` in `Column(...)` write whatever the struct holds, so set `UpdatedAt = time.Now()` first.
 - **`nullzero` on a non-pointer field writes NULL for its zero value**, which a `NOT NULL` column rejects. Use it only where zero is invalid (IDs, required names, 1-based sort orders), not where zero is real, like the size of an empty file.
 - **SQLite table rebuilds use the helpers in `pkg/migrations/rebuild.go`**, never a hand-rolled copy like the `recreateTable` inside an older migration: with `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent cascades deletes into every child, and the pragma is a no-op inside a transaction.
-- **Connection pragmas apply per connection**, and `database/sql` replaces a connection whose query is canceled, so a test that opens its own database uses `pkg/sqliteconn.NewConnector` as `database.New` and `testdb.New(t)` do (or pins one connection and enables the pragma).
+- **`database/sql` replaces a connection whose query is canceled mid-statement.** Connection pragmas apply per connection, so a test that opens its own database uses `pkg/sqliteconn.NewConnector` as `database.New` and `testdb.New(t)` do. An in-memory database also has to outlive the discarded connection, which capping the pool does not do; `testdb` handles both, so prefer it to opening your own.
 - **CASCADE does not clean up FTS indexes or the links that say which rows copied a deleted entity.** Collect affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it; see `docs/agents/backend/search-fts.md`.
 
 ## Agent skills

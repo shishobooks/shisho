@@ -22,11 +22,8 @@ import (
 func TestPluginRoutes_Permissions(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
-	// Every pooled connection to an in-memory SQLite database opens a
-	// separate, empty database, so keep the pool at one connection. Subtests
-	// run sequentially because they share this database and the final admin
-	// PUT below rewrites the hook order they read.
-	tc.db.SetMaxOpenConns(1)
+	// Subtests run sequentially because they share this database and the
+	// final admin PUT below rewrites the hook order they read.
 	ctx := t.Context()
 	cfg := config.NewForTest()
 	cfg.TestMode = false

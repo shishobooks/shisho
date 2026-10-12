@@ -2,8 +2,6 @@ package worker
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
@@ -17,16 +15,14 @@ import (
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/libraries"
-	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
-	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/shishobooks/shisho/pkg/tags"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 )
 
 // testContext holds all the dependencies needed for testing the worker.
@@ -51,30 +47,7 @@ type testContext struct {
 func newTestContext(t *testing.T) *testContext {
 	t.Helper()
 
-	// Create a uniquely named in-memory SQLite database with shared cache.
-	// Using a unique name per test ensures parallel tests don't share databases,
-	// while cache=shared allows multiple connections (from worker goroutines) to
-	// share the same database within a test.
-	// Every pooled connection runs PRAGMA foreign_keys, as in production.
-	dbName := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	connector, err := sqliteconn.NewConnector(dbName, "PRAGMA foreign_keys=ON")
-	if err != nil {
-		t.Fatalf("failed to open in-memory database: %v", err)
-	}
-	sqldb := sql.OpenDB(connector)
-
-	// Configure connection pool for shared in-memory database.
-	// Without this, closing a connection could destroy the database.
-	sqldb.SetMaxIdleConns(1000)
-	sqldb.SetConnMaxLifetime(0)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Run migrations
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	if err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
+	db := testdb.NewShared(t)
 
 	// Create services
 	appSettingsService := appsettings.NewService(db)
@@ -140,10 +113,6 @@ func newTestContext(t *testing.T) *testContext {
 		searchService:      searchService,
 		fingerprintService: fingerprintService,
 	}
-
-	t.Cleanup(func() {
-		db.Close()
-	})
 
 	return tc
 }
@@ -268,30 +237,7 @@ func (tc *testContext) listChapters(fileID int) []*models.Chapter {
 func newTestContextWithSearchService(t *testing.T) *testContext {
 	t.Helper()
 
-	// Create a uniquely named in-memory SQLite database with shared cache.
-	// Using a unique name per test ensures parallel tests don't share databases,
-	// while cache=shared allows multiple connections (from worker goroutines) to
-	// share the same database within a test.
-	// Every pooled connection runs PRAGMA foreign_keys, as in production.
-	dbName := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
-	connector, err := sqliteconn.NewConnector(dbName, "PRAGMA foreign_keys=ON")
-	if err != nil {
-		t.Fatalf("failed to open in-memory database: %v", err)
-	}
-	sqldb := sql.OpenDB(connector)
-
-	// Configure connection pool for shared in-memory database.
-	// Without this, closing a connection could destroy the database.
-	sqldb.SetMaxIdleConns(1000)
-	sqldb.SetConnMaxLifetime(0)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	// Run migrations
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	if err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
+	db := testdb.NewShared(t)
 
 	// Create services
 	appSettingsService := appsettings.NewService(db)
@@ -357,10 +303,6 @@ func newTestContextWithSearchService(t *testing.T) *testContext {
 		searchService:      searchService,
 		fingerprintService: fingerprintService,
 	}
-
-	t.Cleanup(func() {
-		db.Close()
-	})
 
 	return tc
 }
