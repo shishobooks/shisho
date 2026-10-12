@@ -17,8 +17,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -410,7 +412,7 @@ func TestGeneratedDownload_ShareLinkCountedWhenStarted(t *testing.T) {
 // and HEAD, without building again, until the book's metadata changes.
 func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsRoute(), shareRoute(), webRoute()} {
+	for _, r := range []route{opdsRoute(), shareRoute(), webRoute(), webKepubRoute()} {
 		for _, unknownSize := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s unknown size %t", r.name, unknownSize), func(t *testing.T) {
 				t.Parallel()
@@ -440,8 +442,13 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 							assert.Equal(t, f.original, body)
 						}
 					} else {
-						require.Equal(t, http.StatusInternalServerError, again.StatusCode, method)
+						// The failure was logged when it happened, so the
+						// web UI gets a 422 rather than another server error.
+						require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode, method)
 						assert.Empty(t, again.Header.Get("Content-Disposition"))
+						if method == http.MethodGet {
+							assertFailedPartwayBody(t, body)
+						}
 					}
 				}
 				assert.Equal(t, 1, gen.Writes(), "a remembered failure was built again")
@@ -496,7 +503,8 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 				require.Equal(t, http.StatusOK, again.StatusCode)
 				assert.Equal(t, f.original, body)
 			} else {
-				require.Equal(t, http.StatusInternalServerError, again.StatusCode)
+				require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode)
+				assertFailedPartwayBody(t, body)
 			}
 		})
 	}
@@ -547,4 +555,14 @@ func (g *gatedWriter) Write(b []byte) (int, error) {
 	}
 	g.passed = true
 	return g.w.Write(b)
+}
+
+// assertFailedPartwayBody checks a web UI route's answer to a remembered
+// failure: an invalid_state error whose message the download dialog shows.
+func assertFailedPartwayBody(t *testing.T, body []byte) {
+	t.Helper()
+	var res errcodes.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &res), string(body))
+	assert.Equal(t, "invalid_state", res.Error.Code)
+	assert.Equal(t, books.FailedPartwayMessage, res.Error.Message)
 }

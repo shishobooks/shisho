@@ -44,6 +44,10 @@ func OriginalDownload(file *models.File) *Download {
 	}
 }
 
+// FailedPartwayMessage is the web UI routes' answer to a Generated File
+// whose earlier build failed partway (downloadcache.ErrFailedPartway).
+const FailedPartwayMessage = "This file's generated download failed partway through an earlier attempt. Download the original, or edit the book's metadata to try again."
+
 // ResolveFallbackDownload returns what the OPDS, eReader, Kobo, and Share
 // Link download routes send: the file generated with the book's metadata (its
 // KePub conversion when kepub is set), or the original when generation is not

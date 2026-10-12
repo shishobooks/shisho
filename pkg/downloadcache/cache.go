@@ -640,6 +640,11 @@ func (c *Cache) rememberFailure(e *entry, err error) error {
 	return e.writeMeta(meta)
 }
 
+// ErrFailedPartway is the cause of the error returned for a Generated File
+// whose earlier build failed partway. The failure was logged when it
+// happened, so callers that answer it with an error need not log it again.
+var ErrFailedPartway = errors.New("an earlier download failed partway")
+
 // rememberedFailure returns the failure recorded against e's fingerprint
 // as a generation error, so device routes serve the Original File and the
 // web UI shows the error, or nil when there is none.
@@ -652,7 +657,7 @@ func (c *Cache) rememberedFailure(e *entry) error {
 	if meta == nil || meta.Failure == nil || meta.Failure.FingerprintHash != e.hash || meta.Failure.Version != version.Version {
 		return nil
 	}
-	return filegen.NewGenerationError(e.file.FileType, nil, "an earlier download failed partway: "+meta.Failure.Message)
+	return filegen.NewGenerationError(e.file.FileType, ErrFailedPartway, "an earlier download failed partway: "+meta.Failure.Message)
 }
 
 // buildRecovering runs build, turning a panic into an error. The job runs
