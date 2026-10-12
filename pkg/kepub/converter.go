@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/ziputil"
 )
 
 // Converter handles EPUB to KePub conversion.
@@ -29,6 +31,8 @@ func NewConverter() *Converter {
 
 // ConvertEPUB converts an EPUB file to KePub format.
 // The source file is read and a new KePub file is written to destPath.
+// Downloads stream through WriteEPUB instead; this wraps it for callers
+// that have only paths.
 func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) error {
 	// Open source EPUB
 	srcFile, err := os.Open(srcPath)
@@ -46,6 +50,10 @@ func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) e
 	if err != nil {
 		return errors.Wrap(err, "failed to read source EPUB as zip")
 	}
+	entries := make([]Entry, len(srcZip.File))
+	for i, f := range srcZip.File {
+		entries[i] = Entry{Name: f.Name, File: f}
+	}
 
 	// Create temporary output file
 	tmpPath := destPath + ".tmp"
@@ -58,139 +66,8 @@ func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) e
 		os.Remove(tmpPath) // Clean up temp file if we don't rename it
 	}()
 
-	destZip := zip.NewWriter(destFile)
-
-	// Track content files that need transformation
-	contentFiles := make(map[string]bool)
-	var opfPath string
-
-	// First pass: identify content files from OPF
-	for _, f := range srcZip.File {
-		if filepath.Ext(f.Name) == ".opf" {
-			opfPath = f.Name
-			items, err := parseOPFManifest(f)
-			if err != nil {
-				return errors.Wrap(err, "failed to parse OPF manifest")
-			}
-			opfDir := filepath.Dir(opfPath)
-			if opfDir == "." {
-				opfDir = ""
-			}
-			for _, item := range items {
-				if isContentFile(item.MediaType) {
-					itemPath := item.Href
-					if opfDir != "" {
-						itemPath = opfDir + "/" + itemPath
-					}
-					contentFiles[itemPath] = true
-				}
-			}
-			break
-		}
-	}
-
-	// Write mimetype first (must be uncompressed per EPUB spec)
-	mimetypeWritten := false
-	for _, srcZipFile := range srcZip.File {
-		if srcZipFile.Name == "mimetype" {
-			content, err := readZipFile(srcZipFile)
-			if err != nil {
-				return errors.Wrap(err, "failed to read mimetype")
-			}
-			mimeWriter, err := destZip.CreateHeader(&zip.FileHeader{
-				Name:   "mimetype",
-				Method: zip.Store, // Must be uncompressed
-			})
-			if err != nil {
-				return errors.Wrap(err, "failed to create mimetype")
-			}
-			if _, err := mimeWriter.Write(content); err != nil {
-				return errors.Wrap(err, "failed to write mimetype")
-			}
-			mimetypeWritten = true
-			break
-		}
-	}
-
-	// Check if kobo.js already exists in the source EPUB
-	hasKoboJS := false
-	for _, f := range srcZip.File {
-		if f.Name == "kobo.js" {
-			hasKoboJS = true
-			break
-		}
-	}
-
-	// Add kobo.js file for pagination and progress tracking (only if not present)
-	if !hasKoboJS {
-		koboJSWriter, err := destZip.CreateHeader(&zip.FileHeader{
-			Name:   "kobo.js",
-			Method: zip.Deflate,
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to create kobo.js")
-		}
-		if _, err := koboJSWriter.Write([]byte(koboJS)); err != nil {
-			return errors.Wrap(err, "failed to write kobo.js")
-		}
-	}
-
-	// Process each file in the source EPUB (skip mimetype as it's already written)
-	for _, srcZipFile := range srcZip.File {
-		// Skip mimetype - already written first
-		if srcZipFile.Name == "mimetype" && mimetypeWritten {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return errors.Wrap(ctx.Err(), "conversion cancelled")
-		default:
-		}
-
-		var destContent []byte
-		var err error
-
-		if contentFiles[srcZipFile.Name] {
-			// Create a new span counter for each file (per-file counters, starting at 1)
-			// This matches Kobo's expected format for progress tracking
-			spanCounter := NewSpanCounter()
-			// Compute relative path to kobo.js from content file location
-			scriptPath := computeRelativeScriptPath(srcZipFile.Name)
-			destContent, err = c.transformContentFileWithOptions(srcZipFile, spanCounter, scriptPath)
-			if err != nil {
-				return errors.Wrapf(err, "failed to transform content file: %s", srcZipFile.Name)
-			}
-		} else if srcZipFile.Name == opfPath {
-			// Transform OPF file
-			destContent, err = c.transformOPFFile(srcZipFile)
-			if err != nil {
-				return errors.Wrap(err, "failed to transform OPF file")
-			}
-		} else {
-			// Copy file unchanged
-			destContent, err = readZipFile(srcZipFile)
-			if err != nil {
-				return errors.Wrapf(err, "failed to read file: %s", srcZipFile.Name)
-			}
-		}
-
-		// Write to destination
-		destZipFile, err := destZip.CreateHeader(&zip.FileHeader{
-			Name:   srcZipFile.Name,
-			Method: zip.Deflate,
-		})
-		if err != nil {
-			return errors.Wrapf(err, "failed to create file in destination: %s", srcZipFile.Name)
-		}
-
-		if _, err := destZipFile.Write(destContent); err != nil {
-			return errors.Wrapf(err, "failed to write file to destination: %s", srcZipFile.Name)
-		}
-	}
-
-	// Close the zip writer
-	if err := destZip.Close(); err != nil {
-		return errors.Wrap(err, "failed to finalize destination")
+	if err := c.WriteEPUB(ctx, destFile, entries); err != nil {
+		return err
 	}
 
 	// Close the file before renaming
@@ -206,20 +83,225 @@ func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) e
 	return nil
 }
 
-// transformContentFileWithOptions transforms a content file with full options.
-func (c *Converter) transformContentFileWithOptions(f *zip.File, counter *SpanCounter, scriptPath string) ([]byte, error) {
-	r, err := f.Open()
+// Entry is an entry of the EPUB a conversion reads: a zip entry, or content
+// that replaces one.
+type Entry struct {
+	Name string
+	// File is the entry read from a zip, or nil when Content replaces it.
+	File    *zip.File
+	Content []byte
+}
+
+// content returns the entry's uncompressed data.
+func (e Entry) content() ([]byte, error) {
+	if e.File == nil {
+		return e.Content, nil
+	}
+	return readZipFile(e.File)
+}
+
+// lookahead is how many entries the conversion transforms ahead of the one
+// being written, so the writer rarely waits on a transform.
+const lookahead = 4
+
+// WriteEPUB converts the EPUB made of entries to KePub and writes it to w
+// front to back. The mimetype entry goes first and kobo.js second; the
+// content documents and the OPF are transformed, other replaced entries
+// are compressed, and every other entry is copied without recompressing.
+func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry) error {
+	contentFiles := make(map[string]bool)
+	opfPath := ""
+	hasKoboJS := false
+	for _, e := range entries {
+		if e.Name == "kobo.js" {
+			hasKoboJS = true
+		}
+		if opfPath != "" || filepath.Ext(e.Name) != ".opf" {
+			continue
+		}
+		opfPath = e.Name
+		data, err := e.content()
+		if err != nil {
+			return errors.Wrap(err, "failed to parse OPF manifest")
+		}
+		opfDir := filepath.Dir(opfPath)
+		if opfDir == "." {
+			opfDir = ""
+		}
+		for _, item := range extractManifestItems(data) {
+			if isContentFile(item.MediaType) {
+				itemPath := item.Href
+				if opfDir != "" {
+					itemPath = opfDir + "/" + itemPath
+				}
+				contentFiles[itemPath] = true
+			}
+		}
+	}
+
+	// convert returns the compressed output for an entry that is not copied
+	// as is, or nil for one that is.
+	convert := func(ctx context.Context, e Entry) (*ziputil.Entry, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, errors.Wrap(err, "conversion cancelled")
+		}
+		switch {
+		case contentFiles[e.Name]:
+			data, err := e.content()
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to transform content file: %s", e.Name)
+			}
+			// Create a new span counter for each file (per-file counters, starting at 1)
+			// This matches Kobo's expected format for progress tracking
+			var buf bytes.Buffer
+			err = TransformContentWithOptions(bytes.NewReader(data), &buf, NewSpanCounter(), computeRelativeScriptPath(e.Name))
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to transform content file: %s", e.Name)
+			}
+			return ziputil.Compress(e.Name, zip.Deflate, buf.Bytes())
+		case e.Name == opfPath:
+			data, err := e.content()
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to transform OPF file")
+			}
+			var buf bytes.Buffer
+			if err := TransformOPF(bytes.NewReader(data), &buf); err != nil {
+				return nil, errors.Wrap(err, "failed to transform OPF file")
+			}
+			return ziputil.Compress(e.Name, zip.Deflate, buf.Bytes())
+		case e.File == nil:
+			return ziputil.Compress(e.Name, zip.Deflate, e.Content)
+		default:
+			return nil, nil
+		}
+	}
+
+	// The mimetype entry is written first, so any other is dropped.
+	var body []Entry
+	for _, e := range entries {
+		if e.Name != "mimetype" {
+			body = append(body, e)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	results := convertAhead(ctx, body, convert)
+	defer func() {
+		cancel()
+		results.wait()
+	}()
+
+	zw := zip.NewWriter(w)
+	mimetype, err := ziputil.Compress("mimetype", zip.Store, []byte("application/epub+zip"))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer r.Close()
-
-	var buf bytes.Buffer
-	if err := TransformContentWithOptions(r, &buf, counter, scriptPath); err != nil {
-		return nil, err
+	if err := mimetype.Write(zw); err != nil {
+		return err
+	}
+	// Add kobo.js file for pagination and progress tracking (only if not present)
+	if !hasKoboJS {
+		js, err := ziputil.Compress("kobo.js", zip.Deflate, []byte(koboJS))
+		if err != nil {
+			return err
+		}
+		if err := js.Write(zw); err != nil {
+			return err
+		}
+	}
+	// Send the first entries now, so the download starts before the first
+	// transform finishes.
+	if err := zw.Flush(); err != nil {
+		return errors.WithStack(err)
 	}
 
-	return buf.Bytes(), nil
+	for i, e := range body {
+		converted, err := results.next(ctx, i)
+		if err != nil {
+			return err
+		}
+		if converted != nil {
+			err = converted.Write(zw)
+		} else {
+			err = ziputil.CopyRaw(ctx, zw, e.File)
+		}
+		if err != nil {
+			return errors.Wrapf(err, "failed to write file to destination: %s", e.Name)
+		}
+	}
+
+	return errors.Wrap(zw.Close(), "failed to finalize destination")
+}
+
+// converted is one entry's result from convertAhead.
+type converted struct {
+	entry *ziputil.Entry
+	err   error
+}
+
+// aheadResults hands convertAhead's results to the writer in entry order.
+type aheadResults struct {
+	// results holds each entry's result once its conversion has started.
+	results []chan converted
+	// slots holds a token for each conversion the writer has not taken yet.
+	slots chan struct{}
+	wg    sync.WaitGroup
+}
+
+// convertAhead runs convert over entries in the background, at most
+// lookahead entries ahead of the writer, which takes the results in order
+// with next. Cancel ctx and call wait once the writer is done.
+func convertAhead(ctx context.Context, entries []Entry, convert func(context.Context, Entry) (*ziputil.Entry, error)) *aheadResults {
+	r := &aheadResults{
+		results: make([]chan converted, len(entries)),
+		slots:   make(chan struct{}, lookahead),
+	}
+	for i := range r.results {
+		r.results[i] = make(chan converted, 1)
+	}
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		for i, e := range entries {
+			select {
+			case r.slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			r.wg.Add(1)
+			go func() {
+				defer r.wg.Done()
+				// A panic on a malformed document fails the conversion
+				// instead of the process; the download cache only recovers
+				// panics on the goroutine that writes.
+				defer func() {
+					if p := recover(); p != nil {
+						r.results[i] <- converted{err: errors.Errorf("panic converting %s: %v", e.Name, p)}
+					}
+				}()
+				entry, err := convert(ctx, e)
+				r.results[i] <- converted{entry: entry, err: err}
+			}()
+		}
+	}()
+	return r
+}
+
+// next returns entry i's result: its output, or nil when it is copied as
+// is.
+func (r *aheadResults) next(ctx context.Context, i int) (*ziputil.Entry, error) {
+	select {
+	case c := <-r.results[i]:
+		<-r.slots
+		return c.entry, c.err
+	case <-ctx.Done():
+		return nil, errors.Wrap(ctx.Err(), "conversion cancelled")
+	}
+}
+
+// wait waits for the background conversions to end.
+func (r *aheadResults) wait() {
+	r.wg.Wait()
 }
 
 // computeRelativeScriptPath computes the relative path to kobo.js from a content file.
@@ -236,22 +318,6 @@ func computeRelativeScriptPath(filePath string) string {
 		parts[i] = ".."
 	}
 	return strings.Join(parts, "/") + "/kobo.js"
-}
-
-// transformOPFFile transforms the OPF file for KePub.
-func (c *Converter) transformOPFFile(f *zip.File) ([]byte, error) {
-	r, err := f.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
-	var buf bytes.Buffer
-	if err := TransformOPF(r, &buf); err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
 }
 
 // isContentFile returns true if the media type indicates a transformable content file.
@@ -281,22 +347,6 @@ type manifestItem struct {
 	ID        string
 	Href      string
 	MediaType string
-}
-
-// parseOPFManifest parses manifest items from an OPF file.
-func parseOPFManifest(f *zip.File) ([]manifestItem, error) {
-	r, err := f.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
-	return extractManifestItems(data), nil
 }
 
 // extractManifestItems extracts manifest items from OPF XML data.

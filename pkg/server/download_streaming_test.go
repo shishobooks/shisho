@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -565,4 +568,99 @@ func assertFailedPartwayBody(t *testing.T, body []byte) {
 	require.NoError(t, json.Unmarshal(body, &res), string(body))
 	assert.Equal(t, "invalid_state", res.Error.Code)
 	assert.Equal(t, books.FailedPartwayMessage, res.Error.Message)
+}
+
+// A real KePub conversion that fails partway, on an EPUB whose chapter data
+// is corrupt, cuts the download. Afterwards the device route serves the
+// Original File and the web route returns the error.
+func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
+	t.Parallel()
+	opdsKepub := opdsRoute()
+	opdsKepub.name = "opds kepub"
+	opdsKepub.path = func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d/kepub", f.file.ID) }
+	for _, r := range []route{opdsKepub, webKepubRoute()} {
+		t.Run(r.name, func(t *testing.T) {
+			t.Parallel()
+			gen := &gatedGenerator{StreamGenerator: filegen.NewKepubEPUBGenerator(), gate: make(chan struct{})}
+			f := newDownloadFixture(t, func(dir string) (string, string) {
+				return writeEPUBWithCorruptChapter(t, dir), models.FileTypeEPUB
+			}, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+				return gen, nil
+			}))
+			t.Cleanup(gen.release)
+
+			res := f.request(r, http.MethodGet)
+			require.Equal(t, http.StatusOK, res.StatusCode)
+			// The download is attached, so the failure reaches it partway.
+			gen.release()
+			assert.Empty(t, res.Header.Get("Content-Length"))
+			body, err := io.ReadAll(res.Body)
+			require.Error(t, err, "the cut download looked complete")
+			assert.NotEmpty(t, body, "the download failed before any entry was sent")
+			require.NoError(t, res.Body.Close())
+			f.cache.Wait()
+
+			again := f.request(r, http.MethodGet)
+			body, err = io.ReadAll(again.Body)
+			require.NoError(t, err)
+			require.NoError(t, again.Body.Close())
+			if r.device {
+				require.Equal(t, http.StatusOK, again.StatusCode)
+				assert.Equal(t, f.original, body)
+			} else {
+				require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode)
+				assertFailedPartwayBody(t, body)
+			}
+		})
+	}
+}
+
+// writeEPUBWithCorruptChapter writes an EPUB into dir whose chapter has
+// compressed data that is not valid deflate, and returns its path. A large
+// stored entry comes before the chapter, so the conversion writes past
+// gatedGenerator's gate before it reaches the chapter and fails.
+func writeEPUBWithCorruptChapter(t *testing.T, dir string) string {
+	t.Helper()
+	const chapter = "OEBPS/chapter1.xhtml"
+	src, err := zip.OpenReader(testgen.GenerateEPUB(t, t.TempDir(), "Streamed.epub", testgen.EPUBOptions{Title: "Streamed"}))
+	require.NoError(t, err)
+	defer src.Close()
+
+	path := filepath.Join(dir, "Streamed.epub")
+	out, err := os.Create(path)
+	require.NoError(t, err)
+	zw := zip.NewWriter(out)
+	for _, f := range src.File {
+		if f.Name == chapter {
+			w, err := zw.CreateHeader(&zip.FileHeader{Name: "OEBPS/plate.bin", Method: zip.Store})
+			require.NoError(t, err)
+			_, err = w.Write(bytes.Repeat([]byte{0x5a}, 64*1024))
+			require.NoError(t, err)
+		}
+		require.NoError(t, zw.Copy(f))
+	}
+	require.NoError(t, zw.Close())
+	require.NoError(t, out.Close())
+
+	zr, err := zip.OpenReader(path)
+	require.NoError(t, err)
+	var offset, size int64
+	for _, f := range zr.File {
+		if f.Name == chapter {
+			require.Equal(t, zip.Deflate, f.Method)
+			offset, err = f.DataOffset()
+			require.NoError(t, err)
+			size = int64(f.CompressedSize64)
+		}
+	}
+	require.NoError(t, zr.Close())
+	require.NotZero(t, size)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	for i := offset; i < offset+size; i++ {
+		data[i] = 0xff
+	}
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+	return path
 }

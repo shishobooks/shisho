@@ -16,9 +16,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/ziputil"
 )
 
 // EPUBGenerator generates EPUB files with modified metadata.
@@ -31,35 +33,150 @@ func (g *EPUBGenerator) SupportedType() string {
 
 // Generate creates a modified EPUB at destPath with updated metadata.
 func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	// Open source EPUB
-	srcFile, err := os.Open(srcPath)
-	if err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to open source file")
-	}
-	defer srcFile.Close()
+	return generateFile(ctx, g, models.FileTypeEPUB, srcPath, destPath, book, file)
+}
 
-	srcStat, err := srcFile.Stat()
+// Prepare parses the source's OPF, nav, and NCX, reads the cover, and
+// builds the rewritten entries. Every other entry is copied raw when
+// writing, so the exact size of the output is known here.
+func (g *EPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
+	plan, err := planEPUB(ctx, src, book, file)
 	if err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to stat source file")
+		return nil, err
 	}
+	p := &preparedEPUB{plan: plan, rewritten: make(map[int]*ziputil.Entry)}
+	for i, e := range plan.entries {
+		if e.source != nil {
+			continue
+		}
+		// A rewritten entry keeps a stored source entry stored; any other
+		// method, including ones Shisho cannot write, becomes deflate.
+		method := zip.Deflate
+		if e.method == zip.Store {
+			method = zip.Store
+		}
+		entry, err := ziputil.Compress(e.name, method, e.content)
+		if err != nil {
+			return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to compress rewritten entry")
+		}
+		p.rewritten[i] = entry
+	}
+	size := &countingWriter{}
+	if err := p.write(ctx, size, skipBody); err != nil {
+		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to measure destination EPUB")
+	}
+	p.size = size.n
+	return p, nil
+}
 
-	srcZip, err := zip.NewReader(srcFile, srcStat.Size())
+// preparedEPUB is a Generated EPUB ready to be written.
+type preparedEPUB struct {
+	plan *epubPlan
+	// rewritten holds the compressed rewritten entries by index in
+	// plan.entries.
+	rewritten map[int]*ziputil.Entry
+	size      int64
+}
+
+func (p *preparedEPUB) Size() (int64, bool) {
+	return p.size, true
+}
+
+func (p *preparedEPUB) Write(ctx context.Context, w io.Writer) error {
+	copyBody := func(w io.Writer, f *zip.File) error { return ziputil.CopyData(ctx, w, f) }
+	if err := p.write(ctx, w, copyBody); err != nil {
+		return NewGenerationError(models.FileTypeEPUB, err, "failed to write destination EPUB")
+	}
+	return nil
+}
+
+// write writes the EPUB to w, with body writing each copied entry's raw
+// data. Measuring the output runs the same code with a body that skips the
+// data, so the measured size cannot drift from what is written.
+func (p *preparedEPUB) write(ctx context.Context, w io.Writer, body func(io.Writer, *zip.File) error) error {
+	zw := zip.NewWriter(w)
+	for i, e := range p.plan.entries {
+		if err := ctx.Err(); err != nil {
+			return errors.Wrap(err, "generation cancelled")
+		}
+		if entry := p.rewritten[i]; entry != nil {
+			if err := entry.Write(zw); err != nil {
+				return err
+			}
+		} else {
+			if err := ziputil.CopyRawWith(zw, e.source, body); err != nil {
+				return err
+			}
+		}
+		if i == 0 {
+			// Send the mimetype entry now, so the download starts before
+			// the first large entry is read.
+			if err := zw.Flush(); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+	}
+	return errors.Wrap(zw.Close(), "failed to finalize destination EPUB")
+}
+
+// zeros is what skipBody writes in place of an entry's data.
+var zeros = make([]byte, 64*1024)
+
+// skipBody writes as many bytes as f's raw data holds without reading it,
+// for measuring the output.
+func skipBody(w io.Writer, f *zip.File) error {
+	for left := f.CompressedSize64; left > 0; {
+		n := min(left, uint64(len(zeros)))
+		if _, err := w.Write(zeros[:n]); err != nil {
+			return errors.WithStack(err)
+		}
+		left -= n
+	}
+	return nil
+}
+
+// countingWriter counts the bytes written to it and discards them.
+type countingWriter struct{ n int64 }
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	c.n += int64(len(p))
+	return len(p), nil
+}
+
+// epubMimetype is the content of an EPUB's mimetype entry.
+const epubMimetype = "application/epub+zip"
+
+// epubPlan is a Generated EPUB's entries in output order: mimetype first,
+// then the source's entries with the OPF, nav, NCX, and cover rewritten,
+// then a cover Shisho added to a package that had none.
+type epubPlan struct {
+	entries []epubEntry
+}
+
+// epubEntry is one entry of a Generated EPUB: a source entry copied as is,
+// or rewritten content.
+type epubEntry struct {
+	name string
+	// source is the entry copied as is, or nil when content replaces it.
+	source *zip.File
+	// content and method are a rewritten entry's data and the compression
+	// method of the entry it replaces.
+	content []byte
+	method  uint16
+}
+
+// planEPUB reads what a Generated EPUB needs from src and rewrites the OPF,
+// nav, NCX, and cover. It reads only the zip directory, those entries, and
+// each entry's local header, so a source that cannot be generated fails
+// here rather than partway through a download.
+func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.File) (*epubPlan, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, NewGenerationError(models.FileTypeEPUB, err, "generation cancelled")
+	}
+	srcZip, err := zip.NewReader(src, src.Size())
 	if err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to read source EPUB as zip")
+		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to read source EPUB as zip")
 	}
-
-	// Create temporary output file
-	tmpPath := destPath + ".tmp"
-	destFile, err := os.Create(tmpPath)
-	if err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to create destination file")
-	}
-	defer func() {
-		destFile.Close()
-		os.Remove(tmpPath) // Clean up temp file if we don't rename it
-	}()
-
-	destZip := zip.NewWriter(destFile)
 
 	// Find the OPF file
 	var opfFile *zip.File
@@ -72,13 +189,27 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	}
 
 	if opfFile == nil {
-		return NewGenerationError(models.FileTypeEPUB, nil, "no OPF file found in EPUB")
+		return nil, NewGenerationError(models.FileTypeEPUB, nil, "no OPF file found in EPUB")
 	}
 	opfPath := opfFile.Name
 
+	// Every entry is copied from where its local header says its data
+	// starts, so a broken header, or data running past the end of the
+	// source, is found now.
+	for _, f := range srcZip.File {
+		offset, err := f.DataOffset()
+		if err != nil {
+			return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to read source EPUB as zip")
+		}
+		remaining := src.Size() - offset
+		if remaining < 0 || f.CompressedSize64 > uint64(remaining) { //nolint:gosec // remaining is not negative here
+			return nil, NewGenerationError(models.FileTypeEPUB, nil, f.Name+" runs past the end of the source EPUB")
+		}
+	}
+
 	pkg, err := readOPFPackage(opfFile)
 	if err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
+		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
 	}
 
 	// Determine if we need to replace the cover
@@ -103,7 +234,7 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 
 	opfContent, err := modifyOPF(pkg, book, file, coverInfo, newCoverMimeType)
 	if err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
+		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
 	}
 
 	navPath, ncxPath := tocPaths(pkg, opfPath)
@@ -114,7 +245,7 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 		}
 		data, err := readZipFile(f)
 		if err != nil {
-			return NewGenerationError(models.FileTypeEPUB, err, "failed to read table of contents from source EPUB")
+			return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to read table of contents from source EPUB")
 		}
 		if f.Name == navPath {
 			navData = data
@@ -124,73 +255,29 @@ func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	}
 	tocFiles := rewriteTOCs(ctx, navPath, navData, ncxPath, ncxData, file.Chapters)
 
-	// Process each file in the source EPUB
-	for _, srcZipFile := range srcZip.File {
-		select {
-		case <-ctx.Done():
-			return NewGenerationError(models.FileTypeEPUB, ctx.Err(), "generation cancelled")
-		default:
-		}
-
-		var destFileContent []byte
-		var err error
-
-		if srcZipFile.Name == opfPath {
-			destFileContent = opfContent
-		} else if toc, ok := tocFiles[srcZipFile.Name]; ok {
-			destFileContent = toc
-		} else if coverInfo != nil && srcZipFile.Name == coverInfo.path && len(newCoverData) > 0 {
-			// Replace cover image
-			destFileContent = newCoverData
+	plan := &epubPlan{entries: []epubEntry{{name: "mimetype", content: []byte(epubMimetype), method: zip.Store}}}
+	for _, f := range srcZip.File {
+		entry := epubEntry{name: f.Name, method: f.Method}
+		if f.Name == "mimetype" {
+			continue
+		} else if f.Name == opfPath {
+			entry.content = opfContent
+		} else if toc, ok := tocFiles[f.Name]; ok {
+			entry.content = toc
+		} else if coverInfo != nil && f.Name == coverInfo.path && len(newCoverData) > 0 {
+			entry.content = newCoverData
 		} else {
-			// Copy file unchanged
-			destFileContent, err = readZipFile(srcZipFile)
-			if err != nil {
-				return NewGenerationError(models.FileTypeEPUB, err, "failed to read file from source EPUB")
-			}
+			entry.source = f
 		}
-
-		// Write to destination
-		destZipFile, err := destZip.CreateHeader(&zip.FileHeader{
-			Name:   srcZipFile.Name,
-			Method: srcZipFile.Method,
-		})
-		if err != nil {
-			return NewGenerationError(models.FileTypeEPUB, err, "failed to create file in destination EPUB")
-		}
-
-		if _, err := destZipFile.Write(destFileContent); err != nil {
-			return NewGenerationError(models.FileTypeEPUB, err, "failed to write file to destination EPUB")
-		}
+		plan.entries = append(plan.entries, entry)
 	}
 
 	// A cover Shisho added to a package that had none is a new entry.
 	if coverInfo != nil && coverInfo.added {
-		w, err := destZip.Create(coverInfo.path)
-		if err != nil {
-			return NewGenerationError(models.FileTypeEPUB, err, "failed to create cover in destination EPUB")
-		}
-		if _, err := w.Write(newCoverData); err != nil {
-			return NewGenerationError(models.FileTypeEPUB, err, "failed to write cover to destination EPUB")
-		}
+		plan.entries = append(plan.entries, epubEntry{name: coverInfo.path, content: newCoverData, method: zip.Deflate})
 	}
 
-	// Close the zip writer
-	if err := destZip.Close(); err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to finalize destination EPUB")
-	}
-
-	// Close the file before renaming
-	if err := destFile.Close(); err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to close destination file")
-	}
-
-	// Atomic rename
-	if err := os.Rename(tmpPath, destPath); err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to finalize destination file")
-	}
-
-	return nil
+	return plan, nil
 }
 
 // coverImageInfo holds information about the cover image in an EPUB.

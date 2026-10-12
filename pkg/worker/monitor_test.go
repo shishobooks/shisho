@@ -1,8 +1,6 @@
 package worker
 
 import (
-	"archive/zip"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,8 +10,8 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/config"
-	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -804,15 +802,17 @@ func TestMonitor_ProcessEvent_SkipsNewFileWithUnexpectedMime(t *testing.T) {
 	libDir := t.TempDir()
 	tc.createLibrary([]string{libDir})
 
-	// An EPUB without the leading "mimetype" zip entry parses fine but is
-	// detected as a generic zip, which the library scan walker rejects for
-	// the .epub extension. The monitor must apply the same rule so a file
-	// cannot be rejected by one entry point and imported by the other.
-	bookDir := testgen.CreateSubDir(t, libDir, "Not Quite An EPUB")
-	epubPath := writeEPUBWithoutMimetypeEntry(t, bookDir, "book.epub")
-	_, parseErr := epub.Parse(epubPath)
+	// An EPUB named .cbz parses as a CBZ, since any zip does, but detects
+	// as application/epub+zip, which the library scan walker rejects for
+	// .cbz. The monitor must apply the same rule so a file cannot be
+	// rejected by one entry point and imported by the other.
+	bookDir := testgen.CreateSubDir(t, libDir, "Not Quite A CBZ")
+	src := testgen.GenerateEPUB(t, t.TempDir(), "book.epub", testgen.EPUBOptions{Title: "Misnamed"})
+	cbzPath := filepath.Join(bookDir, "book.cbz")
+	require.NoError(t, os.Rename(src, cbzPath))
+	_, parseErr := cbz.Parse(cbzPath)
 	require.NoError(t, parseErr, "test needs a file that parses but fails the mime check")
-	_, expected, err := checkExpectedMimeType(epubPath)
+	_, expected, err := checkExpectedMimeType(cbzPath)
 	require.NoError(t, err)
 	require.False(t, expected, "test needs a file that fails the mime check")
 
@@ -820,7 +820,7 @@ func TestMonitor_ProcessEvent_SkipsNewFileWithUnexpectedMime(t *testing.T) {
 	m := newMonitor(tc.worker)
 	m.pathToLibrary[libDir] = 1
 
-	result := m.processEvent(tc.ctx, epubPath, pendingEvent{
+	result := m.processEvent(tc.ctx, cbzPath, pendingEvent{
 		Op:        fsnotify.Create,
 		LibraryID: 1,
 	})
@@ -828,38 +828,29 @@ func TestMonitor_ProcessEvent_SkipsNewFileWithUnexpectedMime(t *testing.T) {
 	assert.Empty(t, tc.listFiles(), "file with unexpected mime type must not be imported")
 }
 
-// writeEPUBWithoutMimetypeEntry generates a valid EPUB and rewrites it with
-// the "mimetype" entry dropped, so content detection sees a plain zip.
-func writeEPUBWithoutMimetypeEntry(t *testing.T, dir, filename string) string {
-	t.Helper()
-	srcDir := t.TempDir()
-	src := testgen.GenerateEPUB(t, srcDir, filename, testgen.EPUBOptions{
-		Title:   "Missing Mimetype Entry",
-		Authors: []string{"Test Author"},
-	})
-	reader, err := zip.OpenReader(src)
-	require.NoError(t, err)
-	defer reader.Close()
+// The monitor imports an EPUB whose mimetype entry is not first and stored,
+// as the library scan does.
+func TestMonitor_ProcessEvent_ImportsNonConformingEPUB(t *testing.T) {
+	t.Parallel()
 
-	dst := filepath.Join(dir, filename)
-	out, err := os.Create(dst)
-	require.NoError(t, err)
-	writer := zip.NewWriter(out)
-	for _, entry := range reader.File {
-		if entry.Name == "mimetype" {
-			continue
-		}
-		rc, err := entry.Open()
-		require.NoError(t, err)
-		w, err := writer.Create(entry.Name)
-		require.NoError(t, err)
-		_, err = io.Copy(w, rc)
-		require.NoError(t, err)
-		require.NoError(t, rc.Close())
-	}
-	require.NoError(t, writer.Close())
-	require.NoError(t, out.Close())
-	return dst
+	tc := newTestContext(t)
+	libDir := t.TempDir()
+	tc.createLibrary([]string{libDir})
+
+	bookDir := testgen.CreateSubDir(t, libDir, "Loose EPUB")
+	epubPath := writeNonConformingEPUB(t, bookDir, "book.epub", mimetypeDeflatedLast)
+
+	tc.worker.config.LibraryMonitorDelaySeconds = config.MinLibraryMonitorDelaySeconds
+	m := newMonitor(tc.worker)
+	m.pathToLibrary[libDir] = 1
+
+	m.processEvent(tc.ctx, epubPath, pendingEvent{
+		Op:        fsnotify.Create,
+		LibraryID: 1,
+	})
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	assert.Equal(t, models.FileTypeEPUB, files[0].FileType)
 }
 
 func TestMonitor_ProcessEvent_KnownFileReplacedWithBadContent_RecordsScanError(t *testing.T) {

@@ -36,32 +36,40 @@ func transformOPFContent(data []byte) []byte {
 	return []byte(content)
 }
 
+// Patterns for finding the cover in an OPF, compiled once.
+var (
+	// <meta name="cover" content="cover-id"/>, in either attribute order.
+	coverMetaPattern             = regexp.MustCompile(`<meta[^>]+name\s*=\s*["']cover["'][^>]+content\s*=\s*["']([^"']+)["'][^>]*/?>`)
+	coverMetaContentFirstPattern = regexp.MustCompile(`<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+name\s*=\s*["']cover["'][^>]*/?>`)
+	// An item with properties="cover-image" (EPUB 3), in either attribute
+	// order.
+	coverItemPattern        = regexp.MustCompile(`<item[^>]+properties\s*=\s*["'][^"']*cover-image[^"']*["'][^>]+id\s*=\s*["']([^"']+)["']`)
+	coverItemIDFirstPattern = regexp.MustCompile(`<item[^>]+id\s*=\s*["']([^"']+)["'][^>]+properties\s*=\s*["'][^"']*cover-image[^"']*["']`)
+	propertiesPattern       = regexp.MustCompile(`(\sproperties\s*=\s*["'])([^"']*)["']`)
+)
+
 // findCoverID finds the cover item ID from the metadata.
 func findCoverID(content string) string {
 	// Look for <meta name="cover" content="cover-id"/>
-	metaPattern := regexp.MustCompile(`<meta[^>]+name\s*=\s*["']cover["'][^>]+content\s*=\s*["']([^"']+)["'][^>]*/?>`)
-	matches := metaPattern.FindStringSubmatch(content)
+	matches := coverMetaPattern.FindStringSubmatch(content)
 	if len(matches) > 1 {
 		return matches[1]
 	}
 
 	// Try alternative order: content before name
-	metaPattern2 := regexp.MustCompile(`<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+name\s*=\s*["']cover["'][^>]*/?>`)
-	matches = metaPattern2.FindStringSubmatch(content)
+	matches = coverMetaContentFirstPattern.FindStringSubmatch(content)
 	if len(matches) > 1 {
 		return matches[1]
 	}
 
 	// Look for item with properties="cover-image" (EPUB3)
-	itemPattern := regexp.MustCompile(`<item[^>]+properties\s*=\s*["'][^"']*cover-image[^"']*["'][^>]+id\s*=\s*["']([^"']+)["']`)
-	matches = itemPattern.FindStringSubmatch(content)
+	matches = coverItemPattern.FindStringSubmatch(content)
 	if len(matches) > 1 {
 		return matches[1]
 	}
 
 	// Try alternative order for EPUB3
-	itemPattern2 := regexp.MustCompile(`<item[^>]+id\s*=\s*["']([^"']+)["'][^>]+properties\s*=\s*["'][^"']*cover-image[^"']*["']`)
-	matches = itemPattern2.FindStringSubmatch(content)
+	matches = coverItemIDFirstPattern.FindStringSubmatch(content)
 	if len(matches) > 1 {
 		return matches[1]
 	}
@@ -80,7 +88,6 @@ func addCoverImageProperty(content, coverID string) string {
 
 	// Check the properties tokens, not the whole tag: an id or href can
 	// contain "cover-image" too.
-	propertiesPattern := regexp.MustCompile(`(\sproperties\s*=\s*["'])([^"']*)["']`)
 	if props := propertiesPattern.FindStringSubmatch(match); props != nil {
 		for _, prop := range strings.Fields(props[2]) {
 			if prop == "cover-image" {

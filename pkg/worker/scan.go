@@ -27,11 +27,14 @@ import (
 // may report for a genuine file of that format. M4B containers vary by the tool
 // that wrote them: the "M4A " brand detects as audio/x-m4a, the "M4B " brand as
 // audio/mp4, and generic "isom"/"mp42" brands as video/mp4. All three are real
-// audiobooks and must be accepted. MOBI6, KF8, and combo files all detect as
-// application/x-mobipocket-ebook, DRM-protected ones included; the parser
-// declines those.
+// audiobooks and must be accepted. An EPUB detects as application/epub+zip
+// only when a stored mimetype entry comes first. Hand-zipped EPUBs and some
+// older tools put it elsewhere or leave it out and detect as application/zip,
+// so the parser, which needs an OPF, decides. MOBI6, KF8, and combo files all
+// detect as application/x-mobipocket-ebook, DRM-protected ones included; the
+// parser declines those.
 var extensionsToScan = map[string]map[string]struct{}{
-	".epub": {"application/epub+zip": {}},
+	".epub": {"application/epub+zip": {}, "application/zip": {}},
 	".m4b":  {"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}},
 	".cbz":  {"application/zip": {}},
 	".pdf":  {"application/pdf": {}},
