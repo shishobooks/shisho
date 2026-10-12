@@ -49,6 +49,9 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 
 	meta := book.metadata()
 	meta.CoverData, meta.CoverMimeType = book.cover(db)
+	if tocs := readTOCs(db, book.books); len(tocs) > 0 {
+		meta.Chapters = parsedChapters(tocs[0].Entries)
+	}
 	return meta, nil
 }
 
@@ -60,6 +63,8 @@ type book struct {
 	// file's images belong to its MOBI6 book, and the index in its KF8
 	// header points at no image, so it comes from the MOBI6 header there.
 	firstImage uint32
+	// books lists the books in the file, KF8 first.
+	books []bookRef
 }
 
 func readBook(db *pdb) (*book, error) {
@@ -80,8 +85,10 @@ func readBook(db *pdb) (*book, error) {
 
 	b := &book{header: first, firstImage: first.firstImage}
 	if first.isKF8() {
+		b.books = []bookRef{{kind: BookKF8, header: first}}
 		return b, nil
 	}
+	b.books = []bookRef{{kind: BookMOBI6, header: first}}
 
 	// A combo file names the KF8 header record in its MOBI6 header. If that
 	// record holds no KF8 header, the MOBI6 book is all there is to read.
@@ -104,6 +111,7 @@ func readBook(db *pdb) (*book, error) {
 		return nil, err
 	}
 	b.header = kf8
+	b.books = append([]bookRef{{kind: BookKF8, base: int(index), header: kf8}}, b.books...)
 	return b, nil
 }
 

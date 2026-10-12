@@ -40,6 +40,13 @@ const (
 	offDATP        = 256
 	offGuide       = 260
 
+	// The extra data flags say which trailing entries end each text
+	// record, in the low 16 bits; a MOBI header shorter than 0xE4 bytes
+	// has none.
+	offExtraFlags = 240
+	// The PalmDOC header's count of text records.
+	offTextRecords = 8
+
 	exthFlagPresent = 0x40
 	nullIndex       = 0xFFFFFFFF
 )
@@ -87,7 +94,24 @@ type header struct {
 	encoding    uint32
 	fullName    string
 	firstImage  uint32
-	exth        map[uint32][][]byte
+	// ncx is the index of the NCX index's primary record, relative to the
+	// header record for KF8 and absolute for MOBI6 (whose header is record
+	// 0 in every file).
+	ncx  uint32
+	exth map[uint32][][]byte
+}
+
+// headerField returns the record index at off in a header record, or the
+// null index when the MOBI header is too short to hold it.
+func headerField(rec []byte, off int) uint32 {
+	if len(rec) < minHeaderRecord {
+		return nullIndex
+	}
+	end := int64(offMOBIMagic) + int64(binary.BigEndian.Uint32(rec[offHeaderLength:]))
+	if int64(off)+4 > end || off+4 > len(rec) {
+		return nullIndex
+	}
+	return binary.BigEndian.Uint32(rec[off:])
 }
 
 func parseHeader(rec []byte) (*header, error) {
@@ -101,6 +125,7 @@ func parseHeader(rec []byte) (*header, error) {
 		version:     be.Uint32(rec[offVersion:]),
 		encoding:    be.Uint32(rec[offTextEncoding:]),
 		firstImage:  be.Uint32(rec[offFirstImage:]),
+		ncx:         headerField(rec, offNCX),
 	}
 
 	nameOffset := int64(be.Uint32(rec[offFullNameOffset:]))

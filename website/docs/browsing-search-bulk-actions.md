@@ -68,7 +68,7 @@ Shisho generates download copies with format-specific metadata:
 - CBZ metadata is written to `ComicInfo.xml`.
 - M4B metadata and edited chapters are written into MP4 metadata and chapter structures.
 - PDF metadata and edited chapters are written into the PDF information and outline.
-- MOBI and AZW3 metadata and cover data are written into the file; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for the fields.
+- MOBI and AZW3 metadata and cover data are written into the file, and renamed or deleted chapters into its table of contents; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for the fields.
 
 The source files in the library are not replaced by these generated copies. Shisho prepares the ZIP in a background job, and you can navigate elsewhere while it runs.
 

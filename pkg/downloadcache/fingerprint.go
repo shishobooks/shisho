@@ -31,7 +31,9 @@ const (
 //     namespace, which strict readers (foliate-js, some e-readers) reject.
 //   - 3: EPUB downloads write renamed and deleted chapters into the nav
 //     document and NCX (pkg/filegen/epub_toc.go).
-const GeneratorVersion = 3
+//   - 4: MOBI and AZW3 downloads write renamed and deleted chapters into
+//     the NCX index (pkg/filegen/mobi_toc.go).
+const GeneratorVersion = 4
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.

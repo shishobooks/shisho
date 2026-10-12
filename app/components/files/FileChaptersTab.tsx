@@ -38,6 +38,7 @@ import {
   type File,
 } from "@/types";
 import { fileStreamUrl } from "@/utils/downloadUrl";
+import { isReflowableFileType } from "@/utils/fileTypes";
 
 export interface FileChaptersTabHandle {
   save: () => void;
@@ -591,7 +592,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
 
     /**
      * Updates a chapter's title at a specific path in the tree.
-     * For EPUB, chapters can be nested, so we need to handle the path.
+     * For Reflowable files, chapters can be nested, so we need to handle the path.
      */
     const updateChapterTitle = (
       chapters: EditedChapter[],
@@ -640,7 +641,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
 
     /**
      * Deletes a chapter at a specific index from the array.
-     * For EPUB chapters with children, this also removes all descendants.
+     * For Reflowable chapters with children, this also removes all descendants.
      */
     const deleteChapter = (
       chapters: EditedChapter[],
@@ -652,7 +653,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     /**
      * Applies update to the chapter at path (child indexes from the top
      * level down), replacing it with the result or removing it when the
-     * result is null. EPUB chapters nest to any depth.
+     * result is null. Reflowable chapters nest to any depth.
      */
     const updateChapterAt = (
       chapters: EditedChapter[],
@@ -686,16 +687,16 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     };
 
     /**
-     * Renders the edit-mode UI: optional EPUB notice, hidden audio element for
+     * Renders the edit-mode UI: optional Reflowable notice, hidden audio element for
      * M4B, the mapped ChapterRow list, and the Add Chapter button. Shared
      * between two call sites — the main `isEditing` branch and the empty-state
      * "entered edit mode via Add Chapter" branch — so prop changes only need to
-     * land in one place. The EPUB notice and child callbacks are no-ops when
-     * the empty-state path invokes this (EPUB never reaches that path because
-     * `canAddChapters` excludes EPUB).
+     * land in one place. The Reflowable notice and child callbacks are no-ops
+     * when the empty-state path invokes this (Reflowable files never reach
+     * that path because `canAddChapters` excludes them).
      */
     const renderEditedChapters = () => {
-      const isEpub = file.file_type === FileTypeEPUB;
+      const isReflowable = isReflowableFileType(file.file_type);
       const isPageBased =
         file.file_type === FileTypeCBZ || file.file_type === FileTypePDF;
       const isM4b = file.file_type === FileTypeM4B;
@@ -705,12 +706,12 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
 
       return (
         <div className="py-4">
-          {/* EPUB limitation notice */}
-          {isEpub && (
+          {/* Reflowable limitation notice */}
+          {isReflowable && (
             <div className="mb-4 p-3 rounded-md bg-muted border border-border text-sm text-muted-foreground">
               Currently, only renaming and deleting existing chapters is
-              supported for EPUB files. Adding new chapters and reordering
-              chapters is on the roadmap.
+              supported for EPUB, MOBI, and AZW3 files. Adding new chapters and
+              reordering chapters is on the roadmap.
             </div>
           )}
 
@@ -727,7 +728,9 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               fileType={file.file_type}
               isEditing={true}
               isEmptiedHeading={
-                isEpub ? (c) => emptiedHeadings.has(editKeyOf(c)) : undefined
+                isReflowable
+                  ? (c) => emptiedHeadings.has(editKeyOf(c))
+                  : undefined
               }
               key={chapter._editKey}
               maxDurationMs={isM4b ? maxDurationMs : undefined}
@@ -741,7 +744,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
               onDelete={() =>
                 setEditedChapters((prev) => deleteChapter(prev, index))
               }
-              onDeleteAt={isEpub ? handleDeleteAt : undefined}
+              onDeleteAt={isReflowable ? handleDeleteAt : undefined}
               onPlay={isM4b ? handleChapterPlay : undefined}
               onStartPageChange={
                 isPageBased
@@ -765,7 +768,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                   updateChapterTitle(prev, index, title),
                 )
               }
-              onTitleChangeAt={isEpub ? handleTitleChangeAt : undefined}
+              onTitleChangeAt={isReflowable ? handleTitleChangeAt : undefined}
               onValidationChange={
                 isM4b
                   ? (_chapterId, hasError) =>

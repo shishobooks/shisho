@@ -13,7 +13,8 @@ import (
 )
 
 // MOBIGenerator generates MOBI and AZW3 files with the book's metadata and
-// cover written into their EXTH blocks. Series, tags, roles, and narrators
+// cover written into their EXTH blocks, and chapter renames and deletions
+// written into their tables of contents. Series, tags, roles, and narrators
 // have no place in the format and are not written; series is never folded
 // into the title.
 type MOBIGenerator struct {
@@ -47,6 +48,8 @@ func (g *MOBIGenerator) Generate(ctx context.Context, srcPath, destPath string, 
 	if err != nil {
 		return NewGenerationError(fileType, err, "failed to read cover image")
 	}
+	meta.TOC = mobiTOCEdits(ctx, src, stat.Size(), file.Chapters)
+	meta.OnTOCSkipped = logSkippedMOBITOC(ctx)
 	if err := ctx.Err(); err != nil {
 		return NewGenerationError(fileType, err, "context cancelled")
 	}

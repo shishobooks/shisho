@@ -126,9 +126,9 @@ Use the gallery's **Review state** filter to work through the queue. Bulk select
 
 ## Chapters
 
-A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. A heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
+A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB, MOBI, and AZW3 chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. In an EPUB, a heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
 
-Renamed and deleted EPUB chapters appear in the web reader's table of contents and in generated EPUB and KePub downloads. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
+Renamed and deleted EPUB, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, KePub included for EPUB. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
 
 ## Fetch Chapters from Audible
 

@@ -12,11 +12,14 @@ import {
 import { ShishoAPIError } from "@/libraries/api";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import {
+  FileTypeAZW3,
   FileTypeEPUB,
   FileTypeM4B,
+  FileTypeMOBI,
   FileTypePDF,
   type Chapter,
   type File,
+  type FileType,
 } from "@/types";
 
 import FileChaptersTab, { type FileChaptersTabHandle } from "./FileChaptersTab";
@@ -1270,3 +1273,112 @@ describe("FileChaptersTab - EPUB edit state", () => {
     );
   });
 });
+
+describe.each<FileType>([FileTypeMOBI, FileTypeAZW3])(
+  "FileChaptersTab - %s chapters",
+  (fileType) => {
+    const file: File = {
+      id: 1,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+      book_id: 1,
+      library_id: 1,
+      file_type: fileType,
+      file_role: "main",
+      filepath: `/test/book.${fileType}`,
+      display_name: `book.${fileType}`,
+      filesize_bytes: 1000000,
+      is_preferred_cover: false,
+    };
+
+    const chapter = (
+      id: number,
+      title: string,
+      children: Chapter[] = [],
+    ): Chapter => ({
+      id,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+      file_id: 1,
+      title,
+      sort_order: id,
+      href: `kindle:pos:fid:000${id}:off:0000000000`,
+      children,
+    });
+
+    beforeEach(() => {
+      mockUseFileChapters.mockReturnValue({
+        data: [
+          chapter(1, "Part One", [
+            chapter(2, "Chapter 1"),
+            chapter(3, "Chapter 2", [chapter(4, "Scene")]),
+          ]),
+          chapter(5, "Epilogue"),
+        ],
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof useFileChapters>);
+    });
+
+    it("shows nested chapters with expand toggles when viewing", async () => {
+      renderWithProviders(
+        <FileChaptersTab
+          canEdit
+          file={file}
+          isEditing={false}
+          onEditingChange={vi.fn()}
+        />,
+      );
+      expect(await screen.findByText("Scene")).toBeInTheDocument();
+      expect(
+        screen.getAllByRole("button", { name: "Hide subchapters" }),
+      ).toHaveLength(2);
+    });
+
+    it("renames and deletes nested chapters with the edit notice", async () => {
+      const mutate = vi.fn();
+      vi.mocked(useUpdateFileChapters).mockReturnValue({
+        mutate,
+        isPending: false,
+      } as never);
+      const user = createUser();
+      const tabRef = createRef<FileChaptersTabHandle>();
+      renderWithProviders(
+        <FileChaptersTab
+          canEdit
+          file={file}
+          isEditing
+          onEditingChange={vi.fn()}
+          ref={tabRef}
+        />,
+      );
+
+      const title = await screen.findByDisplayValue("Chapter 1");
+      expect(
+        screen.getByText(/only renaming and deleting existing chapters/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /add chapter/i }),
+      ).not.toBeInTheDocument();
+
+      await user.clear(title);
+      await user.type(title, "First");
+      // Chapter 2 has a scene under it, so the delete asks to confirm.
+      await user.click(
+        screen.getAllByRole("button", { name: "Delete chapter" })[2],
+      );
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      act(() => tabRef.current?.save());
+
+      expect(mutate).toHaveBeenCalledTimes(1);
+      const saved = mutate.mock.calls[0][0].chapters;
+      expect(saved).toHaveLength(2);
+      expect(saved[0].title).toBe("Part One");
+      expect(saved[0].children.map((c: { title: string }) => c.title)).toEqual([
+        "First",
+      ]);
+      expect(saved[1].title).toBe("Epilogue");
+    });
+  },
+);
