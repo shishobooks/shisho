@@ -70,6 +70,8 @@ Shisho cannot add its metadata to an encrypted PDF or to one whose internal stru
 
 Shisho can generate Kobo-optimized KePub downloads from **EPUB and CBZ only**. M4B, PDF, MOBI, and AZW3 remain in their native formats. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for device delivery options.
 
+A KePub made from an EPUB starts downloading as soon as it is requested and is converted while it is sent, so the first download has no file size: the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same KePub show their size while it stays in the download cache.
+
 ## Audiobook Browser Compatibility
 
 Most M4B files use AAC-LC or HE-AAC and play in current browsers. xHE-AAC playback is more limited: use Safari or an iOS browser for Shisho's direct audio stream. Firefox cannot play xHE-AAC, and Chrome does not support it in this progressive-streaming setup. In a browser that cannot play the file, the player shows a warning suggesting Safari, though its controls stay available. If broad browser playback matters, encode audiobooks as AAC-LC or HE-AAC.
