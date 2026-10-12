@@ -345,63 +345,6 @@ func TestRunMetadataSearch_ReturnsResults(t *testing.T) {
 	assert.Equal(t, "goodreads", result.Identifiers[0].Type)
 }
 
-func TestRunOutputGenerator_Success(t *testing.T) {
-	t.Parallel()
-	mgr, rt := setupHooksTestManager(t, "hooks-generator", "hooks-generator")
-	ctx := context.Background()
-
-	// Create source file
-	sourceDir := t.TempDir()
-	sourcePath := filepath.Join(sourceDir, "source.epub")
-	err := os.WriteFile(sourcePath, []byte("epub content"), 0644)
-	require.NoError(t, err)
-
-	// Dest file path
-	destDir := t.TempDir()
-	destPath := filepath.Join(destDir, "output.format")
-
-	bookCtx := map[string]interface{}{
-		"title":   "Test Book",
-		"authors": []string{"Author A"},
-	}
-	fileCtx := map[string]interface{}{
-		"fileType": "epub",
-		"filePath": sourcePath,
-	}
-
-	err = mgr.RunOutputGenerator(ctx, rt, sourcePath, destPath, bookCtx, fileCtx)
-	require.NoError(t, err)
-
-	// Verify the output file was created
-	content, err := os.ReadFile(destPath)
-	require.NoError(t, err)
-	assert.Equal(t, "generated:epub content", string(content))
-}
-
-func TestRunFingerprint(t *testing.T) {
-	t.Parallel()
-	mgr, rt := setupHooksTestManager(t, "hooks-generator", "hooks-generator")
-	_ = mgr
-
-	bookCtx := map[string]interface{}{
-		"title":   "My Book",
-		"authors": []string{"Author A"},
-	}
-	fileCtx := map[string]interface{}{
-		"fileType": "epub",
-		"filePath": "/library/book.epub",
-	}
-
-	fp, err := mgr.RunFingerprint(rt, bookCtx, fileCtx)
-	require.NoError(t, err)
-	assert.Equal(t, "fp-My Book-epub", fp)
-
-	// Call again to verify stability
-	fp2, err := mgr.RunFingerprint(rt, bookCtx, fileCtx)
-	require.NoError(t, err)
-	assert.Equal(t, fp, fp2)
-}
-
 func TestRunInputConverter_NoHook(t *testing.T) {
 	t.Parallel()
 	// Use the parser plugin which has no converter hook
@@ -768,27 +711,6 @@ func TestSearchMetadataCarriesAllFields(t *testing.T) {
 	assert.Equal(t, "Full Author", md.Authors[0].Name)
 	assert.Equal(t, "writer", md.Authors[0].Role)
 	assert.Equal(t, "https://example.com/book", md.URL)
-}
-
-func TestRunOutputGenerator_NoHook(t *testing.T) {
-	t.Parallel()
-	// Use the converter plugin which has no generator hook
-	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
-	ctx := context.Background()
-
-	err := mgr.RunOutputGenerator(ctx, rt, "/source", "/dest", nil, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not have an outputGenerator hook")
-}
-
-func TestRunFingerprint_NoHook(t *testing.T) {
-	t.Parallel()
-	// Use the converter plugin which has no generator hook
-	mgr, rt := setupHooksTestManager(t, "hooks-converter", "hooks-converter")
-
-	_, err := mgr.RunFingerprint(rt, nil, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not have an outputGenerator hook")
 }
 
 // installCancelTestPlugin writes a fileParser plugin whose parse() runs the

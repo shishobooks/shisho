@@ -8,10 +8,9 @@ import (
 
 // Plugin hook type constants.
 const (
-	//tygo:emit export type PluginHookType = typeof PluginHookInputConverter | typeof PluginHookFileParser | typeof PluginHookOutputGenerator | typeof PluginHookMetadataEnricher;
+	//tygo:emit export type PluginHookType = typeof PluginHookInputConverter | typeof PluginHookFileParser | typeof PluginHookMetadataEnricher;
 	PluginHookInputConverter   = "inputConverter"
 	PluginHookFileParser       = "fileParser"
-	PluginHookOutputGenerator  = "outputGenerator"
 	PluginHookMetadataEnricher = "metadataEnricher"
 )
 

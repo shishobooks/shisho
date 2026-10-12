@@ -39,7 +39,6 @@ type Runtime struct {
 	// Hook function references (nil if not provided by the plugin)
 	inputConverter   goja.Value
 	fileParser       goja.Value
-	outputGenerator  goja.Value
 	metadataEnricher goja.Value
 	onUninstalling   goja.Callable // Optional lifecycle hook called before uninstall
 
@@ -121,7 +120,6 @@ func LoadPlugin(dir, scope, pluginID string) (*Runtime, error) {
 
 	rt.inputConverter = extractHook(pluginObj, "inputConverter")
 	rt.fileParser = extractHook(pluginObj, "fileParser")
-	rt.outputGenerator = extractHook(pluginObj, "outputGenerator")
 	rt.metadataEnricher = extractHook(pluginObj, "metadataEnricher")
 
 	// Extract optional lifecycle hook (no manifest capability needed)
@@ -140,9 +138,6 @@ func LoadPlugin(dir, scope, pluginID string) (*Runtime, error) {
 	}
 	if rt.fileParser != nil && manifest.Capabilities.FileParser == nil {
 		return nil, errors.New("plugin exports 'fileParser' but manifest does not declare it in capabilities")
-	}
-	if rt.outputGenerator != nil && manifest.Capabilities.OutputGenerator == nil {
-		return nil, errors.New("plugin exports 'outputGenerator' but manifest does not declare it in capabilities")
 	}
 	if rt.metadataEnricher != nil && manifest.Capabilities.MetadataEnricher == nil {
 		return nil, errors.New("plugin exports 'metadataEnricher' but manifest does not declare it in capabilities")
@@ -202,7 +197,7 @@ func (rt *Runtime) LoadWarning() string {
 // HookTypes returns the list of hook type strings this plugin provides,
 // sorted alphabetically for deterministic output.
 // reconcileHookOrder builds the hook order rows from it, so a new hook type
-// must be listed here.
+// must be listed here and in validHookTypes.
 func (rt *Runtime) HookTypes() []string {
 	var hooks []string
 	if rt.inputConverter != nil {
@@ -210,9 +205,6 @@ func (rt *Runtime) HookTypes() []string {
 	}
 	if rt.fileParser != nil {
 		hooks = append(hooks, "fileParser")
-	}
-	if rt.outputGenerator != nil {
-		hooks = append(hooks, "outputGenerator")
 	}
 	if rt.metadataEnricher != nil {
 		hooks = append(hooks, "metadataEnricher")

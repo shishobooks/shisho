@@ -373,46 +373,6 @@ func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 	return result
 }
 
-// GetOutputGenerator returns the PluginGenerator for a given format ID.
-// Returns nil if no plugin provides that format.
-func (m *Manager) GetOutputGenerator(formatID string) *PluginGenerator {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, rt := range m.plugins {
-		if rt.manifest.Capabilities.OutputGenerator == nil {
-			continue
-		}
-		if rt.manifest.Capabilities.OutputGenerator.ID == formatID {
-			return NewPluginGenerator(m, rt.scope, rt.pluginID, formatID)
-		}
-	}
-	return nil
-}
-
-// RegisteredOutputFormats returns all format IDs registered by plugin output generators,
-// along with their source type restrictions.
-func (m *Manager) RegisteredOutputFormats() []OutputFormatInfo {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var formats []OutputFormatInfo
-	for _, rt := range m.plugins {
-		if rt.manifest.Capabilities.OutputGenerator == nil {
-			continue
-		}
-		outGen := rt.manifest.Capabilities.OutputGenerator
-		formats = append(formats, OutputFormatInfo{
-			ID:          outGen.ID,
-			Name:        outGen.Name,
-			SourceTypes: outGen.SourceTypes,
-			Scope:       rt.scope,
-			PluginID:    rt.pluginID,
-		})
-	}
-	return formats
-}
-
 // RegisteredConverterExtensions returns source extensions that have input converters.
 func (m *Manager) RegisteredConverterExtensions() map[string]struct{} {
 	result := make(map[string]struct{})

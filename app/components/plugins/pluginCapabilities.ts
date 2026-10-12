@@ -12,7 +12,6 @@ export const deriveCapabilityLabels = (
   if (caps.metadataEnricher) labels.push("Metadata enricher");
   if (caps.inputConverter) labels.push("Input converter");
   if (caps.fileParser) labels.push("File parser");
-  if (caps.outputGenerator) labels.push("Output generator");
   return labels;
 };
 

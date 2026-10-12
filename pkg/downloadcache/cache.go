@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/shishobooks/shisho/pkg/plugins"
 )
 
 // Cache manages the download cache for generated files.
@@ -140,52 +139,6 @@ func (c *Cache) GetOrGenerateKepub(ctx context.Context, book *models.Book, file 
 	e, err := c.entryFor(book, file, true)
 	if err != nil {
 		return "", "", err
-	}
-	path, err := c.complete(ctx, e)
-	return path, e.filename, err
-}
-
-// GetOrGeneratePlugin returns the path to a cached plugin-generated file,
-// waiting until it is complete. The pluginGenerator handles both generation
-// and fingerprinting.
-func (c *Cache) GetOrGeneratePlugin(ctx context.Context, book *models.Book, file *models.File, generator *plugins.PluginGenerator) (cachedPath string, downloadFilename string, err error) {
-	formatID := generator.SupportedType()
-
-	// Get the plugin's fingerprint for cache invalidation
-	pluginFP, err := generator.Fingerprint(book, file)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to compute plugin fingerprint")
-	}
-
-	// Compute a hash that includes both the standard fingerprint and the plugin fingerprint
-	fp, err := ComputeFingerprint(book, file)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to compute fingerprint")
-	}
-	fp.Format = "plugin:" + formatID
-	fp.PluginFingerprint = pluginFP
-
-	hash, err := fp.Hash()
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to hash fingerprint")
-	}
-
-	destPath := pluginCachedFilename(c.dir, file.ID, formatID)
-	e := &entry{
-		book:     book,
-		file:     file,
-		hash:     hash,
-		destPath: destPath,
-		filename: FormatPluginDownloadFilename(book, file, formatID),
-		lookup:   func() (string, error) { return GetPluginCachedFilePath(c.dir, file.ID, formatID, hash) },
-		touch:    func() { _ = UpdatePluginLastAccessed(c.dir, file.ID, formatID) },
-		writeMeta: func(meta *CacheMetadata) error {
-			return errors.Wrap(WritePluginMetadata(c.dir, file.ID, formatID, meta), "failed to write plugin cache metadata")
-		},
-		meta: CacheMetadata{FileID: file.ID, Format: "plugin:" + formatID, FingerprintHash: hash},
-		generator: func() (filegen.StreamGenerator, error) {
-			return fullBuild{gen: generator, dir: c.dir, name: filepath.Base(destPath), what: "failed to generate plugin file"}, nil
-		},
 	}
 	path, err := c.complete(ctx, e)
 	return path, e.filename, err
@@ -567,11 +520,6 @@ func (c *Cache) Invalidate(fileID int, fileType string) error {
 // InvalidateKepub removes the cached KePub file for a given file ID.
 func (c *Cache) InvalidateKepub(fileID int) error {
 	return DeleteKepubCachedFile(c.dir, fileID)
-}
-
-// InvalidatePlugin removes the cached plugin file for a given file ID and format.
-func (c *Cache) InvalidatePlugin(fileID int, formatID string) error {
-	return DeletePluginCachedFile(c.dir, fileID, formatID)
 }
 
 // GetCachedPath returns the path to a cached file if it exists and is valid.

@@ -51,15 +51,6 @@ func TestCache_GetOrGenerate_MOBIRegeneratesOnMetadataChange(t *testing.T) {
 	}
 }
 
-// A plugin output generator may use "mobi" as its id. Its cache entry and
-// metadata live under their own names, so it neither serves nor evicts the
-// built-in MOBI download.
-func TestPluginMOBIFormatDoesNotCollideWithBuiltIn(t *testing.T) {
-	t.Parallel()
-	assert.NotEqual(t, cachedFilename("/cache", 1, models.FileTypeMOBI), pluginCachedFilename("/cache", 1, models.FileTypeMOBI))
-	assert.NotEqual(t, metadataFilename("/cache", 1), pluginMetadataFilename("/cache", 1, models.FileTypeMOBI))
-}
-
 func TestRunCleanup_EvictsEveryBuiltInType(t *testing.T) {
 	t.Parallel()
 	cacheDir := t.TempDir()

@@ -31,7 +31,6 @@ const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
   { label: "Metadata Enricher", value: "metadataEnricher" },
   { label: "File Parser", value: "fileParser" },
   { label: "Input Converter", value: "inputConverter" },
-  { label: "Output Generator", value: "outputGenerator" },
 ];
 
 export const AdvancedOrderSection = () => {

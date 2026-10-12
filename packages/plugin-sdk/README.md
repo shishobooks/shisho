@@ -13,7 +13,7 @@ npm install --save-dev @shisho/plugin-sdk
 The types provide autocompletion for:
 
 - **`shisho.*`** - Host APIs (log, config, http, fs, archive, xml, ffmpeg)
-- **`plugin`** - Hook structure (inputConverter, fileParser, metadataEnricher, outputGenerator)
+- **`plugin`** - Hook structure (inputConverter, fileParser, metadataEnricher)
 - **Hook contexts** - Typed `context` parameters for each hook method
 - **Return types** - `ParsedMetadata`, `ConvertResult`, `SearchResponse`, etc.
 

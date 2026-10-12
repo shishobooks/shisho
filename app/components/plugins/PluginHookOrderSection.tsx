@@ -17,8 +17,7 @@ interface PluginHookOrderSectionProps {
 }
 
 const HOOK_TYPES: {
-  capabilityKey:
-    "metadataEnricher" | "inputConverter" | "fileParser" | "outputGenerator";
+  capabilityKey: "metadataEnricher" | "inputConverter" | "fileParser";
   label: string;
   value: PluginHookType;
 }[] = [
@@ -33,11 +32,6 @@ const HOOK_TYPES: {
     value: "inputConverter",
   },
   { capabilityKey: "fileParser", label: "File parser", value: "fileParser" },
-  {
-    capabilityKey: "outputGenerator",
-    label: "Output generator",
-    value: "outputGenerator",
-  },
 ];
 
 const modeLabel = (mode: PluginMode | undefined): string => {

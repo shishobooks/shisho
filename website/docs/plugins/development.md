@@ -120,7 +120,6 @@ A plugin may implement one or more hooks:
 - `inputConverter.convert` converts an input into a supported format.
 - `fileParser.parse` extracts metadata from a file.
 - `metadataEnricher.search` returns candidate metadata.
-- `outputGenerator.generate` and `fingerprint` create and cache an alternative format.
 
 Every exported hook must have its matching manifest capability. Permission capabilities must cover every network domain, broad filesystem operation, FFmpeg call, or shell command the plugin uses.
 

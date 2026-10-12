@@ -284,10 +284,10 @@ func TestService_AppendToOrder(t *testing.T) {
 	insertTestPlugin(t, db, "community", "plugin-b")
 
 	// Append first
-	err := svc.AppendToOrder(ctx, models.PluginHookOutputGenerator, "community", "plugin-a")
+	err := svc.AppendToOrder(ctx, models.PluginHookFileParser, "community", "plugin-a")
 	require.NoError(t, err)
 
-	orders, err := svc.GetOrder(ctx, models.PluginHookOutputGenerator)
+	orders, err := svc.GetOrder(ctx, models.PluginHookFileParser)
 	require.NoError(t, err)
 	require.Len(t, orders, 1)
 	assert.Equal(t, "plugin-a", orders[0].PluginID)
@@ -295,10 +295,10 @@ func TestService_AppendToOrder(t *testing.T) {
 	assert.Equal(t, models.PluginModeEnabled, orders[0].Mode)
 
 	// Append second
-	err = svc.AppendToOrder(ctx, models.PluginHookOutputGenerator, "community", "plugin-b")
+	err = svc.AppendToOrder(ctx, models.PluginHookFileParser, "community", "plugin-b")
 	require.NoError(t, err)
 
-	orders, err = svc.GetOrder(ctx, models.PluginHookOutputGenerator)
+	orders, err = svc.GetOrder(ctx, models.PluginHookFileParser)
 	require.NoError(t, err)
 	require.Len(t, orders, 2)
 	assert.Equal(t, "plugin-a", orders[0].PluginID)

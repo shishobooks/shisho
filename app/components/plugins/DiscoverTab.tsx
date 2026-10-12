@@ -150,7 +150,6 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
               </SelectItem>
               <SelectItem value="inputConverter">Input converter</SelectItem>
               <SelectItem value="fileParser">File parser</SelectItem>
-              <SelectItem value="outputGenerator">Output generator</SelectItem>
             </SelectContent>
           </Select>
           <Select onValueChange={setSource} value={source}>

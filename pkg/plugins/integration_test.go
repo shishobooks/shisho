@@ -22,7 +22,7 @@ func TestPluginLifecycle(t *testing.T) {
 	service := NewService(db)
 	pluginDir := t.TempDir()
 
-	// 2. Create a test plugin on disk with all 4 hook types
+	// 2. Create a test plugin on disk with all 3 hook types
 	scope := "test"
 	pluginID := "lifecycle-plugin"
 	destDir := filepath.Join(pluginDir, scope, pluginID)
@@ -50,12 +50,6 @@ func TestPluginLifecycle(t *testing.T) {
       "description": "Enriches metadata with genres",
       "fileTypes": ["testformat"],
       "fields": ["genres"]
-    },
-    "outputGenerator": {
-      "description": "Generates test output",
-      "id": "test-output",
-      "name": "Test Output",
-      "sourceTypes": ["epub"]
     }
   },
   "configSchema": {
@@ -100,15 +94,6 @@ func TestPluginLifecycle(t *testing.T) {
           }]
         };
       }
-    },
-    outputGenerator: {
-      generate: function(ctx) {
-        var content = shisho.fs.readTextFile(ctx.sourcePath);
-        shisho.fs.writeTextFile(ctx.destPath, "generated:" + content);
-      },
-      fingerprint: function(ctx) {
-        return "fp-" + ctx.book.title + "-" + ctx.file.fileType;
-      }
     }
   };
 })();`
@@ -145,15 +130,13 @@ func TestPluginLifecycle(t *testing.T) {
 	hookTypes := rt.HookTypes()
 	assert.Contains(t, hookTypes, "fileParser")
 	assert.Contains(t, hookTypes, "metadataEnricher")
-	assert.Contains(t, hookTypes, "outputGenerator")
 	assert.Contains(t, hookTypes, "inputConverter")
-	assert.Len(t, hookTypes, 4)
+	assert.Len(t, hookTypes, 3)
 
 	// 7. Verify manifest was parsed correctly
 	manifest := rt.Manifest()
 	assert.Equal(t, "Lifecycle Test Plugin", manifest.Name)
 	assert.Equal(t, "1.0.0", manifest.Version)
-	assert.Equal(t, "test-output", manifest.Capabilities.OutputGenerator.ID)
 	assert.Equal(t, []string{"testformat"}, manifest.Capabilities.FileParser.Types)
 
 	// 8. Verify GetParserForType works
@@ -161,22 +144,17 @@ func TestPluginLifecycle(t *testing.T) {
 	require.NotNil(t, parserRT, "GetParserForType should find plugin for testformat")
 	assert.Equal(t, manifest.Name, parserRT.Manifest().Name)
 
-	// 9. Verify GetOutputGenerator works
-	gen := manager.GetOutputGenerator("test-output")
-	require.NotNil(t, gen, "GetOutputGenerator should find plugin for test-output")
-	assert.Equal(t, "test-output", gen.SupportedType())
-
-	// 10. Verify RegisteredFileExtensions
+	// 9. Verify RegisteredFileExtensions
 	exts := manager.RegisteredFileExtensions()
 	assert.Contains(t, exts, "testformat")
 
-	// 11. Verify RegisteredConverterExtensions
+	// 10. Verify RegisteredConverterExtensions
 	convExts := manager.RegisteredConverterExtensions()
 	assert.Contains(t, convExts, "testinput")
 
 	// --- Run Hooks ---
 
-	// 12. Run inputConverter
+	// 11. Run inputConverter
 	sourceDir := t.TempDir()
 	sourcePath := filepath.Join(sourceDir, "input.testinput")
 	err = os.WriteFile(sourcePath, []byte("raw content"), 0644)
@@ -193,7 +171,7 @@ func TestPluginLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "converted:raw content", string(convertedContent))
 
-	// 13. Run fileParser
+	// 12. Run fileParser
 	testFile := filepath.Join(sourceDir, "test.testformat")
 	err = os.WriteFile(testFile, []byte("test content"), 0644)
 	require.NoError(t, err)
@@ -211,7 +189,7 @@ func TestPluginLifecycle(t *testing.T) {
 	require.NotNil(t, metadata.SeriesNumber)
 	assert.InDelta(t, 1.5, *metadata.SeriesNumber, 0.001)
 
-	// 14. Run metadataEnricher search (enrich hook has been removed)
+	// 13. Run metadataEnricher search (enrich hook has been removed)
 	searchCtx := map[string]interface{}{
 		"query": "My Book",
 		"book": map[string]interface{}{
@@ -233,88 +211,49 @@ func TestPluginLifecycle(t *testing.T) {
 	assert.Equal(t, []string{"enriched"}, searchResp.Results[0].Tags)
 	assert.Equal(t, "Enriched: My Book", searchResp.Results[0].Description)
 
-	// 15. Run outputGenerator
-	genSourceDir := t.TempDir()
-	genSourcePath := filepath.Join(genSourceDir, "source.epub")
-	err = os.WriteFile(genSourcePath, []byte("epub content"), 0644)
-	require.NoError(t, err)
-
-	genDestDir := t.TempDir()
-	destPath := filepath.Join(genDestDir, "output.test")
-
-	bookCtx := map[string]interface{}{
-		"title":   "Test Book",
-		"authors": []string{"Author A"},
-	}
-	fileCtx := map[string]interface{}{
-		"fileType": "epub",
-		"filePath": genSourcePath,
-	}
-
-	err = manager.RunOutputGenerator(ctx, rt, genSourcePath, destPath, bookCtx, fileCtx)
-	require.NoError(t, err)
-
-	outputContent, err := os.ReadFile(destPath)
-	require.NoError(t, err)
-	assert.Equal(t, "generated:epub content", string(outputContent))
-
-	// 16. Run fingerprint
-	fp, err := manager.RunFingerprint(rt, bookCtx, fileCtx)
-	require.NoError(t, err)
-	assert.Equal(t, "fp-Test Book-epub", fp)
-
-	// Verify fingerprint is stable (same inputs produce same output)
-	fp2, err := manager.RunFingerprint(rt, bookCtx, fileCtx)
-	require.NoError(t, err)
-	assert.Equal(t, fp, fp2)
-
 	// --- Unload and verify cleanup ---
 
-	// 17. Unload the plugin
+	// 14. Unload the plugin
 	manager.UnloadPlugin(scope, pluginID)
 
-	// 18. Verify runtime is gone
+	// 15. Verify runtime is gone
 	rt = manager.GetRuntime(scope, pluginID)
 	assert.Nil(t, rt, "runtime should be nil after UnloadPlugin")
 
-	// 19. Verify GetParserForType no longer finds it
+	// 16. Verify GetParserForType no longer finds it
 	parserRT = manager.GetParserForType("testformat")
 	assert.Nil(t, parserRT, "GetParserForType should return nil after unload")
 
-	// 20. Verify GetOutputGenerator no longer finds it
-	gen = manager.GetOutputGenerator("test-output")
-	assert.Nil(t, gen, "GetOutputGenerator should return nil after unload")
-
-	// 21. Verify RegisteredFileExtensions is now empty
+	// 17. Verify RegisteredFileExtensions is now empty
 	exts = manager.RegisteredFileExtensions()
 	assert.NotContains(t, exts, "testformat")
 
-	// 22. Verify RegisteredConverterExtensions is now empty
+	// 18. Verify RegisteredConverterExtensions is now empty
 	convExts = manager.RegisteredConverterExtensions()
 	assert.NotContains(t, convExts, "testinput")
 
 	// --- Reload and verify ---
 
-	// 23. Reload the plugin (simulating a re-enable)
+	// 19. Reload the plugin (simulating a re-enable)
 	err = manager.LoadPlugin(ctx, scope, pluginID)
 	require.NoError(t, err)
 
 	rt = manager.GetRuntime(scope, pluginID)
 	require.NotNil(t, rt, "runtime should be available again after reload")
 
-	// 24. Hooks should work again after reload
+	// 20. Hooks should work again after reload
 	metadata, err = manager.RunFileParser(ctx, rt, testFile, "testformat")
 	require.NoError(t, err)
 	assert.Equal(t, "Parsed Title", metadata.Title)
 
 	// --- Full uninstall ---
 
-	// 25. Unload and uninstall
+	// 21. Unload and uninstall
 	manager.UnloadPlugin(scope, pluginID)
 	err = service.UninstallPlugin(ctx, scope, pluginID)
 	require.NoError(t, err)
 
-	// 26. Verify plugin record is gone
+	// 22. Verify plugin record is gone
 	_, err = service.RetrievePlugin(ctx, scope, pluginID)
 	require.Error(t, err, "plugin should not be retrievable after uninstall")
 }

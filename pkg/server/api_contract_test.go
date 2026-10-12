@@ -228,6 +228,18 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Invalid scope or plugin ID",
 		},
 		{
+			name:   "plugin order for an unknown hook type",
+			method: http.MethodPut, path: "/api/plugins/order/outputGenerator",
+			body:   `{"order":[{"scope":"contract","id":"installed"}]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown hook type "outputGenerator".`,
+		},
+		{
+			name:   "library plugin order for an unknown hook type",
+			method: http.MethodPut, path: fmt.Sprintf("/api/libraries/%d/plugins/order/outputGenerator", f.lib.ID),
+			body:   `{"plugins":[{"scope":"contract","id":"installed"}]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown hook type "outputGenerator".`,
+		},
+		{
 			name:   "users list with a limit above the bound",
 			method: http.MethodGet, path: "/api/users?limit=1000",
 			status: http.StatusUnprocessableEntity, code: "validation_error",
