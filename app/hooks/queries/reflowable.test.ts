@@ -50,8 +50,8 @@ describe("useReflowableBlob", () => {
     expect(result.current.data).toBeInstanceOf(Blob);
   });
 
-  it("surfaces the API's error", async () => {
-    fetchSpy.mockResolvedValue(
+  it("surfaces the API's error when the original fails too", async () => {
+    fetchSpy.mockImplementation(async () =>
       Response.json(
         { error: { code: "not_found", message: "File not found" } },
         { status: 404 },
@@ -68,11 +68,12 @@ describe("useReflowableBlob", () => {
   });
 
   it("reports a proxy's error page by its status", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response("<html>Bad gateway</html>", {
-        status: 502,
-        statusText: "Bad Gateway",
-      }),
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response("<html>Bad gateway</html>", {
+          status: 502,
+          statusText: "Bad Gateway",
+        }),
     );
 
     const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
@@ -127,18 +128,59 @@ describe("useReflowableBlob", () => {
     expect(result.current.error?.status).toBe(404);
   });
 
-  it("surfaces any other 422 instead of loading the original", async () => {
-    fetchSpy.mockResolvedValue(
-      Response.json(
-        { error: { code: "validation_error", message: "Bad request" } },
-        { status: 422 },
-      ),
+  it("loads the original file when the generated file cannot be built", async () => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL) =>
+      url === "/api/books/files/42/download"
+        ? Response.json(
+            { error: { code: "internal", message: "Internal server error" } },
+            { status: 500 },
+          )
+        : new Response("original-bytes", { status: 200 }),
     );
 
     const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(result.current.error?.code).toBe("validation_error");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(await result.current.data?.text()).toBe("original-bytes");
+  });
+
+  it("loads the original file when the generated file's fetch fails", async () => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
+      if (url === "/api/books/files/42/download") {
+        throw new TypeError("Failed to fetch");
+      }
+      return new Response("original-bytes", { status: 200 });
+    });
+
+    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(await result.current.data?.text()).toBe("original-bytes");
+  });
+
+  it("loads the original file when the generated file arrives truncated", async () => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
+      if (url !== "/api/books/files/42/download") {
+        return new Response("original-bytes", { status: 200 });
+      }
+      // A body that errors partway, as a cut connection does.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("first bytes"));
+          controller.error(new TypeError("network error"));
+        },
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "/api/books/files/42/download/original",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(await result.current.data?.text()).toBe("original-bytes");
   });
 });

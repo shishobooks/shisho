@@ -28,21 +28,25 @@ export const useReflowableBlob = (
     staleTime: 60 * 1000,
     gcTime: 60 * 1000,
     queryFn: async ({ signal }) => {
-      // checkStatus rejects with the API's error; the body is a file
-      // otherwise, so only a failure goes through it.
-      const response = await fetch(fileDownloadUrl(fileId), { signal });
-      if (response.ok) return response.blob();
-      const error = await API.checkStatus(response).catch((e: unknown) => e);
-      // invalid_state means the server has no generator for this type, so
-      // read the file as it sits on disk, as Download Original would.
-      if (!(
-        error instanceof ShishoAPIError && error.code === "invalid_state"
-      )) {
-        throw error;
+      try {
+        // checkStatus rejects with the API's error; the body is a file
+        // otherwise, so only a failure goes through it.
+        const response = await fetch(fileDownloadUrl(fileId), { signal });
+        if (!response.ok) await API.checkStatus(response);
+        // A build that fails partway cuts the connection, so the body
+        // rejects here rather than arriving truncated.
+        return await response.blob();
+      } catch (error) {
+        if (signal.aborted) throw error;
+        // Read the file as it sits on disk, as Download Original would,
+        // whatever kept the Generated File from arriving: no generator for
+        // the type, a failed build, or a cut connection.
+        const original = await fetch(fileOriginalDownloadUrl(fileId), {
+          signal,
+        });
+        if (!original.ok) await API.checkStatus(original);
+        return original.blob();
       }
-      const original = await fetch(fileOriginalDownloadUrl(fileId), { signal });
-      if (!original.ok) await API.checkStatus(original);
-      return original.blob();
     },
   });
 };

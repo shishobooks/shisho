@@ -19,6 +19,17 @@ type CacheMetadata struct {
 	GeneratedAt     time.Time `json:"generated_at"`
 	LastAccessedAt  time.Time `json:"last_accessed_at"`
 	SizeBytes       int64     `json:"size_bytes"`
+	// Failure records a build that failed after bytes were sent. It applies
+	// only while the file's fingerprint still matches, and a successful
+	// build replaces it.
+	Failure *FailureRecord `json:"failure,omitempty"`
+}
+
+// FailureRecord is a build that failed partway through a download.
+type FailureRecord struct {
+	FingerprintHash string    `json:"fingerprint_hash"`
+	Message         string    `json:"message"`
+	FailedAt        time.Time `json:"failed_at"`
 }
 
 // metadataFilename returns the metadata file path for a given file ID.
@@ -261,6 +272,9 @@ func ListCacheEntries(cacheDir string) ([]*CacheMetadata, error) {
 		var meta CacheMetadata
 		if err := json.Unmarshal(data, &meta); err != nil {
 			continue // Skip invalid metadata files
+		}
+		if meta.FingerprintHash == "" && meta.Failure != nil {
+			continue // Only a remembered failure; no file is cached
 		}
 
 		results = append(results, &meta)

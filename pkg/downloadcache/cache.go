@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -28,6 +30,9 @@ type Cache struct {
 
 	// generators overrides the built-in generator lookup (WithGenerators).
 	generators GeneratorLookup
+	// createPartial creates the file a job writes into. Tests replace it to
+	// make cache writes fail.
+	createPartial func(dir string) (partialFile, error)
 
 	// ctx ends when Close is called, canceling every job.
 	ctx    context.Context
@@ -71,6 +76,7 @@ func NewCache(dir string, maxSizeBytes int64, opts ...Option) *Cache {
 		cancel:  cancel,
 		jobs:    make(map[string]*job),
 	}
+	c.createPartial = func(dir string) (partialFile, error) { return createPartial(dir) }
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -159,7 +165,10 @@ type entry struct {
 	lookup func() (string, error)
 	// touch records a cache hit. Failures are ignored.
 	touch func()
-	// writeMeta publishes metadata for a freshly generated file.
+	// readMeta returns the entry's metadata, or nil when there is none.
+	readMeta func() (*CacheMetadata, error)
+	// writeMeta publishes metadata for a freshly generated file, or records
+	// a failure.
 	writeMeta func(meta *CacheMetadata) error
 	// meta carries the identifying fields; timestamps and size are filled in.
 	meta CacheMetadata
@@ -197,6 +206,7 @@ func (c *Cache) entryFor(book *models.Book, file *models.File, kepub bool) (*ent
 		e.filename = FormatKepubDownloadFilename(book, file)
 		e.lookup = func() (string, error) { return GetKepubCachedFilePath(c.dir, file.ID, hash) }
 		e.touch = func() { _ = UpdateKepubLastAccessed(c.dir, file.ID) }
+		e.readMeta = func() (*CacheMetadata, error) { return ReadKepubMetadata(c.dir, file.ID) }
 		e.writeMeta = func(meta *CacheMetadata) error {
 			return errors.Wrap(WriteKepubMetadata(c.dir, meta), "failed to write kepub cache metadata")
 		}
@@ -207,6 +217,7 @@ func (c *Cache) entryFor(book *models.Book, file *models.File, kepub bool) (*ent
 	e.filename = FormatDownloadFilename(book, file)
 	e.lookup = func() (string, error) { return GetCachedFilePath(c.dir, file.ID, file.FileType, hash) }
 	e.touch = func() { _ = UpdateLastAccessed(c.dir, file.ID) }
+	e.readMeta = func() (*CacheMetadata, error) { return ReadMetadata(c.dir, file.ID) }
 	e.writeMeta = func(meta *CacheMetadata) error {
 		return errors.Wrap(WriteMetadata(c.dir, meta), "failed to write cache metadata")
 	}
@@ -247,6 +258,9 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 	if hit != "" {
 		return &Generated{Filename: e.filename, Path: hit}, nil
 	}
+	if err := c.rememberedFailure(e); err != nil {
+		return nil, err
+	}
 
 	gen, err := e.generator()
 	if err != nil {
@@ -257,6 +271,14 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 	}
 
 	j, hit, err := c.join(ctx, e, gen)
+	var unwritable *unwritableError
+	if errors.As(err, &unwritable) {
+		logger.FromContext(ctx).Warn("download cache cannot be written, streaming without caching", c.logData(e, err))
+		if head {
+			return c.prepareOnly(ctx, e, gen)
+		}
+		return c.stream(ctx, e, gen)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -278,12 +300,23 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 }
 
 // served returns what a download of e reads from the prepared job j: the
-// file as it grows, or the published file once the job has ended.
+// file as it grows, or the published file once the job has ended. When j
+// dropped its cache copy, the download builds its own copy instead.
 func (c *Cache) served(ctx context.Context, e *entry, j *job) (*Generated, error) {
-	if body, ok := j.reader(ctx); ok {
+	body, state := j.reader(ctx)
+	switch state {
+	case attached:
 		return &Generated{Filename: e.filename, Size: j.size, Body: body}, nil
+	case cacheDropped:
+		return c.stream(ctx, e, j.gen)
+	case jobEnded:
 	}
 	<-j.finished
+	// A job that dropped its cache copy before this download attached may
+	// have stopped for want of readers.
+	if j.cacheErr != nil && (j.err == nil || errors.Is(j.err, errNoReaders)) {
+		return c.stream(ctx, e, j.gen)
+	}
 	if j.err != nil {
 		return nil, j.err
 	}
@@ -298,6 +331,9 @@ func (c *Cache) complete(ctx context.Context, e *entry) (string, error) {
 	hit, err := c.lookup(e)
 	if err != nil || hit != "" {
 		return hit, err
+	}
+	if err := c.rememberedFailure(e); err != nil {
+		return "", err
 	}
 	gen, err := e.generator()
 	if err != nil {
@@ -314,6 +350,9 @@ func (c *Cache) complete(ctx context.Context, e *entry) (string, error) {
 	}
 	if j.err != nil {
 		return "", j.err
+	}
+	if j.cacheErr != nil {
+		return "", j.cacheErr
 	}
 	// Fingerprints of one file share its published path, so look the entry
 	// up again rather than trusting that path still holds this job's file.
@@ -343,6 +382,9 @@ func (c *Cache) prepareOnly(ctx context.Context, e *entry, gen filegen.StreamGen
 	if err != nil {
 		return nil, err
 	}
+	if built, ok := prepared.(*builtFile); ok {
+		os.RemoveAll(built.dir)
+	}
 	g := &Generated{Filename: e.filename, Size: -1}
 	if size, ok := prepared.Size(); ok {
 		g.Size = size
@@ -366,16 +408,22 @@ func (c *Cache) join(ctx context.Context, e *entry, gen filegen.StreamGenerator)
 		return nil, "", errors.New("download cache is closed")
 	}
 
-	f, err := createPartial(c.dir)
+	f, err := c.createPartial(c.dir)
 	if err != nil {
-		return nil, "", err
+		return nil, "", &unwritableError{err: err}
 	}
-	j = newJob(f, e.destPath)
+	j = newJob(f, e.destPath, gen)
 	c.jobs[e.key()] = j
 
 	// The job outlives the request but keeps its values (the logger), and
 	// ends when the cache closes.
 	jobCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	j.onDirect = func(err error) {
+		// The start of the output is gone, so later downloads build their
+		// own copy rather than join this one.
+		c.forget(e, j)
+		logger.FromContext(jobCtx).Warn("download cache write failed, streaming without caching", c.logData(e, err))
+	}
 	stop := context.AfterFunc(c.ctx, cancel)
 	c.background.Add(1)
 	go func() {
@@ -387,28 +435,175 @@ func (c *Cache) join(ctx context.Context, e *entry, gen filegen.StreamGenerator)
 	return j, "", nil
 }
 
-// run generates e into j's partial file and publishes it.
+// run generates e into j's partial file and publishes it. A failure after
+// the preparation step is remembered against e's fingerprint, unless the
+// build was only canceled. A cache that fails to take the file does not fail
+// the downloads reading it: they still get all of it, and nothing is
+// published.
 func (c *Cache) run(ctx context.Context, e *entry, j *job, gen filegen.StreamGenerator) {
 	err := c.buildRecovering(ctx, e, j, gen)
-	if err == nil {
-		err = c.publish(e, j)
+	writing := isClosed(j.prepared)
+	if err == nil && j.cacheErr == nil {
+		if perr := c.publish(e, j); perr != nil {
+			j.cacheErr = perr
+			logger.FromContext(ctx).Warn("download cache write failed, generated file not cached", c.logData(e, perr))
+		}
 	}
-	if err != nil {
+	if err != nil || j.cacheErr != nil {
 		os.Remove(j.partialPath)
 	}
 
-	c.mu.Lock()
-	delete(c.jobs, e.key())
-	c.mu.Unlock()
-	if !isClosed(j.prepared) {
+	c.forget(e, j)
+	if !writing {
 		j.prepErr = err
 		close(j.prepared)
+	} else if err != nil && !stopped(ctx, err) {
+		c.failedPartway(ctx, e, err)
 	}
 	j.finish(err)
 
-	if err == nil {
+	if err == nil && j.cacheErr == nil {
 		c.triggerCleanupAsync()
 	}
+}
+
+// forget removes j from the running jobs if it is still e's.
+func (c *Cache) forget(e *entry, j *job) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.jobs[e.key()] == j {
+		delete(c.jobs, e.key())
+	}
+}
+
+// stopped reports whether a build ended because it was canceled or every
+// download reading it left, rather than because the file failed.
+func stopped(ctx context.Context, err error) bool {
+	return ctx.Err() != nil ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, errNoReaders) ||
+		errors.Is(err, io.ErrClosedPipe)
+}
+
+// unwritableError is a cache that cannot take a new file.
+type unwritableError struct{ err error }
+
+func (u *unwritableError) Error() string { return u.err.Error() }
+func (u *unwritableError) Unwrap() error { return u.err }
+
+// stream builds e straight into a download, without the cache, for when
+// the cache cannot hold it. The build runs only while the download reads
+// it.
+func (c *Cache) stream(ctx context.Context, e *entry, gen filegen.StreamGenerator) (*Generated, error) {
+	src, err := filegen.OpenSource(e.file.Filepath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open source file")
+	}
+	prepared, err := gen.Prepare(ctx, src, e.book, e.file)
+	if err != nil {
+		src.Close()
+		return nil, err
+	}
+	size := int64(-1)
+	if n, ok := prepared.Size(); ok {
+		size = n
+	}
+
+	pr, pw := io.Pipe()
+	c.background.Add(1)
+	go func() {
+		defer c.background.Done()
+		defer src.Close()
+		err := writeRecovering(ctx, prepared, size, pw)
+		if err != nil && !stopped(ctx, err) {
+			c.failedPartway(ctx, e, err)
+		}
+		pw.CloseWithError(err)
+	}()
+	return &Generated{Filename: e.filename, Size: size, Body: pr}, nil
+}
+
+// writeRecovering runs prepared's writing step into w, turning a panic into
+// an error and checking the size it reported.
+func writeRecovering(ctx context.Context, prepared filegen.Prepared, size int64, w io.Writer) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Errorf("generator panicked: %v\n%s", r, debug.Stack())
+		}
+	}()
+	cw := &countingWriter{w: w}
+	if err := prepared.Write(ctx, cw); err != nil {
+		return err
+	}
+	if size >= 0 && cw.n != size {
+		return errors.Errorf("generator reported %d bytes and wrote %d", size, cw.n)
+	}
+	return nil
+}
+
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (cw *countingWriter) Write(p []byte) (int, error) {
+	n, err := cw.w.Write(p)
+	cw.n += int64(n)
+	return n, err
+}
+
+// failedPartway logs a build that failed after bytes were sent and
+// remembers it against e's fingerprint, so later downloads get the error
+// up front instead of another cut connection.
+func (c *Cache) failedPartway(ctx context.Context, e *entry, err error) {
+	log := logger.FromContext(ctx)
+	log.Warn("generated file failed partway through a download", c.logData(e, err))
+	if rerr := c.rememberFailure(e, err); rerr != nil {
+		log.Warn("failed to remember a generated file failure", c.logData(e, rerr))
+	}
+}
+
+func (c *Cache) logData(e *entry, err error) logger.Data {
+	return logger.Data{
+		"file_id":  e.file.ID,
+		"filepath": e.file.Filepath,
+		"format":   e.meta.Format,
+		"error":    err.Error(),
+	}
+}
+
+// rememberFailure records err against e's fingerprint in e's metadata,
+// keeping whatever file the metadata already describes.
+func (c *Cache) rememberFailure(e *entry, err error) error {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	meta, rerr := e.readMeta()
+	if rerr != nil {
+		return rerr
+	}
+	if meta == nil {
+		m := e.meta
+		m.FingerprintHash = ""
+		meta = &m
+	}
+	// Only the first line: a panic's message carries its stack.
+	message, _, _ := strings.Cut(err.Error(), "\n")
+	meta.Failure = &FailureRecord{FingerprintHash: e.hash, Message: message, FailedAt: time.Now()}
+	return e.writeMeta(meta)
+}
+
+// rememberedFailure returns the failure recorded against e's fingerprint
+// as a generation error, so device routes serve the Original File and the
+// web UI shows the error, or nil when there is none.
+func (c *Cache) rememberedFailure(e *entry) error {
+	meta, err := e.readMeta()
+	if err != nil {
+		return errors.Wrap(err, "failed to check cache")
+	}
+	if meta == nil || meta.Failure == nil || meta.Failure.FingerprintHash != e.hash {
+		return nil
+	}
+	return filegen.NewGenerationError(e.file.FileType, nil, "an earlier download failed partway: "+meta.Failure.Message)
 }
 
 // buildRecovering runs build, turning a panic into an error. The job runs
@@ -452,8 +647,8 @@ func (c *Cache) build(ctx context.Context, e *entry, j *job, gen filegen.StreamG
 	if err := prepared.Write(ctx, j); err != nil {
 		return err
 	}
-	if j.size >= 0 && j.written != j.size {
-		return errors.Errorf("generator reported %d bytes and wrote %d", j.size, j.written)
+	if j.size >= 0 && j.sent != j.size {
+		return errors.Errorf("generator reported %d bytes and wrote %d", j.size, j.sent)
 	}
 	return nil
 }

@@ -24,12 +24,23 @@ const (
 	stagingPrefix = ".staging-"
 )
 
+// errNoReaders stops a job whose cache copy was dropped once no download is
+// left to send its output to.
+var errNoReaders = errors.New("no download is reading the generated file")
+
 // job is one generation running in the background, detached from the
 // request that started it. It writes into a partial file in the cache and
 // renames it into place once complete. Downloads read the partial file as
 // it grows, through readers that share the job's file handle, so the handle
 // stays valid across the rename and is closed when the last user releases
 // it.
+//
+// When writing the partial file fails partway (a full disk), the job drops
+// its cache copy rather than failing the downloads: from then on each
+// reader already attached gets the rest of the output through its own pipe,
+// once it has read what reached the file, and the job runs at the pace of
+// the slowest reader. Nothing is published, and the job stops when the last
+// reader leaves.
 type job struct {
 	// prepared is closed once the preparation step has finished; prepErr
 	// and size are set before it is closed.
@@ -40,20 +51,40 @@ type job struct {
 	// finished is closed once the job has ended; err is set before.
 	finished chan struct{}
 
-	f           *os.File
+	// gen builds the file, so a download that cannot read this job can
+	// build its own copy.
+	gen filegen.StreamGenerator
+
+	f           partialFile
 	partialPath string
 	finalPath   string
 
+	// sent counts every byte the generator wrote, cached or not. Only the
+	// job's goroutine touches it, and outs.
+	sent int64
+	outs []*io.PipeWriter
+
+	// cacheErr is why the cache copy was dropped (a write that failed
+	// partway, or a failed publish), or nil. Set by the job's goroutine
+	// before finished is closed.
+	cacheErr error
+	// onDirect is called once when the cache copy is dropped partway.
+	onDirect func(err error)
+
 	mu      sync.Mutex
-	written int64
+	written int64 // bytes in the partial file
 	done    bool
 	err     error
-	changed chan struct{} // closed and replaced whenever written or done changes
+	direct  bool // the cache copy was dropped; output goes through pipes
+	readers map[*jobReader]struct{}
+	changed chan struct{} // closed and replaced whenever written, done, or direct changes
 	refs    int           // the writer plus every open reader
 }
 
-func newJob(f *os.File, finalPath string) *job {
+func newJob(f partialFile, finalPath string, gen filegen.StreamGenerator) *job {
 	return &job{
+		gen:         gen,
+		readers:     make(map[*jobReader]struct{}),
 		prepared:    make(chan struct{}),
 		finished:    make(chan struct{}),
 		f:           f,
@@ -65,16 +96,66 @@ func newJob(f *os.File, finalPath string) *job {
 	}
 }
 
-// Write appends to the partial file and wakes the readers.
+// Write appends to the partial file and wakes the readers. Once a write to
+// the file fails, it sends the output to the readers' pipes instead.
 func (j *job) Write(p []byte) (int, error) {
+	if j.cacheErr != nil {
+		return j.writeDirect(p)
+	}
 	n, err := j.f.Write(p)
 	if n > 0 {
+		j.sent += int64(n)
 		j.mu.Lock()
 		j.written += int64(n)
 		j.notifyLocked()
 		j.mu.Unlock()
 	}
-	return n, err
+	if err == nil {
+		return n, nil
+	}
+	j.dropCache(errors.Wrap(err, "failed to write download cache"))
+	m, err := j.writeDirect(p[n:])
+	return n + m, err
+}
+
+// dropCache gives every attached reader a pipe for the output the file did
+// not get, and stops new readers from attaching.
+func (j *job) dropCache(err error) {
+	j.cacheErr = err
+	j.mu.Lock()
+	j.direct = true
+	for r := range j.readers {
+		pr, pw := io.Pipe()
+		r.pipe = pr
+		// A reader blocked on its pipe still stops when its request ends.
+		r.stopPipe = context.AfterFunc(r.ctx, func() { pr.CloseWithError(r.ctx.Err()) })
+		j.outs = append(j.outs, pw)
+	}
+	j.notifyLocked()
+	j.mu.Unlock()
+	if j.onDirect != nil {
+		j.onDirect(err)
+	}
+}
+
+// writeDirect sends p to every reader still reading, waiting for each to
+// take it.
+func (j *job) writeDirect(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	live := j.outs[:0]
+	for _, pw := range j.outs {
+		if _, err := pw.Write(p); err == nil {
+			live = append(live, pw)
+		}
+	}
+	j.outs = live
+	if len(live) == 0 {
+		return 0, errNoReaders
+	}
+	j.sent += int64(len(p))
+	return len(p), nil
 }
 
 func (j *job) notifyLocked() {
@@ -87,6 +168,10 @@ func (j *job) finish(err error) {
 	j.mu.Lock()
 	j.done = true
 	j.err = err
+	for _, pw := range j.outs {
+		pw.CloseWithError(err)
+	}
+	j.outs = nil
 	j.notifyLocked()
 	j.releaseLocked()
 	j.mu.Unlock()
@@ -114,22 +199,40 @@ func (j *job) adopt(built *builtFile) error {
 	j.f.Close()
 	j.f = f
 	j.written = built.size
+	j.sent = built.size
 	j.size = built.size
 	return nil
 }
 
+// attachment is what reader found.
+type attachment int
+
+const (
+	// attached: the reader reads the job's output.
+	attached attachment = iota
+	// jobEnded: the job has ended and its file handle may be closed; read
+	// the published file or report j.err.
+	jobEnded
+	// cacheDropped: the job dropped its cache copy partway, so the start of
+	// the output is gone; build another copy.
+	cacheDropped
+)
+
 // reader returns a reader of the job's output that waits for more while the
-// job runs. ok is false when the job has already ended and its file handle
-// may be closed; the caller then reads the published file or reports
-// j.err.
-func (j *job) reader(ctx context.Context) (r io.ReadCloser, ok bool) {
+// job runs, when the state is attached.
+func (j *job) reader(ctx context.Context) (io.ReadCloser, attachment) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.done {
-		return nil, false
+		return nil, jobEnded
+	}
+	if j.direct {
+		return nil, cacheDropped
 	}
 	j.refs++
-	return &jobReader{j: j, ctx: ctx}, true
+	r := &jobReader{j: j, ctx: ctx}
+	j.readers[r] = struct{}{}
+	return r, attached
 }
 
 // jobReader reads a job's output from the start. Read blocks while it has
@@ -141,6 +244,10 @@ type jobReader struct {
 	ctx    context.Context
 	off    int64
 	closed bool
+	// pipe carries the output the partial file did not get, once the job
+	// drops its cache copy. Set under j.mu.
+	pipe     *io.PipeReader
+	stopPipe func() bool
 }
 
 func (r *jobReader) Read(p []byte) (int, error) {
@@ -150,7 +257,7 @@ func (r *jobReader) Read(p []byte) (int, error) {
 	for {
 		j := r.j
 		j.mu.Lock()
-		written, done, jobErr, changed := j.written, j.done, j.err, j.changed
+		written, done, jobErr, changed, pipe := j.written, j.done, j.err, j.changed, r.pipe
 		j.mu.Unlock()
 
 		if r.off < written {
@@ -164,6 +271,11 @@ func (r *jobReader) Read(p []byte) (int, error) {
 				err = nil
 			}
 			return read, err
+		}
+		if pipe != nil {
+			n, err := pipe.Read(p)
+			r.off += int64(n)
+			return n, err
 		}
 		if done {
 			if jobErr != nil {
@@ -184,6 +296,11 @@ func (r *jobReader) Close() error {
 	defer r.j.mu.Unlock()
 	if !r.closed {
 		r.closed = true
+		delete(r.j.readers, r)
+		if r.pipe != nil {
+			r.stopPipe()
+			r.pipe.Close()
+		}
 		r.j.releaseLocked()
 	}
 	return nil
@@ -213,6 +330,11 @@ type fullBuild struct {
 
 func (a fullBuild) Prepare(ctx context.Context, _ filegen.Source, book *models.Book, file *models.File) (filegen.Prepared, error) {
 	stagingDir, err := os.MkdirTemp(a.dir, stagingPrefix)
+	if err != nil {
+		// A cache that cannot be written still lets the download stream,
+		// so build in the system's temporary directory instead.
+		stagingDir, err = os.MkdirTemp("", stagingPrefix)
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create staging directory")
 	}
@@ -252,6 +374,14 @@ func (b *builtFile) Write(ctx context.Context, w io.Writer) error {
 	defer f.Close()
 	_, err = io.Copy(w, f)
 	return errors.WithStack(err)
+}
+
+// partialFile is the file a job writes into.
+type partialFile interface {
+	io.Writer
+	io.ReaderAt
+	io.Closer
+	Name() string
 }
 
 // createPartial creates the file a job writes into. Downloads are read by
