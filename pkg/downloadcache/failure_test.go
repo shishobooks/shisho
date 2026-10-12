@@ -8,12 +8,14 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,11 +78,7 @@ func TestCache_MidStreamFailureIsRemembered(t *testing.T) {
 	book.Title = "Fixed Book"
 	g, err = restarted.Open(ctx, book, file, false)
 	require.NoError(t, err)
-	require.NotNil(t, g.Body)
-	data, err := io.ReadAll(g.Body)
-	require.NoError(t, err)
-	require.NoError(t, g.Body.Close())
-	assert.Equal(t, gen.Output(), data)
+	assert.Equal(t, gen.Output(), readGenerated(t, g))
 	restarted.Wait()
 	g, err = restarted.Open(ctx, book, file, false)
 	require.NoError(t, err)
@@ -141,6 +139,7 @@ func captureWarnings(t *testing.T) func() []capturedLogLine {
 	}
 }
 
+// Not parallel: it captures the process-wide log.
 func TestCache_MidStreamFailureLogsAWarning(t *testing.T) {
 	warnings := captureWarnings(t)
 	gen := filegentest.NewPausing("first,", "second")
@@ -182,7 +181,7 @@ func (f *failingPartial) Write(p []byte) (int, error) {
 
 // When writing the cache fails partway, every download already reading the
 // file still receives all of it, nothing is published, and a warning is
-// logged.
+// logged. Not parallel: it captures the process-wide log.
 func TestCache_CacheWriteFailurePartwayKeepsStreaming(t *testing.T) {
 	warnings := captureWarnings(t)
 	gen := filegentest.NewPausing("first,", "second and more")
@@ -267,7 +266,135 @@ func TestCache_CacheWriteFailureStopsWhenTheLastDownloadLeaves(t *testing.T) {
 	require.NoError(t, g.Body.Close())
 	cache.Wait()
 
+	// The download leaving is not a failure of the file, so nothing is
+	// remembered either.
 	entries, err := os.ReadDir(cache.Dir())
 	require.NoError(t, err)
 	assert.Empty(t, entries)
+}
+
+// unwritableCache makes every new cache entry fail to start, as a full or
+// read-only cache does, while metadata can still be written.
+func unwritableCache(cache *Cache) {
+	cache.createPartial = func(string) (partialFile, error) {
+		return nil, &os.PathError{Op: "open", Path: "partial", Err: syscall.ENOSPC}
+	}
+}
+
+// A download streamed without the cache that the client leaves is not
+// remembered as a failure, and one whose build fails partway is.
+func TestCache_UncachedStreamFailures(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	t.Run("client leaves", func(t *testing.T) {
+		t.Parallel()
+		gen := filegentest.NewPausing("first,", "second")
+		cache, book, file := pausingCache(t, gen)
+		unwritableCache(cache)
+
+		g, err := cache.Open(ctx, book, file, false)
+		require.NoError(t, err)
+		assert.Equal(t, "first,", readN(t, g.Body, len(gen.First)))
+		require.NoError(t, g.Body.Close())
+		gen.Release()
+		cache.Wait()
+
+		meta, err := ReadMetadata(cache.Dir(), file.ID)
+		require.NoError(t, err)
+		assert.Nil(t, meta)
+	})
+	t.Run("build fails partway", func(t *testing.T) {
+		t.Parallel()
+		gen := filegentest.NewPausing("first,", "second")
+		gen.WriteErr = errors.New("page 3 is corrupt")
+		cache, book, file := pausingCache(t, gen)
+		unwritableCache(cache)
+
+		failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(ctx, book, file, false) })
+		var genErr *filegen.GenerationError
+		_, err := cache.Open(ctx, book, file, false)
+		require.ErrorAs(t, err, &genErr)
+	})
+}
+
+// A failure remembered by another release does not apply: that release
+// may have fixed it.
+func TestCache_FailureFromAnotherReleaseIsIgnored(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	gen.Release()
+	cache, book, file := pausingCache(t, gen)
+	e, err := cache.entryFor(book, file, false)
+	require.NoError(t, err)
+	require.NoError(t, WriteMetadata(cache.Dir(), &CacheMetadata{
+		FileID:  file.ID,
+		Failure: &FailureRecord{FingerprintHash: e.hash, Version: "0.0.1-old", Message: "broken"},
+	}))
+
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	assert.Equal(t, gen.Output(), readGenerated(t, g))
+}
+
+// readGenerated reads a Generated File whether it is still streaming or
+// already cached: a build with nothing to wait for can finish before the
+// download attaches.
+func readGenerated(t *testing.T, g *Generated) []byte {
+	t.Helper()
+	if g.Body == nil {
+		data, err := os.ReadFile(g.Path)
+		require.NoError(t, err)
+		return data
+	}
+	data, err := io.ReadAll(g.Body)
+	require.NoError(t, err)
+	require.NoError(t, g.Body.Close())
+	return data
+}
+
+// stagedElsewhere builds its whole output up front outside the cache, as
+// the full-build adapter does when the cache has no room to stage it.
+type stagedElsewhere struct {
+	dir     string
+	content string
+}
+
+func (s stagedElsewhere) Prepare(context.Context, filegen.Source, *models.Book, *models.File) (filegen.Prepared, error) {
+	dir, err := os.MkdirTemp(s.dir, stagingPrefix)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, "out")
+	if err := os.WriteFile(path, []byte(s.content), 0o600); err != nil {
+		return nil, err
+	}
+	return &builtFile{dir: dir, path: path, size: int64(len(s.content))}, nil
+}
+
+// A file built outside the cache, because the cache had no room to stage
+// it, is copied into the job rather than renamed, so a cache that fills up
+// while copying still delivers the whole file and publishes nothing.
+func TestCache_FileBuiltOutsideTheCacheIsCopied(t *testing.T) {
+	t.Parallel()
+	staging := t.TempDir()
+	cache, book, file := pausingCache(t, stagedElsewhere{dir: staging, content: "whole file"})
+	cache.createPartial = func(dir string) (partialFile, error) {
+		f, err := createPartial(dir)
+		if err != nil {
+			return nil, err
+		}
+		return &failingPartial{File: f, limit: 3}, nil
+	}
+
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	assert.Equal(t, "whole file", string(readGenerated(t, g)))
+	cache.Wait()
+
+	entries, err := os.ReadDir(cache.Dir())
+	require.NoError(t, err)
+	assert.Empty(t, entries, "a file the cache could not hold was published")
+	entries, err = os.ReadDir(staging)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the staging directory was left behind")
 }

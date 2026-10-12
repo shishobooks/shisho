@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 
+import { useAuth } from "@/hooks/useAuth";
 import { API, ShishoAPIError } from "@/libraries/api";
 import { fileDownloadUrl, fileOriginalDownloadUrl } from "@/utils/downloadUrl";
 
@@ -16,6 +17,7 @@ export const useReflowableBlob = (
     "queryKey" | "queryFn"
   > = {},
 ) => {
+  const { demoMode } = useAuth();
   return useQuery<Blob, ShishoAPIError>({
     ...options,
     enabled: useRequires("books:read", options.enabled ?? true),
@@ -37,7 +39,9 @@ export const useReflowableBlob = (
         // rejects here rather than arriving truncated.
         return await response.blob();
       } catch (error) {
-        if (signal.aborted) throw error;
+        // Demo Mode denies the original, so its rejection would only hide
+        // why the Generated File failed.
+        if (signal.aborted || demoMode) throw error;
         // Read the file as it sits on disk, as Download Original would,
         // whatever kept the Generated File from arriving: no generator for
         // the type, a failed build, or a cut connection.

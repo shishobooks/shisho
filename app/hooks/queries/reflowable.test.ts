@@ -159,6 +159,26 @@ describe("useReflowableBlob", () => {
     expect(await result.current.data?.text()).toBe("original-bytes");
   });
 
+  it("does not fall back in Demo Mode, which denies the original", async () => {
+    setAuth({ permissions: ALL_PERMISSIONS, demoMode: true });
+    try {
+      fetchSpy.mockImplementation(async () =>
+        Response.json(
+          { error: { code: "internal", message: "Internal server error" } },
+          { status: 500 },
+        ),
+      );
+
+      const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.current.error?.status).toBe(500);
+    } finally {
+      setAuth({ permissions: ALL_PERMISSIONS });
+    }
+  });
+
   it("loads the original file when the generated file arrives truncated", async () => {
     fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
       if (url !== "/api/books/files/42/download") {

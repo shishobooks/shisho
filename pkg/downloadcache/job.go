@@ -3,10 +3,12 @@ package downloadcache
 import (
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/filegen"
@@ -59,10 +61,11 @@ type job struct {
 	partialPath string
 	finalPath   string
 
-	// sent counts every byte the generator wrote, cached or not. Only the
-	// job's goroutine touches it, and outs.
-	sent int64
-	outs []*io.PipeWriter
+	// outs and readersGone belong to the job's goroutine. readersGone is
+	// set once the cache copy is dropped and no download is left to read
+	// the output, which stops the build without it being the file's fault.
+	outs        []*io.PipeWriter
+	readersGone bool
 
 	// cacheErr is why the cache copy was dropped (a write that failed
 	// partway, or a failed publish), or nil. Set by the job's goroutine
@@ -104,7 +107,6 @@ func (j *job) Write(p []byte) (int, error) {
 	}
 	n, err := j.f.Write(p)
 	if n > 0 {
-		j.sent += int64(n)
 		j.mu.Lock()
 		j.written += int64(n)
 		j.notifyLocked()
@@ -152,9 +154,9 @@ func (j *job) writeDirect(p []byte) (int, error) {
 	}
 	j.outs = live
 	if len(live) == 0 {
+		j.readersGone = true
 		return 0, errNoReaders
 	}
-	j.sent += int64(len(p))
 	return len(p), nil
 }
 
@@ -199,7 +201,6 @@ func (j *job) adopt(built *builtFile) error {
 	j.f.Close()
 	j.f = f
 	j.written = built.size
-	j.sent = built.size
 	j.size = built.size
 	return nil
 }
@@ -329,12 +330,23 @@ type fullBuild struct {
 }
 
 func (a fullBuild) Prepare(ctx context.Context, _ filegen.Source, book *models.Book, file *models.File) (filegen.Prepared, error) {
-	stagingDir, err := os.MkdirTemp(a.dir, stagingPrefix)
+	built, err := a.build(ctx, a.dir, book, file)
+	if err != nil && !errors.Is(err, syscall.ENOSPC) && !errors.Is(err, fs.ErrPermission) {
+		return nil, err
+	}
 	if err != nil {
 		// A cache that cannot be written still lets the download stream,
 		// so build in the system's temporary directory instead.
-		stagingDir, err = os.MkdirTemp("", stagingPrefix)
+		if built, err = a.build(ctx, "", book, file); err != nil {
+			return nil, err
+		}
 	}
+	return built, nil
+}
+
+// build builds the whole file into a new scratch directory in dir.
+func (a fullBuild) build(ctx context.Context, dir string, book *models.Book, file *models.File) (*builtFile, error) {
+	stagingDir, err := os.MkdirTemp(dir, stagingPrefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create staging directory")
 	}

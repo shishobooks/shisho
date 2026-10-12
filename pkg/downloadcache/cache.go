@@ -14,6 +14,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/version"
 )
 
 // Cache manages the download cache for generated files.
@@ -348,11 +349,13 @@ func (c *Cache) complete(ctx context.Context, e *entry) (string, error) {
 	case <-ctx.Done():
 		return "", errors.WithStack(ctx.Err())
 	}
-	if j.err != nil {
-		return "", j.err
-	}
+	// A job that dropped its cache copy stops once no download reads it,
+	// which says less than why the copy was dropped.
 	if j.cacheErr != nil {
 		return "", j.cacheErr
+	}
+	if j.err != nil {
+		return "", j.err
 	}
 	// Fingerprints of one file share its published path, so look the entry
 	// up again rather than trusting that path still holds this job's file.
@@ -457,7 +460,7 @@ func (c *Cache) run(ctx context.Context, e *entry, j *job, gen filegen.StreamGen
 	if !writing {
 		j.prepErr = err
 		close(j.prepared)
-	} else if err != nil && !stopped(ctx, err) {
+	} else if err != nil && !j.readersGone && !stopped(ctx, err) {
 		c.failedPartway(ctx, e, err)
 	}
 	j.finish(err)
@@ -476,13 +479,14 @@ func (c *Cache) forget(e *entry, j *job) {
 	}
 }
 
-// stopped reports whether a build ended because it was canceled or every
-// download reading it left, rather than because the file failed.
+// stopped reports whether a build ended because it was canceled or timed
+// out, rather than because the file failed. Builds that stop because every
+// download left are told apart where the write failed, since a generator
+// need not keep the error it got.
 func stopped(ctx context.Context, err error) bool {
 	return ctx.Err() != nil ||
 		errors.Is(err, context.Canceled) ||
-		errors.Is(err, errNoReaders) ||
-		errors.Is(err, io.ErrClosedPipe)
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // unwritableError is a cache that cannot take a new file.
@@ -495,6 +499,21 @@ func (u *unwritableError) Unwrap() error { return u.err }
 // the cache cannot hold it. The build runs only while the download reads
 // it.
 func (c *Cache) stream(ctx context.Context, e *entry, gen filegen.StreamGenerator) (*Generated, error) {
+	// Counted like a job, so Close waits for it.
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, errors.New("download cache is closed")
+	}
+	c.background.Add(1)
+	c.mu.Unlock()
+	started := false
+	defer func() {
+		if !started {
+			c.background.Done()
+		}
+	}()
+
 	src, err := filegen.OpenSource(e.file.Filepath)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open source file")
@@ -509,13 +528,22 @@ func (c *Cache) stream(ctx context.Context, e *entry, gen filegen.StreamGenerato
 		size = n
 	}
 
+	// The build stops when the download ends or the cache closes, and a
+	// download that ends without reading the body releases the build.
+	buildCtx, cancel := context.WithCancel(ctx)
+	stopOnClose := context.AfterFunc(c.ctx, cancel)
 	pr, pw := io.Pipe()
-	c.background.Add(1)
+	stopOnDone := context.AfterFunc(ctx, func() { pr.CloseWithError(ctx.Err()) })
+	started = true
 	go func() {
 		defer c.background.Done()
 		defer src.Close()
-		err := writeRecovering(ctx, prepared, size, pw)
-		if err != nil && !stopped(ctx, err) {
+		defer cancel()
+		defer stopOnClose()
+		defer stopOnDone()
+		out := &clientWriter{w: pw}
+		err := writeRecovering(buildCtx, prepared, size, out)
+		if err != nil && !out.gone && !stopped(buildCtx, err) {
 			c.failedPartway(ctx, e, err)
 		}
 		pw.CloseWithError(err)
@@ -523,14 +551,34 @@ func (c *Cache) stream(ctx context.Context, e *entry, gen filegen.StreamGenerato
 	return &Generated{Filename: e.filename, Size: size, Body: pr}, nil
 }
 
-// writeRecovering runs prepared's writing step into w, turning a panic into
-// an error and checking the size it reported.
+// clientWriter notes when the download it writes to has gone away.
+type clientWriter struct {
+	w    io.Writer
+	gone bool
+}
+
+func (cw *clientWriter) Write(p []byte) (int, error) {
+	n, err := cw.w.Write(p)
+	if err != nil {
+		cw.gone = true
+	}
+	return n, err
+}
+
+// writeRecovering runs writeChecked, turning a panic into an error, for
+// writes outside a job.
 func writeRecovering(ctx context.Context, prepared filegen.Prepared, size int64, w io.Writer) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = errors.Errorf("generator panicked: %v\n%s", r, debug.Stack())
 		}
 	}()
+	return writeChecked(ctx, prepared, size, w)
+}
+
+// writeChecked runs prepared's writing step into w and checks that it wrote
+// the size it reported, or -1 for no size.
+func writeChecked(ctx context.Context, prepared filegen.Prepared, size int64, w io.Writer) error {
 	cw := &countingWriter{w: w}
 	if err := prepared.Write(ctx, cw); err != nil {
 		return err
@@ -588,7 +636,7 @@ func (c *Cache) rememberFailure(e *entry, err error) error {
 	}
 	// Only the first line: a panic's message carries its stack.
 	message, _, _ := strings.Cut(err.Error(), "\n")
-	meta.Failure = &FailureRecord{FingerprintHash: e.hash, Message: message, FailedAt: time.Now()}
+	meta.Failure = &FailureRecord{FingerprintHash: e.hash, Version: version.Version, Message: message, FailedAt: time.Now()}
 	return e.writeMeta(meta)
 }
 
@@ -600,7 +648,8 @@ func (c *Cache) rememberedFailure(e *entry) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to check cache")
 	}
-	if meta == nil || meta.Failure == nil || meta.Failure.FingerprintHash != e.hash {
+	// Another release may have fixed whatever failed, so it tries again.
+	if meta == nil || meta.Failure == nil || meta.Failure.FingerprintHash != e.hash || meta.Failure.Version != version.Version {
 		return nil
 	}
 	return filegen.NewGenerationError(e.file.FileType, nil, "an earlier download failed partway: "+meta.Failure.Message)
@@ -630,9 +679,11 @@ func (c *Cache) build(ctx context.Context, e *entry, j *job, gen filegen.StreamG
 	if err != nil {
 		return err
 	}
-	if built, ok := prepared.(*builtFile); ok {
-		// A file built in full becomes the job's file as it is, rather
-		// than being copied a second time.
+	if built, ok := prepared.(*builtFile); ok && filepath.Dir(built.dir) == c.dir {
+		// A file built in full in the cache becomes the job's file as it
+		// is, rather than being copied a second time. One staged elsewhere,
+		// because the cache was full, is copied through j like any output,
+		// so a cache that cannot take it is dropped without failing.
 		if err := j.adopt(built); err != nil {
 			return err
 		}
@@ -643,14 +694,7 @@ func (c *Cache) build(ctx context.Context, e *entry, j *job, gen filegen.StreamG
 		j.size = size
 	}
 	close(j.prepared)
-
-	if err := prepared.Write(ctx, j); err != nil {
-		return err
-	}
-	if j.size >= 0 && j.sent != j.size {
-		return errors.Errorf("generator reported %d bytes and wrote %d", j.size, j.sent)
-	}
-	return nil
+	return writeChecked(ctx, prepared, j.size, j)
 }
 
 // publish renames j's complete partial file into place and writes its

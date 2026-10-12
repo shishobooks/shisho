@@ -27,8 +27,11 @@ type CacheMetadata struct {
 
 // FailureRecord is a build that failed partway through a download.
 type FailureRecord struct {
-	FingerprintHash string    `json:"fingerprint_hash"`
-	Message         string    `json:"message"`
+	FingerprintHash string `json:"fingerprint_hash"`
+	// Version is the Shisho release the build failed in. A record from
+	// another release does not apply.
+	Version  string    `json:"version"`
+	Message  string    `json:"message"`
 	FailedAt        time.Time `json:"failed_at"`
 }
 
