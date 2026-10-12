@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -56,33 +55,23 @@ func (g *M4BGenerator) Prepare(ctx context.Context, src Source, book *models.Boo
 	if err != nil {
 		return nil, NewGenerationError(models.FileTypeM4B, err, "failed to write file")
 	}
-	return &m4bPrepared{rewrite: rewrite, src: src}, nil
+	return &m4bPrepared{rewrite: rewrite}, nil
 }
 
 type m4bPrepared struct {
 	rewrite *mp4.Rewrite
-	src     Source
 }
 
 func (p *m4bPrepared) Size() (int64, bool) {
 	return p.rewrite.Size(), true
 }
 
-// Write writes the rewritten file, copying the audio from the source. A
-// source that changed while it was copied fails the write before its last
-// byte, so neither a download nor the cache ends up with a file mixing the
-// old and new audio.
+// Write writes the rewritten file, copying the audio from the source.
 func (p *m4bPrepared) Write(ctx context.Context, w io.Writer) error {
-	held := &holdLastByte{w: w}
-	if err := p.rewrite.WriteTo(ctx, held); err != nil {
+	if err := p.rewrite.WriteTo(ctx, w); err != nil {
 		return NewGenerationError(models.FileTypeM4B, err, "failed to write file")
 	}
-	if checked, ok := p.src.(interface{ Unchanged() error }); ok {
-		if err := checked.Unchanged(); err != nil {
-			return NewGenerationError(models.FileTypeM4B, err, "source file changed during M4B rewrite")
-		}
-	}
-	return errors.WithStack(held.release())
+	return nil
 }
 
 // buildMetadata constructs new Metadata from book/file models while preserving source metadata.

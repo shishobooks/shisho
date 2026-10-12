@@ -96,13 +96,35 @@ func (s *FileSource) Unchanged() error {
 	return nil
 }
 
+// WriteFromSource runs prepared's writing step into w and then checks that
+// src is unchanged since it was opened. A generator copies from its source
+// while it writes, so a source rewritten mid-copy (by a library scan, say)
+// yields a file mixing old and new contents, and the write fails instead.
+// When prepared reports a size, its last byte is held back until the check
+// passes, so a download sent with Content-Length never looks complete; one
+// sent chunked fails without its final chunk either way.
+func WriteFromSource(ctx context.Context, prepared Prepared, src *FileSource, w io.Writer) error {
+	size, known := prepared.Size()
+	if !known || size == 0 {
+		if err := prepared.Write(ctx, w); err != nil {
+			return err
+		}
+		return src.Unchanged()
+	}
+	held := &holdLastByte{w: w, before: size - 1}
+	if err := prepared.Write(ctx, held); err != nil {
+		return err
+	}
+	if err := src.Unchanged(); err != nil {
+		return err
+	}
+	return held.release()
+}
+
 // generateFile writes gen's output for the file at srcPath to destPath, for
 // the path-based Generate of a format that streams. The output appears at
 // destPath only once it is complete.
 func generateFile(ctx context.Context, gen StreamGenerator, fileType, srcPath, destPath string, book *models.Book, file *models.File) error {
-	if err := ctx.Err(); err != nil {
-		return NewGenerationError(fileType, err, "context cancelled")
-	}
 	src, err := OpenSource(srcPath)
 	if err != nil {
 		return NewGenerationError(fileType, err, "failed to open source file")
@@ -120,7 +142,7 @@ func generateFile(ctx context.Context, gen StreamGenerator, fileType, srcPath, d
 	}
 	defer os.Remove(tmp.Name())
 	w := bufio.NewWriter(tmp)
-	err = prepared.Write(ctx, w)
+	err = WriteFromSource(ctx, prepared, src, w)
 	if err == nil {
 		err = errors.WithStack(w.Flush())
 	}
@@ -140,40 +162,49 @@ func generateFile(ctx context.Context, gen StreamGenerator, fileType, srcPath, d
 	return nil
 }
 
-// holdLastByte passes writes through but holds back the last byte written,
-// until release. A generator that must check something after writing
-// everything else keeps the output short of its reported size until the
-// check passes, so a failed check cuts a download that would otherwise look
-// complete.
+// holdLastByte passes writes through, except the byte at offset before,
+// which it holds until release. Bytes after it, which only a generator
+// writing more than it reported produces, release it.
 type holdLastByte struct {
-	w       io.Writer
-	last    byte
-	holding bool
+	w      io.Writer
+	before int64
+	held   []byte
 }
 
+// Write reports every byte as written unless w fails; its callers give up on
+// the whole output then.
 func (h *holdLastByte) Write(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
+	n := len(p)
+	if h.before >= int64(len(p)) {
+		h.before -= int64(len(p))
+		return h.w.Write(p)
 	}
-	if h.holding {
-		if _, err := h.w.Write([]byte{h.last}); err != nil {
-			return 0, err
+	if h.before >= 0 {
+		if _, err := h.w.Write(p[:h.before]); err != nil {
+			return 0, errors.WithStack(err)
+		}
+		h.held = []byte{p[h.before]}
+		p = p[h.before+1:]
+		h.before = -1
+		if len(p) == 0 {
+			return n, nil
 		}
 	}
-	if _, err := h.w.Write(p[:len(p)-1]); err != nil {
-		h.holding = false
+	if err := h.release(); err != nil {
 		return 0, err
 	}
-	h.last, h.holding = p[len(p)-1], true
-	return len(p), nil
+	if _, err := h.w.Write(p); err != nil {
+		return 0, errors.WithStack(err)
+	}
+	return n, nil
 }
 
-// release writes the byte held back.
+// release writes the byte held back, if any.
 func (h *holdLastByte) release() error {
-	if !h.holding {
+	if h.held == nil {
 		return nil
 	}
-	h.holding = false
-	_, err := h.w.Write([]byte{h.last})
-	return err
+	_, err := h.w.Write(h.held)
+	h.held = nil
+	return errors.WithStack(err)
 }

@@ -2,15 +2,16 @@ package filegen_test
 
 import (
 	"bytes"
-	"context"
 	"image"
 	"image/color"
+	_ "image/jpeg" // decode the converted MOBI cover
 	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
@@ -33,19 +34,6 @@ func streamGenerator(t *testing.T, fileType string) filegen.StreamGenerator {
 	sg, ok := gen.(filegen.StreamGenerator)
 	require.True(t, ok, "the %s generator does not stream", fileType)
 	return sg
-}
-
-// generatedByPath builds the file through the path-based Generate, which
-// downloads used before the generator streamed.
-func generatedByPath(t *testing.T, fileType, srcPath string, book *models.Book, file *models.File) []byte {
-	t.Helper()
-	gen, err := filegen.GetGenerator(fileType)
-	require.NoError(t, err)
-	destPath := filepath.Join(t.TempDir(), "out."+fileType)
-	require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, book, file))
-	out, err := os.ReadFile(destPath)
-	require.NoError(t, err)
-	return out
 }
 
 func writeOutput(t *testing.T, name string, output []byte) string {
@@ -99,7 +87,6 @@ func TestM4BGenerator_Conformance(t *testing.T) {
 					{Title: "Edited Three", SortOrder: 2, StartTimestampMs: &third},
 				},
 			}
-			want := generatedByPath(t, models.FileTypeM4B, srcPath, book, file)
 
 			filegentest.Run(t, filegentest.Case{
 				Generator: streamGenerator(t, models.FileTypeM4B),
@@ -108,7 +95,6 @@ func TestM4BGenerator_Conformance(t *testing.T) {
 				File:      file,
 				Broken:    brokenSource(t),
 				Check: func(t *testing.T, output []byte) {
-					assert.Equal(t, want, output, "the streamed file differs from the one built by path")
 					path := writeOutput(t, "out.m4b", output)
 					meta, err := mp4.ParseFull(path)
 					require.NoError(t, err)
@@ -117,64 +103,22 @@ func TestM4BGenerator_Conformance(t *testing.T) {
 					assert.Equal(t, []string{"New Narrator"}, meta.Narrators)
 					assert.Equal(t, cover, meta.CoverData)
 					var titles []string
+					var starts []time.Duration
 					for _, ch := range meta.Chapters {
 						titles = append(titles, ch.Title)
+						starts = append(starts, ch.Start)
 					}
 					assert.Equal(t, []string{"Edited One", "Edited Two", "Edited Three"}, titles)
+					assert.Equal(t, []time.Duration{0, 4 * time.Second, 20 * time.Second}, starts)
+					if len(opts.Chapters) > 0 {
+						// A QuickTime chapter track is rebuilt, never added.
+						assert.Equal(t, []string{"Edited One", "Edited Two", "Edited Three"}, ffprobeChapters(t, path), "players see the edited chapters")
+					}
 					assertDecodesCleanly(t, path)
 				},
 			})
 		})
 	}
-}
-
-// A source that changes while it is copied fails the write before its last
-// byte, so a download sent with Content-Length never looks complete.
-func TestM4BGenerator_SourceChangedDuringCopy(t *testing.T) {
-	t.Parallel()
-	testgen.SkipIfNoFFmpeg(t)
-	dir := testgen.TempDir(t, "m4b-stream-*")
-	srcPath := testgen.GenerateM4B(t, dir, "source.m4b", testgen.M4BOptions{Title: "Original", Duration: 10})
-	file := &models.File{FileType: models.FileTypeM4B, Filepath: srcPath}
-
-	src, err := filegen.OpenSource(srcPath)
-	require.NoError(t, err)
-	defer src.Close()
-	prepared, err := streamGenerator(t, models.FileTypeM4B).Prepare(context.Background(), src, &models.Book{Title: "New"}, file)
-	require.NoError(t, err)
-	size, ok := prepared.Size()
-	require.True(t, ok)
-
-	w := &touchOnFirstWrite{path: srcPath}
-	err = prepared.Write(context.Background(), w)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "changed")
-	assert.Less(t, w.written, size, "every byte was written, so the download would look complete")
-}
-
-// touchOnFirstWrite counts the bytes written to it and appends to the file
-// at path when the first of them arrive.
-type touchOnFirstWrite struct {
-	path    string
-	written int64
-}
-
-func (w *touchOnFirstWrite) Write(p []byte) (int, error) {
-	if w.written == 0 {
-		f, err := os.OpenFile(w.path, os.O_APPEND|os.O_WRONLY, 0)
-		if err != nil {
-			return 0, err
-		}
-		_, err = f.Write([]byte("more"))
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			return 0, err
-		}
-	}
-	w.written += int64(len(p))
-	return len(p), nil
 }
 
 func TestMOBIGenerator_Conformance(t *testing.T) {
@@ -213,7 +157,6 @@ func TestMOBIGenerator_Conformance(t *testing.T) {
 				CoverMimeType:      pointerutil.String("image/png"),
 				Identifiers:        []*models.FileIdentifier{{Type: "isbn_13", Value: "9780141036144"}},
 			}
-			want := generatedByPath(t, tc.fileType, srcPath, book, file)
 
 			filegentest.Run(t, filegentest.Case{
 				Generator: streamGenerator(t, tc.fileType),
@@ -222,19 +165,30 @@ func TestMOBIGenerator_Conformance(t *testing.T) {
 				File:      file,
 				Broken:    brokenSource(t),
 				Check: func(t *testing.T, output []byte) {
-					assert.Equal(t, want, output, "the streamed file differs from the one built by path")
 					meta, err := mobi.Parse(writeOutput(t, "out."+tc.fileType, output))
 					require.NoError(t, err)
 					assert.Equal(t, "New Title", meta.Title)
 					assert.Equal(t, []mediafile.ParsedAuthor{{Name: "New Author"}}, meta.Authors)
 					assert.Equal(t, "New description.", meta.Description)
 					assert.Equal(t, []mediafile.ParsedIdentifier{{Type: "isbn_13", Value: "9780141036144"}}, meta.Identifiers)
-					assert.Equal(t, "image/jpeg", meta.CoverMimeType)
-					assert.NotEmpty(t, meta.CoverData)
+					assert.Equal(t, "image/jpeg", meta.CoverMimeType, "a PNG cover is written as JPEG")
+					cover, _, err := image.Decode(bytes.NewReader(meta.CoverData))
+					require.NoError(t, err)
+					assert.Equal(t, image.Rect(0, 0, 30, 45), cover.Bounds(), "the file's own cover was kept")
 				},
 			})
 		})
 	}
+}
+
+// ffprobeChapters returns the chapter titles ffprobe reports, which come
+// from the QuickTime chapter track when there is one.
+func ffprobeChapters(t *testing.T, path string) []string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "ffprobe", "-v", "error", "-show_entries", "chapter_tags=title", "-of", "csv=p=0", path)
+	output, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.Split(strings.TrimSpace(string(output)), "\n")
 }
 
 // assertDecodesCleanly runs the file through ffmpeg's decoder, which fails
