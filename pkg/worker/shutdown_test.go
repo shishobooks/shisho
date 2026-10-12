@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql/driver"
 	"testing"
 	"time"
 
@@ -154,6 +155,77 @@ func TestShutdown_PersistsFailedJobStatus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.JobStatusFailed, retrieved.Status,
 		"failed status should persist even when the job ctx was cancelled during shutdown")
+}
+
+// TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery covers a handler
+// whose query is running when Shutdown cancels it. database/sql discards the
+// interrupted connection, which is the only one the pool holds, and the status
+// write must still reach the same database on a replacement connection.
+func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	tc.db.SetMaxOpenConns(1)
+
+	cfg := &config.Config{WorkerProcesses: 1}
+	w := New(cfg, tc.db, nil, nil, nil, nil, nil, nil)
+
+	// The handler takes the pool's only connection before it signals, so
+	// Shutdown's cancel cannot land while it waits for one.
+	jobStarted := make(chan struct{})
+	interrupted := make(chan bool, 1)
+	w.processFuncs[models.JobTypeScan] = func(ctx context.Context, _ *models.Job, _ *joblogs.JobLogger) error {
+		conn, err := tc.db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		close(jobStarted)
+		// This query never finishes on its own.
+		_, err = conn.ExecContext(ctx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
+		// The driver marks a connection invalid only when it interrupted a
+		// running statement, which is what makes database/sql discard it.
+		_ = conn.Raw(func(dc any) error {
+			interrupted <- !dc.(driver.Validator).IsValid()
+			return nil
+		})
+		return err
+	}
+
+	job := &models.Job{
+		Type:       models.JobTypeScan,
+		Status:     models.JobStatusPending,
+		DataParsed: &models.JobScanData{},
+	}
+	err := tc.jobService.CreateJob(tc.ctx, job)
+	require.NoError(t, err)
+
+	w.Start()
+	w.queue <- job
+
+	select {
+	case <-jobStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("job never started executing")
+	}
+	// Give the query time to start.
+	time.Sleep(50 * time.Millisecond)
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		w.Shutdown()
+		close(shutdownDone)
+	}()
+	select {
+	case <-shutdownDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Shutdown did not complete in time")
+	}
+
+	require.True(t, <-interrupted, "Shutdown interrupts the running query")
+
+	retrieved, err := tc.jobService.RetrieveJob(tc.ctx, jobs.RetrieveJobOptions{ID: &job.ID})
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusFailed, retrieved.Status)
 }
 
 // TestShouldSkipCleanup_SkipsAfterShutdown verifies that the download cache

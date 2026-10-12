@@ -10,6 +10,8 @@ package testdb
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/migrations"
@@ -19,23 +21,55 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 )
 
+// seq gives each test database its own shared-cache name, so parallel tests
+// never open each other's database.
+var seq atomic.Int64
+
 // New returns an in-memory SQLite database migrated to the latest schema, with
 // foreign keys on, that is closed when the test ends. Each call returns a
-// separate database, so parallel tests do not share rows.
-//
-// The pool is pinned to one connection, as pkg/database does in production:
-// every connection to ":memory:" opens its own empty database. PRAGMA
-// foreign_keys applies only to the connection that ran it, so sqliteconn runs
-// it on every connection the pool opens, as pkg/database does. A replacement
-// connection, opened after a query is canceled mid-statement, has foreign
-// keys on but sees a new empty ":memory:" database, so the schema is gone.
+// separate database, so parallel tests do not share rows. The pool holds one
+// connection, as pkg/database does in production.
 func New(t testing.TB) *bun.DB {
 	t.Helper()
+	return open(t, 1)
+}
 
-	connector, err := sqliteconn.NewConnector(":memory:", "PRAGMA foreign_keys=ON")
+// NewShared is New without the one-connection cap, for tests whose code runs
+// queries from several goroutines at once, such as the worker.
+func NewShared(t testing.TB) *bun.DB {
+	t.Helper()
+	return open(t, 0)
+}
+
+// open returns a migrated database whose pool opens at most maxOpen
+// connections, or any number when maxOpen is 0.
+//
+// database/sql discards a connection whose query is canceled mid-statement and
+// opens a replacement. Every connection to a named shared-cache memory
+// database sees the same data, so the replacement finds the schema, but the
+// database is destroyed when its last connection closes, and the discarded one
+// is often the only one in the pool. A keeper connection held outside the pool
+// until the test ends keeps it alive. PRAGMA foreign_keys applies only to the
+// connection that ran it, so sqliteconn runs it on every connection the pool
+// opens, as pkg/database does.
+func open(t testing.TB, maxOpen int) *bun.DB {
+	t.Helper()
+
+	dsn := fmt.Sprintf("file:testdb-%d?mode=memory&cache=shared", seq.Add(1))
+	connector, err := sqliteconn.NewConnector(dsn, "PRAGMA foreign_keys=ON")
 	require.NoError(t, err)
+
+	keeper, err := connector.Connect(context.Background())
+	require.NoError(t, err)
+	// Registered before the pool's cleanup, so it runs after it.
+	t.Cleanup(func() {
+		_ = keeper.Close()
+	})
+
 	sqldb := sql.OpenDB(connector)
-	sqldb.SetMaxOpenConns(1)
+	if maxOpen > 0 {
+		sqldb.SetMaxOpenConns(maxOpen)
+	}
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 	t.Cleanup(func() {

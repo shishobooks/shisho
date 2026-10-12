@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 func TestNew_MigratesWithForeignKeysOn(t *testing.T) {
@@ -30,10 +31,6 @@ func TestNew_MigratesWithForeignKeysOn(t *testing.T) {
 	assert.Contains(t, err.Error(), "FOREIGN KEY constraint failed")
 }
 
-// A bare ":memory:" database is private to one connection, and PRAGMA
-// foreign_keys applies per connection, so a second pooled connection would see
-// an empty database with foreign keys off. The pool is pinned to one
-// connection, as in production.
 func TestNew_PinsOneConnection(t *testing.T) {
 	t.Parallel()
 	db := New(t)
@@ -55,19 +52,73 @@ func TestNew_DatabasesAreIsolated(t *testing.T) {
 	assert.Zero(t, count)
 }
 
-// A connection whose query is canceled mid-statement is replaced, and foreign
-// keys apply per connection, so the replacement must turn them on too.
-func TestNew_ForeignKeysSurviveConnectionReplacement(t *testing.T) {
+// interruptStatement cancels a statement that never finishes on its own, so
+// database/sql discards the connection it ran on. The driver reports only the
+// context error, so the test checks the pool instead: a cancel that lands
+// before the statement starts never takes a connection, and would let the test
+// pass without a discard.
+func interruptStatement(t *testing.T, db *bun.DB) {
+	t.Helper()
+	open := db.DB.Stats().OpenConnections
+	require.Positive(t, open)
+
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	_, err := db.ExecContext(cancelCtx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Equal(t, open-1, db.DB.Stats().OpenConnections, "the interrupted connection is discarded")
+}
+
+// A connection whose query is canceled mid-statement is replaced. Foreign keys
+// apply per connection, so the replacement must turn them on too, and it must
+// open the same database, so the schema is still there.
+func TestNew_SurvivesConnectionReplacement(t *testing.T) {
 	t.Parallel()
 	db := New(t)
 	ctx := context.Background()
 
-	cancelCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	defer cancel()
-	_, err := db.ExecContext(cancelCtx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
-	require.Error(t, err)
+	interruptStatement(t, db)
 
 	var foreignKeys int
 	require.NoError(t, db.NewRaw("PRAGMA foreign_keys").Scan(ctx, &foreignKeys))
 	assert.Equal(t, 1, foreignKeys)
+
+	_, err := db.NewSelect().Model((*models.Library)(nil)).Count(ctx)
+	require.NoError(t, err)
+}
+
+func TestNewShared_AllowsManyConnections(t *testing.T) {
+	t.Parallel()
+	db := NewShared(t)
+
+	assert.Zero(t, db.DB.Stats().MaxOpenConnections)
+}
+
+func TestNewShared_SurvivesConnectionReplacement(t *testing.T) {
+	t.Parallel()
+	db := NewShared(t)
+	ctx := context.Background()
+
+	interruptStatement(t, db)
+
+	var foreignKeys int
+	require.NoError(t, db.NewRaw("PRAGMA foreign_keys").Scan(ctx, &foreignKeys))
+	assert.Equal(t, 1, foreignKeys)
+
+	_, err := db.NewSelect().Model((*models.Library)(nil)).Count(ctx)
+	require.NoError(t, err)
+}
+
+func TestNewShared_DatabasesAreIsolated(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	first := NewShared(t)
+	second := NewShared(t)
+
+	_, err := first.NewInsert().Model(&models.Library{Name: "Only in first", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}).Exec(ctx)
+	require.NoError(t, err)
+
+	count, err := second.NewSelect().Model((*models.Library)(nil)).Count(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, count)
 }
