@@ -17,10 +17,29 @@ var validPluginModes = map[string]bool{
 	models.PluginModeDisabled:   true,
 }
 
+var validHookTypes = map[string]bool{
+	models.PluginHookInputConverter:   true,
+	models.PluginHookFileParser:       true,
+	models.PluginHookMetadataEnricher: true,
+}
+
+// hookTypeParam returns the :hookType path parameter, rejecting a hook type
+// that plugins cannot provide so no order row is read or stored for it.
+func hookTypeParam(c echo.Context) (string, error) {
+	hookType := c.Param("hookType")
+	if !validHookTypes[hookType] {
+		return "", errcodes.ValidationError(fmt.Sprintf("unknown hook type %q", hookType))
+	}
+	return hookType, nil
+}
+
 func (h *handler) getOrder(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	hookType := c.Param("hookType")
+	hookType, err := hookTypeParam(c)
+	if err != nil {
+		return err
+	}
 
 	orders, err := h.service.GetOrder(ctx, hookType)
 	if err != nil {
@@ -33,7 +52,10 @@ func (h *handler) getOrder(c echo.Context) error {
 func (h *handler) setOrder(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	hookType := c.Param("hookType")
+	hookType, err := hookTypeParam(c)
+	if err != nil {
+		return err
+	}
 
 	var payload SetOrderPayload
 	if err := c.Bind(&payload); err != nil {
@@ -70,7 +92,10 @@ func (h *handler) getLibraryOrder(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	hookType := c.Param("hookType")
+	hookType, err := hookTypeParam(c)
+	if err != nil {
+		return err
+	}
 
 	customized, err := h.service.IsLibraryCustomized(ctx, libraryID, hookType)
 	if err != nil {
@@ -128,7 +153,10 @@ func (h *handler) setLibraryOrder(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	hookType := c.Param("hookType")
+	hookType, err := hookTypeParam(c)
+	if err != nil {
+		return err
+	}
 
 	var payload SetLibraryOrderPayload
 	if err := c.Bind(&payload); err != nil {
@@ -165,7 +193,10 @@ func (h *handler) resetLibraryOrder(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	hookType := c.Param("hookType")
+	hookType, err := hookTypeParam(c)
+	if err != nil {
+		return err
+	}
 
 	if err := h.service.ResetLibraryOrder(ctx, libraryID, hookType); err != nil {
 		return errors.WithStack(err)
