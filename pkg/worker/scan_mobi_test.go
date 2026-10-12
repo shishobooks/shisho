@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/joblogs"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
@@ -433,4 +434,101 @@ func TestResync_DRMReplacementRemovesCoverAndSidecar(t *testing.T) {
 	assert.NoFileExists(t, coverPath)
 	assert.NoFileExists(t, sidecarPath)
 	assert.FileExists(t, path, "the DRM-protected file itself is left alone")
+}
+
+// chapterTitleTree returns stored chapters as nested titles: "Title" for a
+// leaf, "Title[child, ...]" for a chapter with children.
+func chapterTitleTree(chapters []*models.Chapter) []string {
+	out := make([]string, 0, len(chapters))
+	for _, ch := range chapters {
+		s := ch.Title
+		if len(ch.Children) > 0 {
+			s += "[" + strings.Join(chapterTitleTree(ch.Children), ", ") + "]"
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func TestProcessScanJob_MOBIAndAZW3Chapters(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	toc := []testgen.MOBITOCEntry{
+		{Title: "Part One", Children: []testgen.MOBITOCEntry{{Title: "Chapter 1"}, {Title: "Chapter 2"}}},
+		{Title: "Epilogue"},
+	}
+	cases := map[string]testgen.MOBIKind{"MOBI6 Book": testgen.MOBIKindMOBI6, "KF8 Book": testgen.MOBIKindKF8, "Combo Book": testgen.MOBIKindCombo}
+	for dir, kind := range cases {
+		opts := fullMOBIOptions(kind, dir)
+		opts.TOC = toc
+		ext := ".mobi"
+		if kind == testgen.MOBIKindKF8 {
+			ext = ".azw3"
+		}
+		testgen.GenerateMOBI(t, testgen.CreateSubDir(t, libraryPath, dir), "book"+ext, opts)
+	}
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, len(cases))
+	want := []string{"Part One[Chapter 1, Chapter 2]", "Epilogue"}
+	for _, file := range files {
+		chapters, err := tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
+		require.NoError(t, err)
+		assert.Equal(t, want, chapterTitleTree(chapters), file.Filepath)
+		require.NotNil(t, file.ChapterSource, file.Filepath)
+		assert.Equal(t, models.DataSourceMOBIMetadata, *file.ChapterSource, file.Filepath)
+	}
+
+	// A File imported before chapters were read has none; a Resync in scan
+	// mode picks them up.
+	file := files[0]
+	require.NoError(t, tc.worker.chapterService.DeleteChaptersForFile(tc.ctx, file.ID))
+	file.ChapterSource = nil
+	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}))
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID}, nil)
+	require.NoError(t, err)
+	chapters, err := tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
+	require.NoError(t, err)
+	assert.Equal(t, want, chapterTitleTree(chapters))
+}
+
+func TestScanFileByID_ManualChaptersSurviveRescanWithoutSidecar(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	opts := fullMOBIOptions(testgen.MOBIKindKF8, "Edited Book")
+	opts.TOC = []testgen.MOBITOCEntry{{Title: "One"}, {Title: "Two"}}
+	testgen.GenerateMOBI(t, testgen.CreateSubDir(t, libraryPath, "Edited Book"), "book.azw3", opts)
+	require.NoError(t, tc.runScan())
+	file := tc.listFiles()[0]
+
+	// The state saving the Chapters tab leaves (pkg/chapters handler,
+	// covered by its own test): the edited chapters, marked manual. The
+	// sidecar that would also hold them is gone.
+	require.NoError(t, tc.worker.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{{Title: "Renamed One"}}))
+	manual := models.DataSourceManual
+	file.ChapterSource = &manual
+	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}))
+	require.NoError(t, os.Remove(sidecar.FileSidecarPath(file.Filepath)))
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID}, nil)
+	require.NoError(t, err)
+	chapters, err := tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Renamed One"}, chapterTitleTree(chapters))
+
+	// A forced refresh takes the file's own chapters again.
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID, ForceRefresh: true}, nil)
+	require.NoError(t, err)
+	chapters, err = tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"One", "Two"}, chapterTitleTree(chapters))
 }

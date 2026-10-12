@@ -4,6 +4,7 @@ import {
   ebookCoverRank,
   isEbookFileType,
   isMainEligibleFileType,
+  isReflowableFileType,
 } from "./fileTypes";
 
 describe("isEbookFileType", () => {
@@ -16,6 +17,17 @@ describe("isEbookFileType", () => {
   it("excludes audiobooks and other files", () => {
     for (const ft of ["m4b", "txt", "azw", ""]) {
       expect(isEbookFileType(ft)).toBe(false);
+    }
+  });
+});
+
+describe("isReflowableFileType", () => {
+  it("includes EPUB, AZW3, and MOBI and nothing else", () => {
+    for (const ft of ["epub", "azw3", "mobi"]) {
+      expect(isReflowableFileType(ft)).toBe(true);
+    }
+    for (const ft of ["cbz", "pdf", "m4b", "azw", ""]) {
+      expect(isReflowableFileType(ft)).toBe(false);
     }
   });
 });

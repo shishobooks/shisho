@@ -30,12 +30,12 @@ import {
 import { cn } from "@/libraries/utils";
 import {
   FileTypeCBZ,
-  FileTypeEPUB,
   FileTypeM4B,
   FileTypePDF,
   type Chapter,
   type FileType,
 } from "@/types";
+import { isReflowableFileType } from "@/utils/fileTypes";
 import { formatTimestamp } from "@/utils/format";
 import type { PageSourceFile } from "@/utils/pageUrl";
 
@@ -43,7 +43,7 @@ import { countDescendants, parseTimestampMs } from "./chapterUtils";
 import PagePicker from "./PagePicker";
 import PagePreview from "./PagePreview";
 
-/** Pixels of indentation per depth level for EPUB hierarchy */
+/** Pixels of indentation per depth level for a Reflowable hierarchy */
 const INDENT_PX_PER_LEVEL = 24;
 
 /** Duration of the audio preview in milliseconds */
@@ -154,7 +154,7 @@ export interface ChapterRowProps {
   onValidationChange?: (chapterId: number, hasError: boolean) => void;
   // Page-based edit mode: called when page input loses focus (for reordering)
   onBlur?: () => void;
-  // EPUB edit mode: the row's child indexes from the top level down, and
+  // Reflowable edit mode: the row's child indexes from the top level down, and
   // callbacks that edit the chapter at a path, used for nested rows
   path?: number[];
   onTitleChangeAt?: (path: number[], title: string) => void;
@@ -183,9 +183,9 @@ export interface ChapterRowProps {
  * Renders a single chapter row with type-specific display.
  *
  * View mode: Displays chapter title, position (based on file type), and thumbnail/play button.
- * Edit mode: Supports inline editing for EPUB (titles only), CBZ/PDF (titles + pages), and M4B (titles + timestamps).
+ * Edit mode: Supports inline editing for EPUB, MOBI, and AZW3 (titles only), CBZ/PDF (titles + pages), and M4B (titles + timestamps).
  *
- * Handles recursive rendering of children chapters (for EPUB hierarchy).
+ * Handles recursive rendering of children chapters (for a Reflowable hierarchy).
  */
 const ChapterRow = (props: ChapterRowProps) => {
   const {
@@ -204,7 +204,7 @@ const ChapterRow = (props: ChapterRowProps) => {
 
   const children = (chapter.children?.filter(Boolean) as Chapter[]) ?? [];
   const hasChildren = children.length > 0;
-  const isEpub = fileType === FileTypeEPUB;
+  const isReflowable = isReflowableFileType(fileType);
   const isCbz = fileType === FileTypeCBZ;
   const isPdf = fileType === FileTypePDF;
   const isPageBased = isCbz || isPdf;
@@ -212,13 +212,13 @@ const ChapterRow = (props: ChapterRowProps) => {
   const isPlaying =
     chapterIndex != null && playingChapterIndex === chapterIndex;
 
-  // Calculate indentation for EPUB hierarchy
-  const indentPx = isEpub ? depth * INDENT_PX_PER_LEVEL : 0;
+  // Calculate indentation for a Reflowable hierarchy
+  const indentPx = isReflowable ? depth * INDENT_PX_PER_LEVEL : 0;
 
-  // EPUB hierarchy: track expanded state (defaults to expanded)
+  // Reflowable hierarchy: track expanded state (defaults to expanded)
   const [expanded, setExpanded] = useState(true);
 
-  // State for delete confirmation dialog (EPUB only)
+  // State for delete confirmation dialog (Reflowable only)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Page-based edit mode state: local page value and validation
@@ -367,8 +367,8 @@ const ChapterRow = (props: ChapterRowProps) => {
     props.onStartTimestampChange?.(newMs);
   };
 
-  // EPUB edit mode
-  if (isEditing && isEpub) {
+  // Reflowable edit mode
+  if (isEditing && isReflowable) {
     const descendantCount = countDescendants(chapter);
     const hasDescendants = descendantCount > 0;
     const emptiedHeading = props.isEmptiedHeading?.(chapter) ?? false;
@@ -715,8 +715,8 @@ const ChapterRow = (props: ChapterRowProps) => {
         className="flex items-center gap-3 py-2 border-b border-border last:border-b-0"
         style={{ paddingLeft: `${indentPx}px` }}
       >
-        {/* EPUB: Expand/collapse toggle for chapters with children */}
-        {isEpub && hasChildren ? (
+        {/* Reflowable: Expand/collapse toggle for chapters with children */}
+        {isReflowable && hasChildren ? (
           <Button
             aria-expanded={expanded}
             aria-label={expanded ? "Hide subchapters" : "Show subchapters"}
@@ -731,7 +731,7 @@ const ChapterRow = (props: ChapterRowProps) => {
               <ChevronRight className="h-4 w-4" />
             )}
           </Button>
-        ) : isEpub ? (
+        ) : isReflowable ? (
           // Spacer for alignment when no toggle needed
           <div className="w-5" />
         ) : null}
@@ -785,8 +785,8 @@ const ChapterRow = (props: ChapterRowProps) => {
         )}
       </div>
 
-      {/* EPUB: Render children recursively when expanded */}
-      {isEpub &&
+      {/* Reflowable: Render children recursively when expanded */}
+      {isReflowable &&
         hasChildren &&
         expanded &&
         children.map((child) => (

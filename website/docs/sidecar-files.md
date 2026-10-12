@@ -119,6 +119,7 @@ Each chapter uses the position field for its media format:
 | Format | Position Field | Meaning |
 |--------|----------------|---------|
 | EPUB | `href` | Content-document reference |
+| MOBI and AZW3 | `href` | Location in the book, recorded for reference |
 | CBZ | `start_page` | Zero-indexed page number |
 | PDF | `start_page` | Zero-indexed page number |
 | M4B | `start_timestamp_ms` | Milliseconds from the start |

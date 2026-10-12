@@ -3,6 +3,7 @@ package mobi
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -290,4 +291,106 @@ func TestParse_Truncated(t *testing.T) {
 		_, err := Parse(path)
 		assert.Error(t, err, "size %d", size)
 	}
+}
+
+// nestedTOC is a table of contents three levels deep.
+var nestedTOC = []testgen.MOBITOCEntry{
+	{Title: "Part One", Children: []testgen.MOBITOCEntry{
+		{Title: "Chapter 1"},
+		{Title: "Chapter 2", Children: []testgen.MOBITOCEntry{{Title: "Scene 2.1"}}},
+	}},
+	{Title: "Part Two", Children: []testgen.MOBITOCEntry{{Title: "Chapter 3"}}},
+	{Title: "Epilogue"},
+}
+
+// chapterTitles returns the chapters as nested titles: "Title" for a leaf,
+// "Title[child, ...]" for a chapter with children.
+func chapterTitles(chapters []mediafile.ParsedChapter) []string {
+	out := make([]string, 0, len(chapters))
+	for _, ch := range chapters {
+		s := ch.Title
+		if len(ch.Children) > 0 {
+			s += "[" + strings.Join(chapterTitles(ch.Children), ", ") + "]"
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+var nestedTitles = []string{"Part One[Chapter 1, Chapter 2[Scene 2.1]]", "Part Two[Chapter 3]", "Epilogue"}
+
+func TestParse_Chapters(t *testing.T) {
+	t.Parallel()
+
+	for name, kind := range map[string]testgen.MOBIKind{
+		"MOBI6": testgen.MOBIKindMOBI6,
+		"KF8":   testgen.MOBIKindKF8,
+		"combo": testgen.MOBIKindCombo,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			opts := calibreOptions(kind)
+			opts.TOC = nestedTOC
+			meta, err := parseBuilt(t, opts)
+			require.NoError(t, err)
+			assert.Equal(t, nestedTitles, chapterTitles(meta.Chapters))
+			for _, ch := range meta.Chapters {
+				require.NotNil(t, ch.Href, ch.Title)
+				if kind == testgen.MOBIKindMOBI6 {
+					assert.Regexp(t, `^filepos:\d{10}$`, *ch.Href)
+				} else {
+					assert.Regexp(t, `^kindle:pos:fid:[0-9A-V]{4}:off:[0-9A-V]{10}$`, *ch.Href)
+				}
+			}
+		})
+	}
+}
+
+func TestParse_ChaptersFlatMOBI6(t *testing.T) {
+	t.Parallel()
+
+	// Calibre writes a MOBI6 index flat, every entry at depth 0.
+	opts := calibreOptions(testgen.MOBIKindMOBI6)
+	opts.TOC = nestedTOC
+	opts.FlatMOBI6TOC = true
+	meta, err := parseBuilt(t, opts)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Part One", "Chapter 1", "Chapter 2", "Scene 2.1", "Part Two", "Chapter 3", "Epilogue"}, chapterTitles(meta.Chapters))
+}
+
+func TestParse_ChaptersComboPrefersKF8Half(t *testing.T) {
+	t.Parallel()
+
+	opts := calibreOptions(testgen.MOBIKindCombo)
+	opts.TOC = nestedTOC
+	opts.FlatMOBI6TOC = true
+	meta, err := parseBuilt(t, opts)
+	require.NoError(t, err)
+	assert.Equal(t, nestedTitles, chapterTitles(meta.Chapters))
+
+	// A KF8 half with no index leaves the MOBI6 half's.
+	opts = calibreOptions(testgen.MOBIKindCombo)
+	opts.MOBI6TOC = []testgen.MOBITOCEntry{{Title: "Old One"}, {Title: "Old Two"}}
+	meta, err = parseBuilt(t, opts)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Old One", "Old Two"}, chapterTitles(meta.Chapters))
+}
+
+func TestParse_ChaptersCP1252(t *testing.T) {
+	t.Parallel()
+
+	opts := calibreOptions(testgen.MOBIKindMOBI6)
+	opts.CP1252 = true
+	opts.TOC = []testgen.MOBITOCEntry{{Title: "Café"}}
+	meta, err := parseBuilt(t, opts)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Café"}, chapterTitles(meta.Chapters))
+}
+
+func TestParse_NoTOC(t *testing.T) {
+	t.Parallel()
+
+	meta, err := parseBuilt(t, calibreOptions(testgen.MOBIKindKF8))
+	require.NoError(t, err)
+	assert.Empty(t, meta.Chapters)
 }

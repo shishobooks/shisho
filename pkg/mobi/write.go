@@ -40,6 +40,12 @@ type Metadata struct {
 	// other image is re-encoded as JPEG, since a MOBI6 reader shows no PNG
 	// and a combo file's images belong to its MOBI6 book.
 	Cover []byte
+	// TOC holds the edits to each book's table of contents, by the entry
+	// indexes ReadTOC gives.
+	TOC map[Book]*TOCEdit
+	// OnTOCSkipped, when set, hears of each edit Rewrite leaves out because
+	// the book's index cannot take it. The rest of the file is still written.
+	OnTOCSkipped func(*TOCSkipError)
 }
 
 // Identifiers are the identifiers MOBI can hold.
@@ -71,9 +77,10 @@ func isTrailerRecord(head []byte, size int64) bool {
 }
 
 // Rewrite copies the MOBI or AZW3 file in src to dst with meta written into
-// it. Both header records of a combo file are rewritten. Only header records
-// and the cover and thumbnail records change; every other record is copied
-// byte for byte.
+// it. Both header records of a combo file are rewritten. Only header records,
+// the cover and thumbnail records, and the records of an edited table of
+// contents change (with the text records' trailing index data when entries
+// are deleted); every other record is copied byte for byte.
 func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
 	f, err := readPDBFile(src, size)
 	if err != nil {
@@ -132,6 +139,21 @@ func Rewrite(src io.ReaderAt, size int64, dst io.Writer, meta *Metadata) error {
 			return err
 		}
 		f.records[kf8Index] = rec
+	}
+
+	books := []bookRef{{kind: BookMOBI6, header: first}}
+	if first.isKF8() {
+		books[0].kind = BookKF8
+	}
+	if kf8Index >= 0 {
+		books = append(books, bookRef{kind: BookKF8, base: kf8Index, header: kf8})
+	}
+	for _, b := range books {
+		if edit := meta.TOC[b.kind]; edit != nil {
+			if err := f.applyTOCEdit(b.base, b.header, edit); err != nil && meta.OnTOCSkipped != nil {
+				meta.OnTOCSkipped(&TOCSkipError{Book: b.kind, Err: err})
+			}
+		}
 	}
 
 	return f.writeTo(dst)

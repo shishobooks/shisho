@@ -78,8 +78,10 @@ func (h *handler) replace(c echo.Context) error {
 	// Convert input to ParsedChapter
 	chapters := convertInputToChapters(payload.Chapters)
 
-	// Replace chapters
-	if err := h.chapterService.ReplaceChapters(ctx, fileID, chapters); err != nil {
+	// Replace chapters, recorded as a manual edit like every other edited
+	// field, so a scan in scan mode does not put the file's own chapters
+	// back over them.
+	if err := h.chapterService.ReplaceChaptersWithSource(ctx, fileID, chapters, models.DataSourceManual); err != nil {
 		return errors.WithStack(err)
 	}
 

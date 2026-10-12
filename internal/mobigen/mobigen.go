@@ -89,6 +89,24 @@ type Options struct {
 	Compression Compression
 	// CP1252 writes the header and EXTH text as Windows-1252 instead of UTF-8.
 	CP1252 bool
+	// TOC is written as the NCX index of every book in the file, nested
+	// through parent and child tags as KindleGen writes it.
+	TOC []TOCEntry
+	// MOBI6TOC replaces TOC in the MOBI6 half of a combo file.
+	MOBI6TOC []TOCEntry
+	// FlatMOBI6TOC writes the MOBI6 book's index the way Calibre does:
+	// every entry at depth 0 in reading order, with no parent or child tags.
+	FlatMOBI6TOC bool
+	// NCXEntriesPerRecord and NCXLabelsPerCNCX, when positive, split the
+	// index over several data and CNCX records, as a large book's is.
+	NCXEntriesPerRecord int
+	NCXLabelsPerCNCX    int
+}
+
+// TOCEntry is one entry of a generated table of contents.
+type TOCEntry struct {
+	Title    string
+	Children []TOCEntry
 }
 
 // Build returns the bytes of a MOBI, AZW3, or combo file shaped like
@@ -123,6 +141,9 @@ func Build(opts Options) ([]byte, error) {
 		if opts.MOBI6Title != "" {
 			mobi6Opts.Title = opts.MOBI6Title
 			mobi6Opts.FullName = opts.MOBI6Title
+		}
+		if opts.MOBI6TOC != nil {
+			mobi6Opts.TOC = opts.MOBI6TOC
 		}
 		// The MOBI6 book's record count does not depend on the boundary
 		// index it stores, so build it once to learn where the KF8 header
@@ -183,6 +204,17 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 	text := []byte("<html><head></head><body><h1>Chapter One</h1><p>Hello world.</p></body></html>")
 	textRecords := [][]byte{compressMOBIText(text, opts.Compression)}
 
+	var extraFlags uint32
+	if len(opts.TOC) > 0 {
+		// Calibre ends each text record with a multibyte byte and then the
+		// trailing byte sequence (TBS) that names the index entries the
+		// record touches; this TBS is three opaque bytes and its size.
+		extraFlags = 0b11
+		for i := range textRecords {
+			textRecords[i] = append(textRecords[i], 0x00, 0x86, 0x80, 0x07, 0x84)
+		}
+	}
+
 	var after [][]byte
 	var huffIndex, huffCount uint32 = 0, 0
 	if opts.Compression == CompressionHuffCDIC {
@@ -192,9 +224,21 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 	}
 
 	firstNonBook := 1 + len(textRecords) + len(after)
+	// Like Calibre, the NCX index follows the text and comes before the
+	// images. Its index counts from the book's own header record.
+	ncxIndex := uint32(mobiNullIndex)
+	if len(opts.TOC) > 0 {
+		ncxIndex = u32(1 + len(textRecords) + len(after))
+		flat := version != 8 && opts.FlatMOBI6TOC
+		ncx, err := ncxRecords(opts.TOC, version == 8, flat, opts.CP1252, opts.NCXEntriesPerRecord, opts.NCXLabelsPerCNCX)
+		if err != nil {
+			return nil, err
+		}
+		after = append(after, ncx...)
+	}
 	firstImage := uint32(mobiNullIndex)
 	if len(images) > 0 {
-		firstImage = u32(base + firstNonBook)
+		firstImage = u32(base + 1 + len(textRecords) + len(after))
 	} else if version == 8 && base > 0 {
 		// The images of a combo file belong to the MOBI6 book. Calibre's
 		// KF8 header still names a first image, at an index that holds no
@@ -223,6 +267,8 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 		fdstIndex:    fdstIndex,
 		flisIndex:    flisIndex,
 		fcisIndex:    flisIndex + 1,
+		ncxIndex:     ncxIndex,
+		extraFlags:   extraFlags,
 		kf8Index:     kf8Index,
 	})
 	if err != nil {
@@ -246,6 +292,8 @@ type mobiHeaderSpec struct {
 	fdstIndex    uint32
 	flisIndex    uint32
 	fcisIndex    uint32
+	ncxIndex     uint32
+	extraFlags   uint32
 	kf8Index     int
 }
 
@@ -347,7 +395,8 @@ func buildMOBIHeaderRecord(opts Options, spec mobiHeaderSpec) ([]byte, error) {
 	be.PutUint32(h[224:], mobiNullIndex)
 	be.PutUint32(h[232:], mobiNullIndex)
 	be.PutUint32(h[236:], mobiNullIndex)
-	be.PutUint32(h[244:], mobiNullIndex) // no NCX index
+	be.PutUint32(h[240:], spec.extraFlags)
+	be.PutUint32(h[244:], spec.ncxIndex)
 	if headerLength == mobiHeaderLengthKF8 {
 		for off := 248; off < 280; off += 4 {
 			be.PutUint32(h[off:], mobiNullIndex)

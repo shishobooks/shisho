@@ -863,6 +863,10 @@ func (h *handler) updateFile(c echo.Context) error {
 			file.IdentifierSource = nil
 			opts.Columns = append(opts.Columns, "identifier_source")
 
+			// Clear chapter source (chapters are deleted below)
+			file.ChapterSource = nil
+			opts.Columns = append(opts.Columns, "chapter_source")
+
 			// Delete narrators for this file
 			_, err := h.bookService.DeleteNarratorsForFile(ctx, file.ID)
 			if err != nil {
@@ -873,6 +877,11 @@ func (h *handler) updateFile(c echo.Context) error {
 			_, err = h.bookService.DeleteIdentifiersForFile(ctx, file.ID)
 			if err != nil {
 				log.Warn("failed to delete identifiers on downgrade", logger.Data{"error": err.Error()})
+			}
+
+			// Delete chapters for this file
+			if err := h.bookService.DeleteChaptersForFile(ctx, file.ID); err != nil {
+				log.Warn("failed to delete chapters on downgrade", logger.Data{"error": err.Error()})
 			}
 
 			// Delete sidecar file

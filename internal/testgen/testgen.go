@@ -85,6 +85,9 @@ type M4BOptions struct {
 // MOBIOptions configures a generated MOBI file; see mobigen.Options.
 type MOBIOptions = mobigen.Options
 
+// MOBITOCEntry is one entry of a generated MOBI table of contents.
+type MOBITOCEntry = mobigen.TOCEntry
+
 // MOBIKind is the layout of a generated MOBI file.
 type MOBIKind = mobigen.Kind
 

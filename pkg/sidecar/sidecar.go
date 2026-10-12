@@ -312,7 +312,7 @@ func FileSidecarFromModel(file *models.File) *FileSidecar {
 
 	// Convert chapters if loaded
 	if len(file.Chapters) > 0 {
-		s.Chapters = ChaptersFromModels(file.Chapters)
+		s.Chapters = ChaptersFromModels(models.ChapterTree(file.Chapters))
 	}
 
 	return s

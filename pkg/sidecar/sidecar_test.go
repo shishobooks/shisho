@@ -402,6 +402,34 @@ func TestWriteFileSidecarFromModel(t *testing.T) {
 	assert.Equal(t, int64(60000), *readBack.Chapters[1].StartTimestampMs)
 }
 
+func TestFileSidecarFromModel_ChaptersAsRetrieveFileWithRelationsLoadsThem(t *testing.T) {
+	t.Parallel()
+	// RetrieveFileWithRelations loads every chapter of the file into
+	// Chapters, nested ones included, each with copies of its direct
+	// children attached and nothing below those.
+	intPtr := func(i int) *int { return &i }
+	part := &models.Chapter{ID: 1, Title: "Part 1", SortOrder: 0}
+	ch1 := &models.Chapter{ID: 2, ParentID: intPtr(1), Title: "Chapter 1", SortOrder: 0}
+	ch2 := &models.Chapter{ID: 3, ParentID: intPtr(1), Title: "Chapter 2", SortOrder: 1}
+	scene := &models.Chapter{ID: 4, ParentID: intPtr(3), Title: "Scene", SortOrder: 0}
+	epilogue := &models.Chapter{ID: 5, Title: "Epilogue", SortOrder: 1}
+	copyOf := func(c *models.Chapter) *models.Chapter { cp := *c; return &cp }
+	part.Children = []*models.Chapter{copyOf(ch1), copyOf(ch2)}
+	ch2.Children = []*models.Chapter{copyOf(scene)}
+	file := &models.File{Chapters: []*models.Chapter{part, ch1, scene, epilogue, ch2}}
+
+	chapters := FileSidecarFromModel(file).Chapters
+
+	require.Len(t, chapters, 2)
+	assert.Equal(t, "Part 1", chapters[0].Title)
+	assert.Equal(t, "Epilogue", chapters[1].Title)
+	require.Len(t, chapters[0].Children, 2)
+	assert.Equal(t, "Chapter 1", chapters[0].Children[0].Title)
+	assert.Equal(t, "Chapter 2", chapters[0].Children[1].Title)
+	require.Len(t, chapters[0].Children[1].Children, 1)
+	assert.Equal(t, "Scene", chapters[0].Children[1].Children[0].Title)
+}
+
 func TestWriteFileSidecarFromModel_WithNestedChapters(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

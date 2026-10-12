@@ -63,26 +63,14 @@ type editedChapter struct {
 }
 
 // chapterTree returns the file's chapters as a tree. A file loaded from the
-// database lists every chapter in one flat slice, nested ones included, so
-// the tree is rebuilt from ParentID.
+// database lists every chapter in one flat slice, nested ones included; see
+// models.ChapterTree.
 func chapterTree(chapters []*models.Chapter) []editedChapter {
-	byParent := map[int][]*models.Chapter{}
-	var roots []*models.Chapter
-	for _, ch := range chapters {
-		if ch.ParentID == nil {
-			roots = append(roots, ch)
-		} else {
-			byParent[*ch.ParentID] = append(byParent[*ch.ParentID], ch)
-		}
-	}
-
-	var build func(level []*models.Chapter) []editedChapter
-	build = func(level []*models.Chapter) []editedChapter {
-		level = slices.Clone(level)
-		sort.SliceStable(level, func(i, j int) bool { return level[i].SortOrder < level[j].SortOrder })
+	var convert func(level []*models.Chapter) []editedChapter
+	convert = func(level []*models.Chapter) []editedChapter {
 		out := make([]editedChapter, 0, len(level))
 		for _, ch := range level {
-			c := editedChapter{title: ch.Title, children: build(byParent[ch.ID])}
+			c := editedChapter{title: ch.Title, children: convert(ch.Children)}
 			if ch.Href != nil {
 				c.href = *ch.Href
 			}
@@ -90,7 +78,7 @@ func chapterTree(chapters []*models.Chapter) []editedChapter {
 		}
 		return out
 	}
-	return build(roots)
+	return convert(models.ChapterTree(chapters))
 }
 
 // xmlNode is an element of a parsed document with the byte offsets of its

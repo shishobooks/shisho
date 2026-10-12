@@ -27,6 +27,19 @@ const MAIN_ELIGIBLE_FILE_TYPES: readonly string[] = [
 export const isEbookFileType = (fileType: string): boolean =>
   EBOOK_FILE_TYPES.includes(fileType);
 
+/** Reflowable ebooks: text that reflows to the screen, as opposed to the
+ *  fixed pages of CBZ and PDF. Their chapters come from a nested table of
+ *  contents, which Shisho can rename and delete entries of but not add to or
+ *  reorder. */
+const REFLOWABLE_FILE_TYPES: readonly string[] = [
+  FileTypeEPUB,
+  FileTypeAZW3,
+  FileTypeMOBI,
+];
+
+export const isReflowableFileType = (fileType: string): boolean =>
+  REFLOWABLE_FILE_TYPES.includes(fileType);
+
 export const isMainEligibleFileType = (fileType: string): boolean =>
   MAIN_ELIGIBLE_FILE_TYPES.includes(fileType);
 

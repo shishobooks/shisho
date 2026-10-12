@@ -466,16 +466,29 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 		return nil, errors.Wrap(err, "failed to fetch source book authors")
 	}
 
-	// Derive title from file's metadata name, falling back to filename on disk
+	// Derive title from file's metadata name, falling back to filename on
+	// disk. The title keeps the name's source, so a name the user set stays
+	// manual and a later scan cannot replace it with the embedded title.
 	var title string
 	var titleSource string
 	if file.Name != nil && *file.Name != "" {
 		title = *file.Name
 		titleSource = models.DataSourceFileMetadata
+		if file.NameSource != nil && *file.NameSource != "" {
+			titleSource = *file.NameSource
+		}
 	} else {
 		filename := filepath.Base(file.Filepath)
 		title = strings.TrimSuffix(filename, filepath.Ext(filename))
 		titleSource = models.DataSourceFilepath
+	}
+
+	// The sort title follows the title's source, as when a scan creates a
+	// Book, except that it is derived rather than set by hand: a manual title
+	// leaves it regenerable, as the edit handler does.
+	sortTitleSource := titleSource
+	if sortTitleSource == models.DataSourceManual {
+		sortTitleSource = models.DataSourceFilepath
 	}
 
 	// Determine book directory
@@ -554,7 +567,7 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 		Title:             title,
 		TitleSource:       titleSource,
 		SortTitle:         sortname.ForTitle(title),
-		SortTitleSource:   titleSource,
+		SortTitleSource:   sortTitleSource,
 		Subtitle:          sourceBook.Subtitle,
 		SubtitleSource:    sourceBook.SubtitleSource,
 		Description:       sourceBook.Description,
