@@ -60,6 +60,12 @@ Pages are read in file name order, folder names included, with numbers compared 
 
 Scanning a PDF turns its bookmarks into chapters, flattened into a single list. A bookmark that does not point at a page is skipped. Its nested bookmarks are still imported when they point at pages.
 
+## PDF Downloads
+
+A downloaded PDF is the original file, unchanged, with Shisho's metadata and bookmarks appended to the end as an update. PDF readers show the appended title, authors, description, tags, language, and chapters. Because the original bytes are kept, the file is not re-optimized, so it can be slightly larger than the original. A PDF optimized for fast web viewing (linearized) loses that optimization, so a browser may need the whole file before it shows the first page. A digital signature still covers the original bytes and verifies, though PDF readers report the document as changed after signing, and a certified PDF that permits no changes is shown as altered.
+
+Shisho cannot add its metadata to an encrypted PDF or to one whose internal structure it cannot read, so these count as files whose contents Shisho cannot rewrite, and downloads of them [fall back as described above](#capability-matrix).
+
 ## KePub Generation
 
 Shisho can generate Kobo-optimized KePub downloads from **EPUB and CBZ only**. M4B, PDF, MOBI, and AZW3 remain in their native formats. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for device delivery options.
