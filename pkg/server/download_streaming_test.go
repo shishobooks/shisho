@@ -125,6 +125,7 @@ func newDownloadFixture(t *testing.T, addFile func(dir string) (path, fileType s
 type route struct {
 	name   string
 	device bool
+	kepub  bool
 	path   func(f *streamingFixture) string
 	auth   func(f *streamingFixture, req *http.Request)
 }
@@ -136,6 +137,14 @@ func opdsRoute() route {
 		path:   func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d", f.file.ID) },
 		auth:   func(_ *streamingFixture, req *http.Request) { req.SetBasicAuth("admin", streamingPassword) },
 	}
+}
+
+func opdsKepubRoute() route {
+	r := opdsRoute()
+	r.name = "opds kepub"
+	r.kepub = true
+	r.path = func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d/kepub", f.file.ID) }
+	return r
 }
 
 func webRoute() route {
@@ -151,6 +160,7 @@ func webRoute() route {
 func webKepubRoute() route {
 	r := webRoute()
 	r.name = "web kepub"
+	r.kepub = true
 	r.path = func(f *streamingFixture) string { return fmt.Sprintf("/api/books/files/%d/download/kepub", f.file.ID) }
 	return r
 }
@@ -472,14 +482,22 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 }
 
 // A real CBZ with a page that cannot be read midway fails partway through
-// its first download: the client sees a cut download, device routes then
-// serve the Original File, and web UI routes return the error.
+// its first download, as a CBZ or a KePub: the client sees a cut download,
+// device routes then serve the Original File, and web UI routes return the
+// error.
 func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsRoute(), webRoute()} {
+	for _, r := range []route{opdsRoute(), webRoute(), opdsKepubRoute(), webKepubRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
-			gen := &gatedGenerator{StreamGenerator: &filegen.CBZGenerator{}, gate: make(chan struct{})}
+			builtIn, err := filegen.GetGenerator(models.FileTypeCBZ)
+			if r.kepub {
+				builtIn, err = filegen.GetKepubGenerator(models.FileTypeCBZ)
+			}
+			require.NoError(t, err)
+			sg, ok := builtIn.(filegen.StreamGenerator)
+			require.True(t, ok, "the generator does not stream")
+			gen := &gatedGenerator{StreamGenerator: sg, gate: make(chan struct{})}
 			f := newDownloadFixture(t, func(dir string) (string, string) {
 				return testgen.GenerateCorruptCBZ(t, dir, "Streamed.cbz", 40, 20), models.FileTypeCBZ
 			}, downloadcache.WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {

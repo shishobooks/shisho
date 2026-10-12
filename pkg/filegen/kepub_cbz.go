@@ -1,7 +1,9 @@
 package filegen
 
 import (
+	"archive/zip"
 	"context"
+	"io"
 	"sort"
 
 	"github.com/shishobooks/shisho/pkg/kepub"
@@ -27,16 +29,39 @@ func (g *KepubCBZGenerator) SupportedType() string {
 }
 
 // Generate creates a KePub file at destPath from a CBZ source.
-// The CBZ is converted to a fixed-layout EPUB with KePub enhancements.
-// Images are copied byte-for-byte without modification (lossless).
 func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	// Build metadata from book model
-	metadata := buildCBZMetadata(book, file)
+	return generateFile(ctx, g, models.FileTypeCBZ, srcPath, destPath, book, file)
+}
 
-	if err := g.converter.ConvertCBZWithMetadata(ctx, srcPath, destPath, metadata); err != nil {
-		return NewGenerationError(models.FileTypeCBZ, err, "failed to convert CBZ to KePub format")
+// Prepare reads the source's zip directory and checks that every page can
+// be read. Pages are read and processed only while writing.
+func (g *KepubCBZGenerator) Prepare(_ context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
+	srcZip, err := zip.NewReader(src, src.Size())
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeCBZ, err, "failed to read source CBZ as zip")
 	}
+	conversion, err := g.converter.PrepareCBZ(srcZip, buildCBZMetadata(book, file))
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeCBZ, err, "failed to convert CBZ to KePub format: "+err.Error())
+	}
+	return &kepubCBZPrepared{conversion: conversion}, nil
+}
 
+// kepubCBZPrepared writes a fixed-layout KePub converted from a CBZ.
+type kepubCBZPrepared struct {
+	conversion *kepub.CBZConversion
+}
+
+// Size reports no size: processed pages are only measured once written.
+func (p *kepubCBZPrepared) Size() (int64, bool) {
+	return 0, false
+}
+
+// Write writes the KePub to w, about one page at a time.
+func (p *kepubCBZPrepared) Write(ctx context.Context, w io.Writer) error {
+	if err := p.conversion.Write(ctx, w); err != nil {
+		return NewGenerationError(models.FileTypeCBZ, err, "failed to convert CBZ to KePub format: "+err.Error())
+	}
 	return nil
 }
 
