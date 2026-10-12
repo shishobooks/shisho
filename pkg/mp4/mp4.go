@@ -2,6 +2,7 @@ package mp4
 
 import (
 	"context"
+	"io"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
@@ -53,6 +54,19 @@ func ParseFull(path string) (*Metadata, error) {
 // ParseFullContext is ParseFull with cancellation support.
 func ParseFullContext(ctx context.Context, path string) (*Metadata, error) {
 	raw, err := readMetadataContext(ctx, path)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return convertRawMetadata(raw), nil
+}
+
+// ParseFullReaderContext is ParseFullContext for the first size bytes of r.
+// It reads the boxes it needs and skips over the audio.
+func ParseFullReaderContext(ctx context.Context, r io.ReaderAt, size int64) (*Metadata, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	raw, err := readMetadataSeekerContext(ctx, io.NewSectionReader(r, 0, size))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

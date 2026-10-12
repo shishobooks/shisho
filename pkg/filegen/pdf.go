@@ -34,7 +34,7 @@ func (g *PDFGenerator) SupportedType() string {
 
 // Generate writes the Generated File to destPath.
 func (g *PDFGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	return generateToPath(ctx, g, srcPath, destPath, book, file)
+	return generateFile(ctx, g, models.FileTypePDF, srcPath, destPath, book, file)
 }
 
 // Prepare reads the end of the PDF (its cross-reference data and

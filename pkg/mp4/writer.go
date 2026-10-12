@@ -67,7 +67,7 @@ func writeToFileContext(ctx context.Context, srcPath, destPath string, metadata 
 		return errors.WithStack(err)
 	}
 
-	boxes, err := inspectTopLevelBoxes(ctx, src, info.Size())
+	rewrite, err := PrepareRewrite(ctx, src, info.Size(), metadata)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -86,7 +86,7 @@ func writeToFileContext(ctx context.Context, srcPath, destPath string, metadata 
 		_ = os.Remove(tmpPath)
 	}()
 
-	if err := rewriteToFile(ctx, src, tmp, info.Size(), boxes, metadata); err != nil {
+	if err := rewrite.WriteTo(ctx, tmp); err != nil {
 		return errors.WithStack(err)
 	}
 	afterInfo, err := src.Stat()
@@ -221,13 +221,39 @@ func inspectTopLevelBoxes(ctx context.Context, input io.ReaderAt, fileSize int64
 	return boxes, nil
 }
 
-// rewriteToFile rebuilds only moov plus the modified metadata, cover, and
-// chapter samples, and copies every unchanged box, above all the audio mdat,
-// through a fixed buffer. Peak memory must scale with the modified structures,
-// never the audiobook size; writer_streaming_test.go enforces a bound.
-func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize int64, boxes []fileBox, metadata *Metadata) error {
+// Rewrite is an M4B rewrite planned from the source's box layout and moov,
+// ready to be written front to back. Its size is known before the first
+// byte, so a download can send it as Content-Length.
+type Rewrite struct {
+	src     io.ReaderAt
+	boxes   []fileBox
+	moov    *fileBox
+	newMoov []byte
+	// chapterOutput is written after every box when the chapter track is
+	// rebuilt: the chapter samples, in their own mdat unless they extend a
+	// final mdat that runs to the end of the file.
+	chapterOutput   []byte
+	appendChapters  bool
+	promoteFinalBox bool
+	size            int64
+}
+
+// PrepareRewrite plans writing src with metadata. It reads only the box
+// headers and moov, rebuilding moov with the metadata, cover, and chapter
+// track, and computing every offset the output needs, so all of the work
+// that can fail on a malformed file happens before any byte is written.
+//
+// Only moov and the chapter samples are held in memory; WriteTo copies every
+// unchanged box, above all the audio mdat, through a fixed buffer. Peak
+// memory must scale with the modified structures, never the audiobook size;
+// writer_streaming_test.go enforces a bound.
+func PrepareRewrite(ctx context.Context, src io.ReaderAt, sourceSize int64, metadata *Metadata) (*Rewrite, error) {
 	if sourceSize < 0 {
-		return errors.New("source file size is negative")
+		return nil, errors.New("source file size is negative")
+	}
+	boxes, err := inspectTopLevelBoxes(ctx, src, sourceSize)
+	if err != nil {
+		return nil, err
 	}
 
 	var moov *fileBox
@@ -243,22 +269,22 @@ func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize
 		}
 	}
 	if moov == nil {
-		return errors.New("moov box not found")
+		return nil, errors.New("moov box not found")
 	}
 	if moov.size > maxInMemoryMoovSize {
-		return errors.Errorf("moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
+		return nil, errors.Errorf("moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
 	// #nosec G115 -- moov.size is positive and bounded by maxInMemoryMoovSize.
 	moovData := make([]byte, int(moov.size))
 	if _, err := src.ReadAt(moovData, moov.offset); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	origContent := moovData[moov.headerSize:]
 	moovContent := replaceIlstInContent(origContent, metadata)
@@ -271,11 +297,11 @@ func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	newMoov := buildBox("moov", moovContent)
 	if int64(len(newMoov)) > maxInMemoryMoovSize {
-		return errors.Errorf("rewritten moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
+		return nil, errors.Errorf("rewritten moov box exceeds %d-byte safety limit", maxInMemoryMoovSize)
 	}
 
 	// The chapter co64 holds a placeholder during the shift below, so the
@@ -295,7 +321,7 @@ func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize
 		delta := int64(len(newMoov)) - moov.size
 		if delta != 0 {
 			if err := shiftChunkOffsets(newMoov, delta); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
@@ -315,54 +341,81 @@ func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize
 			partSize = int64(len(newMoov))
 		} else if promoteFinalBox && i == len(boxes)-1 {
 			if partSize > math.MaxInt64-8 {
-				return errors.New("promoted final box exceeds supported file size")
+				return nil, errors.New("promoted final box exceeds supported file size")
 			}
 			partSize += 8
 		}
 		if partSize > math.MaxInt64-outputSize {
-			return errors.New("rewritten file size exceeds supported file size")
+			return nil, errors.New("rewritten file size exceeds supported file size")
 		}
 		outputSize += partSize
+	}
+
+	r := &Rewrite{
+		src:             src,
+		boxes:           boxes,
+		moov:            moov,
+		newMoov:         newMoov,
+		appendChapters:  appendChaptersToFinalMdat,
+		promoteFinalBox: promoteFinalBox,
+		size:            outputSize,
 	}
 	if chapterMdat != nil {
 		sampleDataOffset := outputSize
 		if !appendChaptersToFinalMdat {
 			if sampleDataOffset > math.MaxInt64-8 {
-				return errors.New("chapter sample offset exceeds supported file size")
+				return nil, errors.New("chapter sample offset exceeds supported file size")
 			}
 			sampleDataOffset += 8
 		}
 		if int64(len(chapterMdat.sampleData)) > math.MaxInt64-sampleDataOffset {
-			return errors.New("chapter samples exceed supported file size")
+			return nil, errors.New("chapter samples exceed supported file size")
 		}
 		patchPos := 8 + chapterMdat.co64FieldOffset
 		// #nosec G115 -- sampleDataOffset is non-negative and checked for overflow above.
 		binary.BigEndian.PutUint64(newMoov[patchPos:patchPos+8], uint64(sampleDataOffset))
-	}
 
+		r.chapterOutput = chapterMdat.sampleData
+		if !appendChaptersToFinalMdat {
+			r.chapterOutput = buildBox("mdat", r.chapterOutput)
+		}
+		r.size = sampleDataOffset + int64(len(chapterMdat.sampleData))
+	}
+	return r, nil
+}
+
+// Size returns the exact number of bytes WriteTo writes.
+func (r *Rewrite) Size() int64 {
+	return r.size
+}
+
+// WriteTo writes the rewritten file to dest front to back, copying every
+// unchanged box from the source.
+func (r *Rewrite) WriteTo(ctx context.Context, dest io.Writer) error {
+	boxes := r.boxes
 	buffer := make([]byte, copyBufferSize)
 	for i, box := range boxes {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if box.offset == moov.offset {
-			if _, err := dest.Write(newMoov); err != nil {
+		if box.offset == r.moov.offset {
+			if _, err := dest.Write(r.newMoov); err != nil {
 				return err
 			}
 			continue
 		}
 
-		if chapterMdat != nil && i == len(boxes)-1 && box.toEOF && !appendChaptersToFinalMdat {
-			if promoteFinalBox {
+		if r.chapterOutput != nil && i == len(boxes)-1 && box.toEOF && !r.appendChapters {
+			if r.promoteFinalBox {
 				header := make([]byte, 16)
 				binary.BigEndian.PutUint32(header[:4], 1)
 				copy(header[4:8], box.typ)
-				// #nosec G115 -- the promoted size is checked against MaxInt64 above.
+				// #nosec G115 -- the promoted size is checked against MaxInt64 when planning.
 				binary.BigEndian.PutUint64(header[8:16], uint64(box.size+8))
 				if _, err := dest.Write(header); err != nil {
 					return err
 				}
-				if err := copySectionContext(ctx, dest, src, box.offset+8, box.size-8, buffer); err != nil {
+				if err := copySectionContext(ctx, dest, r.src, box.offset+8, box.size-8, buffer); err != nil {
 					return err
 				}
 				continue
@@ -374,25 +427,21 @@ func rewriteToFile(ctx context.Context, src *os.File, dest io.Writer, sourceSize
 			if _, err := dest.Write(header); err != nil {
 				return err
 			}
-			if err := copySectionContext(ctx, dest, src, box.offset+4, box.size-4, buffer); err != nil {
+			if err := copySectionContext(ctx, dest, r.src, box.offset+4, box.size-4, buffer); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := copySectionContext(ctx, dest, src, box.offset, box.size, buffer); err != nil {
+		if err := copySectionContext(ctx, dest, r.src, box.offset, box.size, buffer); err != nil {
 			return err
 		}
 	}
 
-	if chapterMdat != nil {
+	if r.chapterOutput != nil {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		chapterOutput := chapterMdat.sampleData
-		if !appendChaptersToFinalMdat {
-			chapterOutput = buildBox("mdat", chapterOutput)
-		}
-		if _, err := dest.Write(chapterOutput); err != nil {
+		if _, err := dest.Write(r.chapterOutput); err != nil {
 			return err
 		}
 	}
