@@ -45,6 +45,17 @@ func Pack(hist History, pkgs []Package, n int) [][]Item {
 
 const unknownPackageFallbackPerTest = 30.0
 
+// maxItemSeconds caps the estimated size of any one planned item, in summed
+// per-test seconds. go test times out each package's run after 10 minutes of
+// wallclock, and tests run in parallel, so summed seconds are about 2.5 to 3.5
+// times wallclock on CI runners. Splitting only against the ideal shard load
+// leaves a package whole whenever the suite total grows faster than it does.
+// The cap keeps an item to about 4 to 5 minutes uncontended, whatever the
+// suite total, which leaves headroom for whole packages sharing the runner
+// with the shard's other whole packages. A single test over the cap cannot be
+// split.
+const maxItemSeconds = 720.0
+
 // estimateDuration returns the best guess for one test's wallclock:
 //   - exact JUnit value if known
 //   - else the median of other known tests in this package
@@ -66,8 +77,9 @@ func estimateDuration(hist History, pkg, test string) float64 {
 }
 
 // buildItems turns each Package into one or more Items. Hot packages (wallclock
-// > ideal*0.8) are split into K chunks via test-level LPT so that no single
-// item dominates a shard. Packages with ≤1 test are always kept whole.
+// > ideal*0.8, or > maxItemSeconds) are split into K chunks via test-level LPT
+// so that no single item dominates a shard or runs long enough to time out.
+// Packages with ≤1 test are always kept whole.
 func buildItems(hist History, pkgs []Package, n int) []Item {
 	// First pass: compute each package's estimated wallclock and the global total.
 	pkgWall := make(map[string]float64, len(pkgs))
@@ -89,7 +101,7 @@ func buildItems(hist History, pkgs []Package, n int) []Item {
 		return out
 	}
 	ideal := total / float64(n)
-	threshold := ideal * 0.8
+	threshold := math.Min(ideal*0.8, maxItemSeconds)
 
 	items := make([]Item, 0, len(pkgs))
 	for _, p := range pkgs {
@@ -102,9 +114,25 @@ func buildItems(hist History, pkgs []Package, n int) []Item {
 		if k > len(p.Tests) {
 			k = len(p.Tests)
 		}
-		items = append(items, chunkPackage(p, hist, k)...)
+		chunks := chunkPackage(p, hist, k)
+		// Coarse tests can leave a chunk over the threshold; add chunks
+		// until each fits or every test has its own.
+		for k < len(p.Tests) && largest(chunks) > threshold {
+			k++
+			chunks = chunkPackage(p, hist, k)
+		}
+		items = append(items, chunks...)
 	}
 	return items
+}
+
+// largest returns the biggest Duration among items.
+func largest(items []Item) float64 {
+	var m float64
+	for _, it := range items {
+		m = math.Max(m, it.Duration)
+	}
+	return m
 }
 
 // chunkPackage assigns p.Tests to k chunks via LPT, returning k Items each
