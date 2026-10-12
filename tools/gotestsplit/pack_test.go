@@ -309,3 +309,34 @@ func TestPack_SplitsPackageOverMaxItem(t *testing.T) {
 		}
 	}
 }
+
+func TestPack_CoarseTestsStillFitUnderMaxItem(t *testing.T) {
+	t.Parallel()
+	// Three tests of 5/9 of the cap: two chunks would put two tests, over the
+	// cap, in one of them, so the package needs three.
+	test := maxItemSeconds * 5 / 9
+	big := Package{Path: "big", Tests: []string{"T1", "T2", "T3"}}
+	hist := History{"big": {"T1": test, "T2": test, "T3": test}}
+	pkgs := []Package{big}
+	for _, name := range []string{"f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"} {
+		pkgs = append(pkgs, Package{Path: name, Tests: []string{"T"}})
+		hist[name] = map[string]float64{"T": 2 * maxItemSeconds}
+	}
+
+	var chunks []Item
+	for _, shard := range Pack(hist, pkgs, 2) {
+		for _, it := range shard {
+			if it.Pkg == "big" {
+				chunks = append(chunks, it)
+			}
+		}
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("big planned as %d item(s), want 3: %+v", len(chunks), chunks)
+	}
+	for _, c := range chunks {
+		if c.Duration > maxItemSeconds {
+			t.Errorf("chunk %+v is over %v seconds", c, maxItemSeconds)
+		}
+	}
+}
