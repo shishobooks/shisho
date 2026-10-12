@@ -16,7 +16,7 @@ For image bytes from outside the file (enricher, download, upload), the validity
 
 ## Serving file bytes
 
-- **Every route that serves a file from disk calls `httputil.ServeFile`** (forbidigo enforces it) and sets no `Cache-Control`, `Content-Type`, `Content-Disposition`, or `ETag` before it: Echo's error handler keeps preset headers, so a failure would go out cacheable, typed as an image, or as an attachment. A route that builds its own body sets headers only after the body is ready.
+- **Every route that serves a file from disk calls `httputil.ServeFile`** (forbidigo enforces it), or `books.Download.Serve`, which sends a Generated File still being built with `httputil.ServeStream`. The route sets no `Cache-Control`, `Content-Type`, `Content-Disposition`, or `ETag` before that call: Echo's error handler keeps preset headers, so a failure would go out cacheable, typed as an image, or as an attachment. A route that builds its own body sets headers only after the body is ready.
 - **Book files pass an explicit content type** (`models.FileTypeMimeType`), because the Alpine image's mime table has no entry for most book formats.
 - **Check existence with `books.RequireFileOnDisk`**, not an inline `os.Stat`, before serving or before a cache lookup keyed on the source.
 - **Never parse `Range` by hand**; `http.ServeContent` handles it.
@@ -29,3 +29,5 @@ Every file-serving response carries `Cache-Control`; without it, reverse proxies
 ## Downloads
 
 Book downloads go through `books.Download.Serve`. **Device and Share Link downloads fall back to the original; web routes do not.** OPDS, eReader, Kobo, and Share Link routes choose what to send with `books.ResolveFallbackDownload`, because a device or recipient has no Download Original. The web app's download routes report the generation error instead.
+
+**A route that serves a Generated File gets it from `books.GeneratedDownload` or `books.ResolveFallbackDownload`**, which stream the file while it is built and answer HEAD from the preparation step alone (ADR 0010). The cache's `GetOrGenerate` waits for the whole build, so a route calling it sends nothing until the file is complete and devices time out; it is for bulk download, which runs as a job.

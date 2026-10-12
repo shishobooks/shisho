@@ -2,7 +2,9 @@ package books
 
 import (
 	"context"
+	"io"
 	"io/fs"
+	"net/http"
 	"path/filepath"
 
 	"github.com/labstack/echo/v4"
@@ -21,6 +23,10 @@ type Download struct {
 	Path        string
 	Filename    string
 	ContentType string
+
+	// building is set instead of Path for a Generated File that is still
+	// being built: Serve streams it as it grows.
+	building *downloadcache.Generated
 }
 
 // KepubContentType is the media type a KePub download is served as (Kobo
@@ -52,30 +58,22 @@ func OriginalDownload(file *models.File) *Download {
 //
 // The web app's download routes do not fall back: a browser user sees the
 // error and has Download Original.
-func ResolveFallbackDownload(ctx context.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, kepub bool) (*Download, error) {
+func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, kepub bool) (*Download, error) {
+	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {
 		return OriginalDownload(file), nil
 	}
 	// Check for a generator before the cache is touched, so a full or
 	// read-only cache cannot fail a file there is nothing to generate for.
-	// GetOrGenerateKepub makes the same check for KePub itself.
+	// The cache makes the same check for KePub itself.
 	if _, err := filegen.GetGenerator(file.FileType); !kepub && errors.Is(err, filegen.ErrNotImplemented) {
 		return OriginalDownload(file), nil
 	}
 
-	var path, filename string
-	var err error
-	if kepub {
-		path, filename, err = cache.GetOrGenerateKepub(ctx, book, file)
-	} else {
-		path, filename, err = cache.GetOrGenerate(ctx, book, file)
-	}
+	download, err := GeneratedDownload(c, cache, book, file, kepub)
 	switch {
 	case err == nil:
-		if kepub {
-			return &Download{Path: path, Filename: filename, ContentType: KepubContentType}, nil
-		}
-		return &Download{Path: path, Filename: filename, ContentType: models.FileTypeMimeType(file.FileType)}, nil
+		return download, nil
 	case errors.Is(err, filegen.ErrNotImplemented), errors.Is(err, filegen.ErrKepubNotSupported):
 		return OriginalDownload(file), nil
 	case isGenerationFallback(err):
@@ -103,14 +101,53 @@ func isGenerationFallback(err error) bool {
 		!errors.Is(err, context.DeadlineExceeded)
 }
 
+// GeneratedDownload returns the Generated File for the book's file, or its
+// KePub conversion when kepub is set: the cached file, or the file streamed
+// while it is built (ADR 0010). A HEAD request runs only the preparation
+// step, so it reports an error or the size without generating. Errors from
+// the preparation step are returned before anything is sent. A Download
+// returned here must be served: a file still being built holds the cache's
+// handle on it until Serve has read it.
+func GeneratedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, kepub bool) (*Download, error) {
+	ctx := c.Request().Context()
+	var generated *downloadcache.Generated
+	var err error
+	if c.Request().Method == http.MethodHead {
+		generated, err = cache.Head(ctx, book, file, kepub)
+	} else {
+		generated, err = cache.Open(ctx, book, file, kepub)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	download := &Download{Path: generated.Path, Filename: generated.Filename, ContentType: models.FileTypeMimeType(file.FileType)}
+	if kepub {
+		download.ContentType = KepubContentType
+	}
+	if generated.Path == "" {
+		download.building = generated
+	}
+	return download, nil
+}
+
 // Serve sends the download as an attachment no cache may store. Options
 // passed here apply after the defaults, so a caller can override one, as the
-// Kobo route does with its Content-Type.
+// Kobo route does with its Content-Type. A Generated File still being built
+// is streamed whole, ignoring Range, with its size when it is known.
 func (d *Download) Serve(c echo.Context, opts ...httputil.ServeOption) error {
-	defaults := []httputil.ServeOption{
+	opts = append([]httputil.ServeOption{
 		httputil.WithContentType(d.ContentType),
 		httputil.WithAttachment(d.Filename),
 		httputil.WithCacheControl("private, no-store"),
+	}, opts...)
+	if d.building != nil {
+		var body io.Reader
+		if d.building.Body != nil {
+			defer d.building.Body.Close()
+			body = d.building.Body
+		}
+		return httputil.ServeStream(c, body, d.building.Size, opts...)
 	}
-	return httputil.ServeFile(c, d.Path, errcodes.NotFound("File"), append(defaults, opts...)...)
+	return httputil.ServeFile(c, d.Path, errcodes.NotFound("File"), opts...)
 }

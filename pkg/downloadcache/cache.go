@@ -2,8 +2,10 @@ package downloadcache
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -14,182 +16,138 @@ import (
 )
 
 // Cache manages the download cache for generated files.
+//
+// A Generated File is built by a job running in the background, detached
+// from the request that asked for it, which writes into a partial file in
+// the cache (ADR 0010). Every download of the file while the job runs, the
+// first one included, reads that partial file as it grows. A client that
+// disconnects leaves the job running, so the file still lands in the cache.
 type Cache struct {
 	dir               string
 	maxSize           int64
 	ShouldSkipCleanup func() bool
 
-	// cleanups tracks background cleanups so Wait can drain them.
-	cleanups sync.WaitGroup
+	// generators overrides the built-in generator lookup (WithGenerators).
+	generators GeneratorLookup
 
-	// generating serializes generation per destination path. Requests for the
-	// same output wait and then reuse the file the first one published.
-	generating keyedLock
+	// ctx ends when Close is called, canceling every job.
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// background tracks cleanups and running jobs so Wait can drain them.
+	background sync.WaitGroup
+
+	// mu guards jobs, the running job for each cache entry and fingerprint,
+	// and closed, which stops new jobs once Close has begun.
+	mu     sync.Mutex
+	jobs   map[string]*job
+	closed bool
+
+	// publishMu serializes publishing. Fingerprints of one file share its
+	// cached path, so a rename and its metadata write must not interleave
+	// with another job's.
+	publishMu sync.Mutex
+}
+
+// GeneratorLookup returns the generator for a file type, or its KePub
+// generator when kepub is set.
+type GeneratorLookup func(fileType string, kepub bool) (filegen.StreamGenerator, error)
+
+// Option configures a Cache.
+type Option func(*Cache)
+
+// WithGenerators replaces the built-in generators, so tests can stand in a
+// generator they control.
+func WithGenerators(lookup GeneratorLookup) Option {
+	return func(c *Cache) { c.generators = lookup }
 }
 
 // NewCache creates a new Cache with the given directory and max size.
-func NewCache(dir string, maxSizeBytes int64) *Cache {
-	return &Cache{
+func NewCache(dir string, maxSizeBytes int64, opts ...Option) *Cache {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &Cache{
 		dir:     dir,
 		maxSize: maxSizeBytes,
+		ctx:     ctx,
+		cancel:  cancel,
+		jobs:    make(map[string]*job),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
-// GetOrGenerate returns the path to a cached file, generating it if necessary.
-// It returns the cached file path, the formatted download filename, and any error.
+// Generated is a Generated File ready to send. Either Path names the
+// complete file in the cache, or the file is still being built and Body
+// streams it.
+type Generated struct {
+	// Filename is the name to save the download under.
+	Filename string
+	// Path is the complete file in the cache, or "" while it is being built.
+	Path string
+	// Size is the exact size of a file still being built, or -1 when it is
+	// not known until the file is complete.
+	Size int64
+	// Body reads a file still being built as it grows. It is nil for a
+	// cached file and for Head. The caller closes it.
+	Body io.ReadCloser
+}
+
+// Open returns the cached Generated File for the book's file, or starts
+// building it (or joins the build already running) and streams it. An error
+// from the preparation step is returned before anything is sent. The build
+// keeps running if ctx ends.
+func (c *Cache) Open(ctx context.Context, book *models.Book, file *models.File, kepub bool) (*Generated, error) {
+	e, err := c.entryFor(book, file, kepub)
+	if err != nil {
+		return nil, err
+	}
+	return c.open(ctx, e, false)
+}
+
+// Head answers a HEAD request for the Generated File: the cached file when
+// there is one, and otherwise the result of the preparation step alone,
+// which reports any error and the size when it is known. Nothing is
+// generated, except by generators that build a whole file before streaming
+// it: their preparation step is the build, so Head starts it as Open would
+// and the build lands in the cache.
+func (c *Cache) Head(ctx context.Context, book *models.Book, file *models.File, kepub bool) (*Generated, error) {
+	e, err := c.entryFor(book, file, kepub)
+	if err != nil {
+		return nil, err
+	}
+	return c.open(ctx, e, true)
+}
+
+// GetOrGenerate returns the path to a cached file, generating it if necessary
+// and waiting until it is complete. It returns the cached file path, the
+// formatted download filename, and any error.
 func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *models.File) (cachedPath string, downloadFilename string, err error) {
-	// Compute the fingerprint for the current state
-	fp, err := ComputeFingerprint(book, file)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to compute fingerprint")
-	}
-
-	hash, err := fp.Hash()
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to hash fingerprint")
-	}
-
-	downloadFilename = FormatDownloadFilename(book, file)
-
-	cachedPath, err = c.getOrGenerate(ctx, cachedFilename(c.dir, file.ID, file.FileType), cacheOps{
-		lookup: func() (string, error) { return GetCachedFilePath(c.dir, file.ID, file.FileType, hash) },
-		touch:  func() { _ = UpdateLastAccessed(c.dir, file.ID) },
-		generate: func(stagedPath string) error {
-			generator, err := filegen.GetGenerator(file.FileType)
-			if err != nil {
-				return errors.Wrap(err, "failed to get generator")
-			}
-			return errors.Wrap(generator.Generate(ctx, file.Filepath, stagedPath, book, file), "failed to generate file")
-		},
-		writeMeta: func(meta *CacheMetadata) error {
-			return errors.Wrap(WriteMetadata(c.dir, meta), "failed to write cache metadata")
-		},
-		meta: CacheMetadata{FileID: file.ID, FingerprintHash: hash},
-	})
+	e, err := c.entryFor(book, file, false)
 	if err != nil {
 		return "", "", err
 	}
-	return cachedPath, downloadFilename, nil
+	path, err := c.complete(ctx, e)
+	return path, e.filename, err
 }
 
-// GetOrGenerateKepub returns the path to a cached KePub file, generating it if necessary.
-// It returns the cached file path, the formatted download filename, and any error.
-// Returns ErrKepubNotSupported if the file type cannot be converted to KePub.
+// GetOrGenerateKepub returns the path to a cached KePub file, generating it
+// if necessary and waiting until it is complete. It returns the cached file
+// path, the formatted download filename, and any error. Returns
+// ErrKepubNotSupported if the file type cannot be converted to KePub.
 func (c *Cache) GetOrGenerateKepub(ctx context.Context, book *models.Book, file *models.File) (cachedPath string, downloadFilename string, err error) {
-	// Check if this file type supports KePub conversion
-	if !filegen.SupportsKepub(file.FileType) {
-		return "", "", filegen.ErrKepubNotSupported
-	}
-
-	// Compute the fingerprint for the current state with KePub format
-	fp, err := ComputeFingerprint(book, file)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to compute fingerprint")
-	}
-	fp.Format = FormatKepub
-
-	hash, err := fp.Hash()
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to hash fingerprint")
-	}
-
-	downloadFilename = FormatKepubDownloadFilename(book, file)
-
-	cachedPath, err = c.getOrGenerate(ctx, kepubCachedFilename(c.dir, file.ID), cacheOps{
-		lookup: func() (string, error) { return GetKepubCachedFilePath(c.dir, file.ID, hash) },
-		touch:  func() { _ = UpdateKepubLastAccessed(c.dir, file.ID) },
-		generate: func(stagedPath string) error {
-			generator, err := filegen.GetKepubGenerator(file.FileType)
-			if err != nil {
-				return errors.Wrap(err, "failed to get kepub generator")
-			}
-			return errors.Wrap(generator.Generate(ctx, file.Filepath, stagedPath, book, file), "failed to generate kepub file")
-		},
-		writeMeta: func(meta *CacheMetadata) error {
-			return errors.Wrap(WriteKepubMetadata(c.dir, meta), "failed to write kepub cache metadata")
-		},
-		meta: CacheMetadata{FileID: file.ID, Format: FormatKepub, FingerprintHash: hash},
-	})
+	e, err := c.entryFor(book, file, true)
 	if err != nil {
 		return "", "", err
 	}
-	return cachedPath, downloadFilename, nil
+	path, err := c.complete(ctx, e)
+	return path, e.filename, err
 }
 
-// cacheOps describes one kind of cache entry for getOrGenerate.
-type cacheOps struct {
-	// lookup returns the published path if it matches the current
-	// fingerprint, or "" on a miss.
-	lookup func() (string, error)
-	// touch records a cache hit. Failures are ignored.
-	touch func()
-	// generate writes the output to stagedPath.
-	generate func(stagedPath string) error
-	// writeMeta publishes metadata for a freshly generated file.
-	writeMeta func(meta *CacheMetadata) error
-	// meta carries the identifying fields; timestamps and size are filled in.
-	meta CacheMetadata
-}
-
-// getOrGenerate returns destPath when lookup reports a hit, and otherwise
-// generates it. Generation for a given destPath is serialized, and every
-// waiter checks the cache again once it holds the lock, so concurrent cold
-// reads of the same file generate it once. Different fingerprints of one file
-// share a destPath, so they are serialized too.
-func (c *Cache) getOrGenerate(ctx context.Context, destPath string, ops cacheOps) (string, error) {
-	if existing, err := ops.lookup(); err != nil {
-		return "", errors.Wrap(err, "failed to check cache")
-	} else if existing != "" {
-		ops.touch()
-		return existing, nil
-	}
-
-	release, err := c.generating.acquire(ctx, destPath)
-	if err != nil {
-		return "", errors.Wrap(err, "waiting for cache generation")
-	}
-	defer release()
-
-	if existing, err := ops.lookup(); err != nil {
-		return "", errors.Wrap(err, "failed to check cache")
-	} else if existing != "" {
-		ops.touch()
-		return existing, nil
-	}
-
-	size, err := generateInto(c.dir, destPath, ops.generate)
-	if err != nil {
-		return "", err
-	}
-
-	now := time.Now()
-	meta := ops.meta
-	meta.GeneratedAt = now
-	meta.LastAccessedAt = now
-	meta.SizeBytes = size
-	if err := ops.writeMeta(&meta); err != nil {
-		// Without metadata the file is unreachable, so don't leave it behind.
-		os.Remove(destPath)
-		return "", err
-	}
-
-	c.triggerCleanupAsync()
-
-	return destPath, nil
-}
-
-// Invalidate removes the cached file for a given file ID.
-func (c *Cache) Invalidate(fileID int, fileType string) error {
-	return DeleteCachedFile(c.dir, fileID, fileType)
-}
-
-// InvalidateKepub removes the cached KePub file for a given file ID.
-func (c *Cache) InvalidateKepub(fileID int) error {
-	return DeleteKepubCachedFile(c.dir, fileID)
-}
-
-// GetOrGeneratePlugin returns the path to a cached plugin-generated file.
-// The pluginGenerator handles both generation and fingerprinting.
+// GetOrGeneratePlugin returns the path to a cached plugin-generated file,
+// waiting until it is complete. The pluginGenerator handles both generation
+// and fingerprinting.
 func (c *Cache) GetOrGeneratePlugin(ctx context.Context, book *models.Book, file *models.File, generator *plugins.PluginGenerator) (cachedPath string, downloadFilename string, err error) {
 	formatID := generator.SupportedType()
 
@@ -212,23 +170,403 @@ func (c *Cache) GetOrGeneratePlugin(ctx context.Context, book *models.Book, file
 		return "", "", errors.Wrap(err, "failed to hash fingerprint")
 	}
 
-	downloadFilename = FormatPluginDownloadFilename(book, file, formatID)
-
-	cachedPath, err = c.getOrGenerate(ctx, pluginCachedFilename(c.dir, file.ID, formatID), cacheOps{
-		lookup: func() (string, error) { return GetPluginCachedFilePath(c.dir, file.ID, formatID, hash) },
-		touch:  func() { _ = UpdatePluginLastAccessed(c.dir, file.ID, formatID) },
-		generate: func(stagedPath string) error {
-			return errors.Wrap(generator.Generate(ctx, file.Filepath, stagedPath, book, file), "failed to generate plugin file")
-		},
+	destPath := pluginCachedFilename(c.dir, file.ID, formatID)
+	e := &entry{
+		book:     book,
+		file:     file,
+		hash:     hash,
+		destPath: destPath,
+		filename: FormatPluginDownloadFilename(book, file, formatID),
+		lookup:   func() (string, error) { return GetPluginCachedFilePath(c.dir, file.ID, formatID, hash) },
+		touch:    func() { _ = UpdatePluginLastAccessed(c.dir, file.ID, formatID) },
 		writeMeta: func(meta *CacheMetadata) error {
 			return errors.Wrap(WritePluginMetadata(c.dir, file.ID, formatID, meta), "failed to write plugin cache metadata")
 		},
 		meta: CacheMetadata{FileID: file.ID, Format: "plugin:" + formatID, FingerprintHash: hash},
-	})
-	if err != nil {
-		return "", "", err
+		generator: func() (filegen.StreamGenerator, error) {
+			return fullBuild{gen: generator, dir: c.dir, name: filepath.Base(destPath), what: "failed to generate plugin file"}, nil
+		},
 	}
-	return cachedPath, downloadFilename, nil
+	path, err := c.complete(ctx, e)
+	return path, e.filename, err
+}
+
+// entry describes one cache entry: a file in one output format, at one
+// fingerprint.
+type entry struct {
+	book *models.Book
+	file *models.File
+	hash string
+	// destPath is where the complete file is published. Fingerprints of one
+	// file share it.
+	destPath string
+	filename string
+	// lookup returns the published path if it matches the current
+	// fingerprint, or "" on a miss.
+	lookup func() (string, error)
+	// touch records a cache hit. Failures are ignored.
+	touch func()
+	// writeMeta publishes metadata for a freshly generated file.
+	writeMeta func(meta *CacheMetadata) error
+	// meta carries the identifying fields; timestamps and size are filled in.
+	meta CacheMetadata
+	// generator returns the generator that builds the file.
+	generator func() (filegen.StreamGenerator, error)
+}
+
+func (e *entry) key() string {
+	return e.destPath + "\x00" + e.hash
+}
+
+// entryFor describes the cache entry for the book's file, or its KePub
+// conversion when kepub is set.
+func (c *Cache) entryFor(book *models.Book, file *models.File, kepub bool) (*entry, error) {
+	if kepub && !filegen.SupportsKepub(file.FileType) {
+		return nil, filegen.ErrKepubNotSupported
+	}
+
+	fp, err := ComputeFingerprint(book, file)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to compute fingerprint")
+	}
+	if kepub {
+		fp.Format = FormatKepub
+	}
+	hash, err := fp.Hash()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to hash fingerprint")
+	}
+
+	e := &entry{book: book, file: file, hash: hash}
+	e.generator = func() (filegen.StreamGenerator, error) { return c.generatorFor(e, kepub) }
+	if kepub {
+		e.destPath = kepubCachedFilename(c.dir, file.ID)
+		e.filename = FormatKepubDownloadFilename(book, file)
+		e.lookup = func() (string, error) { return GetKepubCachedFilePath(c.dir, file.ID, hash) }
+		e.touch = func() { _ = UpdateKepubLastAccessed(c.dir, file.ID) }
+		e.writeMeta = func(meta *CacheMetadata) error {
+			return errors.Wrap(WriteKepubMetadata(c.dir, meta), "failed to write kepub cache metadata")
+		}
+		e.meta = CacheMetadata{FileID: file.ID, Format: FormatKepub, FingerprintHash: hash}
+		return e, nil
+	}
+	e.destPath = cachedFilename(c.dir, file.ID, file.FileType)
+	e.filename = FormatDownloadFilename(book, file)
+	e.lookup = func() (string, error) { return GetCachedFilePath(c.dir, file.ID, file.FileType, hash) }
+	e.touch = func() { _ = UpdateLastAccessed(c.dir, file.ID) }
+	e.writeMeta = func(meta *CacheMetadata) error {
+		return errors.Wrap(WriteMetadata(c.dir, meta), "failed to write cache metadata")
+	}
+	e.meta = CacheMetadata{FileID: file.ID, FingerprintHash: hash}
+	return e, nil
+}
+
+// generatorFor returns the generator for e's file. A built-in generator
+// that does not stream yet is adapted with fullBuild.
+func (c *Cache) generatorFor(e *entry, kepub bool) (filegen.StreamGenerator, error) {
+	if c.generators != nil {
+		return c.generators(e.file.FileType, kepub)
+	}
+	var gen filegen.Generator
+	var err error
+	what := "failed to generate file"
+	if kepub {
+		gen, err = filegen.GetKepubGenerator(e.file.FileType)
+		what = "failed to generate kepub file"
+	} else {
+		gen, err = filegen.GetGenerator(e.file.FileType)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get generator")
+	}
+	if sg, ok := gen.(filegen.StreamGenerator); ok {
+		return sg, nil
+	}
+	return fullBuild{gen: gen, dir: c.dir, name: filepath.Base(e.destPath), what: what}, nil
+}
+
+// open serves Open and Head.
+func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, error) {
+	hit, err := c.lookup(e)
+	if err != nil {
+		return nil, err
+	}
+	if hit != "" {
+		return &Generated{Filename: e.filename, Path: hit}, nil
+	}
+
+	gen, err := e.generator()
+	if err != nil {
+		return nil, err
+	}
+	if _, builds := gen.(fullBuild); head && !builds {
+		return c.prepareOnly(ctx, e, gen)
+	}
+
+	j, hit, err := c.join(ctx, e, gen)
+	if err != nil {
+		return nil, err
+	}
+	if hit != "" {
+		return &Generated{Filename: e.filename, Path: hit}, nil
+	}
+	select {
+	case <-j.prepared:
+	case <-ctx.Done():
+		return nil, errors.WithStack(ctx.Err())
+	}
+	if j.prepErr != nil {
+		return nil, j.prepErr
+	}
+	if head {
+		return &Generated{Filename: e.filename, Size: j.size}, nil
+	}
+	return c.served(ctx, e, j)
+}
+
+// served returns what a download of e reads from the prepared job j: the
+// file as it grows, or the published file once the job has ended.
+func (c *Cache) served(ctx context.Context, e *entry, j *job) (*Generated, error) {
+	if body, ok := j.reader(ctx); ok {
+		return &Generated{Filename: e.filename, Size: j.size, Body: body}, nil
+	}
+	<-j.finished
+	if j.err != nil {
+		return nil, j.err
+	}
+	// Fingerprints of one file share its published path, so look the entry
+	// up again rather than trusting that path still holds this job's file.
+	return c.open(ctx, e, false)
+}
+
+// complete returns the path of e's complete file, generating it or waiting
+// for the job already running.
+func (c *Cache) complete(ctx context.Context, e *entry) (string, error) {
+	hit, err := c.lookup(e)
+	if err != nil || hit != "" {
+		return hit, err
+	}
+	gen, err := e.generator()
+	if err != nil {
+		return "", err
+	}
+	j, hit, err := c.join(ctx, e, gen)
+	if err != nil || hit != "" {
+		return hit, err
+	}
+	select {
+	case <-j.finished:
+	case <-ctx.Done():
+		return "", errors.WithStack(ctx.Err())
+	}
+	if j.err != nil {
+		return "", j.err
+	}
+	// Fingerprints of one file share its published path, so look the entry
+	// up again rather than trusting that path still holds this job's file.
+	return c.complete(ctx, e)
+}
+
+// lookup returns e's published path on a hit, recording the access.
+func (c *Cache) lookup(e *entry) (string, error) {
+	hit, err := e.lookup()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to check cache")
+	}
+	if hit != "" {
+		e.touch()
+	}
+	return hit, nil
+}
+
+// prepareOnly runs only the preparation step, for Head.
+func (c *Cache) prepareOnly(ctx context.Context, e *entry, gen filegen.StreamGenerator) (*Generated, error) {
+	src, err := filegen.OpenSource(e.file.Filepath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open source file")
+	}
+	defer src.Close()
+	prepared, err := gen.Prepare(ctx, src, e.book, e.file)
+	if err != nil {
+		return nil, err
+	}
+	g := &Generated{Filename: e.filename, Size: -1}
+	if size, ok := prepared.Size(); ok {
+		g.Size = size
+	}
+	return g, nil
+}
+
+// join returns the job running for e, starting one if there is none. When
+// a job for e finished between the caller's lookup and now, hit is the
+// published path instead.
+func (c *Cache) join(ctx context.Context, e *entry, gen filegen.StreamGenerator) (j *job, hit string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if j, ok := c.jobs[e.key()]; ok {
+		return j, "", nil
+	}
+	if hit, err := c.lookup(e); err != nil || hit != "" {
+		return nil, hit, err
+	}
+	if c.closed {
+		return nil, "", errors.New("download cache is closed")
+	}
+
+	f, err := createPartial(c.dir)
+	if err != nil {
+		return nil, "", err
+	}
+	j = newJob(f, e.destPath)
+	c.jobs[e.key()] = j
+
+	// The job outlives the request but keeps its values (the logger), and
+	// ends when the cache closes.
+	jobCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(c.ctx, cancel)
+	c.background.Add(1)
+	go func() {
+		defer c.background.Done()
+		defer cancel()
+		defer stop()
+		c.run(jobCtx, e, j, gen)
+	}()
+	return j, "", nil
+}
+
+// run generates e into j's partial file and publishes it.
+func (c *Cache) run(ctx context.Context, e *entry, j *job, gen filegen.StreamGenerator) {
+	err := c.buildRecovering(ctx, e, j, gen)
+	if err == nil {
+		err = c.publish(e, j)
+	}
+	if err != nil {
+		os.Remove(j.partialPath)
+	}
+
+	c.mu.Lock()
+	delete(c.jobs, e.key())
+	c.mu.Unlock()
+	if !isClosed(j.prepared) {
+		j.prepErr = err
+		close(j.prepared)
+	}
+	j.finish(err)
+
+	if err == nil {
+		c.triggerCleanupAsync()
+	}
+}
+
+// buildRecovering runs build, turning a panic into an error. The job runs
+// outside any request, so no middleware would recover it, and a generator
+// that panics on a malformed file would otherwise take down the process.
+func (c *Cache) buildRecovering(ctx context.Context, e *entry, j *job, gen filegen.StreamGenerator) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Errorf("generator panicked: %v\n%s", r, debug.Stack())
+		}
+	}()
+	return c.build(ctx, e, j, gen)
+}
+
+// build runs the preparation and writing steps into j.
+func (c *Cache) build(ctx context.Context, e *entry, j *job, gen filegen.StreamGenerator) error {
+	src, err := filegen.OpenSource(e.file.Filepath)
+	if err != nil {
+		return errors.Wrap(err, "failed to open source file")
+	}
+	defer src.Close()
+
+	prepared, err := gen.Prepare(ctx, src, e.book, e.file)
+	if err != nil {
+		return err
+	}
+	if built, ok := prepared.(*builtFile); ok {
+		// A file built in full becomes the job's file as it is, rather
+		// than being copied a second time.
+		if err := j.adopt(built); err != nil {
+			return err
+		}
+		close(j.prepared)
+		return nil
+	}
+	if size, ok := prepared.Size(); ok {
+		j.size = size
+	}
+	close(j.prepared)
+
+	if err := prepared.Write(ctx, j); err != nil {
+		return err
+	}
+	if j.size >= 0 && j.written != j.size {
+		return errors.Errorf("generator reported %d bytes and wrote %d", j.size, j.written)
+	}
+	return nil
+}
+
+// publish renames j's complete partial file into place and writes its
+// metadata.
+func (c *Cache) publish(e *entry, j *job) error {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+
+	if err := os.Rename(j.partialPath, e.destPath); err != nil {
+		return errors.Wrap(err, "failed to publish generated file")
+	}
+	now := time.Now()
+	meta := e.meta
+	meta.GeneratedAt = now
+	meta.LastAccessedAt = now
+	meta.SizeBytes = j.written
+	if err := e.writeMeta(&meta); err != nil {
+		// Without metadata the file is unreachable, so don't leave it behind.
+		os.Remove(e.destPath)
+		return err
+	}
+	return nil
+}
+
+func isClosed(ch chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Close cancels every running job and waits, until ctx ends, for them to
+// delete their partial files and end. Downloads still reading a canceled
+// job fail, and no new job starts. Call it on shutdown, once the server has
+// stopped taking requests. A generator that is slow to notice the
+// cancellation can outlast ctx; RemoveLeftovers clears what it leaves at the
+// next startup.
+func (c *Cache) Close(ctx context.Context) {
+	c.mu.Lock()
+	c.closed = true
+	c.mu.Unlock()
+	c.cancel()
+
+	done := make(chan struct{})
+	go func() {
+		c.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+// Invalidate removes the cached file for a given file ID.
+func (c *Cache) Invalidate(fileID int, fileType string) error {
+	return DeleteCachedFile(c.dir, fileID, fileType)
+}
+
+// InvalidateKepub removes the cached KePub file for a given file ID.
+func (c *Cache) InvalidateKepub(fileID int) error {
+	return DeleteKepubCachedFile(c.dir, fileID)
 }
 
 // InvalidatePlugin removes the cached plugin file for a given file ID and format.
@@ -299,19 +637,19 @@ func (c *Cache) runCleanup() error {
 // triggerCleanupAsync runs a best-effort cleanup in the background so a
 // download never waits on cache eviction.
 func (c *Cache) triggerCleanupAsync() {
-	c.cleanups.Add(1)
+	c.background.Add(1)
 	go func() {
-		defer c.cleanups.Done()
+		defer c.background.Done()
 		c.TriggerCleanup()
 	}()
 }
 
-// Wait blocks until every background cleanup started so far has finished. A
-// cleanup writes a lock file into the cache directory, so anything that
-// removes the directory (tests using t.TempDir, mostly) must Wait first or the
-// removal can fail with "directory not empty".
+// Wait blocks until every background cleanup and job started so far has
+// finished. Both write into the cache directory, so anything that removes the
+// directory (tests using t.TempDir, mostly) must Wait first or the removal can
+// fail with "directory not empty".
 func (c *Cache) Wait() {
-	c.cleanups.Wait()
+	c.background.Wait()
 }
 
 // Dir returns the cache directory path.

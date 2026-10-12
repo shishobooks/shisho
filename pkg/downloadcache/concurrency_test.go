@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,184 +129,373 @@ func assertNoStagingLeftovers(t *testing.T, dir string) {
 	}
 }
 
-// blockingOps returns cacheOps backed by an in-memory metadata slot whose
-// generate step signals started, then blocks until proceed is closed.
-func blockingOps(dir string, fileID int, started chan<- struct{}, proceed <-chan struct{}, calls *int32) cacheOps {
-	var mu sync.Mutex
-	published := false
-	dest := cachedFilename(dir, fileID, "bin")
-	return cacheOps{
-		lookup: func() (string, error) {
-			mu.Lock()
-			defer mu.Unlock()
-			if published {
-				return dest, nil
-			}
-			return "", nil
-		},
-		touch: func() {},
-		generate: func(stagedPath string) error {
-			atomic.AddInt32(calls, 1)
-			f, err := os.Create(stagedPath)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if _, err := f.WriteString("partial"); err != nil {
-				return err
-			}
-			started <- struct{}{}
-			<-proceed
-			_, err = f.WriteString("+complete")
-			return err
-		},
-		writeMeta: func(*CacheMetadata) error {
-			mu.Lock()
-			defer mu.Unlock()
-			published = true
-			return nil
-		},
-		meta: CacheMetadata{FileID: fileID},
-	}
+// pausingCache is a cache whose every generator is gen, with one source file
+// on disk for it to open.
+func pausingCache(t *testing.T, gen filegen.StreamGenerator) (*Cache, *models.Book, *models.File) {
+	t.Helper()
+	dir := t.TempDir()
+	cacheDir := filepath.Join(dir, "cache")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	src := filepath.Join(dir, "source.epub")
+	require.NoError(t, os.WriteFile(src, []byte("source"), 0o600))
+	cache := NewCache(cacheDir, 1<<30, WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+		return gen, nil
+	}))
+	t.Cleanup(cache.Wait)
+	return cache, &models.Book{Title: "Book"}, &models.File{ID: 1, FileType: models.FileTypeEPUB, Filepath: src}
 }
 
-func TestCache_getOrGenerate_WaitersReuseSingleGeneration(t *testing.T) {
+// readN reads exactly n bytes from r.
+func readN(t *testing.T, r io.Reader, n int) string {
+	t.Helper()
+	buf := make([]byte, n)
+	_, err := io.ReadFull(r, buf)
+	require.NoError(t, err)
+	return string(buf)
+}
+
+// A download reads the file while it is built, and the partial file is
+// never served as a cache hit.
+func TestCache_Open_StreamsWhileGenerating(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	cache := NewCache(dir, 1<<30)
-	t.Cleanup(cache.Wait)
+	gen := filegentest.NewPausing("first part,", " rest")
+	cache, book, file := pausingCache(t, gen)
 
-	started := make(chan struct{}, 4)
-	proceed := make(chan struct{})
-	var calls int32
-	ops := blockingOps(dir, 1, started, proceed, &calls)
-	dest := cachedFilename(dir, 1, "bin")
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	require.NotNil(t, g.Body)
+	defer g.Body.Close()
+	assert.Empty(t, g.Path)
+	assert.Equal(t, int64(len(gen.Output())), g.Size)
 
-	type result struct {
-		path string
-		err  error
-	}
-	results := make(chan result, 3)
-	run := func() {
-		p, err := cache.getOrGenerate(context.Background(), dest, ops)
-		results <- result{p, err}
-	}
+	assert.Equal(t, "first part,", readN(t, g.Body, len(gen.First)))
 
-	go run()
-	<-started // the first caller is mid-write
+	hit, err := cache.GetCachedPath(file.ID, file.FileType, book, file)
+	require.NoError(t, err)
+	assert.Empty(t, hit, "a partial file was a cache hit")
+	_, err = os.Stat(cachedFilename(cache.Dir(), file.ID, file.FileType))
+	assert.True(t, os.IsNotExist(err), "the partial file was visible at the cached path")
 
-	// The published path must not exist while generation is in flight.
-	_, err := os.Stat(dest)
-	assert.True(t, os.IsNotExist(err), "partial output was visible at the published path")
+	gen.Release()
+	rest, err := io.ReadAll(g.Body)
+	require.NoError(t, err)
+	assert.Equal(t, " rest", string(rest))
 
-	go run()
-	go run()
-	// Both waiters must be queued on the lock before the leader publishes, so
-	// they exercise the recheck under the lock rather than the fast-path hit.
-	require.Eventually(t, func() bool { return cache.generating.refs(dest) == 3 }, 5*time.Second, time.Millisecond)
-	close(proceed)
-
-	for i := 0; i < 3; i++ {
-		r := <-results
-		require.NoError(t, r.err)
-		data, err := os.ReadFile(r.path)
-		require.NoError(t, err)
-		assert.Equal(t, "partial+complete", string(data))
-	}
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 	cache.Wait()
-	assertNoStagingLeftovers(t, dir)
+	hit, err = cache.GetCachedPath(file.ID, file.FileType, book, file)
+	require.NoError(t, err)
+	require.NotEmpty(t, hit)
+	data, err := os.ReadFile(hit)
+	require.NoError(t, err)
+	assert.Equal(t, gen.Output(), data)
+	assertNoStagingLeftovers(t, cache.Dir())
 }
 
-func TestCache_getOrGenerate_CanceledWaiterReturnsPromptly(t *testing.T) {
+// A second download of the same file joins the build already running and
+// gets bytes before it finishes.
+func TestCache_Open_SecondDownloadJoinsTheBuild(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	cache := NewCache(dir, 1<<30)
-	t.Cleanup(cache.Wait)
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
 
-	started := make(chan struct{}, 4)
-	proceed := make(chan struct{})
-	var calls int32
-	ops := blockingOps(dir, 1, started, proceed, &calls)
-	dest := cachedFilename(dir, 1, "bin")
+	a, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	defer a.Body.Close()
+	<-gen.Started()
+	b, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	defer b.Body.Close()
 
-	done := make(chan error, 1)
-	go func() {
-		_, err := cache.getOrGenerate(context.Background(), dest, ops)
-		done <- err
-	}()
-	<-started
+	assert.Equal(t, "first,", readN(t, a.Body, len(gen.First)))
+	assert.Equal(t, "first,", readN(t, b.Body, len(gen.First)))
+	gen.Release()
+	restA, err := io.ReadAll(a.Body)
+	require.NoError(t, err)
+	restB, err := io.ReadAll(b.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "second", string(restA))
+	assert.Equal(t, "second", string(restB))
+	assert.Equal(t, 1, gen.Prepares())
+	assert.Equal(t, 1, gen.Writes())
+}
+
+// A download that goes away leaves the build running, so the file lands in
+// the cache and the next download is a hit.
+func TestCache_Open_DisconnectLeavesTheBuildRunning(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := cache.getOrGenerate(ctx, dest, ops)
-	require.ErrorIs(t, err, context.Canceled)
-
-	close(proceed)
-	require.NoError(t, <-done)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
-}
-
-func TestCache_getOrGenerate_UnrelatedFilesDoNotWait(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	cache := NewCache(dir, 1<<30)
-	t.Cleanup(cache.Wait)
-
-	started := make(chan struct{}, 4)
-	proceed := make(chan struct{})
-	var calls int32
-	blocked := blockingOps(dir, 1, started, proceed, &calls)
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := cache.getOrGenerate(context.Background(), cachedFilename(dir, 1, "bin"), blocked)
-		done <- err
-	}()
-	<-started
-
-	// File 2 generates to completion while file 1 is still blocked.
-	otherStarted := make(chan struct{}, 1)
-	otherProceed := make(chan struct{})
-	close(otherProceed)
-	path, err := cache.getOrGenerate(context.Background(), cachedFilename(dir, 2, "bin"), blockingOps(dir, 2, otherStarted, otherProceed, &calls))
+	g, err := cache.Open(ctx, book, file, false)
 	require.NoError(t, err)
-	assert.Equal(t, cachedFilename(dir, 2, "bin"), path)
+	readN(t, g.Body, len(gen.First))
+	cancel()
+	_, err = g.Body.Read(make([]byte, 1))
+	require.ErrorIs(t, err, context.Canceled)
+	require.NoError(t, g.Body.Close())
 
-	close(proceed)
-	require.NoError(t, <-done)
+	gen.Release()
+	cache.Wait()
+
+	again, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, again.Path, "the next download was not served from the cache")
+	data, err := os.ReadFile(again.Path)
+	require.NoError(t, err)
+	assert.Equal(t, gen.Output(), data)
+	assert.Equal(t, 1, gen.Writes())
 }
 
-func TestCache_getOrGenerate_GenerateErrorCleansStaging(t *testing.T) {
+// Head runs only the preparation step: it reports the size and creates
+// nothing in the cache.
+func TestCache_Head_PreparesOnly(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	cache := NewCache(dir, 1<<30)
-	t.Cleanup(cache.Wait)
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
 
-	dest := cachedFilename(dir, 1, "bin")
-	boom := errors.New("boom")
-	_, err := cache.getOrGenerate(context.Background(), dest, cacheOps{
-		lookup: func() (string, error) { return "", nil },
-		touch:  func() {},
-		generate: func(stagedPath string) error {
-			require.NoError(t, os.WriteFile(stagedPath, []byte("half"), 0600))
-			return boom
-		},
-		writeMeta: func(*CacheMetadata) error { return nil },
-	})
-	require.ErrorIs(t, err, boom)
+	g, err := cache.Head(context.Background(), book, file, false)
+	require.NoError(t, err)
+	assert.Nil(t, g.Body)
+	assert.Empty(t, g.Path)
+	assert.Equal(t, int64(len(gen.Output())), g.Size)
+	assert.Equal(t, 1, gen.Prepares())
+	assert.Equal(t, 0, gen.Writes())
 
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(cache.Dir())
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
 
-// refs reports how many callers hold or wait for key. Test helper.
-func (l *keyedLock) refs(key string) int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if slot, ok := l.slots[key]; ok {
-		return slot.refs
+// A size not known up front is reported as -1.
+func TestCache_Head_UnknownSize(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	gen.UnknownSize = true
+	cache, book, file := pausingCache(t, gen)
+
+	g, err := cache.Head(context.Background(), book, file, false)
+	require.NoError(t, err)
+	assert.Equal(t, int64(-1), g.Size)
+}
+
+// A preparation failure is returned before anything is sent or cached, for
+// downloads and for HEAD.
+func TestCache_PrepareFailure(t *testing.T) {
+	t.Parallel()
+	boom := errors.New("boom")
+	for _, head := range []bool{false, true} {
+		gen := filegentest.NewPausing("first,", "second")
+		gen.PrepareErr = boom
+		cache, book, file := pausingCache(t, gen)
+
+		var err error
+		if head {
+			_, err = cache.Head(context.Background(), book, file, false)
+		} else {
+			_, err = cache.Open(context.Background(), book, file, false)
+		}
+		require.ErrorIs(t, err, boom)
+		cache.Wait()
+		entries, err := os.ReadDir(cache.Dir())
+		require.NoError(t, err)
+		assert.Empty(t, entries)
 	}
-	return 0
+}
+
+// A generator that writes a different number of bytes than it reported
+// fails the build rather than publishing a file that does not match the
+// Content-Length already sent.
+func TestCache_SizeMismatchFailsTheBuild(t *testing.T) {
+	t.Parallel()
+	cache, book, file := pausingCache(t, wrongSize{})
+
+	_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+	require.ErrorContains(t, err, "reported 100 bytes and wrote 5")
+	cache.Wait()
+	entries, err := os.ReadDir(cache.Dir())
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+type wrongSize struct{}
+
+func (wrongSize) Prepare(context.Context, filegen.Source, *models.Book, *models.File) (filegen.Prepared, error) {
+	return wrongSize{}, nil
+}
+func (wrongSize) Size() (int64, bool) { return 100, true }
+func (wrongSize) Write(_ context.Context, w io.Writer) error {
+	_, err := io.WriteString(w, "short")
+	return err
+}
+
+// A waiter whose context ends returns promptly; the build continues.
+func TestCache_GetOrGenerate_CanceledWaiterReturnsPromptly(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
+
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	defer g.Body.Close()
+	<-gen.Started()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err = cache.GetOrGenerate(ctx, book, file)
+	require.ErrorIs(t, err, context.Canceled)
+
+	gen.Release()
+	path, _, err := cache.GetOrGenerate(context.Background(), book, file)
+	require.NoError(t, err)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, gen.Output(), data)
+	assert.Equal(t, 1, gen.Writes())
+}
+
+// A build of one file does not hold up another.
+func TestCache_UnrelatedFilesDoNotWait(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
+
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	defer g.Body.Close()
+	<-gen.Started()
+
+	other := *file
+	other.ID = 2
+	done := make(chan error, 1)
+	go func() {
+		g2, err := cache.Open(context.Background(), book, &other, false)
+		if err == nil {
+			g2.Body.Close()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a build of another file waited")
+	}
+	gen.Release()
+}
+
+// Close cancels running builds, deletes their partial files, and fails the
+// downloads still reading them.
+func TestCache_CloseCancelsBuilds(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
+
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	defer g.Body.Close()
+	readN(t, g.Body, len(gen.First))
+
+	cache.Close(context.Background())
+	_, err = io.ReadAll(g.Body)
+	require.ErrorIs(t, err, context.Canceled)
+	entries, err := os.ReadDir(cache.Dir())
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+// Partial files and scratch directories left by a crash are deleted;
+// published entries stay.
+func TestCache_RemoveLeftovers(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, partialPrefix+"123"), []byte("half"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, stagingPrefix+"456"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, stagingPrefix+"456", "1.epub"), []byte("half"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub"), []byte("whole"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.meta.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bulk"), 0o755))
+
+	require.NoError(t, NewCache(dir, 1<<30).RemoveLeftovers())
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.ElementsMatch(t, []string{"1.epub", "1.meta.json", "bulk"}, names)
+	require.NoError(t, NewCache(filepath.Join(dir, "missing"), 1<<30).RemoveLeftovers())
+}
+
+// A generator that panics fails its build like any other error instead of
+// taking down the process, which a detached goroutine would otherwise do.
+func TestCache_GeneratorPanicFailsTheBuild(t *testing.T) {
+	t.Parallel()
+	for _, step := range []string{"prepare", "write"} {
+		cache, book, file := pausingCache(t, panicking{step: step})
+
+		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		require.ErrorContains(t, err, "generator panicked")
+		cache.Wait()
+		entries, err := os.ReadDir(cache.Dir())
+		require.NoError(t, err)
+		assert.Empty(t, entries)
+	}
+}
+
+type panicking struct{ step string }
+
+func (p panicking) Prepare(context.Context, filegen.Source, *models.Book, *models.File) (filegen.Prepared, error) {
+	if p.step == "prepare" {
+		panic("bad file")
+	}
+	return p, nil
+}
+func (panicking) Size() (int64, bool) { return 0, false }
+func (panicking) Write(_ context.Context, w io.Writer) error {
+	_, _ = io.WriteString(w, "half")
+	panic("bad file")
+}
+
+// A download joining a build that has already finished is served the
+// published file.
+func TestCache_Open_JoinAfterFinishServesPublishedFile(t *testing.T) {
+	t.Parallel()
+	gen := filegentest.NewPausing("first,", "second")
+	cache, book, file := pausingCache(t, gen)
+
+	g, err := cache.Open(context.Background(), book, file, false)
+	require.NoError(t, err)
+	require.NoError(t, g.Body.Close())
+	e, err := cache.entryFor(book, file, false)
+	require.NoError(t, err)
+	cache.mu.Lock()
+	j := cache.jobs[e.key()]
+	cache.mu.Unlock()
+	require.NotNil(t, j)
+
+	gen.Release()
+	<-j.finished
+	_, ok := j.reader(context.Background())
+	require.False(t, ok)
+	got, err := cache.served(context.Background(), e, j)
+	require.NoError(t, err)
+	require.NotEmpty(t, got.Path)
+	data, err := os.ReadFile(got.Path)
+	require.NoError(t, err)
+	assert.Equal(t, gen.Output(), data)
+}
+
+// Close makes later downloads fail rather than start builds it would not
+// wait for.
+func TestCache_OpenAfterCloseFails(t *testing.T) {
+	t.Parallel()
+	cache, book, file := pausingCache(t, filegentest.NewPausing("a", "b"))
+	cache.Close(context.Background())
+	_, err := cache.Open(context.Background(), book, file, false)
+	require.ErrorContains(t, err, "closed")
+	entries, err := os.ReadDir(cache.Dir())
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 }

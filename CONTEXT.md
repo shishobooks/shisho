@@ -22,6 +22,14 @@ _Avoid_: text book, ebook (ebook also includes page-based files)
 An ebook **File** made of fixed pages (CBZ, PDF). Positions within it are page numbers.
 _Avoid_: fixed-layout (that is an EPUB rendering mode, not this distinction)
 
+**Original File**:
+A **File** exactly as it sits in the library on disk.
+_Avoid_: source file, raw file
+
+**Generated File**:
+A **File** rebuilt at download time to carry Shisho's current metadata, and for KePub, converted for Kobo devices. It is the default download; the **Original File** is the alternative.
+_Avoid_: converted file, processed file
+
 **Library**:
 A top-level organizational unit that scopes all resources. Each resource belongs to exactly one library.
 _Avoid_: collection, shelf

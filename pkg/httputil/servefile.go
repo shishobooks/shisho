@@ -1,9 +1,11 @@
 package httputil
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,4 +120,63 @@ func ServeFile(c echo.Context, path string, notFound error, opts ...ServeOption)
 	}
 	http.ServeContent(c.Response(), req, filepath.Base(path), modTime, f)
 	return nil
+}
+
+// ServeStream sends body, a file still being written, as a whole-file 200
+// with the headers the options set (WithETag is ignored). size is the file's
+// exact length, sent as Content-Length, or -1 when it is not known yet, in
+// which case the response is chunked. A Range header is ignored, since bytes
+// past what has been written do not exist yet; once the file is complete it
+// is served with ServeFile, which handles Range. Each read is flushed to the
+// client as it arrives, so a slow writer never leaves bytes sitting in a
+// buffer. A nil body, as for HEAD, sends the headers alone.
+//
+// Call it only once body is ready to read: the headers are sent first, so an
+// error from body can only cut the response short.
+func ServeStream(c echo.Context, body io.Reader, size int64, opts ...ServeOption) error {
+	var o serveOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	res := c.Response()
+	header := res.Header()
+	contentType := o.contentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	header.Set(echo.HeaderContentType, contentType)
+	if o.attachment != "" {
+		SetAttachmentFilename(res, o.attachment)
+	}
+	if o.cacheControl != "" {
+		header.Set("Cache-Control", o.cacheControl)
+	}
+	if size >= 0 {
+		header.Set(echo.HeaderContentLength, strconv.FormatInt(size, 10))
+	}
+	res.WriteHeader(http.StatusOK)
+	if body == nil || c.Request().Method == http.MethodHead {
+		return nil
+	}
+
+	// A writer that cannot flush (a test recorder) buffers nothing anyway.
+	flusher := http.NewResponseController(res.Writer)
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := body.Read(buf)
+		if n > 0 {
+			if _, werr := res.Write(buf[:n]); werr != nil {
+				return errors.WithStack(werr)
+			}
+			if ferr := flusher.Flush(); ferr != nil && !errors.Is(ferr, http.ErrNotSupported) {
+				return errors.WithStack(ferr)
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
 }
