@@ -21,6 +21,10 @@ The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file wh
 
 CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parsers or converters for CBR and other formats.
 
+## First Downloads
+
+A generated download starts as soon as it is requested and is built while it is sent. EPUB, M4B, MOBI, AZW3, and PDF downloads know their size before they start, so the device or browser shows progress even the first time. A CBZ, or a KePub made from an EPUB, does not: its first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+
 ## MOBI and AZW3
 
 Kindle files are imported as two file types: **MOBI** for `.mobi`, `.azw`, and `.prc` files, and **AZW3** for `.azw3` files. A file keeps its own extension on disk, so an organized `.azw` file is still an `.azw`. A `.mobi` that holds both an older Mobipocket book and a newer KF8 book, as Calibre writes with its "both" output type, is read from the KF8 book.
@@ -69,8 +73,6 @@ Shisho cannot add its metadata to an encrypted PDF or to one whose internal stru
 ## KePub Generation
 
 Shisho can generate Kobo-optimized KePub downloads from **EPUB and CBZ only**. M4B, PDF, MOBI, and AZW3 remain in their native formats. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for device delivery options.
-
-A KePub made from an EPUB starts downloading as soon as it is requested and is converted while it is sent, so the first download has no file size: the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same KePub show their size while it stays in the download cache.
 
 ## Audiobook Browser Compatibility
 
