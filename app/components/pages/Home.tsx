@@ -30,6 +30,7 @@ import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { toastRequestError } from "@/libraries/api";
 import {
   BUILTIN_DEFAULT_SORT,
@@ -49,7 +50,6 @@ const HomeContent = () => {
   const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
     useBulkSelection();
   const seriesIdParam = searchParams.get("series_id");
-  const searchQuery = searchParams.get("search") ?? "";
   const fileTypesParam = searchParams.get("file_types") ?? "";
   const genreIdsParam = searchParams.get("genre_ids") ?? "";
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
@@ -60,28 +60,7 @@ const HomeContent = () => {
     ? parseSortSpec(sortParam)
     : null;
 
-  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
-
-  // Callback for SearchInput - memoized to prevent unnecessary re-renders
-  const handleDebouncedSearchChange = useMemo(
-    () => (value: string) => {
-      setDebouncedSearch(value);
-      // Sync to URL when debounced value changes
-      if (value !== searchQuery) {
-        setSearchParams((prev) => {
-          const newParams = new URLSearchParams(prev);
-          if (value) {
-            newParams.set("search", value);
-          } else {
-            newParams.delete("search");
-          }
-          newParams.set("page", "1");
-          return newParams;
-        });
-      }
-    },
-    [searchQuery, setSearchParams],
-  );
+  const { searchQuery, setSearchQuery } = useSearchQueryParam();
 
   // Parse file types from URL
   const selectedFileTypes = fileTypesParam
@@ -385,8 +364,8 @@ const HomeContent = () => {
   };
 
   // Add search if present
-  if (debouncedSearch) {
-    booksQueryParams.search = debouncedSearch;
+  if (searchQuery) {
+    booksQueryParams.search = searchQuery;
   }
 
   // Add file types if present
@@ -428,7 +407,7 @@ const HomeContent = () => {
   // Track the filter state that produced the currently displayed data
   // We use a stringified version of all filter params for comparison
   const currentFilterKey = JSON.stringify({
-    search: debouncedSearch,
+    search: searchQuery,
     fileTypes: selectedFileTypes,
     genreIds: selectedGenreIds,
     tagIds: selectedTagIds,
@@ -450,7 +429,7 @@ const HomeContent = () => {
     if (booksSettled && !booksQuery.isFetching) {
       setConfirmedFilterKey(currentFilterKey);
       setConfirmedHasFilters(
-        debouncedSearch !== "" ||
+        searchQuery !== "" ||
           selectedFileTypes.length > 0 ||
           selectedGenreIds.length > 0 ||
           selectedTagIds.length > 0 ||
@@ -462,7 +441,7 @@ const HomeContent = () => {
     booksSettled,
     booksQuery.isFetching,
     currentFilterKey,
-    debouncedSearch,
+    searchQuery,
     selectedFileTypes.length,
     selectedGenreIds.length,
     selectedTagIds.length,
@@ -519,7 +498,7 @@ const HomeContent = () => {
           <SearchInput
             initialValue={searchQuery}
             label="Search books"
-            onDebouncedChange={handleDebouncedSearchChange}
+            onDebouncedChange={setSearchQuery}
             placeholder="Search books..."
           />
           <FilterSheet

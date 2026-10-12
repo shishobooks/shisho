@@ -31,22 +31,33 @@ export const SearchInput = ({
   const prevInitialValue = useRef(initialValue);
   const lastReportedValue = useRef(initialValue);
 
+  const onDebouncedChangeRef = useRef(onDebouncedChange);
+  useEffect(() => {
+    onDebouncedChangeRef.current = onDebouncedChange;
+  }, [onDebouncedChange]);
+
   // Sync from parent when external navigation changes the URL
   useEffect(() => {
     if (initialValue !== prevInitialValue.current) {
       // Only sync if this wasn't caused by our own debounced report
       if (initialValue !== lastReportedValue.current) {
         setValue(initialValue);
+        // The parent already has this value, so don't report it back once
+        // the debounce catches up.
+        lastReportedValue.current = initialValue;
       }
       prevInitialValue.current = initialValue;
     }
   }, [initialValue]);
 
-  // Report debounced changes to parent
+  // Report debounced changes to parent. Only a new debounced value reports:
+  // after back navigation the debounced value still holds the old query, and
+  // reporting it would push that query back into the URL.
   useEffect(() => {
+    if (debouncedValue === lastReportedValue.current) return;
     lastReportedValue.current = debouncedValue;
-    onDebouncedChange(debouncedValue);
-  }, [debouncedValue, onDebouncedChange]);
+    onDebouncedChangeRef.current(debouncedValue);
+  }, [debouncedValue]);
 
   return (
     <Input
