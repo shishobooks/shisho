@@ -45,6 +45,15 @@ func Pack(hist History, pkgs []Package, n int) [][]Item {
 
 const unknownPackageFallbackPerTest = 30.0
 
+// maxItemSeconds caps the estimated size of any one planned item, in summed
+// per-test seconds. go test times out each package's run after 10 minutes of
+// wallclock, and tests run in parallel, so summed seconds are about 2.5 to 3.5
+// times wallclock on CI runners. Splitting only against the ideal shard load
+// leaves a package whole whenever the suite total grows faster than it does;
+// whole packages also share the runner with the shard's other whole packages.
+// This cap keeps every run near 5 minutes at worst, whatever the suite total.
+const maxItemSeconds = 720.0
+
 // estimateDuration returns the best guess for one test's wallclock:
 //   - exact JUnit value if known
 //   - else the median of other known tests in this package
@@ -66,8 +75,9 @@ func estimateDuration(hist History, pkg, test string) float64 {
 }
 
 // buildItems turns each Package into one or more Items. Hot packages (wallclock
-// > ideal*0.8) are split into K chunks via test-level LPT so that no single
-// item dominates a shard. Packages with ≤1 test are always kept whole.
+// > ideal*0.8, or > maxItemSeconds) are split into K chunks via test-level LPT
+// so that no single item dominates a shard or runs long enough to time out.
+// Packages with ≤1 test are always kept whole.
 func buildItems(hist History, pkgs []Package, n int) []Item {
 	// First pass: compute each package's estimated wallclock and the global total.
 	pkgWall := make(map[string]float64, len(pkgs))
@@ -89,7 +99,7 @@ func buildItems(hist History, pkgs []Package, n int) []Item {
 		return out
 	}
 	ideal := total / float64(n)
-	threshold := ideal * 0.8
+	threshold := math.Min(ideal*0.8, maxItemSeconds)
 
 	items := make([]Item, 0, len(pkgs))
 	for _, p := range pkgs {

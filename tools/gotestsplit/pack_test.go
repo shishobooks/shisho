@@ -275,3 +275,37 @@ func TestPack_NoHistory_PartialFragmentRetainsTests(t *testing.T) {
 		}
 	}
 }
+
+func TestPack_SplitsPackageOverMaxItem(t *testing.T) {
+	t.Parallel()
+	// "big" is under 0.8 x ideal, which alone would keep it whole, but over
+	// maxItemSeconds, so it is chunked with no chunk over the cap.
+	test := maxItemSeconds / 4
+	big := Package{Path: "big", Tests: []string{"T1", "T2", "T3", "T4", "T5", "T6"}}
+	hist := History{"big": {}}
+	for _, name := range big.Tests {
+		hist["big"][name] = test
+	}
+	pkgs := []Package{big}
+	for _, name := range []string{"f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8"} {
+		pkgs = append(pkgs, Package{Path: name, Tests: []string{"T"}})
+		hist[name] = map[string]float64{"T": 2 * maxItemSeconds}
+	}
+
+	var chunks []Item
+	for _, shard := range Pack(hist, pkgs, 2) {
+		for _, it := range shard {
+			if it.Pkg == "big" {
+				chunks = append(chunks, it)
+			}
+		}
+	}
+	if len(chunks) < 2 {
+		t.Fatalf("big planned as %d item(s), want it split: %+v", len(chunks), chunks)
+	}
+	for _, c := range chunks {
+		if len(c.Tests) == 0 || c.Duration > maxItemSeconds {
+			t.Errorf("chunk %+v: want named tests and at most %v seconds", c, maxItemSeconds)
+		}
+	}
+}
