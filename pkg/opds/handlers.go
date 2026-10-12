@@ -762,7 +762,7 @@ func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 		}
 	}
 
-	download, err := books.ResolveFallbackDownload(ctx, h.downloadCache, book, fileWithRelations, kepub)
+	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, kepub)
 	if err != nil {
 		return err
 	}

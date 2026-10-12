@@ -215,19 +215,23 @@ func (h *publicHandler) download(c echo.Context) error {
 		return err
 	}
 
-	download, err := books.ResolveFallbackDownload(ctx, h.downloadCache, book, file, false)
+	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, file, false)
 	if err != nil {
 		return err
 	}
-	if err := download.Serve(c); err != nil {
-		return err
-	}
-	// Count only a download that was served. The client may have gone by the
-	// time the body is written, so the count must not depend on its context.
+	// Count a download once it starts sending, not when it completes: a
+	// Generated File streams while it is built, and a large one may take a
+	// while. An error response is not a download. The client may be gone by
+	// the time the count is written, so it must not depend on its context.
 	if startsDownload(c.Request()) {
-		countAccess(context.WithoutCancel(ctx), link, h.service.RecordDownload)
+		res := c.Response()
+		res.Before(func() {
+			if res.Status < http.StatusMultipleChoices {
+				countAccess(context.WithoutCancel(ctx), link, h.service.RecordDownload)
+			}
+		})
 	}
-	return nil
+	return download.Serve(c)
 }
 
 // startsDownload reports whether a download request counts as a download. HEAD

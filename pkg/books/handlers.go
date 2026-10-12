@@ -1676,8 +1676,7 @@ func (h *handler) downloadFile(c echo.Context) error {
 		return err
 	}
 
-	// Try to generate/get from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerate(ctx, book, fileWithRelations)
+	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, false)
 	if err != nil {
 		// A type with no generator is one the user can work around with
 		// Download Original (422); any other generation failure is a server
@@ -1688,8 +1687,6 @@ func (h *handler) downloadFile(c echo.Context) error {
 		}
 		return errors.WithStack(err)
 	}
-
-	download := &Download{Path: cachedPath, Filename: downloadFilename, ContentType: models.FileTypeMimeType(file.FileType)}
 	return download.Serve(c)
 }
 
@@ -1771,8 +1768,7 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 		return err
 	}
 
-	// Try to generate/get from cache
-	cachedPath, downloadFilename, err := h.downloadCache.GetOrGenerateKepub(ctx, book, fileWithRelations)
+	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, true)
 	if err != nil {
 		// A file type KePub cannot convert is the one failure the user can
 		// work around; any other generation failure is a server fault.
@@ -1781,8 +1777,6 @@ func (h *handler) downloadKepubFile(c echo.Context) error {
 		}
 		return errors.WithStack(err)
 	}
-
-	download := &Download{Path: cachedPath, Filename: downloadFilename, ContentType: KepubContentType}
 	return download.Serve(c)
 }
 

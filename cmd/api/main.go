@@ -40,6 +40,11 @@ const shutdownHardDeadline = 5 * time.Second
 // closed. Shorter than shutdownHardDeadline so worker/db cleanup still runs.
 const serverShutdownTimeout = 3 * time.Second
 
+// downloadCacheCloseTimeout bounds how long shutdown waits for canceled
+// download generations to clean up, within what shutdownHardDeadline leaves
+// after the server.
+const downloadCacheCloseTimeout = time.Second
+
 func main() {
 	ctx := context.Background()
 
@@ -87,7 +92,7 @@ func main() {
 
 	// Plugin system. The Manager, the worker, and the server share this one
 	// plugin service, and the server and worker share the download and page
-	// caches built below: the download cache's per-file lock lives on the
+	// caches built below: the download cache's running builds live on the
 	// instance, and a second page cache would drift from the one the cache
 	// admin routes size and clear and the scan invalidates. worker.New and
 	// server.New build their own when handed nil, which only tests should do.
@@ -100,6 +105,9 @@ func main() {
 	}
 
 	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
+	if err := dlCache.RemoveLeftovers(); err != nil {
+		log.Warn("failed to remove partial downloads left in the cache", logger.Data{"error": err.Error()})
+	}
 	cbzCache := cbzpages.NewCache(cfg.CacheDir)
 	pdfCache := pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 
@@ -176,6 +184,15 @@ func main() {
 		}
 	}
 	log.Info("server shutdown")
+
+	// Cancel the Generated Files still being built and delete their partial
+	// files. Any download still reading one was cut off with the server. The
+	// wait is bounded so the worker and database still close before the hard
+	// deadline; anything a slow generator leaves is cleared at next startup.
+	closeCtx, cancelClose := context.WithTimeout(ctx, downloadCacheCloseTimeout)
+	dlCache.Close(closeCtx)
+	cancelClose()
+	log.Info("download cache closed")
 
 	// Another worktree may take this port next, so the dev launcher must not
 	// find it in this worktree's port file.
