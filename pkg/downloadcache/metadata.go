@@ -32,7 +32,7 @@ type FailureRecord struct {
 	// another release does not apply.
 	Version  string    `json:"version"`
 	Message  string    `json:"message"`
-	FailedAt        time.Time `json:"failed_at"`
+	FailedAt time.Time `json:"failed_at"`
 }
 
 // metadataFilename returns the metadata file path for a given file ID.
