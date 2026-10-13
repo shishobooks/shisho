@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/cbz"
@@ -252,6 +253,56 @@ func TestKepubCBZGenerator_PrepareRejects(t *testing.T) {
 			defer src.Close()
 			_, err = newKepubCBZGenerator(t).Prepare(context.Background(), src, &models.Book{Title: "Book"}, &models.File{FileType: models.FileTypeCBZ})
 			require.Error(t, err)
+		})
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("disk on fire")
+}
+
+// A KePub generator's errors name the KePub being generated, not the source
+// format, and keep the cause, which the logs and the remembered failure
+// show only through the message.
+func TestKepubGenerators_ErrorsNameKepub(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	broken := filepath.Join(dir, "broken.bin")
+	require.NoError(t, os.WriteFile(broken, []byte("not a zip"), 0o600))
+	for name, tc := range map[string]struct {
+		fileType string
+		source   string
+	}{
+		"cbz":  {models.FileTypeCBZ, testgen.GenerateCBZ(t, dir, "source.cbz", testgen.CBZOptions{})},
+		"epub": {models.FileTypeEPUB, testgen.GenerateEPUB(t, dir, "source.epub", testgen.EPUBOptions{Title: "Book"})},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			gen, err := filegen.GetKepubGenerator(tc.fileType)
+			require.NoError(t, err)
+			sg, ok := gen.(filegen.StreamGenerator)
+			require.True(t, ok)
+			book := &models.Book{Title: "Book"}
+			file := &models.File{FileType: tc.fileType}
+
+			src, err := filegen.OpenSource(broken)
+			require.NoError(t, err)
+			defer src.Close()
+			_, err = sg.Prepare(context.Background(), src, book, file)
+			require.Error(t, err)
+			assert.True(t, strings.HasPrefix(err.Error(), "failed to generate kepub file: "), err.Error())
+
+			src, err = filegen.OpenSource(tc.source)
+			require.NoError(t, err)
+			defer src.Close()
+			prepared, err := sg.Prepare(context.Background(), src, book, file)
+			require.NoError(t, err)
+			err = prepared.Write(context.Background(), failingWriter{})
+			require.Error(t, err)
+			assert.True(t, strings.HasPrefix(err.Error(), "failed to generate kepub file: "), err.Error())
+			assert.Contains(t, err.Error(), "disk on fire")
 		})
 	}
 }

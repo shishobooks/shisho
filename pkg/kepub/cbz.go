@@ -229,13 +229,16 @@ func (cv *CBZConversion) Write(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
+	// The NCX's dtb:uid must equal the OPF's unique identifier.
+	uid := generateUUID()
+
 	// Generate OPF content
-	if err := writeZipFile(destZip, "OEBPS/content.opf", generateFixedLayoutOPF(pages, cv.metadata)); err != nil {
+	if err := writeZipFile(destZip, "OEBPS/content.opf", generateFixedLayoutOPF(pages, cv.metadata, uid)); err != nil {
 		return errors.Wrap(err, "failed to write content.opf")
 	}
 
 	// Generate NCX (table of contents)
-	if err := writeZipFile(destZip, "OEBPS/toc.ncx", generateNCX(pages, cv.metadata)); err != nil {
+	if err := writeZipFile(destZip, "OEBPS/toc.ncx", generateNCX(pages, cv.metadata, uid)); err != nil {
 		return errors.Wrap(err, "failed to write toc.ncx")
 	}
 
@@ -301,7 +304,7 @@ func getEffectiveTitle(metadata *CBZMetadata) string {
 }
 
 // generateFixedLayoutOPF generates the OPF file for a fixed-layout EPUB.
-func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
+func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata, uid string) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -311,7 +314,7 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">urn:uuid:`)
-	buf.WriteString(generateUUID())
+	buf.WriteString(uid)
 	buf.WriteString(`</dc:identifier>
     <dc:title>`)
 	buf.WriteString(html.EscapeString(title))
@@ -506,7 +509,7 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 // generateNCX generates the NCX navigation file.
 // If chapters are provided in metadata, uses chapter-based navigation.
 // Otherwise, falls back to page-based navigation.
-func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
+func generateNCX(pages []pageInfo, metadata *CBZMetadata, uid string) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -516,7 +519,7 @@ func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
     <meta name="dtb:uid" content="urn:uuid:`)
-	buf.WriteString(generateUUID())
+	buf.WriteString(uid)
 	buf.WriteString(`"/>
     <meta name="dtb:depth" content="1"/>
     <meta name="dtb:totalPageCount" content="`)

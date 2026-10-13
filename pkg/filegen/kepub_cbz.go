@@ -30,7 +30,7 @@ func (g *KepubCBZGenerator) SupportedType() string {
 
 // Generate creates a KePub file at destPath from a CBZ source.
 func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	return generateFile(ctx, g, models.FileTypeCBZ, srcPath, destPath, book, file)
+	return generateFile(ctx, g, kepubFormat, srcPath, destPath, book, file)
 }
 
 // Prepare reads the source's zip directory and checks that every page can
@@ -38,11 +38,11 @@ func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath stri
 func (g *KepubCBZGenerator) Prepare(_ context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
 	srcZip, err := zip.NewReader(src, src.Size())
 	if err != nil {
-		return nil, NewGenerationError(models.FileTypeCBZ, err, "failed to read source CBZ as zip")
+		return nil, NewGenerationError(kepubFormat, err, "failed to read source CBZ as zip")
 	}
 	conversion, err := g.converter.PrepareCBZ(srcZip, buildCBZMetadata(book, file))
 	if err != nil {
-		return nil, NewGenerationError(models.FileTypeCBZ, err, "failed to convert CBZ to KePub format: "+err.Error())
+		return nil, NewGenerationError(kepubFormat, err, "failed to convert CBZ: "+err.Error())
 	}
 	return &kepubCBZPrepared{conversion: conversion}, nil
 }
@@ -60,7 +60,7 @@ func (p *kepubCBZPrepared) Size() (int64, bool) {
 // Write writes the KePub to w, about one page at a time.
 func (p *kepubCBZPrepared) Write(ctx context.Context, w io.Writer) error {
 	if err := p.conversion.Write(ctx, w); err != nil {
-		return NewGenerationError(models.FileTypeCBZ, err, "failed to convert CBZ to KePub format: "+err.Error())
+		return NewGenerationError(kepubFormat, err, "failed to convert CBZ: "+err.Error())
 	}
 	return nil
 }
