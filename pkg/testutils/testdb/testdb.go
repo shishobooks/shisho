@@ -10,14 +10,18 @@ package testdb
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
+	"modernc.org/sqlite"
 )
 
 // seq gives each test database its own shared-cache name, so parallel tests
@@ -78,8 +82,66 @@ func open(t testing.TB, maxOpen int) *bun.DB {
 		_ = db.Close()
 	})
 
-	_, err = migrations.BringUpToDate(context.Background(), db)
-	require.NoError(t, err)
+	require.NoError(t, migrate(keeper, db))
 
 	return db
+}
+
+// templateDSN names a database migrated once per test binary. Under -race,
+// running the migrations takes seconds per database while copying the
+// template takes milliseconds, and most tests open at least one database.
+const templateDSN = "file:testdb-template?mode=memory&cache=shared"
+
+var (
+	templateOnce sync.Once
+	templateErr  error
+)
+
+// restorer is the modernc connection's backup API, which sqliteshim uses
+// wherever modernc supports the platform.
+type restorer interface {
+	NewRestore(srcURI string) (*sqlite.Backup, error)
+}
+
+// migrate brings db, whose connections share keeper's database, to the latest
+// schema by copying the template into keeper, or by running the migrations
+// when the driver has no backup API.
+func migrate(keeper driver.Conn, db *bun.DB) error {
+	r, ok := keeper.(restorer)
+	if !ok {
+		_, err := migrations.BringUpToDate(context.Background(), db)
+		return err
+	}
+
+	templateOnce.Do(func() { templateErr = buildTemplate() })
+	if templateErr != nil {
+		return templateErr
+	}
+
+	backup, err := r.NewRestore(templateDSN)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if _, err := backup.Step(-1); err != nil {
+		_ = backup.Finish()
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(backup.Finish())
+}
+
+// buildTemplate migrates the template database and keeps a connection to it
+// open for the life of the test binary, so it is never destroyed.
+func buildTemplate() error {
+	connector, err := sqliteconn.NewConnector(templateDSN, "PRAGMA foreign_keys=ON")
+	if err != nil {
+		return err
+	}
+	if _, err := connector.Connect(context.Background()); err != nil {
+		return errors.WithStack(err)
+	}
+
+	sqldb := sql.OpenDB(connector)
+	defer sqldb.Close()
+	_, err = migrations.BringUpToDate(context.Background(), bun.NewDB(sqldb, sqliteconn.NewDialect()))
+	return err
 }

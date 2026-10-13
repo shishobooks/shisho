@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,6 +18,16 @@ const (
 	// BcryptCost is the cost factor for bcrypt hashing.
 	BcryptCost = 12
 )
+
+// bcryptCost is BcryptCost, or bcrypt's minimum in test binaries, where cost
+// 12 takes seconds per hash under -race. Checking a password reads the cost
+// from its hash, so the lower cost changes nothing else.
+func bcryptCost() int {
+	if testing.Testing() {
+		return bcrypt.MinCost
+	}
+	return BcryptCost
+}
 
 // JWTClaims represents the claims in a JWT token.
 type JWTClaims struct {
@@ -175,7 +186,7 @@ func (s *Service) CreateFirstAdmin(ctx context.Context, username string, email *
 	}
 
 	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -214,7 +225,7 @@ func (s *Service) CreateFirstAdmin(ctx context.Context, username string, email *
 
 // HashPassword hashes a password using bcrypt.
 func HashPassword(password string) (string, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost())
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

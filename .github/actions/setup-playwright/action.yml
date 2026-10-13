@@ -1,0 +1,33 @@
+name: Set up Playwright
+description: Install one Playwright browser and its system dependencies, caching the browser download.
+
+inputs:
+  browser:
+    description: Browser to install (chromium or firefox)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Get Playwright version
+      id: playwright-version
+      shell: bash
+      run: echo "version=$(npx playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+    - name: Cache Playwright browser
+      id: playwright-cache
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ inputs.browser }}-${{ steps.playwright-version.outputs.version }}
+    - name: Install Playwright browser
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BROWSER: ${{ inputs.browser }}
+      run: npx playwright install --with-deps "$BROWSER"
+    - name: Install Playwright system dependencies
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      env:
+        BROWSER: ${{ inputs.browser }}
+      run: npx playwright install-deps "$BROWSER"
