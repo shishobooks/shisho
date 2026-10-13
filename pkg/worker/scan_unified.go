@@ -1038,7 +1038,7 @@ func (w *Worker) scanFileCore(
 				applySeriesNumberUnit(metadata, unit, titleSource)
 			}
 		}
-		if shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
+		if shouldUpdateBookScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
 			logInfo("updating book title", logger.Data{"from": book.Title, "to": title})
 			book.Title = title
 			book.TitleSource = titleSource
@@ -1047,7 +1047,7 @@ func (w *Worker) scanFileCore(
 
 			// Regenerate sort title
 			newSortTitle := sortname.ForTitle(title)
-			if shouldUpdateScalar(newSortTitle, book.SortTitle, titleSource, book.SortTitleSource, forceRefresh) {
+			if shouldUpdateBookScalar(newSortTitle, book.SortTitle, titleSource, book.SortTitleSource, forceRefresh) {
 				book.SortTitle = newSortTitle
 				book.SortTitleSource = titleSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "sort_title", "sort_title_source")
@@ -1084,7 +1084,7 @@ func (w *Worker) scanFileCore(
 				existingSubtitleSource = *book.SubtitleSource
 			}
 			subtitleSource := metadata.SourceForField("subtitle")
-			if shouldUpdateScalar(subtitle, existingSubtitle, subtitleSource, existingSubtitleSource, forceRefresh) {
+			if shouldUpdateBookScalar(subtitle, existingSubtitle, subtitleSource, existingSubtitleSource, forceRefresh) {
 				logInfo("updating book subtitle", logger.Data{"from": existingSubtitle, "to": subtitle})
 				book.Subtitle = &subtitle
 				book.SubtitleSource = &subtitleSource
@@ -1123,7 +1123,7 @@ func (w *Worker) scanFileCore(
 				existingDescriptionSource = *book.DescriptionSource
 			}
 			descSource := metadata.SourceForField("description")
-			if shouldUpdateScalar(description, existingDescription, descSource, existingDescriptionSource, forceRefresh) {
+			if shouldUpdateBookScalar(description, existingDescription, descSource, existingDescriptionSource, forceRefresh) {
 				logInfo("updating book description", nil)
 				book.Description = &description
 				book.DescriptionSource = &descSource
@@ -1170,7 +1170,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			authorSource := metadata.SourceForField("authors")
-			if shouldUpdateRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, forceRefresh) {
+			if shouldUpdateBookRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, forceRefresh) {
 				logInfo("updating authors", logger.Data{"new_count": len(metadata.Authors), "old_count": len(book.Authors)})
 
 				// Collect authors for batch insert (replaces immediate delete + create)
@@ -1393,7 +1393,7 @@ func (w *Worker) scanFileCore(
 			sort.Strings(existingGenreNames)
 
 			genreSource := metadata.SourceForField("genres")
-			if shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
+			if shouldUpdateBookRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
 				logInfo("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
 
 				// Collect genres for batch insert (replaces immediate delete + create)
@@ -1494,7 +1494,7 @@ func (w *Worker) scanFileCore(
 			sort.Strings(existingTagNames)
 
 			tagSource := metadata.SourceForField("tags")
-			if shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
+			if shouldUpdateBookRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
 				logInfo("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
 
 				// Collect tags for batch insert (replaces immediate delete + create)

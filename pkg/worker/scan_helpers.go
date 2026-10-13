@@ -160,6 +160,9 @@ func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*mo
 		return false
 	}
 	newSource := incoming.SourceForField("series")
+	if !forceRefresh && fromAnotherFileFormat(newSource, existingSource) {
+		return false
+	}
 	if len(existing) != 1 || existing[0].Series == nil || existing[0].Series.Name != incoming.Series {
 		existingNames := make([]string, 0, len(existing))
 		for _, membership := range existing {
@@ -332,4 +335,42 @@ func appendIfMissing(slice []string, items ...string) []string {
 		}
 	}
 	return slice
+}
+
+// fileFormatSources are the sources for metadata embedded in one file format.
+// The generic file_metadata source a book merge writes is deliberately absent.
+var fileFormatSources = map[string]bool{
+	models.DataSourceEPUBMetadata: true,
+	models.DataSourceCBZMetadata:  true,
+	models.DataSourceM4BMetadata:  true,
+	models.DataSourcePDFMetadata:  true,
+	models.DataSourceMOBIMetadata: true,
+}
+
+// fromAnotherFileFormat reports whether a book-level value about to be
+// replaced was embedded in a different file format than the new one. All
+// file formats share one priority, so without this check a book with an
+// EPUB and a PDF would take each field from whichever file was scanned last.
+// A normal scan keeps the value the other format set; refresh and reset
+// still replace it.
+func fromAnotherFileFormat(newSource, existingSource string) bool {
+	return newSource != existingSource && fileFormatSources[newSource] && fileFormatSources[existingSource]
+}
+
+// shouldUpdateBookScalar is shouldUpdateScalar for a book-level field, which
+// any of the book's main files can supply.
+func shouldUpdateBookScalar(newValue, existingValue, newSource, existingSource string, forceRefresh bool) bool {
+	if !forceRefresh && fromAnotherFileFormat(newSource, existingSource) {
+		return false
+	}
+	return shouldUpdateScalar(newValue, existingValue, newSource, existingSource, forceRefresh)
+}
+
+// shouldUpdateBookRelationship is shouldUpdateRelationship for a book-level
+// collection, which any of the book's main files can supply.
+func shouldUpdateBookRelationship(newItems, existingItems []string, newSource, existingSource string, forceRefresh bool) bool {
+	if !forceRefresh && fromAnotherFileFormat(newSource, existingSource) {
+		return false
+	}
+	return shouldUpdateRelationship(newItems, existingItems, newSource, existingSource, forceRefresh)
 }
