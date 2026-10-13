@@ -2,6 +2,7 @@ package kepub
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -9,12 +10,11 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -59,13 +59,13 @@ type CBZChapter struct {
 	StartPage int // 0-indexed page number
 }
 
-// pageInfo holds information about a page image.
+// pageInfo describes a written page: its image's filename in the images
+// directory, dimensions, and media type.
 type pageInfo struct {
 	filename  string
 	width     int
 	height    int
 	mediaType string
-	data      []byte
 }
 
 // ConvertCBZ converts a CBZ file to a fixed-layout KePub EPUB.
@@ -76,10 +76,11 @@ func (c *Converter) ConvertCBZ(ctx context.Context, srcPath, destPath string) er
 }
 
 // ConvertCBZWithMetadata converts a CBZ file to a fixed-layout KePub EPUB with metadata.
+// It is a path-based wrapper over PrepareCBZ and CBZConversion.Write; downloads
+// call those directly through pkg/filegen.
 // JPEG/PNG images taller than 2000px are resized to 2000px height.
 // PNG images are converted to JPEG for smaller file size.
 func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPath string, metadata *CBZMetadata) error {
-	// Open source CBZ
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to open source file")
@@ -96,10 +97,9 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 		return errors.Wrap(err, "failed to read source CBZ as zip")
 	}
 
-	imageFiles := cbz.PageImages(srcZip)
-
-	if len(imageFiles) == 0 {
-		return errors.New("no images found in CBZ file")
+	conversion, err := c.PrepareCBZ(srcZip, metadata)
+	if err != nil {
+		return err
 	}
 
 	// Create temporary output file
@@ -113,7 +113,58 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 		os.Remove(tmpPath)
 	}()
 
-	destZip := zip.NewWriter(destFile)
+	w := bufio.NewWriter(destFile)
+	if err := conversion.Write(ctx, w); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
+		return errors.Wrap(err, "failed to write destination file")
+	}
+
+	// Close the file before renaming
+	if err := destFile.Close(); err != nil {
+		return errors.Wrap(err, "failed to close destination file")
+	}
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return errors.Wrap(err, "failed to finalize destination file")
+	}
+
+	return nil
+}
+
+// CBZConversion is a CBZ ready to be converted to a fixed-layout KePub.
+type CBZConversion struct {
+	pages    []*zip.File
+	metadata *CBZMetadata
+}
+
+// PrepareCBZ finds the pages of the CBZ in srcZip and checks that each can
+// be opened, so a CBZ the conversion cannot use fails before anything is
+// written. Pages are read only by Write, and srcZip must stay readable
+// until it returns.
+func (c *Converter) PrepareCBZ(srcZip *zip.Reader, metadata *CBZMetadata) (*CBZConversion, error) {
+	pages := cbz.PageImages(srcZip)
+	if len(pages) == 0 {
+		return nil, errors.New("no images found in CBZ file")
+	}
+	for _, page := range pages {
+		if err := cbz.CheckReadable(page); err != nil {
+			return nil, err
+		}
+	}
+	return &CBZConversion{pages: pages, metadata: metadata}, nil
+}
+
+// Write writes the KePub to w front to back. Each page's XHTML and image
+// are written as soon as the page is processed, a bounded number of pages
+// ahead, and the zip writer is flushed after each page so output arrives
+// about once per page. The OPF, NCX, and nav list every page with its
+// dimensions, so they come last; the container only requires mimetype
+// first, and container.xml points to the OPF by path.
+func (cv *CBZConversion) Write(ctx context.Context, w io.Writer) error {
+	destZip := zip.NewWriter(w)
 
 	// Write mimetype first (uncompressed, as per EPUB spec)
 	mimeWriter, err := destZip.CreateHeader(&zip.FileHeader{
@@ -138,129 +189,77 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 		return errors.Wrap(err, "failed to write container.xml")
 	}
 
-	// Process images in parallel for better performance
-	pages := make([]pageInfo, len(imageFiles))
-	processErrors := make([]error, len(imageFiles))
-
-	// Use a worker pool with NumCPU workers
-	numWorkers := runtime.NumCPU()
-	if numWorkers > len(imageFiles) {
-		numWorkers = len(imageFiles)
+	// Generate CSS for fixed layout
+	if err := writeZipFile(destZip, "OEBPS/styles.css", generateFixedLayoutCSS()); err != nil {
+		return errors.Wrap(err, "failed to write styles.css")
+	}
+	if err := destZip.Flush(); err != nil {
+		return errors.Wrap(err, "failed to write destination")
 	}
 
-	var wg sync.WaitGroup
-	jobs := make(chan int, len(imageFiles))
-
-	// Start workers
-	for w := 0; w < numWorkers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range jobs {
-				// Check for context cancellation
-				select {
-				case <-ctx.Done():
-					processErrors[i] = ctx.Err()
-					continue
-				default:
-				}
-
-				imgFile := imageFiles[i]
-				data, err := readZipFile(imgFile)
-				if err != nil {
-					processErrors[i] = errors.Wrapf(err, "failed to read image: %s", imgFile.Name)
-					continue
-				}
-
-				// Process image: resize if too tall, convert PNG to JPEG
-				ext := strings.ToLower(filepath.Ext(imgFile.Name))
-				processed := ProcessImageForEreader(data, ext)
-
-				pages[i] = pageInfo{
-					filename:  fmt.Sprintf("page%04d%s", i+1, processed.Ext),
-					width:     processed.Width,
-					height:    processed.Height,
-					mediaType: processed.MediaType,
-					data:      processed.Data,
-				}
-			}
-		}()
-	}
-
-	// Send jobs
-	for i := range imageFiles {
-		jobs <- i
-	}
-	close(jobs)
-
-	// Wait for all workers to complete
-	wg.Wait()
-
-	// Check for errors
-	for i, err := range processErrors {
-		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return errors.Wrap(err, "conversion cancelled")
-			}
-			return errors.Wrapf(err, "failed to process image %d", i+1)
+	// Generate one XHTML page per image (required for fixed-layout), each
+	// with its processed image: JPEG/PNG resized to fit the screen, PNG
+	// converted to JPEG.
+	pages := make([]pageInfo, 0, len(cv.pages))
+	err = cbz.ProcessInOrder(ctx, cv.pages, processCBZPage, func(i int, processed *ProcessedImage) error {
+		page := pageInfo{
+			filename:  fmt.Sprintf("page%04d%s", i+1, processed.Ext),
+			width:     processed.Width,
+			height:    processed.Height,
+			mediaType: processed.MediaType,
 		}
+		pageName := fmt.Sprintf("OEBPS/page%04d.xhtml", i+1)
+		if err := writeZipFile(destZip, pageName, generateImagePage(page, i)); err != nil {
+			return errors.Wrapf(err, "failed to write %s", pageName)
+		}
+		imgPath := "OEBPS/images/" + page.filename
+		if err := writeZipFile(destZip, imgPath, processed.Data); err != nil {
+			return errors.Wrapf(err, "failed to write %s", imgPath)
+		}
+		if err := destZip.Flush(); err != nil {
+			return errors.Wrapf(err, "failed to write %s", imgPath)
+		}
+		pages = append(pages, page)
+		return nil
+	})
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return errors.Wrap(ctxErr, "conversion cancelled")
+		}
+		return err
 	}
+
+	// The NCX's dtb:uid must equal the OPF's unique identifier.
+	uid := generateUUID()
 
 	// Generate OPF content
-	opf := generateFixedLayoutOPF(pages, metadata)
-	if err := writeZipFile(destZip, "OEBPS/content.opf", opf); err != nil {
+	if err := writeZipFile(destZip, "OEBPS/content.opf", generateFixedLayoutOPF(pages, cv.metadata, uid)); err != nil {
 		return errors.Wrap(err, "failed to write content.opf")
 	}
 
 	// Generate NCX (table of contents)
-	ncx := generateNCX(pages, metadata)
-	if err := writeZipFile(destZip, "OEBPS/toc.ncx", ncx); err != nil {
+	if err := writeZipFile(destZip, "OEBPS/toc.ncx", generateNCX(pages, cv.metadata, uid)); err != nil {
 		return errors.Wrap(err, "failed to write toc.ncx")
 	}
 
-	// Generate one XHTML page per image (required for fixed-layout)
-	for i, page := range pages {
-		xhtml := generateImagePage(page, i)
-		pageName := fmt.Sprintf("OEBPS/page%04d.xhtml", i+1)
-		if err := writeZipFile(destZip, pageName, xhtml); err != nil {
-			return errors.Wrapf(err, "failed to write %s", pageName)
-		}
-
-		// Write processed image file
-		imgPath := "OEBPS/images/" + page.filename
-		if err := writeZipFile(destZip, imgPath, page.data); err != nil {
-			return errors.Wrapf(err, "failed to write %s", imgPath)
-		}
-	}
-
-	// Generate CSS for fixed layout
-	css := generateFixedLayoutCSS()
-	if err := writeZipFile(destZip, "OEBPS/styles.css", css); err != nil {
-		return errors.Wrap(err, "failed to write styles.css")
-	}
-
 	// Generate nav.xhtml (required for EPUB3 and helps Kobo navigation)
-	nav := generateNavXHTML(pages, metadata)
-	if err := writeZipFile(destZip, "OEBPS/nav.xhtml", nav); err != nil {
+	if err := writeZipFile(destZip, "OEBPS/nav.xhtml", generateNavXHTML(pages, cv.metadata)); err != nil {
 		return errors.Wrap(err, "failed to write nav.xhtml")
 	}
 
-	// Close the zip writer
 	if err := destZip.Close(); err != nil {
 		return errors.Wrap(err, "failed to finalize destination")
 	}
-
-	// Close the file before renaming
-	if err := destFile.Close(); err != nil {
-		return errors.Wrap(err, "failed to close destination file")
-	}
-
-	// Atomic rename
-	if err := os.Rename(tmpPath, destPath); err != nil {
-		return errors.Wrap(err, "failed to finalize destination file")
-	}
-
 	return nil
+}
+
+// processCBZPage reads a page and processes it for e-readers.
+func processCBZPage(imgFile *zip.File) (*ProcessedImage, error) {
+	data, err := readZipFile(imgFile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read image: %s", imgFile.Name)
+	}
+	return ProcessImageForEreader(data, strings.ToLower(filepath.Ext(imgFile.Name))), nil
 }
 
 // imageMediaType returns the MIME type for an image extension.
@@ -305,7 +304,7 @@ func getEffectiveTitle(metadata *CBZMetadata) string {
 }
 
 // generateFixedLayoutOPF generates the OPF file for a fixed-layout EPUB.
-func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
+func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata, uid string) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -315,7 +314,7 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">urn:uuid:`)
-	buf.WriteString(generateUUID())
+	buf.WriteString(uid)
 	buf.WriteString(`</dc:identifier>
     <dc:title>`)
 	buf.WriteString(html.EscapeString(title))
@@ -510,7 +509,7 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata) []byte {
 // generateNCX generates the NCX navigation file.
 // If chapters are provided in metadata, uses chapter-based navigation.
 // Otherwise, falls back to page-based navigation.
-func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
+func generateNCX(pages []pageInfo, metadata *CBZMetadata, uid string) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -520,7 +519,7 @@ func generateNCX(pages []pageInfo, metadata *CBZMetadata) []byte {
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
     <meta name="dtb:uid" content="urn:uuid:`)
-	buf.WriteString(generateUUID())
+	buf.WriteString(uid)
 	buf.WriteString(`"/>
     <meta name="dtb:depth" content="1"/>
     <meta name="dtb:totalPageCount" content="`)

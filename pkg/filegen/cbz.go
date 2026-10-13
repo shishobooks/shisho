@@ -8,12 +8,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
@@ -85,10 +82,8 @@ func (g *CBZGenerator) Prepare(_ context.Context, src Source, book *models.Book,
 	var existingComicInfo *cbzComicInfo
 	hasComicInfo := false
 	for _, f := range srcZip.File {
-		// An entry the zip reader cannot open would otherwise only fail once
-		// the download has started.
-		if f.Method != zip.Store && f.Method != zip.Deflate || f.Flags&0x1 != 0 {
-			return nil, NewGenerationError(models.FileTypeCBZ, zip.ErrAlgorithm, fmt.Sprintf("cannot read %s from source CBZ", f.Name))
+		if err := cbz.CheckReadable(f); err != nil {
+			return nil, NewGenerationError(models.FileTypeCBZ, err, err.Error()+" from source CBZ")
 		}
 		lowerName := strings.ToLower(f.Name)
 		if lowerName == "comicinfo.xml" {
@@ -176,123 +171,39 @@ func (p *cbzPrepared) Write(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-// processedPage is a page ready to be written, or why it is not.
+// processedPage is a page ready to be written.
 type processedPage struct {
 	name string
 	data []byte
-	err  error
 }
 
-// writePages processes pages in parallel and writes them in order. Each page
-// gets a slot in pending before a worker starts on it, and pending holds as
-// many slots as there are workers, so workers never run more than that many
-// pages ahead of the writer and memory stays bounded however many pages the
-// book has.
+// writePages processes pages in parallel and writes them in order, holding
+// a bounded number of processed pages at a time.
 func (p *cbzPrepared) writePages(ctx context.Context, destZip *zip.Writer) error {
-	numWorkers := min(runtime.NumCPU(), len(p.imageFiles))
-	if numWorkers == 0 {
-		return nil
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	type job struct {
-		file *zip.File
-		out  chan<- processedPage
-	}
-	jobs := make(chan job)
-	pending := make(chan chan processedPage, numWorkers)
-	var wg sync.WaitGroup
-	// Stop the dispatcher and workers, and wait for them, before returning,
-	// so nothing reads the source once Write is done with it.
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer close(jobs)
-		defer close(pending)
-		for _, f := range p.imageFiles {
-			out := make(chan processedPage, 1)
-			select {
-			case pending <- out:
-			case <-ctx.Done():
-				return
-			}
-			select {
-			case jobs <- job{file: f, out: out}:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	for range numWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := range jobs {
-				if err := ctx.Err(); err != nil {
-					j.out <- processedPage{err: err}
-					continue
-				}
-				j.out <- processCBZPageRecovering(j.file)
-			}
-		}()
-	}
-
-	i := 0
-	for out := range pending {
-		var page processedPage
-		select {
-		case page = <-out:
-		case <-ctx.Done():
-			return NewGenerationError(models.FileTypeCBZ, ctx.Err(), "generation cancelled")
-		}
-		if page.err != nil {
-			if ctx.Err() != nil {
-				return NewGenerationError(models.FileTypeCBZ, ctx.Err(), "generation cancelled")
-			}
-			return NewGenerationError(models.FileTypeCBZ, page.err, fmt.Sprintf("failed to process image %d", i+1))
-		}
+	err := cbz.ProcessInOrder(ctx, p.imageFiles, processCBZPage, func(_ int, page processedPage) error {
 		destZipFile, err := destZip.Create(page.name)
 		if err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to create image file in destination CBZ")
+			return errors.Wrap(err, "failed to create image file in destination CBZ")
 		}
 		if _, err := destZipFile.Write(page.data); err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to write image file to destination CBZ")
+			return errors.Wrap(err, "failed to write image file to destination CBZ")
 		}
-		if err := destZip.Flush(); err != nil {
-			return NewGenerationError(models.FileTypeCBZ, err, "failed to write image file to destination CBZ")
-		}
-		i++
+		return errors.Wrap(destZip.Flush(), "failed to write image file to destination CBZ")
+	})
+	if err == nil {
+		return nil
 	}
-	// The dispatcher stops early only when ctx is done.
-	if err := ctx.Err(); err != nil {
-		return NewGenerationError(models.FileTypeCBZ, err, "generation cancelled")
+	if ctx.Err() != nil {
+		return NewGenerationError(models.FileTypeCBZ, ctx.Err(), "generation cancelled")
 	}
-	return nil
-}
-
-// processCBZPageRecovering is processCBZPage with a panic, from an image
-// decoder for example, returned as the page's error. Workers run outside the
-// download cache's own recovery, so a panic would otherwise end the process.
-func processCBZPageRecovering(imgFile *zip.File) (page processedPage) {
-	defer func() {
-		if r := recover(); r != nil {
-			page = processedPage{err: errors.Errorf("panic processing image %s: %v\n%s", imgFile.Name, r, debug.Stack())}
-		}
-	}()
-	return processCBZPage(imgFile)
+	return NewGenerationError(models.FileTypeCBZ, err, err.Error())
 }
 
 // processCBZPage reads a page and processes it for e-readers.
-func processCBZPage(imgFile *zip.File) processedPage {
+func processCBZPage(imgFile *zip.File) (processedPage, error) {
 	data, err := readCBZZipFile(imgFile)
 	if err != nil {
-		return processedPage{err: fmt.Errorf("failed to read image %s: %w", imgFile.Name, err)}
+		return processedPage{}, fmt.Errorf("failed to read image %s: %w", imgFile.Name, err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(imgFile.Name))
@@ -303,7 +214,7 @@ func processCBZPage(imgFile *zip.File) processedPage {
 	if processed.Ext != ext {
 		newName = strings.TrimSuffix(imgFile.Name, filepath.Ext(imgFile.Name)) + processed.Ext
 	}
-	return processedPage{name: newName, data: processed.Data}
+	return processedPage{name: newName, data: processed.Data}, nil
 }
 
 // cbzComicInfo represents ComicInfo.xml structure for CBZ generation.

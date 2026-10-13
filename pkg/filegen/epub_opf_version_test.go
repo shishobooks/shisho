@@ -10,11 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -244,6 +248,24 @@ func assertNoDuplicateAttrs(t *testing.T, raw []byte) {
 	}
 }
 
+// assertEPUBCheckClean runs epubcheck on the generated file when it is
+// installed and fails on any error, for fixtures that are complete
+// packages.
+func assertEPUBCheckClean(t *testing.T, path string) {
+	t.Helper()
+
+	if _, err := exec.LookPath("epubcheck"); err != nil {
+		return
+	}
+	out, _ := exec.CommandContext(t.Context(), "epubcheck", path).CombinedOutput()
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "ERROR") || strings.HasPrefix(line, "FATAL") {
+			t.Errorf("epubcheck output:\n%s", out)
+			return
+		}
+	}
+}
+
 // assertEPUBCheck runs epubcheck on the generated file when it is installed.
 func assertEPUBCheck(t *testing.T, path string) {
 	t.Helper()
@@ -272,6 +294,12 @@ func coverBook() *models.Book {
 
 const coverChapter = `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title></head><body><p>One</p></body></html>`
 
+// coverNav is the nav document that makes the EPUB 3 cover fixtures valid
+// packages, so the generator adds none of its own.
+const coverNav = `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="chapter1.xhtml">One</a></li></ol></nav></body></html>`
+
+const coverNavItem = `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`
+
 func TestEPUBGenerator_CoverSwap(t *testing.T) {
 	t.Parallel()
 
@@ -292,12 +320,14 @@ func TestEPUBGenerator_CoverSwap(t *testing.T) {
   <manifest>
     <item id="img" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    ` + coverNavItem + `
   </manifest>
   <spine><itemref idref="chapter1"/></spine>
 </package>`,
 			files: map[string]string{
 				"OEBPS/images/cover.jpg": "original cover",
 				"OEBPS/chapter1.xhtml":   coverChapter,
+				"OEBPS/nav.xhtml":        coverNav,
 			},
 		}, coverBook(), nil, newCover, "image/png")
 
@@ -305,7 +335,7 @@ func TestEPUBGenerator_CoverSwap(t *testing.T) {
 		assert.Equal(t, newCover, entries["OEBPS/images/cover.jpg"], "the cover-image item's file is replaced")
 
 		els := opfElements(t, entries["OEBPS/content.opf"])
-		require.Len(t, els["manifest"], 2, "no second cover item is added")
+		require.Len(t, els["manifest"], 3, "no second cover item is added")
 		mediaType, _ := els["manifest"][0].attr("", "media-type")
 		assert.Equal(t, "image/png", mediaType)
 		props, _ := els["manifest"][0].attr("", "properties")
@@ -391,17 +421,18 @@ func TestEPUBGenerator_CoverSwap(t *testing.T) {
   </metadata>
   <manifest>
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    ` + coverNavItem + `
   </manifest>
   <spine><itemref idref="chapter1"/></spine>
 </package>`,
-			files: map[string]string{"OEBPS/chapter1.xhtml": coverChapter},
+			files: map[string]string{"OEBPS/chapter1.xhtml": coverChapter, "OEBPS/nav.xhtml": coverNav},
 		}, coverBook(), nil, newCover, "image/png")
 
 		entries := zipEntries(t, dest)
 		raw := entries["OEBPS/content.opf"]
 		els := opfElements(t, raw)
-		require.Len(t, els["manifest"], 2)
-		added := els["manifest"][1]
+		require.Len(t, els["manifest"], 3)
+		added := els["manifest"][2]
 		props, _ := added.attr("", "properties")
 		assert.Equal(t, "cover-image", props)
 		mediaType, _ := added.attr("", "media-type")
@@ -578,15 +609,16 @@ func TestEPUBGenerator_CoverSwap(t *testing.T) {
   </metadata>
   <manifest>
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    ` + coverNavItem + `
   </manifest>
   <spine><itemref idref="chapter1"/></spine>
 </package>`,
-			files: map[string]string{"chapter1.xhtml": coverChapter},
+			files: map[string]string{"chapter1.xhtml": coverChapter, "nav.xhtml": coverNav},
 		}, coverBook(), nil, nil, "")
 
 		entries := zipEntries(t, dest)
-		assert.Len(t, entries, 4, "mimetype, container, OPF, and chapter only")
-		assert.Len(t, opfElements(t, entries["content.opf"])["manifest"], 1)
+		assert.Len(t, entries, 5, "mimetype, container, OPF, chapter, and nav only")
+		assert.Len(t, opfElements(t, entries["content.opf"])["manifest"], 2)
 	})
 }
 
@@ -1479,4 +1511,211 @@ func TestEPUBGenerator_NCXFollowsOnlyWrittenNavEdits(t *testing.T) {
 	entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
 	assert.Equal(t, nav, string(entries["OEBPS/nav.xhtml"]))
 	assert.Equal(t, ncx, string(entries["OEBPS/toc.ncx"]))
+}
+
+// epub3RequirementsOPF is an EPUB 3 package with neither of the things EPUB
+// 3 requires of every package: a dcterms:modified date and a nav document.
+// Its NCX sits in a directory of its own, as the scan's chapter hrefs are
+// relative to it.
+const epub3RequirementsOPF = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="pub-id">urn:uuid:0b5e5b3c-1f4e-4a8e-9c1d-3f7c2a9e8b10</dc:identifier>
+    <dc:title>Source</dc:title>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc/toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="chapter1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx"><itemref idref="chapter1"/></spine>
+</package>`
+
+const epub3RequirementsNCX = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="urn:uuid:0b5e5b3c-1f4e-4a8e-9c1d-3f7c2a9e8b10"/></head><docTitle><text>Source</text></docTitle>
+<navMap><navPoint id="n1" playOrder="1"><navLabel><text>One</text></navLabel><content src="../text/chapter1.xhtml"/></navPoint></navMap></ncx>`
+
+var modifiedDatePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`)
+
+// modifiedDates returns the text of the package's dcterms:modified metas.
+func modifiedDates(els map[string][]opfElement) []string {
+	var dates []string
+	for _, e := range els["metadata"] {
+		if p, _ := e.attr("", "property"); p == "dcterms:modified" {
+			dates = append(dates, e.Text)
+		}
+	}
+	return dates
+}
+
+// navItemHrefs returns the hrefs of the manifest items marked nav.
+func navItemHrefs(els map[string][]opfElement) []string {
+	var hrefs []string
+	for _, e := range els["manifest"] {
+		props, _ := e.attr("", "properties")
+		if slices.Contains(strings.Fields(props), "nav") {
+			href, _ := e.attr("", "href")
+			hrefs = append(hrefs, href)
+		}
+	}
+	return hrefs
+}
+
+// An EPUB 3 package missing a dcterms:modified date or a nav document gets
+// them in the Generated EPUB and its KePub. The nav goes next to the NCX
+// and lists the file's chapters with their hrefs as stored.
+func TestEPUBGenerators_AddMissingEPUB3Requirements(t *testing.T) {
+	t.Parallel()
+	for name, gen := range map[string]Generator{"epub": &EPUBGenerator{}, "kepub": NewKepubEPUBGenerator()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			srcPath := filepath.Join(dir, "source.epub")
+			writeVersionedEPUB(t, srcPath, versionedEPUB{
+				opfPath: "OEBPS/content.opf",
+				opf:     epub3RequirementsOPF,
+				files: map[string]string{
+					"OEBPS/toc/toc.ncx":         epub3RequirementsNCX,
+					"OEBPS/text/chapter1.xhtml": coverChapter,
+				},
+			})
+			file := &models.File{
+				FileType: models.FileTypeEPUB,
+				Filepath: srcPath,
+				Chapters: []*models.Chapter{{Title: "One <1>", Href: pointerutil.String("../text/chapter1.xhtml")}},
+			}
+			dest := filepath.Join(dir, "out.epub")
+			require.NoError(t, gen.Generate(context.Background(), srcPath, dest, &models.Book{Title: "Fish & Chips"}, file))
+
+			entries := zipEntries(t, dest)
+			raw := entries["OEBPS/content.opf"]
+			els := opfElements(t, raw)
+			dates := modifiedDates(els)
+			require.Len(t, dates, 1, string(raw))
+			assert.Regexp(t, modifiedDatePattern, dates[0])
+
+			hrefs := navItemHrefs(els)
+			require.Equal(t, []string{"toc/nav.xhtml"}, hrefs, "the nav is declared next to the NCX")
+			nav := string(entries["OEBPS/toc/nav.xhtml"])
+			assert.Contains(t, nav, `epub:type="toc"`)
+			assert.Regexp(t, `<a href="../text/chapter1.xhtml">(<span[^>]*>)?One &lt;1&gt;`, nav)
+			assert.Contains(t, nav, "Fish &amp; Chips")
+			assert.Equal(t, 1, strings.Count(string(raw), "<itemref"), "the nav is not added to the spine")
+			assertValidXML(t, raw)
+			assertEPUBCheckClean(t, dest)
+		})
+	}
+}
+
+// The added nav goes in the NCX's directory as the zip names it, so an NCX
+// href that is percent-encoded puts the nav beside the NCX, under an href
+// that is encoded too. A chapter with no title still gets a link text.
+func TestEPUBGenerator_AddedNavBesideEncodedNCX(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "source.epub")
+	writeVersionedEPUB(t, srcPath, versionedEPUB{
+		opfPath: "OEBPS/content.opf",
+		opf:     strings.Replace(epub3RequirementsOPF, `href="toc/toc.ncx"`, `href="my%20toc/toc.ncx"`, 1),
+		files: map[string]string{
+			"OEBPS/my toc/toc.ncx":      epub3RequirementsNCX,
+			"OEBPS/text/chapter1.xhtml": coverChapter,
+		},
+	})
+	file := &models.File{
+		FileType: models.FileTypeEPUB,
+		Filepath: srcPath,
+		Chapters: []*models.Chapter{{Title: "", Href: pointerutil.String("../text/chapter1.xhtml")}},
+	}
+	dest := filepath.Join(dir, "out.epub")
+	require.NoError(t, (&EPUBGenerator{}).Generate(context.Background(), srcPath, dest, coverBook(), file))
+
+	entries := zipEntries(t, dest)
+	assert.Equal(t, []string{"my%20toc/nav.xhtml"}, navItemHrefs(opfElements(t, entries["OEBPS/content.opf"])))
+	nav := string(entries["OEBPS/my toc/nav.xhtml"])
+	assert.Regexp(t, `<a href="../text/chapter1.xhtml">[^<]+</a>`, nav)
+	assertEPUBCheckClean(t, dest)
+}
+
+// The modified date is when the book's or the file's metadata last changed,
+// so generating the same metadata twice gives the same file.
+func TestEPUBGenerator_AddedModifiedDateIsLastMetadataChange(t *testing.T) {
+	t.Parallel()
+	book := coverBook()
+	book.UpdatedAt = time.Date(2024, 5, 6, 7, 8, 9, 0, time.UTC)
+	file := &models.File{FileType: models.FileTypeEPUB, UpdatedAt: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)}
+	dest := generateVersioned(t, versionedEPUB{
+		opfPath: "OEBPS/content.opf",
+		opf:     epub3RequirementsOPF,
+		files: map[string]string{
+			"OEBPS/toc/toc.ncx":         epub3RequirementsNCX,
+			"OEBPS/text/chapter1.xhtml": coverChapter,
+		},
+	}, book, file, nil, "")
+
+	assert.Equal(t, []string{"2024-05-06T07:08:09Z"}, modifiedDates(opfElements(t, zipEntries(t, dest)["OEBPS/content.opf"])))
+}
+
+// With no chapters to list and no NCX, the nav goes next to the OPF and
+// links the first document in the spine under the book's title.
+func TestEPUBGenerator_AddedNavWithoutChapters(t *testing.T) {
+	t.Parallel()
+	opf := strings.Replace(epub3RequirementsOPF, `<item id="ncx" href="toc/toc.ncx" media-type="application/x-dtbncx+xml"/>`, "", 1)
+	opf = strings.Replace(opf, `<spine toc="ncx">`, "<spine>", 1)
+	dest := generateVersioned(t, versionedEPUB{
+		opfPath: "OEBPS/content.opf",
+		opf:     opf,
+		files:   map[string]string{"OEBPS/text/chapter1.xhtml": coverChapter},
+	}, coverBook(), nil, nil, "")
+
+	entries := zipEntries(t, dest)
+	assert.Equal(t, []string{"nav.xhtml"}, navItemHrefs(opfElements(t, entries["OEBPS/content.opf"])))
+	assert.Contains(t, string(entries["OEBPS/nav.xhtml"]), `<a href="text/chapter1.xhtml">Cover Book</a>`)
+	assertEPUBCheckClean(t, dest)
+}
+
+// A package that has a dcterms:modified date and a nav keeps them as they
+// are, and an EPUB 2 package, which needs neither, gets neither.
+func TestEPUBGenerator_EPUB3RequirementsLeftAlone(t *testing.T) {
+	t.Parallel()
+
+	t.Run("EPUB 3 with both", func(t *testing.T) {
+		t.Parallel()
+		opf := strings.Replace(epub3RequirementsOPF, `<dc:language>en</dc:language>`, `<dc:language>en</dc:language>
+    <meta property="dcterms:modified">2020-01-01T00:00:00Z</meta>`, 1)
+		opf = strings.Replace(opf, `</manifest>`, coverNavItem+`</manifest>`, 1)
+		dest := generateVersioned(t, versionedEPUB{
+			opfPath: "OEBPS/content.opf",
+			opf:     opf,
+			files: map[string]string{
+				"OEBPS/toc/toc.ncx":         epub3RequirementsNCX,
+				"OEBPS/text/chapter1.xhtml": coverChapter,
+				"OEBPS/nav.xhtml":           coverNav,
+			},
+		}, coverBook(), nil, nil, "")
+
+		entries := zipEntries(t, dest)
+		els := opfElements(t, entries["OEBPS/content.opf"])
+		assert.Equal(t, []string{"2020-01-01T00:00:00Z"}, modifiedDates(els))
+		assert.Equal(t, []string{"nav.xhtml"}, navItemHrefs(els))
+		assert.NotContains(t, entries, "OEBPS/toc/nav.xhtml")
+	})
+
+	t.Run("EPUB 2", func(t *testing.T) {
+		t.Parallel()
+		dest := generateVersioned(t, versionedEPUB{
+			opfPath: "OEBPS/content.opf",
+			opf:     strings.Replace(epub3RequirementsOPF, `version="3.0"`, `version="2.0"`, 1),
+			files: map[string]string{
+				"OEBPS/toc/toc.ncx":         epub3RequirementsNCX,
+				"OEBPS/text/chapter1.xhtml": coverChapter,
+			},
+		}, coverBook(), nil, nil, "")
+
+		entries := zipEntries(t, dest)
+		els := opfElements(t, entries["OEBPS/content.opf"])
+		assert.Empty(t, modifiedDates(els))
+		assert.Empty(t, navItemHrefs(els))
+		assert.NotContains(t, entries, "OEBPS/toc/nav.xhtml")
+	})
 }

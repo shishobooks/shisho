@@ -33,7 +33,12 @@ const (
 //     document and NCX (pkg/filegen/epub_toc.go).
 //   - 4: MOBI and AZW3 downloads write renamed and deleted chapters into
 //     the NCX index (pkg/filegen/mobi_toc.go).
-const GeneratorVersion = 4
+//   - 5: Generated files pass epubcheck: KePubs declare kobo.js and mark
+//     EPUB 3 documents scripted (pkg/kepub/opf.go), KePubs from CBZ give
+//     the NCX the OPF's identifier (pkg/kepub/cbz.go), and EPUB 3 downloads
+//     gain a missing nav document and modified date
+//     (pkg/filegen/epub_repair.go).
+const GeneratorVersion = 5
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.

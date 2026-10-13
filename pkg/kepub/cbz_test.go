@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1263,4 +1264,21 @@ func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
 		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
 		assert.Contains(t, opfContent, `id="img0001" href="images/page0001.jpg" media-type="image/jpeg" properties="cover-image"`)
 	})
+}
+
+// The NCX names the same book as the OPF: EPUB readers and validators
+// require its dtb:uid to equal the OPF's unique identifier.
+func TestConvertCBZ_NCXIdentifierMatchesOPF(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "comic.cbz")
+	destPath := filepath.Join(dir, "comic.kepub.epub")
+	createTestCBZ(t, srcPath, testCBZOptions{})
+	require.NoError(t, NewConverter().ConvertCBZ(context.Background(), srcPath, destPath))
+
+	opfID := regexp.MustCompile(`<dc:identifier id="uid">([^<]+)</dc:identifier>`).FindStringSubmatch(string(readFileFromKepub(t, destPath, "content.opf")))
+	require.NotNil(t, opfID)
+	ncxID := regexp.MustCompile(`<meta name="dtb:uid" content="([^"]+)"/>`).FindStringSubmatch(string(readFileFromKepub(t, destPath, "toc.ncx")))
+	require.NotNil(t, ncxID)
+	assert.Equal(t, opfID[1], ncxID[1])
 }

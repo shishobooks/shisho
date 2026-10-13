@@ -18,7 +18,11 @@ type Generator interface {
 }
 
 // GenerationError represents an error that occurred during file generation.
+// Error prints only Message, so a message that should reach the logs and a
+// remembered failure carries its cause's text.
 type GenerationError struct {
+	// FileType is the format being generated: a file type, or kepubFormat
+	// for a KePub.
 	FileType string
 	Err      error
 	Message  string
@@ -39,6 +43,20 @@ func NewGenerationError(fileType string, err error, message string) *GenerationE
 		Err:      err,
 		Message:  message,
 	}
+}
+
+// kepubFormat labels the errors of the KePub generators, which would
+// otherwise name their source's file type as the format being generated.
+const kepubFormat = "kepub"
+
+// asKepubError relabels a GenerationError from code a KePub generator shares
+// with its source format's generator, so it names the KePub.
+func asKepubError(err error) error {
+	var genErr *GenerationError
+	if errors.As(err, &genErr) {
+		return NewGenerationError(kepubFormat, genErr.Err, genErr.Message)
+	}
+	return err
 }
 
 // ErrKepubNotSupported is returned when KePub conversion is not supported for a file type.

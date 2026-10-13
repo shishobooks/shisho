@@ -27,7 +27,7 @@ func (g *KepubEPUBGenerator) SupportedType() string {
 
 // Generate creates a KePub file at destPath from an EPUB source.
 func (g *KepubEPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	return generateFile(ctx, g, models.FileTypeEPUB, srcPath, destPath, book, file)
+	return generateFile(ctx, g, kepubFormat, srcPath, destPath, book, file)
 }
 
 // Prepare does the EPUB generator's preparation. Writing converts its
@@ -36,7 +36,7 @@ func (g *KepubEPUBGenerator) Generate(ctx context.Context, srcPath, destPath str
 func (g *KepubEPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
 	plan, err := planEPUB(ctx, src, book, file)
 	if err != nil {
-		return nil, err
+		return nil, asKepubError(err)
 	}
 	entries := make([]kepub.Entry, 0, len(plan.entries))
 	for _, e := range plan.entries {
@@ -57,7 +57,7 @@ func (p *preparedKepubEPUB) Size() (int64, bool) {
 
 func (p *preparedKepubEPUB) Write(ctx context.Context, w io.Writer) error {
 	if err := p.converter.WriteEPUB(ctx, w, p.entries); err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to convert to KePub format")
+		return NewGenerationError(kepubFormat, err, "failed to convert EPUB: "+err.Error())
 	}
 	return nil
 }

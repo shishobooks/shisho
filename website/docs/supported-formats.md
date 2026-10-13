@@ -23,7 +23,7 @@ CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parse
 
 ## First Downloads
 
-A generated download starts as soon as it is requested and is built while it is sent. EPUB, M4B, MOBI, AZW3, and PDF downloads know their size before they start, so the device or browser shows progress even the first time. A CBZ, or a KePub made from an EPUB, does not: its first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+A generated download starts as soon as it is requested and is built while it is sent. EPUB, M4B, MOBI, AZW3, and PDF downloads know their size before they start, so the device or browser shows progress even the first time. A CBZ or a KePub, whether made from an EPUB or a CBZ, does not: its first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
 
 ## MOBI and AZW3
 
