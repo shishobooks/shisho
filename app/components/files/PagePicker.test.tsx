@@ -76,4 +76,21 @@ describe("PagePicker navigation", () => {
     expect(current()[0]).toHaveTextContent("1");
     expect(screen.getByText("Page 2 of 3")).toHaveAttribute("role", "status");
   });
+
+  it("opens on the current page even when it changed while closed", () => {
+    const props = {
+      file,
+      onOpenChange: vi.fn(),
+      onSelect: vi.fn(),
+      pageCount: 3,
+    };
+    const { rerender } = render(
+      <PagePicker {...props} currentPage={0} open={false} />,
+    );
+
+    // Callers open the picker by flipping `open`, and the start page can be
+    // edited elsewhere (a chapter's page input) while the picker is closed.
+    rerender(<PagePicker {...props} currentPage={2} open />);
+    expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
+  });
 });

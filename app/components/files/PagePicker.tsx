@@ -63,16 +63,20 @@ const PagePicker = ({
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [thumbnailLoadRadius, setThumbnailLoadRadius] = useState(0);
 
-  // Reset state when dialog opens
-  const handleOpenChange = (newOpen: boolean) => {
-    if (newOpen) {
-      setFocusedPage(currentPage ?? 0);
-      setLoadedPage(null);
-      setPreviewLoaded(false);
-      setThumbnailLoadRadius(0);
-    }
-    onOpenChange(newOpen);
-  };
+  // Reset state whenever `open` turns true. Callers open the picker by setting
+  // `open` themselves, so Radix never reports the open through onOpenChange,
+  // and currentPage may have changed since this component mounted.
+  const prevOpenRef = useRef(open);
+  useEffect(() => {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!justOpened) return;
+
+    setFocusedPage(currentPage ?? 0);
+    setLoadedPage(null);
+    setPreviewLoaded(false);
+    setThumbnailLoadRadius(0);
+  }, [open, currentPage]);
 
   // After the main preview loads, progressively expand thumbnail loading
   useEffect(() => {
@@ -180,11 +184,7 @@ const PagePicker = ({
   const hasChanges = focusedPage !== currentPage;
 
   return (
-    <FormDialog
-      hasChanges={hasChanges}
-      onOpenChange={handleOpenChange}
-      open={open}
-    >
+    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
       <DialogContent
         className="max-w-4xl w-[95vw] h-[90vh] flex flex-col gap-0 p-0 overflow-hidden"
         onCloseAutoFocus={(e) => {
