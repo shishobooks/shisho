@@ -897,6 +897,18 @@ class MOBI6 {
 // handlers for `kindle:` uris
 const kindleResourceRegex = /kindle:(flow|embed):(\w+)(?:\?mime=(\w+\/[-+.\w]+))?/
 const kindlePosRegex = /kindle:pos:fid:(\w+):off:(\w+)/
+// Shisho patch: KF8 books converted from EPUB can keep the EPUB's srcset
+// beside a rewritten src. Its relative paths resolve against the section's
+// blob URL and load nothing, and browsers prefer srcset over src, so the
+// image breaks. Drop any srcset with a candidate that was never resolved.
+export const removeUnresolvedSrcset = doc => {
+    for (const el of doc.querySelectorAll('[srcset]')) {
+        const urls = el.getAttribute('srcset').split(',')
+            .map(candidate => candidate.trim().split(/\s+/)[0])
+        if (urls.some(url => !/^(blob|data):/i.test(url))) el.removeAttribute('srcset')
+    }
+}
+
 const parseResourceURI = str => {
     const [resourceType, id, type] = str.match(kindleResourceRegex).slice(1)
     return { resourceType, id: parseInt(id, 32), type }
@@ -1094,7 +1106,7 @@ class KF8 {
         const newData = await event.detail.data
         const newType = await event.detail.type
         const doc = newType === MIME.SVG ? this.parser.parseFromString(newData, newType) : null
-        return [new Blob([newData], { newType }),
+        return [new Blob([newData], { type: newType }),
             // SVG wrappers need to be inlined
             // as browsers don't allow external resources when loading SVG as an image
             doc?.getElementsByTagNameNS('http://www.w3.org/2000/svg', 'image')?.length
@@ -1184,6 +1196,7 @@ class KF8 {
             for (const el of doc.querySelectorAll(`img[src="${url}"]`))
                 el.replaceWith(node)
         }
+        removeUnresolvedSrcset(doc)
         const url = URL.createObjectURL(
             new Blob([this.serializer.serializeToString(doc)], { type: this.#type }))
         this.#cache.set(section, url)

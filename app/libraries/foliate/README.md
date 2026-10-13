@@ -37,6 +37,10 @@ view.js
 
 Some of the other files (e.g. `fb2.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
 
+## Local patches
+
+`mobi.js` carries changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug; `app/libraries/foliate-mobi.test.ts` fails without them.
+
 ## To update
 
 1. Clone or update the upstream repo:
