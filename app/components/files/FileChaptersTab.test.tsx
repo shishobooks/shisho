@@ -859,6 +859,69 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
   });
 });
 
+describe("FileChaptersTab - adding a PDF chapter", () => {
+  const shortPdf: File = {
+    id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    book_id: 1,
+    library_id: 1,
+    file_type: FileTypePDF,
+    file_role: "main",
+    filepath: "/test/short.pdf",
+    display_name: "short.pdf",
+    filesize_bytes: 1000,
+    page_count: 6,
+    is_preferred_cover: false,
+  };
+
+  const chapterAt = (id: number, title: string, page: number): Chapter => ({
+    id,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    file_id: 1,
+    title,
+    sort_order: id - 1,
+    start_page: page,
+    children: [],
+  });
+
+  const addChapter = async (chapters: Chapter[]) => {
+    mockUseFileChapters.mockReturnValue({
+      data: chapters,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useFileChapters>);
+    const user = createUser();
+    renderWithProviders(
+      <FileChaptersTab
+        canEdit
+        file={shortPdf}
+        isEditing={true}
+        onEditingChange={vi.fn()}
+      />,
+    );
+    await screen.findByDisplayValue(chapters[0].title);
+    await user.click(screen.getByRole("button", { name: /add chapter/i }));
+    return screen.getAllByRole("spinbutton") as HTMLInputElement[];
+  };
+
+  it("starts the new chapter on the page after the last one", async () => {
+    const pages = await addChapter([chapterAt(1, "Chapter 1", 2)]);
+    expect(pages.map((p) => p.value)).toEqual(["3", "4"]);
+  });
+
+  it("never starts the new chapter past the last page", async () => {
+    // The last chapter is on page 6 of 6, so page 7 does not exist.
+    const pages = await addChapter([
+      chapterAt(1, "Chapter 1", 0),
+      chapterAt(2, "Chapter 2", 5),
+    ]);
+    expect(pages.map((p) => p.value)).toEqual(["1", "6", "6"]);
+  });
+});
+
 describe("FileChaptersTab - uncovered pages banner", () => {
   const mockPdfFile: File = {
     id: 1,
