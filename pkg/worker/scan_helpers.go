@@ -333,3 +333,64 @@ func appendIfMissing(slice []string, items ...string) []string {
 	}
 	return slice
 }
+
+// fileFormatSources are the sources for metadata embedded in one file format.
+// The generic file_metadata source a book merge writes is deliberately absent.
+var fileFormatSources = map[string]bool{
+	models.DataSourceEPUBMetadata: true,
+	models.DataSourceCBZMetadata:  true,
+	models.DataSourceM4BMetadata:  true,
+	models.DataSourcePDFMetadata:  true,
+	models.DataSourceMOBIMetadata: true,
+}
+
+// bookMetadataOwnerID returns the ID of the main file whose embedded metadata
+// owns the book-level fields: the book's oldest main file. file may be nil;
+// when given it counts too, since a file just created by this scan may not be
+// in book.Files yet. Returns 0 when the book has no main file.
+func bookMetadataOwnerID(book *models.Book, file *models.File) int {
+	ownerID := 0
+	consider := func(f *models.File) {
+		if f == nil || f.FileRole == models.FileRoleSupplement {
+			return
+		}
+		if ownerID == 0 || f.ID < ownerID {
+			ownerID = f.ID
+		}
+	}
+	consider(file)
+	for _, f := range book.Files {
+		consider(f)
+	}
+	return ownerID
+}
+
+// keepOwnersBookValue reports whether a normal scan must leave a book-level
+// value alone because it came from embedded metadata and the file being
+// scanned does not own the book. All embedded formats share one priority, so
+// without this a book with an EPUB and a PDF would take each field from
+// whichever file a scan reached last. Another file still fills fields that
+// are empty or came from lower-priority sources, and a refresh of that file
+// still replaces them.
+func keepOwnersBookValue(ownsBook bool, newSource, existingSource string, forceRefresh bool) bool {
+	return !forceRefresh && !ownsBook && fileFormatSources[newSource] && fileFormatSources[existingSource]
+}
+
+// filesWithOwnerLast returns the book's files with the metadata owner moved to
+// the end, so a book-level refresh or reset ends with the owner's values.
+func filesWithOwnerLast(book *models.Book) []*models.File {
+	ownerID := bookMetadataOwnerID(book, nil)
+	ordered := make([]*models.File, 0, len(book.Files))
+	var owner *models.File
+	for _, f := range book.Files {
+		if f.ID == ownerID {
+			owner = f
+			continue
+		}
+		ordered = append(ordered, f)
+	}
+	if owner != nil {
+		ordered = append(ordered, owner)
+	}
+	return ordered
+}
