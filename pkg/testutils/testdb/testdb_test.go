@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -42,6 +43,19 @@ func TestNew_RecordsEveryMigrationApplied(t *testing.T) {
 	group, err := migrations.BringUpToDate(context.Background(), db)
 	require.NoError(t, err)
 	assert.True(t, group.IsZero(), "no migration is left to apply")
+}
+
+// migrate falls back to running every migration when the connection has no
+// backup API, which passes every test while losing the template's speedup.
+func TestConnections_SupportRestoringTheTemplate(t *testing.T) {
+	t.Parallel()
+	connector, err := sqliteconn.NewConnector("file:testdb-restorer?mode=memory&cache=shared")
+	require.NoError(t, err)
+	conn, err := connector.Connect(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	assert.Implements(t, (*restorer)(nil), conn)
 }
 
 func TestNew_PinsOneConnection(t *testing.T) {

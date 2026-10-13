@@ -27,8 +27,7 @@ func TestServiceCreateFirstAdmin_SetsTimestamps(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), user.UpdatedAt, time.Minute)
 }
 
-// Cost 12 takes seconds per hash under -race, and tests across the backend
-// hash passwords to create users, so test binaries hash at bcrypt's minimum.
+// See bcryptCost.
 func TestHashPassword_UsesMinimumCostInTests(t *testing.T) {
 	t.Parallel()
 

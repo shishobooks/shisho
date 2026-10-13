@@ -30,6 +30,7 @@ jobs:
         run: |
           echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
           echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
       # Only master saves Go caches, so PR runs never evict the shared ones.
       - name: Restore Go and golangci-lint caches
         uses: actions/cache/restore@v6
@@ -38,10 +39,10 @@ jobs:
             ${{ steps.go-env.outputs.gocache }}
             ${{ steps.go-env.outputs.gomodcache }}
             tmp/golangci-lint-cache
-          key: go-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-
-            go-lint-${{ runner.os }}-
+            go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       - run: mise lint
       - run: mise test:scripts
       - name: Save Go and golangci-lint caches
@@ -54,7 +55,7 @@ jobs:
             ${{ steps.go-env.outputs.gocache }}
             ${{ steps.go-env.outputs.gomodcache }}
             tmp/golangci-lint-cache
-          key: go-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
   test:
     # Keep this N in sync with env.SHARD_TOTAL (env not available in name).
@@ -75,6 +76,7 @@ jobs:
         run: |
           echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
           echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
       - name: Restore Go build cache
         # gotestsplit compiles all of pkg/ with -race on every shard to list
         # the tests, so one cache serves every shard. Shard 1 saves it on
@@ -84,10 +86,10 @@ jobs:
           path: |
             ${{ steps.go-env.outputs.gocache }}
             ${{ steps.go-env.outputs.gomodcache }}
-          key: go-race-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-race-${{ runner.os }}-${{ hashFiles('go.sum') }}-
-            go-race-${{ runner.os }}-
+            go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       - name: Restore test timing cache
         # Restore-only — saving is consolidated across shards in the
         # consolidate-test-timings job below. If we used actions/cache here,
@@ -136,7 +138,7 @@ jobs:
           path: |
             ${{ steps.go-env.outputs.gocache }}
             ${{ steps.go-env.outputs.gomodcache }}
-          key: go-race-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
   consolidate-test-timings:
     name: Consolidate test timings
@@ -358,6 +360,7 @@ jobs:
         run: |
           echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
           echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
       - name: Restore Go build cache
         # The Chromium job saves it on master only.
         uses: actions/cache/restore@v6
@@ -365,10 +368,10 @@ jobs:
           path: |
             ${{ steps.go-env.outputs.gocache }}
             ${{ steps.go-env.outputs.gomodcache }}
-          key: go-build-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-build-${{ runner.os }}-${{ hashFiles('go.sum') }}-
-            go-build-${{ runner.os }}-
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       - run: go mod download
       - run: mise tygo
       - name: Run E2E
@@ -389,14 +392,14 @@ jobs:
           path: |
             ${{ steps.go-env.outputs.gocache }}
             ${{ steps.go-env.outputs.gomodcache }}
-          key: go-build-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that
   # should block merges goes in needs.
   ci-ok:
     name: CI OK
-    needs: [lint, test, lint-js, docs-build, test-js, e2e]
+    needs: [lint, test, image-build, image-smoke, lint-js, docs-build, test-js, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
