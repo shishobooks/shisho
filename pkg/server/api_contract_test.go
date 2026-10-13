@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -69,7 +70,8 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	f.insert(child)
 	f.insert(&models.Plugin{Scope: "contract", ID: "installed", Name: "Installed", Version: "1.0.0", Status: models.PluginStatusActive, InstalledAt: time.Now()})
 	// Files on disk for the download and page rejections: a main file of a
-	// type with no generator, and a CBZ with no stored page count.
+	// type with no generator, a PDF that needs a password, and a CBZ with no
+	// stored page count.
 	fileBook := &models.Book{
 		LibraryID: f.lib.ID, Title: "Served Files", TitleSource: models.DataSourceManual,
 		SortTitle: "Served Files", SortTitleSource: models.DataSourceFilepath,
@@ -80,6 +82,9 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	require.NoError(t, os.WriteFile(pluginPath, []byte("fb2"), 0o644))
 	pluginFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: "fb2", FileRole: models.FileRoleMain, Filepath: pluginPath, FilesizeBytes: 3}
 	f.insert(pluginFile)
+	lockedPath := testgen.GeneratePDF(t, fileBook.Filepath, "locked.pdf", testgen.PDFOptions{UserPassword: "secret"})
+	lockedFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypePDF, FileRole: models.FileRoleMain, Filepath: lockedPath, FilesizeBytes: 1}
+	f.insert(lockedFile)
 	cbzPath := testgen.GenerateCBZ(t, fileBook.Filepath, "comic.cbz", testgen.CBZOptions{Title: "Comic"})
 	cbzFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain, Filepath: cbzPath, FilesizeBytes: 1}
 	f.insert(cbzFile)
@@ -169,6 +174,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download", pluginFile.ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state",
 			message: "Generated downloads are not supported for fb2 files",
+		},
+		{
+			name:   "generated download of a PDF that needs a password",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download", lockedFile.ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+			message: books.CannotDecryptMessage,
 		},
 		{
 			name:   "page past the end of a file with no stored page count",

@@ -524,11 +524,7 @@ func TestGeneratedDownload_PasswordProtectedPDF(t *testing.T) {
 			t.Run(r.name+" "+method, func(t *testing.T) {
 				t.Parallel()
 				f := newDownloadFixture(t, func(dir string) (string, string) {
-					data, err := os.ReadFile("../filegen/testdata/password-aes-256.pdf")
-					require.NoError(t, err)
-					path := filepath.Join(dir, "Locked.pdf")
-					require.NoError(t, os.WriteFile(path, data, 0o600))
-					return path, models.FileTypePDF
+					return testgen.GeneratePDF(t, dir, "Locked.pdf", testgen.PDFOptions{UserPassword: "secret"}), models.FileTypePDF
 				})
 
 				res := f.request(r, method)
