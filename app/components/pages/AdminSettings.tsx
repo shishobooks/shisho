@@ -219,11 +219,6 @@ const AdminSettings = () => {
               value={config.cache_dir}
             />
             <ConfigRow
-              description="Maximum disk space for generated downloads. When exceeded, the least recently used are removed until the cache is at 80% of this size"
-              label="Download Cache Max Size"
-              value={`${config.download_cache_max_size_gb} GiB`}
-            />
-            <ConfigRow
               description="File patterns excluded from supplement discovery. They never cause files to be deleted"
               label="Supplement Exclude Patterns"
               value={config.supplement_exclude_patterns.join(", ")}

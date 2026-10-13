@@ -6,14 +6,19 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/cache"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,24 +65,115 @@ func TestCoverThumbnails_BookFileAndSeriesShareTheManagedCache(t *testing.T) {
 	require.FileExists(t, covers.FileCoverPath(file), "clearing thumbnails must preserve the source cover")
 }
 
-func TestCoverThumbnailSettings_DefaultAndPersistedLimit(t *testing.T) {
+// defaultCacheSettings is GET /api/settings/cache before anything is saved.
+const defaultCacheSettings = `{
+	"cover_thumbnails": {"max_size_gb": 1, "unlimited": false},
+	"downloads": {"max_size_gb": 5, "unlimited": false},
+	"cbz_pages": {"max_size_gb": 5, "unlimited": true},
+	"pdf_pages": {"max_size_gb": 5, "unlimited": true}
+}`
+
+func TestCacheSettings_DefaultsAndPersistedLimits(t *testing.T) {
 	t.Parallel()
 	f := newSharingSettingsFixture(t, false)
 	get := f.do(t, f.admin, http.MethodGet, "/api/settings/cache", "")
 	require.Equal(t, http.StatusOK, get.Code, get.Body.String())
-	require.JSONEq(t, `{"cover_thumbnail_max_size_gb":1}`, get.Body.String())
-	put := f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"cover_thumbnail_max_size_gb":2.5}`)
+	require.JSONEq(t, defaultCacheSettings, get.Body.String())
+
+	put := f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"cbz_pages":{"max_size_gb":2.5,"unlimited":false}}`)
 	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
-	require.JSONEq(t, `{"cover_thumbnail_max_size_gb":2.5}`, put.Body.String())
+	put = f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"downloads":{"max_size_gb":3,"unlimited":true}}`)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	saved := `{
+		"cover_thumbnails": {"max_size_gb": 1, "unlimited": false},
+		"downloads": {"max_size_gb": 3, "unlimited": true},
+		"cbz_pages": {"max_size_gb": 2.5, "unlimited": false},
+		"pdf_pages": {"max_size_gb": 5, "unlimited": true}
+	}`
+	require.JSONEq(t, saved, put.Body.String(), "saving one limit leaves the others as they were")
+
 	restarted, err := New(newPermissionTestConfig(t), f.db, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	f.handler = restarted.Handler
 	get = f.do(t, f.admin, http.MethodGet, "/api/settings/cache", "")
 	require.Equal(t, http.StatusOK, get.Code, get.Body.String())
-	require.JSONEq(t, `{"cover_thumbnail_max_size_gb":2.5}`, get.Body.String())
+	require.JSONEq(t, saved, get.Body.String())
 }
 
-func TestCoverThumbnailSettings_ZeroEvictsAndSurvivesRestart(t *testing.T) {
+func TestCacheSettings_DownloadsLimitAppliesNowAndAfterRestart(t *testing.T) {
+	t.Parallel()
+	f := newSharingSettingsFixture(t, false)
+	cfg := newPermissionTestConfig(t)
+	start := func() *downloadcache.Cache {
+		// Built unlimited, as cmd/api/main.go does, so only the server can
+		// set its limit.
+		dl := downloadcache.NewCache(t.TempDir(), math.MaxInt64)
+		srv, err := New(cfg, f.db, nil, nil, nil, nil, dl, nil, nil, nil)
+		require.NoError(t, err)
+		f.handler = srv.Handler
+		return dl
+	}
+	dl := start()
+	require.Equal(t, int64(5<<30), dl.MaxSize(), "the default limit applies at startup")
+
+	rec := f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"downloads":{"max_size_gb":2,"unlimited":false}}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, int64(2<<30), dl.MaxSize(), "a saved limit applies immediately")
+	require.Equal(t, int64(2<<30), start().MaxSize(), "a saved limit applies after restart")
+
+	rec = f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"downloads":{"max_size_gb":2,"unlimited":true}}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, int64(math.MaxInt64), start().MaxSize())
+}
+
+func TestCacheSettings_PageCacheLimitAppliesNowAndAfterRestart(t *testing.T) {
+	t.Parallel()
+	f := newSharingSettingsFixture(t, false)
+	cfg := newPermissionTestConfig(t)
+	writeOld := func(path string) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+		require.NoError(t, os.WriteFile(path, []byte("page"), 0644))
+		past := time.Now().Add(-2 * time.Hour)
+		require.NoError(t, os.Chtimes(path, past, past))
+	}
+	start := func() {
+		srv, err := New(cfg, f.db, nil, nil, nil, nil, downloadcache.NewCache(t.TempDir(), 1<<30), cbzpages.NewCache(cfg.CacheDir), pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality), nil)
+		require.NoError(t, err)
+		f.handler = srv.Handler
+	}
+	count := func(id string) int {
+		rec := f.do(t, f.admin, http.MethodGet, "/api/cache", "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var entries []cache.Info
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &entries))
+		for _, entry := range entries {
+			if entry.ID == id {
+				return entry.FileCount
+			}
+		}
+		t.Fatalf("cache %s missing", id)
+		return -1
+	}
+	start()
+	writeOld(filepath.Join(cfg.CacheDir, "cbz", "1", "page_0_v2.jpg"))
+	writeOld(filepath.Join(cfg.CacheDir, "pdf", "1", "150-85", "page_0.jpg"))
+	require.Equal(t, 1, count("cbz_pages"))
+
+	rec := f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"cbz_pages":{"max_size_gb":0,"unlimited":false}}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Zero(t, count("cbz_pages"), "lowering the limit evicts existing pages immediately")
+	require.Equal(t, 1, count("pdf_pages"), "each cache has its own limit")
+
+	rec = f.do(t, f.admin, http.MethodPut, "/api/settings/cache", `{"pdf_pages":{"max_size_gb":0,"unlimited":false}}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Zero(t, count("pdf_pages"))
+
+	writeOld(filepath.Join(cfg.CacheDir, "cbz", "2", "page_0_v2.jpg"))
+	start()
+	require.Zero(t, count("cbz_pages"), "a saved page cache limit applies at startup")
+}
+
+func TestCacheSettings_CoverThumbnailZeroEvictsAndSurvivesRestart(t *testing.T) {
 	t.Parallel()
 	f := newResourceDeleteFixture(t)
 	seeded := f.seedReviewedBook(models.FileTypeEPUB, nil)
@@ -100,7 +196,7 @@ func TestCoverThumbnailSettings_ZeroEvictsAndSurvivesRestart(t *testing.T) {
 		return -1
 	}
 	require.Equal(t, 1, count())
-	f.request(http.MethodPut, "/api/settings/cache", `{"cover_thumbnail_max_size_gb":0}`, http.StatusOK)
+	f.request(http.MethodPut, "/api/settings/cache", `{"cover_thumbnails":{"max_size_gb":0,"unlimited":false}}`, http.StatusOK)
 	require.Zero(t, count(), "lowering the limit evicts existing thumbnails immediately")
 	server, err := New(newPermissionTestConfig(t), f.db, nil, nil, nil, nil, downloadcache.NewCache(t.TempDir(), 1<<30), nil, nil, nil)
 	require.NoError(t, err)
@@ -110,25 +206,32 @@ func TestCoverThumbnailSettings_ZeroEvictsAndSurvivesRestart(t *testing.T) {
 	require.FileExists(t, covers.FileCoverPath(file))
 }
 
-func TestCoverThumbnailSettings_PermissionsValidationAndDemoMode(t *testing.T) {
+func TestCacheSettings_PermissionsValidationAndDemoMode(t *testing.T) {
 	t.Parallel()
 	f := newSharingSettingsFixture(t, false)
 	rec := f.do(t, f.configReader, http.MethodGet, "/api/settings/cache", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	for _, user := range []*models.User{f.configReader, f.viewer} {
-		rec = f.do(t, user, http.MethodPut, "/api/settings/cache", `{"cover_thumbnail_max_size_gb":0}`)
+		rec = f.do(t, user, http.MethodPut, "/api/settings/cache", `{"cover_thumbnails":{"max_size_gb":0,"unlimited":false}}`)
 		require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
 	}
 	rec = f.do(t, f.viewer, http.MethodGet, "/api/settings/cache", "")
 	require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
-	for _, body := range []string{`{"cover_thumbnail_max_size_gb":-1}`, `{"cover_thumbnail_max_size_gb":1025}`} {
+	for _, body := range []string{
+		`{"cover_thumbnails":{"max_size_gb":-1,"unlimited":false}}`,
+		`{"pdf_pages":{"max_size_gb":1025,"unlimited":true}}`,
+		// A missing size must not read as 0 and empty the cache.
+		`{"downloads":{"unlimited":false}}`,
+		`{"cover_thumbnails":{}}`,
+		`{"cbz_pages":{"max_size_gb":2}}`,
+	} {
 		rec = f.do(t, f.admin, http.MethodPut, "/api/settings/cache", body)
 		require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
 	}
 	rec = f.do(t, f.admin, http.MethodGet, "/api/settings/cache", "")
-	require.JSONEq(t, `{"cover_thumbnail_max_size_gb":1}`, rec.Body.String())
+	require.JSONEq(t, defaultCacheSettings, rec.Body.String())
 	demo := newSharingSettingsFixture(t, true)
-	rec = demo.do(t, demo.admin, http.MethodPut, "/api/settings/cache", `{"cover_thumbnail_max_size_gb":2}`)
+	rec = demo.do(t, demo.admin, http.MethodPut, "/api/settings/cache", `{"downloads":{"max_size_gb":2,"unlimited":false}}`)
 	require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
 	rec = demo.do(t, demo.admin, http.MethodGet, "/api/settings/cache", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())

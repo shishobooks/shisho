@@ -11,6 +11,7 @@ import (
 	"github.com/klippa-app/go-pdfium/requests"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/lrufiles"
 	"github.com/shishobooks/shisho/pkg/pdf"
 )
 
@@ -19,11 +20,12 @@ type Cache struct {
 	dir     string
 	dpi     int
 	quality int
+	lru     *lrufiles.Index
 }
 
 // NewCache creates a new Cache with the given base directory and render settings.
 func NewCache(dir string, dpi int, quality int) *Cache {
-	return &Cache{dir: dir, dpi: dpi, quality: quality}
+	return &Cache{dir: dir, dpi: dpi, quality: quality, lru: lrufiles.New(filepath.Join(dir, "pdf"))}
 }
 
 // RenderKey returns the key of this cache's render settings.
@@ -51,7 +53,7 @@ func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath str
 
 	// Check if page is already cached
 	expected := c.pagePath(fileID, pageNum)
-	if _, err := os.Stat(expected); err == nil {
+	if c.lru.Used(expected) {
 		return expected, "image/jpeg", nil
 	}
 
@@ -124,6 +126,7 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 	if err := fileutils.WriteFileAtomic(outPath, buf.Bytes(), 0644); err != nil { //nolint:gosec // Cache files need to be readable by the HTTP server
 		return "", "", err
 	}
+	c.lru.Added(outPath)
 
 	return outPath, "image/jpeg", nil
 }
@@ -135,7 +138,18 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 // back afterwards. The window is one page render, so it is accepted rather
 // than locked.
 func (c *Cache) Invalidate(fileID int) error {
-	return os.RemoveAll(c.fileDir(fileID))
+	if err := os.RemoveAll(c.fileDir(fileID)); err != nil {
+		return errors.WithStack(err)
+	}
+	c.lru.Forget(c.fileDir(fileID))
+	return nil
+}
+
+// SetMaxBytes changes the disk budget, lrufiles.Unlimited for none, and
+// evicts the least recently used pages down to it now. Pages rendered at
+// earlier render settings count toward it and are the first to go.
+func (c *Cache) SetMaxBytes(maxBytes int64) error {
+	return c.lru.SetMaxBytes(maxBytes)
 }
 
 // rootDir returns the directory this cache owns.
@@ -181,6 +195,7 @@ func (c *Cache) Clear() error {
 	if err := os.RemoveAll(c.rootDir()); err != nil {
 		return errors.Wrap(err, "failed to clear cache")
 	}
+	c.lru.Reset()
 	return nil
 }
 

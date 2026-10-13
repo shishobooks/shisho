@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -285,4 +286,23 @@ func TestGetPage_RenderSettingsChangeRerenders(t *testing.T) {
 	for _, p := range []string{lowPath, highPath, otherQuality} {
 		assert.NoFileExists(t, p)
 	}
+}
+
+func TestCache_SetMaxBytes_EvictsLeastRecentlyUsedPages(t *testing.T) {
+	t.Parallel()
+	cacheDir := t.TempDir()
+	cache := NewCache(cacheDir, 72, 50)
+	old := filepath.Join(cacheDir, "pdf", "9", "150-85", "page_0.jpg")
+	require.NoError(t, os.MkdirAll(filepath.Dir(old), 0755))
+	require.NoError(t, os.WriteFile(old, make([]byte, 1000), 0644))
+	past := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(old, past, past))
+
+	require.NoError(t, cache.SetMaxBytes(1001))
+	require.FileExists(t, old, "a cache under its limit evicts nothing")
+
+	fresh, _, err := cache.GetPage(testPDFPath, 10, 0)
+	require.NoError(t, err)
+	assert.FileExists(t, fresh)
+	assert.NoFileExists(t, old, "publishing a page over the limit evicts the least recently used page")
 }

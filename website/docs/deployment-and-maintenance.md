@@ -148,11 +148,17 @@ Core local library management does not require sending your library to a hosted 
 
 ## Maintain Server Caches
 
-Generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pages live under `CACHE_DIR`, which defaults to `/config/cache`. The download cache is automatically limited by `DOWNLOAD_CACHE_MAX_SIZE_GB`; viewer caches can still grow with use.
+Generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pages live under `CACHE_DIR`, which defaults to `/config/cache`. Each of these four caches has its own size limit under **Settings > Cache**.
 
 Cover thumbnails are generated only when the web interface requests a size. Scanning a library does not generate every thumbnail size. The first view of an uncached cover or size can take longer; later requests reuse the saved thumbnail, including after a server restart. See [Gallery Size](./browsing-search-bulk-actions.md#gallery-size) for the display controls.
 
-The **Cover Thumbnails** cache defaults to a 1 GiB limit. Change **Maximum size (GiB)** on its card under **Settings > Cache**, then select **Save limit**. Fractional values are allowed, from 0 to 1024 GiB. The saved limit applies immediately and survives restarts. Lowering the limit removes the least recently used thumbnails until the cache fits; setting it to `0` keeps no thumbnails on disk, so an uncached request resizes the cover again.
+To change a limit, set **Maximum size (GiB)** on the cache's card under **Settings > Cache**, then select **Save limit**. Fractional values are allowed, from 0 to 1024 GiB. Select **No limit** instead to let the cache use as much disk space as it needs; the size stays filled in, so clearing **No limit** later restores it. A saved limit applies immediately and survives restarts. Lowering a limit removes the least recently used files until the cache fits.
+
+| Cache | Default limit | Over the limit |
+|-------|---------------|----------------|
+| **Cover Thumbnails** | 1 GiB | The least recently used thumbnails are removed. `0` keeps no thumbnails on disk, so every uncached request resizes the cover again. |
+| **Downloads** | 5 GiB | After each generated download, the least recently used files are removed until the cache is at 80% of its limit. Cleanup is skipped while a bulk download is running. |
+| **CBZ Pages** and **PDF Pages** | No limit | The least recently used pages are removed. Pages opened in the last minute are kept so they can finish loading, so the cache can briefly go over its limit. |
 
 Changed covers get new thumbnails on demand, and their older versions are removed when a replacement is generated. Metadata-only edits reuse the existing thumbnails. Generating, evicting, or clearing thumbnails leaves the cover files in your library untouched.
 
@@ -160,4 +166,4 @@ Changed covers get new thumbnails on demand, and their older versions are remove
 Clearing a cache permanently deletes its generated files, but does not delete the library database, source media, or original covers. Verify that you selected the intended cache. The content can be regenerated, although the next affected cover, download, or reader request may be slower.
 :::
 
-Users with Config Read permission can open **Settings > Cache** to inspect each cache. Config Write permission is required to change the thumbnail limit or select **Clear**. See [Configuration](./configuration.md#cache) for other cache limits and rendering options.
+Users with Config Read permission can open **Settings > Cache** to inspect each cache. Config Write permission is required to change a limit or select **Clear**. See [Configuration](./configuration.md#cache) for the cache directory and PDF rendering options.

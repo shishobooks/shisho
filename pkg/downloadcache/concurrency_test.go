@@ -416,8 +416,8 @@ func TestCache_CloseCancelsBuilds(t *testing.T) {
 	assert.Empty(t, entries)
 }
 
-// Partial files and scratch directories left by a crash are deleted;
-// published entries stay.
+// Partial files, scratch directories, and a cleanup lock left by a crash are
+// deleted; published entries stay.
 func TestCache_RemoveLeftovers(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -427,6 +427,9 @@ func TestCache_RemoveLeftovers(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub"), []byte("whole"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.meta.json"), []byte("{}"), 0o600))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bulk"), 0o755))
+	// A stale lock would make every later cleanup, including the one a lower
+	// limit runs, return without evicting anything.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, cleanupLockName), nil, 0o644))
 
 	require.NoError(t, NewCache(dir, 1<<30).RemoveLeftovers())
 

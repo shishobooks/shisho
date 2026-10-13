@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,4 +77,34 @@ func TestCache_Clear_IdempotentWhenMissing(t *testing.T) {
 	c := NewCache(t.TempDir())
 
 	require.NoError(t, c.Clear())
+}
+
+// writeOldPage writes a cached page last used two hours ago, outside the
+// window that protects pages a reader just fetched.
+func writeOldPage(t *testing.T, path string, size int) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	require.NoError(t, os.WriteFile(path, make([]byte, size), 0644))
+	old := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(path, old, old))
+}
+
+func TestCache_SetMaxBytes_EvictsLeastRecentlyUsedPages(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	c := NewCache(filepath.Join(dir, "cache"))
+	old := filepath.Join(dir, "cache", "cbz", "7", pageFileName(0, ".jpg"))
+	writeOldPage(t, old, 600<<10)
+
+	require.NoError(t, c.SetMaxBytes(1<<20))
+	require.FileExists(t, old, "a cache under its limit evicts nothing")
+
+	cbzPath := writeCBZ(t, dir, randomBytes(t, 600<<10))
+	fresh, _, err := c.GetPage(cbzPath, 8, 0)
+	require.NoError(t, err)
+	assert.FileExists(t, fresh)
+	assert.NoFileExists(t, old, "publishing a page over the limit evicts the least recently used page")
+
+	require.NoError(t, c.SetMaxBytes(0))
+	assert.FileExists(t, fresh, "a page a reader just fetched survives until it is served")
 }

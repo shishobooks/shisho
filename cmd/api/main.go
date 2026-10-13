@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -104,7 +105,9 @@ func main() {
 		log.Warn("plugin load errors occurred", logger.Data{"error": err.Error()})
 	}
 
-	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), cfg.DownloadCacheMaxSizeBytes())
+	// Unlimited until server.New applies the limit saved under Settings >
+	// Cache, so nothing is evicted against a limit the admin did not choose.
+	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), math.MaxInt64)
 	if err := dlCache.RemoveLeftovers(); err != nil {
 		log.Warn("failed to remove partial downloads left in the cache", logger.Data{"error": err.Error()})
 	}

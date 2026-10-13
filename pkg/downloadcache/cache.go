@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,8 +26,9 @@ import (
 // first one included, reads that partial file as it grows. A client that
 // disconnects leaves the job running, so the file still lands in the cache.
 type Cache struct {
-	dir               string
-	maxSize           int64
+	dir string
+	// maxSize changes at runtime through SetMaxBytes.
+	maxSize           atomic.Int64
 	ShouldSkipCleanup func() bool
 
 	// generators overrides the built-in generator lookup (WithGenerators).
@@ -76,12 +78,12 @@ func WithGenerators(lookup GeneratorLookup) Option {
 func NewCache(dir string, maxSizeBytes int64, opts ...Option) *Cache {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Cache{
-		dir:     dir,
-		maxSize: maxSizeBytes,
-		ctx:     ctx,
-		cancel:  cancel,
-		jobs:    make(map[string]*job),
+		dir:    dir,
+		ctx:    ctx,
+		cancel: cancel,
+		jobs:   make(map[string]*job),
 	}
+	c.maxSize.Store(maxSizeBytes)
 	c.createPartial = func(dir string) (partialFile, error) { return createPartial(dir) }
 	for _, opt := range opts {
 		opt(c)
@@ -819,6 +821,10 @@ func (c *Cache) TriggerCleanup() {
 	_ = c.runCleanup()
 }
 
+// cleanupLockName is the file a running cleanup holds so another one skips.
+// RemoveLeftovers deletes one a crash left behind.
+const cleanupLockName = ".cleanup.lock"
+
 // runCleanup performs the actual cleanup operation.
 func (c *Cache) runCleanup() error {
 	if c.ShouldSkipCleanup != nil && c.ShouldSkipCleanup() {
@@ -826,7 +832,7 @@ func (c *Cache) runCleanup() error {
 	}
 
 	// Get lock file to prevent concurrent cleanups
-	lockPath := filepath.Join(c.dir, ".cleanup.lock")
+	lockPath := filepath.Join(c.dir, cleanupLockName)
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 	if err != nil {
 		// Another cleanup is running or we can't create the lock
@@ -837,7 +843,7 @@ func (c *Cache) runCleanup() error {
 		os.Remove(lockPath)
 	}()
 
-	return RunCleanup(c.dir, c.maxSize)
+	return RunCleanup(c.dir, c.maxSize.Load())
 }
 
 // triggerCleanupAsync runs a best-effort cleanup in the background so a
@@ -865,7 +871,15 @@ func (c *Cache) Dir() string {
 
 // MaxSize returns the maximum cache size in bytes.
 func (c *Cache) MaxSize() int64 {
-	return c.maxSize
+	return c.maxSize.Load()
+}
+
+// SetMaxBytes changes the maximum cache size, math.MaxInt64 for none, and
+// runs a cleanup against it now. Like every cleanup it is skipped while a
+// bulk download job runs.
+func (c *Cache) SetMaxBytes(maxBytes int64) error {
+	c.maxSize.Store(maxBytes)
+	return c.runCleanup()
 }
 
 // SizeBytes returns the total size in bytes and file count of the cache.

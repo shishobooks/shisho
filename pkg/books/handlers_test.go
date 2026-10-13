@@ -232,7 +232,7 @@ func setupTestServerWithConfig(t *testing.T, db *bun.DB, configure func(*config.
 	// real instance so RecomputeReviewedFor{File,Book} actually runs after
 	// mutations — otherwise reviewed flag tests give false greens.
 	g := e.Group("/books")
-	downloadCache := downloadcache.NewCache(cfg.CacheDir, cfg.DownloadCacheMaxSizeBytes())
+	downloadCache := downloadcache.NewCache(cfg.CacheDir, 1<<30)
 	// Registered after cfg.CacheDir's TempDir, so it runs first: drain background
 	// cache cleanups before the directory is removed.
 	t.Cleanup(downloadCache.Wait)
