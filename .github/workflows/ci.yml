@@ -8,7 +8,7 @@ on:
   workflow_call:
 
 env:
-  SHARD_TOTAL: 12
+  SHARD_TOTAL: 2
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,23 +25,71 @@ jobs:
           # history to find the merge base.
           fetch-depth: 0
       - uses: jdx/mise-action@v5
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      # Only master saves Go caches, so PR runs never evict the shared ones.
+      - name: Restore Go and golangci-lint caches
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+            tmp/golangci-lint-cache
+          key: go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       - run: mise lint
       - run: mise test:scripts
+      - name: Save Go and golangci-lint caches
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        # A re-run on the same SHA finds the key taken.
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+            tmp/golangci-lint-cache
+          key: go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
   test:
     # Keep this N in sync with env.SHARD_TOTAL (env not available in name).
-    name: Go Test (${{ matrix.shard }}/12)
+    name: Go Test (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        shard: [1, 2]
     env:
       TZ: America/Chicago
       CI: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - name: Restore Go build cache
+        # gotestsplit compiles all of pkg/ with -race on every shard to list
+        # the tests, so one cache serves every shard. Shard 1 saves it on
+        # master only.
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       - name: Restore test timing cache
         # Restore-only — saving is consolidated across shards in the
         # consolidate-test-timings job below. If we used actions/cache here,
@@ -60,6 +108,8 @@ jobs:
             gotest-timings-${{ github.ref }}-
             gotest-timings-refs/heads/master-
       - name: Run tests
+        # -count=1 keeps the restored build cache from replaying master's test
+        # results, so every test still runs under -race on every run.
         env:
           SHARD: ${{ matrix.shard }}
         run: |
@@ -67,7 +117,7 @@ jobs:
             -junit-dir=.gotest-timings \
             -junit-out=.gotest-timings-fresh \
             -total=$SHARD_TOTAL -index=$((SHARD - 1)) \
-            ./pkg/... -- -race
+            ./pkg/... -- -race -count=1
       - name: Upload shard JUnit
         if: always()
         uses: actions/upload-artifact@v7
@@ -79,6 +129,16 @@ jobs:
           include-hidden-files: true
           # Catch go test crashing before any junit is written.
           if-no-files-found: error
+      - name: Save Go build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.shard == 1
+        # A re-run on the same SHA finds the key taken.
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
   consolidate-test-timings:
     name: Consolidate test timings
@@ -250,8 +310,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js
       - run: mise tygo
       - run: mise lint:js
 
@@ -259,60 +318,99 @@ jobs:
   # from dependency bumps that only touch the root pnpm-lock.yaml (e.g. a
   # dependabot bump of @docusaurus/* that misses a new required peer), so
   # filtering on website/** would reintroduce the gap this job exists to
-  # close. Do not add a paths-ignore here.
+  # close. Do not add a paths-ignore here. The docs e2e config builds the
+  # site before serving it, so it is the build check too.
   docs-build:
-    name: Docs Build
+    name: Docs Build and E2E
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
-      - run: pnpm install --frozen-lockfile
-      - run: mise build:docs
+      - uses: ./.github/actions/setup-js
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browser: chromium
+      - run: pnpm e2e:docs
 
   test-js:
-    name: JS Test
+    name: JS Unit Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
-      - run: pnpm install --frozen-lockfile
-
-      - name: Get Playwright version
-        id: playwright-version
-        run: echo "version=$(npx playwright --version | awk '{print $NF}')" >> $GITHUB_OUTPUT
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium firefox
-
-      - name: Install Playwright system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium firefox
-
-      - run: go mod download
+      - uses: ./.github/actions/setup-js
       - run: mise tygo
       - run: pnpm test:unit
-      - name: Run docs E2E
-        run: pnpm e2e:docs
-      - run: mise build
-      - name: Run Chromium E2E
+
+  # Each browser runs its own API server and Vite dev server, so neither
+  # needs the production build; Image Build covers that.
+  e2e:
+    name: E2E (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-js
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browser: ${{ matrix.browser }}
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - name: Restore Go build cache
+        # The Chromium job saves it on master only.
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
+      - run: go mod download
+      - run: mise tygo
+      - name: Run E2E
         uses: nick-fields/retry@v4
+        env:
+          BROWSER: ${{ matrix.browser }}
         with:
           timeout_minutes: 6
           max_attempts: 2
           retry_on: timeout
-          command: pnpm e2e:chromium
-      - name: Run Firefox E2E
-        uses: nick-fields/retry@v4
+          command: pnpm "e2e:$BROWSER"
+      - name: Save Go build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.browser == 'chromium'
+        # A re-run on the same SHA finds the key taken.
+        continue-on-error: true
+        uses: actions/cache/save@v6
         with:
-          timeout_minutes: 6
-          max_attempts: 2
-          retry_on: timeout
-          command: pnpm e2e:firefox
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+
+  # The one check branch protection requires, so the shard count and job
+  # names can change without editing protection. A job added above that
+  # should block merges goes in needs.
+  ci-ok:
+    name: CI OK
+    needs:
+      - lint
+      - test
+      - image-build
+      - image-smoke
+      - lint-js
+      - docs-build
+      - test-js
+      - e2e
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every needed job succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1

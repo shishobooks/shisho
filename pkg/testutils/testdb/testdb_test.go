@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -29,6 +31,31 @@ func TestNew_MigratesWithForeignKeysOn(t *testing.T) {
 	_, err = db.NewInsert().Model(&models.LibraryPath{CreatedAt: now, UpdatedAt: now, LibraryID: 999, Filepath: "/orphan"}).Exec(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "FOREIGN KEY constraint failed")
+}
+
+// New copies a template migrated once, so the copy must carry the record of
+// applied migrations along with the schema, or code that migrates the database
+// it is handed would rerun them.
+func TestNew_RecordsEveryMigrationApplied(t *testing.T) {
+	t.Parallel()
+	db := New(t)
+
+	group, err := migrations.BringUpToDate(context.Background(), db)
+	require.NoError(t, err)
+	assert.True(t, group.IsZero(), "no migration is left to apply")
+}
+
+// migrate falls back to running every migration when the connection has no
+// backup API, which passes every test while losing the template's speedup.
+func TestConnections_SupportRestoringTheTemplate(t *testing.T) {
+	t.Parallel()
+	connector, err := sqliteconn.NewConnector("file:testdb-restorer?mode=memory&cache=shared")
+	require.NoError(t, err)
+	conn, err := connector.Connect(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	assert.Implements(t, (*restorer)(nil), conn)
 }
 
 func TestNew_PinsOneConnection(t *testing.T) {
@@ -59,6 +86,8 @@ func TestNew_DatabasesAreIsolated(t *testing.T) {
 // pass without a discard.
 func interruptStatement(t *testing.T, db *bun.DB) {
 	t.Helper()
+	// The template copy runs outside the pool, so open a pool connection first.
+	require.NoError(t, db.PingContext(t.Context()))
 	open := db.DB.Stats().OpenConnections
 	require.Positive(t, open)
 

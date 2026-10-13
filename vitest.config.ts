@@ -29,7 +29,8 @@ export default defineConfig({
     // out on each loaded run. This only delays detection of a truly hung test.
     testTimeout: 15_000,
     coverage: {
-      enabled: true,
+      // CI neither uploads nor checks the report, so it skips the overhead.
+      enabled: !process.env.CI,
       provider: "v8",
       reporter: ["text-summary", "lcov", "html"],
       reportsDirectory: coverageDir,

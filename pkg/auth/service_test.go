@@ -8,6 +8,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Bun writes a zero time.Time instead of omitting the column, so the
@@ -24,4 +25,17 @@ func TestServiceCreateFirstAdmin_SetsTimestamps(t *testing.T) {
 
 	assert.WithinDuration(t, time.Now(), user.CreatedAt, time.Minute)
 	assert.WithinDuration(t, time.Now(), user.UpdatedAt, time.Minute)
+}
+
+// See bcryptCost.
+func TestHashPassword_UsesMinimumCostInTests(t *testing.T) {
+	t.Parallel()
+
+	hashed, err := HashPassword("securepassword123")
+	require.NoError(t, err)
+
+	cost, err := bcrypt.Cost([]byte(hashed))
+	require.NoError(t, err)
+	assert.Equal(t, bcrypt.MinCost, cost)
+	assert.True(t, CheckPassword("securepassword123", hashed))
 }

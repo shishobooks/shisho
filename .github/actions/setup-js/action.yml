@@ -1,0 +1,34 @@
+name: Set up JS
+description: Install mise tools and pnpm dependencies from a cached pnpm store.
+
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@v5
+    - name: Locate pnpm store
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    # A cold store downloads every package from the registry, which has taken
+    # minutes when the registry is slow.
+    - name: Restore pnpm store
+      id: pnpm-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+    # Only master saves, as with the Go caches, so PR lockfile changes never
+    # evict master's entries. The store is complete once install finishes.
+    - name: Save pnpm store
+      if: steps.pnpm-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+      # Parallel jobs race to save the same key.
+      continue-on-error: true
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
