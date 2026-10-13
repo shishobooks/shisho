@@ -23,6 +23,10 @@ func AddQueryHook(t testing.TB, db *bun.DB, hook bun.QueryHook) {
 	if !ok {
 		t.Fatal("testdb.AddQueryHook: db did not come from testdb.New or testdb.NewShared")
 	}
+	// bun initializes hooks that want the database before attaching them.
+	if initer, ok := hook.(interface{ Init(db *bun.DB) }); ok {
+		initer.Init(db)
+	}
 	fwd.(*forwardHook).add(hook)
 }
 
