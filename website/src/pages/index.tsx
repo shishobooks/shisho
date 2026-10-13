@@ -35,7 +35,12 @@ const workflowSteps = [
 const formatCategories = [
   {
     category: "Ebooks",
-    formats: [{ name: "EPUB" }, { name: "PDF" }],
+    formats: [
+      { name: "EPUB" },
+      { name: "PDF" },
+      { name: "MOBI" },
+      { name: "AZW3" },
+    ],
   },
   {
     category: "Audiobooks",

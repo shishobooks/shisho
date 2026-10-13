@@ -9,7 +9,7 @@
 services:
   shisho:
     # Bump this to the release the demo deploys. Tags on ghcr.io carry no "v".
-    image: ghcr.io/shishobooks/shisho:${SHISHO_VERSION:-0.0.52}
+    image: ghcr.io/shishobooks/shisho:${SHISHO_VERSION:-0.2.0}
     container_name: shisho-demo-authoring
     ports:
       - "5173:5173"
@@ -22,3 +22,6 @@ services:
       # The authoring database never leaves this machine with sessions in it,
       # and the demo sets its own secret, so a fixed value is fine here.
       JWT_SECRET: "demo-corpus-authoring-secret-fixed-for-local-use"
+      # No scheduled full scans while authoring; see README.md step 4. The
+      # library monitor still imports files added under library/.
+      SYNC_INTERVAL_MINUTES: "0"
