@@ -160,9 +160,6 @@ func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*mo
 		return false
 	}
 	newSource := incoming.SourceForField("series")
-	if !forceRefresh && fromAnotherFileFormat(newSource, existingSource) {
-		return false
-	}
 	if len(existing) != 1 || existing[0].Series == nil || existing[0].Series.Name != incoming.Series {
 		existingNames := make([]string, 0, len(existing))
 		for _, membership := range existing {
@@ -347,30 +344,53 @@ var fileFormatSources = map[string]bool{
 	models.DataSourceMOBIMetadata: true,
 }
 
-// fromAnotherFileFormat reports whether a book-level value about to be
-// replaced was embedded in a different file format than the new one. All
-// file formats share one priority, so without this check a book with an
-// EPUB and a PDF would take each field from whichever file was scanned last.
-// A normal scan keeps the value the other format set; refresh and reset
-// still replace it.
-func fromAnotherFileFormat(newSource, existingSource string) bool {
-	return newSource != existingSource && fileFormatSources[newSource] && fileFormatSources[existingSource]
+// bookMetadataOwnerID returns the ID of the main file whose embedded metadata
+// owns the book-level fields: the book's oldest main file. file may be nil;
+// when given it counts too, since a file just created by this scan may not be
+// in book.Files yet. Returns 0 when the book has no main file.
+func bookMetadataOwnerID(book *models.Book, file *models.File) int {
+	ownerID := 0
+	consider := func(f *models.File) {
+		if f == nil || f.FileRole == models.FileRoleSupplement {
+			return
+		}
+		if ownerID == 0 || f.ID < ownerID {
+			ownerID = f.ID
+		}
+	}
+	consider(file)
+	for _, f := range book.Files {
+		consider(f)
+	}
+	return ownerID
 }
 
-// shouldUpdateBookScalar is shouldUpdateScalar for a book-level field, which
-// any of the book's main files can supply.
-func shouldUpdateBookScalar(newValue, existingValue, newSource, existingSource string, forceRefresh bool) bool {
-	if !forceRefresh && fromAnotherFileFormat(newSource, existingSource) {
-		return false
-	}
-	return shouldUpdateScalar(newValue, existingValue, newSource, existingSource, forceRefresh)
+// keepOwnersBookValue reports whether a normal scan must leave a book-level
+// value alone because it came from embedded metadata and the file being
+// scanned does not own the book. All embedded formats share one priority, so
+// without this a book with an EPUB and a PDF would take each field from
+// whichever file a scan reached last. Another file still fills fields that
+// are empty or came from lower-priority sources, and a refresh of that file
+// still replaces them.
+func keepOwnersBookValue(ownsBook bool, newSource, existingSource string, forceRefresh bool) bool {
+	return !forceRefresh && !ownsBook && fileFormatSources[newSource] && fileFormatSources[existingSource]
 }
 
-// shouldUpdateBookRelationship is shouldUpdateRelationship for a book-level
-// collection, which any of the book's main files can supply.
-func shouldUpdateBookRelationship(newItems, existingItems []string, newSource, existingSource string, forceRefresh bool) bool {
-	if !forceRefresh && fromAnotherFileFormat(newSource, existingSource) {
-		return false
+// filesWithOwnerLast returns the book's files with the metadata owner moved to
+// the end, so a book-level refresh or reset ends with the owner's values.
+func filesWithOwnerLast(book *models.Book) []*models.File {
+	ownerID := bookMetadataOwnerID(book, nil)
+	ordered := make([]*models.File, 0, len(book.Files))
+	var owner *models.File
+	for _, f := range book.Files {
+		if f.ID == ownerID {
+			owner = f
+			continue
+		}
+		ordered = append(ordered, f)
 	}
-	return shouldUpdateRelationship(newItems, existingItems, newSource, existingSource, forceRefresh)
+	if owner != nil {
+		ordered = append(ordered, owner)
+	}
+	return ordered
 }

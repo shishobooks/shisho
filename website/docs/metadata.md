@@ -104,7 +104,7 @@ During a normal scan, Shisho resolves conflicting values in this order:
 
 Manual values are protected during normal scans. They are not permanently immutable: **Refresh all metadata** and **Reset to file metadata** can overwrite or remove them.
 
-When a book has files in more than one format, such as an EPUB and a PDF, a normal scan keeps the book's title, subtitle, description, authors, series, genres, and tags from whichever format set them first. Another format's embedded metadata only fills fields that are empty or were derived from the filepath. A later scan of the same format still updates the values it set. To take a field from a different format, edit it or use **Refresh all metadata** on that file.
+When a book has more than one main file, such as an EPUB and a PDF, the file added first owns the book's title, subtitle, description, authors, series, genres, and tags as far as embedded file metadata goes. During a normal scan, embedded metadata from the book's other files only fills those fields when they are empty or derived from the filepath. If the first file is removed, the next oldest main file takes over. **Refresh all metadata** and **Reset to file metadata** on the whole book apply the other files first and the first file last, so its values win. To take a field from another file, edit it or use **Refresh all metadata** on that file. [Library monitoring](./configuration.md#library-monitor) refreshes a file whose contents change on disk, so changing another file's contents also replaces these fields. Plugin metadata follows its own priority and is not affected.
 
 ## Normal Scans, Refresh, and Reset
 

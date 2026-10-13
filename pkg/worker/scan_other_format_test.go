@@ -12,65 +12,112 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A book with an EPUB and a PDF keeps the book-level metadata its first file
-// set: scanning the other file does not replace it with that file's
-// embedded values. Without this rule both formats share one priority, so the
-// book takes each field from whichever file was scanned last.
+// A book's oldest main file owns its book-level fields as far as embedded
+// metadata goes. Without that rule every embedded format shares one
+// priority, so a book with an EPUB and a PDF took each field from whichever
+// file a scan reached last.
 
-type otherFormatFixture struct {
-	tc   *testContext
-	book *models.Book
-	pdf  *models.File
+type bookOwnerFixture struct {
+	tc      *testContext
+	bookDir string
+	book    *models.Book
+	epub    *models.File // the owner: created first, so its ID is lowest
+	pdf     *models.File
 }
 
-func newOtherFormatFixture(t *testing.T) *otherFormatFixture {
+func newBookOwnerFixture(t *testing.T) *bookOwnerFixture {
 	t.Helper()
 	tc := newTestContext(t)
 	libraryPath := testgen.TempLibraryDir(t)
 	tc.createLibrary([]string{libraryPath})
 	bookDir := testgen.CreateSubDir(t, libraryPath, "Open Advice")
 
-	epubSource := models.DataSourceEPUBMetadata
+	source := models.DataSourceEPUBMetadata
+	subtitle := "From the EPUB"
 	description := "From the EPUB."
 	book := &models.Book{
 		LibraryID:         1,
 		Filepath:          bookDir,
 		Title:             "Open Advice",
-		TitleSource:       epubSource,
+		TitleSource:       source,
 		SortTitle:         "Open Advice",
-		SortTitleSource:   epubSource,
+		SortTitleSource:   source,
+		Subtitle:          &subtitle,
+		SubtitleSource:    &source,
 		Description:       &description,
-		DescriptionSource: &epubSource,
-		AuthorSource:      epubSource,
+		DescriptionSource: &source,
+		AuthorSource:      source,
+		SeriesSource:      &source,
+		GenreSource:       &source,
+		TagSource:         &source,
 	}
 	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
-	person, err := tc.personService.FindOrCreatePerson(tc.ctx, "Lydia Pintscher", 1)
-	require.NoError(t, err)
-	require.NoError(t, tc.bookService.CreateAuthor(tc.ctx, &models.Author{BookID: book.ID, PersonID: person.ID, SortOrder: 1}))
 
-	require.NoError(t, tc.bookService.CreateFile(tc.ctx, &models.File{
-		LibraryID: 1, BookID: book.ID, Filepath: filepath.Join(bookDir, "Open Advice.epub"),
-		FileType: models.FileTypeEPUB, FilesizeBytes: 1000,
-	}))
-	pdf := &models.File{
-		LibraryID: 1, BookID: book.ID, Filepath: filepath.Join(bookDir, "Open Advice.pdf"),
-		FileType: models.FileTypePDF, FilesizeBytes: 1000,
-	}
-	require.NoError(t, tc.bookService.CreateFile(tc.ctx, pdf))
-	return &otherFormatFixture{tc: tc, book: book, pdf: pdf}
+	f := &bookOwnerFixture{tc: tc, bookDir: bookDir, book: book}
+	f.epub = f.addFile(t, "Open Advice.epub", models.FileTypeEPUB)
+	f.pdf = f.addFile(t, "Open Advice.pdf", models.FileTypePDF)
+	f.setAuthors(t, "Lydia Pintscher")
+
+	series, err := tc.worker.seriesService.FindOrCreateSeries(tc.ctx, "FOSS", 1, source)
+	require.NoError(t, err)
+	_, err = tc.db.NewInsert().Model(&models.BookSeries{BookID: book.ID, SeriesID: series.ID, SortOrder: 1}).Exec(tc.ctx)
+	require.NoError(t, err)
+	genre, err := tc.worker.genreService.FindOrCreateGenre(tc.ctx, "Nonfiction", 1)
+	require.NoError(t, err)
+	require.NoError(t, tc.bookService.CreateBookGenre(tc.ctx, &models.BookGenre{BookID: book.ID, GenreID: genre.ID}))
+	tag, err := tc.worker.tagService.FindOrCreateTag(tc.ctx, "essays", 1)
+	require.NoError(t, err)
+	require.NoError(t, tc.bookService.CreateBookTag(tc.ctx, &models.BookTag{BookID: book.ID, TagID: tag.ID}))
+	return f
 }
 
-func (f *otherFormatFixture) scanPDF(t *testing.T, metadata *mediafile.ParsedMetadata, forceRefresh bool) *models.Book {
+func (f *bookOwnerFixture) addFile(t *testing.T, name, fileType string) *models.File {
+	t.Helper()
+	file := &models.File{
+		LibraryID: 1, BookID: f.book.ID, Filepath: filepath.Join(f.bookDir, name),
+		FileType: fileType, FileRole: models.FileRoleMain, FilesizeBytes: 1000,
+	}
+	require.NoError(t, f.tc.bookService.CreateFile(f.tc.ctx, file))
+	return file
+}
+
+// setAuthors replaces the book's authors directly, keeping AuthorSource.
+func (f *bookOwnerFixture) setAuthors(t *testing.T, names ...string) {
+	t.Helper()
+	require.NoError(t, f.tc.bookService.DeleteAuthors(f.tc.ctx, f.book.ID))
+	for i, name := range names {
+		person, err := f.tc.personService.FindOrCreatePerson(f.tc.ctx, name, 1)
+		require.NoError(t, err)
+		require.NoError(t, f.tc.bookService.CreateAuthor(f.tc.ctx, &models.Author{BookID: f.book.ID, PersonID: person.ID, SortOrder: i + 1}))
+	}
+}
+
+// scan runs scanFileCore for file the way a scan does, with the book and
+// file reloaded so their relations are populated.
+func (f *bookOwnerFixture) scan(t *testing.T, file *models.File, metadata *mediafile.ParsedMetadata, forceRefresh bool) *models.Book {
 	t.Helper()
 	book, err := f.tc.bookService.RetrieveBook(f.tc.ctx, books.RetrieveBookOptions{ID: &f.book.ID})
 	require.NoError(t, err)
-	file, err := f.tc.bookService.RetrieveFileWithRelations(f.tc.ctx, f.pdf.ID)
+	loaded, err := f.tc.bookService.RetrieveFileWithRelations(f.tc.ctx, file.ID)
 	require.NoError(t, err)
-	_, err = f.tc.worker.scanFileCore(f.tc.ctx, file, book, metadata, forceRefresh, true, nil, nil)
+	_, err = f.tc.worker.scanFileCore(f.tc.ctx, loaded, book, metadata, forceRefresh, true, nil, nil)
 	require.NoError(t, err)
 	book, err = f.tc.bookService.RetrieveBook(f.tc.ctx, books.RetrieveBookOptions{ID: &f.book.ID})
 	require.NoError(t, err)
 	return book
+}
+
+func pdfMetadata() *mediafile.ParsedMetadata {
+	return &mediafile.ParsedMetadata{
+		Title:       "Open Advice: FOSS",
+		Subtitle:    "From the PDF",
+		Description: "From the PDF.",
+		Authors:     []mediafile.ParsedAuthor{{Name: "Georg Greve"}, {Name: "Lydia Pintscher"}},
+		Series:      "Open Source",
+		Genres:      []string{"Technology"},
+		Tags:        []string{"software"},
+		DataSource:  models.DataSourcePDFMetadata,
+	}
 }
 
 func authorNames(book *models.Book) []string {
@@ -81,82 +128,126 @@ func authorNames(book *models.Book) []string {
 	return names
 }
 
-func pdfMetadata() *mediafile.ParsedMetadata {
-	return &mediafile.ParsedMetadata{
-		Title:       "Open Advice: FOSS",
-		Description: "From the PDF.",
-		Authors:     []mediafile.ParsedAuthor{{Name: "Georg Greve"}, {Name: "Lydia Pintscher"}},
-		Genres:      []string{"Technology"},
-		Series:      "FOSS Books",
-		DataSource:  models.DataSourcePDFMetadata,
-	}
-}
-
-func TestScanFileCore_OtherFormatKeepsBookMetadata(t *testing.T) {
+func TestScanFileCore_NonOwnerKeepsBookMetadata(t *testing.T) {
 	t.Parallel()
-	f := newOtherFormatFixture(t)
+	f := newBookOwnerFixture(t)
 
-	book := f.scanPDF(t, pdfMetadata(), false)
+	book := f.scan(t, f.pdf, pdfMetadata(), false)
 
 	assert.Equal(t, "Open Advice", book.Title)
-	assert.Equal(t, models.DataSourceEPUBMetadata, book.TitleSource)
+	assert.Equal(t, "Open Advice", book.SortTitle)
+	require.NotNil(t, book.Subtitle)
+	assert.Equal(t, "From the EPUB", *book.Subtitle)
 	require.NotNil(t, book.Description)
 	assert.Equal(t, "From the EPUB.", *book.Description)
+	assert.Equal(t, []string{"Lydia Pintscher"}, authorNames(book))
+	require.Len(t, book.BookSeries, 1)
+	assert.Equal(t, "FOSS", book.BookSeries[0].Series.Name)
+	require.Len(t, book.BookGenres, 1)
+	assert.Equal(t, "Nonfiction", book.BookGenres[0].Genre.Name)
+	require.Len(t, book.BookTags, 1)
+	assert.Equal(t, "essays", book.BookTags[0].Tag.Name)
+}
+
+// Fields the owner left empty are still filled from another file.
+func TestScanFileCore_NonOwnerFillsEmptyBookFields(t *testing.T) {
+	t.Parallel()
+	f := newBookOwnerFixture(t)
+	_, err := f.tc.db.NewDelete().Model((*models.BookGenre)(nil)).Where("book_id = ?", f.book.ID).Exec(f.tc.ctx)
+	require.NoError(t, err)
+	_, err = f.tc.db.NewUpdate().Model(f.book).Set("genre_source = NULL").WherePK().Exec(f.tc.ctx)
+	require.NoError(t, err)
+
+	book := f.scan(t, f.pdf, pdfMetadata(), false)
+
+	require.Len(t, book.BookGenres, 1)
+	assert.Equal(t, "Technology", book.BookGenres[0].Genre.Name)
+}
+
+// A second file of the owner's format does not replace its values either.
+func TestScanFileCore_NonOwnerOfSameFormatKeepsBookMetadata(t *testing.T) {
+	t.Parallel()
+	f := newBookOwnerFixture(t)
+	second := f.addFile(t, "Open Advice (2nd edition).epub", models.FileTypeEPUB)
+
+	metadata := pdfMetadata()
+	metadata.DataSource = models.DataSourceEPUBMetadata
+	book := f.scan(t, second, metadata, false)
+
+	assert.Equal(t, []string{"Lydia Pintscher"}, authorNames(book))
+}
+
+// The owner still updates the book, including over values another file set
+// before this rule existed.
+func TestScanFileCore_OwnerReplacesAnotherFilesBookMetadata(t *testing.T) {
+	t.Parallel()
+	f := newBookOwnerFixture(t)
+	f.setAuthors(t, "Georg Greve", "Lydia Pintscher")
+	_, err := f.tc.db.NewUpdate().Model(f.book).Set("author_source = ?", models.DataSourcePDFMetadata).WherePK().Exec(f.tc.ctx)
+	require.NoError(t, err)
+
+	book := f.scan(t, f.epub, &mediafile.ParsedMetadata{
+		Authors:    []mediafile.ParsedAuthor{{Name: "Lydia Pintscher"}},
+		DataSource: models.DataSourceEPUBMetadata,
+	}, false)
+
 	assert.Equal(t, []string{"Lydia Pintscher"}, authorNames(book))
 	assert.Equal(t, models.DataSourceEPUBMetadata, book.AuthorSource)
 }
 
-// Fields the first file left empty are still filled from the other file.
-func TestScanFileCore_OtherFormatFillsEmptyBookFields(t *testing.T) {
+// Once the owner's file is gone, the next oldest main file owns the book.
+func TestScanFileCore_NextFileOwnsBookAfterOwnerIsRemoved(t *testing.T) {
 	t.Parallel()
-	f := newOtherFormatFixture(t)
+	f := newBookOwnerFixture(t)
+	_, err := f.tc.db.NewDelete().Model((*models.File)(nil)).Where("id = ?", f.epub.ID).Exec(f.tc.ctx)
+	require.NoError(t, err)
 
-	book := f.scanPDF(t, pdfMetadata(), false)
+	book := f.scan(t, f.pdf, pdfMetadata(), false)
 
-	genres := make([]string, 0, len(book.BookGenres))
-	for _, bg := range book.BookGenres {
-		genres = append(genres, bg.Genre.Name)
-	}
-	assert.Equal(t, []string{"Technology"}, genres)
-	require.Len(t, book.BookSeries, 1)
-	assert.Equal(t, "FOSS Books", book.BookSeries[0].Series.Name)
+	assert.Equal(t, []string{"Georg Greve", "Lydia Pintscher"}, authorNames(book))
 }
 
-// Once the PDF has set the genres, rescanning with different PDF genres
-// still updates them: the rule only stops one format replacing another's.
-func TestScanFileCore_SameFormatStillUpdatesBookMetadata(t *testing.T) {
+// Refreshing one file takes that file's values, so a user can pick them.
+func TestScanFileCore_NonOwnerReplacesOnFileRefresh(t *testing.T) {
 	t.Parallel()
-	f := newOtherFormatFixture(t)
-	f.scanPDF(t, pdfMetadata(), false)
+	f := newBookOwnerFixture(t)
 
-	metadata := pdfMetadata()
-	metadata.Genres = []string{"Programming"}
-	book := f.scanPDF(t, metadata, false)
-
-	genres := make([]string, 0, len(book.BookGenres))
-	for _, bg := range book.BookGenres {
-		genres = append(genres, bg.Genre.Name)
-	}
-	assert.Equal(t, []string{"Programming"}, genres)
-}
-
-// Refresh still takes the scanned file's values.
-func TestScanFileCore_OtherFormatReplacesOnRefresh(t *testing.T) {
-	t.Parallel()
-	f := newOtherFormatFixture(t)
-
-	book := f.scanPDF(t, pdfMetadata(), true)
+	book := f.scan(t, f.pdf, pdfMetadata(), true)
 
 	assert.Equal(t, []string{"Georg Greve", "Lydia Pintscher"}, authorNames(book))
 	assert.Equal(t, models.DataSourcePDFMetadata, book.AuthorSource)
 }
 
-func TestFromAnotherFileFormat(t *testing.T) {
+// Refreshing the whole book applies the owner last, so its values win, even
+// though files are otherwise scanned in file-type order (mobi after epub).
+func TestScanBook_RefreshAppliesOwnerLast(t *testing.T) {
 	t.Parallel()
-	assert.True(t, fromAnotherFileFormat(models.DataSourcePDFMetadata, models.DataSourceEPUBMetadata))
-	assert.False(t, fromAnotherFileFormat(models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata))
-	// The generic source a book merge writes is not one file's format.
-	assert.False(t, fromAnotherFileFormat(models.DataSourceEPUBMetadata, models.DataSourceFileMetadata))
-	assert.False(t, fromAnotherFileFormat(models.DataSourceEPUBMetadata, models.DataSourceFilepath))
-	assert.False(t, fromAnotherFileFormat(models.DataSourcePlugin, models.DataSourceEPUBMetadata))
+	tc := newTestContext(t)
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	bookDir := testgen.CreateSubDir(t, libraryPath, "[Lydia Pintscher] Open Advice")
+	testgen.GenerateEPUB(t, bookDir, "Open Advice.epub", testgen.EPUBOptions{
+		Title: "Open Advice", Authors: []string{"Lydia Pintscher"},
+	})
+	require.NoError(t, tc.runScan())
+	testgen.GenerateMOBI(t, bookDir, "Open Advice.mobi", testgen.MOBIOptions{
+		Kind: testgen.MOBIKindMOBI6, Title: "Open Advice", Authors: []string{"Georg Greve", "Lydia Pintscher"},
+	})
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 1)
+	bookID := allBooks[0].ID
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	require.Len(t, book.Files, 2)
+	assert.Equal(t, []string{"Lydia Pintscher"}, authorNames(book), "a normal scan keeps the EPUB's author")
+
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{BookID: bookID, ForceRefresh: true, SkipPlugins: true}, nil)
+	require.NoError(t, err)
+
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Lydia Pintscher"}, authorNames(book))
+	assert.Equal(t, models.DataSourceEPUBMetadata, book.AuthorSource)
 }
