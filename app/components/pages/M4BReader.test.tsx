@@ -164,7 +164,7 @@ describe("M4BReader", () => {
     renderReader();
     const img = screen.getByRole("img") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(
-      "/api/books/files/42/cover?v=1704067200000&size=512&aspect=book&r=1",
+      "/api/books/files/42/cover?v=1704067200000&size=512&aspect=book&r=2",
     );
   });
 

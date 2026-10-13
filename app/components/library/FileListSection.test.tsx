@@ -112,7 +112,7 @@ describe("FileListSection", () => {
     );
 
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=2",
     );
   });
 

@@ -51,7 +51,7 @@ describe("SeriesCard", () => {
 
     expect(screen.getByAltText("Saga Cover")).toHaveAttribute(
       "src",
-      "/api/series/3/cover?v=12-1704067200&size=512&aspect=book&r=1",
+      "/api/series/3/cover?v=12-1704067200&size=512&aspect=book&r=2",
     );
   });
 });

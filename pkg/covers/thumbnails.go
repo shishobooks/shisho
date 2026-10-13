@@ -1,19 +1,22 @@
 package covers
 
 import (
+	"bufio"
 	"bytes"
 	"container/list"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"image"
-	_ "image/gif"  // Register GIF cover decoding.
-	_ "image/jpeg" // Register JPEG cover decoding.
-	"image/png"
+	"image/color"
+	_ "image/gif" // Register GIF cover decoding.
+	"image/jpeg"
+	_ "image/png" // Register PNG cover decoding.
 	"io"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +28,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // Register WebP cover decoding.
+	"golang.org/x/sync/semaphore"
 )
 
 // Thumbnail is a resized cover and its representation-specific cache key.
@@ -44,6 +48,185 @@ const DefaultThumbnailCacheMaxBytes = 1 << 30
 
 const maxThumbnailSourcePixels = 32_000_000
 
+// thumbnailDecodeBudget caps the estimated bytes of the resizes running at
+// once, so a host with many CPUs and no container CPU limit cannot decode
+// enough covers together to exceed a container's memory limit. With Go's
+// default GC headroom the heap can reach about twice this.
+const thumbnailDecodeBudget = 256 << 20
+
+// thumbnailDecodeWeight is what one resize reserves from the budget: its
+// estimated bytes, but at least an equal share per CPU so resizes never
+// outnumber CPUs. A resize estimated above the whole budget runs alone.
+func thumbnailDecodeWeight(bytes, procs int64) int64 {
+	return min(thumbnailDecodeBudget, max(bytes, thumbnailDecodeBudget/max(1, procs)))
+}
+
+// thumbnailDecodeBytes estimates the memory resize allocates for a source
+// whose header is cfg and whose decoding costs bpp bytes per pixel (see
+// decodeBytesPerPixel): the decoded image, each halving, Catmull-Rom's
+// scratch buffer (32 bytes per destination column per source row), the
+// output and its flattened copy, and the decoder's and encoder's working
+// buffers.
+func thumbnailDecodeBytes(cfg image.Config, bpp int64, size int, aspect string) int64 {
+	total := int64(cfg.Width) * int64(cfg.Height) * bpp
+	crop, dw, dh := thumbnailGeometry(cfg.Width, cfg.Height, size, aspect)
+	w, h := crop.Dx(), crop.Dy()
+	for halveForThumbnail(w, h, dw, dh) {
+		w, h = (w+1)/2, (h+1)/2
+		total += int64(w) * int64(h) * 4
+	}
+	if w != dw || h != dh {
+		total += int64(dw) * int64(h) * 32
+	}
+	return total + int64(dw)*int64(dh)*4*3 + 1<<20
+}
+
+// decodeBytesPerPixel estimates what decoding r costs per source pixel,
+// from its format, color model, and header. Progressive JPEGs keep every DCT
+// coefficient (4 bytes per sample per component) beside the image, CMYK and
+// RGB-coded JPEGs convert through an intermediate image, and interlaced PNGs
+// decode each pass before merging. A header that cannot be read counts as
+// the costliest layout.
+func decodeBytesPerPixel(r io.ReadSeeker, format string, model color.Model) int64 {
+	switch format {
+	case "jpeg":
+		progressive := jpegIsProgressive(r)
+		switch {
+		case model == color.CMYKModel && progressive:
+			return 26
+		case model == color.CMYKModel:
+			return 9
+		case model == color.GrayModel && progressive:
+			return 6
+		case model == color.GrayModel:
+			return 2
+		case model == color.RGBAModel && progressive:
+			return 20
+		case model == color.RGBAModel:
+			return 8
+		case progressive:
+			return 16
+		}
+	case "png":
+		bpp := int64(4)
+		if model == color.RGBA64Model || model == color.NRGBA64Model {
+			bpp = 10
+		}
+		if pngIsInterlaced(r) {
+			bpp *= 2
+		}
+		return bpp
+	case "webp":
+		if model == color.NYCbCrAModel {
+			return 8
+		}
+	}
+	return 4
+}
+
+// jpegIsProgressive walks r's marker segments to its start-of-frame marker.
+func jpegIsProgressive(r io.ReadSeeker) bool {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return true
+	}
+	br := bufio.NewReader(r)
+	var soi [2]byte
+	if _, err := io.ReadFull(br, soi[:]); err != nil || soi != [2]byte{0xFF, 0xD8} {
+		return true
+	}
+	for {
+		b, err := br.ReadByte()
+		if err != nil || b != 0xFF {
+			return true
+		}
+		marker := byte(0xFF)
+		for marker == 0xFF {
+			if marker, err = br.ReadByte(); err != nil {
+				return true
+			}
+		}
+		switch {
+		case marker == 0xC2 || marker == 0xC6 || marker == 0xCA || marker == 0xCE:
+			return true
+		case marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC:
+			return false
+		case marker == 0x01 || (marker >= 0xD0 && marker <= 0xD8):
+			continue
+		}
+		var length [2]byte
+		if _, err := io.ReadFull(br, length[:]); err != nil {
+			return true
+		}
+		n := int(length[0])<<8 | int(length[1])
+		if n < 2 {
+			return true
+		}
+		if _, err := br.Discard(n - 2); err != nil {
+			return true
+		}
+	}
+}
+
+// pngIsInterlaced reads the interlace method from r's IHDR chunk, which the
+// PNG format requires to come first.
+func pngIsInterlaced(r io.ReadSeeker) bool {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return true
+	}
+	var header [29]byte
+	if _, err := io.ReadFull(r, header[:]); err != nil || string(header[12:16]) != "IHDR" {
+		return true
+	}
+	return header[28] != 0
+}
+
+// thumbnailGeometry returns the centered 2:3 (book) or square crop of a
+// width x height source, relative to its origin, and the size that crop
+// scales to so its longest side fits size without upscaling. The crop matches
+// the web UI's object-cover, so a wide source does not become an undersized
+// thumbnail in a tall frame.
+func thumbnailGeometry(width, height, size int, aspect string) (image.Rectangle, int, int) {
+	crop := image.Rect(0, 0, width, height)
+	if aspect != "" {
+		ratio := 1.0
+		if aspect == "book" {
+			ratio = 2.0 / 3.0
+		}
+		if float64(width)/float64(height) > ratio {
+			w := max(1, int(math.Round(float64(height)*ratio)))
+			crop.Min.X = (width - w) / 2
+			crop.Max.X = crop.Min.X + w
+		} else {
+			h := max(1, int(math.Round(float64(width)/ratio)))
+			crop.Min.Y = (height - h) / 2
+			crop.Max.Y = crop.Min.Y + h
+		}
+	}
+	scale := math.Min(1, float64(size)/float64(max(crop.Dx(), crop.Dy())))
+	return crop, max(1, int(math.Round(float64(crop.Dx())*scale))), max(1, int(math.Round(float64(crop.Dy())*scale)))
+}
+
+// halveForThumbnail reports whether a w x h image is still at least four
+// times the dw x dh target, so another exact halving comes before
+// Catmull-Rom. Leaving Catmull-Rom up to 4x keeps text as sharp as running
+// it over the full source, while its scratch buffer stays under 128 bytes
+// per destination pixel.
+func halveForThumbnail(w, h, dw, dh int) bool {
+	return max(w, h) >= 4*max(dw, dh)
+}
+
+// thumbnailJPEGQuality keeps cover lettering crisp at small sizes while
+// staying several times smaller than PNG.
+const thumbnailJPEGQuality = 85
+
+// thumbnailExt is the current file format. legacyThumbnailExt files come from
+// an earlier renderer; the index skips them, so loadLocked deletes them rather
+// than leave them outside the size limit.
+const (
+	thumbnailExt       = ".jpg"
+	legacyThumbnailExt = ".png"
+)
+
 // ErrInvalidThumbnailAspect rejects unbounded crop variants.
 var ErrInvalidThumbnailAspect = errors.New("thumbnail aspect must be book or square")
 
@@ -59,9 +242,13 @@ type thumbnailEntry struct {
 }
 
 // ThumbnailCache persists only requested cover sizes. One instance is shared
-// by all API cover routes and cache management. Its mutex covers disk reads,
-// publication, and eviction, never decoding or resizing. Two independent
-// generations can run at once; duplicate cold requests wait for the same file.
+// by all API cover routes and cache management. Its mutex covers the index,
+// publication, and eviction, never cache hit reads, decoding, or resizing.
+// Independent generations run at once within the decode budget, at most one
+// per GOMAXPROCS (which follows a container's CPU limit, or the host's cores
+// without one); duplicate cold requests wait for the same file. The budget
+// admits waiters in arrival order, so a large cover waiting for room holds
+// back smaller ones queued behind it rather than starving.
 type ThumbnailCache struct {
 	dir      string
 	maxBytes int64
@@ -71,7 +258,7 @@ type ThumbnailCache struct {
 	lru      list.List
 	total    int64
 	flights  map[string]chan struct{}
-	slots    chan struct{}
+	decodes  *semaphore.Weighted
 	epoch    uint64
 }
 
@@ -81,11 +268,11 @@ func NewThumbnailCache(dir string, maxBytes int64) *ThumbnailCache {
 		dir:      filepath.Join(dir, "cover-thumbnails"),
 		maxBytes: maxBytes,
 		flights:  make(map[string]chan struct{}),
-		slots:    make(chan struct{}, 2),
+		decodes:  semaphore.NewWeighted(thumbnailDecodeBudget),
 	}
 }
 
-// Get returns a PNG fitting within size pixels on its longest side, without
+// Get returns a JPEG fitting within size pixels on its longest side, without
 // upscaling the original. Returned bytes stay usable even if another request
 // evicts the file or an administrator clears the cache before it is served.
 func (c *ThumbnailCache) Get(ctx context.Context, file *models.File, size int) (Thumbnail, error) {
@@ -130,10 +317,13 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 			c.mu.Unlock()
 			return Thumbnail{}, err
 		}
-		data, err := c.readLocked(key)
-		if err != nil || data != nil {
+		if entry, touch := c.hitLocked(key); entry != nil {
 			c.mu.Unlock()
-			return Thumbnail{Data: data, Key: key}, err
+			data, err := c.read(entry, touch)
+			if err != nil || data != nil {
+				return Thumbnail{Data: data, Key: key}, err
+			}
+			continue
 		}
 		if done, ok := c.flights[key]; ok {
 			c.mu.Unlock()
@@ -153,13 +343,7 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 			close(done)
 			c.mu.Unlock()
 		}()
-		select {
-		case <-ctx.Done():
-			return Thumbnail{}, errors.WithStack(ctx.Err())
-		case c.slots <- struct{}{}:
-		}
-		data, err = resizeThumbnail(ctx, source, size, aspect)
-		<-c.slots
+		data, err := c.resize(ctx, source, size, aspect)
 		if err != nil {
 			return Thumbnail{}, err
 		}
@@ -183,13 +367,15 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 	}
 }
 
-// resizeThumbnail decodes the cover (bounded to maxThumbnailSourcePixels),
-// applies a centered 2:3 (book) or square crop when aspect is set, and scales
-// it to fit size without upscaling. The crop matches the web UI's
-// object-cover, so a wide source does not become an undersized thumbnail in a
-// tall frame. Catmull-Rom averages fine detail during reduction rather than
-// dropping source pixels, and PNG keeps that detail and transparency.
-func resizeThumbnail(ctx context.Context, path string, size int, aspect string) ([]byte, error) {
+// resize decodes the cover (bounded to maxThumbnailSourcePixels) once its
+// estimated memory fits in the decode budget, then crops and scales it as
+// thumbnailGeometry describes. Exact halvings with bilinear sampling average
+// each 2x2 block until the image is within 4x of the target, and Catmull-Rom
+// does the rest: fine detail is averaged rather than dropped, at a fraction
+// of the cost of running Catmull-Rom over the full source. Covers are
+// expected to be opaque; any transparency is flattened onto white because
+// JPEG has no alpha.
+func (c *ThumbnailCache) resize(ctx context.Context, path string, size int, aspect string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -198,13 +384,19 @@ func resizeThumbnail(ctx context.Context, path string, size int, aspect string) 
 		return nil, errors.WithStack(err)
 	}
 	defer f.Close()
-	cfg, _, err := image.DecodeConfig(f)
+	cfg, format, err := image.DecodeConfig(f)
 	if err != nil {
 		return nil, errors.Wrap(ErrUnsupportedThumbnail, err.Error())
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > maxThumbnailSourcePixels/cfg.Height {
 		return nil, errors.Wrap(ErrUnsupportedThumbnail, "cover exceeds thumbnail decode limit")
 	}
+	bpp := decodeBytesPerPixel(f, format, cfg.ColorModel)
+	weight := thumbnailDecodeWeight(thumbnailDecodeBytes(cfg, bpp, size, aspect), int64(runtime.GOMAXPROCS(0)))
+	if err := c.decodes.Acquire(ctx, weight); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	defer c.decodes.Release(weight)
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -215,33 +407,33 @@ func resizeThumbnail(ctx context.Context, path string, size int, aspect string) 
 	if err := ctx.Err(); err != nil {
 		return nil, errors.WithStack(err)
 	}
-	bounds := img.Bounds()
-	if aspect != "" {
-		ratio := 1.0
-		if aspect == "book" {
-			ratio = 2.0 / 3.0
-		}
-		width, height := bounds.Dx(), bounds.Dy()
-		if float64(width)/float64(height) > ratio {
-			crop := max(1, int(math.Round(float64(height)*ratio)))
-			bounds.Min.X += (width - crop) / 2
-			bounds.Max.X = bounds.Min.X + crop
-		} else {
-			crop := max(1, int(math.Round(float64(width)/ratio)))
-			bounds.Min.Y += (height - crop) / 2
-			bounds.Max.Y = bounds.Min.Y + crop
+	crop, width, height := thumbnailGeometry(img.Bounds().Dx(), img.Bounds().Dy(), size, aspect)
+	src, sr := img, crop.Add(img.Bounds().Min)
+	for halveForThumbnail(sr.Dx(), sr.Dy(), width, height) {
+		half := image.NewRGBA(image.Rect(0, 0, (sr.Dx()+1)/2, (sr.Dy()+1)/2))
+		draw.ApproxBiLinear.Scale(half, half.Bounds(), src, sr, draw.Src, nil)
+		src, sr = half, half.Bounds()
+		if err := ctx.Err(); err != nil {
+			return nil, errors.WithStack(err)
 		}
 	}
-	scale := math.Min(1, float64(size)/float64(max(bounds.Dx(), bounds.Dy())))
-	width := max(1, int(math.Round(float64(bounds.Dx())*scale)))
-	height := max(1, int(math.Round(float64(bounds.Dy())*scale)))
 	dst := image.NewRGBA(image.Rect(0, 0, width, height))
-	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
+	if sr.Size() == dst.Rect.Size() {
+		draw.Draw(dst, dst.Bounds(), src, sr.Min, draw.Src)
+	} else {
+		draw.CatmullRom.Scale(dst, dst.Bounds(), src, sr, draw.Src, nil)
+	}
+	if !dst.Opaque() {
+		flat := image.NewRGBA(dst.Bounds())
+		draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
+		draw.Draw(flat, flat.Bounds(), dst, image.Point{}, draw.Over)
+		dst = flat
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, errors.WithStack(err)
 	}
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, dst); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: thumbnailJPEGQuality}); err != nil {
 		return nil, errors.WithStack(err)
 	}
 	if err := ctx.Err(); err != nil {
@@ -265,10 +457,16 @@ func (c *ThumbnailCache) loadLocked() error {
 	c.total = 0
 	var entries []*thumbnailEntry
 	for _, file := range files {
-		if file.IsDir() || !strings.HasSuffix(file.Name(), ".png") {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), legacyThumbnailExt) {
+			// Best effort: a file that cannot be removed is retried after the
+			// next restart and must not take thumbnails offline meanwhile.
+			_ = os.Remove(filepath.Join(c.dir, file.Name()))
 			continue
 		}
-		key := strings.TrimSuffix(file.Name(), ".png")
+		if file.IsDir() || !strings.HasSuffix(file.Name(), thumbnailExt) {
+			continue
+		}
+		key := strings.TrimSuffix(file.Name(), thumbnailExt)
 		parts := strings.Split(key, "-")
 		if len(parts) != 4 {
 			continue
@@ -300,7 +498,7 @@ func (c *ThumbnailCache) loadLocked() error {
 	return c.evictLocked()
 }
 
-func (c *ThumbnailCache) path(key string) string { return filepath.Join(c.dir, key+".png") }
+func (c *ThumbnailCache) path(key string) string { return filepath.Join(c.dir, key+thumbnailExt) }
 
 func (c *ThumbnailCache) addLocked(entry *thumbnailEntry) {
 	entry.element = c.lru.PushBack(entry.key)
@@ -314,27 +512,46 @@ func (c *ThumbnailCache) forgetLocked(entry *thumbnailEntry) {
 	c.total -= entry.bytes
 }
 
-func (c *ThumbnailCache) readLocked(key string) ([]byte, error) {
+// hitLocked marks an indexed thumbnail as recently used and reports whether
+// its file's mtime should be refreshed. Persisting approximate recency for
+// restarts avoids a metadata write on every gallery hit; in-process LRU order
+// is updated on every access.
+func (c *ThumbnailCache) hitLocked(key string) (*thumbnailEntry, bool) {
 	entry, ok := c.entries[key]
 	if !ok {
-		return nil, nil
+		return nil, false
 	}
-	data, err := os.ReadFile(c.path(key))
+	c.lru.MoveToBack(entry.element)
+	now := time.Now()
+	if now.Sub(entry.touched) < time.Minute {
+		return entry, false
+	}
+	entry.touched = now
+	return entry, true
+}
+
+// read loads a hit without holding the mutex, so a page of cached covers is
+// read in parallel. Files are published by atomic rename, so a read sees a
+// whole thumbnail or none. Eviction, a newer cover version, or Clear can
+// delete the file first; read then drops the entry if the index still holds
+// it and returns nil data so the caller treats the request as a miss.
+func (c *ThumbnailCache) read(entry *thumbnailEntry, touch bool) ([]byte, error) {
+	path := c.path(entry.key)
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		c.forgetLocked(entry)
+		c.mu.Lock()
+		if c.entries[entry.key] == entry {
+			c.forgetLocked(entry)
+		}
+		c.mu.Unlock()
 		return nil, nil
 	}
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	c.lru.MoveToBack(entry.element)
-	// Persist approximate recency for restarts without a metadata write on
-	// every gallery hit. In-process LRU order is updated on every access.
-	now := time.Now()
-	if now.Sub(entry.touched) >= time.Minute {
-		if err := os.Chtimes(c.path(key), now, now); err == nil {
-			entry.touched = now
-		}
+	if touch {
+		now := time.Now()
+		_ = os.Chtimes(path, now, now)
 	}
 	return data, nil
 }

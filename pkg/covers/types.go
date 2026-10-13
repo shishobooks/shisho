@@ -20,7 +20,7 @@ const (
 // browser as the r query parameter, and a request whose r is absent or stale
 // is served private, no-store, so current bytes are never cached under a
 // previous renderer's URL.
-const ThumbnailRenderKey = "1"
+const ThumbnailRenderKey = "2"
 
 // CoverThumbnailQuery describes optional resizing on API cover endpoints.
 // Omitting Size serves the original. An omitted Aspect preserves its proportions.

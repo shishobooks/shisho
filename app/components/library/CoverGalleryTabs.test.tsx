@@ -38,7 +38,7 @@ describe("CoverGalleryTabs", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=2",
     );
   });
 
@@ -57,7 +57,7 @@ describe("CoverGalleryTabs", () => {
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=2",
     );
 
     fireEvent.error(firstImg!);
@@ -76,7 +76,7 @@ describe("CoverGalleryTabs", () => {
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=2",
     );
   });
 
@@ -95,7 +95,7 @@ describe("CoverGalleryTabs", () => {
     const firstImg = container.querySelector("img");
     expect(firstImg).not.toBeNull();
     expect(firstImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=2",
     );
 
     const updatedFiles = [
@@ -113,7 +113,7 @@ describe("CoverGalleryTabs", () => {
     expect(secondImg).not.toBeNull();
     expect(secondImg).not.toBe(firstImg);
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=2",
     );
   });
 
@@ -130,7 +130,7 @@ describe("CoverGalleryTabs", () => {
       />,
     );
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/share/tok/files/1/cover?size=512&aspect=book&r=1",
+      "/api/share/tok/files/1/cover?size=512&aspect=book&r=2",
     );
   });
 

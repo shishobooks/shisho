@@ -337,13 +337,13 @@ describe("BookDetailBody in Share Link context", () => {
 
     expect(screen.getByAltText("Test Book Cover")).toHaveAttribute(
       "src",
-      "/api/share/tok/cover?v=42-1&size=512&aspect=book&r=1",
+      "/api/share/tok/cover?v=42-1&size=512&aspect=book&r=2",
     );
     const thumbnails = Array.from(container.querySelectorAll("img")).map(
       (img) => img.getAttribute("src"),
     );
     expect(thumbnails).toContain(
-      "/api/share/tok/files/42/cover?size=512&aspect=book&r=1",
+      "/api/share/tok/files/42/cover?size=512&aspect=book&r=2",
     );
   });
 

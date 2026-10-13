@@ -312,7 +312,7 @@ describe("BookItem cover", () => {
     render(wrap(<BookItem book={book} libraryId="1" />));
     expect(screen.getByAltText("Test Book Cover")).toHaveAttribute(
       "src",
-      "/api/books/1/cover?v=10-1704067200&size=512&aspect=book&r=1",
+      "/api/books/1/cover?v=10-1704067200&size=512&aspect=book&r=2",
     );
   });
 });

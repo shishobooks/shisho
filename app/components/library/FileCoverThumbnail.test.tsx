@@ -42,7 +42,7 @@ describe("FileCoverThumbnail", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=2",
     );
   });
 
@@ -73,7 +73,7 @@ describe("FileCoverThumbnail", () => {
     const secondImg = container.querySelector("img");
     expect(secondImg).not.toBeNull();
     expect(secondImg?.getAttribute("src")).toBe(
-      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=1",
+      "/api/books/files/1/cover?v=1717200000000&size=512&aspect=book&r=2",
     );
   });
 
@@ -139,7 +139,7 @@ describe("FileCoverThumbnail", () => {
       />,
     );
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/share/tok/files/1/cover?size=512&aspect=book&r=1",
+      "/api/share/tok/files/1/cover?size=512&aspect=book&r=2",
     );
   });
 

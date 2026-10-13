@@ -305,7 +305,7 @@ describe("FileEditDialog", () => {
 
       expect(await screen.findByAltText("File cover")).toHaveAttribute(
         "src",
-        "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=1",
+        "/api/books/files/1/cover?v=1704067200000&size=512&aspect=book&r=2",
       );
     });
 
@@ -326,7 +326,7 @@ describe("FileEditDialog", () => {
         );
       });
       expect(screen.getByAltText("File cover").getAttribute("src")).toMatch(
-        /^\/api\/books\/files\/1\/cover\?v=\d+&size=512&aspect=book&r=1$/,
+        /^\/api\/books\/files\/1\/cover\?v=\d+&size=512&aspect=book&r=2$/,
       );
     });
   });
