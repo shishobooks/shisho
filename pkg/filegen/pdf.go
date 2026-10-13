@@ -3,6 +3,7 @@ package filegen
 import (
 	"context"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -58,7 +59,7 @@ func (g *PDFGenerator) Prepare(ctx context.Context, src Source, book *models.Boo
 	}
 	doc, err := incremental.Open(src, src.Size())
 	if errors.Is(err, incremental.ErrCannotDecrypt) {
-		return nil, NewGenerationError(models.FileTypePDF, err, "PDF is encrypted in a way Shisho cannot open")
+		return nil, NewGenerationError(models.FileTypePDF, fmt.Errorf("%w: %w", ErrCannotDecrypt, err), "PDF is encrypted in a way Shisho cannot open")
 	}
 	if err != nil {
 		return nil, NewGenerationError(models.FileTypePDF, err, "failed to read PDF cross-reference data")

@@ -426,7 +426,8 @@ func TestPDFGenerator_PasswordRequiredServedAsOriginal(t *testing.T) {
 			require.Error(t, err)
 			var genErr *filegen.GenerationError
 			require.ErrorAs(t, err, &genErr, "a GenerationError makes device routes serve the Original File")
-			assert.ErrorIs(t, err, incremental.ErrCannotDecrypt)
+			require.ErrorIs(t, err, incremental.ErrCannotDecrypt)
+			assert.ErrorIs(t, err, filegen.ErrCannotDecrypt, "the web UI routes answer this with a message")
 		})
 	}
 }

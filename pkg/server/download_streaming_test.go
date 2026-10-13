@@ -513,6 +513,47 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 	}
 }
 
+// A PDF that needs a password to open cannot get Shisho's metadata: device
+// routes serve the Original File, and web UI routes answer with an
+// invalid_state error the download dialog shows beside Download Original,
+// not a server error.
+func TestGeneratedDownload_PasswordProtectedPDF(t *testing.T) {
+	t.Parallel()
+	for _, r := range []route{opdsRoute(), shareRoute(), webRoute()} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			t.Run(r.name+" "+method, func(t *testing.T) {
+				t.Parallel()
+				f := newDownloadFixture(t, func(dir string) (string, string) {
+					data, err := os.ReadFile("../filegen/testdata/password-aes-256.pdf")
+					require.NoError(t, err)
+					path := filepath.Join(dir, "Locked.pdf")
+					require.NoError(t, os.WriteFile(path, data, 0o600))
+					return path, models.FileTypePDF
+				})
+
+				res := f.request(r, method)
+				defer res.Body.Close()
+				body, err := io.ReadAll(res.Body)
+				require.NoError(t, err)
+				if r.device {
+					require.Equal(t, http.StatusOK, res.StatusCode)
+					if method == http.MethodGet {
+						assert.Equal(t, f.original, body)
+					}
+					return
+				}
+				require.Equal(t, http.StatusUnprocessableEntity, res.StatusCode)
+				if method == http.MethodGet {
+					var errRes errcodes.ErrorResponse
+					require.NoError(t, json.Unmarshal(body, &errRes), string(body))
+					assert.Equal(t, "invalid_state", errRes.Error.Code)
+					assert.Equal(t, books.CannotDecryptMessage, errRes.Error.Message)
+				}
+			})
+		}
+	}
+}
+
 // gatedGenerator is a real generator whose output after its first write
 // waits until the test releases it, so a download is attached before the
 // build gets far.
