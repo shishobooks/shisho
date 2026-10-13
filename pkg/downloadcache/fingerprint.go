@@ -38,7 +38,11 @@ const (
 //     the NCX the OPF's identifier (pkg/kepub/cbz.go), and EPUB 3 downloads
 //     gain a missing nav document and modified date
 //     (pkg/filegen/epub_repair.go).
-const GeneratorVersion = 5
+//   - 6: CBZ and KePub-from-CBZ pages keep their gray levels and color
+//     (pkg/kepub/cbz.go): no 16-level reduction, and no conversion of
+//     mostly gray pages to gray. Pages are resized by area averaging
+//     (pkg/kepub/resize.go).
+const GeneratorVersion = 6
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.

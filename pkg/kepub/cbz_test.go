@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -1047,64 +1048,120 @@ func TestGenerateNavXHTML_WithChapters(t *testing.T) {
 	})
 }
 
-func TestIsGrayscaleImage(t *testing.T) {
+// Pages keep their tones and colors: a gray page keeps every gray level,
+// and a gray page with a small colored element stays in color. Only the
+// size and, for PNGs, the format change.
+func TestProcessImageForEreader_KeepsTonesAndColor(t *testing.T) {
 	t.Parallel()
-	t.Run("detects grayscale image", func(t *testing.T) {
-		// Create a grayscale image (all pixels have R=G=B)
-		img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-		gray := color.RGBA{R: 128, G: 128, B: 128, A: 255}
-		for y := 0; y < 100; y++ {
-			for x := 0; x < 100; x++ {
-				img.Set(x, y, gray)
+
+	t.Run("gray page keeps every level", func(t *testing.T) {
+		t.Parallel()
+		img := image.NewGray(image.Rect(0, 0, 2048, 2730))
+		for y := range 2730 {
+			for x := range 2048 {
+				img.SetGray(x, y, color.Gray{Y: uint8(x * 256 / 2048)})
 			}
 		}
-		assert.True(t, isGrayscaleImage(img), "should detect grayscale image")
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+
+		processed := ProcessImageForEreader(buf.Bytes(), ".png")
+		require.Equal(t, ".jpg", processed.Ext)
+		out, err := jpeg.Decode(bytes.NewReader(processed.Data))
+		require.NoError(t, err)
+		levels := map[uint8]bool{}
+		b := out.Bounds()
+		for x := b.Min.X; x < b.Max.X; x++ {
+			levels[color.GrayModel.Convert(out.At(x, b.Min.Y+b.Dy()/2)).(color.Gray).Y] = true
+		}
+		assert.Greater(t, len(levels), 100, "a gradient across the page should keep far more than 16 levels")
 	})
 
-	t.Run("detects color image", func(t *testing.T) {
-		// Create a color image with distinct R, G, B values
-		img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-		red := color.RGBA{R: 255, G: 0, B: 0, A: 255}
-		for y := 0; y < 100; y++ {
-			for x := 0; x < 100; x++ {
-				img.Set(x, y, red)
+	t.Run("gray page with a colored element stays in color", func(t *testing.T) {
+		t.Parallel()
+		img := image.NewRGBA(image.Rect(0, 0, 2048, 2730))
+		draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{R: 128, G: 128, B: 128, A: 255}), image.Point{}, draw.Src)
+		red := image.Rect(0, 0, 200, 200)
+		draw.Draw(img, red, image.NewUniform(color.RGBA{R: 255, A: 255}), image.Point{}, draw.Src)
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+
+		processed := ProcessImageForEreader(buf.Bytes(), ".png")
+		out, err := jpeg.Decode(bytes.NewReader(processed.Data))
+		require.NoError(t, err)
+		r, g, _, _ := out.At(20, 20).RGBA()
+		assert.Greater(t, r>>8, uint32(200), "the red element should stay red")
+		assert.Less(t, g>>8, uint32(60), "the red element should stay red")
+	})
+
+	// Scans are often saved as palette PNGs, which decode as paletted
+	// rather than gray.
+	t.Run("palette PNG of grays becomes a gray JPEG", func(t *testing.T) {
+		t.Parallel()
+		palettePage := func(pal color.Palette) []byte {
+			img := image.NewPaletted(image.Rect(0, 0, 2000, 3000), pal)
+			for i := range img.Pix {
+				img.Pix[i] = uint8(i % len(pal))
+			}
+			var buf bytes.Buffer
+			require.NoError(t, png.Encode(&buf, img))
+			return buf.Bytes()
+		}
+		grays := color.Palette{}
+		for i := range 16 {
+			grays = append(grays, color.Gray{Y: uint8(i * 17)})
+		}
+		out, err := jpeg.Decode(bytes.NewReader(ProcessImageForEreader(palettePage(grays), ".png").Data))
+		require.NoError(t, err)
+		assert.IsType(t, &image.Gray{}, out)
+
+		// A page that fits the screen is not resized, and still comes out gray.
+		small := image.NewPaletted(image.Rect(0, 0, 800, 1200), grays)
+		var smallPNG bytes.Buffer
+		require.NoError(t, png.Encode(&smallPNG, small))
+		out, err = jpeg.Decode(bytes.NewReader(ProcessImageForEreader(smallPNG.Bytes(), ".png").Data))
+		require.NoError(t, err)
+		assert.IsType(t, &image.Gray{}, out, "a palette PNG that fits the screen")
+
+		withRed := append(color.Palette{color.RGBA{R: 255, A: 255}}, grays[1:]...)
+		out, err = jpeg.Decode(bytes.NewReader(ProcessImageForEreader(palettePage(withRed), ".png").Data))
+		require.NoError(t, err)
+		assert.IsType(t, &image.YCbCr{}, out, "a palette with a color in it stays in color")
+	})
+
+	t.Run("16-bit gray PNG that fits the screen becomes a gray JPEG", func(t *testing.T) {
+		t.Parallel()
+		img := image.NewGray16(image.Rect(0, 0, 800, 1200))
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		out, err := jpeg.Decode(bytes.NewReader(ProcessImageForEreader(buf.Bytes(), ".png").Data))
+		require.NoError(t, err)
+		assert.IsType(t, &image.Gray{}, out)
+	})
+
+	// A page thinner than one output pixel at the screen's scale keeps one.
+	t.Run("very tall page", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, image.NewGray(image.Rect(0, 0, 1, 20000))))
+		processed := ProcessImageForEreader(buf.Bytes(), ".png")
+		assert.Equal(t, 1, processed.Width)
+		assert.Equal(t, koboHeight, processed.Height)
+	})
+
+	t.Run("gray JPEG that fits the screen is passed through", func(t *testing.T) {
+		t.Parallel()
+		img := image.NewGray(image.Rect(0, 0, 800, 1200))
+		for y := range 1200 {
+			for x := range 800 {
+				img.SetGray(x, y, color.Gray{Y: uint8(x + y)})
 			}
 		}
-		assert.False(t, isGrayscaleImage(img), "should detect color image")
-	})
+		var buf bytes.Buffer
+		require.NoError(t, jpeg.Encode(&buf, img, nil))
 
-	t.Run("detects native Gray image type", func(t *testing.T) {
-		img := image.NewGray(image.Rect(0, 0, 100, 100))
-		assert.True(t, isGrayscaleImage(img), "should detect native Gray image")
-	})
-
-	t.Run("allows small color elements in grayscale", func(t *testing.T) {
-		// Create mostly grayscale image with 1% color pixels
-		img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-		gray := color.RGBA{R: 128, G: 128, B: 128, A: 255}
-		red := color.RGBA{R: 255, G: 0, B: 0, A: 255}
-		for y := 0; y < 100; y++ {
-			for x := 0; x < 100; x++ {
-				if x == 0 && y == 0 {
-					img.Set(x, y, red) // Only 1 color pixel
-				} else {
-					img.Set(x, y, gray)
-				}
-			}
-		}
-		assert.True(t, isGrayscaleImage(img), "should still be grayscale with tiny color elements")
-	})
-
-	t.Run("rejects small images", func(t *testing.T) {
-		// Very small images should not be converted
-		img := image.NewRGBA(image.Rect(0, 0, 10, 10))
-		gray := color.RGBA{R: 128, G: 128, B: 128, A: 255}
-		for y := 0; y < 10; y++ {
-			for x := 0; x < 10; x++ {
-				img.Set(x, y, gray)
-			}
-		}
-		assert.False(t, isGrayscaleImage(img), "should not convert tiny images")
+		processed := ProcessImageForEreader(buf.Bytes(), ".jpg")
+		assert.Equal(t, buf.Bytes(), processed.Data)
 	})
 }
 

@@ -166,7 +166,7 @@ func TestKepubCBZGenerator_ReadsBoundedPagesAhead(t *testing.T) {
 	pages := manyPages()
 	path := testgen.GenerateCBZ(t, t.TempDir(), "source.cbz", testgen.CBZOptions{PageCount: pages})
 	src := newPageSource(t, path)
-	bound := 2*runtime.NumCPU() + 2
+	bound := 2*runtime.GOMAXPROCS(0) + 2
 
 	prepared, err := newKepubCBZGenerator(t).Prepare(context.Background(), src, &models.Book{Title: "Book"}, &models.File{FileType: models.FileTypeCBZ})
 	require.NoError(t, err)
