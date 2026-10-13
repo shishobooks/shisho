@@ -50,14 +50,14 @@ func serveThumbnail(c echo.Context, file *models.File, cacheControl, resource st
 	}
 	// Generation and cache reads succeed before any cacheable image headers are set.
 	header := c.Response().Header()
-	header.Set("Content-Type", "image/png")
+	header.Set("Content-Type", "image/jpeg")
 	header.Set("Cache-Control", cacheControl)
 	header.Set("ETag", strconv.Quote(thumb.Key))
 	req := c.Request()
 	if rng := req.Header.Get("Range"); rng != "" && !strings.HasPrefix(rng, "bytes=") {
 		req.Header.Del("Range")
 	}
-	http.ServeContent(c.Response(), req, "cover.png", time.Time{}, bytes.NewReader(thumb.Data))
+	http.ServeContent(c.Response(), req, "cover.jpg", time.Time{}, bytes.NewReader(thumb.Data))
 	return true, nil
 }
 

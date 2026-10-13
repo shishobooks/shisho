@@ -40,9 +40,10 @@ func TestCoverThumbnails_BookFileAndSeriesShareTheManagedCache(t *testing.T) {
 		fmt.Sprintf("/api/books/files/%d/cover", seeded.fileID),
 		fmt.Sprintf("/api/series/%d/cover", series.ID),
 	} {
-		body := f.request(http.MethodGet, path+"?size=256&aspect=book&r=1", "", http.StatusOK)
-		img, err := png.Decode(bytes.NewReader([]byte(body)))
+		body := f.request(http.MethodGet, path+"?size=256&aspect=book&r="+covers.ThumbnailRenderKey, "", http.StatusOK)
+		img, format, err := image.Decode(bytes.NewReader([]byte(body)))
 		require.NoError(t, err)
+		require.Equal(t, "jpeg", format)
 		require.Equal(t, image.Rect(0, 0, 171, 256), img.Bounds())
 		if first == "" {
 			first = body
@@ -182,7 +183,7 @@ func TestCacheSettings_CoverThumbnailZeroEvictsAndSurvivesRestart(t *testing.T) 
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, image.NewNRGBA(image.Rect(0, 0, 600, 900))))
 	require.NoError(t, os.WriteFile(covers.FileCoverPath(file), buf.Bytes(), 0644))
-	coverPath := fmt.Sprintf("/api/books/%d/cover?size=256&aspect=book&r=1", seeded.bookID)
+	coverPath := fmt.Sprintf("/api/books/%d/cover?size=256&aspect=book&r=%s", seeded.bookID, covers.ThumbnailRenderKey)
 	f.request(http.MethodGet, coverPath, "", http.StatusOK)
 	count := func() int {
 		var entries []cache.Info

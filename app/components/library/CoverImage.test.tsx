@@ -32,7 +32,7 @@ describe("CoverImage", () => {
     render(<CoverImage alt="Cover" src="/api/books/7/cover?v=12-1" />);
     expect(screen.getByAltText("Cover")).toHaveAttribute(
       "src",
-      "/api/books/7/cover?v=12-1&size=512&aspect=book&r=1",
+      "/api/books/7/cover?v=12-1&size=512&aspect=book&r=2",
     );
   });
 
@@ -46,13 +46,13 @@ describe("CoverImage", () => {
     act(() => resize());
     expect(screen.getByAltText("Cover")).toHaveAttribute(
       "src",
-      "/api/books/7/cover?v=12-1&size=512&aspect=book&r=1",
+      "/api/books/7/cover?v=12-1&size=512&aspect=book&r=2",
     );
     height = 600;
     act(() => resize());
     expect(screen.getByAltText("Cover")).toHaveAttribute(
       "src",
-      "/api/books/7/cover?v=12-1&size=2048&r=1",
+      "/api/books/7/cover?v=12-1&size=2048&r=2",
     );
   });
 
@@ -65,7 +65,7 @@ describe("CoverImage", () => {
     );
     expect(screen.getByAltText("Cover")).toHaveAttribute(
       "src",
-      "/api/share/tok/files/42/cover?v=2&size=512&aspect=book&r=1",
+      "/api/share/tok/files/42/cover?v=2&size=512&aspect=book&r=2",
     );
   });
 });
