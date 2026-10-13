@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/shishobooks/shisho/internal/testgen"
@@ -42,10 +43,13 @@ func TestCache_SourceChangedDuringCopy(t *testing.T) {
 			require.NoError(t, err)
 			streaming, ok := gen.(filegen.StreamGenerator)
 			require.True(t, ok)
+			attached := make(chan struct{})
+			attach := sync.OnceFunc(func() { close(attached) })
 			cache := NewCache(cacheDir, 1<<30, WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
-				return changesSource{StreamGenerator: streaming, path: srcPath}, nil
+				return changesSource{StreamGenerator: streaming, path: srcPath, attached: attached}, nil
 			}))
 			t.Cleanup(cache.Wait)
+			t.Cleanup(attach) // runs before cache.Wait, so a failed Open does not hang the build
 			book := &models.Book{Title: "New"}
 			file := &models.File{ID: 1, FileType: name, Filepath: srcPath}
 
@@ -53,6 +57,7 @@ func TestCache_SourceChangedDuringCopy(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, g.Body)
 			defer g.Body.Close()
+			attach()
 			got, err := io.ReadAll(g.Body)
 			require.Error(t, err, "a download of a changed source ended like a complete one")
 			assert.Less(t, int64(len(got)), g.Size)
@@ -66,10 +71,14 @@ func TestCache_SourceChangedDuringCopy(t *testing.T) {
 }
 
 // changesSource appends to the source at path once the generator starts
-// writing, as a library scan rewriting the file mid-download would.
+// writing, as a library scan rewriting the file mid-download would. Its
+// first write waits for attached, so the build cannot fail before the
+// download attaches; that case returns the error from Open instead of a
+// stream.
 type changesSource struct {
 	filegen.StreamGenerator
-	path string
+	path     string
+	attached <-chan struct{}
 }
 
 func (g changesSource) Prepare(ctx context.Context, src filegen.Source, book *models.Book, file *models.File) (filegen.Prepared, error) {
@@ -77,27 +86,35 @@ func (g changesSource) Prepare(ctx context.Context, src filegen.Source, book *mo
 	if err != nil {
 		return nil, err
 	}
-	return changesSourcePrepared{Prepared: p, path: g.path}, nil
+	return changesSourcePrepared{Prepared: p, path: g.path, attached: g.attached}, nil
 }
 
 type changesSourcePrepared struct {
 	filegen.Prepared
-	path string
+	path     string
+	attached <-chan struct{}
 }
 
 func (p changesSourcePrepared) Write(ctx context.Context, w io.Writer) error {
-	return p.Prepared.Write(ctx, &appendOnFirstWrite{w: w, path: p.path})
+	return p.Prepared.Write(ctx, &appendOnFirstWrite{ctx: ctx, w: w, path: p.path, attached: p.attached})
 }
 
 type appendOnFirstWrite struct {
-	w     io.Writer
-	path  string
-	wrote bool
+	ctx      context.Context
+	w        io.Writer
+	path     string
+	attached <-chan struct{}
+	wrote    bool
 }
 
 func (a *appendOnFirstWrite) Write(b []byte) (int, error) {
 	if !a.wrote {
 		a.wrote = true
+		select {
+		case <-a.attached:
+		case <-a.ctx.Done():
+			return 0, a.ctx.Err()
+		}
 		f, err := os.OpenFile(a.path, os.O_APPEND|os.O_WRONLY, 0)
 		if err != nil {
 			return 0, err
