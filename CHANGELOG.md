@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
+### Breaking Changes
+- **Add per-cache size limits with a No limit option (#706)**
+  - `download_cache_max_size_gb` (`DOWNLOAD_CACHE_MAX_SIZE_GB`) is
+    removed. The download cache now defaults to a 5 GiB limit, set under
+    **Settings > Cache > Downloads**. If you set a different value, save it
+    there after upgrading; until then the server logs a warning while the
+    old setting is still present.
+
+### Features
+- Speed up cover thumbnail generation within a memory budget (#708)
+- Add per-cache size limits with a No limit option (#706)
+- Add MOBI and AZW3 to the homepage and pin demo authoring to v0.2.0 (#703)
+- Bound CBZ page memory and keep page tones and color (#702)
+
+### Bug Fixes
+- Let a book's oldest main file own its embedded book-level metadata (#705)
+- Show images in AZW3 books converted from EPUB in the reader (#704)
+
+### Other
+- Bump bun to 1.3.0 (#700)
+- Bump koanf, echo, go-pdfium, and pdfcpu (#698)
+- Bump jdx/mise-action from 4 to 5 (#618)
+
 ## [0.2.0] - 2026-10-13
 
 ### Breaking Changes
