@@ -232,12 +232,19 @@ func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.F
 		coverInfo = addCoverImage(pkg, opfPath, srcNames, filepath.Ext(*file.CoverImageFilename), newCoverMimeType)
 	}
 
+	navPath, ncxPath := tocPaths(pkg, opfPath)
+	addModifiedDate(pkg, book, file)
+	title := book.Title
+	if file.Name != nil && *file.Name != "" {
+		title = *file.Name
+	}
+	addedNavPath, addedNav := addNavDocument(pkg, opfPath, navPath, srcNames, title, file.Chapters)
+
 	opfContent, err := modifyOPF(pkg, book, file, coverInfo, newCoverMimeType)
 	if err != nil {
 		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
 	}
 
-	navPath, ncxPath := tocPaths(pkg, opfPath)
 	var navData, ncxData []byte
 	for _, f := range srcZip.File {
 		if f.Name != navPath && f.Name != ncxPath {
@@ -275,6 +282,10 @@ func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.F
 	// A cover Shisho added to a package that had none is a new entry.
 	if coverInfo != nil && coverInfo.added {
 		plan.entries = append(plan.entries, epubEntry{name: coverInfo.path, content: newCoverData, method: zip.Deflate})
+	}
+	// So is a nav Shisho added to an EPUB 3 package that had none.
+	if addedNav != nil {
+		plan.entries = append(plan.entries, epubEntry{name: addedNavPath, content: addedNav, method: zip.Deflate})
 	}
 
 	return plan, nil

@@ -124,17 +124,9 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OPF manifest")
 		}
-		opfDir := filepath.Dir(opfPath)
-		if opfDir == "." {
-			opfDir = ""
-		}
 		for _, item := range extractManifestItems(data) {
 			if isContentFile(item.MediaType) {
-				itemPath := item.Href
-				if opfDir != "" {
-					itemPath = opfDir + "/" + itemPath
-				}
-				contentFiles[itemPath] = true
+				contentFiles[manifestEntryPath(opfPath, item.Href)] = true
 			}
 		}
 	}
@@ -164,11 +156,7 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to transform OPF file")
 			}
-			var buf bytes.Buffer
-			if err := TransformOPF(bytes.NewReader(data), &buf); err != nil {
-				return nil, errors.Wrap(err, "failed to transform OPF file")
-			}
-			return ziputil.Compress(e.Name, zip.Deflate, buf.Bytes())
+			return ziputil.Compress(e.Name, zip.Deflate, transformKepubOPF(data, opfPath, contentFiles))
 		case e.File == nil:
 			return ziputil.Compress(e.Name, zip.Deflate, e.Content)
 		default:
@@ -303,6 +291,9 @@ func (r *aheadResults) next(ctx context.Context, i int) (*ziputil.Entry, error) 
 func (r *aheadResults) wait() {
 	r.wg.Wait()
 }
+
+// koboJSPath is where kobo.js goes in a KePub: the root of the zip.
+const koboJSPath = "kobo.js"
 
 // computeRelativeScriptPath computes the relative path to kobo.js from a content file.
 // kobo.js is always at the root of the EPUB.
