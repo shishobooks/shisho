@@ -8,7 +8,7 @@ on:
   workflow_call:
 
 env:
-  SHARD_TOTAL: 4
+  SHARD_TOTAL: 2
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -45,7 +45,7 @@ jobs:
       - run: mise lint
       - run: mise test:scripts
       - name: Save Go and golangci-lint caches
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: always() # TEMP
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
@@ -58,12 +58,12 @@ jobs:
 
   test:
     # Keep this N in sync with env.SHARD_TOTAL (env not available in name).
-    name: Go Test (${{ matrix.shard }}/4)
+    name: Go Test (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2]
     env:
       TZ: America/Chicago
       CI: "true"
@@ -128,7 +128,7 @@ jobs:
           # Catch go test crashing before any junit is written.
           if-no-files-found: error
       - name: Save Go build cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.shard == 1
+        if: matrix.shard == 1 # TEMP: measure warm cache on this branch
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
@@ -381,7 +381,7 @@ jobs:
           retry_on: timeout
           command: pnpm "e2e:$BROWSER"
       - name: Save Go build cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.browser == 'chromium'
+        if: matrix.browser == 'chromium' # TEMP
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
