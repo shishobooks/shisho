@@ -901,10 +901,14 @@ const kindlePosRegex = /kindle:pos:fid:(\w+):off:(\w+)/
 // beside a rewritten src. Its relative paths resolve against the section's
 // blob URL and load nothing, and browsers prefer srcset over src, so the
 // image breaks. Drop any srcset with a candidate that was never resolved.
+// Candidates are split on a comma followed by whitespace, so the comma in a
+// data: URL stays inside its candidate; anything misparsed is dropped, which
+// only falls back to src.
 export const removeUnresolvedSrcset = doc => {
     for (const el of doc.querySelectorAll('[srcset]')) {
-        const urls = el.getAttribute('srcset').split(',')
-            .map(candidate => candidate.trim().split(/\s+/)[0])
+        const urls = el.getAttribute('srcset').split(/,\s+/)
+            .map(candidate => candidate.trim().replace(/,$/, '').split(/\s+/)[0])
+            .filter(Boolean)
         if (urls.some(url => !/^(blob|data):/i.test(url))) el.removeAttribute('srcset')
     }
 }
@@ -1106,6 +1110,8 @@ class KF8 {
         const newData = await event.detail.data
         const newType = await event.detail.type
         const doc = newType === MIME.SVG ? this.parser.parseFromString(newData, newType) : null
+        // Shisho patch: upstream passes { newType }, which leaves every
+        // resource blob without a MIME type.
         return [new Blob([newData], { type: newType }),
             // SVG wrappers need to be inlined
             // as browsers don't allow external resources when loading SVG as an image

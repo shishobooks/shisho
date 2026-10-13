@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { removeUnresolvedSrcset } from "@/libraries/foliate/mobi.js";
@@ -26,11 +28,41 @@ describe("removeUnresolvedSrcset", () => {
     expect(doc.querySelector("img")!.getAttribute("srcset")).toBe(srcset);
   });
 
+  it("keeps a resolved srcset holding a data URL", () => {
+    const srcset = "data:image/png;base64,AAAA 1x, blob:http://x/2 2x";
+    const doc = parse(`<img src="blob:http://x/1" srcset="${srcset}"/>`);
+    removeUnresolvedSrcset(doc);
+    expect(doc.querySelector("img")!.getAttribute("srcset")).toBe(srcset);
+  });
+
+  it("keeps a resolved srcset with a trailing comma", () => {
+    const srcset = "blob:http://x/1 1x, blob:http://x/2 2x,";
+    const doc = parse(`<img src="blob:http://x/1" srcset="${srcset}"/>`);
+    removeUnresolvedSrcset(doc);
+    expect(doc.querySelector("img")!.getAttribute("srcset")).toBe(srcset);
+  });
+
   it("drops an unresolved srcset on a picture source", () => {
     const doc = parse(
       `<picture><source srcset="../images/a.webp"/><img src="blob:http://x/1"/></picture>`,
     );
     removeUnresolvedSrcset(doc);
     expect(doc.querySelector("source")!.hasAttribute("srcset")).toBe(false);
+  });
+});
+
+// The vendored mobi.js carries local patches that a refresh from upstream
+// would silently drop. See "Local patches" in app/libraries/foliate/README.md.
+describe("vendored mobi.js patches", () => {
+  const source = readFileSync("app/libraries/foliate/mobi.js", "utf8");
+
+  it("runs removeUnresolvedSrcset on every KF8 section", () => {
+    expect(source).toMatch(
+      /async loadSection\(section\) \{[\s\S]*?removeUnresolvedSrcset\(doc\)[\s\S]*?\n {4}\}/,
+    );
+  });
+
+  it("gives KF8 resource blobs their MIME type", () => {
+    expect(source).toContain("new Blob([newData], { type: newType })");
   });
 });
