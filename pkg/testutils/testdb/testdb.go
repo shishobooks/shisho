@@ -18,7 +18,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 )
 
 // seq gives each test database its own shared-cache name, so parallel tests
@@ -71,7 +70,7 @@ func open(t testing.TB, maxOpen int) *bun.DB {
 		sqldb.SetMaxOpenConns(maxOpen)
 	}
 
-	db := bun.NewDB(sqldb, sqlitedialect.New())
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect())
 	t.Cleanup(func() {
 		_ = db.Close()
 	})

@@ -73,13 +73,13 @@ func TestUpsertLibrarySort_InsertsThenUpdates(t *testing.T) {
 	assert.Equal(t, "author:asc,series:asc", *row2.SortSpec)
 
 	// Only one row should exist for this pair.
-	var count int
+	var count int64
 	count, err = db.NewSelect().
 		Model((*models.UserLibrarySettings)(nil)).
 		Where("user_id = ? AND library_id = ?", user.ID, lib.ID).
 		Count(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 }
 
 func TestUpsertLibrarySort_ClearsWithNil(t *testing.T) {
@@ -114,11 +114,11 @@ func TestUserDelete_CascadesSettings(t *testing.T) {
 	_, err = db.NewDelete().Model((*models.User)(nil)).Where("id = ?", user.ID).Exec(context.Background())
 	require.NoError(t, err)
 
-	var count int
+	var count int64
 	count, err = db.NewSelect().
 		Model((*models.UserLibrarySettings)(nil)).
 		Where("user_id = ?", user.ID).
 		Count(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "settings should cascade on user delete")
+	assert.Equal(t, int64(0), count, "settings should cascade on user delete")
 }

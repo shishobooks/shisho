@@ -89,7 +89,7 @@ func (svc *Service) CountForFile(ctx context.Context, fileID int) (int, error) {
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
-	return count, nil
+	return int(count), nil
 }
 
 // ListFilesMissingAlgorithm returns IDs of files in the library that do not

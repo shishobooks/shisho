@@ -176,7 +176,7 @@ func (svc *Service) ListSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 
 func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOptions) ([]*models.Series, int, error) {
 	var series []*models.Series
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -201,10 +201,10 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		}
 	}
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 
 	if opts.includeTotal {
@@ -216,7 +216,7 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return series, total, nil
+	return series, int(total), nil
 }
 
 func (svc *Service) UpdateSeries(ctx context.Context, series *models.Series, opts UpdateSeriesOptions) error {
@@ -363,7 +363,7 @@ func (svc *Service) GetSeriesBookCount(ctx context.Context, seriesID int) (int, 
 		Model((*models.BookSeries)(nil)).
 		Where("series_id = ?", seriesID).
 		Count(ctx)
-	return count, errors.WithStack(err)
+	return int(count), errors.WithStack(err)
 }
 
 // buildFTSPrefixQuery builds an FTS5 query for prefix/typeahead search.

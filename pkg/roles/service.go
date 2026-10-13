@@ -157,10 +157,10 @@ func (s *Service) List(ctx context.Context, opts ListOptions) ([]*models.Role, i
 		Order("r.id ASC")
 
 	if opts.Limit > 0 {
-		query = query.Limit(opts.Limit)
+		query = query.Limit(int64(opts.Limit))
 	}
 	if opts.Offset > 0 {
-		query = query.Offset(opts.Offset)
+		query = query.Offset(int64(opts.Offset))
 	}
 
 	total, err := query.ScanAndCount(ctx)
@@ -168,7 +168,7 @@ func (s *Service) List(ctx context.Context, opts ListOptions) ([]*models.Role, i
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return roles, total, nil
+	return roles, int(total), nil
 }
 
 // Update updates a role's name and/or permissions.

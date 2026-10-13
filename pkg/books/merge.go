@@ -316,7 +316,7 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 	err = svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		for sourceBookID, bookPath := range sourceBookPaths {
 			// Lock the book row and count files atomically
-			var count int
+			var count int64
 			count, err = tx.NewSelect().
 				Model((*models.File)(nil)).
 				Where("book_id = ?", sourceBookID).

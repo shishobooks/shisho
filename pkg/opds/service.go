@@ -531,8 +531,8 @@ func (svc *Service) ListAuthorsInLibrary(ctx context.Context, libraryID, limit, 
 		Where("b.library_id = ?", libraryID).
 		Group("p.id", "p.name").
 		Order("p.sort_name ASC").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		Scan(ctx, &authors)
 	if err != nil {
 		return nil, 0, err

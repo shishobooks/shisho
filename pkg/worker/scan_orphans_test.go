@@ -306,7 +306,7 @@ func TestCleanupOrphanedFiles_MissingBookRow(t *testing.T) {
 	fileID := files[0].ID
 
 	// Verify authors exist for this book
-	var authorCount int
+	var authorCount int64
 	authorCount, err = tc.db.NewSelect().TableExpr("authors").Where("book_id = ?", bookID).Count(tc.ctx)
 	require.NoError(t, err)
 	require.Positive(t, authorCount, "book should have authors after scan")
@@ -344,15 +344,15 @@ func TestCleanupOrphanedFiles_MissingBookRow(t *testing.T) {
 	assert.Empty(t, afterFiles, "orphaned file row should be deleted when parent book is missing")
 
 	// Assert: file-scoped children should also be gone (narrators, identifiers cascade from file delete)
-	var narratorCount int
+	var narratorCount int64
 	narratorCount, err = tc.db.NewSelect().TableExpr("narrators").Where("file_id = ?", fileID).Count(tc.ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, narratorCount, "narrators for orphaned file should be gone")
+	assert.Equal(t, int64(0), narratorCount, "narrators for orphaned file should be gone")
 
 	// Assert: book-scoped children should also be gone
 	authorCount, err = tc.db.NewSelect().TableExpr("authors").Where("book_id = ?", bookID).Count(tc.ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, authorCount, "authors for missing book should be cleaned up")
+	assert.Equal(t, int64(0), authorCount, "authors for missing book should be cleaned up")
 }
 
 func TestCleanupOrphanedFiles_MissingBookRow_SubsequentScanIsClean(t *testing.T) {
@@ -402,10 +402,10 @@ func TestCleanupOrphanedFiles_MissingBookRow_SubsequentScanIsClean(t *testing.T)
 	assert.Empty(t, tc.listFiles(), "no files should remain after second scan")
 
 	// Verify no FK violations remain
-	var authorCount int
+	var authorCount int64
 	authorCount, err = tc.db.NewSelect().TableExpr("authors").Where("book_id = ?", bookID).Count(tc.ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, authorCount, "no orphaned authors should remain")
+	assert.Equal(t, int64(0), authorCount, "no orphaned authors should remain")
 }
 
 func intPtr(i int) *int {

@@ -144,6 +144,13 @@ linters:
           - forbidigo
         path: (^pkg/fileutils/|_test\.go)
         text: os\.CreateTemp
+      # Tests attach a hook to a DB that services built earlier already hold.
+      # WithQueryHook returns a copy those services never see; AddQueryHook
+      # changes the DB in place, which is what these tests need.
+      - linters:
+          - staticcheck
+        path: _test\.go
+        text: AddQueryHook is deprecated
       # pkg/migrations owns the one sanctioned migrate.NewMigrator call.
       - linters:
           - forbidigo

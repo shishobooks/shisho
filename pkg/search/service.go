@@ -161,8 +161,8 @@ func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery string, li
 			Where("books_fts MATCH ?", ftsQuery).
 			Where("bf.library_id = ?", libraryID).
 			Order("bf.rank").
-			Limit(remaining + len(seenIDs)). // Fetch extra to account for potential duplicates
-			Offset(offset)
+			Limit(int64(remaining + len(seenIDs))). // Fetch extra to account for potential duplicates
+			Offset(int64(offset))
 
 		if len(fileTypes) > 0 {
 			q = q.Where("bf.book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?))", bun.List(fileTypes))
@@ -268,7 +268,7 @@ func (svc *Service) searchBooksByIdentifier(ctx context.Context, query string, l
 		Join("JOIN books b ON b.id = f.book_id").
 		Where("fi.value IN (?)", bun.List(searchValues)).
 		Where("b.library_id = ?", libraryID).
-		Limit(limit)
+		Limit(int64(limit))
 
 	if len(fileTypes) > 0 {
 		q = q.Where("f.file_type IN (?)", bun.List(fileTypes))
@@ -294,8 +294,8 @@ func (svc *Service) searchSeriesInternal(ctx context.Context, ftsQuery string, l
 		Where("series_fts MATCH ?", ftsQuery).
 		Where("sf.library_id = ?", libraryID).
 		Order("sf.rank").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		Scan(ctx, &results)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -325,8 +325,8 @@ func (svc *Service) searchPeopleInternal(ctx context.Context, ftsQuery string, l
 		Where("persons_fts MATCH ?", ftsQuery).
 		Where("pf.library_id = ?", libraryID).
 		Order("pf.rank").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		Scan(ctx, &results)
 	if err != nil {
 		return nil, errors.WithStack(err)

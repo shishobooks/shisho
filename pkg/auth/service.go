@@ -63,7 +63,7 @@ func (s *Service) CountUsers(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
-	return count, nil
+	return int(count), nil
 }
 
 // Authenticate validates credentials and returns the user if valid.

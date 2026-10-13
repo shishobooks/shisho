@@ -112,7 +112,7 @@ func (svc *Service) HasLists(ctx context.Context, userID int) (bool, error) {
 
 func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOptions) ([]*models.List, int, error) {
 	var lists []*models.List
-	var total int
+	var total int64
 	var err error
 
 	// Get lists owned by user OR shared with user
@@ -124,10 +124,10 @@ func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOption
 		Order("l.name ASC")
 
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 
 	// Count first (when requested), then Scan. We deliberately avoid bun's
@@ -143,7 +143,7 @@ func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOption
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return lists, total, nil
+	return lists, int(total), nil
 }
 
 type UpdateListOptions struct {
@@ -298,7 +298,7 @@ func (svc *Service) GetListBookCount(ctx context.Context, listID int, libraryIDs
 	}
 
 	count, err := q.Count(ctx)
-	return count, errors.WithStack(err)
+	return int(count), errors.WithStack(err)
 }
 
 type ListBooksOptions struct {
@@ -328,7 +328,7 @@ func (svc *Service) ListBooksWithTotal(ctx context.Context, opts ListBooksOption
 
 func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOptions) ([]*models.ListBook, int, error) {
 	var listBooks []*models.ListBook
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -388,10 +388,10 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	q = q.Order("lb.id ASC")
 
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 
 	// Count first (when requested), then Scan, rather than bun's concurrent
@@ -409,7 +409,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		models.ResolveBookFileDisplayNames(lb.Book)
 	}
 
-	return listBooks, total, nil
+	return listBooks, int(total), nil
 }
 
 // BookLibraryIDs maps each existing book id in bookIDs to its library id. Ids
@@ -928,7 +928,7 @@ func (svc *Service) DeleteShare(ctx context.Context, shareID int) error {
 // CheckBookVisibility returns counts of visible/total books for a user.
 func (svc *Service) CheckBookVisibility(ctx context.Context, listID int, targetUserLibraryIDs []int) (visible, total int, err error) {
 	// Total books in list
-	total, err = svc.db.NewSelect().
+	totalCount, err := svc.db.NewSelect().
 		Model((*models.ListBook)(nil)).
 		Where("list_id = ?", listID).
 		Count(ctx)
@@ -946,6 +946,6 @@ func (svc *Service) CheckBookVisibility(ctx context.Context, listID int, targetU
 		q = q.Where("b.library_id IN (?)", bun.List(targetUserLibraryIDs))
 	}
 
-	visible, err = q.Count(ctx)
-	return visible, total, errors.WithStack(err)
+	visibleCount, err := q.Count(ctx)
+	return int(visibleCount), int(totalCount), errors.WithStack(err)
 }

@@ -62,7 +62,7 @@ func tagBookCount(t *testing.T, db *bun.DB, id int) int {
 	t.Helper()
 	count, err := db.NewSelect().Model((*models.BookTag)(nil)).Where("tag_id = ?", id).Count(context.Background())
 	require.NoError(t, err)
-	return count
+	return int(count)
 }
 
 func TestMergeTags_SelfMerge_Rejected(t *testing.T) {

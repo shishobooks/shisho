@@ -12,7 +12,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 )
 
 // slowQueryThreshold is how long a query may take before it is logged as a
@@ -143,9 +142,8 @@ func New(cfg *config.Config) (*bun.DB, error) {
 	// all operations at the Go level, eliminating SQLITE_BUSY errors.
 	sqldb.SetMaxOpenConns(1)
 
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-
-	db.AddQueryHook(newQueryLogHook(cfg.DatabaseDebug))
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect()).
+		WithQueryHook(newQueryLogHook(cfg.DatabaseDebug))
 
 	// Retry up to a few times to ensure that the database can connect.
 	for i := 0; i < cfg.DatabaseConnectRetryCount; i++ {

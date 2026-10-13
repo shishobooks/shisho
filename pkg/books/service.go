@@ -331,7 +331,7 @@ func (svc *Service) ListBooksWithTotal(ctx context.Context, opts ListBooksOption
 
 func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOptions) ([]*models.Book, int, error) {
 	books := []*models.Book{}
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -406,10 +406,10 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 	if opts.LibraryID != nil {
 		q = q.Where("b.library_id = ?", *opts.LibraryID)
@@ -498,7 +498,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 
 	models.ResolveBookFileDisplayNames(books...)
-	return books, total, nil
+	return books, int(total), nil
 }
 
 func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts UpdateBookOptions) error {
@@ -696,7 +696,7 @@ func (svc *Service) ListFilesWithTotal(ctx context.Context, opts ListFilesOption
 
 func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOptions) ([]*models.File, int, error) {
 	files := []*models.File{}
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -709,10 +709,10 @@ func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOption
 		Order("f.created_at ASC")
 
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 	if opts.BookID != nil {
 		q = q.Where("f.book_id = ?", *opts.BookID)
@@ -739,7 +739,7 @@ func (svc *Service) listFilesWithTotal(ctx context.Context, opts ListFilesOption
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return files, total, nil
+	return files, int(total), nil
 }
 
 func (svc *Service) UpdateFile(ctx context.Context, file *models.File, opts UpdateFileOptions) error {

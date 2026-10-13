@@ -105,7 +105,7 @@ func TestSeedPluginWritesDBRow(t *testing.T) {
 		Where("scope = ? AND id = ?", "test", "fixture").
 		Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 
 	// Files exist on disk.
 	assert.FileExists(t, filepath.Join(tmp, "test", "fixture", "manifest.json"))
@@ -140,7 +140,7 @@ func TestDeleteAllPluginsWipesStateAndDisk(t *testing.T) {
 	// Row gone.
 	count, err := db.NewSelect().Model((*models.Plugin)(nil)).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Directory gone.
 	_, err = os.Stat(filepath.Join(tmp, "test"))

@@ -83,13 +83,13 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 	count, err := db.NewSelect().Model((*models.Series)(nil)).
 		Where("id = ?", orphan.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "orphan series row should be deleted")
+	assert.Equal(t, int64(0), count, "orphan series row should be deleted")
 
 	// Kept series remains.
 	count, err = db.NewSelect().Model((*models.Series)(nil)).
 		Where("id = ?", keep.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count, "series with books must not be cleaned up")
+	assert.Equal(t, int64(1), count, "series with books must not be cleaned up")
 }
 
 // CleanupOrphanedEntities deletes every unreferenced Series, Person, Genre,

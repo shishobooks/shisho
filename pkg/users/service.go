@@ -154,10 +154,10 @@ func (s *Service) List(ctx context.Context, opts ListOptions) ([]*models.User, i
 		Order("u.id ASC")
 
 	if opts.Limit > 0 {
-		query = query.Limit(opts.Limit)
+		query = query.Limit(int64(opts.Limit))
 	}
 	if opts.Offset > 0 {
-		query = query.Offset(opts.Offset)
+		query = query.Offset(int64(opts.Offset))
 	}
 
 	total, err := query.ScanAndCount(ctx)
@@ -165,7 +165,7 @@ func (s *Service) List(ctx context.Context, opts ListOptions) ([]*models.User, i
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return users, total, nil
+	return users, int(total), nil
 }
 
 // ListDirectory returns every active user's id and username, sorted by

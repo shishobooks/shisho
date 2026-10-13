@@ -77,7 +77,7 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 		return errcodes.ValidationError("Alias cannot match the resource's own name")
 	}
 
-	var conflictCount int
+	var conflictCount int64
 	conflictCount, err = svc.db.NewSelect().
 		TableExpr(cfg.ResourceTable).
 		Where("name = ? COLLATE NOCASE AND library_id = ?", name, libraryID).
@@ -89,7 +89,7 @@ func (svc *Service) AddAlias(ctx context.Context, cfg ResourceConfig, resourceID
 		return errcodes.ValidationError("Alias conflicts with an existing name")
 	}
 
-	var aliasCount int
+	var aliasCount int64
 	aliasCount, err = svc.db.NewSelect().
 		TableExpr(cfg.AliasTable).
 		Where("name = ? COLLATE NOCASE AND library_id = ?", name, libraryID).

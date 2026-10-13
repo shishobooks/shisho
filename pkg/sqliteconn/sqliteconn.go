@@ -1,6 +1,7 @@
 // Package sqliteconn opens SQLite connections that run a fixed set of
-// statements, usually pragmas, on every connection the pool opens. It has no
-// Shisho imports, so both pkg/database and pkg/testutils/testdb can use it.
+// statements, usually pragmas, on every connection the pool opens, and
+// provides the bun dialect for them. It has no Shisho imports, so both
+// pkg/database and pkg/testutils/testdb can use it.
 //
 // Pragmas such as foreign_keys and busy_timeout apply only to the connection
 // that ran them. database/sql discards a connection whose query is canceled
