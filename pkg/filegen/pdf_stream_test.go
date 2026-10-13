@@ -51,7 +51,7 @@ func writeSourcePDF(t *testing.T, dir string, kind pdfSourceKind) string {
 	conf.WriteXRefStream = true
 	conf.WriteObjectStream = kind == objectStreams
 	out := filepath.Join(dir, strings.ReplaceAll(string(kind), " ", "-")+".pdf")
-	require.NoError(t, api.OptimizeFile(classic, out, conf))
+	require.NoError(t, api.OptimizeFile(context.Background(), classic, out, conf, nil))
 
 	data, err := os.ReadFile(out)
 	require.NoError(t, err)
@@ -302,7 +302,7 @@ func writeEncryptedPDF(t *testing.T, dir string, kind pdfSourceKind, c restricte
 	conf.WriteXRefStream = kind != classicXRef
 	conf.WriteObjectStream = kind == objectStreams
 	out := filepath.Join(dir, "encrypted.pdf")
-	require.NoError(t, api.EncryptFile(srcPath, out, conf))
+	require.NoError(t, api.EncryptFile(context.Background(), srcPath, out, conf))
 	return out
 }
 
@@ -323,9 +323,9 @@ func checkKeepsEncryption(t *testing.T, original, output []byte, cleartextMetada
 	assert.Equal(t, origDoc.Trailer()["ID"], outDoc.Trailer()["ID"])
 
 	pdf.EnsurePdfcpuInit()
-	origPerms, err := api.GetPermissions(bytes.NewReader(original), model.NewDefaultConfiguration())
+	origPerms, err := api.GetPermissions(context.Background(), bytes.NewReader(original), model.NewDefaultConfiguration())
 	require.NoError(t, err)
-	outPerms, err := api.GetPermissions(bytes.NewReader(output), model.NewDefaultConfiguration())
+	outPerms, err := api.GetPermissions(context.Background(), bytes.NewReader(output), model.NewDefaultConfiguration())
 	require.NoError(t, err)
 	require.NotNil(t, origPerms)
 	require.NotNil(t, outPerms, "the output must still be encrypted")

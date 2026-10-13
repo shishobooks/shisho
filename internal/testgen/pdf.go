@@ -41,7 +41,7 @@ func GeneratePDF(t *testing.T, dir, filename string, opts PDFOptions) string {
 			t.Fatalf("failed to move pdf %s: %v", path, err)
 		}
 		conf := model.NewAESConfiguration(opts.UserPassword, "owner", 256)
-		if err := api.EncryptFile(plain, path, conf); err != nil {
+		if err := api.EncryptFile(t.Context(), plain, path, conf); err != nil {
 			t.Fatalf("failed to encrypt pdf %s: %v", path, err)
 		}
 		if err := os.Remove(plain); err != nil {

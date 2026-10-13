@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"bytes"
+	"context"
 	"image/jpeg"
 	"io"
 	"os"
@@ -83,7 +84,7 @@ func extractEmbeddedCover(path string) ([]byte, string, error) {
 	conf.ValidationMode = model.ValidationRelaxed
 
 	// Extract images from page 1 only.
-	imageMaps, err := api.ExtractImagesRaw(f, []string{"1"}, conf)
+	imageMaps, err := api.ExtractImagesRaw(context.Background(), f, []string{"1"}, conf)
 	if err != nil {
 		return nil, "", err
 	}

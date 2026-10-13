@@ -447,7 +447,7 @@ func TestPDFGenerator_PreservesCreator(t *testing.T) {
 
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
-	pdfCtx, err := api.ReadAndValidate(f, conf)
+	pdfCtx, err := api.ReadAndValidate(context.Background(), f, conf)
 	require.NoError(t, err)
 
 	xrt := pdfCtx.XRefTable
