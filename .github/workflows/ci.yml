@@ -45,7 +45,7 @@ jobs:
       - run: mise lint
       - run: mise test:scripts
       - name: Save Go and golangci-lint caches
-        if: always() # TEMP
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
@@ -128,7 +128,7 @@ jobs:
           # Catch go test crashing before any junit is written.
           if-no-files-found: error
       - name: Save Go build cache
-        if: matrix.shard == 1 # TEMP: measure warm cache on this branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.shard == 1
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
@@ -381,7 +381,7 @@ jobs:
           retry_on: timeout
           command: pnpm "e2e:$BROWSER"
       - name: Save Go build cache
-        if: matrix.browser == 'chromium' # TEMP
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.browser == 'chromium'
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
