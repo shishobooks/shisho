@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRequestLoggingSkipsSuccessfulFrontendResponses(t *testing.T) {
+func TestRequestLoggingSkipsSuccessfulFrontendAndLogViewerResponses(t *testing.T) {
 	// This test changes the process-wide logger output.
 	var output bytes.Buffer
 	previous := logger.Output()
@@ -29,12 +29,18 @@ func TestRequestLoggingSkipsSuccessfulFrontendResponses(t *testing.T) {
 		return c.String(http.StatusOK, "frontend")
 	})
 	e.GET("/api/books", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
-	for _, path := range []string{"/assets/app.js", "/library/42", "/api/books", "/broken"} {
+	e.GET("/api/logs", func(c echo.Context) error {
+		if c.QueryParam("limit") == "bad" {
+			return echo.ErrBadRequest
+		}
+		return c.NoContent(http.StatusOK)
+	})
+	for _, path := range []string{"/assets/app.js", "/library/42", "/api/books", "/broken", "/api/logs", "/api/logs?limit=bad"} {
 		output.Reset()
 		e.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
-		if path == "/api/books" || path == "/broken" {
+		if path == "/api/books" || path == "/broken" || path == "/api/logs?limit=bad" {
 			assert.Contains(t, output.String(), "request handled", path)
-			assert.Contains(t, output.String(), path)
+			assert.Contains(t, output.String(), strings.Split(path, "?")[0])
 		} else {
 			assert.Empty(t, output.String(), path)
 		}
