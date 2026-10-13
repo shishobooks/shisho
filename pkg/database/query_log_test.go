@@ -119,7 +119,7 @@ func TestNew_SlowQueryWarnsWithoutValues(t *testing.T) {
 
 	_, err := db.NewCreateTable().Model((*widget)(nil)).Exec(ctx)
 	require.NoError(t, err)
-	db.AddQueryHook(sleepHook{})
+	db = db.WithQueryHook(sleepHook{})
 
 	_, err = db.NewInsert().Model(&widget{Secret: "hunter2-password-hash"}).Exec(ctx)
 	require.NoError(t, err)

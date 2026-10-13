@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
@@ -23,7 +23,7 @@ func TestNormalizeIdentifyFileNameSources(t *testing.T) {
 		require.NoError(t, sqldb.Close())
 	})
 
-	db := bun.NewDB(sqldb, sqlitedialect.New())
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect())
 	t.Cleanup(func() {
 		require.NoError(t, db.Close())
 	})

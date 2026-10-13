@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 	"github.com/uptrace/bun/migrate"
 )
@@ -36,7 +36,7 @@ func testDeleteNegativePDFChapters(t *testing.T, foreignKeys string) {
 	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
 	require.NoError(t, err)
 	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect())
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
 	for _, query := range []string{

@@ -928,13 +928,14 @@ func (svc *Service) DeleteShare(ctx context.Context, shareID int) error {
 // CheckBookVisibility returns counts of visible/total books for a user.
 func (svc *Service) CheckBookVisibility(ctx context.Context, listID int, targetUserLibraryIDs []int) (visible, total int, err error) {
 	// Total books in list
-	totalCount, err := svc.db.NewSelect().
+	n, err := svc.db.NewSelect().
 		Model((*models.ListBook)(nil)).
 		Where("list_id = ?", listID).
 		Count(ctx)
 	if err != nil {
 		return 0, 0, errors.WithStack(err)
 	}
+	total = int(n)
 
 	// Visible books (filtered by target user's library access)
 	q := svc.db.NewSelect().
@@ -946,6 +947,7 @@ func (svc *Service) CheckBookVisibility(ctx context.Context, listID int, targetU
 		q = q.Where("b.library_id IN (?)", bun.List(targetUserLibraryIDs))
 	}
 
-	visibleCount, err := q.Count(ctx)
-	return int(visibleCount), int(totalCount), errors.WithStack(err)
+	n, err = q.Count(ctx)
+	visible = int(n)
+	return visible, total, errors.WithStack(err)
 }
