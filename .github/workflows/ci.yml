@@ -24,7 +24,7 @@ jobs:
           # mise lint runs scripts/check-emdash.sh, which needs master's
           # history to find the merge base.
           fetch-depth: 0
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: mise lint
       - run: mise test:scripts
 
@@ -41,7 +41,7 @@ jobs:
       CI: "true"
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - name: Restore test timing cache
         # Restore-only — saving is consolidated across shards in the
         # consolidate-test-timings job below. If we used actions/cache here,
@@ -108,7 +108,7 @@ jobs:
           path: .gotest-timings
           pattern: gotest-timings-shard-*
           merge-multiple: true
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           install_args: go
       - name: Prune stale junit files
@@ -250,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
       - run: mise tygo
       - run: mise lint:js
@@ -265,7 +265,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
       - run: mise build:docs
 
@@ -274,7 +274,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
 
       - name: Get Playwright version
