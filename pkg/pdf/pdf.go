@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"context"
 	"os"
 	"strings"
 	"sync"
@@ -62,7 +63,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
 
-	ctx, err := api.ReadAndValidate(f, conf)
+	ctx, err := api.ReadAndValidate(context.Background(), f, conf)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read PDF")
 	}
