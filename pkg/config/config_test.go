@@ -419,3 +419,31 @@ func TestNew_CookieNamespace(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid config shisho_cookie_namespace (env SHISHO_COOKIE_NAMESPACE): may only contain letters, digits, '-' and '_'")
 }
+
+// A removed setting still in the environment or the config file is ignored,
+// so the server starts, but a warning says where its value moved.
+func TestNew_RemovedSettingWarns(t *testing.T) {
+	t.Setenv("DATABASE_FILE_PATH", "/tmp/test.db")
+	t.Setenv("JWT_SECRET", testJWTSecret)
+	t.Setenv("CONFIG_FILE", "/nonexistent/config.yaml")
+
+	cfg, err := New()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.StartupWarnings())
+
+	t.Setenv("DOWNLOAD_CACHE_MAX_SIZE_GB", "20")
+	cfg, err = New()
+	require.NoError(t, err)
+	require.Len(t, cfg.StartupWarnings(), 1)
+	assert.Contains(t, cfg.StartupWarnings()[0], "download_cache_max_size_gb (env DOWNLOAD_CACHE_MAX_SIZE_GB) is no longer read")
+	assert.Contains(t, cfg.StartupWarnings()[0], "Settings > Cache")
+}
+
+// Only settings are split from comma-separated env values; private and
+// computed fields of type []string are not settings.
+func TestStringListKeys_OnlySettings(t *testing.T) {
+	keys := stringListKeys()
+	assert.NotContains(t, keys, "")
+	assert.NotContains(t, keys, "-")
+	assert.Contains(t, keys, "supplement_exclude_patterns")
+}

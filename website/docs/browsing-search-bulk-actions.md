@@ -80,4 +80,4 @@ Jobs permissions are not needed for a bulk download. The user who started it can
 
 ### Bulk Download Cache
 
-Generated files and ZIP archives use the download cache. Cached output has no time-to-live expiration. Shisho evicts older cached output based on usage when the configured cache size limit is exceeded. See [Configuration](./configuration.md#cache) for `download_cache_max_size_gb`.
+Generated files and ZIP archives use the download cache. Cached output has no time-to-live expiration. Shisho evicts older cached output based on usage when the cache size limit is exceeded. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) to change or lift the limit.

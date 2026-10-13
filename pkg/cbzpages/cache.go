@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/fileutils"
+	"github.com/shishobooks/shisho/pkg/lrufiles"
 )
 
 // maxImageSize is the maximum size for a single page image (100 MB).
@@ -21,6 +22,7 @@ const maxImageSize = 100 * 1024 * 1024
 // Cache manages extracted CBZ page images.
 type Cache struct {
 	dir string
+	lru *lrufiles.Index
 
 	// openEntry opens a page inside the archive. Tests replace it to pause an
 	// extraction midway.
@@ -31,6 +33,7 @@ type Cache struct {
 func NewCache(dir string) *Cache {
 	return &Cache{
 		dir:       dir,
+		lru:       lrufiles.New(filepath.Join(dir, "cbz")),
 		openEntry: func(f *zip.File) (io.ReadCloser, error) { return f.Open() },
 	}
 }
@@ -45,7 +48,7 @@ func (c *Cache) GetPage(cbzPath string, fileID int, pageNum int) (cachedPath str
 	cacheDir := c.pageDir(fileID)
 	pattern := filepath.Join(cacheDir, pageFileName(pageNum, ".*"))
 	matches, _ := filepath.Glob(pattern)
-	if len(matches) > 0 {
+	if len(matches) > 0 && c.lru.Used(matches[0]) {
 		return matches[0], mimeTypeFromPath(matches[0]), nil
 	}
 
@@ -115,6 +118,7 @@ func (c *Cache) extractPage(cbzPath string, fileID int, pageNum int) (cachedPath
 	if err := os.Rename(tmpPath, cachedPath); err != nil {
 		return "", "", errors.WithStack(err)
 	}
+	c.lru.Added(cachedPath)
 
 	return cachedPath, mimeTypeFromPath(cachedPath), nil
 }
@@ -139,7 +143,17 @@ func (c *Cache) pageDir(fileID int) string {
 
 // Invalidate removes all cached pages for a file.
 func (c *Cache) Invalidate(fileID int) error {
-	return os.RemoveAll(c.pageDir(fileID))
+	if err := os.RemoveAll(c.pageDir(fileID)); err != nil {
+		return errors.WithStack(err)
+	}
+	c.lru.Forget(c.pageDir(fileID))
+	return nil
+}
+
+// SetMaxBytes changes the disk budget, lrufiles.Unlimited for none, and
+// evicts the least recently used pages down to it now.
+func (c *Cache) SetMaxBytes(maxBytes int64) error {
+	return c.lru.SetMaxBytes(maxBytes)
 }
 
 // rootDir returns the directory this cache owns.
@@ -184,6 +198,7 @@ func (c *Cache) Clear() error {
 	if err := os.RemoveAll(c.rootDir()); err != nil {
 		return errors.Wrap(err, "failed to clear cache")
 	}
+	c.lru.Reset()
 	return nil
 }
 

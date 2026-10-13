@@ -403,9 +403,9 @@ func createPartial(dir string) (*os.File, error) {
 	return f, errors.Wrap(err, "failed to create partial file")
 }
 
-// RemoveLeftovers deletes the partial files and scratch directories a crash
-// or a killed process left in the cache. Call it at startup, before any
-// download runs.
+// RemoveLeftovers deletes the partial files, scratch directories, and cleanup
+// lock a crash or a killed process left in the cache. Call it at startup,
+// before any download runs.
 func (c *Cache) RemoveLeftovers() error {
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
@@ -416,7 +416,7 @@ func (c *Cache) RemoveLeftovers() error {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if !strings.HasPrefix(name, partialPrefix) && !strings.HasPrefix(name, stagingPrefix) {
+		if !strings.HasPrefix(name, partialPrefix) && !strings.HasPrefix(name, stagingPrefix) && name != cleanupLockName {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(c.dir, name)); err != nil {

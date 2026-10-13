@@ -155,3 +155,19 @@ func createCachedFile(t *testing.T, cacheDir string, fileID int, ext string, siz
 	err = WriteMetadata(cacheDir, meta)
 	require.NoError(t, err)
 }
+
+func TestCache_SetMaxBytes_AppliesTheNewLimitNow(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	c := NewCache(tmpDir, 1<<30)
+	createCachedFile(t, tmpDir, 1, "epub", 1000, time.Now().Add(-3*time.Hour))
+	createCachedFile(t, tmpDir, 2, "epub", 1000, time.Now().Add(-2*time.Hour))
+	createCachedFile(t, tmpDir, 3, "epub", 1000, time.Now().Add(-1*time.Hour))
+
+	require.NoError(t, c.SetMaxBytes(2000))
+	assert.Equal(t, int64(2000), c.MaxSize())
+	entries, err := ListCacheEntries(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "lowering the limit cleans the cache down to 80% of it immediately")
+	assert.Equal(t, 3, entries[0].FileID)
+}

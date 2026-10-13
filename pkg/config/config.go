@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -47,9 +48,9 @@ type Config struct {
 	// Job retention settings
 	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
 
-	// Cache settings
-	CacheDir               string `koanf:"cache_dir" json:"cache_dir"`
-	DownloadCacheMaxSizeGB int    `koanf:"download_cache_max_size_gb" json:"download_cache_max_size_gb"`
+	// Cache settings. Cache size limits are admin policy saved under
+	// Settings > Cache, not config.
+	CacheDir string `koanf:"cache_dir" json:"cache_dir"`
 
 	// PDF viewer rendering settings
 	PDFRenderDPI     int `koanf:"pdf_render_dpi" json:"pdf_render_dpi" validate:"min=72,max=600"`
@@ -101,6 +102,16 @@ type Config struct {
 	// Used by the frontend to create a default dev library.
 	// Computed at startup, not from config file. Only set in development.
 	DevLibraryPath string `koanf:"-" json:"dev_library_path,omitempty"`
+
+	// removedSet lists the removedSettings keys the config file or
+	// environment still sets, for StartupWarnings.
+	removedSet []string
+}
+
+// removedSettings maps a setting Shisho no longer reads to where its value
+// moved. A server that still sets one starts normally and logs a warning.
+var removedSettings = map[string]string{
+	"download_cache_max_size_gb": "Set the Downloads cache limit under Settings > Cache instead",
 }
 
 // IsTestMode returns true if the server is running in test mode.
@@ -132,6 +143,10 @@ func (c *Config) JWTSecretTooShort() bool {
 // secret value.
 func (c *Config) StartupWarnings() []string {
 	var warnings []string
+	for _, key := range c.removedSet {
+		warnings = append(warnings, fmt.Sprintf("%s (env %s) is no longer read. %s",
+			key, strings.ToUpper(key), removedSettings[key]))
+	}
 	if c.JWTSecretTooShort() {
 		warnings = append(warnings, fmt.Sprintf(
 			"jwt_secret (env JWT_SECRET) is shorter than %d characters, so login sessions are easier to forge. "+
@@ -169,7 +184,6 @@ func defaults() *Config {
 		PluginDir:                     "/config/plugins/installed",
 		PluginDataDir:                 "/config/plugins/data",
 		EnrichmentConfidenceThreshold: 0.85,
-		DownloadCacheMaxSizeGB:        5,
 		PDFRenderDPI:                  200,
 		PDFRenderQuality:              85,
 		LibraryMonitorEnabled:         true,
@@ -236,6 +250,13 @@ func New() (*Config, error) {
 		return nil, errors.Wrap(err, "failed to unmarshal config")
 	}
 
+	for key := range removedSettings {
+		if k.Exists(key) {
+			cfg.removedSet = append(cfg.removedSet, key)
+		}
+	}
+	sort.Strings(cfg.removedSet)
+
 	// Compute dev library path only in development (when using shisho.dev.yaml)
 	if filepath.Base(configPath) == devConfigFilename {
 		cfg.DevLibraryPath = computeDevLibraryPath()
@@ -260,7 +281,6 @@ func NewForTest() *Config {
 	cfg.WorkerProcesses = 1
 	cfg.LibraryMonitorEnabled = false
 	cfg.CacheDir = "" // Must be set by test
-	cfg.DownloadCacheMaxSizeGB = 1
 	cfg.SupplementExcludePatterns = []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"}
 	cfg.PDFSupplementFilenames = []string{
 		"supplement", "supplemental", "bonus", "bonus material", "bonus content",
@@ -277,17 +297,15 @@ func (c *Config) SessionDuration() time.Duration {
 	return time.Duration(c.SessionDurationDays) * 24 * time.Hour
 }
 
-// DownloadCacheMaxSizeBytes returns the maximum cache size in bytes.
-func (c *Config) DownloadCacheMaxSizeBytes() int64 {
-	return int64(c.DownloadCacheMaxSizeGB) * 1024 * 1024 * 1024
-}
-
 // stringListKeys returns the config keys of every []string field.
 func stringListKeys() map[string]struct{} {
 	keys := make(map[string]struct{})
 	t := reflect.TypeOf(Config{})
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		if !f.IsExported() || f.Tag.Get("koanf") == "-" {
+			continue
+		}
 		if f.Type == reflect.TypeOf([]string{}) {
 			keys[f.Tag.Get("koanf")] = struct{}{}
 		}

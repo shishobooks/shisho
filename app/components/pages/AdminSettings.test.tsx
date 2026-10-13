@@ -24,7 +24,6 @@ const baseConfig: ConfigResponse = {
   worker_processes: 2,
   job_retention_days: 30,
   cache_dir: "/config/cache",
-  download_cache_max_size_gb: 5,
   pdf_render_dpi: 200,
   pdf_render_quality: 85,
   plugin_dir: "/config/plugins/installed",

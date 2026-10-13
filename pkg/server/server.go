@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"math"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/echo/v4/health"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/recovery"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/audnexus"
@@ -98,8 +100,8 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	// Services and caches that more than one route family uses are built once
 	// and injected. The books service carries app settings so every mutation
 	// through it recomputes Reviewed.
-	// Tests may pass nil page caches and a nil plugin service. Build them
-	// here, as the books routes did before the caches were injected, so page
+	// Tests may pass nil caches and a nil plugin service. Build them here, as
+	// the books routes did before the caches were injected, so page, cache,
 	// and plugin routes still work.
 	if pluginService == nil {
 		pluginService = plugins.NewService(db)
@@ -110,10 +112,21 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	if pdfCache == nil {
 		pdfCache = pdfpages.NewCache(cfg.CacheDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality)
 	}
+	if dlCache == nil {
+		dlCache = downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), math.MaxInt64)
+	}
 	appSettingsSvc := appsettings.NewService(db)
 	cacheSettings, err := cache.LoadSettings(context.Background(), appSettingsSvc)
 	if err != nil {
 		return nil, errors.Wrap(err, "load cache settings")
+	}
+	// The thumbnail cache takes its limit when built below. The other caches
+	// were built before the settings could be read. Enforcing a limit is best
+	// effort, as it is after every write, so a cache that cannot be cleaned
+	// does not stop the server.
+	startupLimits := cache.Limiters{Downloads: dlCache, CBZPages: cbzCache, PDFPages: pdfCache}
+	if err := startupLimits.Apply(cacheSettings); err != nil {
+		logger.New().Warn("failed to apply cache limits", logger.Data{"error": err.Error()})
 	}
 	svcs := sharedServices{
 		appSettings: appSettingsSvc,
@@ -122,7 +135,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		dlCache:     dlCache,
 		cbzCache:    cbzCache,
 		pdfCache:    pdfCache,
-		coverCache:  covers.NewThumbnailCache(cfg.CacheDir, int64(cacheSettings.CoverThumbnailMaxSizeGB*(1<<30))),
+		coverCache:  covers.NewThumbnailCache(cfg.CacheDir, cacheSettings.CoverThumbnails.Bytes()),
 	}
 	svcs.books = books.NewService(db, svcs.appSettings)
 
@@ -189,7 +202,12 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	// Cache management routes (admin only; requires config:read to list, config:write to clear)
 	cacheHandler := cache.NewHandler(svcs.dlCache, svcs.cbzCache, svcs.pdfCache, svcs.coverCache)
 	cache.RegisterRoutes(api, cacheHandler, authMiddleware)
-	cache.RegisterSettingsRoutes(api, authMiddleware, svcs.appSettings, svcs.coverCache)
+	cache.RegisterSettingsRoutes(api, authMiddleware, svcs.appSettings, cache.Limiters{
+		CoverThumbnails: svcs.coverCache,
+		Downloads:       svcs.dlCache,
+		CBZPages:        svcs.cbzCache,
+		PDFPages:        svcs.pdfCache,
+	})
 
 	// Echo's Group.Use adds authenticated not-found handlers. Unknown paths
 	// must return JSON 404 without running a route family's authentication.

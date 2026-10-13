@@ -109,18 +109,10 @@ job_retention_days: 30
 #   - {cache_dir}/cbz/        Extracted CBZ page images for the comic viewer
 #   - {cache_dir}/pdf/        Rendered PDF page images for the PDF viewer
 #   - {cache_dir}/cover-thumbnails/  Cover sizes generated on demand
-# The cover-thumbnail limit defaults to 1 GiB and is editable in Settings > Cache.
+# Each cache's size limit is editable in Settings > Cache.
 # Env: CACHE_DIR
 # Default: /config/cache
 cache_dir: /config/cache
-
-# Maximum size of the download cache in GiB (1 GiB = 1024^3 bytes)
-# After each generated download, if the cache is over this size, the least
-# recently used files are removed until it is at 80% of it.
-# 0 removes every cached download after each generation.
-# Env: DOWNLOAD_CACHE_MAX_SIZE_GB
-# Default: 5
-download_cache_max_size_gb: 5
 
 # DPI for rendering PDF pages in the viewer (higher = sharper but larger images)
 # Range: 72-600. At 200 DPI, a typical letter-size page renders to ~1700x2200 pixels.
