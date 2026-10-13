@@ -37,6 +37,10 @@ view.js
 
 Some of the other files (e.g. `fb2.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
 
+## Local patches
+
+`mobi.js` carries changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the patched helper and fails when a patch or its call site is missing.
+
 ## To update
 
 1. Clone or update the upstream repo:
@@ -50,14 +54,15 @@ Some of the other files (e.g. `fb2.js`, `progress.js`, `search.js`, `tts.js`) ar
    ```bash
    cp /tmp/foliate-js-src/LICENSE app/libraries/foliate/LICENSE
    ```
-4. Re-copy each file in the **Vendored file list** above from `/tmp/foliate-js-src/` to the matching path under `app/libraries/foliate/`. Preserve the `ui/` and `vendor/` subdirectories. **Exception:** do not re-copy `pdf.js` — see the stub note above. If you need to refresh it, also vendor `vendor/pdfjs/` from upstream.
-5. Check for new transitive imports that weren't in the previous snapshot:
+4. Before copying, find the local patches with `grep -n "Shisho patch" app/libraries/foliate/*.js`; see **Local patches** above.
+5. Re-copy each file in the **Vendored file list** above from `/tmp/foliate-js-src/` to the matching path under `app/libraries/foliate/`. Preserve the `ui/` and `vendor/` subdirectories. **Exception:** do not re-copy `pdf.js`; see the stub note above. If you need to refresh it, also vendor `vendor/pdfjs/` from upstream.
+6. Check for new transitive imports that weren't in the previous snapshot:
    ```bash
    grep -rEn "from ['\"]\.|import\(['\"]\." app/libraries/foliate/
    ```
    For every relative import (`./foo.js`, `./ui/bar.js`, etc.), confirm the target exists in the directory. If any are missing, copy them from upstream and add them to the **Vendored file list** in this README.
-6. Update the **Vendored file list** section above to match the new set:
+7. Update the **Vendored file list** section above to match the new set:
    ```bash
    find app/libraries/foliate -type f -not -name README.md -not -name LICENSE | sort
    ```
-7. Run `mise check:quiet` and test with several real EPUB, MOBI, and AZW3 files in the reader, since foliate-js's API occasionally shifts.
+8. Reapply the local patches, then run `mise check:quiet` and test with several real EPUB, MOBI, and AZW3 files in the reader, since foliate-js's API occasionally shifts.
