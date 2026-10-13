@@ -49,6 +49,11 @@ var ErrKepubNotSupported = errors.New("KePub conversion not supported for this f
 // the original file for it; any other generation failure is a server fault.
 var ErrNotImplemented = errors.New("no generator for this file type")
 
+// ErrCannotDecrypt is wrapped by the GenerationError for a source whose
+// encryption Shisho cannot open, such as a PDF that needs a password. The
+// web UI routes answer it with a message instead of a server error.
+var ErrCannotDecrypt = errors.New("file is encrypted in a way Shisho cannot open")
+
 // GetGenerator returns the appropriate generator for a file type.
 func GetGenerator(fileType string) (Generator, error) {
 	switch fileType {

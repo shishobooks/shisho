@@ -1687,13 +1687,17 @@ func (h *handler) downloadFile(c echo.Context) error {
 
 	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, false)
 	if err != nil {
-		// A type with no generator, and a file whose earlier build failed
-		// partway (logged when it happened), are ones the user can work
-		// around with Download Original (422); any other generation failure
-		// is a server fault. The device routes fall back to the original instead
-		// (ResolveFallbackDownload), since a device has no such button.
+		// A type with no generator, a file Shisho cannot decrypt, and a file
+		// whose earlier build failed partway (logged when it happened), are
+		// ones the user can work around with Download Original (422); any
+		// other generation failure is a server fault. The device routes fall
+		// back to the original instead (ResolveFallbackDownload), since a
+		// device has no such button.
 		if errors.Is(err, filegen.ErrNotImplemented) {
 			return errcodes.InvalidState("Generated downloads are not supported for " + file.FileType + " files")
+		}
+		if errors.Is(err, filegen.ErrCannotDecrypt) {
+			return errcodes.InvalidState(CannotDecryptMessage)
 		}
 		if errors.Is(err, downloadcache.ErrFailedPartway) {
 			return errcodes.InvalidState(FailedPartwayMessage)

@@ -549,12 +549,16 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     /**
      * Handles adding a new chapter for page-based files.
      * Defaults:
-     * - Start page: last chapter's start_page + 1 (or 0 if no chapters)
+     * - Start page: last chapter's start_page + 1 (or 0 if no chapters),
+     *   never past the file's last page
      * - Title: pattern detection from last chapter title
      */
     const handleAddChapter = () => {
       const lastChapter = editedChapters[editedChapters.length - 1];
-      const startPage = lastChapter ? (lastChapter.start_page ?? 0) + 1 : 0;
+      let startPage = lastChapter ? (lastChapter.start_page ?? 0) + 1 : 0;
+      if (file.page_count) {
+        startPage = Math.min(startPage, file.page_count - 1);
+      }
       const title = lastChapter ? getNextChapterTitle(lastChapter.title) : "";
 
       const newChapter: EditedChapter = {

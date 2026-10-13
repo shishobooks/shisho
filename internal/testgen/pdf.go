@@ -6,11 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/shishobooks/shisho/pkg/pdf"
 )
 
 // PDFOptions configures the generated PDF file.
 type PDFOptions struct {
 	PageCount int // defaults to 3
+	// UserPassword, when set, encrypts the PDF with AES-256 so it needs
+	// this password to open.
+	UserPassword string
 }
 
 // GeneratePDF writes a minimal valid PDF with the given page count to the
@@ -26,6 +33,20 @@ func GeneratePDF(t *testing.T, dir, filename string, opts PDFOptions) string {
 	path := filepath.Join(dir, filename)
 	if err := writeMinimalPDF(path, pageCount); err != nil {
 		t.Fatalf("failed to generate pdf %s: %v", path, err)
+	}
+	if opts.UserPassword != "" {
+		pdf.EnsurePdfcpuInit()
+		plain := path + ".plain"
+		if err := os.Rename(path, plain); err != nil {
+			t.Fatalf("failed to move pdf %s: %v", path, err)
+		}
+		conf := model.NewAESConfiguration(opts.UserPassword, "owner", 256)
+		if err := api.EncryptFile(plain, path, conf); err != nil {
+			t.Fatalf("failed to encrypt pdf %s: %v", path, err)
+		}
+		if err := os.Remove(plain); err != nil {
+			t.Fatalf("failed to remove %s: %v", plain, err)
+		}
 	}
 	return path
 }

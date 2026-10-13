@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/zlib"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -195,7 +197,8 @@ func TestOpen_Failures(t *testing.T) {
 	}
 
 	require.NoError(t, open(classic("<< /Size 2 /Root 1 0 R >>")))
-	require.ErrorIs(t, open(classic("<< /Size 2 /Root 1 0 R /Encrypt << /Filter /Standard >> >>")), ErrEncrypted)
+	require.ErrorIs(t, open(classic("<< /Size 2 /Root 1 0 R /Encrypt << /Filter /Standard >> >>")), ErrCannotDecrypt, "an incomplete encryption dictionary")
+	require.ErrorIs(t, open(classic("<< /Size 2 /Root 1 0 R /Encrypt << /Filter /FOPN_foweb /V 1 /R 2 >> >>")), ErrCannotDecrypt, "a security handler other than the standard one")
 	require.ErrorIs(t, open(classic("<< /Size 2 >>")), ErrUnreadable, "no /Root")
 	require.ErrorIs(t, open(classic("<< /Size 2 /Root 1 0 R /Prev 9 >>")), ErrUnreadable, "a /Prev pointing at nothing")
 	require.ErrorIs(t, open([]byte("%PDF-1.4\nno cross-reference data")), ErrUnreadable)
@@ -320,6 +323,15 @@ func FuzzOpen(f *testing.F) {
 	xref := p.b.Len()
 	fmt.Fprintf(&p.b, "xref\n0 4\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", p.offsets[1], p.offsets[2], p.offsets[3], xref)
 	f.Add(p.b.Bytes())
+	// Permission-restricted PDFs reach the decryption code.
+	encrypted, err := filepath.Glob("../../filegen/testdata/restricted-*.pdf")
+	require.NoError(f, err)
+	require.NotEmpty(f, encrypted)
+	for _, path := range encrypted {
+		data, err := os.ReadFile(path)
+		require.NoError(f, err)
+		f.Add(data)
+	}
 	f.Fuzz(func(_ *testing.T, data []byte) {
 		doc, err := Open(bytes.NewReader(data), int64(len(data)))
 		if err != nil {

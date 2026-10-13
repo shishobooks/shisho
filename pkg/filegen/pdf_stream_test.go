@@ -64,6 +64,15 @@ func writeSourcePDF(t *testing.T, dir string, kind pdfSourceKind) string {
 	return out
 }
 
+// writeBrokenPDF writes a file whose preparation fails and returns its
+// path.
+func writeBrokenPDF(t *testing.T, dir string) string {
+	t.Helper()
+	broken := filepath.Join(dir, "broken.pdf")
+	require.NoError(t, os.WriteFile(broken, []byte("%PDF-1.4\nnot really a PDF\n"), 0o600))
+	return broken
+}
+
 func pdfTestBook() (*models.Book, *models.File) {
 	description := "A book about things"
 	language := "fr"
@@ -146,8 +155,6 @@ func TestPDFGenerator_Conformance(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			broken := filepath.Join(dir, "broken.pdf")
-			require.NoError(t, os.WriteFile(broken, []byte("%PDF-1.4\nnot really a PDF\n"), 0o600))
 			book, file := pdfTestBook()
 			filegentest.Run(t, filegentest.Case{
 				Generator: &filegen.PDFGenerator{},
@@ -155,7 +162,7 @@ func TestPDFGenerator_Conformance(t *testing.T) {
 				Book:      book,
 				File:      file,
 				Check:     checkPDFOutput,
-				Broken:    broken,
+				Broken:    writeBrokenPDF(t, dir),
 			})
 		})
 	}
@@ -268,20 +275,161 @@ func TestPDFGenerator_KeepsOtherInfoEntries(t *testing.T) {
 	assert.Equal(t, "old, words", info["Keywords"].(incremental.String).Text(), "keywords stay when the book has no tags")
 }
 
-func TestPDFGenerator_EncryptedServedAsOriginal(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	srcPath := writeSourcePDF(t, dir, classicXRef)
-	encrypted := filepath.Join(dir, "encrypted.pdf")
-	pdf.EnsurePdfcpuInit()
-	require.NoError(t, api.EncryptFile(srcPath, encrypted, model.NewAESConfiguration("", "owner", 256)))
+// restrictedCrypto is how a test source is encrypted with the standard
+// security handler.
+type restrictedCrypto struct {
+	name string
+	conf func(userPW string) *model.Configuration
+}
 
-	book, file := pdfTestBook()
-	_, _, err := generatePDF(t, encrypted, book, file)
-	require.Error(t, err)
-	var genErr *filegen.GenerationError
-	require.ErrorAs(t, err, &genErr, "a GenerationError makes device routes serve the Original File")
-	assert.ErrorIs(t, err, incremental.ErrEncrypted)
+var restrictedCryptos = []restrictedCrypto{
+	{"RC4 40-bit", func(pw string) *model.Configuration { return model.NewRC4Configuration(pw, "owner", 40) }},
+	{"RC4 128-bit", func(pw string) *model.Configuration { return model.NewRC4Configuration(pw, "owner", 128) }},
+	{"AES-128", func(pw string) *model.Configuration { return model.NewAESConfiguration(pw, "owner", 128) }},
+	{"AES-256", func(pw string) *model.Configuration { return model.NewAESConfiguration(pw, "owner", 256) }},
+}
+
+// writeEncryptedPDF writes a source of the given kind encrypted with c and
+// the user password userPW, allowing only printing, and returns its path.
+// An empty userPW makes it permission-restricted: it opens without a
+// password.
+func writeEncryptedPDF(t *testing.T, dir string, kind pdfSourceKind, c restrictedCrypto, userPW string) string {
+	t.Helper()
+	srcPath := writeSourcePDF(t, dir, kind)
+	pdf.EnsurePdfcpuInit()
+	conf := c.conf(userPW)
+	conf.Permissions = model.PermissionsPrint
+	conf.WriteXRefStream = kind != classicXRef
+	conf.WriteObjectStream = kind == objectStreams
+	out := filepath.Join(dir, "encrypted.pdf")
+	require.NoError(t, api.EncryptFile(srcPath, out, conf))
+	return out
+}
+
+// checkKeepsEncryption checks that output, generated from original, still
+// uses the original's encryption and permissions, and that its update is
+// encrypted: no author name appears in it as plain text unless the
+// document metadata is left unencrypted.
+func checkKeepsEncryption(t *testing.T, original, output []byte, cleartextMetadata bool) {
+	t.Helper()
+	require.True(t, bytes.HasPrefix(output, original), "the output must start with the original bytes")
+
+	origDoc, err := incremental.Open(bytes.NewReader(original), int64(len(original)))
+	require.NoError(t, err)
+	outDoc, err := incremental.Open(bytes.NewReader(output), int64(len(output)))
+	require.NoError(t, err)
+	require.NotNil(t, origDoc.Trailer()["Encrypt"])
+	assert.Equal(t, origDoc.Trailer()["Encrypt"], outDoc.Trailer()["Encrypt"])
+	assert.Equal(t, origDoc.Trailer()["ID"], outDoc.Trailer()["ID"])
+
+	pdf.EnsurePdfcpuInit()
+	origPerms, err := api.GetPermissions(bytes.NewReader(original), model.NewDefaultConfiguration())
+	require.NoError(t, err)
+	outPerms, err := api.GetPermissions(bytes.NewReader(output), model.NewDefaultConfiguration())
+	require.NoError(t, err)
+	require.NotNil(t, origPerms)
+	require.NotNil(t, outPerms, "the output must still be encrypted")
+	assert.Equal(t, *origPerms, *outPerms)
+
+	appended := string(output[len(original):])
+	assert.NotContains(t, appended, "(First Author", "strings in the update must be encrypted")
+	if cleartextMetadata {
+		assert.Contains(t, appended, "<rdf:li>First Author</rdf:li>", "the metadata stream stays unencrypted when the file says so")
+	} else {
+		assert.NotContains(t, appended, "First Author", "the metadata stream must be encrypted")
+	}
+
+	// The update reads back decrypted.
+	_, catalog, err := outDoc.Catalog()
+	require.NoError(t, err)
+	o, err := outDoc.Resolve(catalog["Metadata"])
+	require.NoError(t, err)
+	stream, ok := o.(*incremental.Stream)
+	require.True(t, ok, "the catalog's /Metadata must be a stream")
+	assert.Contains(t, string(stream.Data), "<rdf:li>First Author</rdf:li>")
+}
+
+// A permission-restricted PDF opens without a password, so it gets
+// Shisho's metadata in an update encrypted the same way as the original.
+func TestPDFGenerator_PermissionRestricted(t *testing.T) {
+	t.Parallel()
+	for _, c := range restrictedCryptos {
+		for _, kind := range pdfSourceKinds {
+			t.Run(c.name+"/"+string(kind), func(t *testing.T) {
+				t.Parallel()
+				dir := t.TempDir()
+				srcPath := writeEncryptedPDF(t, dir, kind, c, "")
+				original, err := os.ReadFile(srcPath)
+				require.NoError(t, err)
+				if kind == objectStreams {
+					require.Contains(t, string(original), "/ObjStm", "the source must use object streams")
+				}
+				book, file := pdfTestBook()
+				filegentest.Run(t, filegentest.Case{
+					Generator: &filegen.PDFGenerator{},
+					Source:    srcPath,
+					Book:      book,
+					File:      file,
+					Check: func(t *testing.T, output []byte) {
+						checkPDFOutput(t, output)
+						checkKeepsEncryption(t, original, output, false)
+					},
+					Broken: writeBrokenPDF(t, dir),
+				})
+			})
+		}
+	}
+}
+
+// Revisions and options pdfcpu cannot write (its RC4 128-bit is revision
+// 4 and its AES-256 is revision 5), made with qpdf from a 5-page PDF
+// written by writeTestPDFWithContent:
+//
+//	qpdf --allow-weak-crypto --encrypt --user-password= --owner-password=owner --bits=128 --use-aes=n --print=none --modify=none -- in.pdf restricted-rc4-128-r3.pdf
+//	qpdf --encrypt --user-password= --owner-password=owner --bits=128 --use-aes=y --cleartext-metadata --print=none -- in.pdf restricted-aes-128-cleartext-metadata.pdf
+//	qpdf --object-streams=generate --encrypt --user-password= --owner-password=owner --bits=256 --print=none -- in.pdf restricted-aes-256-r6-object-streams.pdf
+func TestPDFGenerator_PermissionRestrictedFixtures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		file              string
+		cleartextMetadata bool
+	}{
+		{file: "restricted-rc4-128-r3.pdf"},
+		{file: "restricted-aes-128-cleartext-metadata.pdf", cleartextMetadata: true},
+		{file: "restricted-aes-256-r6-object-streams.pdf"},
+	} {
+		t.Run(tc.file, func(t *testing.T) {
+			t.Parallel()
+			srcPath := filepath.Join("testdata", tc.file)
+			original, err := os.ReadFile(srcPath)
+			require.NoError(t, err)
+			book, file := pdfTestBook()
+			out, size, err := generatePDF(t, srcPath, book, file)
+			require.NoError(t, err)
+			assert.Equal(t, int64(len(out)), size)
+			checkPDFOutput(t, out)
+			checkKeepsEncryption(t, original, out, tc.cleartextMetadata)
+		})
+	}
+}
+
+// A PDF that needs a password to open cannot be read, so device routes
+// serve the Original File.
+func TestPDFGenerator_PasswordRequiredServedAsOriginal(t *testing.T) {
+	t.Parallel()
+	for _, c := range restrictedCryptos {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			encrypted := writeEncryptedPDF(t, t.TempDir(), classicXRef, c, "user")
+			book, file := pdfTestBook()
+			_, _, err := generatePDF(t, encrypted, book, file)
+			require.Error(t, err)
+			var genErr *filegen.GenerationError
+			require.ErrorAs(t, err, &genErr, "a GenerationError makes device routes serve the Original File")
+			require.ErrorIs(t, err, incremental.ErrCannotDecrypt)
+			assert.ErrorIs(t, err, filegen.ErrCannotDecrypt, "the web UI routes answer this with a message")
+		})
+	}
 }
 
 func TestPDFGenerator_UnreadableXRefServedAsOriginal(t *testing.T) {
