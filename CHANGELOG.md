@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-13
+
+### Breaking Changes
+- **Remove the plugin output generator hook (#688)**
+  - The plugin `outputGenerator` hook is removed from the plugin contract.
+    Plugins that declare `outputGenerator` in their manifest or export it
+    from `main.js` still load, but the hook is ignored and never runs (it
+    never ran before either). Plugin authors should remove it from their
+    manifest and code. Its hook-order settings are deleted on upgrade.
+- **Order CBZ pages naturally in every consumer (#645)**
+  - CBZ pages are now counted in natural file name order (`page2.jpg` before `page10.jpg`), and macOS metadata (`._*` files and anything under `__MACOSX/`) is no longer counted as a page. Cover pages, chapter start pages and page counts recorded by earlier scans are not remapped, and a library scan skips files that have not changed on disk, so those old values stay as they are.
+    - **Affected files:** CBZ files already in a library whose page or folder numbers are not zero-padded, or that contain `._` files or a `__MACOSX` folder.
+    - **If you do nothing:** the reader shows pages in the correct order right away, and the cover image shown in the library does not change. But on affected files:
+      - chapter links open the wrong pages
+      - **Select page** highlights a page other than the cover
+      - KePub downloads and the `ComicInfo.xml` cover index in CBZ downloads can use a different image than the cover Shisho shows
+      - files that contained macOS metadata show a broken or blank image for their last pages
+    - **To fix a file:** on the book page, open the file's actions menu and choose **Rescan file**.
+      - **Scan for new metadata** corrects the page count and keeps manual edits, but leaves chapters unchanged.
+      - **Refresh all metadata** also detects chapters again. It replaces chapters edited by hand, so edit those again afterward. It does not change the cover page.
+      - To correct the cover page, open **Edit** on the file, choose **Select page**, and pick the cover again.
+      - **Reset to file metadata** recomputes both the cover page and the chapters, but removes the file's manual edits and plugin metadata.
+    - Reader pages cached on the server under the old order are no longer served. They stay on disk until the file's page cache is invalidated or an admin clears the cache.
+- **Improve cover thumbnails with configurable lazy caching**
+  - The web interface now stores generated cover thumbnails under the cache directory, with a 1 GiB default limit. Operators with a smaller disk budget should set Maximum size (GiB) under Settings > Cache after upgrading. Otherwise Shisho can retain up to 1 GiB of generated thumbnails. Set 0 to disable disk retention. Original cover files remain in the library.
+
+### Features
+- Stream KePub-from-CBZ downloads and make generated EPUBs pass epubcheck (#697)
+- Write metadata into permission-restricted PDFs (#696)
+- Stream EPUB and KePub-from-EPUB downloads (#694)
+- Stream PDF downloads as an incremental update (#693)
+- Stream CBZ downloads (#695)
+- Stream M4B, MOBI, and AZW3 downloads (#692)
+- Handle mid-stream Generated File failures and an unwritable download cache (#691)
+- Remove the plugin output generator hook (#688)
+- MOBI and AZW3 chapters, with edits written into downloads (#687)
+- Stream Generated File downloads from the cache while they are built (#686)
+- Browse and search lists over OPDS (#673)
+- Serve MOBI and AZW3 over OPDS and to Kindles in the eReader browser (#670)
+- Read MOBI and AZW3 in the web reader (#669)
+- Download MOBI and AZW3 with current metadata (#668)
+- Write EPUB chapter edits into downloads (#667)
+- Import MOBI and AZW3 books in a library scan (#666)
+- Type list query hooks with generated response envelopes (#647)
+- Replace raw buttons with shared Button variants and ban them with ESLint (#646)
+- Let several worktrees run the dev servers at once (#637)
+
+### Bug Fixes
+- Keep one history entry per search so back returns to the page you were on (#672)
+- Show the docs site's mobile nav drawer (#671)
+- Expose groups, toggle state, current page, validation errors, and search results to screen readers (#658)
+- Name every form control and keyboard-reachable tooltip and enforce names with lint (#657)
+- Make the library and list picker usable from the keyboard (#656)
+- Name every icon-only and phone-hidden control and enforce it with lint (#650)
+- Order CBZ pages naturally in every consumer (#645)
+- Make resource, series, and list detail headers responsive (#644)
+- Improve cover thumbnails with configurable lazy caching
+
+### Documentation
+- Add MOBI ADR, Reflowable glossary terms, and narrow the breaking-change rule (#655)
+- Cut agent instructions to cross-cutting guidance and enforce mechanical rules with checks (#642)
+
+### Testing
+- Keep in-memory test databases alive when a canceled query drops a connection (#685)
+
+### CI/CD
+- Split any Go test package too large to finish well inside the timeout (#690)
+- Keep nested bullets in breaking-change notes in the changelog (#649)
+
 ## [0.1.1] - 2026-10-05
 
 ### Bug Fixes
