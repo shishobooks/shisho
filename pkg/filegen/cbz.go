@@ -28,7 +28,7 @@ func (g *CBZGenerator) SupportedType() string {
 }
 
 // Generate creates a modified CBZ at destPath with updated metadata.
-// Images are processed to optimize for e-readers (resized, grayscale optimization).
+// Pages are resized to fit e-reader screens, and PNG pages become JPEGs.
 func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
 	src, err := OpenSource(srcPath)
 	if err != nil {

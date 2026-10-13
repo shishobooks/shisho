@@ -25,9 +25,9 @@ import (
 )
 
 // manyPages is enough pages that the generator's lookahead, which grows
-// with the number of CPUs, is a small part of the book.
+// with GOMAXPROCS, is a small part of the book.
 func manyPages() int {
-	return 8*runtime.NumCPU() + 40
+	return 8*runtime.GOMAXPROCS(0) + 40
 }
 
 func TestCBZGenerator_Conformance(t *testing.T) {
@@ -174,7 +174,7 @@ func TestCBZGenerator_ReadsBoundedPagesAhead(t *testing.T) {
 	pages := manyPages()
 	path := testgen.GenerateCBZ(t, t.TempDir(), "source.cbz", testgen.CBZOptions{PageCount: pages})
 	src := newPageSource(t, path)
-	bound := 2*runtime.NumCPU() + 2
+	bound := 2*runtime.GOMAXPROCS(0) + 2
 
 	prepared, err := (&filegen.CBZGenerator{}).Prepare(context.Background(), src, &models.Book{Title: "Book"}, &models.File{FileType: models.FileTypeCBZ})
 	require.NoError(t, err)

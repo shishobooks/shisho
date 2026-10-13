@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"image"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -19,7 +20,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
-	"golang.org/x/image/draw"
 )
 
 // CBZMetadata holds metadata for CBZ to KePub conversion.
@@ -702,15 +702,6 @@ const (
 	koboHeight = 1680
 )
 
-// Palette16 is the 16-level grayscale palette used by Kobo e-ink displays.
-// This matches KCC (Kindle Comic Converter) for optimal e-ink rendering.
-var Palette16 = []uint8{
-	0x00, 0x11, 0x22, 0x33,
-	0x44, 0x55, 0x66, 0x77,
-	0x88, 0x99, 0xaa, 0xbb,
-	0xcc, 0xdd, 0xee, 0xff,
-}
-
 // ProcessedImage holds the result of image processing.
 type ProcessedImage struct {
 	Data      []byte
@@ -722,9 +713,13 @@ type ProcessedImage struct {
 
 // ProcessImageForEreader resizes images to fit e-reader screen dimensions.
 // - All JPEG/PNG images are resized to fit within Kobo Libra Color resolution (1264x1680)
-// - Grayscale images (like manga) are converted to grayscale JPEG for faster rendering
 // - PNG images are converted to JPEG for smaller file size
 // - Other formats (GIF, WebP) are passed through unchanged.
+//
+// Tones and colors are left alone: one generated file serves every reader,
+// from e-ink to phones, so reducing grays or dropping color for a screen is
+// left to the reading app. A page comes out gray only if it holds nothing
+// but grays: it decoded as gray, or as a palette of grays.
 //
 // pkg/filegen/cbz.go uses it too, so a change here also changes regular CBZ
 // downloads.
@@ -780,10 +775,7 @@ func ProcessImageForEreader(data []byte, origExt string) *ProcessedImage {
 	needsResize := ratio < 1.0 // Only resize if image is larger than screen
 	needsConvert := format == "png"
 
-	// Check if image is grayscale (like manga pages)
-	isGray := isGrayscaleImage(img)
-
-	if !needsResize && !needsConvert && !isGray {
+	if !needsResize && !needsConvert {
 		// No processing needed, return original
 		return &ProcessedImage{
 			Data:      data,
@@ -798,31 +790,21 @@ func ProcessImageForEreader(data []byte, origExt string) *ProcessedImage {
 	newWidth := origWidth
 	newHeight := origHeight
 	if needsResize {
-		newWidth = int(float64(origWidth) * ratio)
-		newHeight = int(float64(origHeight) * ratio)
+		// A strip thinner than one pixel at this scale keeps one.
+		newWidth = max(1, int(float64(origWidth)*ratio))
+		newHeight = max(1, int(float64(origHeight)*ratio))
 	}
 
 	// Create the output image
-	var outputImg image.Image
+	// image/jpeg writes a gray JPEG only for an *image.Gray.
+	outputImg := img
+	isGray := isGrayImage(img)
 	if needsResize {
-		if isGray {
-			// Resize directly to grayscale for better performance
-			resized := image.NewGray(image.Rect(0, 0, newWidth, newHeight))
-			draw.BiLinear.Scale(resized, resized.Bounds(), img, bounds, draw.Over, nil)
-			// Apply 16-level palette quantization for optimal e-ink rendering
-			quantizeToKoboPalette(resized)
-			outputImg = resized
-		} else {
-			// Resize to RGBA
-			resized := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-			draw.BiLinear.Scale(resized, resized.Bounds(), img, bounds, draw.Over, nil)
-			outputImg = resized
-		}
-	} else if isGray {
-		// Convert to grayscale without resizing
-		outputImg = convertToGrayscale(img)
-	} else {
-		outputImg = img
+		outputImg = shrink(img, newWidth, newHeight, isGray)
+	} else if _, ok := img.(*image.Gray); isGray && !ok {
+		gray := image.NewGray(bounds)
+		draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
+		outputImg = gray
 	}
 
 	// Encode as JPEG
@@ -847,117 +829,22 @@ func ProcessImageForEreader(data []byte, origExt string) *ProcessedImage {
 	}
 }
 
-// isGrayscaleImage detects if an image is essentially grayscale.
-// It samples pixels and checks if R≈G≈B within a tolerance.
-// This is useful for manga/comic pages which are often black and white.
-func isGrayscaleImage(img image.Image) bool {
-	// If it's already a grayscale image type, return true
-	switch img.(type) {
+// isGrayImage reports whether img holds only grays: a gray image, or a
+// palette image, as scans are often saved, whose colors are all gray.
+func isGrayImage(img image.Image) bool {
+	switch img := img.(type) {
 	case *image.Gray, *image.Gray16:
 		return true
-	}
-
-	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-
-	// Sample pixels in a grid pattern (every 10th pixel)
-	// to avoid checking every single pixel
-	const sampleStep = 10
-	const tolerance = 10 // Allow small differences due to compression artifacts
-
-	colorPixels := 0
-	sampledPixels := 0
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y += sampleStep {
-		for x := bounds.Min.X; x < bounds.Max.X; x += sampleStep {
-			r, g, b, _ := img.At(x, y).RGBA()
-			// Convert from 16-bit to 8-bit
-			r8 := r >> 8
-			g8 := g >> 8
-			b8 := b >> 8
-
-			// Check if pixel is grayscale (R≈G≈B)
-			maxDiff := max3(abs(int(r8)-int(g8)), abs(int(g8)-int(b8)), abs(int(r8)-int(b8)))
-			if maxDiff > tolerance {
-				colorPixels++
+	case *image.Paletted:
+		for _, c := range img.Palette {
+			r, g, b, _ := c.RGBA()
+			if r != g || g != b {
+				return false
 			}
-			sampledPixels++
 		}
+		return true
 	}
-
-	// If less than 2% of sampled pixels are colored, consider it grayscale
-	// This allows for small color elements like chapter markers
-	if sampledPixels == 0 {
-		return false
-	}
-	colorRatio := float64(colorPixels) / float64(sampledPixels)
-
-	// Also check total pixel count - very small images might have false positives
-	totalPixels := width * height
-	if totalPixels < 1000 {
-		return false // Don't convert tiny images
-	}
-
-	return colorRatio < 0.02
-}
-
-// convertToGrayscale converts an image to grayscale with 16-level palette quantization.
-// This matches KCC behavior for optimal e-ink display on Kobo devices.
-func convertToGrayscale(img image.Image) *image.Gray {
-	bounds := img.Bounds()
-	gray := image.NewGray(bounds)
-	draw.Draw(gray, bounds, img, bounds.Min, draw.Src)
-
-	// Apply 16-level palette quantization for optimal e-ink rendering
-	quantizeToKoboPalette(gray)
-
-	return gray
-}
-
-// quantizeToKoboPalette reduces a grayscale image to 16 levels.
-// This matches the e-ink display capability of Kobo devices and improves rendering speed.
-func quantizeToKoboPalette(gray *image.Gray) {
-	bounds := gray.Bounds()
-	pix := gray.Pix
-	stride := gray.Stride
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		rowOffset := (y - bounds.Min.Y) * stride
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			// Get the pixel value directly from the slice for performance
-			offset := rowOffset + (x - bounds.Min.X)
-			c := pix[offset]
-
-			// Quantize to nearest of 16 levels (0x00, 0x11, 0x22, ..., 0xff)
-			// Each level spans ~17 values (256/15 ≈ 17)
-			level := (uint16(c) + 8) / 17 // +8 for rounding to nearest
-			if level > 15 {
-				level = 15
-			}
-
-			pix[offset] = Palette16[level]
-		}
-	}
-}
-
-// abs returns the absolute value of an int.
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-// max3 returns the maximum of three ints.
-func max3(a, b, c int) int {
-	if a >= b && a >= c {
-		return a
-	}
-	if b >= c {
-		return b
-	}
-	return c
+	return false
 }
 
 // Ensure png package is used for decoding (image.Decode uses registered decoders).
