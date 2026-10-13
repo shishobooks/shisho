@@ -16,7 +16,8 @@ import (
 )
 
 // requestLoggerMiddleware preserves the request context and fields used by
-// golib's logger, but omits successful frontend requests from the access log.
+// golib's logger, but omits successful frontend and log viewer requests from
+// the access log.
 func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		started := time.Now()
@@ -40,9 +41,14 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if err := next(c); err != nil {
 			c.Error(err)
 		}
-		// "/*" is the frontend fallback pattern server.New registers.
-		if (c.Path() == "/*" || c.Path() == "/") && c.Response().Status < 400 {
-			return nil
+		// "/*" is the frontend fallback pattern server.New registers. The log
+		// viewer refetches /api/logs whenever a line is logged, so logging
+		// that request would feed itself and fill the ring buffer.
+		switch c.Path() {
+		case "/*", "/", "/api/logs":
+			if c.Response().Status < 400 {
+				return nil
+			}
 		}
 		logger.FromContext(c.Request().Context()).Root(logger.Data{
 			"status_code": c.Response().Status,
