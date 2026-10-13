@@ -213,7 +213,7 @@ func TestDeleteFromIndex_UsesRowidLookup(t *testing.T) {
 	svc := NewService(db)
 
 	recorder := &ftsDeleteRecorder{}
-	db.AddQueryHook(recorder)
+	testdb.AddQueryHook(t, db, recorder)
 
 	require.NoError(t, svc.DeleteFromBookIndex(ctx, e.books[0].ID))
 	require.NoError(t, svc.DeleteFromSeriesIndex(ctx, e.series[0].ID))
@@ -286,7 +286,7 @@ func TestIndexMethods_ReplaceRowWrittenConcurrently(t *testing.T) {
 	for table, info := range e.ftsTables() {
 		injector.pending[table] = concurrentRow(table, info.idColumn, info.ids[0])
 	}
-	db.AddQueryHook(injector)
+	testdb.AddQueryHook(t, db, injector)
 
 	require.NoError(t, svc.IndexBook(ctx, e.books[0]))
 	require.NoError(t, svc.IndexSeries(ctx, e.series[0]))

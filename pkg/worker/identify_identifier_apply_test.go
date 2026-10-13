@@ -9,6 +9,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,7 +79,7 @@ func TestIdentifyIdentifiers_NoOpPreservesSourcesWithoutWrites(t *testing.T) {
 	require.NoError(t, err)
 
 	writes := &identifyWrites{}
-	f.tc.db.AddQueryHook(writes)
+	testdb.AddQueryHook(t, f.tc.db, writes)
 	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
 		BookID: book.ID, FileID: &file.ID,
 		Fields: map[string]any{"identifiers": []any{

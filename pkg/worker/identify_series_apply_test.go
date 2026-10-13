@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,7 +168,7 @@ func TestIdentifySeries_NoOpPreservesSourceWithoutWrites(t *testing.T) {
 			require.NoError(t, err)
 
 			writes := &identifyWrites{}
-			f.tc.db.AddQueryHook(writes)
+			testdb.AddQueryHook(t, f.tc.db, writes)
 			// A different spelling that resolves to the same Series through
 			// an Alias is the same membership.
 			postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), seriesApplyPayload(book, file, []map[string]any{seriesEntry("Series Alias", 1, nil)}, plugins.SourceIntentPlugin))
@@ -319,7 +320,7 @@ func TestIdentifySeries_MalformedGroupRejectedBeforeMutation(t *testing.T) {
 			epub := models.DataSourceEPUBMetadata
 			require.Equal(t, &epub, book.SeriesSource)
 			writes := &identifyWrites{}
-			f.tc.db.AddQueryHook(writes)
+			testdb.AddQueryHook(t, f.tc.db, writes)
 			body, err := json.Marshal(seriesApplyPayload(book, file, entries, plugins.SourceIntentUser))
 			require.NoError(t, err)
 			req := httptest.NewRequest(http.MethodPost, "/plugins/apply", strings.NewReader(string(body)))

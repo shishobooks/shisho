@@ -70,8 +70,11 @@ func open(t testing.TB, maxOpen int) *bun.DB {
 		sqldb.SetMaxOpenConns(maxOpen)
 	}
 
-	db := bun.NewDB(sqldb, sqliteconn.NewDialect())
+	fwd := &forwardHook{}
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect()).WithQueryHook(fwd)
+	forwarders.Store(db, fwd)
 	t.Cleanup(func() {
+		forwarders.Delete(db)
 		_ = db.Close()
 	})
 

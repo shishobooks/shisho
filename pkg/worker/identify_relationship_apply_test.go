@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -105,7 +106,7 @@ func TestIdentifyRelationships_NoOpPreservesSourceWithoutWrites(t *testing.T) {
 			fields["tags"] = []string{"Read", "favorite"}
 			fields["authors"] = []map[string]any{{"name": "first author", "role": ""}, {"name": "Second Author", "role": "editor"}}
 			writes := &identifyWrites{}
-			f.tc.db.AddQueryHook(writes)
+			testdb.AddQueryHook(t, f.tc.db, writes)
 			postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
 				BookID: book.ID, FileID: &file.ID, Fields: fields, Sources: relationshipIntents(plugins.SourceIntentPlugin), PluginScope: "test", PluginID: "auto-enricher",
 			})
@@ -223,7 +224,7 @@ func TestIdentifyRelationships_AliasesAreNoOps(t *testing.T) {
 	fields["genres"] = []string{"Genre Alias", book.BookGenres[1].Genre.Name, book.BookGenres[0].Genre.Name}
 	fields["tags"] = []string{"Tag Alias", book.BookTags[1].Tag.Name, book.BookTags[0].Tag.Name}
 	writes := &identifyWrites{}
-	f.tc.db.AddQueryHook(writes)
+	testdb.AddQueryHook(t, f.tc.db, writes)
 	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
 		BookID: book.ID, FileID: &file.ID, Fields: fields, Sources: relationshipIntents(plugins.SourceIntentUser), PluginScope: "test", PluginID: "auto-enricher",
 	})
