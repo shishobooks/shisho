@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -297,7 +298,7 @@ func TestProcessScanJob_CancelledScanIsIndexedAtNextStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(tc.ctx)
 	defer cancel()
 	hook := &cancelAfterBookCommit{cancel: cancel}
-	tc.db.AddQueryHook(hook)
+	testdb.AddQueryHook(t, tc.db, hook)
 	job := &models.Job{Type: models.JobTypeScan, Status: models.JobStatusInProgress, DataParsed: &models.JobScanData{}}
 	require.NoError(t, tc.jobService.CreateJob(tc.ctx, job))
 
@@ -456,7 +457,7 @@ func TestProcessScanJob_ChangedFileSkipsPerFileReindex(t *testing.T) {
 	require.NoError(t, os.Chtimes(path, later, later))
 
 	recorder := &ftsRowDeleteRecorder{}
-	tc.db.AddQueryHook(recorder)
+	testdb.AddQueryHook(t, tc.db, recorder)
 	require.NoError(t, tc.runScan())
 
 	recorder.mu.Lock()

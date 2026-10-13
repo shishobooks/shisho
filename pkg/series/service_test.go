@@ -127,7 +127,7 @@ func TestDeleteSeries_RemovesBookSeriesAndFlipsReviewed(t *testing.T) {
 	// book_series rows for this series must be gone.
 	count, err := db.NewSelect().Model((*models.BookSeries)(nil)).Where("series_id = ?", s.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "book_series rows pointing at the deleted series must be removed")
+	assert.Equal(t, int64(0), count, "book_series rows pointing at the deleted series must be removed")
 
 	// Recompute (mirrors what the handler will do for each affected book).
 	bookSvc.RecomputeReviewedForBook(ctx, book.ID)
@@ -386,14 +386,14 @@ func TestDeleteSeries_HardDeletesRowAndFTS(t *testing.T) {
 		Where("id = ?", s.ID).
 		Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count, "series row must be hard-deleted, not soft-deleted")
+	assert.Equal(t, int64(0), count, "series row must be hard-deleted, not soft-deleted")
 
 	// 2. book_series rows for the deleted series are gone (CASCADE).
 	bsCount, err := db.NewSelect().Model((*models.BookSeries)(nil)).
 		Where("series_id = ?", s.ID).
 		Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, bsCount, "book_series rows must be removed")
+	assert.Equal(t, int64(0), bsCount, "book_series rows must be removed")
 
 	// 3. FTS row is gone.
 	var post int

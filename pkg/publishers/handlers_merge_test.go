@@ -62,7 +62,7 @@ func publisherFileCount(t *testing.T, db *bun.DB, id int) int {
 	t.Helper()
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("publisher_id = ?", id).Count(context.Background())
 	require.NoError(t, err)
-	return count
+	return int(count)
 }
 
 func publisherParent(t *testing.T, db *bun.DB, id int) *int {

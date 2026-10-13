@@ -64,7 +64,7 @@ func genreBookCount(t *testing.T, db *bun.DB, id int) int {
 	t.Helper()
 	count, err := db.NewSelect().Model((*models.BookGenre)(nil)).Where("genre_id = ?", id).Count(context.Background())
 	require.NoError(t, err)
-	return count
+	return int(count)
 }
 
 func TestMergeGenres_SelfMerge_Rejected(t *testing.T) {

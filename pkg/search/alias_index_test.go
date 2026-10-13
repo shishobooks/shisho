@@ -78,7 +78,7 @@ func TestIndexing_AliasLookupsUseParentIndex(t *testing.T) {
 	}
 
 	recorder := &aliasQueryRecorder{}
-	db.AddQueryHook(recorder)
+	testdb.AddQueryHook(t, db, recorder)
 
 	require.NoError(t, svc.ReindexBookByID(ctx, book))
 	require.NoError(t, svc.IndexSeries(ctx, e.series[0]))

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/sqliteconn"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 	"github.com/uptrace/bun/migrate"
 )
@@ -23,7 +23,7 @@ func openMigrationTestDB(t *testing.T) *bun.DB {
 	sqldb, err := sql.Open(sqliteshim.ShimName, ":memory:")
 	require.NoError(t, err)
 	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect())
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	_, err = db.Exec("PRAGMA foreign_keys = ON")
 	require.NoError(t, err)

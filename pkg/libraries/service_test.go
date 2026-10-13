@@ -158,23 +158,23 @@ func TestDeleteLibrary_RemovesRowAndCascades(t *testing.T) {
 	assert.Zero(t, libCount, "library row should be gone")
 
 	// CASCADE removed children.
-	for name, count := range map[string]func() (int, error){
-		"books": func() (int, error) {
+	for name, count := range map[string]func() (int64, error){
+		"books": func() (int64, error) {
 			return db.NewSelect().Model((*models.Book)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 		},
-		"files": func() (int, error) {
+		"files": func() (int64, error) {
 			return db.NewSelect().Model((*models.File)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 		},
-		"series": func() (int, error) {
+		"series": func() (int64, error) {
 			return db.NewSelect().Model((*models.Series)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 		},
-		"persons": func() (int, error) {
+		"persons": func() (int64, error) {
 			return db.NewSelect().Model((*models.Person)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 		},
-		"genres": func() (int, error) {
+		"genres": func() (int64, error) {
 			return db.NewSelect().Model((*models.Genre)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 		},
-		"tags": func() (int, error) {
+		"tags": func() (int64, error) {
 			return db.NewSelect().Model((*models.Tag)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 		},
 	} {
@@ -318,12 +318,12 @@ func TestDeleteLibrary_Atomicity(t *testing.T) {
 	// Library row must still exist.
 	libCount, err := db.NewSelect().Model((*models.Library)(nil)).Where("id = ?", seeded.LibraryID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, libCount, "library row should survive a failed transaction")
+	assert.Equal(t, int64(1), libCount, "library row should survive a failed transaction")
 
 	// Books must still exist (CASCADE didn't run).
 	bookCount, err := db.NewSelect().Model((*models.Book)(nil)).Where("library_id = ?", seeded.LibraryID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, bookCount, "book row should survive a failed transaction")
+	assert.Equal(t, int64(1), bookCount, "book row should survive a failed transaction")
 
 	// FTS entries must still exist.
 	var ftsCount int

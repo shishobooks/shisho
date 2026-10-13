@@ -202,7 +202,7 @@ func TestService_AddPermission_Duplicate(t *testing.T) {
 		Where("api_key_id = ? AND permission = ?", created.ID, PermissionEReaderBrowser).
 		Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count, "adding the same permission twice stores one row")
+	assert.Equal(t, int64(1), count, "adding the same permission twice stores one row")
 	assert.Len(t, key.Permissions, 1)
 }
 

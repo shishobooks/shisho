@@ -582,7 +582,7 @@ func TestDeleteBook_DeletesBookAndFiles(t *testing.T) {
 	// Verify book deleted
 	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify file deleted from disk
 	_, err = os.Stat(filePath)
@@ -673,11 +673,11 @@ func TestDeleteFile_DeletesFileAndKeepsBook(t *testing.T) {
 	// Verify file1 deleted, book and file2 remain
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("id = ?", file1.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 }
 
 // A user's supplement_exclude_patterns only hide files from supplement
@@ -967,7 +967,7 @@ func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 	// Verify books deleted
 	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id IN (?)", bun.List([]int{book1.ID, book2.ID})).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 }
 
 func TestUpdateFile_DowngradeMainToSupplement_DeletesChapters(t *testing.T) {

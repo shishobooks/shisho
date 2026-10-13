@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -87,7 +88,7 @@ func TestScanSeries_AliasOfAttachedSeriesDoesNotChurn(t *testing.T) {
 			}
 
 			writes := &seriesWrites{}
-			f.tc.db.AddQueryHook(writes)
+			testdb.AddQueryHook(t, f.tc.db, writes)
 			f.ordinaryScan(t, file.ID)
 			book, _ = f.retrieve(t)
 			assert.Equal(t, []string{tc.wantSummary}, membershipSummary(book))

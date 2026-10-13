@@ -109,7 +109,7 @@ func (svc *Service) ListJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 
 func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions) ([]*models.Job, int, error) {
 	jobs := []*models.Job{}
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -118,10 +118,10 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 		Order("j.created_at DESC")
 
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 	if opts.Statuses != nil {
 		q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
@@ -165,7 +165,7 @@ func (svc *Service) listJobsWithTotal(ctx context.Context, opts ListJobsOptions)
 		}
 	}
 
-	return jobs, total, nil
+	return jobs, int(total), nil
 }
 
 // HasActiveJob checks if there's a pending or in-progress job of the given type.

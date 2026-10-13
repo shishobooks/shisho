@@ -372,12 +372,12 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 	// Verify book is deleted from DB
 	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify file is deleted from DB
 	count, err = db.NewSelect().Model((*models.File)(nil)).Where("id = ?", file.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify files are deleted from disk
 	_, err = os.Stat(mainFilePath)
@@ -529,12 +529,12 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 	// Verify book is deleted from DB
 	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify file is deleted from DB
 	count, err = db.NewSelect().Model((*models.File)(nil)).Where("id = ?", file.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify the entire book directory is deleted
 	_, err = os.Stat(bookDir)
@@ -612,7 +612,7 @@ func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 	// Verify file1 is deleted from DB
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("id = ?", file1.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify file1 is deleted from disk
 	_, err = os.Stat(file1Path)
@@ -621,12 +621,12 @@ func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 	// Verify book still exists
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 
 	// Verify file2 still exists
 	count, err = db.NewSelect().Model((*models.File)(nil)).Where("id = ?", file2.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 }
 
 func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
@@ -685,12 +685,12 @@ func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
 	// Verify file is deleted from DB
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("id = ?", file.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify book is deleted from DB
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 }
 
 func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
@@ -944,7 +944,7 @@ func TestDeleteBooksAndFiles_DeletesMultipleBooks(t *testing.T) {
 	// Verify all books deleted
 	count, err := db.NewSelect().Model((*models.Book)(nil)).Where("id IN (?)", bun.List([]int{book1.ID, book2.ID})).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify all files deleted from disk
 	_, err = os.Stat(file1Path)
@@ -1035,12 +1035,12 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 	// Verify main file is deleted from DB
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("id = ?", mainFile.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify book still exists
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 
 	// Verify supplement was promoted to main
 	var updatedSupplement models.File
@@ -1129,12 +1129,12 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 	// Verify both files are deleted from DB
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("book_id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify book is deleted
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify supplement file is deleted from disk
 	_, err = os.Stat(supplementFilePath)
@@ -1221,12 +1221,12 @@ func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *te
 	// Verify main file is deleted from DB
 	count, err := db.NewSelect().Model((*models.File)(nil)).Where("id = ?", mainFile.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), count)
 
 	// Verify book still exists
 	count, err = db.NewSelect().Model((*models.Book)(nil)).Where("id = ?", book.ID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), count)
 
 	// Verify PDF supplement was promoted to main
 	var updatedSupplement models.File

@@ -121,7 +121,7 @@ func (svc *Service) ListLibrariesWithTotal(ctx context.Context, opts ListLibrari
 
 func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrariesOptions) ([]*models.Library, int, error) {
 	libraries := []*models.Library{}
-	var total int
+	var total int64
 	var err error
 
 	// A non-nil empty filter is a user with no library access, not "no
@@ -144,10 +144,10 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 	}
 
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 	if opts.LibraryIDs != nil {
 		q = q.Where("l.id IN (?)", bun.List(opts.LibraryIDs))
@@ -162,7 +162,7 @@ func (svc *Service) listLibrariesWithTotal(ctx context.Context, opts ListLibrari
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return libraries, total, nil
+	return libraries, int(total), nil
 }
 
 func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, opts UpdateLibraryOptions) error {

@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
 )
 
 // These tests enforce the schema rules in "Database" in the
@@ -320,7 +319,7 @@ func TestSchemaInvariantCheckers_CatchViolations(t *testing.T) {
 	require.NoError(t, err)
 	sqldb := sql.OpenDB(connector)
 	sqldb.SetMaxOpenConns(1)
-	db := bun.NewDB(sqldb, sqlitedialect.New())
+	db := bun.NewDB(sqldb, sqliteconn.NewDialect())
 	t.Cleanup(func() { _ = db.Close() })
 
 	for _, stmt := range []string{

@@ -106,7 +106,7 @@ func TestNameLookups_CaseInsensitiveUsingNameIndex(t *testing.T) {
 	aliasesSvc := aliases.NewService(db)
 
 	recorder := &queryRecorder{}
-	db.AddQueryHook(recorder)
+	testdb.AddQueryHook(t, db, recorder)
 
 	cases := []struct {
 		name string

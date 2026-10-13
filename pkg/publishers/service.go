@@ -138,7 +138,7 @@ func (svc *Service) ListPublishersWithTotal(ctx context.Context, opts ListPublis
 
 func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublishersOptions) ([]*models.Publisher, int, error) {
 	var publishers []*models.Publisher
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -162,10 +162,10 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 		q = q.Where("pub.id NOT IN (?)", bun.List(opts.ExcludeIDs))
 	}
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 
 	if opts.includeTotal {
@@ -177,7 +177,7 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return publishers, total, nil
+	return publishers, int(total), nil
 }
 
 func (svc *Service) UpdatePublisher(ctx context.Context, publisher *models.Publisher, opts UpdatePublisherOptions) error {
@@ -255,7 +255,7 @@ func (svc *Service) GetFileCount(ctx context.Context, publisherID int) (int, err
 		Model((*models.File)(nil)).
 		Where("publisher_id IN ("+descendantIDsSubquery()+")", publisherID).
 		Count(ctx)
-	return count, errors.WithStack(err)
+	return int(count), errors.WithStack(err)
 }
 
 // GetFiles returns all files with this publisher and all its descendants.
@@ -288,14 +288,14 @@ func (svc *Service) GetFilesPaginated(ctx context.Context, publisherID, limit, o
 		}).
 		Relation("Book.Authors.Person").
 		Order("f.filepath ASC").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		ScanAndCount(ctx)
 	if err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return files, total, nil
+	return files, int(total), nil
 }
 
 // MergePublishers merges sourcePublisher into targetPublisher (moves all file
@@ -588,7 +588,7 @@ func (svc *Service) GetFileCountForPublisherIDs(ctx context.Context, publisherID
 		Model((*models.File)(nil)).
 		Where("publisher_id IN (?)", bun.List(publisherIDs)).
 		Count(ctx)
-	return count, errors.WithStack(err)
+	return int(count), errors.WithStack(err)
 }
 
 // GetDescendantPublisherCount returns the count of all publishers in the

@@ -191,7 +191,7 @@ func TestDeleteLibraryHandler_RequiresWritePermission(t *testing.T) {
 
 	count, err := db.NewSelect().Model((*models.Library)(nil)).Where("id = ?", seeded.LibraryID).Count(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count, "library must survive")
+	assert.Equal(t, int64(1), count, "library must survive")
 
 	assert.Zero(t, *callbacks, "onLibraryChanged must not fire on 403")
 }

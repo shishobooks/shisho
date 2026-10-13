@@ -136,7 +136,7 @@ func (svc *Service) ListTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 
 func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions) ([]*models.Tag, int, error) {
 	var tags []*models.Tag
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -158,10 +158,10 @@ func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 		}
 	}
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 
 	if opts.includeTotal {
@@ -173,7 +173,7 @@ func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return tags, total, nil
+	return tags, int(total), nil
 }
 
 func (svc *Service) UpdateTag(ctx context.Context, tag *models.Tag, opts UpdateTagOptions) error {
@@ -263,7 +263,7 @@ func (svc *Service) GetBookCount(ctx context.Context, tagID int) (int, error) {
 		Model((*models.BookTag)(nil)).
 		Where("tag_id = ?", tagID).
 		Count(ctx)
-	return count, errors.WithStack(err)
+	return int(count), errors.WithStack(err)
 }
 
 // GetBooks returns all books with this tag.
@@ -292,14 +292,14 @@ func (svc *Service) GetBooksPaginated(ctx context.Context, tagID, limit, offset 
 		Join("INNER JOIN book_tags bt ON bt.book_id = b.id").
 		Where("bt.tag_id = ?", tagID).
 		Order("b.title ASC").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		ScanAndCount(ctx)
 	if err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return books, total, nil
+	return books, int(total), nil
 }
 
 // MergeTags merges sourceTag into targetTag (moves all associations, deletes source).

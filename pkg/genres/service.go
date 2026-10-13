@@ -136,7 +136,7 @@ func (svc *Service) ListGenresWithTotal(ctx context.Context, opts ListGenresOpti
 
 func (svc *Service) listGenresWithTotal(ctx context.Context, opts ListGenresOptions) ([]*models.Genre, int, error) {
 	var genres []*models.Genre
-	var total int
+	var total int64
 	var err error
 
 	q := svc.db.
@@ -158,10 +158,10 @@ func (svc *Service) listGenresWithTotal(ctx context.Context, opts ListGenresOpti
 		}
 	}
 	if opts.Limit != nil {
-		q = q.Limit(*opts.Limit)
+		q = q.Limit(int64(*opts.Limit))
 	}
 	if opts.Offset != nil {
-		q = q.Offset(*opts.Offset)
+		q = q.Offset(int64(*opts.Offset))
 	}
 
 	if opts.includeTotal {
@@ -173,7 +173,7 @@ func (svc *Service) listGenresWithTotal(ctx context.Context, opts ListGenresOpti
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return genres, total, nil
+	return genres, int(total), nil
 }
 
 func (svc *Service) UpdateGenre(ctx context.Context, genre *models.Genre, opts UpdateGenreOptions) error {
@@ -263,7 +263,7 @@ func (svc *Service) GetBookCount(ctx context.Context, genreID int) (int, error) 
 		Model((*models.BookGenre)(nil)).
 		Where("genre_id = ?", genreID).
 		Count(ctx)
-	return count, errors.WithStack(err)
+	return int(count), errors.WithStack(err)
 }
 
 // GetBooks returns all books with this genre.
@@ -292,14 +292,14 @@ func (svc *Service) GetBooksPaginated(ctx context.Context, genreID, limit, offse
 		Join("INNER JOIN book_genres bg ON bg.book_id = b.id").
 		Where("bg.genre_id = ?", genreID).
 		Order("b.title ASC").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		ScanAndCount(ctx)
 	if err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
 
-	return books, total, nil
+	return books, int(total), nil
 }
 
 // MergeGenres merges sourceGenre into targetGenre (moves all associations, deletes source).

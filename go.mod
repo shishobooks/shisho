@@ -30,9 +30,9 @@ require (
 	github.com/robinjoseph08/golib v0.6.0
 	github.com/segmentio/encoding v0.5.4
 	github.com/stretchr/testify v1.12.1
-	github.com/uptrace/bun v1.2.18
-	github.com/uptrace/bun/dialect/sqlitedialect v1.2.18
-	github.com/uptrace/bun/driver/sqliteshim v1.2.18
+	github.com/uptrace/bun v1.3.0
+	github.com/uptrace/bun/dialect/sqlitedialect v1.3.0
+	github.com/uptrace/bun/driver/sqliteshim v1.3.0
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0

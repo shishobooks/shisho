@@ -90,6 +90,7 @@ Run `mise check:quiet` once when the work is done, before pushing or opening a P
 ## Testing
 
 - Go tests get their database from `testdb.New(t)` (`pkg/testutils/testdb`), or `testdb.NewShared(t)` when the code under test queries from several goroutines at once, as the worker does; don't copy a `setupTestDB` into a package. Only migration tests that need an older schema open their own.
+- To watch a test's queries, attach the hook with `testdb.AddQueryHook(t, db, hook)`. The deprecation warning on `db.AddQueryHook` suggests bun's `WithQueryHook`, but that returns a copy the services under test never use.
 - Run Go tests through `mise test`, or set `TZ=America/Chicago CI=true` as it does when calling `go test` directly.
 - New Go tests call `t.Parallel()` as their first line, unless they touch shared global state: `pkg/config` tests mutate global config, and `pkg/plugins/AGENTS.md` lists the plugin tests that can't run in parallel.
 - **Bug fixes and features follow Red-Green-Refactor**, in sequence: write the test and watch it fail, implement until it passes, then clean up with the tests still passing. A test never seen failing proves nothing.
