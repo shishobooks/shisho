@@ -399,7 +399,15 @@ jobs:
   # should block merges goes in needs.
   ci-ok:
     name: CI OK
-    needs: [lint, test, image-build, image-smoke, lint-js, docs-build, test-js, e2e]
+    needs:
+      - lint
+      - test
+      - image-build
+      - image-smoke
+      - lint-js
+      - docs-build
+      - test-js
+      - e2e
     if: always()
     runs-on: ubuntu-latest
     steps:
