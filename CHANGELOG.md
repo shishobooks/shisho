@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-14
+
+### Features
+- Write CBZ chapters as folders so KOReader shows them (#715)
+
+### Bug Fixes
+- Open the page picker on the start page entered since it last opened (#713)
+- Stop the log viewer's own requests from filling the server log (#712)
+
+### Testing
+- Fix race in TestCache_SourceChangedDuringCopy (#709)
+
+### CI/CD
+- Cut CI time with a migrated template test database and restructure CI jobs (#710)
+- Pin demo authoring to v0.3.0 (#711)
+
 ## [0.3.0] - 2026-10-13
 
 ### Breaking Changes
