@@ -2,12 +2,15 @@ package filegen
 
 import (
 	"archive/zip"
+	"cmp"
 	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/kepub"
+	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
@@ -29,6 +33,8 @@ func (g *CBZGenerator) SupportedType() string {
 
 // Generate creates a modified CBZ at destPath with updated metadata.
 // Pages are resized to fit e-reader screens, and PNG pages become JPEGs.
+// Chapters are written as folders of pages (cbz.ChapterPagePaths), the way
+// KOReader reads a CBZ's chapters.
 func (g *CBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
 	src, err := OpenSource(srcPath)
 	if err != nil {
@@ -93,11 +99,20 @@ func (g *CBZGenerator) Prepare(_ context.Context, src Source, book *models.Book,
 			}
 			hasComicInfo = true
 			p.otherFiles = append(p.otherFiles, f)
-		} else if cbz.IsPageImage(f.Name) {
-			p.imageFiles = append(p.imageFiles, f)
-		} else {
+		} else if !cbz.IsPageImage(f.Name) {
 			p.otherFiles = append(p.otherFiles, f)
 		}
+	}
+
+	p.imageFiles = cbz.PageImages(srcZip)
+	p.pagePaths = cbzChapterPagePaths(p.imageFiles, file)
+	if p.pagePaths != nil {
+		// Folder entries would be left empty, and KOReader would count macOS
+		// metadata such as "._page1.jpg" as a page in the old folder's
+		// chapter.
+		p.otherFiles = slices.DeleteFunc(p.otherFiles, func(f *zip.File) bool {
+			return strings.HasSuffix(f.Name, "/") || cbz.HasImageExt(f.Name)
+		})
 	}
 
 	p.comicInfo, err = marshalComicInfo(modifyCBZComicInfo(existingComicInfo, book, file))
@@ -112,10 +127,34 @@ func (g *CBZGenerator) Prepare(_ context.Context, src Source, book *models.Book,
 // replaced, then the processed pages in order, then ComicInfo.xml if the
 // source had none.
 type cbzPrepared struct {
-	otherFiles      []*zip.File
-	imageFiles      []*zip.File
+	otherFiles []*zip.File
+	imageFiles []*zip.File
+	// pagePaths names each page of imageFiles in the output, or is nil to
+	// keep the source's names.
+	pagePaths       []string
 	comicInfo       []byte
 	appendComicInfo bool
+}
+
+// cbzChapterPagePaths returns the paths that write the file's top-level
+// chapters as folders, or nil to keep the pages' names.
+func cbzChapterPagePaths(pages []*zip.File, file *models.File) []string {
+	if file == nil || len(file.Chapters) == 0 {
+		return nil
+	}
+	topLevel := slices.Clone(models.ChapterTree(file.Chapters))
+	slices.SortStableFunc(topLevel, func(a, b *models.Chapter) int {
+		return cmp.Compare(a.SortOrder, b.SortOrder)
+	})
+	chapters := make([]mediafile.ParsedChapter, len(topLevel))
+	for i, ch := range topLevel {
+		chapters[i] = mediafile.ParsedChapter{Title: ch.Title, StartPage: ch.StartPage}
+	}
+	names := make([]string, len(pages))
+	for i, f := range pages {
+		names[i] = f.Name
+	}
+	return cbz.ChapterPagePaths(names, chapters)
 }
 
 // Size reports no size: processed pages are only measured once written.
@@ -180,8 +219,13 @@ type processedPage struct {
 // writePages processes pages in parallel and writes them in order, holding
 // a bounded number of processed pages at a time.
 func (p *cbzPrepared) writePages(ctx context.Context, destZip *zip.Writer) error {
-	err := cbz.ProcessInOrder(ctx, p.imageFiles, processCBZPage, func(_ int, page processedPage) error {
-		destZipFile, err := destZip.Create(page.name)
+	err := cbz.ProcessInOrder(ctx, p.imageFiles, processCBZPage, func(i int, page processedPage) error {
+		name := page.name
+		if p.pagePaths != nil {
+			// Keep the extension processing gave the page.
+			name = strings.TrimSuffix(p.pagePaths[i], path.Ext(p.pagePaths[i])) + path.Ext(page.name)
+		}
+		destZipFile, err := destZip.Create(name)
 		if err != nil {
 			return errors.Wrap(err, "failed to create image file in destination CBZ")
 		}

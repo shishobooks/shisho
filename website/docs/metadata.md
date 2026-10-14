@@ -132,6 +132,8 @@ A file's **Chapters** tab lists the chapters a scan found, and a user whose role
 
 Renamed and deleted EPUB, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, KePub included for EPUB. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
 
+CBZ chapters are written into generated CBZ downloads as folders of pages; see [CBZ Downloads](./supported-formats.md#cbz-downloads).
+
 ## Fetch Chapters from Audible
 
 For an M4B file with an Audible ASIN, a user whose role has Books Write can open chapter editing and choose **Fetch from Audible**. Shisho sends the ASIN to [Audnexus](https://audnex.us), an external service that provides Audible chapter data.

@@ -42,7 +42,9 @@ const (
 //     (pkg/kepub/cbz.go): no 16-level reduction, and no conversion of
 //     mostly gray pages to gray. Pages are resized by area averaging
 //     (pkg/kepub/resize.go).
-const GeneratorVersion = 6
+//   - 7: CBZ downloads write chapters as folders of pages
+//     (pkg/cbz/chapterlayout.go).
+const GeneratorVersion = 7
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
