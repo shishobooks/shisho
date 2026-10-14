@@ -25,7 +25,20 @@ func DetectChapters(files []string) []mediafile.ParsedChapter {
 
 // detectChaptersFromFolders detects chapters based on immediate parent directories.
 // Returns empty slice if all files share the same parent or only one unique parent exists.
+// Folder numbers that ChapterPagePaths wrote are left out of the titles.
 func detectChaptersFromFolders(files []string) []mediafile.ParsedChapter {
+	chapters := folderChapters(files)
+	// If all files are in root or only one chapter folder, no chapters
+	if len(chapters) <= 1 {
+		return nil
+	}
+	return stripFolderNumbers(chapters)
+}
+
+// folderChapters returns a chapter for each of files' immediate parent
+// directories, one folder included, titled with the folder names as
+// written.
+func folderChapters(files []string) []mediafile.ParsedChapter {
 	if len(files) == 0 {
 		return nil
 	}
@@ -60,11 +73,6 @@ func detectChaptersFromFolders(files []string) []mediafile.ParsedChapter {
 			chapterOrder = append(chapterOrder, parent)
 		}
 		chapterMap[parent].pageCount++
-	}
-
-	// If all files are in root or only one chapter folder, no chapters
-	if len(chapterMap) <= 1 {
-		return nil
 	}
 
 	// Build chapter list sorted by first page

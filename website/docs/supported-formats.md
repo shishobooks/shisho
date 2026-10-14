@@ -7,7 +7,7 @@ Shisho has native support for six main-file formats. See [Reading and Playback](
 | Format | Import | Metadata Extraction | In-App Reader or Player | Generated Download |
 |--------|--------|---------------------|-------------------------|--------------------|
 | **EPUB** | Yes | Package metadata, navigation, and embedded cover data | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | EPUB with supported current metadata and [edited chapters](./metadata.md#chapters) applied |
-| **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied |
+| **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied and chapters written as [folders](#cbz-downloads) |
 | **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
 | **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata, table of contents, and cover; see [MOBI and AZW3](#mobi-and-azw3) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | MOBI with supported current metadata, cover, and [edited chapters](./metadata.md#chapters) applied |
@@ -59,6 +59,10 @@ Native CBZ parsing recognizes these page image formats:
 - GIF
 
 Pages are read in file name order, folder names included, with numbers compared by value: `page2.jpg` comes before `page10.jpg`, and `Chapter 2/` before `Chapter 10/`. macOS metadata such as `._page1.jpg` files and anything under `__MACOSX/` is not a page. The reader, the `ComicInfo.xml` cover index, and KePub downloads count pages in this order, and so do the cover page and chapter start pages that a scan records. A comic scanned by an earlier version can keep cover page and chapter numbers counted the old way; see [Troubleshooting](./troubleshooting.md#a-comics-cover-page-or-chapters-point-at-the-wrong-page).
+
+## CBZ Downloads
+
+A downloaded CBZ holds the file's chapters as folders: each chapter's pages go in a folder named after the chapter, and pages before the first chapter stay at the top level. KOReader lists these folders as the comic's chapters. Scanning the download into Shisho finds the same chapters when there are two or more, since a scan reads chapters only from two or more folders. Only top-level chapters are written, and when several chapters start on the same page, only the first is kept. When the chapter names would not sort in reading order, such as `Prologue` before `Chapter 1`, every folder is numbered in reading order, as in `1. Prologue` and `2. Chapter 1`, and a scan leaves the numbers out of the chapter names. A scan also leaves out numbers you added yourself when every chapter folder is numbered `1.`, `2.`, `3.` in order. Folders named only by a number, such as `1` and `2`, keep their names. Rewritten pages are named after their page numbers. A comic with no chapters, or whose folders already match its chapters, keeps its own folder and page names.
 
 ## PDF Bookmarks
 

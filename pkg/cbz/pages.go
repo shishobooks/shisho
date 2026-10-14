@@ -44,6 +44,12 @@ func IsPageImage(name string) bool {
 	if slices.Contains(strings.Split(name, "/"), "__MACOSX") {
 		return false
 	}
+	return HasImageExt(name)
+}
+
+// HasImageExt reports whether an archive entry name has a page image's
+// extension, macOS metadata files included.
+func HasImageExt(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
 		return true
