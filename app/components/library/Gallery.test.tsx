@@ -1,12 +1,12 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, waitFor } from "@testing-library/react";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  RouterProvider,
+} from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import Gallery from "./Gallery";
-
-vi.mock("@/components/library/PaginationFooter", () => ({
-  default: () => null,
-}));
 
 const query = {
   data: undefined as unknown,
@@ -34,6 +34,32 @@ const renderGallery = (
   );
 
 describe("Gallery", () => {
+  it("replaces a page past the end with the last page", async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <Gallery
+              isLoading={false}
+              itemLabel="books"
+              items={[]}
+              query={{ ...query, data: { items: [], total: 45 } }}
+              renderItem={(item: string) => <div key={item}>{item}</div>}
+              total={45}
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/?page=9"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    // 45 items at 20 per page is three pages.
+    await waitFor(() => expect(router.state.location.search).toBe("?page=3"));
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
   it("shows a spinner, not an error, while its query waits on its gate", () => {
     renderGallery({ isEnabled: false });
 

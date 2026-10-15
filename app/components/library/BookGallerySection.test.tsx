@@ -1,7 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  RouterProvider,
+  useLocation,
+} from "react-router-dom";
 import { toast } from "sonner";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -184,6 +189,33 @@ describe("BookGallerySection", () => {
     );
     // SizeButton renders as a button with "Size" text
     expect(screen.getByRole("button", { name: /Size/ })).toBeInTheDocument();
+  });
+
+  it("replaces a page past the end with the last page", async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <BookGallerySection
+              libraryId="1"
+              query={makeQueryResult([], 100)}
+              title="Books"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/?page=9"] },
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    // 100 books at size M (24 per page) is five pages.
+    await waitFor(() => expect(router.state.location.search).toBe("?page=5"));
+    expect(router.state.historyAction).toBe("REPLACE");
   });
 
   it("calls onPageChange with page 1 when size changes from the first page", async () => {
