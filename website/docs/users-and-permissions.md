@@ -80,7 +80,7 @@ Shisho hides pages and links that a role cannot read, rather than showing an err
 - **Jobs Read.** **Settings > Jobs** is unavailable, and so are the library rescan button and **Recompute now** on **Settings > Review Criteria**, which also need Jobs Write.
 - **Config Read.** The server, review criteria, sharing, plugin, cache, and log settings pages are unavailable. With Config Read but not Config Write, the review criteria are shown without a **Save** button.
 
-The **Global Settings** button opens the first settings page the role can view, and is hidden when there is none. The home page opens the first library the user can access when the role has Books Read. With no libraries yet, it opens **Settings > Libraries** for a role with Libraries Read and **Lists** otherwise.
+The **Global Settings** button opens the first settings page the role can view, and is hidden when there is none. When the role has Books Read, the home page opens the user's default library, which each user can choose under **Library** in **User Settings** once they can access two or more libraries. Without a default, or after losing access to it, the home page opens the first library the user can access. With no libraries yet, it opens **Settings > Libraries** for a role with Libraries Read and **Lists** otherwise.
 
 ## Custom Roles
 

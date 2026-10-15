@@ -187,6 +187,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusNotFound, code: "not_found", message: "Child publisher not found.",
 		},
 		{
+			name:   "user settings with a default library that does not exist",
+			method: http.MethodPut, path: "/api/settings/user",
+			body:   `{"default_library_id":999999}`,
+			status: http.StatusNotFound, code: "not_found", message: "Library not found.",
+		},
+		{
 			name:   "publisher update with a parent that does not exist",
 			method: http.MethodPatch, path: fmt.Sprintf("/api/publishers/%d", child.ID),
 			body:   `{"parent_id":999999}`,

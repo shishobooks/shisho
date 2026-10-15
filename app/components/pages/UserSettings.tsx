@@ -2,11 +2,20 @@ import { Check, KeyRound, Moon, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
+import QueryError from "@/components/library/QueryError";
 import { SizeSelector } from "@/components/library/SizeSelector";
 import TopNav from "@/components/library/TopNav";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
+import { useNavLibraries } from "@/hooks/queries/libraries";
 import {
   useUpdateUserSettings,
   useUserSettings,
@@ -49,6 +58,10 @@ const ThemeOption = ({
   </Button>
 );
 
+// The Select value standing for "no default library", since Radix Select
+// reserves the empty string.
+const FIRST_LIBRARY = "first";
+
 const UserSettings = () => {
   usePageTitle("User Settings");
 
@@ -58,6 +71,26 @@ const UserSettings = () => {
   const updateUserSettings = useUpdateUserSettings();
   const gallerySize: GallerySize =
     userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
+
+  const librariesQuery = useNavLibraries();
+  const libraries = librariesQuery.data ?? [];
+  const librariesFailed = Boolean(librariesQuery.error) && !librariesQuery.data;
+  const defaultLibraryId = userSettingsQuery.data?.default_library_id;
+  const defaultLibraryValue = libraries.some((l) => l.id === defaultLibraryId)
+    ? String(defaultLibraryId)
+    : FIRST_LIBRARY;
+
+  const handleDefaultLibraryChange = (value: string) => {
+    updateUserSettings.mutate(
+      {
+        default_library_id: value === FIRST_LIBRARY ? null : Number(value),
+      },
+      {
+        onError: (error) =>
+          toastRequestError(error, "Failed to update default library"),
+      },
+    );
+  };
 
   const handleGallerySizeChange = (next: GallerySize) => {
     updateUserSettings.mutate(
@@ -127,6 +160,53 @@ const UserSettings = () => {
               </div>
             </div>
           </div>
+
+          {/* Library Settings: only a choice with two or more libraries */}
+          {librariesFailed && (
+            <div className="border border-border rounded-md p-4 md:p-6">
+              <h2 className="text-lg font-semibold mb-4">Library</h2>
+              <QueryError
+                fallback="Failed to load libraries"
+                query={librariesQuery}
+              />
+            </div>
+          )}
+          {libraries.length > 1 && (
+            <div className="border border-border rounded-md p-4 md:p-6">
+              <h2 className="text-lg font-semibold mb-4">Library</h2>
+              <div className="flex flex-col gap-2">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="default-library-setting"
+                >
+                  Default library
+                </label>
+                <Select
+                  disabled={!userSettingsQuery.data}
+                  onValueChange={handleDefaultLibraryChange}
+                  value={defaultLibraryValue}
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-72"
+                    id="default-library-setting"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={FIRST_LIBRARY}>First library</SelectItem>
+                    {libraries.map((library) => (
+                      <SelectItem key={library.id} value={String(library.id)}>
+                        {library.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The library that opens when you go to the home page.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Reader Settings */}
           <div className="border border-border rounded-md p-4 md:p-6">

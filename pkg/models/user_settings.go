@@ -65,6 +65,9 @@ type UserSettings struct {
 	GallerySize        string    `bun:",notnull,default:'m'" json:"gallery_size" tstype:"GallerySize"`
 	ViewerHideChrome   bool      `bun:",notnull,default:false" json:"viewer_hide_chrome"`
 	PlaybackSpeed      float64   `bun:"viewer_playback_speed,notnull,default:1.0" json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
+	// DefaultLibraryID is the library `/` opens. Nil opens the first library
+	// the user can access.
+	DefaultLibraryID *int `json:"default_library_id" tstype:"number | null"`
 }
 
 // DefaultUserSettings returns a UserSettings with default values.
