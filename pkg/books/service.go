@@ -212,6 +212,20 @@ func (svc *Service) CreateBook(ctx context.Context, book *models.Book) error {
 	return nil
 }
 
+// orderBookGenresByName sorts a book's genres alphabetically. book_genres has
+// no sort_order, so without this the order is whatever SQLite returns.
+func orderBookGenresByName(sq *bun.SelectQuery) *bun.SelectQuery {
+	return sq.Join("JOIN genres AS bg_genre ON bg_genre.id = bg.genre_id").
+		OrderExpr("bg_genre.name COLLATE NOCASE ASC")
+}
+
+// orderBookTagsByName sorts a book's tags alphabetically. book_tags has no
+// sort_order, so without this the order is whatever SQLite returns.
+func orderBookTagsByName(sq *bun.SelectQuery) *bun.SelectQuery {
+	return sq.Join("JOIN tags AS bt_tag ON bt_tag.id = bt.tag_id").
+		OrderExpr("bt_tag.name COLLATE NOCASE ASC")
+}
+
 func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) (*models.Book, error) {
 	book := &models.Book{}
 
@@ -227,9 +241,9 @@ func (svc *Service) RetrieveBook(ctx context.Context, opts RetrieveBookOptions) 
 			return sq.Order("bs.sort_order ASC")
 		}).
 		Relation("BookSeries.Series").
-		Relation("BookGenres").
+		Relation("BookGenres", orderBookGenresByName).
 		Relation("BookGenres.Genre").
-		Relation("BookTags").
+		Relation("BookTags", orderBookTagsByName).
 		Relation("BookTags.Tag").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
@@ -285,9 +299,9 @@ func (svc *Service) RetrieveBookByFilePath(ctx context.Context, filepath string,
 			return sq.Order("bs.sort_order ASC")
 		}).
 		Relation("BookSeries.Series").
-		Relation("BookGenres").
+		Relation("BookGenres", orderBookGenresByName).
 		Relation("BookGenres.Genre").
-		Relation("BookTags").
+		Relation("BookTags", orderBookTagsByName).
 		Relation("BookTags.Tag").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.filepath ASC")
@@ -346,9 +360,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 			return sq.Order("bs.sort_order ASC")
 		}).
 		Relation("BookSeries.Series").
-		Relation("BookGenres").
+		Relation("BookGenres", orderBookGenresByName).
 		Relation("BookGenres.Genre").
-		Relation("BookTags").
+		Relation("BookTags", orderBookTagsByName).
 		Relation("BookTags.Tag").
 		Relation("Files", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.Order("f.file_type ASC")
