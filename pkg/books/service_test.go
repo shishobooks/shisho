@@ -297,6 +297,70 @@ func TestRetrieveBookByFilePath_LoadsNestedChapters(t *testing.T) {
 	assert.Equal(t, parentChapter.ID, *loadedParent.Children[1].ParentID, "Second child has correct parent_id")
 }
 
+func TestBookLoaders_OrderGenresAndTagsByName(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	_, book := setupTestLibraryAndBook(t, db)
+	file := &models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      "/test/book.epub",
+		FilesizeBytes: 1000,
+	}
+	_, err := db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+
+	// Link in neither alphabetical nor case-sensitive order, so only a
+	// case-insensitive name sort produces the expected result.
+	names := []string{"Zombies", "action", "Mystery"}
+	want := []string{"action", "Mystery", "Zombies"}
+	for _, name := range names {
+		genre := &models.Genre{LibraryID: book.LibraryID, Name: name}
+		_, err := db.NewInsert().Model(genre).Exec(ctx)
+		require.NoError(t, err)
+		_, err = db.NewInsert().Model(&models.BookGenre{BookID: book.ID, GenreID: genre.ID}).Exec(ctx)
+		require.NoError(t, err)
+
+		tag := &models.Tag{LibraryID: book.LibraryID, Name: name}
+		_, err = db.NewInsert().Model(tag).Exec(ctx)
+		require.NoError(t, err)
+		_, err = db.NewInsert().Model(&models.BookTag{BookID: book.ID, TagID: tag.ID}).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	assertOrdered := func(t *testing.T, b *models.Book) {
+		t.Helper()
+		var genres, tags []string
+		for _, bg := range b.BookGenres {
+			genres = append(genres, bg.Genre.Name)
+		}
+		for _, bt := range b.BookTags {
+			tags = append(tags, bt.Tag.Name)
+		}
+		assert.Equal(t, want, genres)
+		assert.Equal(t, want, tags)
+	}
+
+	svc := NewService(db, appsettings.NewService(db))
+
+	retrieved, err := svc.RetrieveBook(ctx, RetrieveBookOptions{ID: &book.ID})
+	require.NoError(t, err)
+	assertOrdered(t, retrieved)
+
+	byPath, err := svc.RetrieveBookByFilePath(ctx, file.Filepath, book.LibraryID)
+	require.NoError(t, err)
+	assertOrdered(t, byPath)
+
+	listed, err := svc.ListBooks(ctx, ListBooksOptions{LibraryID: &book.LibraryID})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assertOrdered(t, listed[0])
+}
+
 // ptrInt64 is a helper to create a pointer to an int64.
 func ptrInt64(v int64) *int64 {
 	return &v
