@@ -17,25 +17,25 @@ const PublishersList = () => {
 
         const badges = [
           {
-            label: fileCount === 1 ? "file" : "files",
             count: fileCount,
+            singular: "file",
+            plural: "files",
           },
         ];
 
         if (descendantFileCount > 0) {
           badges.push({
-            label: descendantFileCount === 1 ? "sub-file" : "sub-files",
             count: descendantFileCount,
+            singular: "sub-file",
+            plural: "sub-files",
           });
         }
 
         if (descendantPublisherCount > 0) {
           badges.push({
-            label:
-              descendantPublisherCount === 1
-                ? "sub-publisher"
-                : "sub-publishers",
             count: descendantPublisherCount,
+            singular: "sub-publisher",
+            plural: "sub-publishers",
           });
         }
 

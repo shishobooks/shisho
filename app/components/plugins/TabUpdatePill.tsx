@@ -5,7 +5,7 @@ export const TabUpdatePill = ({ count }: { count: number }) => {
   const label =
     count === 1
       ? "1 plugin has an update available"
-      : `${count} plugins have an update available`;
+      : `${count.toLocaleString()} plugins have an update available`;
   return (
     <Badge
       aria-label={label}

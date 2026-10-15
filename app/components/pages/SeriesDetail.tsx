@@ -251,12 +251,11 @@ const SeriesDetail = () => {
           />
 
           <MetadataMergeDialog
-            countLabel={{ singular: "book", plural: "books" }}
             entities={
               seriesListQuery.data?.items.map((s) => ({
                 id: s.id,
                 name: s.name,
-                count: s.book_count ?? 0,
+                countText: formatCount(s.book_count ?? 0, "book"),
               })) ?? []
             }
             entityType="series"

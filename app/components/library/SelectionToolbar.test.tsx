@@ -22,7 +22,10 @@ const selection = vi.hoisted(() => ({ ids: [1, 2, 3] }));
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
+beforeEach(() => {
+  setAuth({ permissions: ["books:read", "books:write"] });
+  selection.ids = [1, 2, 3];
+});
 
 vi.mock("@/hooks/useBulkSelection", () => ({
   useBulkSelection: () => ({
@@ -172,17 +175,13 @@ describe("SelectionToolbar bulk review actions in the More popover", () => {
     const success = vi.spyOn(toast, "success");
     selection.ids = Array.from({ length: 1200 }, (_, i) => i + 1);
     mockBulkSetReviewMutateAsync.mockResolvedValueOnce(undefined);
-    try {
-      render(wrap(<SelectionToolbar />));
+    render(wrap(<SelectionToolbar />));
 
-      await user.click(screen.getByRole("button", { name: /more/i }));
-      await user.click(screen.getByRole("button", { name: /mark reviewed/i }));
+    await user.click(screen.getByRole("button", { name: /more/i }));
+    await user.click(screen.getByRole("button", { name: /mark reviewed/i }));
 
-      expect(success).toHaveBeenCalledWith("Marked 1,200 books as reviewed");
-    } finally {
-      selection.ids = [1, 2, 3];
-      success.mockRestore();
-    }
+    expect(success).toHaveBeenCalledWith("Marked 1,200 books as reviewed");
+    success.mockRestore();
   });
 
   it("calls useBulkSetReview with reviewed override and exits selection mode", async () => {

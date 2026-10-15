@@ -272,7 +272,7 @@ const PagePicker = ({
               </div>
             )}
             <img
-              alt={`Page ${focusedPage + 1}`}
+              alt={`Page ${(focusedPage + 1).toLocaleString()}`}
               className="max-h-full max-w-full object-contain rounded shadow-2xl"
               onLoad={() => {
                 setLoadedPage(focusedPage);
@@ -331,7 +331,7 @@ const PagePicker = ({
                     {previewLoaded &&
                     Math.abs(page - focusedPage) <= thumbnailLoadRadius ? (
                       <img
-                        alt={`Page ${page + 1}`}
+                        alt={`Page ${(page + 1).toLocaleString()}`}
                         className="w-full h-full object-contain"
                         loading="lazy"
                         src={filePageUrl(file, page)}
@@ -347,7 +347,7 @@ const PagePicker = ({
                           : "bg-black/70 text-white",
                       )}
                     >
-                      {page + 1}
+                      {(page + 1).toLocaleString()}
                     </div>
                   </Button>
                 ))}
@@ -395,7 +395,7 @@ const PagePicker = ({
                 Cancel
               </Button>
               <Button onClick={handleConfirmSelection}>
-                Select Page {focusedPage + 1}
+                Select Page {(focusedPage + 1).toLocaleString()}
               </Button>
             </div>
           </div>

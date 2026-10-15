@@ -31,20 +31,17 @@ import {
 } from "@/components/ui/tooltip";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import { formatCount } from "@/utils/format";
 
 import type { EntityType } from "./MetadataEditDialog";
 
-export interface CountLabel {
-  singular: string;
-  plural: string;
-}
-
-interface EntityOption {
+export interface EntityOption {
   id: number;
   name: string;
-  /** What `countLabel` names: books for most entities, files for publishers. */
-  count: number;
+  /**
+   * What merging this entity moves, formatted by the caller, who knows what
+   * the count means: "12 books", "40 files", "3 books authored".
+   */
+  countText: string;
 }
 
 export interface SetChildConfig {
@@ -65,7 +62,6 @@ interface MetadataMergeDialogProps {
   onMerge: (sourceId: number) => Promise<unknown>;
   isPending: boolean;
   entities: EntityOption[];
-  countLabel: CountLabel;
   isLoadingEntities: boolean;
   onSearch: (search: string) => void;
   /** When provided, shows a "Set as child" option alongside Merge */
@@ -97,13 +93,10 @@ export function MetadataMergeDialog({
   onMerge,
   isPending,
   entities,
-  countLabel,
   isLoadingEntities,
   onSearch,
   setChildConfig,
 }: MetadataMergeDialogProps) {
-  const formatEntityCount = (count: number) =>
-    formatCount(count, countLabel.singular, countLabel.plural);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -190,7 +183,7 @@ export function MetadataMergeDialog({
               >
                 <span className="truncate">
                   {selectedEntity
-                    ? `${selectedEntity.name} (${formatEntityCount(selectedEntity.count)})`
+                    ? `${selectedEntity.name} (${selectedEntity.countText})`
                     : `Select ${entityType}...`}
                 </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -246,7 +239,7 @@ export function MetadataMergeDialog({
                             {entity.name}
                           </span>
                           <span className="text-muted-foreground text-sm shrink-0 ml-2">
-                            {formatEntityCount(entity.count)}
+                            {entity.countText}
                           </span>
                         </CommandItem>
                       ))}
@@ -259,10 +252,9 @@ export function MetadataMergeDialog({
 
           {selectedEntity && !setChildConfig && (
             <p className="mt-4 text-sm text-muted-foreground">
-              Move all {formatEntityCount(selectedEntity.count)} from "
-              {selectedEntity.name}" to "{targetName}", add "
-              {selectedEntity.name}" as an alias, and delete "
-              {selectedEntity.name}".
+              Move all {selectedEntity.countText} from "{selectedEntity.name}"
+              to "{targetName}", add "{selectedEntity.name}" as an alias, and
+              delete "{selectedEntity.name}".
             </p>
           )}
 

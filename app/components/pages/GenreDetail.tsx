@@ -17,6 +17,7 @@ import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSortParam } from "@/hooks/useSortParam";
 import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
+import { formatCount } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const GenreDetail = () => {
@@ -120,7 +121,7 @@ const GenreDetail = () => {
           genresListQuery.data?.items.map((g) => ({
             id: g.id,
             name: g.name,
-            count: g.book_count ?? 0,
+            countText: formatCount(g.book_count ?? 0, "book"),
           })) ?? [],
         isLoadingEntities: genresListQuery.isLoading,
         isPending: mergeGenreMutation.isPending,

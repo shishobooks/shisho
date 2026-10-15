@@ -91,6 +91,15 @@ const uiConventions = [
     message:
       'Use Button from @/components/ui/button, not a raw <button>: size="icon", "icon-sm", or "icon-xs" for icon-only buttons (with an aria-label), variant="link" for inline text, variant="unstyled" for caller-styled rows, cards, and tiles (with aria-pressed inside a role="group" for segmented controls and single-select rows), BadgeRemoveButton for a Badge\'s X, or the ui Checkbox or RadioGroup for form toggles.',
   },
+  // `n === 1 ? "" : "s"` and `n > 1 ? "books" : "book"`: a hand-built plural,
+  // which also leaves the count without thousands separators. Only string
+  // branches that look like a plural (one empty or ending in "s") count, so
+  // `n === 1 ? "first" : "other"` passes.
+  ...["test.right.value=1", "test.left.value=1"].map((one) => ({
+    selector: `ConditionalExpression[test.type="BinaryExpression"][${one}]:matches([consequent.value=""], [alternate.value=""], [consequent.value=/s$/], [alternate.value=/s$/])`,
+    message:
+      'Write a count with formatCount(count, "book") from @/utils/format, not a hand-built plural (see app/AGENTS.md).',
+  })),
   {
     selector:
       'JSXOpeningElement[name.name="Tabs"] > JSXAttribute[name.name="defaultValue"]',

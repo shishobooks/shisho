@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useFilesystemBrowse } from "@/hooks/queries/filesystem";
 import type { Entry } from "@/types";
+import { formatCount } from "@/utils/format";
 
 interface DirectoryPickerDialogProps {
   open: boolean;
@@ -402,7 +403,7 @@ const DirectoryPickerDialog = ({
           >
             Select{" "}
             {selectedPaths.size > 0
-              ? `${selectedPaths.size} folder${selectedPaths.size > 1 ? "s" : ""}`
+              ? formatCount(selectedPaths.size, "folder")
               : "folders"}
           </Button>
         </DialogFooter>

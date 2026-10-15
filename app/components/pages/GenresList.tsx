@@ -16,8 +16,9 @@ const GenresList = () => {
           aliases: genre.aliases,
           badges: [
             {
-              label: bookCount === 1 ? "book" : "books",
               count: bookCount,
+              singular: "book",
+              plural: "books",
             },
           ],
         };

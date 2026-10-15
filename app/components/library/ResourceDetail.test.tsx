@@ -241,8 +241,8 @@ describe("ResourceDetail", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onMerge = vi.fn().mockResolvedValue(undefined);
     const entities = [
-      { id: 10, name: "Fantasy", count: 5 },
-      { id: 20, name: "Horror", count: 3 },
+      { id: 10, name: "Fantasy", countText: "5 books" },
+      { id: 20, name: "Horror", countText: "3 books" },
     ];
     render(
       wrap(
@@ -286,7 +286,7 @@ describe("ResourceDetail", () => {
         <ResourceDetail
           {...defaultProps}
           mergeConfig={{
-            entities: [{ id: 10, name: "Fantasy", count: 5 }],
+            entities: [{ id: 10, name: "Fantasy", countText: "5 books" }],
             isLoadingEntities: false,
             isPending: false,
             onMerge,

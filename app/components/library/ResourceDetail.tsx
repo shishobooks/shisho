@@ -11,7 +11,7 @@ import {
 } from "@/components/library/MetadataEditDialog";
 import {
   MetadataMergeDialog,
-  type CountLabel,
+  type EntityOption,
   type SetChildConfig,
 } from "@/components/library/MetadataMergeDialog";
 import QueryError, {
@@ -43,8 +43,13 @@ interface EditConfig {
   sortNameSource?: DataSource;
 }
 
+interface CountLabel {
+  singular: string;
+  plural: string;
+}
+
 interface MergeConfig {
-  entities: { id: number; name: string; count: number }[];
+  entities: EntityOption[];
   isLoadingEntities: boolean;
   isPending: boolean;
   onMerge: (sourceId: number) => Promise<unknown>;
@@ -240,7 +245,6 @@ export function ResourceDetail({
 
       {canMutate && (
         <MetadataMergeDialog
-          countLabel={countLabel}
           entities={mergeConfig.entities}
           entityType={entityType}
           isLoadingEntities={mergeConfig.isLoadingEntities}

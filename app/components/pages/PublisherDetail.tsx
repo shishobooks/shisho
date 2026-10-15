@@ -218,7 +218,7 @@ const PublisherDetail = () => {
             publishersListQuery.data?.items.map((p) => ({
               id: p.id,
               name: p.name,
-              count: p.file_count ?? 0,
+              countText: formatCount(p.file_count ?? 0, "file"),
             })) ?? [],
           isLoadingEntities: publishersListQuery.isLoading,
           isPending: mergePublisherMutation.isPending,

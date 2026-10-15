@@ -764,7 +764,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         {/* Position display based on file type (1-indexed for user display) */}
         {isPageBased && chapter.start_page != null && (
           <span className="text-muted-foreground text-sm">
-            Page {chapter.start_page + 1}
+            Page {(chapter.start_page + 1).toLocaleString()}
           </span>
         )}
         {/* M4B: Play button and timestamp grouped together */}

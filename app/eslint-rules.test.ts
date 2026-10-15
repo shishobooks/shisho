@@ -378,13 +378,20 @@ export const Fixture = ({ n }: { n: number }) => {
   const a = error.status === 404;
   const b = 404 !== error.status;
   const t = \`\${n} minutes ago\`;
+  const files = \`\${n} file\${n === 1 ? "" : "s"}\`;
+  const books = n > 1 ? "books" : "book";
+  const pages = 1 === n ? "page" : "pages";
+  const rank = n === 1 ? "first" : "other";
+  const size = n === 1 ? 1 : 2;
   const forbidden = error.status === 403;
   return (
     <div className={\`p-2 \${c}\`}>
       <span>{n} days ago</span>
       <Tabs defaultValue="x" />
       <Tabs onValueChange={() => undefined} value="x" />
-      <span className={cn("p-2", c)}>{String(a && b && forbidden) + t}</span>
+      <span className={cn("p-2", c)}>
+        {String(a && b && forbidden) + t + files + books + pages + rank + size}
+      </span>
       <span>{String(clipboard)} Chicago</span>
       <button type="button">x</button>
       <Button type="button">x</Button>
@@ -416,7 +423,8 @@ describe("ESLint UI convention rules", () => {
     expect(count("cn()")).toBe(1);
     expect(count("Deep-link tabs")).toBe(1);
     expect(count("raw <button>")).toBe(1);
-    expect(messages).toHaveLength(9);
+    expect(count("formatCount")).toBe(3);
+    expect(messages).toHaveLength(12);
   });
 
   it("allows them in tests", async () => {

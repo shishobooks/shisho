@@ -16,8 +16,9 @@ const TagsList = () => {
           aliases: tag.aliases,
           badges: [
             {
-              label: bookCount === 1 ? "book" : "books",
               count: bookCount,
+              singular: "book",
+              plural: "books",
             },
           ],
         };

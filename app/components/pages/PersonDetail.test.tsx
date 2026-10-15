@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
 
@@ -19,6 +20,13 @@ const counts = vi.hoisted(() => ({
   // What the list queries return, which can disagree with the stored counts.
   authoredList: { total: 0, failed: false },
   narratedList: { total: 0, failed: false },
+  // The people the merge dialog offers.
+  candidates: [] as Array<{
+    id: number;
+    name: string;
+    authored_book_count: number;
+    narrated_file_count: number;
+  }>,
 }));
 
 const listQuery = (list: { total: number; failed: boolean }) =>
@@ -54,7 +62,9 @@ vi.mock("@/hooks/queries/people", () => ({
     refetch: vi.fn(),
   }),
   usePersonNarratedFiles: () => listQuery(counts.narratedList),
-  usePeopleList: () => ({ data: { items: [], total: 0 } }),
+  usePeopleList: () => ({
+    data: { items: counts.candidates, total: counts.candidates.length },
+  }),
   useUpdatePerson: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useMergePerson: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeletePerson: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -152,5 +162,33 @@ describe("PersonDetail sections", () => {
     renderPerson(2, 0, { narrated: { total: 0, failed: true } });
     expect(screen.getByText("Files Narrated")).toBeInTheDocument();
     expect(screen.queryByText(NEITHER)).not.toBeInTheDocument();
+  });
+});
+
+describe("PersonDetail merge", () => {
+  afterEach(() => {
+    counts.candidates = [];
+    setAuth({ permissions: ["books:read", "people:read"] });
+  });
+
+  it("offers a narrator by the files a merge would move", async () => {
+    setAuth({ permissions: ["books:read", "people:read", "people:write"] });
+    counts.candidates = [
+      {
+        id: 9,
+        name: "Ray Porter",
+        authored_book_count: 0,
+        narrated_file_count: 40,
+      },
+    ];
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPerson(2, 3);
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    await user.click(screen.getByRole("combobox", { name: "Person to merge" }));
+
+    expect(
+      screen.getByRole("option", { name: /Ray Porter/ }),
+    ).toHaveTextContent("40 files narrated");
   });
 });

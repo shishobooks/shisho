@@ -25,7 +25,7 @@ import { useSortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
 import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
-import { formatCount } from "@/utils/format";
+import { formatCount, formatPersonCredits } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const PersonDetail = () => {
@@ -177,7 +177,10 @@ const PersonDetail = () => {
           peopleListQuery.data?.items.map((p) => ({
             id: p.id,
             name: p.name,
-            count: p.authored_book_count,
+            countText: formatPersonCredits(
+              p.authored_book_count,
+              p.narrated_file_count,
+            ),
           })) ?? [],
         isLoadingEntities: peopleListQuery.isLoading,
         isPending: mergePersonMutation.isPending,

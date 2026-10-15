@@ -13,27 +13,24 @@ const PersonList = () => {
         const badges = [];
         if (person.authored_book_count > 0) {
           badges.push({
-            label:
-              person.authored_book_count === 1
-                ? "book authored"
-                : "books authored",
             count: person.authored_book_count,
+            singular: "book authored",
+            plural: "books authored",
           });
         }
         if (person.narrated_file_count > 0) {
           badges.push({
-            label:
-              person.narrated_file_count === 1
-                ? "file narrated"
-                : "files narrated",
             count: person.narrated_file_count,
+            singular: "file narrated",
+            plural: "files narrated",
             variant: "outline" as const,
           });
         }
         if (badges.length === 0) {
           badges.push({
-            label: "works",
             count: 0,
+            singular: "work",
+            plural: "works",
             variant: "outline" as const,
           });
         }

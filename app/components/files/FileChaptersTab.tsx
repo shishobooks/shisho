@@ -939,7 +939,8 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
                 />
                 <div className="flex-1 min-w-0">
                   <span className="text-amber-600 dark:text-amber-400 font-medium">
-                    Pages 1-{firstChapterStartPage} not in any chapter
+                    Pages 1-{firstChapterStartPage.toLocaleString()} not in any
+                    chapter
                   </span>
                   {canEdit && (
                     <p className="text-muted-foreground text-sm mt-0.5">

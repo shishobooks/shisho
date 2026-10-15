@@ -13,11 +13,12 @@ import { Badge } from "@/components/ui/badge";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { ResourceListState } from "@/hooks/useResourceListState";
 import type { ResourceListResponse } from "@/types";
-import { formatShowingRange } from "@/utils/format";
+import { formatCount, formatShowingRange } from "@/utils/format";
 
 interface BadgeConfig {
-  label: string;
   count: number;
+  singular: string;
+  plural: string;
   variant?: "default" | "secondary" | "outline" | "destructive";
 }
 
@@ -120,8 +121,8 @@ const ResourceList = <T extends { id: number }, F extends string>({
         </div>
         <div className="flex gap-2 shrink-0">
           {config.badges.map((badge) => (
-            <Badge key={badge.label} variant={badge.variant ?? "secondary"}>
-              {badge.count.toLocaleString()} {badge.label}
+            <Badge key={badge.singular} variant={badge.variant ?? "secondary"}>
+              {formatCount(badge.count, badge.singular, badge.plural)}
             </Badge>
           ))}
         </div>

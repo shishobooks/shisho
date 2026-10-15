@@ -1974,7 +1974,7 @@ export function IdentifyReviewForm({
                         <span className="w-[calc(6rem+4px)] text-center">
                           {isPageBasedCoverChoice
                             ? currentCoverPage !== null
-                              ? `Page ${currentCoverPage + 1}`
+                              ? `Page ${(currentCoverPage + 1).toLocaleString()}`
                               : " "
                             : currentCoverDims
                               ? `${currentCoverDims.w} × ${currentCoverDims.h}`

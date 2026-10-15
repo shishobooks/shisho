@@ -8,6 +8,7 @@ import {
   formatElapsed,
   formatFileSize,
   formatPageCount,
+  formatPersonCredits,
   formatPlayerTime,
   formatShowingRange,
 } from "./format";
@@ -176,5 +177,25 @@ describe("formatCount", () => {
 
   it("takes an irregular plural", () => {
     expect(formatCount(2, "person", "people")).toBe("2 people");
+  });
+});
+
+describe("formatPersonCredits", () => {
+  it("names both credits", () => {
+    expect(formatPersonCredits(3, 1200)).toBe(
+      "3 books authored and 1,200 files narrated",
+    );
+  });
+
+  it("names only the narrated files for a narrator", () => {
+    expect(formatPersonCredits(0, 40)).toBe("40 files narrated");
+  });
+
+  it("names only the authored books for an author", () => {
+    expect(formatPersonCredits(1, 0)).toBe("1 book authored");
+  });
+
+  it("says there is nothing for a person with no credits", () => {
+    expect(formatPersonCredits(0, 0)).toBe("0 books authored");
   });
 });

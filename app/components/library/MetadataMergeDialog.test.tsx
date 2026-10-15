@@ -11,11 +11,9 @@ import { MetadataMergeDialog } from "./MetadataMergeDialog";
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-const BOOKS = { singular: "book", plural: "books" };
-
 const entities = [
-  { id: 10, name: "Dutton", count: 5 },
-  { id: 20, name: "Riverhead", count: 3 },
+  { id: 10, name: "Dutton", countText: "5 books" },
+  { id: 20, name: "Riverhead", countText: "3 books" },
 ];
 
 describe("MetadataMergeDialog", () => {
@@ -24,7 +22,6 @@ describe("MetadataMergeDialog", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="genre"
         isLoadingEntities={false}
@@ -53,7 +50,6 @@ describe("MetadataMergeDialog", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="genre"
         isLoadingEntities={false}
@@ -92,7 +88,6 @@ describe("MetadataMergeDialog", () => {
 
     const { rerender } = render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         {...props}
         setChildConfig={{
           disabledIds: [],
@@ -110,7 +105,6 @@ describe("MetadataMergeDialog", () => {
     // The ancestor list refetches and now includes the picked source.
     rerender(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         {...props}
         setChildConfig={{
           disabledIds: [10],
@@ -129,7 +123,6 @@ describe("MetadataMergeDialog", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="publisher"
         isLoadingEntities={false}
@@ -165,7 +158,6 @@ describe("MetadataMergeDialog", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="publisher"
         isLoadingEntities={false}
@@ -206,7 +198,6 @@ describe("MetadataMergeDialog", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="publisher"
         isLoadingEntities={false}
@@ -248,7 +239,6 @@ describe("MetadataMergeDialog failures", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="genre"
         isLoadingEntities={false}
@@ -294,7 +284,6 @@ describe("MetadataMergeDialog failures", () => {
 
     render(
       <MetadataMergeDialog
-        countLabel={BOOKS}
         entities={entities}
         entityType="publisher"
         isLoadingEntities={false}
@@ -325,48 +314,31 @@ describe("MetadataMergeDialog failures", () => {
     expect(screen.getByRole("combobox")).toHaveTextContent("Dutton");
   });
 
-  it.each([
-    {
-      entityType: "genre" as const,
-      countLabel: { singular: "book", plural: "books" },
-      noun: "books",
-    },
-    {
-      entityType: "publisher" as const,
-      countLabel: { singular: "file", plural: "files" },
-      noun: "files",
-    },
-  ])(
-    "labels a $entityType's count as $noun everywhere it shows",
-    async ({ entityType, countLabel, noun }) => {
-      const user = createUser();
-      render(
-        <MetadataMergeDialog
-          countLabel={countLabel}
-          entities={[{ id: 10, name: "Dutton", count: 1200 }]}
-          entityType={entityType}
-          isLoadingEntities={false}
-          isPending={false}
-          onMerge={vi.fn()}
-          onOpenChange={vi.fn()}
-          onSearch={vi.fn()}
-          open={true}
-          targetId={1}
-          targetName="Riverhead"
-        />,
-      );
+  it("shows each source's count text in the list, on the picker, and in the merge sentence", async () => {
+    const user = createUser();
+    render(
+      <MetadataMergeDialog
+        entities={[{ id: 10, name: "Dutton", countText: "1,200 books" }]}
+        entityType="genre"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={vi.fn()}
+        open={true}
+        targetId={1}
+        targetName="Fantasy"
+      />,
+    );
 
-      const trigger = screen.getByRole("combobox", { name: /to merge/ });
-      await user.click(trigger);
-      expect(screen.getByRole("option", { name: /Dutton/ })).toHaveTextContent(
-        `1,200 ${noun}`,
-      );
-      await user.click(screen.getByRole("option", { name: /Dutton/ }));
+    const trigger = screen.getByRole("combobox", { name: "Genre to merge" });
+    await user.click(trigger);
+    expect(screen.getByRole("option", { name: /Dutton/ })).toHaveTextContent(
+      "1,200 books",
+    );
+    await user.click(screen.getByRole("option", { name: /Dutton/ }));
 
-      expect(trigger).toHaveTextContent(`Dutton (1,200 ${noun})`);
-      expect(
-        screen.getByText(new RegExp(`Move all 1,200 ${noun} from`)),
-      ).toBeInTheDocument();
-    },
-  );
+    expect(trigger).toHaveTextContent("Dutton (1,200 books)");
+    expect(screen.getByText(/Move all 1,200 books from/)).toBeInTheDocument();
+  });
 });
