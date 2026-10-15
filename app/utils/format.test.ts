@@ -75,6 +75,10 @@ describe("formatPlayerTime", () => {
 });
 
 describe("formatPageCount", () => {
+  it("groups thousands", () => {
+    expect(formatPageCount(1200)).toBe("1,200 pages");
+  });
+
   it("uses the singular for one page", () => {
     expect(formatPageCount(1)).toBe("1 page");
   });

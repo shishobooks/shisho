@@ -30,10 +30,10 @@ export const fileLabel = (file: {
 /**
  * Formats a page count with the right plural.
  * @example formatPageCount(1) // "1 page"
- * @example formatPageCount(12) // "12 pages"
+ * @example formatPageCount(1200) // "1,200 pages"
  */
 export const formatPageCount = (count: number): string =>
-  `${count} ${count === 1 ? "page" : "pages"}`;
+  formatCount(count, "page");
 
 /**
  * Formats a count with its noun, thousands grouped.

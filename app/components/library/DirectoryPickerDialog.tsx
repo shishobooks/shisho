@@ -366,7 +366,7 @@ const DirectoryPickerDialog = ({
                           Loading...
                         </>
                       ) : (
-                        `Load more (${remaining} remaining)`
+                        `Load more (${remaining.toLocaleString()} remaining)`
                       )}
                     </Button>
                   </div>

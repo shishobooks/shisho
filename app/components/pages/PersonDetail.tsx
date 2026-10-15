@@ -177,7 +177,7 @@ const PersonDetail = () => {
           peopleListQuery.data?.items.map((p) => ({
             id: p.id,
             name: p.name,
-            count: p.authored_book_count + p.narrated_file_count,
+            count: p.authored_book_count,
           })) ?? [],
         isLoadingEntities: peopleListQuery.isLoading,
         isPending: mergePersonMutation.isPending,

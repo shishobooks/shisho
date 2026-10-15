@@ -25,7 +25,7 @@ import type {
   Limit,
   SettingsResponse,
 } from "@/types/generated/cache";
-import { formatFileSize } from "@/utils/format";
+import { formatCount, formatFileSize } from "@/utils/format";
 
 // The caches with an editable limit, keyed by their id in GET /cache, with
 // what happens when a cache goes over its limit.
@@ -253,7 +253,7 @@ const AdminCache = () => {
     try {
       const result = await clearMutation.mutateAsync(target.id);
       toast.success(
-        `Cleared ${formatFileSize(result.cleared_bytes)} (${result.cleared_files} files) from ${target.name}`,
+        `Cleared ${formatFileSize(result.cleared_bytes)} (${formatCount(result.cleared_files, "file")}) from ${target.name}`,
       );
       setPending(null);
     } catch (err) {
@@ -309,10 +309,7 @@ const AdminCache = () => {
                       {formatFileSize(cache.size_bytes)}
                     </span>
                     <span className="mx-2 text-muted-foreground/50">·</span>
-                    <span>
-                      {cache.file_count}{" "}
-                      {cache.file_count === 1 ? "file" : "files"}
-                    </span>
+                    <span>{formatCount(cache.file_count, "file")}</span>
                   </div>
                   {limitId &&
                     (settings ? (
@@ -348,7 +345,7 @@ const AdminCache = () => {
         confirmLabel="Clear"
         description={
           pending
-            ? `This will delete ${pending.file_count} files (${formatFileSize(pending.size_bytes)}). Content will be regenerated on next access.`
+            ? `This will delete ${formatCount(pending.file_count, "file")} (${formatFileSize(pending.size_bytes)}). Content will be regenerated on next access.`
             : ""
         }
         isPending={clearMutation.isPending}

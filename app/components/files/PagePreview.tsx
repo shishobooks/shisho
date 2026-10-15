@@ -100,11 +100,11 @@ const PagePreview = ({
       {/* Error state: show page number */}
       {hasError ? (
         <span className="text-muted-foreground text-sm font-medium">
-          {displayPage}
+          {displayPage.toLocaleString()}
         </span>
       ) : (
         <img
-          alt={`Page ${displayPage}`}
+          alt={`Page ${displayPage.toLocaleString()}`}
           className={cn(
             "h-full w-auto object-contain",
             isLoading && "opacity-0",
@@ -121,7 +121,7 @@ const PagePreview = ({
   // keyboard can reach it too.
   const defaultThumbnail = onClick ? (
     <Button
-      aria-label={`${actionLabel}: page ${displayPage}`}
+      aria-label={`${actionLabel}: page ${displayPage.toLocaleString()}`}
       className={thumbnailClassName}
       onClick={onClick}
       ref={buttonRef}
@@ -161,7 +161,7 @@ const PagePreview = ({
               <div className="absolute inset-0 bg-muted animate-pulse" />
             )}
             <img
-              alt={`Page ${displayPage} preview`}
+              alt={`Page ${displayPage.toLocaleString()} preview`}
               className={cn(
                 "h-full w-auto object-contain",
                 previewLoading && "opacity-0",
@@ -171,7 +171,7 @@ const PagePreview = ({
             />
           </div>
           <p className="text-center text-sm text-muted-foreground mt-1">
-            Page {displayPage}
+            Page {displayPage.toLocaleString()}
           </p>
         </HoverCardContent>
       </HoverCardPortal>

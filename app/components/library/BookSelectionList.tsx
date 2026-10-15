@@ -10,6 +10,7 @@ import { useBooks } from "@/hooks/queries/books";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/libraries/utils";
 import type { Book } from "@/types";
+import { formatCount } from "@/utils/format";
 
 interface BookSelectionListProps {
   /** Library ID to fetch books from */
@@ -148,8 +149,7 @@ function BookSelectionItem({ book, isSelected }: BookSelectionItemProps) {
         </div>
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <span className="shrink-0">
-            {book.files?.length || 0} file
-            {(book.files?.length || 0) !== 1 ? "s" : ""}
+            {formatCount(book.files?.length ?? 0, "file")}
           </span>
           {authorsText && (
             <>

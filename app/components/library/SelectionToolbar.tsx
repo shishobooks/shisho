@@ -49,7 +49,7 @@ import {
   collectDownloadFiles,
   getAvailableFileTypes,
 } from "@/utils/downloadFiles";
-import { formatFileSize } from "@/utils/format";
+import { formatCount, formatFileSize } from "@/utils/format";
 
 interface SelectionToolbarProps {
   library?: LibrarySummary;
@@ -161,9 +161,8 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         listId,
         payload: { book_ids: selectedBookIds },
       });
-      const count = selectedBookIds.length;
       toast.success(
-        `Added ${count} book${count !== 1 ? "s" : ""} to "${listName}"`,
+        `Added ${formatCount(selectedBookIds.length, "book")} to "${listName}"`,
       );
       setPopoverOpen(false);
       setActionsPopoverOpen(false);
@@ -190,9 +189,8 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         listId: newList.id,
         payload: { book_ids: selectedBookIds },
       });
-      const count = selectedBookIds.length;
       toast.success(
-        `Added ${count} book${count !== 1 ? "s" : ""} to "${payload.name}"`,
+        `Added ${formatCount(selectedBookIds.length, "book")} to "${payload.name}"`,
       );
       exitSelectionMode();
     } catch (error) {
@@ -207,10 +205,9 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         bookIds: selectedBookIds,
         override,
       });
-      const count = selectedBookIds.length;
       const label = override === "reviewed" ? "reviewed" : "needs review";
       toast.success(
-        `Marked ${count} book${count !== 1 ? "s" : ""} as ${label}`,
+        `Marked ${formatCount(selectedBookIds.length, "book")} as ${label}`,
       );
       exitSelectionMode();
     } catch (error) {
@@ -223,9 +220,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       const result = await deleteBooksMutation.mutateAsync({
         book_ids: selectedBookIds,
       });
-      toast.success(
-        `Deleted ${result.books_deleted} book${result.books_deleted !== 1 ? "s" : ""}`,
-      );
+      toast.success(`Deleted ${formatCount(result.books_deleted, "book")}`);
       setShowDeleteDialog(false);
       exitSelectionMode();
     } catch (error) {
@@ -237,8 +232,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     return null;
   }
 
-  const bookLabel =
-    selectedBookIds.length === 1 ? `1 book` : `${selectedBookIds.length} books`;
+  const bookLabel = formatCount(selectedBookIds.length, "book");
 
   const downloadContent = (onDownloadClick: () => void) => (
     <div className="p-3 space-y-3">
@@ -282,8 +276,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       </div>
       {downloadInfo && downloadInfo.totalSize > 0 && (
         <p className="text-xs text-muted-foreground" role="status">
-          {downloadInfo.fileIds.length}{" "}
-          {downloadInfo.fileIds.length === 1 ? "file" : "files"} &middot;{" "}
+          {formatCount(downloadInfo.fileIds.length, "file")} &middot;{" "}
           {formatFileSize(downloadInfo.totalSize)}
         </p>
       )}

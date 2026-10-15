@@ -36,7 +36,7 @@ import {
   type FileType,
 } from "@/types";
 import { isReflowableFileType } from "@/utils/fileTypes";
-import { formatTimestamp } from "@/utils/format";
+import { formatCount, formatTimestamp } from "@/utils/format";
 import type { PageSourceFile } from "@/utils/pageUrl";
 
 import { countDescendants, parseTimestampMs } from "./chapterUtils";
@@ -449,8 +449,8 @@ const ChapterRow = (props: ChapterRowProps) => {
             </DialogHeader>
             <DialogBody>
               <DialogDescription>
-                Delete "{chapter.title}" and its {descendantCount} chapter
-                {descendantCount === 1 ? "" : "s"}?
+                Delete "{chapter.title}" and its{" "}
+                {formatCount(descendantCount, "chapter")}?
               </DialogDescription>
             </DialogBody>
             <DialogFooter>
@@ -589,7 +589,7 @@ const ChapterRow = (props: ChapterRowProps) => {
         <p className="mt-1 min-h-4 text-xs text-destructive" id={pageErrorId}>
           {hasPageError &&
             (pageCount > 0
-              ? `Enter a page from 1 to ${pageCount}`
+              ? `Enter a page from 1 to ${pageCount.toLocaleString()}`
               : "Enter a valid page number")}
         </p>
 

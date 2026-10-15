@@ -23,6 +23,7 @@ import {
   type AudnexusChaptersResponse,
 } from "@/hooks/queries/audnexus";
 import type { ChapterInput } from "@/types";
+import { formatCount } from "@/utils/format";
 
 import {
   applyTitlesAndTimestamps,
@@ -268,8 +269,7 @@ const ResultStage = ({
 
       {/* Chapter count info */}
       <p className="text-sm text-muted-foreground">
-        {data.chapters.length} chapter{data.chapters.length !== 1 ? "s" : ""}{" "}
-        from Audible
+        {formatCount(data.chapters.length, "chapter")} from Audible
         {!countsMatch && (
           <span className="ml-1 text-destructive">
             (file has {editedChapters.length})

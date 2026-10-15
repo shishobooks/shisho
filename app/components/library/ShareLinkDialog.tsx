@@ -41,7 +41,7 @@ import {
   type ShareLinkResponse,
 } from "@/types";
 import { copyText } from "@/utils/clipboard";
-import { formatDateTime } from "@/utils/format";
+import { formatCount, formatDateTime } from "@/utils/format";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NEVER = "never";
@@ -72,15 +72,12 @@ const expiryText = (link: ShareLinkResponse) => {
     : `Expires ${when}`;
 };
 
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 // Opens count recipient page loads and downloads count file downloads, so a
 // download is definite proof the recipient got the file.
 const usageText = (link: ShareLinkResponse) =>
   [
-    plural(link.open_count, "open"),
-    plural(link.download_count, "download"),
+    formatCount(link.open_count, "open"),
+    formatCount(link.download_count, "download"),
     link.last_accessed_at
       ? `Last used ${formatDateTime(link.last_accessed_at)}`
       : "Never used",

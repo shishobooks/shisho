@@ -12,6 +12,7 @@ import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { Library } from "@/types";
+import { formatCount } from "@/utils/format";
 import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 interface LibraryRowProps {
@@ -37,8 +38,7 @@ const LibraryRow = ({ library, canOpen, canConfigure }: LibraryRowProps) => (
         </span>
       )}
       <p className="text-sm text-muted-foreground mt-0.5 md:mt-1">
-        {library.library_paths?.length || 0} path
-        {library.library_paths?.length !== 1 ? "s" : ""}
+        {formatCount(library.library_paths?.length ?? 0, "path")}
       </p>
     </div>
     {canConfigure && (

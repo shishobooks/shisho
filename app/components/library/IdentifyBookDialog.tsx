@@ -35,6 +35,7 @@ import {
   formatDuration,
   formatFileSize,
   formatIdentifierType,
+  formatPageCount,
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
@@ -309,10 +310,7 @@ export function IdentifyBookDialog({
                         {file.page_count != null && (
                           <>
                             <span className="text-muted-foreground/50">·</span>
-                            <span>
-                              {file.page_count} page
-                              {file.page_count !== 1 ? "s" : ""}
-                            </span>
+                            <span>{formatPageCount(file.page_count)}</span>
                           </>
                         )}
                       </div>

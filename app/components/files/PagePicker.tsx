@@ -200,7 +200,8 @@ const PagePicker = ({
               className="text-sm font-normal text-muted-foreground tabular-nums"
               role="status"
             >
-              Page {focusedPage + 1} of {pageCount}
+              Page {(focusedPage + 1).toLocaleString()} of{" "}
+              {pageCount.toLocaleString()}
             </span>
           </DialogTitle>
           <DialogDescription className="sr-only">

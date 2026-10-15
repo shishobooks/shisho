@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { useMergeBooks } from "@/hooks/queries/books";
 import { toastRequestError } from "@/libraries/api";
 import type { Book, LibrarySummary } from "@/types";
+import { formatCount } from "@/utils/format";
 
 import { BookSelectionList } from "./BookSelectionList";
 
@@ -82,8 +83,8 @@ export function MergeIntoDialog({
             Merge Into Another Book
           </DialogTitle>
           <DialogDescription>
-            Move {sourceFileCount} file{sourceFileCount !== 1 ? "s" : ""} from
-            this book into another book.
+            Move {formatCount(sourceFileCount, "file")} from this book into
+            another book.
           </DialogDescription>
         </DialogHeader>
 

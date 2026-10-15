@@ -241,7 +241,7 @@ const FilterCombobox = ({
                         <span className="sr-only">(chosen)</span>
                       )}
                       <span className="ml-auto text-xs text-muted-foreground">
-                        {opt.book_count}
+                        {opt.book_count.toLocaleString()}
                       </span>
                     </CommandItem>
                   ))}

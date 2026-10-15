@@ -23,6 +23,7 @@ import { useBooksByIds, useMergeBooks } from "@/hooks/queries/books";
 import { firstFailedQuery, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { Book, LibrarySummary } from "@/types";
+import { formatCount } from "@/utils/format";
 
 interface MergeBooksDialogProps {
   open: boolean;
@@ -87,7 +88,7 @@ export function MergeBooksDialog({
 
       if (result.target_book) {
         toast.success(
-          `Merged ${result.books_deleted} book${result.books_deleted !== 1 ? "s" : ""} into "${result.target_book.title}"`,
+          `Merged ${formatCount(result.books_deleted, "book")} into "${result.target_book.title}"`,
         );
         onSuccess?.(result.target_book);
       }
@@ -127,8 +128,8 @@ export function MergeBooksDialog({
           </DialogTitle>
           <DialogDescription>
             {isLoadingBooks
-              ? `Loading ${bookIds.length} books...`
-              : `Merge ${books.length} books (${totalFiles} files total)`}
+              ? `Loading ${formatCount(bookIds.length, "book")}...`
+              : `Merge ${formatCount(books.length, "book")} (${formatCount(totalFiles, "file")} total)`}
           </DialogDescription>
         </DialogHeader>
 
@@ -187,8 +188,7 @@ export function MergeBooksDialog({
                           <div className="font-medium">{book.title}</div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>
-                              {book.files?.length || 0} file
-                              {(book.files?.length || 0) !== 1 ? "s" : ""}
+                              {formatCount(book.files?.length ?? 0, "file")}
                             </span>
                             {book.authors && book.authors.length > 0 && (
                               <>
@@ -274,7 +274,8 @@ export function MergeBooksDialog({
 
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">
-                      Books to be deleted ({booksToDelete.length})
+                      Books to be deleted (
+                      {booksToDelete.length.toLocaleString()})
                     </div>
                     <div className="space-y-1">
                       {booksToDelete.map((book) => (
@@ -284,8 +285,7 @@ export function MergeBooksDialog({
                         >
                           <span className="truncate flex-1">{book.title}</span>
                           <Badge className="shrink-0" variant="secondary">
-                            {book.files?.length || 0} file
-                            {(book.files?.length || 0) !== 1 ? "s" : ""}
+                            {formatCount(book.files?.length ?? 0, "file")}
                           </Badge>
                         </div>
                       ))}
@@ -321,8 +321,7 @@ export function MergeBooksDialog({
                   {mergeBooksMutation.isPending && (
                     <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                   )}
-                  Merge {booksToDelete.length} Book
-                  {booksToDelete.length !== 1 ? "s" : ""}
+                  Merge {formatCount(booksToDelete.length, "Book")}
                 </Button>
               </DialogFooter>
             </>

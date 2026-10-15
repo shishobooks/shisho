@@ -104,6 +104,7 @@ import {
 } from "@/utils/downloadUrl";
 import {
   fileLabel,
+  formatCount,
   formatDate,
   formatDateTime,
   formatDuration,
@@ -1670,8 +1671,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       {canWriteBooks && selectedFileIds.size > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-md shadow-lg p-3 flex items-center gap-3 z-50">
           <span className="text-sm text-muted-foreground">
-            {selectedFileIds.size} file
-            {selectedFileIds.size !== 1 ? "s" : ""} selected
+            {formatCount(selectedFileIds.size, "file")} selected
           </span>
           <Button
             onClick={() => {
