@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SortLevel } from "@/libraries/sortSpec";
+import { SORT_FIELD_LABELS, type SortLevel } from "@/libraries/sortSpec";
 
 import SortedByChips from "./SortedByChips";
 
@@ -14,6 +14,7 @@ describe("SortedByChips", () => {
     ];
     render(
       <SortedByChips
+        fieldLabels={SORT_FIELD_LABELS}
         levels={levels}
         onRemoveLevel={vi.fn()}
         onReset={vi.fn()}
@@ -26,6 +27,7 @@ describe("SortedByChips", () => {
   it("renders ascending arrow for asc and descending for desc", () => {
     render(
       <SortedByChips
+        fieldLabels={SORT_FIELD_LABELS}
         levels={[
           { field: "title", direction: "asc" },
           { field: "date_added", direction: "desc" },
@@ -51,6 +53,7 @@ describe("SortedByChips", () => {
     const onRemoveLevel = vi.fn();
     render(
       <SortedByChips
+        fieldLabels={SORT_FIELD_LABELS}
         levels={[
           { field: "title", direction: "asc" },
           { field: "author", direction: "asc" },
@@ -68,6 +71,7 @@ describe("SortedByChips", () => {
     const onReset = vi.fn();
     render(
       <SortedByChips
+        fieldLabels={SORT_FIELD_LABELS}
         levels={[{ field: "title", direction: "asc" }]}
         onRemoveLevel={vi.fn()}
         onReset={onReset}
@@ -79,7 +83,12 @@ describe("SortedByChips", () => {
 
   it("renders nothing when levels is empty", () => {
     const { container } = render(
-      <SortedByChips levels={[]} onRemoveLevel={vi.fn()} onReset={vi.fn()} />,
+      <SortedByChips
+        fieldLabels={SORT_FIELD_LABELS}
+        levels={[]}
+        onRemoveLevel={vi.fn()}
+        onReset={vi.fn()}
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });

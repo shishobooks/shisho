@@ -1,14 +1,14 @@
 import ResourceList from "@/components/library/ResourceList";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useResourceListState } from "@/hooks/useResourceListState";
-import type { PublisherListItem } from "@/types";
+import { PUBLISHER_SORT } from "@/libraries/resourceSort";
 
 const PublishersList = () => {
-  const state = useResourceListState();
+  const state = useResourceListState(PUBLISHER_SORT);
   const query = usePublishersList(state.queryParams);
 
   return (
-    <ResourceList<PublisherListItem>
+    <ResourceList
       itemConfig={(publisher) => {
         const fileCount = publisher.file_count ?? 0;
         const descendantFileCount = publisher.descendant_file_count ?? 0;

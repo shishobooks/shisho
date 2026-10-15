@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
@@ -27,9 +28,19 @@ type ListGenresOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	Search     *string
+	Sort       []sortspec.SortLevel // Defaults to name ascending
 
 	includeTotal bool
 }
+
+// genreSortFields are the sort fields the genre list accepts.
+var genreSortFields = sortspec.ResourceFields{
+	sortspec.FieldName:      "g.name",
+	sortspec.FieldBookCount: "(SELECT COUNT(*) FROM book_genres bg WHERE bg.genre_id = g.id)",
+	sortspec.FieldDateAdded: "g.created_at",
+}
+
+var defaultGenresSort = []sortspec.SortLevel{{Field: sortspec.FieldName, Direction: sortspec.DirAsc}}
 
 type UpdateGenreOptions struct {
 	Columns []string
@@ -141,8 +152,7 @@ func (svc *Service) listGenresWithTotal(ctx context.Context, opts ListGenresOpti
 
 	q := svc.db.
 		NewSelect().
-		Model(&genres).
-		Order("g.name ASC")
+		Model(&genres)
 
 	if opts.LibraryID != nil {
 		q = q.Where("g.library_id = ?", *opts.LibraryID)
@@ -156,6 +166,13 @@ func (svc *Service) listGenresWithTotal(ctx context.Context, opts ListGenresOpti
 		if ftsQuery != "" {
 			q = q.Where("g.id IN (SELECT genre_id FROM genres_fts WHERE genres_fts MATCH ?)", ftsQuery)
 		}
+	}
+	sortLevels := opts.Sort
+	if len(sortLevels) == 0 {
+		sortLevels = defaultGenresSort
+	}
+	for _, clause := range genreSortFields.OrderClauses(sortLevels, "g.id") {
+		q = q.OrderExpr(clause.Expression)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))

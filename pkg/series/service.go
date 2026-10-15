@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
@@ -26,11 +27,21 @@ type ListSeriesOptions struct {
 	Limit      *int
 	Offset     *int
 	LibraryID  *int
-	LibraryIDs []int   // Filter by multiple library IDs (for access control)
-	Search     *string // FTS5 search query
+	LibraryIDs []int                // Filter by multiple library IDs (for access control)
+	Search     *string              // FTS5 search query
+	Sort       []sortspec.SortLevel // Defaults to name ascending
 
 	includeTotal bool
 }
+
+// seriesSortFields are the sort fields the series list accepts.
+var seriesSortFields = sortspec.ResourceFields{
+	sortspec.FieldName:      "s.sort_name",
+	sortspec.FieldBookCount: "(SELECT COUNT(*) FROM book_series bs WHERE bs.series_id = s.id)",
+	sortspec.FieldDateAdded: "s.created_at",
+}
+
+var defaultSeriesSort = []sortspec.SortLevel{{Field: sortspec.FieldName, Direction: sortspec.DirAsc}}
 
 type UpdateSeriesOptions struct {
 	Columns []string
@@ -184,8 +195,7 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		Model(&series).
 		Relation("Library").
 		ColumnExpr("s.*").
-		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count").
-		Order("s.sort_name ASC")
+		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count")
 
 	if opts.LibraryID != nil {
 		q = q.Where("s.library_id = ?", *opts.LibraryID)
@@ -199,6 +209,13 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		if ftsQuery != "" {
 			q = q.Where("s.id IN (SELECT series_id FROM series_fts WHERE series_fts MATCH ?)", ftsQuery)
 		}
+	}
+	sortLevels := opts.Sort
+	if len(sortLevels) == 0 {
+		sortLevels = defaultSeriesSort
+	}
+	for _, clause := range seriesSortFields.OrderClauses(sortLevels, "s.id") {
+		q = q.OrderExpr(clause.Expression)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))

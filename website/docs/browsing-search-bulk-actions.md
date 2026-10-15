@@ -30,6 +30,16 @@ Without a saved default, books sort by **Date added** with the newest first.
 
 The saved default also controls book ordering in that library's [OPDS](./opds.md) feed and [eReader Browser](./ereader-browser.md), which use the same fallback. A temporary browser URL sort does not change those views.
 
+## Series, People, Genres, Tags, and Publishers Sort
+
+The **Series**, **People**, **Genres**, **Tags**, and **Publishers** pages have the same multi-level **Sort** control. Every page offers **Name** and **Date added**, plus the counts the page shows:
+
+- **Series**, **Genres**, and **Tags**: **Book count**
+- **People**: **Books authored** and **Files narrated**
+- **Publishers**: **File count**, which includes the files of sub-publishers
+
+These pages sort by **Name** until you choose another sort. Their sort lives only in the page URL and cannot be saved as a default.
+
 ## Gallery Size
 
 Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is available on the library home, the series list, list detail pages, and the book sections of series, person, genre, and tag pages. It is not a per-library setting.

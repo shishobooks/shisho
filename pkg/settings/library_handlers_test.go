@@ -156,7 +156,7 @@ func TestUpdateLibrarySettings_RejectsInvalidSpec(t *testing.T) {
 
 	err := h.updateLibrarySettings(c)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown sort field")
+	assert.Contains(t, err.Error(), "Unknown sort field")
 }
 
 func TestUpdateLibrarySettings_AcceptsNullClear(t *testing.T) {

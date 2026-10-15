@@ -1,14 +1,14 @@
 import ResourceList from "@/components/library/ResourceList";
 import { useTagsList } from "@/hooks/queries/tags";
 import { useResourceListState } from "@/hooks/useResourceListState";
-import type { TagResponse } from "@/types";
+import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 
 const TagsList = () => {
-  const state = useResourceListState();
+  const state = useResourceListState(BOOK_COUNT_RESOURCE_SORT);
   const query = useTagsList(state.queryParams);
 
   return (
-    <ResourceList<TagResponse>
+    <ResourceList
       itemConfig={(tag) => {
         const bookCount = tag.book_count ?? 0;
         return {

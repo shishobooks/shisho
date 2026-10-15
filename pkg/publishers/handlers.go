@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
 type handler struct {
@@ -177,11 +178,21 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	var sortLevels []sortspec.SortLevel
+	if params.Sort != "" {
+		parsed, err := publisherSortFields.Parse(params.Sort)
+		if err != nil {
+			return err
+		}
+		sortLevels = parsed
+	}
+
 	opts := ListPublishersOptions{
 		Limit:      &params.Limit,
 		Offset:     &params.Offset,
 		LibraryID:  params.LibraryID,
 		Search:     params.Search,
+		Sort:       sortLevels,
 		ExcludeIDs: params.ExcludeIDs,
 	}
 

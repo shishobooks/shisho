@@ -7,6 +7,8 @@ import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
+import SortedByChips from "@/components/library/SortedByChips";
+import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -22,7 +24,9 @@ import { useSeriesList } from "@/hooks/queries/series";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useResourceSortParam } from "@/hooks/useResourceSortParam";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
+import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 import { cn } from "@/libraries/utils";
 import type { GallerySize, SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
@@ -131,6 +135,7 @@ const SeriesList = () => {
 
   const { libraryId } = useParams();
   const { searchQuery, setSearchQuery } = useSearchQueryParam();
+  const sort = useResourceSortParam(BOOK_COUNT_RESOURCE_SORT);
 
   const {
     savedSize,
@@ -153,6 +158,7 @@ const SeriesList = () => {
       offset,
       library_id: libraryId ? parseInt(libraryId, 10) : undefined,
       search: searchQuery || undefined,
+      sort: sort.param,
     },
     { enabled: userSettingsResolved },
   );
@@ -198,23 +204,41 @@ const SeriesList = () => {
         </p>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <SearchInput
-          initialValue={searchQuery}
-          label="Search series"
-          onDebouncedChange={setSearchQuery}
-          placeholder="Search series..."
-        />
-        <div className="hidden sm:flex">
-          <SizePopover
-            effectiveSize={effectiveSize}
-            isSaving={isSavingSize}
-            onChange={applyGallerySize}
-            onSaveAsDefault={saveSizeAsDefault}
-            savedSize={savedSize}
-            trigger={<SizeButton isDirty={isSizeDirty} />}
+      <div className="mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            initialValue={searchQuery}
+            label="Search series"
+            onDebouncedChange={setSearchQuery}
+            placeholder="Search series..."
           />
+          <SortSheet
+            fieldLabels={sort.config.labels}
+            fields={sort.config.fields}
+            isDirty={sort.isDirty}
+            levels={sort.levels}
+            onChange={sort.apply}
+            trigger={<SortButton isDirty={sort.isDirty} />}
+          />
+          <div className="hidden sm:flex">
+            <SizePopover
+              effectiveSize={effectiveSize}
+              isSaving={isSavingSize}
+              onChange={applyGallerySize}
+              onSaveAsDefault={saveSizeAsDefault}
+              savedSize={savedSize}
+              trigger={<SizeButton isDirty={isSizeDirty} />}
+            />
+          </div>
         </div>
+        <SortedByChips
+          fieldLabels={sort.config.labels}
+          levels={sort.isDirty ? sort.levels : []}
+          onRemoveLevel={(index) =>
+            sort.apply(sort.levels.filter((_, i) => i !== index))
+          }
+          onReset={sort.reset}
+        />
       </div>
 
       <Gallery

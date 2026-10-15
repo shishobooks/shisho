@@ -2,19 +2,21 @@ import { ArrowDown, ArrowUp, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SORT_FIELD_LABELS, type SortLevel } from "@/libraries/sortSpec";
+import type { SortLevel } from "@/libraries/sortSpec";
 
-interface SortedByChipsProps {
-  levels: readonly SortLevel[];
+interface SortedByChipsProps<F extends string> {
+  fieldLabels: Record<F, string>;
+  levels: readonly SortLevel<F>[];
   onRemoveLevel: (index: number) => void;
   onReset: () => void;
 }
 
-const SortedByChips = ({
+const SortedByChips = <F extends string>({
+  fieldLabels,
   levels,
   onRemoveLevel,
   onReset,
-}: SortedByChipsProps) => {
+}: SortedByChipsProps<F>) => {
   if (levels.length === 0) {
     return null;
   }
@@ -24,7 +26,7 @@ const SortedByChips = ({
       <span className="text-sm text-muted-foreground">Sorted by:</span>
 
       {levels.map((level, index) => {
-        const label = SORT_FIELD_LABELS[level.field];
+        const label = fieldLabels[level.field];
         const Arrow = level.direction === "asc" ? ArrowUp : ArrowDown;
         const directionLabel =
           level.direction === "asc" ? "ascending" : "descending";

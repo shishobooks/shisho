@@ -15,8 +15,12 @@ export type SortField =
   | "page_count"
   | "duration";
 
-export interface SortLevel {
-  field: SortField;
+/**
+ * One field and direction. The field defaults to the book gallery's fields;
+ * the resource lists pass their own (app/libraries/resourceSort.ts).
+ */
+export interface SortLevel<F extends string = SortField> {
+  field: F;
   direction: SortDirection;
 }
 
@@ -58,28 +62,32 @@ export const BUILTIN_DEFAULT_SORT: readonly SortLevel[] = [
   { field: "date_added", direction: "desc" },
 ];
 
-const FIELD_SET = new Set<string>(SORT_FIELDS);
-
-function isSortField(s: string): s is SortField {
-  return FIELD_SET.has(s);
-}
-
 function isSortDirection(s: string): s is SortDirection {
   return s === "asc" || s === "desc";
 }
 
 /**
- * Parse a serialized sort spec. Returns null for any invalid input —
+ * Parse a serialized book sort spec. Returns null for any invalid input;
  * callers should treat that as "no sort specified" and fall back.
  */
 export function parseSortSpec(s: string): SortLevel[] | null {
+  return parseSortSpecFor(s, SORT_FIELDS);
+}
+
+/** parseSortSpec for a caller-supplied field whitelist. */
+export function parseSortSpecFor<F extends string>(
+  s: string,
+  fields: readonly F[],
+): SortLevel<F>[] | null {
+  const isField = (f: string): f is F =>
+    (fields as readonly string[]).includes(f);
   if (!s) return null;
   if (/\s/.test(s)) return null;
 
   const parts = s.split(",");
   if (parts.length > MAX_SORT_LEVELS) return null;
 
-  const levels: SortLevel[] = [];
+  const levels: SortLevel<F>[] = [];
   const seen = new Set<string>();
 
   for (const part of parts) {
@@ -92,7 +100,7 @@ export function parseSortSpec(s: string): SortLevel[] | null {
     if (pieces.length !== 2) return null;
     const [field, direction] = pieces;
     if (!field || !direction) return null;
-    if (!isSortField(field)) return null;
+    if (!isField(field)) return null;
     if (!isSortDirection(direction)) return null;
     if (seen.has(field)) return null;
     seen.add(field);
@@ -111,14 +119,16 @@ export function parseSortSpec(s: string): SortLevel[] | null {
  * would round-trip through parseSortSpec as null (no sort) but pollutes
  * the URL with a meaningless empty key.
  */
-export function serializeSortSpec(levels: readonly SortLevel[]): string {
+export function serializeSortSpec(
+  levels: readonly SortLevel<string>[],
+): string {
   return levels.map((l) => `${l.field}:${l.direction}`).join(",");
 }
 
 /** Deep equality for two specs (order matters). */
 export function sortSpecsEqual(
-  a: readonly SortLevel[] | null | undefined,
-  b: readonly SortLevel[] | null | undefined,
+  a: readonly SortLevel<string>[] | null | undefined,
+  b: readonly SortLevel<string>[] | null | undefined,
 ): boolean {
   if (!a || !b) return !a && !b;
   if (a.length !== b.length) return false;

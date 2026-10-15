@@ -7,9 +7,11 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
 import { SearchInput } from "@/components/library/SearchInput";
+import SortedByChips from "@/components/library/SortedByChips";
+import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { Badge } from "@/components/ui/badge";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { useResourceListState } from "@/hooks/useResourceListState";
+import type { ResourceListState } from "@/hooks/useResourceListState";
 import type { ResourceListResponse } from "@/types";
 
 interface BadgeConfig {
@@ -25,7 +27,7 @@ interface ItemConfig {
   badges: BadgeConfig[];
 }
 
-interface ResourceListProps<T extends { id: number }> {
+interface ResourceListProps<T extends { id: number }, F extends string> {
   title: string;
   subtitle: string;
   /** Names the search box ("Search genres"). */
@@ -33,14 +35,14 @@ interface ResourceListProps<T extends { id: number }> {
   /** Defaults to the label followed by "...". */
   searchPlaceholder?: string;
   query: UseQueryResult<ResourceListResponse<T>>;
-  state: ReturnType<typeof useResourceListState>;
+  state: ResourceListState<F>;
   itemConfig: (item: T) => ItemConfig;
   linkTo: (item: T, libraryId: string) => string;
   itemLabel: string;
   maxWidth?: string;
 }
 
-const ResourceList = <T extends { id: number }>({
+const ResourceList = <T extends { id: number }, F extends string>({
   title,
   subtitle,
   searchLabel,
@@ -51,7 +53,7 @@ const ResourceList = <T extends { id: number }>({
   linkTo,
   itemLabel,
   maxWidth = "max-w-4xl",
-}: ResourceListProps<T>) => {
+}: ResourceListProps<T, F>) => {
   usePageTitle(title);
 
   const {
@@ -59,6 +61,7 @@ const ResourceList = <T extends { id: number }>({
     currentPage,
     searchQuery,
     setSearchQuery,
+    sort,
     limit,
     offset,
     handlePageChange,
@@ -132,11 +135,29 @@ const ResourceList = <T extends { id: number }>({
       </div>
 
       <div className="mb-6">
-        <SearchInput
-          initialValue={searchQuery}
-          label={searchLabel}
-          onDebouncedChange={setSearchQuery}
-          placeholder={searchPlaceholder ?? `${searchLabel}...`}
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            initialValue={searchQuery}
+            label={searchLabel}
+            onDebouncedChange={setSearchQuery}
+            placeholder={searchPlaceholder ?? `${searchLabel}...`}
+          />
+          <SortSheet
+            fieldLabels={sort.config.labels}
+            fields={sort.config.fields}
+            isDirty={sort.isDirty}
+            levels={sort.levels}
+            onChange={sort.apply}
+            trigger={<SortButton isDirty={sort.isDirty} />}
+          />
+        </div>
+        <SortedByChips
+          fieldLabels={sort.config.labels}
+          levels={sort.isDirty ? sort.levels : []}
+          onRemoveLevel={(index) =>
+            sort.apply(sort.levels.filter((_, i) => i !== index))
+          }
+          onReset={sort.reset}
         />
       </div>
 

@@ -181,7 +181,7 @@ func (h *handler) list(c echo.Context) error {
 	if params.Sort != "" {
 		parsed, err := sortspec.Parse(params.Sort)
 		if err != nil {
-			return errcodes.ValidationError(err.Error())
+			return err
 		}
 		explicitSort = parsed
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sortname"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
@@ -28,9 +29,20 @@ type ListPeopleOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	Search     *string
+	Sort       []sortspec.SortLevel // Defaults to name ascending
 
 	includeTotal bool
 }
+
+// personSortFields are the sort fields the person list accepts.
+var personSortFields = sortspec.ResourceFields{
+	sortspec.FieldName:              "p.sort_name",
+	sortspec.FieldAuthoredBookCount: "(SELECT COUNT(*) FROM authors a WHERE a.person_id = p.id)",
+	sortspec.FieldNarratedFileCount: "(SELECT COUNT(*) FROM narrators n WHERE n.person_id = p.id)",
+	sortspec.FieldDateAdded:         "p.created_at",
+}
+
+var defaultPeopleSort = []sortspec.SortLevel{{Field: sortspec.FieldName, Direction: sortspec.DirAsc}}
 
 type UpdatePersonOptions struct {
 	Columns []string
@@ -157,8 +169,7 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 
 	q := svc.db.
 		NewSelect().
-		Model(&people).
-		Order("p.sort_name ASC")
+		Model(&people)
 
 	if opts.LibraryID != nil {
 		q = q.Where("p.library_id = ?", *opts.LibraryID)
@@ -172,6 +183,13 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 		if ftsQuery != "" {
 			q = q.Where("p.id IN (SELECT person_id FROM persons_fts WHERE persons_fts MATCH ?)", ftsQuery)
 		}
+	}
+	sortLevels := opts.Sort
+	if len(sortLevels) == 0 {
+		sortLevels = defaultPeopleSort
+	}
+	for _, clause := range personSortFields.OrderClauses(sortLevels, "p.id") {
+		q = q.OrderExpr(clause.Expression)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))

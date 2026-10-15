@@ -38,6 +38,7 @@ type ListSeriesQuery struct {
 	Offset    int     `query:"offset" json:"offset,omitempty" validate:"min=0"`
 	LibraryID *int    `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
+	Sort      string  `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 }
 
 type SubResourceQuery struct {
