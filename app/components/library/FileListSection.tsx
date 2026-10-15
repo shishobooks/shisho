@@ -10,7 +10,7 @@ import QueryError, {
 import { Badge } from "@/components/ui/badge";
 import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
-import { fileLabel, formatDuration } from "@/utils/format";
+import { fileLabel, formatDuration, formatShowingRange } from "@/utils/format";
 
 export const FILE_LIST_ITEMS_PER_PAGE = 50;
 
@@ -125,8 +125,7 @@ export function FileListSection({
       <h2 className="text-xl font-semibold mb-4">{title}</h2>
 
       <div className="mb-4 text-sm text-muted-foreground">
-        Showing {offset + 1}-
-        {Math.min(offset + FILE_LIST_ITEMS_PER_PAGE, total)} of {total} files
+        {formatShowingRange(offset, FILE_LIST_ITEMS_PER_PAGE, total, "files")}
       </div>
 
       <div className="space-y-2 mb-6 md:mb-8">

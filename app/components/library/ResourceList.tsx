@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { ResourceListState } from "@/hooks/useResourceListState";
 import type { ResourceListResponse } from "@/types";
+import { formatShowingRange } from "@/utils/format";
 
 interface BadgeConfig {
   label: string;
@@ -167,8 +168,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
       <div role="status">
         {showsResults && query.data && total > 0 && (
           <div className="mb-4 text-sm text-muted-foreground">
-            Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
-            {itemLabel}
+            {formatShowingRange(offset, limit, total, itemLabel)}
           </div>
         )}
         {showsResults && query.data?.items.length === 0 && (

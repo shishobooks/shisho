@@ -36,6 +36,21 @@ export const formatPageCount = (count: number): string =>
   `${count} ${count === 1 ? "page" : "pages"}`;
 
 /**
+ * Formats the "Showing" line above a paginated list, with thousands grouped.
+ * @example formatShowingRange(0, 15, 18307, "books") // "Showing 1-15 of 18,307 books"
+ */
+export const formatShowingRange = (
+  offset: number,
+  limit: number,
+  total: number,
+  itemLabel: string,
+): string => {
+  const first = (offset + 1).toLocaleString();
+  const last = Math.min(offset + limit, total).toLocaleString();
+  return `Showing ${first}-${last} of ${total.toLocaleString()} ${itemLabel}`;
+};
+
+/**
  * Formats seconds into a human-readable duration string.
  * @example formatDuration(3661) // "1h 1m"
  */

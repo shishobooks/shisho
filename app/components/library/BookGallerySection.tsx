@@ -13,6 +13,7 @@ import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import type { SortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
+import { formatShowingRange } from "@/utils/format";
 
 interface BookGalleryQuery extends RetryableQuery {
   data: ResourceListResponse<Book> | undefined;
@@ -153,8 +154,7 @@ export function BookGallerySection<F extends string>({
       )}
 
       <div className="mb-4 text-sm text-muted-foreground">
-        Showing {offset + 1}-{Math.min(offset + itemsPerPage, total)} of {total}{" "}
-        books
+        {formatShowingRange(offset, itemsPerPage, total, "books")}
       </div>
 
       <div className="flex flex-wrap gap-4 mb-6 md:mb-8">

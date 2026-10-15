@@ -16,7 +16,7 @@ import { toastRequestError } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
 import { cn } from "@/libraries/utils";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
-import { formatElapsed } from "@/utils/format";
+import { formatElapsed, formatShowingRange } from "@/utils/format";
 
 const JOBS_PER_PAGE = 20;
 
@@ -163,8 +163,12 @@ const AdminJobs = () => {
       ) : (
         <>
           <div className="mb-4 text-sm text-muted-foreground">
-            Showing {(currentPage - 1) * JOBS_PER_PAGE + 1}-
-            {Math.min(currentPage * JOBS_PER_PAGE, total)} of {total} jobs
+            {formatShowingRange(
+              (currentPage - 1) * JOBS_PER_PAGE,
+              JOBS_PER_PAGE,
+              total,
+              "jobs",
+            )}
           </div>
 
           <div className="border border-border rounded-md divide-y divide-border">

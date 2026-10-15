@@ -7,6 +7,7 @@ import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
 import { parsePageParam } from "@/libraries/pagination";
+import { formatShowingRange } from "@/utils/format";
 
 interface GalleryProps<T> {
   items: T[];
@@ -54,8 +55,7 @@ const Gallery = <T,>({
     <div role="status">
       {showsItems && total > 0 && (
         <div className="mb-4 text-sm text-muted-foreground">
-          Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
-          {itemLabel}
+          {formatShowingRange(offset, limit, total, itemLabel)}
         </div>
       )}
       {showsItems && total === 0 && (

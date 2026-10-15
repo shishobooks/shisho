@@ -8,6 +8,7 @@ import {
   formatFileSize,
   formatPageCount,
   formatPlayerTime,
+  formatShowingRange,
 } from "./format";
 
 describe("formatDate", () => {
@@ -137,6 +138,20 @@ describe("formatElapsed", () => {
   it("formats longer spans in minutes and seconds", () => {
     expect(formatElapsed("2024-01-01T00:00:00Z", "2024-01-01T00:03:05Z")).toBe(
       "3m 5s",
+    );
+  });
+});
+
+describe("formatShowingRange", () => {
+  it("groups thousands in the range and the total", () => {
+    expect(formatShowingRange(18300, 15, 18307, "books")).toBe(
+      "Showing 18,301-18,307 of 18,307 books",
+    );
+  });
+
+  it("caps the end of the range at the total", () => {
+    expect(formatShowingRange(0, 20, 2, "genres")).toBe(
+      "Showing 1-2 of 2 genres",
     );
   });
 });
