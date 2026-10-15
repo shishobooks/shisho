@@ -1,12 +1,13 @@
 // Package sortspec parses, validates, builds SQL for, and resolves
-// multi-level book sort specifications (e.g. "author:asc,series:asc").
+// multi-level sort specifications (e.g. "author:asc,series:asc") for the
+// book gallery and the resource lists.
 package sortspec
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
 // Direction is "asc" or "desc".
@@ -50,21 +51,27 @@ func BuiltinDefault() []SortLevel {
 }
 
 // Parse reads a serialized spec string (e.g. "author:asc,series:desc") into
-// a slice of SortLevel. It rejects unknown fields, bad directions, duplicates,
+// a slice of SortLevel. Its errors are 422 validation errors whose messages
+// are full sentences, so handlers return them as they are. It rejects unknown fields, bad directions, duplicates,
 // empty pairs, stray whitespace, and specs longer than MaxLevels.
 func Parse(s string) ([]SortLevel, error) {
+	return parse(s, IsValidField)
+}
+
+// parse implements the spec grammar against a field whitelist.
+func parse(s string, isValidField func(string) bool) ([]SortLevel, error) {
 	if s == "" {
-		return nil, errors.New("sort spec is empty")
+		return nil, invalidSpec("Sort spec is empty.")
 	}
 	// Whitespace is not allowed anywhere — this is a machine-readable URL
 	// param, not human prose. Rejecting early keeps the grammar strict.
 	if strings.ContainsAny(s, " \t\n\r") {
-		return nil, errors.New("sort spec must not contain whitespace")
+		return nil, invalidSpec("Sort spec must not contain whitespace.")
 	}
 
 	parts := strings.Split(s, ",")
 	if len(parts) > MaxLevels {
-		return nil, errors.Errorf("sort spec has %d levels, max is %d", len(parts), MaxLevels)
+		return nil, invalidSpec("Sort spec has %d levels; the maximum is %d.", len(parts), MaxLevels)
 	}
 
 	seen := make(map[string]struct{}, len(parts))
@@ -72,23 +79,23 @@ func Parse(s string) ([]SortLevel, error) {
 
 	for _, part := range parts {
 		if part == "" {
-			return nil, errors.New("sort spec contains an empty pair")
+			return nil, invalidSpec("Sort spec contains an empty pair.")
 		}
 
 		kv := strings.SplitN(part, ":", 2)
 		if len(kv) != 2 {
-			return nil, errors.Errorf("sort level %q missing direction", part)
+			return nil, invalidSpec("Sort level %q is missing a direction.", part)
 		}
 
 		field, dir := kv[0], kv[1]
-		if !IsValidField(field) {
-			return nil, errors.Errorf("unknown sort field %q", field)
+		if !isValidField(field) {
+			return nil, invalidSpec("Unknown sort field %q.", field)
 		}
 		if dir != string(DirAsc) && dir != string(DirDesc) {
-			return nil, errors.Errorf("invalid direction %q (want asc or desc)", dir)
+			return nil, invalidSpec("Invalid direction %q; use asc or desc.", dir)
 		}
 		if _, dup := seen[field]; dup {
-			return nil, errors.Errorf("duplicate sort field %q", field)
+			return nil, invalidSpec("Duplicate sort field %q.", field)
 		}
 		seen[field] = struct{}{}
 
@@ -109,4 +116,9 @@ func Serialize(levels []SortLevel) string {
 		parts[i] = fmt.Sprintf("%s:%s", l.Field, l.Direction)
 	}
 	return strings.Join(parts, ",")
+}
+
+// invalidSpec builds the 422 a malformed spec returns.
+func invalidSpec(format string, args ...any) error {
+	return errcodes.ValidationError(fmt.Sprintf(format, args...))
 }

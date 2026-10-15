@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
@@ -28,10 +29,28 @@ type ListPublishersOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	Search     *string
-	ExcludeIDs []int // Exclude specific publisher IDs from results
+	ExcludeIDs []int                // Exclude specific publisher IDs from results
+	Sort       []sortspec.SortLevel // Defaults to name ascending
 
 	includeTotal bool
 }
+
+// publisherSortFields are the sort fields the publisher list accepts.
+var publisherSortFields = sortspec.ResourceFields{
+	sortspec.FieldName: "pub.name",
+	// Matches GetFileCount: the publisher's own files plus its descendants'.
+	sortspec.FieldFileCount: `(SELECT COUNT(*) FROM files f WHERE f.publisher_id IN (
+		WITH RECURSIVE publisher_tree(id) AS (
+			SELECT pub.id
+			UNION
+			SELECT child.id FROM publishers child JOIN publisher_tree pt ON child.parent_id = pt.id
+		)
+		SELECT id FROM publisher_tree
+	))`,
+	sortspec.FieldDateAdded: "pub.created_at",
+}
+
+var defaultPublishersSort = []sortspec.SortLevel{{Field: sortspec.FieldName, Direction: sortspec.DirAsc}}
 
 type UpdatePublisherOptions struct {
 	Columns []string
@@ -143,8 +162,7 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 
 	q := svc.db.
 		NewSelect().
-		Model(&publishers).
-		Order("pub.name ASC")
+		Model(&publishers)
 
 	if opts.LibraryID != nil {
 		q = q.Where("pub.library_id = ?", *opts.LibraryID)
@@ -160,6 +178,13 @@ func (svc *Service) listPublishersWithTotal(ctx context.Context, opts ListPublis
 	}
 	if len(opts.ExcludeIDs) > 0 {
 		q = q.Where("pub.id NOT IN (?)", bun.List(opts.ExcludeIDs))
+	}
+	sortLevels := opts.Sort
+	if len(sortLevels) == 0 {
+		sortLevels = defaultPublishersSort
+	}
+	for _, clause := range publisherSortFields.OrderClauses(sortLevels, "pub.id") {
+		q = q.OrderExpr(clause.Expression)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))

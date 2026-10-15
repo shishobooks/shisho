@@ -72,6 +72,7 @@ type ListPublishersQuery struct {
 	LibraryID  *int    `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search     *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
 	ExcludeIDs []int   `query:"exclude_ids" json:"exclude_ids,omitempty" validate:"omitempty,dive,min=1" tstype:"number[]"`
+	Sort       string  `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 }
 
 type SubResourceQuery struct {

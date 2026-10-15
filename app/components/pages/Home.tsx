@@ -36,6 +36,8 @@ import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
   serializeSortSpec,
+  SORT_FIELD_LABELS,
+  SORT_FIELDS,
   sortSpecsEqual,
   type SortLevel,
 } from "@/libraries/sortSpec";
@@ -530,6 +532,8 @@ const HomeContent = () => {
             tagsQuery={tagsQuery}
           />
           <SortSheet
+            fieldLabels={SORT_FIELD_LABELS}
+            fields={SORT_FIELDS}
             isDirty={isSortDirty}
             isSaving={updateLibrarySettings.isPending}
             levels={effectiveSort}
@@ -574,6 +578,7 @@ const HomeContent = () => {
           selectedTags={selectedTags}
         />
         <SortedByChips
+          fieldLabels={SORT_FIELD_LABELS}
           levels={isSortDirty ? effectiveSort : []}
           onRemoveLevel={(index) => {
             const next = effectiveSort.filter((_, i) => i !== index);

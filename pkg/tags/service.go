@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/merge"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
@@ -27,9 +28,19 @@ type ListTagsOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	Search     *string
+	Sort       []sortspec.SortLevel // Defaults to name ascending
 
 	includeTotal bool
 }
+
+// tagSortFields are the sort fields the tag list accepts.
+var tagSortFields = sortspec.ResourceFields{
+	sortspec.FieldName:      "t.name",
+	sortspec.FieldBookCount: "(SELECT COUNT(*) FROM book_tags bt WHERE bt.tag_id = t.id)",
+	sortspec.FieldDateAdded: "t.created_at",
+}
+
+var defaultTagsSort = []sortspec.SortLevel{{Field: sortspec.FieldName, Direction: sortspec.DirAsc}}
 
 type UpdateTagOptions struct {
 	Columns []string
@@ -141,8 +152,7 @@ func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 
 	q := svc.db.
 		NewSelect().
-		Model(&tags).
-		Order("t.name ASC")
+		Model(&tags)
 
 	if opts.LibraryID != nil {
 		q = q.Where("t.library_id = ?", *opts.LibraryID)
@@ -156,6 +166,13 @@ func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 		if ftsQuery != "" {
 			q = q.Where("t.id IN (SELECT tag_id FROM tags_fts WHERE tags_fts MATCH ?)", ftsQuery)
 		}
+	}
+	sortLevels := opts.Sort
+	if len(sortLevels) == 0 {
+		sortLevels = defaultTagsSort
+	}
+	for _, clause := range tagSortFields.OrderClauses(sortLevels, "t.id") {
+		q = q.OrderExpr(clause.Expression)
 	}
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))

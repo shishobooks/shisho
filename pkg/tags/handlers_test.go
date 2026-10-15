@@ -303,3 +303,41 @@ func TestRetrieve_NoUserInContext_Returns401(t *testing.T) {
 	code := serveWithoutUser(newTestEcho(t), "/tags/:id", newTestHandler(db).retrieve, fmt.Sprintf("/tags/%d", tag.ID))
 	assert.Equal(t, http.StatusUnauthorized, code)
 }
+
+func TestList_SortParam(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	lib := createTestLibrary(t, db)
+	seedTagWithBooks(t, db, lib, "Few", []string{"A"})
+	seedTagWithBooks(t, db, lib, "Many", []string{"B", "C"})
+
+	e := newTestEcho(t)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/?library_id=%d&sort=book_count:desc", lib.ID), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
+
+	require.NoError(t, newTestHandler(db).list(c))
+	var resp ListTagsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Items, 2)
+	assert.Equal(t, "Many", resp.Items[0].Name)
+	assert.Equal(t, "Few", resp.Items[1].Name)
+}
+
+// A sort field the tag list does not offer is rejected instead of silently
+// falling back to the default order.
+func TestList_UnknownSortField_Returns422(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+
+	e := newTestEcho(t)
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET("/tags", func(c echo.Context) error {
+		setAllAccessUser(c)
+		return newTestHandler(db).list(c)
+	})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tags?sort=title:asc", nil))
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}

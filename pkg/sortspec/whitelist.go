@@ -6,7 +6,7 @@ package sortspec
 //   - Update AllFields() below (order matters — it's pinned in tests).
 //   - Add an SQL case to OrderClauses in sql.go.
 //   - Update the TS whitelist in app/libraries/sortSpec.ts (it mirrors this file).
-//   - Document semantics in website/docs/gallery-sort.md (the user-facing reference).
+//   - Document semantics in website/docs/browsing-search-bulk-actions.md (the user-facing reference).
 const (
 	FieldTitle        = "title"
 	FieldAuthor       = "author"

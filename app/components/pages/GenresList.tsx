@@ -1,14 +1,14 @@
 import ResourceList from "@/components/library/ResourceList";
 import { useGenresList } from "@/hooks/queries/genres";
 import { useResourceListState } from "@/hooks/useResourceListState";
-import type { GenreResponse } from "@/types";
+import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 
 const GenresList = () => {
-  const state = useResourceListState();
+  const state = useResourceListState(BOOK_COUNT_RESOURCE_SORT);
   const query = useGenresList(state.queryParams);
 
   return (
-    <ResourceList<GenreResponse>
+    <ResourceList
       itemConfig={(genre) => {
         const bookCount = genre.book_count ?? 0;
         return {

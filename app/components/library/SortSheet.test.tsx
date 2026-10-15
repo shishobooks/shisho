@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Button } from "@/components/ui/button";
-import type { SortLevel } from "@/libraries/sortSpec";
+import { PERSON_SORT } from "@/libraries/resourceSort";
+import {
+  SORT_FIELD_LABELS,
+  SORT_FIELDS,
+  type SortLevel,
+} from "@/libraries/sortSpec";
 
 import SortSheet from "./SortSheet";
 
@@ -40,6 +45,8 @@ describe("SortSheet", () => {
     const onChange = vi.fn();
     render(
       <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
         isDirty={false}
         isSaving={false}
         levels={[]}
@@ -61,6 +68,8 @@ describe("SortSheet", () => {
     const levels: SortLevel[] = [{ field: "title", direction: "asc" }];
     render(
       <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
         isDirty={true}
         isSaving={false}
         levels={levels}
@@ -87,6 +96,8 @@ describe("SortSheet", () => {
     ];
     render(
       <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
         isDirty={false}
         isSaving={false}
         levels={levels}
@@ -110,6 +121,8 @@ describe("SortSheet", () => {
     const levels: SortLevel[] = [{ field: "title", direction: "asc" }];
     render(
       <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
         isDirty={true}
         isSaving={false}
         levels={levels}
@@ -130,6 +143,8 @@ describe("SortSheet", () => {
     const levels: SortLevel[] = [{ field: "title", direction: "asc" }];
     render(
       <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
         isDirty={false}
         isSaving={false}
         levels={levels}
@@ -142,5 +157,34 @@ describe("SortSheet", () => {
     expect(
       screen.queryByRole("button", { name: /Save as default/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("offers only the fields it is given and hides the save prompt without a save handler", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    render(
+      <SortSheet
+        fieldLabels={PERSON_SORT.labels}
+        fields={PERSON_SORT.fields}
+        isDirty
+        levels={[{ field: "name", direction: "asc" }]}
+        onChange={onChange}
+        trigger={<Trigger />}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Open Sort/i }));
+
+    expect(
+      screen.queryByRole("button", { name: /Title/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Save as my default/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Books authored/i }));
+    expect(onChange).toHaveBeenCalledWith([
+      { field: "name", direction: "asc" },
+      { field: "authored_book_count", direction: "asc" },
+    ]);
   });
 });

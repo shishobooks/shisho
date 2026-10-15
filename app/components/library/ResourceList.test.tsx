@@ -3,9 +3,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
+import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
+import type { SortLevel } from "@/libraries/sortSpec";
 import type { ResourceListResponse } from "@/types";
 
 import ResourceList from "./ResourceList";
@@ -17,13 +19,33 @@ vi.mock("@/components/library/PaginationFooter", () => ({
   default: () => null,
 }));
 
+// The Sort control picks a sheet or a drawer by viewport width.
+beforeAll(() => {
+  window.matchMedia = vi.fn(() => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+});
+
 type Item = { id: number; name: string };
+type Field = (typeof BOOK_COUNT_RESOURCE_SORT.fields)[number];
+
+const defaultSort = {
+  config: BOOK_COUNT_RESOURCE_SORT,
+  levels: BOOK_COUNT_RESOURCE_SORT.defaultSort,
+  isDirty: false,
+  param: "name:asc",
+  apply: vi.fn(),
+  reset: vi.fn(),
+};
 
 const state = {
   libraryId: "1",
   currentPage: 1,
   searchQuery: "",
   setSearchQuery: vi.fn(),
+  sort: defaultSort,
   queryParams: { limit: 50, offset: 0 },
   limit: 50,
   offset: 0,
@@ -33,16 +55,17 @@ const state = {
 const list = (
   query: Partial<UseQueryResult<ResourceListResponse<Item>>>,
   searchQuery = "",
+  sort = defaultSort,
 ) => (
   <MemoryRouter>
-    <ResourceList<Item>
+    <ResourceList<Item, Field>
       itemConfig={(item) => ({ name: item.name, aliases: [], badges: [] })}
       itemLabel="genres"
       linkTo={(item) => `/libraries/1/genres/${item.id}`}
       query={query as UseQueryResult<ResourceListResponse<Item>>}
       searchLabel="Search genres"
       searchPlaceholder="Search genres..."
-      state={{ ...state, searchQuery }}
+      state={{ ...state, searchQuery, sort }}
       subtitle="Browse genres"
       title="Genres"
     />
@@ -153,5 +176,38 @@ describe("ResourceList", () => {
     rerender(list({ ...settled, data: { items: [], total: 0 } }));
     expect(region).toBeInTheDocument();
     expect(region).toHaveTextContent("No genres in this library yet.");
+  });
+
+  it("shows a changed sort as chips that can be removed or reset", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const apply = vi.fn();
+    const reset = vi.fn();
+    const levels: SortLevel<Field>[] = [
+      { field: "book_count", direction: "desc" },
+      { field: "name", direction: "asc" },
+    ];
+    render(
+      list({ ...settled, data: { items: [], total: 0 } }, "", {
+        ...defaultSort,
+        levels,
+        isDirty: true,
+        param: "book_count:desc,name:asc",
+        apply,
+        reset,
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: /^Sort/ })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /Book count descending/ }),
+    );
+    expect(apply).toHaveBeenCalledWith([{ field: "name", direction: "asc" }]);
+    await user.click(screen.getByRole("button", { name: "reset to default" }));
+    expect(reset).toHaveBeenCalled();
+  });
+
+  it("shows no sort chips for the default sort", () => {
+    render(list({ ...settled, data: { items: [], total: 0 } }));
+    expect(screen.queryByText("Sorted by:")).not.toBeInTheDocument();
   });
 });

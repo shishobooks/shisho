@@ -6,7 +6,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
-	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
@@ -70,7 +69,7 @@ func (h *libraryHandler) updateLibrarySettings(c echo.Context) error {
 	// Validate sort_spec if present (nil means "clear").
 	if payload.SortSpec != nil && *payload.SortSpec != "" {
 		if _, err := sortspec.Parse(*payload.SortSpec); err != nil {
-			return errcodes.ValidationError(err.Error())
+			return err
 		}
 	}
 	// Treat empty string as equivalent to null (clear).

@@ -49,13 +49,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import {
-  MAX_SORT_LEVELS,
-  SORT_FIELD_LABELS,
-  SORT_FIELDS,
-  type SortField,
-  type SortLevel,
-} from "@/libraries/sortSpec";
+import { MAX_SORT_LEVELS, type SortLevel } from "@/libraries/sortSpec";
 
 /*
  * SortSheet is intentionally controlled — it holds NO local state for
@@ -73,31 +67,39 @@ import {
  * must keep `levels` free of duplicate fields, otherwise dnd-kit will
  * reuse the same node id for two rows and reorder/animations break.
  */
-interface SortSheetProps {
-  levels: readonly SortLevel[];
-  onChange: (levels: SortLevel[]) => void;
-  onSaveAsDefault: () => void;
+interface SortSheetProps<F extends string> {
+  /** Fields the user can add, in display order. */
+  fields: readonly F[];
+  fieldLabels: Record<F, string>;
+  levels: readonly SortLevel<F>[];
+  onChange: (levels: SortLevel<F>[]) => void;
+  /** Omit where the sort cannot be saved; the save prompt is then hidden. */
+  onSaveAsDefault?: () => void;
   isDirty: boolean;
-  isSaving: boolean;
+  isSaving?: boolean;
 }
 
-interface SortLevelRowProps {
-  level: SortLevel;
+interface SortLevelRowProps<F extends string> {
+  fields: readonly F[];
+  fieldLabels: Record<F, string>;
+  level: SortLevel<F>;
   levelIndex: number;
-  usedFields: SortField[];
-  onChangeField: (index: number, field: SortField) => void;
+  usedFields: F[];
+  onChangeField: (index: number, field: F) => void;
   onToggleDirection: (index: number) => void;
   onRemove: (index: number) => void;
 }
 
-const SortLevelRow = ({
+const SortLevelRow = <F extends string>({
+  fields,
+  fieldLabels,
   level,
   levelIndex,
   usedFields,
   onChangeField,
   onToggleDirection,
   onRemove,
-}: SortLevelRowProps) => {
+}: SortLevelRowProps<F>) => {
   const {
     attributes,
     listeners,
@@ -114,11 +116,11 @@ const SortLevelRow = ({
   };
 
   // Available fields for this row: fields not used by other rows + this row's current field
-  const availableFields = SORT_FIELDS.filter(
+  const availableFields = fields.filter(
     (f) => f === level.field || !usedFields.includes(f),
   );
 
-  const fieldLabel = SORT_FIELD_LABELS[level.field];
+  const fieldLabel = fieldLabels[level.field];
   const isAsc = level.direction === "asc";
 
   return (
@@ -139,7 +141,7 @@ const SortLevelRow = ({
       </Button>
 
       <Select
-        onValueChange={(value) => onChangeField(levelIndex, value as SortField)}
+        onValueChange={(value) => onChangeField(levelIndex, value as F)}
         value={level.field}
       >
         <SelectTrigger
@@ -151,7 +153,7 @@ const SortLevelRow = ({
         <SelectContent>
           {availableFields.map((f) => (
             <SelectItem key={f} value={f}>
-              {SORT_FIELD_LABELS[f]}
+              {fieldLabels[f]}
             </SelectItem>
           ))}
         </SelectContent>
@@ -186,15 +188,17 @@ const SortLevelRow = ({
   );
 };
 
-const SortSheetContent = ({
+const SortSheetContent = <F extends string>({
+  fields,
+  fieldLabels,
   levels,
   onChange,
   onSaveAsDefault,
   isDirty,
-  isSaving,
-}: SortSheetProps) => {
+  isSaving = false,
+}: SortSheetProps<F>) => {
   const usedFields = levels.map((l) => l.field);
-  const unusedFields = SORT_FIELDS.filter((f) => !usedFields.includes(f));
+  const unusedFields = fields.filter((f) => !usedFields.includes(f));
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -205,11 +209,11 @@ const SortSheetContent = ({
     onChange(arrayMove([...levels], oldIndex, newIndex));
   };
 
-  const addLevel = (field: SortField) => {
+  const addLevel = (field: F) => {
     onChange([...levels, { field, direction: "asc" }]);
   };
 
-  const changeField = (index: number, field: SortField) => {
+  const changeField = (index: number, field: F) => {
     onChange(levels.map((l, i) => (i === index ? { ...l, field } : l)));
   };
 
@@ -249,6 +253,8 @@ const SortSheetContent = ({
             <div className="flex flex-col">
               {levels.map((level, index) => (
                 <SortLevelRow
+                  fieldLabels={fieldLabels}
+                  fields={fields}
                   key={level.field}
                   level={level}
                   levelIndex={index}
@@ -277,14 +283,14 @@ const SortSheetContent = ({
                 variant="outline"
               >
                 <Plus className="h-4 w-4" />
-                {SORT_FIELD_LABELS[field]}
+                {fieldLabels[field]}
               </Button>
             ))}
           </div>
         </div>
       )}
 
-      {isDirty && (
+      {isDirty && onSaveAsDefault && (
         <div className="border border-dashed rounded-md p-3">
           <p className="text-xs text-muted-foreground mb-2">
             Other users won't be affected.
@@ -299,10 +305,10 @@ const SortSheetContent = ({
   );
 };
 
-const SortSheet = ({
+const SortSheet = <F extends string>({
   trigger,
   ...props
-}: SortSheetProps & { trigger: React.ReactNode }) => {
+}: SortSheetProps<F> & { trigger: React.ReactNode }) => {
   const [open, setOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 

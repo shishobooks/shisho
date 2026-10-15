@@ -146,6 +146,31 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
+			name:   "tags list with a sort field it does not offer",
+			method: http.MethodGet, path: "/api/tags?sort=title:asc",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
+		},
+		{
+			name:   "genres list with a sort field it does not offer",
+			method: http.MethodGet, path: "/api/genres?sort=title:asc",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
+		},
+		{
+			name:   "series list with a sort field it does not offer",
+			method: http.MethodGet, path: "/api/series?sort=title:asc",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
+		},
+		{
+			name:   "people list with a sort field it does not offer",
+			method: http.MethodGet, path: "/api/people?sort=title:asc",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
+		},
+		{
+			name:   "publishers list with a sort field it does not offer",
+			method: http.MethodGet, path: "/api/publishers?sort=title:asc",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
+		},
+		{
 			name:   "publisher set-child with a child that does not exist",
 			method: http.MethodPost, path: fmt.Sprintf("/api/publishers/%d/set-child", parent.ID),
 			body:   `{"child_id":999999}`,
