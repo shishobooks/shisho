@@ -89,6 +89,7 @@ const QUERY_STATE = {
   error: null,
   isFetching: false,
   isEnabled: true,
+  isPlaceholderData: false,
   refetch: () => undefined,
 };
 
@@ -216,6 +217,32 @@ describe("BookGallerySection", () => {
     // 100 books at size M (24 per page) is five pages.
     await waitFor(() => expect(router.state.location.search).toBe("?page=5"));
     expect(router.state.historyAction).toBe("REPLACE");
+  });
+
+  it("keeps the page while the total is another query's placeholder", async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <BookGallerySection
+              libraryId="1"
+              query={{ ...makeQueryResult([], 10), isPlaceholderData: true }}
+              title="Books"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/?page=4"] },
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("Books");
+    expect(router.state.location.search).toBe("?page=4");
   });
 
   it("calls onPageChange with page 1 when size changes from the first page", async () => {

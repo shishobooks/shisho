@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
+import type { PageChangeHandler } from "@/components/library/PaginationFooter";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { useSortParam } from "@/hooks/useSortParam";
 import { parsePageParam } from "@/libraries/pagination";
@@ -37,8 +38,8 @@ export function useResourceListState<F extends string>(
     sort: sort.param,
   };
 
-  const handlePageChange = useCallback(
-    (page: number, options?: { replace?: boolean }) => {
+  const handlePageChange = useCallback<PageChangeHandler>(
+    (page, options) => {
       const newParams = new URLSearchParams(searchParams);
       newParams.set("page", page.toString());
       setSearchParams(newParams, options);

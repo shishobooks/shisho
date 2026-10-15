@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   fileLabel,
+  formatCount,
   formatDate,
   formatDateTime,
   formatElapsed,
@@ -149,9 +150,27 @@ describe("formatShowingRange", () => {
     );
   });
 
+  it("says nothing for a page past the end", () => {
+    expect(formatShowingRange(400, 50, 120, "genres")).toBeNull();
+  });
+
   it("caps the end of the range at the total", () => {
     expect(formatShowingRange(0, 20, 2, "genres")).toBe(
       "Showing 1-2 of 2 genres",
     );
+  });
+});
+
+describe("formatCount", () => {
+  it("groups thousands and pluralizes with an s", () => {
+    expect(formatCount(18307, "book")).toBe("18,307 books");
+  });
+
+  it("keeps the singular for one", () => {
+    expect(formatCount(1, "book")).toBe("1 book");
+  });
+
+  it("takes an irregular plural", () => {
+    expect(formatCount(2, "person", "people")).toBe("2 people");
   });
 });

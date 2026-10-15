@@ -13,6 +13,7 @@ const query = {
   error: null as unknown,
   isFetching: false,
   isEnabled: true,
+  isPlaceholderData: false,
   refetch: vi.fn(),
 };
 

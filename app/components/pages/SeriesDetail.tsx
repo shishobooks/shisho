@@ -28,6 +28,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSortParam } from "@/hooks/useSortParam";
 import { isLoadFailure } from "@/libraries/api";
 import { SERIES_BOOKS_SORT } from "@/libraries/sortSpec";
+import { formatCount } from "@/utils/format";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -221,7 +222,7 @@ const SeriesDetail = () => {
           </p>
         )}
         <Badge variant="secondary">
-          {series.book_count} book{series.book_count !== 1 ? "s" : ""}
+          {formatCount(series.book_count, "book")}
         </Badge>
       </div>
 

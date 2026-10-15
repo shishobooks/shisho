@@ -36,7 +36,20 @@ export const formatPageCount = (count: number): string =>
   `${count} ${count === 1 ? "page" : "pages"}`;
 
 /**
+ * Formats a count with its noun, thousands grouped.
+ * @example formatCount(18307, "book") // "18,307 books"
+ * @example formatCount(1, "person", "people") // "1 person"
+ */
+export const formatCount = (
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string => `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+
+/**
  * Formats the "Showing" line above a paginated list, with thousands grouped.
+ * Returns null for a page past the end, which shows nothing until the
+ * pagination footer moves to the last page.
  * @example formatShowingRange(0, 15, 18307, "books") // "Showing 1-15 of 18,307 books"
  */
 export const formatShowingRange = (
@@ -44,7 +57,8 @@ export const formatShowingRange = (
   limit: number,
   total: number,
   itemLabel: string,
-): string => {
+): string | null => {
+  if (offset >= total) return null;
   const first = (offset + 1).toLocaleString();
   const last = Math.min(offset + limit, total).toLocaleString();
   return `Showing ${first}-${last} of ${total.toLocaleString()} ${itemLabel}`;

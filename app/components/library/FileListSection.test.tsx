@@ -79,6 +79,7 @@ function makeQueryResult(files: File[], total: number) {
     isSuccess: true,
     isFetching: false,
     isEnabled: true,
+    isPlaceholderData: false,
     refetch: vi.fn(),
   };
 }

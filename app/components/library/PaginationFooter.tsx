@@ -23,11 +23,21 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/libraries/utils";
 
+/** `replace` is set when the footer corrects a page past the end, so Back skips it. */
+export type PageChangeHandler = (
+  page: number,
+  options?: { replace?: boolean },
+) => void;
+
 interface PaginationFooterProps {
   currentPage: number;
   totalPages: number;
-  /** `replace` is set when the footer corrects a page past the end, so Back skips it. */
-  onPageChange: (page: number, options?: { replace?: boolean }) => void;
+  /**
+   * False while `totalPages` comes from another query's placeholder data
+   * (the global `keepPreviousData`), which says nothing about this page.
+   */
+  totalIsCurrent: boolean;
+  onPageChange: PageChangeHandler;
   className?: string;
 }
 
@@ -42,8 +52,9 @@ function pageOptions(
   totalPages: number,
 ): number[] {
   const pages: number[] = [];
-  const digits = query.replace(/\D/g, "");
-  if (digits) {
+  if (query) {
+    const digits = query.replace(/\D/g, "");
+    if (!digits) return pages;
     for (let p = 1; p <= totalPages && pages.length < MAX_MATCHES; p++) {
       if (String(p).startsWith(digits)) pages.push(p);
     }
@@ -81,6 +92,7 @@ const NavButton = ({
 const PaginationFooter = ({
   currentPage,
   totalPages,
+  totalIsCurrent,
   onPageChange,
   className,
 }: PaginationFooterProps) => {
@@ -90,13 +102,13 @@ const PaginationFooter = ({
   const currentRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // A page past the end (a bookmarked URL, or items deleted since) would show
-  // an empty page under a range like "Showing 401-367".
+  // A page past the end (a bookmarked URL, or items deleted since) has no
+  // items, so move to the last page that does.
   useEffect(() => {
-    if (totalPages >= 1 && currentPage > totalPages) {
+    if (totalIsCurrent && totalPages >= 1 && currentPage > totalPages) {
       onPageChange(totalPages, { replace: true });
     }
-  }, [currentPage, totalPages, onPageChange]);
+  }, [currentPage, totalPages, totalIsCurrent, onPageChange]);
 
   const options = useMemo(
     () => (open ? pageOptions(query, currentPage, totalPages) : []),
@@ -111,9 +123,10 @@ const PaginationFooter = ({
       if (listRef.current) listRef.current.scrollTop = 0;
     } else {
       setHighlighted(String(currentPage));
-      requestAnimationFrame(() =>
+      const frame = requestAnimationFrame(() =>
         currentRef.current?.scrollIntoView({ block: "center" }),
       );
+      return () => cancelAnimationFrame(frame);
     }
   }, [open, query, options, currentPage]);
 
@@ -128,7 +141,7 @@ const PaginationFooter = ({
   return (
     <nav
       aria-label="Pagination"
-      className={cn("flex items-center justify-center gap-1", className)}
+      className={cn("flex items-center justify-center sm:gap-1", className)}
     >
       <NavButton
         disabled={currentPage <= 1}
@@ -152,7 +165,7 @@ const PaginationFooter = ({
         open={open}
       >
         <PopoverTrigger asChild>
-          <Button className="mx-1 gap-2 tabular-nums" variant="outline">
+          <Button className="tabular-nums sm:mx-1" variant="outline">
             Page {currentPage.toLocaleString()} of {totalPages.toLocaleString()}
             <ChevronDown className="opacity-60" />
           </Button>

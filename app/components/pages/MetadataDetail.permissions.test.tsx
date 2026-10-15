@@ -75,7 +75,13 @@ const PAGES: Array<{
 const stubRequests = () =>
   vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
     if (/^\/[a-z]+\/1$/.test(String(path))) {
-      return { id: 1, name: "Entity", library_id: 1, aliases: [] };
+      return {
+        id: 1,
+        name: "Entity",
+        library_id: 1,
+        aliases: [],
+        book_count: 0,
+      };
     }
     return { items: [], total: 0 };
   });

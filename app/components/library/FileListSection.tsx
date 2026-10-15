@@ -3,7 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import PaginationFooter from "@/components/library/PaginationFooter";
+import PaginationFooter, {
+  type PageChangeHandler,
+} from "@/components/library/PaginationFooter";
 import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
@@ -18,6 +20,7 @@ interface FileListQuery extends RetryableQuery {
   data: ResourceListResponse<File> | undefined;
   isLoading: boolean;
   isSuccess: boolean;
+  isPlaceholderData: boolean;
 }
 
 interface FileListSectionProps {
@@ -78,8 +81,14 @@ export function FileListSection({
   const offset = (currentPage - 1) * FILE_LIST_ITEMS_PER_PAGE;
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / FILE_LIST_ITEMS_PER_PAGE);
+  const showing = formatShowingRange(
+    offset,
+    FILE_LIST_ITEMS_PER_PAGE,
+    total,
+    "files",
+  );
 
-  const handlePageChange = (page: number, options?: { replace?: boolean }) => {
+  const handlePageChange: PageChangeHandler = (page, options) => {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (page === 1) {
@@ -124,9 +133,9 @@ export function FileListSection({
     <section className="mb-10">
       <h2 className="text-xl font-semibold mb-4">{title}</h2>
 
-      <div className="mb-4 text-sm text-muted-foreground">
-        {formatShowingRange(offset, FILE_LIST_ITEMS_PER_PAGE, total, "files")}
-      </div>
+      {showing && (
+        <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
+      )}
 
       <div className="space-y-2 mb-6 md:mb-8">
         {query.data?.items.map((file) => (
@@ -161,6 +170,7 @@ export function FileListSection({
         className="mb-8"
         currentPage={currentPage}
         onPageChange={handlePageChange}
+        totalIsCurrent={!query.isPlaceholderData}
         totalPages={totalPages}
       />
     </section>

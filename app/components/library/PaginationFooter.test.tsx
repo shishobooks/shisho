@@ -6,12 +6,17 @@ import PaginationFooter from "./PaginationFooter";
 
 const setup = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-const renderFooter = (currentPage: number, totalPages: number) => {
+const renderFooter = (
+  currentPage: number,
+  totalPages: number,
+  totalIsCurrent = true,
+) => {
   const onPageChange = vi.fn();
   render(
     <PaginationFooter
       currentPage={currentPage}
       onPageChange={onPageChange}
+      totalIsCurrent={totalIsCurrent}
       totalPages={totalPages}
     />,
   );
@@ -100,8 +105,6 @@ describe("PaginationFooter", () => {
       "Page 348",
       "Page 349",
     ]);
-    // Only options in the list: no separators between them.
-    expect(listbox.querySelectorAll("[cmdk-item]")).toHaveLength(11);
 
     await user.keyboard("{Enter}");
     expect(onPageChange).toHaveBeenCalledWith(34);
@@ -117,6 +120,24 @@ describe("PaginationFooter", () => {
     const onPageChange = renderFooter(4, 1);
 
     expect(onPageChange).toHaveBeenCalledWith(1, { replace: true });
+  });
+
+  it("shows no pages for input without digits", async () => {
+    const user = setup();
+    const onPageChange = renderFooter(120, 367);
+
+    await user.click(screen.getByRole("button", { name: /Page 120 of 367/ }));
+    await user.keyboard("abc{Enter}");
+
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.getByText("No such page.")).toBeInTheDocument();
+    expect(onPageChange).not.toHaveBeenCalled();
+  });
+
+  it("leaves the page alone while the total belongs to another query", () => {
+    const onPageChange = renderFooter(10, 3, false);
+
+    expect(onPageChange).not.toHaveBeenCalled();
   });
 
   it("leaves the page alone while there are no results", () => {

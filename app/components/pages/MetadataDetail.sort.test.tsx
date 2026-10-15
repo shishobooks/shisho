@@ -51,7 +51,13 @@ beforeEach(() => {
     .mockImplementation(async (_method, path) => {
       if (path === "/settings/user") return { gallery_size: "m" };
       if (/^\/(tags|genres|people|series)\/\d+$/.test(path)) {
-        return { id: 5, library_id: 1, name: "Entity", aliases: [] };
+        return {
+          id: 5,
+          library_id: 1,
+          name: "Entity",
+          aliases: [],
+          book_count: 0,
+        };
       }
       return { items: [], total: 0 };
     });

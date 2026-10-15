@@ -2,7 +2,9 @@ import { useSearchParams } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import PaginationFooter from "@/components/library/PaginationFooter";
+import PaginationFooter, {
+  type PageChangeHandler,
+} from "@/components/library/PaginationFooter";
 import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
@@ -19,6 +21,7 @@ interface BookGalleryQuery extends RetryableQuery {
   data: ResourceListResponse<Book> | undefined;
   isSuccess: boolean;
   isError: boolean;
+  isPlaceholderData: boolean;
 }
 
 interface BookGallerySectionProps<F extends string> {
@@ -65,7 +68,7 @@ export function BookGallerySection<F extends string>({
   });
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
 
-  const handlePageChange = (page: number, options?: { replace?: boolean }) => {
+  const handlePageChange: PageChangeHandler = (page, options) => {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (page === 1) {
@@ -101,6 +104,7 @@ export function BookGallerySection<F extends string>({
   }
 
   const total = query.data?.total ?? 0;
+  const showing = formatShowingRange(offset, itemsPerPage, total, "books");
 
   if (total === 0) {
     return (
@@ -153,9 +157,9 @@ export function BookGallerySection<F extends string>({
         />
       )}
 
-      <div className="mb-4 text-sm text-muted-foreground">
-        {formatShowingRange(offset, itemsPerPage, total, "books")}
-      </div>
+      {showing && (
+        <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
+      )}
 
       <div className="flex flex-wrap gap-4 mb-6 md:mb-8">
         {query.data?.items.map((book) => (
@@ -173,6 +177,7 @@ export function BookGallerySection<F extends string>({
         className="mb-8"
         currentPage={currentPage}
         onPageChange={handlePageChange}
+        totalIsCurrent={!query.isPlaceholderData}
         totalPages={totalPages}
       />
     </section>
