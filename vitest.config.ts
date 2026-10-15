@@ -11,6 +11,12 @@ const coverageTmpDir = path.join(coverageDir, ".tmp");
 // Pre-creating the directory avoids intermittent ENOENT failures at write time.
 fs.mkdirSync(coverageTmpDir, { recursive: true });
 
+// Number and date formatting follow the host locale, and the tests expect
+// en-US output ("18,307", "Jan"). Test workers start after this runs and
+// inherit it, so a machine set to another locale gets the same results.
+process.env.LANG = "en_US.UTF-8";
+process.env.LC_ALL = "en_US.UTF-8";
+
 export default defineConfig({
   plugins: [react() as never],
   resolve: {
@@ -22,6 +28,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    // Forks, not threads: threads share this process's locale, which was
+    // fixed before the pin above ran.
+    pool: "forks",
     include: ["app/**/*.test.{ts,tsx}", "website/*.test.ts"],
     // `mise check:quiet` runs this suite alongside the Go tests, both linters,
     // and the browser e2e pipelines, which pegs the CPU. Heavy jsdom tests take

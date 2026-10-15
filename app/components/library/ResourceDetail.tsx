@@ -22,6 +22,7 @@ import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useCan } from "@/hooks/useCan";
 import { isLoadFailure } from "@/libraries/api";
 import type { DataSource } from "@/types";
+import { formatCount } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 interface BreadcrumbItem {
@@ -219,8 +220,7 @@ export function ResourceDetail({
         )}
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary">
-            {bookCount}{" "}
-            {bookCount !== 1 ? countLabel.plural : countLabel.singular}
+            {formatCount(bookCount, countLabel.singular, countLabel.plural)}
           </Badge>
           {extraBadges}
         </div>

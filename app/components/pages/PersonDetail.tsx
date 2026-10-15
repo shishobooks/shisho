@@ -25,6 +25,7 @@ import { useSortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
 import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
+import { formatCount } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const PersonDetail = () => {
@@ -166,8 +167,7 @@ const PersonDetail = () => {
       extraBadges={
         narratedFileCount > 0 ? (
           <Badge variant="outline">
-            {narratedFileCount}{" "}
-            {narratedFileCount !== 1 ? "files narrated" : "file narrated"}
+            {formatCount(narratedFileCount, "file")} narrated
           </Badge>
         ) : null
       }

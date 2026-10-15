@@ -45,6 +45,7 @@ import {
   type ListSort,
   type UpdateListPayload,
 } from "@/types";
+import { formatCount } from "@/utils/format";
 
 const SORT_OPTIONS = [
   { value: ListSortAddedAtDesc, label: "Recently Added" },
@@ -235,9 +236,7 @@ const ListDetail = () => {
             </p>
           )}
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary">
-              {bookCount} book{bookCount !== 1 ? "s" : ""}
-            </Badge>
+            <Badge variant="secondary">{formatCount(bookCount, "book")}</Badge>
             {!isOwner && <Badge variant="outline">{permission}</Badge>}
             {!isOwner && list.user && (
               <Badge variant="outline">Shared by {list.user.username}</Badge>

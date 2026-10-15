@@ -15,9 +15,6 @@ import ResourceList from "./ResourceList";
 vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
-vi.mock("@/components/library/PaginationFooter", () => ({
-  default: () => null,
-}));
 
 // The Sort control picks a sheet or a drawer by viewport width.
 beforeAll(() => {
@@ -153,6 +150,39 @@ describe("ResourceList", () => {
 
     expect(screen.getByText("Fantasy")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("asks for the last page, replacing history, when the page is past the end", () => {
+    const handlePageChange = vi.fn();
+    const pastTheEnd: Partial<UseQueryResult<ResourceListResponse<Item>>> = {
+      ...settled,
+      data: { items: [], total: 120 },
+    };
+    render(
+      <MemoryRouter>
+        <ResourceList<Item, Field>
+          itemConfig={(item) => ({ name: item.name, aliases: [], badges: [] })}
+          itemLabel="genres"
+          linkTo={(item) => `/libraries/1/genres/${item.id}`}
+          query={pastTheEnd as UseQueryResult<ResourceListResponse<Item>>}
+          searchLabel="Search genres"
+          state={{
+            ...state,
+            currentPage: 9,
+            offset: 400,
+            handlePageChange,
+          }}
+          subtitle="Browse genres"
+          title="Genres"
+        />
+      </MemoryRouter>,
+    );
+
+    // 120 genres at 50 per page is three pages.
+    expect(handlePageChange).toHaveBeenCalledWith(3, { replace: true });
+    expect(
+      screen.queryByText("No genres in this library yet."),
+    ).not.toBeInTheDocument();
   });
 
   it("announces the count and the empty state in one region that stays mounted", () => {

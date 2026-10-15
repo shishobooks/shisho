@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { ResourceListState } from "@/hooks/useResourceListState";
 import type { ResourceListResponse } from "@/types";
+import { formatShowingRange } from "@/utils/format";
 
 interface BadgeConfig {
   label: string;
@@ -85,6 +86,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
 
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
+  const showing = formatShowingRange(offset, limit, total, itemLabel);
   // Loaded results for the current search, not a page still loading.
   const showsResults = !query.isFetching && !isStaleData;
 
@@ -119,7 +121,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
         <div className="flex gap-2 shrink-0">
           {config.badges.map((badge) => (
             <Badge key={badge.label} variant={badge.variant ?? "secondary"}>
-              {badge.count} {badge.label}
+              {badge.count.toLocaleString()} {badge.label}
             </Badge>
           ))}
         </div>
@@ -165,13 +167,10 @@ const ResourceList = <T extends { id: number }, F extends string>({
           change, so a new count or the empty state is announced. A region
           mounted with its text is often not. */}
       <div role="status">
-        {showsResults && query.data && total > 0 && (
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
-            {itemLabel}
-          </div>
+        {showsResults && query.data && showing && (
+          <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
         )}
-        {showsResults && query.data?.items.length === 0 && (
+        {showsResults && query.data?.total === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             {confirmedSearch
               ? `No ${itemLabel} found matching your search.`
@@ -199,6 +198,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
           <PaginationFooter
             currentPage={currentPage}
             onPageChange={handlePageChange}
+            totalIsCurrent={!query.isPlaceholderData}
             totalPages={totalPages}
           />
         </>

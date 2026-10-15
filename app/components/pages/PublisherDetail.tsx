@@ -30,6 +30,7 @@ import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { parsePageParam } from "@/libraries/pagination";
+import { formatCount } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const PublisherDetail = () => {
@@ -207,8 +208,7 @@ const PublisherDetail = () => {
         extraBadges={
           descendantFileCount > 0 ? (
             <Badge variant="secondary">
-              {descendantFileCount}{" "}
-              {descendantFileCount === 1 ? "file" : "files"} in sub-publishers
+              {formatCount(descendantFileCount, "file")} in sub-publishers
             </Badge>
           ) : undefined
         }
@@ -247,8 +247,7 @@ const PublisherDetail = () => {
                 >
                   <span className="font-medium">{child.name}</span>
                   <Badge variant="secondary">
-                    {child.file_count}{" "}
-                    {child.file_count === 1 ? "file" : "files"}
+                    {formatCount(child.file_count, "file")}
                   </Badge>
                 </Link>
               ))}

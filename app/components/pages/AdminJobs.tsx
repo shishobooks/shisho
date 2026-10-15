@@ -5,7 +5,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import PaginationFooter from "@/components/library/PaginationFooter";
+import PaginationFooter, {
+  type PageChangeHandler,
+} from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +18,7 @@ import { toastRequestError } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
 import { cn } from "@/libraries/utils";
 import { JobStatusInProgress, JobTypeScan, type Job } from "@/types";
-import { formatElapsed } from "@/utils/format";
+import { formatElapsed, formatShowingRange } from "@/utils/format";
 
 const JOBS_PER_PAGE = 20;
 
@@ -87,11 +89,17 @@ const AdminJobs = () => {
   const canCreateJobs = useCan("jobs:write");
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / JOBS_PER_PAGE);
+  const showing = formatShowingRange(
+    (currentPage - 1) * JOBS_PER_PAGE,
+    JOBS_PER_PAGE,
+    total,
+    "jobs",
+  );
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange: PageChangeHandler = (page, options) => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("page", page.toString());
-    setSearchParams(newSearchParams);
+    setSearchParams(newSearchParams, options);
   };
 
   const handleTriggerSync = useCallback(async () => {
@@ -156,16 +164,15 @@ const AdminJobs = () => {
 
       {jobsQuery.error && !data ? (
         <QueryError fallback="Failed to load jobs" query={jobsQuery} />
-      ) : jobs.length === 0 ? (
+      ) : total === 0 ? (
         <div className="border border-border rounded-md p-8 text-center">
           <p className="text-muted-foreground">No jobs found.</p>
         </div>
       ) : (
         <>
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {(currentPage - 1) * JOBS_PER_PAGE + 1}-
-            {Math.min(currentPage * JOBS_PER_PAGE, total)} of {total} jobs
-          </div>
+          {showing && (
+            <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
+          )}
 
           <div className="border border-border rounded-md divide-y divide-border">
             {jobs.map((job) => (
@@ -177,6 +184,7 @@ const AdminJobs = () => {
             className="mt-6"
             currentPage={currentPage}
             onPageChange={handlePageChange}
+            totalIsCurrent={!jobsQuery.isPlaceholderData}
             totalPages={totalPages}
           />
         </>

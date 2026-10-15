@@ -18,6 +18,7 @@ import {
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse, ListTemplate } from "@/types";
+import { formatCount } from "@/utils/format";
 
 const ListsIndex = () => {
   usePageTitle("Lists");
@@ -75,9 +76,7 @@ const ListsIndex = () => {
           {list.permission !== "owner" && (
             <Badge variant="outline">{list.permission}</Badge>
           )}
-          <Badge variant="secondary">
-            {bookCount} book{bookCount !== 1 ? "s" : ""}
-          </Badge>
+          <Badge variant="secondary">{formatCount(bookCount, "book")}</Badge>
         </div>
       </Link>
     );

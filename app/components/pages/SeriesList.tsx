@@ -31,6 +31,7 @@ import { cn } from "@/libraries/utils";
 import type { GallerySize, SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { seriesCoverUrl } from "@/utils/coverUrl";
+import { formatCount } from "@/utils/format";
 
 // For series, we don't have access to the underlying files, so we use the
 // library's cover_aspect_ratio preference to determine aspect ratio.
@@ -78,7 +79,7 @@ export const SeriesCard = ({
   return (
     <div
       className={cn("w-[calc(50%-0.5rem)]", COVER_WIDTH_CLASS[gallerySize])}
-      title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${bookCount} book${bookCount !== 1 ? "s" : ""}`}
+      title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${formatCount(bookCount, "book")}`}
     >
       <Link
         className="group cursor-pointer"
@@ -123,7 +124,7 @@ export const SeriesCard = ({
       </Link>
       <div className="mt-1 text-xs line-clamp-1 text-muted-foreground">
         <Badge className="text-xs" variant="secondary">
-          {bookCount} book{bookCount !== 1 ? "s" : ""}
+          {formatCount(bookCount, "book")}
         </Badge>
       </div>
     </div>

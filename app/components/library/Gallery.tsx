@@ -2,11 +2,14 @@ import { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import PaginationFooter from "@/components/library/PaginationFooter";
+import PaginationFooter, {
+  type PageChangeHandler,
+} from "@/components/library/PaginationFooter";
 import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
 import { parsePageParam } from "@/libraries/pagination";
+import { formatShowingRange } from "@/utils/format";
 
 interface GalleryProps<T> {
   items: T[];
@@ -14,7 +17,7 @@ interface GalleryProps<T> {
   /** True while the shown items are not the current ones (loading, refetching, stale). */
   isLoading: boolean;
   /** The query behind the items, for the error report and its Retry. */
-  query: RetryableQuery & { data: unknown };
+  query: RetryableQuery & { data: unknown; isPlaceholderData: boolean };
   itemsPerPage?: number;
   renderItem: (item: T) => ReactNode;
   itemLabel: string;
@@ -37,11 +40,12 @@ const Gallery = <T,>({
   const limit = itemsPerPage;
   const offset = (currentPage - 1) * limit;
   const totalPages = Math.ceil(total / itemsPerPage);
+  const showing = formatShowingRange(offset, limit, total, itemLabel);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange: PageChangeHandler = (page, options) => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("page", page.toString());
-    setSearchParams(newSearchParams);
+    setSearchParams(newSearchParams, options);
   };
 
   // Only shown items count, so the line says nothing while they load.
@@ -52,11 +56,8 @@ const Gallery = <T,>({
   // text is often not.
   const status = (
     <div role="status">
-      {showsItems && total > 0 && (
-        <div className="mb-4 text-sm text-muted-foreground">
-          Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}{" "}
-          {itemLabel}
-        </div>
+      {showsItems && showing && (
+        <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
       )}
       {showsItems && total === 0 && (
         <div className="text-center py-8 text-muted-foreground">
@@ -106,6 +107,7 @@ const Gallery = <T,>({
         className="mb-8"
         currentPage={currentPage}
         onPageChange={handlePageChange}
+        totalIsCurrent={!query.isPlaceholderData}
         totalPages={totalPages}
       />
     </>
