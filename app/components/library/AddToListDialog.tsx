@@ -27,6 +27,7 @@ import {
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { firstFailedQuery, toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse } from "@/types";
+import { formatCount } from "@/utils/format";
 
 interface AddToListDialogProps {
   bookId: number;
@@ -245,8 +246,7 @@ export const AddToListDialog = ({
                             {list.name}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {list.book_count} book
-                            {list.book_count !== 1 ? "s" : ""} ·{" "}
+                            {formatCount(list.book_count, "book")} ·{" "}
                             {list.permission}
                           </div>
                         </div>

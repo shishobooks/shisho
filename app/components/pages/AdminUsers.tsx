@@ -11,6 +11,7 @@ import { useRoles, useUsers } from "@/hooks/queries/users";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Role, User } from "@/types";
+import { formatCount } from "@/utils/format";
 import { sortRoles } from "@/utils/roles";
 
 interface UserRowProps {
@@ -61,7 +62,7 @@ const RoleRow = ({ role, onClick }: RoleRowProps) => {
         {role.is_system && <Badge variant="outline">System</Badge>}
       </div>
       <span className="text-xs md:text-sm text-muted-foreground shrink-0">
-        {permissionCount} permission{permissionCount !== 1 ? "s" : ""}
+        {formatCount(permissionCount, "permission")}
       </span>
     </Button>
   );

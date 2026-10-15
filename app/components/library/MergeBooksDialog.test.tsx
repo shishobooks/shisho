@@ -54,3 +54,25 @@ describe("MergeBooksDialog Continue button", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 });
+
+describe("MergeBooksDialog description", () => {
+  beforeEach(() => {
+    loadedBooks = [];
+  });
+
+  it("groups thousands in the file total", () => {
+    const withFiles = (id: number, title: string, files: number) =>
+      ({
+        id,
+        title,
+        files: Array.from({ length: files }, (_, i) => ({ id: id * 1000 + i })),
+      }) as unknown as Book;
+    loadedBooks = [withFiles(1, "First", 600), withFiles(2, "Second", 600)];
+
+    render(renderDialog());
+
+    expect(
+      screen.getByText("Merge 2 books (1,200 files total)"),
+    ).toBeInTheDocument();
+  });
+});

@@ -12,7 +12,12 @@ import QueryError, {
 import { Badge } from "@/components/ui/badge";
 import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
-import { fileLabel, formatDuration, formatShowingRange } from "@/utils/format";
+import {
+  fileLabel,
+  formatDuration,
+  formatPageCount,
+  formatShowingRange,
+} from "@/utils/format";
 
 export const FILE_LIST_ITEMS_PER_PAGE = 50;
 
@@ -60,7 +65,7 @@ function FileMetaInfo({ file }: { file: File }) {
   ) {
     return (
       <span className="text-xs text-muted-foreground">
-        {file.page_count} page{file.page_count !== 1 ? "s" : ""}
+        {formatPageCount(file.page_count)}
       </span>
     );
   }

@@ -165,7 +165,7 @@ const LibraryListPicker = () => {
                             : "text-muted-foreground",
                         )}
                       >
-                        {list.book_count}
+                        {list.book_count.toLocaleString()}
                       </span>
                       {isActive && (
                         <Check className="size-4 shrink-0 text-primary" />

@@ -280,7 +280,7 @@ const MobileDrawer = () => {
                                 : "text-muted-foreground",
                             )}
                           >
-                            {list.book_count}
+                            {list.book_count.toLocaleString()}
                           </span>
                           {isActive && <Check className="h-4 w-4 shrink-0" />}
                         </Link>

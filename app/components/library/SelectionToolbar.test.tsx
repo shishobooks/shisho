@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
@@ -17,14 +18,18 @@ beforeAll(() => {
 
 const mockExitSelectionMode = vi.fn();
 const mockClearSelection = vi.fn();
+const selection = vi.hoisted(() => ({ ids: [1, 2, 3] }));
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
+beforeEach(() => {
+  setAuth({ permissions: ["books:read", "books:write"] });
+  selection.ids = [1, 2, 3];
+});
 
 vi.mock("@/hooks/useBulkSelection", () => ({
   useBulkSelection: () => ({
-    selectedBookIds: [1, 2, 3],
+    selectedBookIds: selection.ids,
     exitSelectionMode: mockExitSelectionMode,
     clearSelection: mockClearSelection,
   }),
@@ -163,6 +168,20 @@ describe("SelectionToolbar bulk review actions in the More popover", () => {
     expect(
       screen.getByRole("button", { name: /mark needs review/i }),
     ).toBeInTheDocument();
+  });
+
+  it("groups thousands in the count it reports", async () => {
+    const user = createUser();
+    const success = vi.spyOn(toast, "success");
+    selection.ids = Array.from({ length: 1200 }, (_, i) => i + 1);
+    mockBulkSetReviewMutateAsync.mockResolvedValueOnce(undefined);
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: /more/i }));
+    await user.click(screen.getByRole("button", { name: /mark reviewed/i }));
+
+    expect(success).toHaveBeenCalledWith("Marked 1,200 books as reviewed");
+    success.mockRestore();
   });
 
   it("calls useBulkSetReview with reviewed override and exits selection mode", async () => {

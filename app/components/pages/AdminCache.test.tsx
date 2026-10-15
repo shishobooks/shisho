@@ -39,7 +39,7 @@ const caches: CacheInfo[] = [
     name: "Covers",
     description: "Resized covers",
     size_bytes: 4096,
-    file_count: 5,
+    file_count: 1200,
   },
 ];
 
@@ -105,6 +105,12 @@ describe("AdminCache Clear button", () => {
     updateSettings.mockReset();
     updateSettings.mockResolvedValue(settings);
     vi.mocked(toast.error).mockClear();
+  });
+
+  it("groups thousands in a cache's file count", () => {
+    renderPage();
+
+    expect(screen.getByText("1,200 files")).toBeInTheDocument();
   });
 
   it("is disabled for an empty cache and enabled for one with files", () => {

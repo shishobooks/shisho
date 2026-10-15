@@ -17,6 +17,7 @@ import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSortParam } from "@/hooks/useSortParam";
 import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
+import { formatCount } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const TagDetail = () => {
@@ -120,7 +121,7 @@ const TagDetail = () => {
           tagsListQuery.data?.items.map((t) => ({
             id: t.id,
             name: t.name,
-            count: t.book_count ?? 0,
+            countText: formatCount(t.book_count ?? 0, "book"),
           })) ?? [],
         isLoadingEntities: tagsListQuery.isLoading,
         isPending: mergeTagMutation.isPending,

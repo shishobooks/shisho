@@ -26,6 +26,7 @@ import type {
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { bookCoverUrl, seriesCoverUrl } from "@/utils/coverUrl";
 import { isEbookFileType } from "@/utils/fileTypes";
+import { formatCount } from "@/utils/format";
 
 const getSearchThumbnailClasses = (variant: "book" | "audiobook"): string => {
   // For search thumbnails, we use a fixed width and vary the aspect ratio
@@ -437,7 +438,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         }}
         role="option"
         tabIndex={-1}
-        title={`${series.name}\n${series.book_count} book${series.book_count !== 1 ? "s" : ""}`}
+        title={`${series.name}\n${formatCount(series.book_count, "book")}`}
         to={`/libraries/${libraryId}/series/${series.id}`}
       >
         <SearchResultCover
@@ -450,7 +451,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
         <div className="flex-1 min-w-0">
           <div className="font-medium truncate">{series.name}</div>
           <div className="text-sm text-muted-foreground">
-            {series.book_count} book{series.book_count !== 1 ? "s" : ""}
+            {formatCount(series.book_count, "book")}
           </div>
         </div>
       </Link>

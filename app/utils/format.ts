@@ -30,10 +30,10 @@ export const fileLabel = (file: {
 /**
  * Formats a page count with the right plural.
  * @example formatPageCount(1) // "1 page"
- * @example formatPageCount(12) // "12 pages"
+ * @example formatPageCount(1200) // "1,200 pages"
  */
 export const formatPageCount = (count: number): string =>
-  `${count} ${count === 1 ? "page" : "pages"}`;
+  formatCount(count, "page");
 
 /**
  * Formats a count with its noun, thousands grouped.
@@ -45,6 +45,31 @@ export const formatCount = (
   singular: string,
   plural = `${singular}s`,
 ): string => `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+
+/**
+ * Formats what a person is credited with, leaving out a credit they have none
+ * of. A merge moves both, so neither can be dropped when it is nonzero.
+ * @example formatPersonCredits(3, 40) // "3 books authored and 40 files narrated"
+ * @example formatPersonCredits(0, 40) // "40 files narrated"
+ */
+export const formatPersonCredits = (
+  authoredBooks: number,
+  narratedFiles: number,
+): string => {
+  const authored = formatCount(
+    authoredBooks,
+    "book authored",
+    "books authored",
+  );
+  const narrated = formatCount(
+    narratedFiles,
+    "file narrated",
+    "files narrated",
+  );
+  if (narratedFiles === 0) return authored;
+  if (authoredBooks === 0) return narrated;
+  return `${authored} and ${narrated}`;
+};
 
 /**
  * Formats the "Showing" line above a paginated list, with thousands grouped.

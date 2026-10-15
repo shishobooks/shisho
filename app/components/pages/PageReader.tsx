@@ -366,7 +366,7 @@ export default function PageReader({
         )}
 
         <img
-          alt={`Page ${currentPage + 1}`}
+          alt={`Page ${(currentPage + 1).toLocaleString()}`}
           className={
             fitMode === "fit-height"
               ? "max-h-full w-auto object-contain"
@@ -402,7 +402,7 @@ export default function PageReader({
             aria-valuemax={totalPages}
             aria-valuemin={1}
             aria-valuenow={currentPage + 1}
-            aria-valuetext={`Page ${currentPage + 1} of ${totalPages}`}
+            aria-valuetext={`Page ${(currentPage + 1).toLocaleString()} of ${totalPages.toLocaleString()}`}
             className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
             onKeyDown={handleProgressKeyDown}
@@ -446,7 +446,8 @@ export default function PageReader({
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <span className="text-sm text-muted-foreground">
-            Page {currentPage + 1} of {totalPages}
+            Page {(currentPage + 1).toLocaleString()} of{" "}
+            {totalPages.toLocaleString()}
           </span>
           <Button
             aria-label="Next page"

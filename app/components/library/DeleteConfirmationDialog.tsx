@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Book, File } from "@/types";
-import { formatFileSize } from "@/utils/format";
+import { formatCount, formatFileSize } from "@/utils/format";
 
 // Calculate total size of files
 const getTotalSize = (files: File[] | undefined): number => {
@@ -73,7 +73,7 @@ export function DeleteConfirmationDialog({
             {files && files.length > 0 && (
               <span className="text-muted-foreground">
                 {" "}
-                ({files.length} file{files.length !== 1 ? "s" : ""})
+                ({formatCount(files.length, "file")})
               </span>
             )}
           </>
@@ -84,11 +84,11 @@ export function DeleteConfirmationDialog({
         return (
           <>
             <span className="font-medium">
-              {books?.length} book{books?.length !== 1 ? "s" : ""}
+              {formatCount(books?.length ?? 0, "book")}
             </span>
             <span className="text-muted-foreground">
               {" "}
-              ({totalFiles} file{totalFiles !== 1 ? "s" : ""} total)
+              ({formatCount(totalFiles, "file")} total)
             </span>
           </>
         );
@@ -137,9 +137,7 @@ export function DeleteConfirmationDialog({
                 {fileCount > 0 && (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <FileText className="h-3 w-3" />
-                    <span>
-                      {fileCount} file{fileCount !== 1 ? "s" : ""}
-                    </span>
+                    <span>{formatCount(fileCount, "file")}</span>
                   </div>
                 )}
               </div>

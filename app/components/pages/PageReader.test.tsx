@@ -33,7 +33,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const renderReader = () =>
+const renderReader = (totalPages = 10) =>
   render(
     <MemoryRouter>
       <PageReader
@@ -41,7 +41,7 @@ const renderReader = () =>
         fileId={42}
         getPageUrl={(page) => `/page-${page}`}
         libraryId="1"
-        totalPages={10}
+        totalPages={totalPages}
       />
     </MemoryRouter>,
   );
@@ -81,6 +81,16 @@ describe("PageReader fit mode", () => {
 });
 
 describe("PageReader controls", () => {
+  it("groups thousands in the page count", () => {
+    settings.mutate = vi.fn();
+    renderReader(1200);
+
+    expect(screen.getByText("Page 1 of 1,200")).toBeInTheDocument();
+    expect(
+      screen.getByRole("slider", { name: "Reading progress" }),
+    ).toHaveAttribute("aria-valuetext", "Page 1 of 1,200");
+  });
+
   it("seeks to the first and last page from the keyboard on the progress bar", async () => {
     settings.mutate = vi.fn();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

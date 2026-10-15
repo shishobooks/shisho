@@ -15,6 +15,7 @@ import {
 import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
+import { formatCount } from "@/utils/format";
 
 import {
   deriveCapabilityLabels,
@@ -45,7 +46,7 @@ export const InstalledTab = () => {
           toast.info("No new local plugins found.");
         } else {
           toast.success(
-            `Discovered ${discovered.length} new local plugin${discovered.length > 1 ? "s" : ""}.`,
+            `Discovered ${formatCount(discovered.length, "new local plugin")}.`,
           );
         }
       },

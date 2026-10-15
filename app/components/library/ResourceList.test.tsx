@@ -185,6 +185,37 @@ describe("ResourceList", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("writes each badge's count with its noun and thousands grouped", () => {
+    const oneGenre: Partial<UseQueryResult<ResourceListResponse<Item>>> = {
+      ...settled,
+      data: { items: [{ id: 1, name: "Fantasy" }], total: 1 },
+    };
+    render(
+      <MemoryRouter>
+        <ResourceList<Item, Field>
+          itemConfig={(item) => ({
+            name: item.name,
+            aliases: [],
+            badges: [
+              { count: 1200, singular: "book", plural: "books" },
+              { count: 1, singular: "file narrated", plural: "files narrated" },
+            ],
+          })}
+          itemLabel="genres"
+          linkTo={(item) => `/libraries/1/genres/${item.id}`}
+          query={oneGenre as UseQueryResult<ResourceListResponse<Item>>}
+          searchLabel="Search genres"
+          state={state}
+          subtitle="Browse genres"
+          title="Genres"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("1,200 books")).toBeInTheDocument();
+    expect(screen.getByText("1 file narrated")).toBeInTheDocument();
+  });
+
   it("announces the count and the empty state in one region that stays mounted", () => {
     const { rerender } = render(
       list({ ...settled, isLoading: true, isFetching: true }),

@@ -34,10 +34,14 @@ import { cn } from "@/libraries/utils";
 
 import type { EntityType } from "./MetadataEditDialog";
 
-interface EntityOption {
+export interface EntityOption {
   id: number;
   name: string;
-  count: number;
+  /**
+   * What merging this entity moves, formatted by the caller, who knows what
+   * the count means: "12 books", "40 files", "3 books authored".
+   */
+  countText: string;
 }
 
 export interface SetChildConfig {
@@ -179,7 +183,7 @@ export function MetadataMergeDialog({
               >
                 <span className="truncate">
                   {selectedEntity
-                    ? `${selectedEntity.name} (${selectedEntity.count} ${selectedEntity.count !== 1 ? "files" : "file"})`
+                    ? `${selectedEntity.name} (${selectedEntity.countText})`
                     : `Select ${entityType}...`}
                 </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -235,7 +239,7 @@ export function MetadataMergeDialog({
                             {entity.name}
                           </span>
                           <span className="text-muted-foreground text-sm shrink-0 ml-2">
-                            {entity.count} book{entity.count !== 1 ? "s" : ""}
+                            {entity.countText}
                           </span>
                         </CommandItem>
                       ))}
@@ -248,11 +252,9 @@ export function MetadataMergeDialog({
 
           {selectedEntity && !setChildConfig && (
             <p className="mt-4 text-sm text-muted-foreground">
-              Move all {selectedEntity.count} book
-              {selectedEntity.count !== 1 ? "s" : ""} from "
-              {selectedEntity.name}" to "{targetName}", add "
-              {selectedEntity.name}" as an alias, and delete "
-              {selectedEntity.name}".
+              Move all {selectedEntity.countText} from "{selectedEntity.name}"
+              to "{targetName}", add "{selectedEntity.name}" as an alias, and
+              delete "{selectedEntity.name}".
             </p>
           )}
 

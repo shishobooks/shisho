@@ -28,6 +28,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 import { JobTypeRecomputeReview } from "@/types";
+import { formatCount } from "@/utils/format";
 
 import { humanizeField } from "./review-criteria-utils";
 
@@ -68,9 +69,8 @@ const RecomputeDialog = ({
                 Auto-detected reviewed status will refresh based on the new
                 criteria. You currently have{" "}
                 <strong>
-                  {overrideCount} reviewed-override
-                  {overrideCount !== 1 ? "s" : ""} set out of {mainFileCount}{" "}
-                  total main file{mainFileCount !== 1 ? "s" : ""}
+                  {formatCount(overrideCount, "reviewed-override")} set out of{" "}
+                  {formatCount(mainFileCount, "total main file")}
                 </strong>
                 .
               </p>

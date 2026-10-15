@@ -72,6 +72,7 @@ import {
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import {
+  formatCount,
   formatDuration,
   formatMetadataFieldLabel,
   formatPageCount,
@@ -1330,9 +1331,7 @@ export function IdentifyReviewForm({
 
     try {
       const result = await applyMutation.mutateAsync(payload);
-      toast.success(
-        `Updated ${totalSelected} field${totalSelected === 1 ? "" : "s"}.`,
-      );
+      toast.success(`Updated ${formatCount(totalSelected, "field")}.`);
       // The apply succeeded, but a selected value can still be skipped
       // (a proposed cover that could not be downloaded or decoded). Say so,
       // or the user takes the success toast at face value.
@@ -1410,9 +1409,8 @@ export function IdentifyReviewForm({
             Identify {book.title}
           </h3>
           <p className="truncate text-xs text-muted-foreground">
-            {mainFileCount} file{mainFileCount === 1 ? "" : "s"} ·{" "}
-            {proposedChangesCount} change
-            {proposedChangesCount === 1 ? "" : "s"} proposed
+            {formatCount(mainFileCount, "file")} ·{" "}
+            {formatCount(proposedChangesCount, "change")} proposed
           </p>
         </div>
         {/* Source pill */}
@@ -1569,9 +1567,7 @@ export function IdentifyReviewForm({
                         const c = (
                           p as AuthorEntry & { authored_book_count?: number }
                         ).authored_book_count;
-                        return c != null
-                          ? `${c} ${c === 1 ? "book" : "books"}`
-                          : undefined;
+                        return c != null ? formatCount(c, "book") : undefined;
                       },
                       hook: function useAuthorOptions(q) {
                         return usePeopleSearch(book.library_id, true, q);
@@ -1676,9 +1672,7 @@ export function IdentifyReviewForm({
                       getOptionDescription: (s) => {
                         const c = (s as SeriesEntry & { book_count?: number })
                           .book_count;
-                        return c != null
-                          ? `${c} ${c === 1 ? "book" : "books"}`
-                          : undefined;
+                        return c != null ? formatCount(c, "book") : undefined;
                       },
                       hook: function useSeriesOptions(q) {
                         const result = useSeriesSearch(
@@ -1813,7 +1807,7 @@ export function IdentifyReviewForm({
                   <MultiSelectCombobox<NameWithBookCount>
                     getOptionCount={(g) => g.book_count}
                     getOptionDescription={(g) =>
-                      `${g.book_count} ${g.book_count === 1 ? "book" : "books"}`
+                      formatCount(g.book_count, "book")
                     }
                     getOptionLabel={(g) => g.name}
                     hook={function useGenreOptions(q) {
@@ -1846,7 +1840,7 @@ export function IdentifyReviewForm({
                   <MultiSelectCombobox<NameWithBookCount>
                     getOptionCount={(t) => t.book_count}
                     getOptionDescription={(t) =>
-                      `${t.book_count} ${t.book_count === 1 ? "book" : "books"}`
+                      formatCount(t.book_count, "book")
                     }
                     getOptionLabel={(t) => t.name}
                     hook={function useTagOptions(q) {
@@ -1980,7 +1974,7 @@ export function IdentifyReviewForm({
                         <span className="w-[calc(6rem+4px)] text-center">
                           {isPageBasedCoverChoice
                             ? currentCoverPage !== null
-                              ? `Page ${currentCoverPage + 1}`
+                              ? `Page ${(currentCoverPage + 1).toLocaleString()}`
                               : " "
                             : currentCoverDims
                               ? `${currentCoverDims.w} × ${currentCoverDims.h}`
@@ -2042,9 +2036,7 @@ export function IdentifyReviewForm({
                           const c = (
                             p as NameOption & { narrated_file_count?: number }
                           ).narrated_file_count;
-                          return c != null
-                            ? `${c} ${c === 1 ? "file" : "files"}`
-                            : undefined;
+                          return c != null ? formatCount(c, "file") : undefined;
                         },
                         hook: function useNarratorOptions(q) {
                           return usePeopleSearch(book.library_id, true, q);
@@ -2094,9 +2086,7 @@ export function IdentifyReviewForm({
                       <EntityCombobox<NameOption>
                         getOptionDescription={(p) => {
                           const c = (p as NameWithFileCount).file_count;
-                          return c != null
-                            ? `${c} ${c === 1 ? "file" : "files"}`
-                            : undefined;
+                          return c != null ? formatCount(c, "file") : undefined;
                         }}
                         getOptionKey={(p) => p.name}
                         getOptionLabel={(p) => p.name}
@@ -2338,13 +2328,11 @@ export function IdentifyReviewForm({
         <div className="flex items-center gap-3">
           <span className="hidden text-xs text-muted-foreground sm:block">
             <strong className="font-semibold text-foreground">
-              {bookSelectedCount} book change
-              {bookSelectedCount === 1 ? "" : "s"}
+              {formatCount(bookSelectedCount, "book change")}
             </strong>{" "}
             ·{" "}
             <strong className="font-semibold text-foreground">
-              {fileSelectedCount} file change
-              {fileSelectedCount === 1 ? "" : "s"}
+              {formatCount(fileSelectedCount, "file change")}
             </strong>{" "}
             selected
           </span>
@@ -2376,7 +2364,7 @@ export function IdentifyReviewForm({
             ) : totalSelected === 0 ? (
               "Apply changes"
             ) : (
-              `Apply ${totalSelected} change${totalSelected === 1 ? "" : "s"}`
+              `Apply ${formatCount(totalSelected, "change")}`
             )}
           </Button>
         </div>

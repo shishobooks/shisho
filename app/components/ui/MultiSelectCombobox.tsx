@@ -126,7 +126,7 @@ export function MultiSelectCombobox<T>({
                   {value}
                   {count != null && (
                     <span className="text-muted-foreground ml-1">
-                      ({count})
+                      ({count.toLocaleString()})
                     </span>
                   )}
                 </span>

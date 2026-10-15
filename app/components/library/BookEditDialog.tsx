@@ -60,6 +60,7 @@ import {
   type SeriesInput,
 } from "@/types";
 import { AUTHOR_ROLES } from "@/utils/authorRoles";
+import { formatCount } from "@/utils/format";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 import { forTitle } from "@/utils/sortname";
 
@@ -558,9 +559,7 @@ export function BookEditDialog({
                   const c = (
                     p as AuthorInput & { authored_book_count?: number }
                   ).authored_book_count;
-                  return c != null
-                    ? `${c} ${c === 1 ? "book" : "books"}`
-                    : undefined;
+                  return c != null ? formatCount(c, "book") : undefined;
                 },
                 hook: function useAuthorOptions(q) {
                   return useAuthorSearch(book.library_id, open, q);
@@ -636,9 +635,7 @@ export function BookEditDialog({
                 getOptionDescription: (s) => {
                   const c = (s as SeriesEntry & { book_count?: number })
                     .book_count;
-                  return c != null
-                    ? `${c} ${c === 1 ? "book" : "books"}`
-                    : undefined;
+                  return c != null ? formatCount(c, "book") : undefined;
                 },
                 hook: function useSeriesOptions(q) {
                   const result = useSeriesSearch(book.library_id, open, q);
@@ -815,9 +812,7 @@ export function BookEditDialog({
             <Label id="book-genres-label">Genres</Label>
             <MultiSelectCombobox<NameWithBookCount>
               getOptionCount={(g) => g.book_count}
-              getOptionDescription={(g) =>
-                `${g.book_count} ${g.book_count === 1 ? "book" : "books"}`
-              }
+              getOptionDescription={(g) => formatCount(g.book_count, "book")}
               getOptionLabel={(g) => g.name}
               hook={function useGenreOptions(q) {
                 return useGenreSearch(book.library_id, open, q);
@@ -838,9 +833,7 @@ export function BookEditDialog({
             <Label id="book-tags-label">Tags</Label>
             <MultiSelectCombobox<NameWithBookCount>
               getOptionCount={(t) => t.book_count}
-              getOptionDescription={(t) =>
-                `${t.book_count} ${t.book_count === 1 ? "book" : "books"}`
-              }
+              getOptionDescription={(t) => formatCount(t.book_count, "book")}
               getOptionLabel={(t) => t.name}
               hook={function useTagOptions(q) {
                 return useTagSearch(book.library_id, open, q);

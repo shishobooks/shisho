@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
 import { bulkDownloadUrl } from "@/utils/downloadUrl";
-import { formatFileSize } from "@/utils/format";
+import { formatCount, formatFileSize } from "@/utils/format";
 
 export const BulkDownloadToast = () => {
   const { demoMode } = useAuth();
@@ -36,7 +36,7 @@ export const BulkDownloadToast = () => {
                 ? "Download failed"
                 : status === "zipping"
                   ? "Creating zip file..."
-                  : `Preparing ${current} of ${total} files...`}
+                  : `Preparing ${current.toLocaleString()} of ${formatCount(total, "file")}...`}
           </span>
         </div>
         <Button

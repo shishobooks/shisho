@@ -11,6 +11,7 @@ import {
 } from "@/components/library/MetadataEditDialog";
 import {
   MetadataMergeDialog,
+  type EntityOption,
   type SetChildConfig,
 } from "@/components/library/MetadataMergeDialog";
 import QueryError, {
@@ -42,8 +43,13 @@ interface EditConfig {
   sortNameSource?: DataSource;
 }
 
+interface CountLabel {
+  singular: string;
+  plural: string;
+}
+
 interface MergeConfig {
-  entities: { id: number; name: string; count: number }[];
+  entities: EntityOption[];
   isLoadingEntities: boolean;
   isPending: boolean;
   onMerge: (sourceId: number) => Promise<unknown>;
@@ -57,11 +63,6 @@ interface DeleteConfig {
   onDelete: () => Promise<unknown>;
   /** When true, the Delete button is hidden (e.g. entity still has books) */
   disabled: boolean;
-}
-
-interface CountLabel {
-  singular: string;
-  plural: string;
 }
 
 interface ResourceDetailProps {

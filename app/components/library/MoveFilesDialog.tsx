@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { useMoveFiles } from "@/hooks/queries/books";
 import { toastRequestError } from "@/libraries/api";
 import type { Book, File, LibrarySummary } from "@/types";
+import { formatCount } from "@/utils/format";
 
 import { BookSelectionList } from "./BookSelectionList";
 
@@ -61,7 +62,7 @@ export function MoveFilesDialog({
 
       if (result.target_book) {
         toast.success(
-          `Moved ${result.files_moved} file${result.files_moved !== 1 ? "s" : ""} to "${result.target_book.title}"`,
+          `Moved ${formatCount(result.files_moved, "file")} to "${result.target_book.title}"`,
         );
         onSuccess?.(result.target_book);
       }
@@ -89,8 +90,7 @@ export function MoveFilesDialog({
         <DialogHeader>
           <DialogTitle>Move Files</DialogTitle>
           <DialogDescription>
-            Move {selectedFiles.length} file
-            {selectedFiles.length !== 1 ? "s" : ""} to another book
+            Move {formatCount(selectedFiles.length, "file")} to another book
           </DialogDescription>
         </DialogHeader>
 

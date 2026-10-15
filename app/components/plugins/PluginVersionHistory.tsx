@@ -8,6 +8,7 @@ import {
 } from "@/hooks/queries/plugins";
 import { toastRequestError } from "@/libraries/api";
 import type { Plugin } from "@/types/generated/models";
+import { formatCount } from "@/utils/format";
 
 import { PluginVersionCard } from "./PluginVersionCard";
 
@@ -113,7 +114,7 @@ export const PluginVersionHistory = ({
           size="sm"
           variant="ghost"
         >
-          Show {hiddenCount} older version{hiddenCount === 1 ? "" : "s"}
+          Show {formatCount(hiddenCount, "older version")}
         </Button>
       )}
     </section>

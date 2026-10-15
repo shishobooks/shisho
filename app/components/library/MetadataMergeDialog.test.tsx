@@ -12,8 +12,8 @@ const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
 const entities = [
-  { id: 10, name: "Dutton", count: 5 },
-  { id: 20, name: "Riverhead", count: 3 },
+  { id: 10, name: "Dutton", countText: "5 books" },
+  { id: 20, name: "Riverhead", countText: "3 books" },
 ];
 
 describe("MetadataMergeDialog", () => {
@@ -312,5 +312,33 @@ describe("MetadataMergeDialog failures", () => {
     expect(await watcher.stop()).toEqual([]);
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(screen.getByRole("combobox")).toHaveTextContent("Dutton");
+  });
+
+  it("shows each source's count text in the list, on the picker, and in the merge sentence", async () => {
+    const user = createUser();
+    render(
+      <MetadataMergeDialog
+        entities={[{ id: 10, name: "Dutton", countText: "1,200 books" }]}
+        entityType="genre"
+        isLoadingEntities={false}
+        isPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={vi.fn()}
+        open={true}
+        targetId={1}
+        targetName="Fantasy"
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Genre to merge" });
+    await user.click(trigger);
+    expect(screen.getByRole("option", { name: /Dutton/ })).toHaveTextContent(
+      "1,200 books",
+    );
+    await user.click(screen.getByRole("option", { name: /Dutton/ }));
+
+    expect(trigger).toHaveTextContent("Dutton (1,200 books)");
+    expect(screen.getByText(/Move all 1,200 books from/)).toBeInTheDocument();
   });
 });

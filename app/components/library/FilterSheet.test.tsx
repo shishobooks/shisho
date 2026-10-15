@@ -82,7 +82,7 @@ describe("FilterSheet", () => {
   it("names the file type and review state groups and says which genres are chosen", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const genres = [
-      { id: 1, name: "Fantasy", book_count: 3 },
+      { id: 1, name: "Fantasy", book_count: 1200 },
       { id: 2, name: "Horror", book_count: 1 },
     ] as unknown as Genre[];
     render(
@@ -132,6 +132,9 @@ describe("FilterSheet", () => {
     await user.click(screen.getByRole("combobox", { name: "Genres" }));
     expect(screen.getByRole("option", { name: /Fantasy/ })).toHaveTextContent(
       "(chosen)",
+    );
+    expect(screen.getByRole("option", { name: /Fantasy/ })).toHaveTextContent(
+      "1,200",
     );
     expect(
       screen.getByRole("option", { name: /Horror/ }),

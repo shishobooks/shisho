@@ -60,6 +60,7 @@ import {
 } from "@/types";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { isEbookFileType, isMainEligibleFileType } from "@/utils/fileTypes";
+import { formatCount } from "@/utils/format";
 
 interface FileEditDialogProps {
   file: File;
@@ -850,9 +851,7 @@ export function FileEditDialog({
                         const c = (
                           p as NameOption & { narrated_file_count?: number }
                         ).narrated_file_count;
-                        return c != null
-                          ? `${c} ${c === 1 ? "file" : "files"}`
-                          : undefined;
+                        return c != null ? formatCount(c, "file") : undefined;
                       },
                       hook: function useNarratorOptions(q) {
                         return usePeopleSearch(file.library_id, open, q);
@@ -928,9 +927,7 @@ export function FileEditDialog({
                     <EntityCombobox<NameOption>
                       getOptionDescription={(p) => {
                         const c = (p as NameWithFileCount).file_count;
-                        return c != null
-                          ? `${c} ${c === 1 ? "file" : "files"}`
-                          : undefined;
+                        return c != null ? formatCount(c, "file") : undefined;
                       }}
                       getOptionKey={(item) => item.name}
                       getOptionLabel={(item) => item.name}

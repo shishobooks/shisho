@@ -22,6 +22,7 @@ import type { PublisherIdOption } from "@/hooks/queries/entity-search";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { isDemoModeError, requestErrorMessage } from "@/libraries/api";
 import { resolveAliases } from "@/utils/aliases";
+import { formatCount } from "@/utils/format";
 
 export interface PublisherEditData {
   name: string;
@@ -244,7 +245,7 @@ export function PublisherEditDialog({
               <div className="flex-1">
                 <EntityCombobox<PublisherIdOption>
                   getOptionDescription={(p) =>
-                    `${p.file_count} ${p.file_count === 1 ? "file" : "files"}`
+                    formatCount(p.file_count, "file")
                   }
                   getOptionKey={(item) => item.id}
                   getOptionLabel={(item) => item.name}
