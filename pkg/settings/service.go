@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -39,6 +40,15 @@ func (svc *Service) GetUserSettings(ctx context.Context, userID int) (*models.Us
 	return settings, nil
 }
 
+// LibraryExists reports whether a library with the given ID exists.
+func (svc *Service) LibraryExists(ctx context.Context, libraryID int) (bool, error) {
+	exists, err := svc.db.NewSelect().
+		Model((*models.Library)(nil)).
+		Where("id = ?", libraryID).
+		Exists(ctx)
+	return exists, errors.WithStack(err)
+}
+
 // UserSettingsUpdate describes a partial update to user settings. Any
 // field left nil is left untouched; fields set to a non-nil value are
 // persisted. This lets clients change one setting without having to read
@@ -52,6 +62,7 @@ type UserSettingsUpdate struct {
 	GallerySize        *string
 	HideChrome         *bool
 	PlaybackSpeed      *float64
+	DefaultLibraryID   httputil.NullableInt
 }
 
 // UpdateUserSettings applies a partial update to a user's settings,
@@ -107,6 +118,9 @@ func (svc *Service) UpdateUserSettings(
 		if update.PlaybackSpeed != nil {
 			current.PlaybackSpeed = *update.PlaybackSpeed
 		}
+		if update.DefaultLibraryID.Set {
+			current.DefaultLibraryID = update.DefaultLibraryID.Value
+		}
 
 		now := time.Now()
 		current.UserID = userID
@@ -127,6 +141,7 @@ func (svc *Service) UpdateUserSettings(
 			Set("gallery_size = EXCLUDED.gallery_size").
 			Set("viewer_hide_chrome = EXCLUDED.viewer_hide_chrome").
 			Set("viewer_playback_speed = EXCLUDED.viewer_playback_speed").
+			Set("default_library_id = EXCLUDED.default_library_id").
 			Returning("*").
 			Exec(ctx)
 		if err != nil {

@@ -1,25 +1,30 @@
 package settings
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/models"
+)
 
 // UserSettingsPayload is the request body for updating user settings.
 //
 // All fields are pointers so clients can send partial updates. Omitting a
 // field (or sending it as null) leaves the current value untouched; sending
-// a value updates just that field.
+// a value updates just that field. DefaultLibraryID is the exception: it is
+// nullable, so null clears it and only omitting it leaves it untouched.
 //
 // Field shape must stay identical to UserSettingsUpdate (same field names,
 // same types, same order) — the handler converts between them with
 // `UserSettingsUpdate(payload)`. Drifting either one breaks that cast.
 type UserSettingsPayload struct {
-	PreloadCount       *int     `json:"preload_count,omitempty"`
-	FitMode            *string  `json:"fit_mode,omitempty" tstype:"FitMode"`
-	ReflowableFontSize *int     `json:"viewer_reflowable_font_size,omitempty"`
-	ReflowableTheme    *string  `json:"viewer_reflowable_theme,omitempty" tstype:"ReflowableTheme"`
-	ReflowableFlow     *string  `json:"viewer_reflowable_flow,omitempty" tstype:"ReflowableFlow"`
-	GallerySize        *string  `json:"gallery_size,omitempty" tstype:"GallerySize"`
-	HideChrome         *bool    `json:"viewer_hide_chrome,omitempty"`
-	PlaybackSpeed      *float64 `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
+	PreloadCount       *int                 `json:"preload_count,omitempty"`
+	FitMode            *string              `json:"fit_mode,omitempty" tstype:"FitMode"`
+	ReflowableFontSize *int                 `json:"viewer_reflowable_font_size,omitempty"`
+	ReflowableTheme    *string              `json:"viewer_reflowable_theme,omitempty" tstype:"ReflowableTheme"`
+	ReflowableFlow     *string              `json:"viewer_reflowable_flow,omitempty" tstype:"ReflowableFlow"`
+	GallerySize        *string              `json:"gallery_size,omitempty" tstype:"GallerySize"`
+	HideChrome         *bool                `json:"viewer_hide_chrome,omitempty"`
+	PlaybackSpeed      *float64             `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
+	DefaultLibraryID   httputil.NullableInt `json:"default_library_id,omitempty" tstype:"number | null"`
 }
 
 // UserSettingsResponse is the response for user settings.
@@ -32,6 +37,7 @@ type UserSettingsResponse struct {
 	GallerySize        string  `json:"gallery_size" tstype:"GallerySize"`
 	HideChrome         bool    `json:"viewer_hide_chrome"`
 	PlaybackSpeed      float64 `json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
+	DefaultLibraryID   *int    `json:"default_library_id" tstype:"number | null"`
 }
 
 // ValidFitModes returns all valid fit mode values.

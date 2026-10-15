@@ -2,6 +2,8 @@
 
 Shisho provides library-scoped search, gallery controls, and selection tools for working with many books at once.
 
+To choose which library opens from the home page, open the user menu, select **User Settings**, and pick a **Default library** under **Library**.
+
 ## Search
 
 The global search field in the header is scoped to the current library. It searches **Books**, **Series**, and **People**, then groups matching results by resource type. Search requires Books Read. Series results appear only for roles with Series Read, and People results only for roles with People Read. Switch libraries before searching if the item belongs elsewhere.

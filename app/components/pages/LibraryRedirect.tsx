@@ -4,6 +4,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
 import { useNavLibraries } from "@/hooks/queries/libraries";
+import { useUserSettings } from "@/hooks/queries/settings";
 import { useCan } from "@/hooks/useCan";
 
 const LibraryRedirect = () => {
@@ -12,12 +13,15 @@ const LibraryRedirect = () => {
   const canReadBooks = useCan("books:read");
   const canReadLibraries = useCan("libraries:read");
   const librariesQuery = useNavLibraries();
+  // Settings that fail to load only cost the user their default library, so
+  // an error falls through to the first library rather than blocking `/`.
+  const userSettingsQuery = useUserSettings({ enabled: canReadBooks });
 
   if (!canReadBooks) {
     return <Navigate replace to="/lists" />;
   }
 
-  if (librariesQuery.isLoading) {
+  if (librariesQuery.isLoading || userSettingsQuery.isLoading) {
     return (
       <div>
         <TopNav />
@@ -55,8 +59,12 @@ const LibraryRedirect = () => {
     );
   }
 
-  // Redirect to the first library (user can switch via dropdown)
-  return <Navigate replace to={`/libraries/${libraries[0].id}`} />;
+  // Open the user's default library while they can still access it, and
+  // otherwise the first library (user can switch via dropdown).
+  const defaultLibraryId = userSettingsQuery.data?.default_library_id;
+  const library =
+    libraries.find((l) => l.id === defaultLibraryId) ?? libraries[0];
+  return <Navigate replace to={`/libraries/${library.id}`} />;
 };
 
 export default LibraryRedirect;

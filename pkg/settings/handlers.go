@@ -17,7 +17,13 @@ type handler struct {
 // newUserSettingsResponse maps the settings model onto the wire shape.
 // Shared by get and update so the two endpoints can't drift as fields are
 // added.
-func newUserSettingsResponse(settings *models.UserSettings) UserSettingsResponse {
+func newUserSettingsResponse(user *models.User, settings *models.UserSettings) UserSettingsResponse {
+	// A default library the user has since lost access to reads as unset, so
+	// the client falls back to the first library it can open.
+	defaultLibraryID := settings.DefaultLibraryID
+	if defaultLibraryID != nil && !user.HasLibraryAccess(*defaultLibraryID) {
+		defaultLibraryID = nil
+	}
 	return UserSettingsResponse{
 		PreloadCount:       settings.ViewerPreloadCount,
 		FitMode:            settings.ViewerFitMode,
@@ -27,6 +33,7 @@ func newUserSettingsResponse(settings *models.UserSettings) UserSettingsResponse
 		GallerySize:        settings.GallerySize,
 		HideChrome:         settings.ViewerHideChrome,
 		PlaybackSpeed:      settings.PlaybackSpeed,
+		DefaultLibraryID:   defaultLibraryID,
 	}
 }
 
@@ -43,7 +50,7 @@ func (h *handler) getUserSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, newUserSettingsResponse(settings))
+	return c.JSON(http.StatusOK, newUserSettingsResponse(user, settings))
 }
 
 func (h *handler) updateUserSettings(c echo.Context) error {
@@ -82,6 +89,18 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 	if payload.PlaybackSpeed != nil && !IsValidPlaybackSpeed(*payload.PlaybackSpeed) {
 		return errcodes.ValidationError("viewer_playback_speed must be one of 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, or 3")
 	}
+	if libraryID := payload.DefaultLibraryID.Value; libraryID != nil {
+		if !user.HasLibraryAccess(*libraryID) {
+			return errcodes.LibraryAccessDenied()
+		}
+		exists, err := h.settingsService.LibraryExists(ctx, *libraryID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if !exists {
+			return errcodes.NotFound("Library")
+		}
+	}
 
 	settings, err := h.settingsService.UpdateUserSettings(
 		ctx, user.ID, UserSettingsUpdate(payload))
@@ -89,5 +108,5 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusOK, newUserSettingsResponse(settings))
+	return c.JSON(http.StatusOK, newUserSettingsResponse(user, settings))
 }
