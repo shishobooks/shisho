@@ -65,7 +65,7 @@ export function BookGallerySection<F extends string>({
   });
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = (page: number, options?: { replace?: boolean }) => {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (page === 1) {
@@ -74,7 +74,7 @@ export function BookGallerySection<F extends string>({
         params.set("page", page.toString());
       }
       return params;
-    });
+    }, options);
     onPageChange?.(page);
   };
 

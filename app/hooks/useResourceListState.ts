@@ -38,10 +38,10 @@ export function useResourceListState<F extends string>(
   };
 
   const handlePageChange = useCallback(
-    (page: number) => {
+    (page: number, options?: { replace?: boolean }) => {
       const newParams = new URLSearchParams(searchParams);
       newParams.set("page", page.toString());
-      setSearchParams(newParams);
+      setSearchParams(newParams, options);
     },
     [searchParams, setSearchParams],
   );

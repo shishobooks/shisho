@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  RouterProvider,
+} from "react-router-dom";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
@@ -80,6 +84,33 @@ function makeQueryResult(files: File[], total: number) {
 }
 
 describe("FileListSection", () => {
+  it("replaces a page past the end with the last page", async () => {
+    const queryClient = new QueryClient();
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <FileListSection
+              libraryId="1"
+              query={makeQueryResult([], 2)}
+              title="Files"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/?page=9"] },
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(router.state.location.search).toBe(""));
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
   it("flags files whose last scan could not read them", () => {
     render(
       wrap(

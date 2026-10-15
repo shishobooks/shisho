@@ -88,10 +88,10 @@ const AdminJobs = () => {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / JOBS_PER_PAGE);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = (page: number, options?: { replace?: boolean }) => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("page", page.toString());
-    setSearchParams(newSearchParams);
+    setSearchParams(newSearchParams, options);
   };
 
   const handleTriggerSync = useCallback(async () => {
@@ -156,7 +156,7 @@ const AdminJobs = () => {
 
       {jobsQuery.error && !data ? (
         <QueryError fallback="Failed to load jobs" query={jobsQuery} />
-      ) : jobs.length === 0 ? (
+      ) : total === 0 ? (
         <div className="border border-border rounded-md p-8 text-center">
           <p className="text-muted-foreground">No jobs found.</p>
         </div>

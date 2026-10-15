@@ -59,6 +59,10 @@ The inline **Size** control is hidden on small screens. On those devices, open t
 
 Covers use thumbnails sized for their display size and screen pixel density. A new size is generated when first needed, so its initial load can take longer. Subsequent views reuse cached thumbnails. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for cache limits and clearing.
 
+## Jump to a Page
+
+Long lists are split into pages, with controls below the last item. The double arrows go to the first and last page. To reach a page in between, open **Page _N_ of _M_** and type its number: the list narrows to pages that start with what you typed, and **Enter** opens the first match.
+
 ## Selecting Books
 
 Click the explicit **Select** button on the library gallery to enter selection mode. Click books to add or remove them from the selection. Selections remain active as you move between gallery pages.

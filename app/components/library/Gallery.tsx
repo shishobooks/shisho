@@ -39,10 +39,10 @@ const Gallery = <T,>({
   const offset = (currentPage - 1) * limit;
   const totalPages = Math.ceil(total / itemsPerPage);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = (page: number, options?: { replace?: boolean }) => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("page", page.toString());
-    setSearchParams(newSearchParams);
+    setSearchParams(newSearchParams, options);
   };
 
   // Only shown items count, so the line says nothing while they load.

@@ -171,7 +171,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
             {formatShowingRange(offset, limit, total, itemLabel)}
           </div>
         )}
-        {showsResults && query.data?.items.length === 0 && (
+        {showsResults && query.data?.total === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             {confirmedSearch
               ? `No ${itemLabel} found matching your search.`

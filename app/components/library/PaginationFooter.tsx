@@ -1,131 +1,212 @@
 import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/libraries/utils";
 
 interface PaginationFooterProps {
   currentPage: number;
   totalPages: number;
-  onPageChange?: (page: number) => void;
-  buildHref?: (page: number) => string;
+  /** `replace` is set when the footer corrects a page past the end, so Back skips it. */
+  onPageChange: (page: number, options?: { replace?: boolean }) => void;
   className?: string;
 }
 
-function getPageNumbers(
+// Pages listed on each side of the current one before anything is typed.
+const PAGE_WINDOW = 50;
+// Cap on typed matches, so "1" on a huge list stays cheap to render.
+const MAX_MATCHES = 100;
+
+function pageOptions(
+  query: string,
   currentPage: number,
   totalPages: number,
-  showPages: number,
 ): number[] {
   const pages: number[] = [];
-  let start = Math.max(1, currentPage - Math.floor(showPages / 2));
-  const end = Math.min(totalPages, start + showPages - 1);
-
-  if (end - start + 1 < showPages) {
-    start = Math.max(1, end - showPages + 1);
+  const digits = query.replace(/\D/g, "");
+  if (digits) {
+    for (let p = 1; p <= totalPages && pages.length < MAX_MATCHES; p++) {
+      if (String(p).startsWith(digits)) pages.push(p);
+    }
+    return pages;
   }
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
+  const last = Math.min(totalPages, currentPage + PAGE_WINDOW);
+  for (let p = Math.max(1, currentPage - PAGE_WINDOW); p <= last; p++) {
+    pages.push(p);
   }
-
   return pages;
 }
+
+const NavButton = ({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) => (
+  <Button
+    aria-label={label}
+    disabled={disabled}
+    onClick={onClick}
+    size="icon"
+    variant="ghost"
+  >
+    {children}
+  </Button>
+);
 
 const PaginationFooter = ({
   currentPage,
   totalPages,
   onPageChange,
-  buildHref,
   className,
 }: PaginationFooterProps) => {
-  const isSmallScreen = !useMediaQuery("(min-width: 640px)");
-  const showPages = isSmallScreen ? 3 : 5;
-  const pages = getPageNumbers(currentPage, totalPages, showPages);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlighted, setHighlighted] = useState("");
+  const currentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // A page past the end (a bookmarked URL, or items deleted since) would show
+  // an empty page under a range like "Showing 401-367".
+  useEffect(() => {
+    if (totalPages >= 1 && currentPage > totalPages) {
+      onPageChange(totalPages, { replace: true });
+    }
+  }, [currentPage, totalPages, onPageChange]);
+
+  const options = useMemo(
+    () => (open ? pageOptions(query, currentPage, totalPages) : []),
+    [open, query, currentPage, totalPages],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    if (query) {
+      setHighlighted(options.length > 0 ? String(options[0]) : "");
+      // The list may still be scrolled to where the current page was.
+      if (listRef.current) listRef.current.scrollTop = 0;
+    } else {
+      setHighlighted(String(currentPage));
+      requestAnimationFrame(() =>
+        currentRef.current?.scrollIntoView({ block: "center" }),
+      );
+    }
+  }, [open, query, options, currentPage]);
 
   if (totalPages <= 1) return null;
 
-  const linkProps = (page: number) => ({
-    ...(onPageChange ? { onClick: () => onPageChange(page) } : {}),
-    ...(buildHref ? { href: buildHref(page) } : {}),
-  });
+  const goTo = (page: number) => {
+    setOpen(false);
+    setQuery("");
+    if (page !== currentPage) onPageChange(page);
+  };
 
   return (
-    <Pagination className={className}>
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            className={
-              currentPage <= 1
-                ? "pointer-events-none opacity-50"
-                : "cursor-pointer"
-            }
-            {...linkProps(currentPage - 1)}
-          />
-        </PaginationItem>
-
-        {pages[0] > 1 && (
-          <>
-            <PaginationItem>
-              <PaginationLink className="cursor-pointer" {...linkProps(1)}>
-                1
-              </PaginationLink>
-            </PaginationItem>
-            {pages[0] > 2 && (
-              <PaginationItem>
-                <PaginationEllipsis />
-              </PaginationItem>
-            )}
-          </>
-        )}
-
-        {pages.map((page) => (
-          <PaginationItem key={page}>
-            <PaginationLink
-              className="cursor-pointer"
-              isActive={page === currentPage}
-              {...linkProps(page)}
-            >
-              {page}
-            </PaginationLink>
-          </PaginationItem>
-        ))}
-
-        {pages[pages.length - 1] < totalPages && (
-          <>
-            {pages[pages.length - 1] < totalPages - 1 && (
-              <PaginationItem>
-                <PaginationEllipsis />
-              </PaginationItem>
-            )}
-            <PaginationItem>
-              <PaginationLink
-                className="cursor-pointer"
-                {...linkProps(totalPages)}
-              >
-                {totalPages}
-              </PaginationLink>
-            </PaginationItem>
-          </>
-        )}
-
-        <PaginationItem>
-          <PaginationNext
-            className={
-              currentPage >= totalPages
-                ? "pointer-events-none opacity-50"
-                : "cursor-pointer"
-            }
-            {...linkProps(currentPage + 1)}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
+    <nav
+      aria-label="Pagination"
+      className={cn("flex items-center justify-center gap-1", className)}
+    >
+      <NavButton
+        disabled={currentPage <= 1}
+        label="Go to first page"
+        onClick={() => onPageChange(1)}
+      >
+        <ChevronsLeft />
+      </NavButton>
+      <NavButton
+        disabled={currentPage <= 1}
+        label="Go to previous page"
+        onClick={() => onPageChange(currentPage - 1)}
+      >
+        <ChevronLeft />
+      </NavButton>
+      <Popover
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+        open={open}
+      >
+        <PopoverTrigger asChild>
+          <Button className="mx-1 gap-2 tabular-nums" variant="outline">
+            Page {currentPage.toLocaleString()} of {totalPages.toLocaleString()}
+            <ChevronDown className="opacity-60" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-0">
+          <Command
+            label="Go to page"
+            onValueChange={setHighlighted}
+            shouldFilter={false}
+            value={highlighted}
+          >
+            <CommandInput
+              inputMode="numeric"
+              onValueChange={setQuery}
+              placeholder="Type a page number..."
+              value={query}
+            />
+            <CommandList className="max-h-72" ref={listRef}>
+              <CommandEmpty>No such page.</CommandEmpty>
+              {options.map((page) => {
+                const isCurrent = page === currentPage;
+                return (
+                  <CommandItem
+                    aria-current={isCurrent ? "page" : undefined}
+                    className="tabular-nums"
+                    key={page}
+                    onSelect={() => goTo(page)}
+                    ref={isCurrent ? currentRef : undefined}
+                    value={String(page)}
+                  >
+                    Page {page.toLocaleString()}
+                    {isCurrent && <Check className="ml-auto" />}
+                  </CommandItem>
+                );
+              })}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <NavButton
+        disabled={currentPage >= totalPages}
+        label="Go to next page"
+        onClick={() => onPageChange(currentPage + 1)}
+      >
+        <ChevronRight />
+      </NavButton>
+      <NavButton
+        disabled={currentPage >= totalPages}
+        label="Go to last page"
+        onClick={() => onPageChange(totalPages)}
+      >
+        <ChevronsRight />
+      </NavButton>
+    </nav>
   );
 };
 
