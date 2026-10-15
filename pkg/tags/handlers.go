@@ -198,39 +198,6 @@ func (h *handler) update(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
-func (h *handler) books(c echo.Context) error {
-	ctx := c.Request().Context()
-	id, err := httputil.ParamID(c, "id", "Tag")
-	if err != nil {
-		return err
-	}
-
-	params := SubResourceQuery{}
-	if err := c.Bind(&params); err != nil {
-		return errors.WithStack(err)
-	}
-
-	tag, err := h.tagService.RetrieveTag(ctx, RetrieveTagOptions{
-		ID: &id,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, tag.LibraryID); err != nil {
-		return err
-	}
-
-	books, total, err := h.tagService.GetBooksPaginated(ctx, id, params.Limit, params.Offset)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	response := ListTagBooksResponse{Items: books, Total: total}
-
-	return errors.WithStack(c.JSON(http.StatusOK, response))
-}
-
 func (h *handler) merge(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := httputil.ParamID(c, "id", "Tag")

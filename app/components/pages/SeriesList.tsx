@@ -24,8 +24,8 @@ import { useSeriesList } from "@/hooks/queries/series";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useResourceSortParam } from "@/hooks/useResourceSortParam";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
+import { useSortParam } from "@/hooks/useSortParam";
 import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 import { cn } from "@/libraries/utils";
 import type { GallerySize, SeriesResponse } from "@/types";
@@ -135,7 +135,7 @@ const SeriesList = () => {
 
   const { libraryId } = useParams();
   const { searchQuery, setSearchQuery } = useSearchQueryParam();
-  const sort = useResourceSortParam(BOOK_COUNT_RESOURCE_SORT);
+  const sort = useSortParam(BOOK_COUNT_RESOURCE_SORT);
 
   const {
     savedSize,

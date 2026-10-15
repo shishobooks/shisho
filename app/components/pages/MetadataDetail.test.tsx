@@ -60,7 +60,6 @@ const { idle, succeeding, loaded, emptyList } = vi.hoisted(() => {
 
 vi.mock("@/hooks/queries/genres", () => ({
   useGenre: loaded,
-  useGenreBooks: emptyList,
   useGenresList: emptyList,
   useUpdateGenre: idle,
   useMergeGenre: idle,
@@ -68,7 +67,6 @@ vi.mock("@/hooks/queries/genres", () => ({
 }));
 vi.mock("@/hooks/queries/tags", () => ({
   useTag: loaded,
-  useTagBooks: emptyList,
   useTagsList: emptyList,
   useUpdateTag: idle,
   useMergeTag: idle,
@@ -76,7 +74,6 @@ vi.mock("@/hooks/queries/tags", () => ({
 }));
 vi.mock("@/hooks/queries/people", () => ({
   usePerson: loaded,
-  usePersonAuthoredBooks: emptyList,
   usePersonNarratedFiles: emptyList,
   usePeopleList: emptyList,
   useUpdatePerson: idle,
@@ -91,6 +88,9 @@ vi.mock("@/hooks/queries/publishers", () => ({
   useMergePublisher: idle,
   useSetChildPublisher: idle,
   useDeletePublisher: succeeding,
+}));
+vi.mock("@/hooks/queries/books", () => ({
+  useBooks: emptyList,
 }));
 vi.mock("@/hooks/queries/entity-search", () => ({
   useParentPublisherSearch: () => ({ data: undefined, isLoading: false }),

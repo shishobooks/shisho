@@ -41,6 +41,7 @@ export {
   type SeriesResponse,
   type ListSeriesResponse,
   type ListSeriesBooksResponse,
+  type ListSeriesBooksQuery,
   type ListSeriesQuery,
   type UpdateSeriesPayload,
   type MergeSeriesPayload,
@@ -48,7 +49,6 @@ export {
 export {
   type PersonResponse,
   type ListPeopleResponse,
-  type ListAuthoredBooksResponse,
   type ListNarratedFilesResponse,
   type ListPeopleQuery,
   type UpdatePersonPayload,
@@ -57,14 +57,12 @@ export {
 export {
   type GenreResponse,
   type ListGenresResponse,
-  type ListGenreBooksResponse,
   type ListGenresQuery,
   type UpdateGenrePayload,
   type MergeGenresPayload,
 } from "./generated/genres";
 export {
   type TagResponse,
-  type ListTagBooksResponse,
   type ListTagsResponse,
   type ListTagsQuery,
   type UpdateTagPayload,

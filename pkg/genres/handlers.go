@@ -206,41 +206,6 @@ func (h *handler) update(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
-func (h *handler) books(c echo.Context) error {
-	ctx := c.Request().Context()
-	id, err := httputil.ParamID(c, "id", "Genre")
-	if err != nil {
-		return err
-	}
-
-	params := SubResourceQuery{}
-	if err := c.Bind(&params); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Fetch the genre to check library access
-	genre, err := h.genreService.RetrieveGenre(ctx, RetrieveGenreOptions{
-		ID: &id,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Check library access
-	if err := auth.RequireLibraryAccessFor(c, genre.LibraryID); err != nil {
-		return err
-	}
-
-	books, total, err := h.genreService.GetBooksPaginated(ctx, id, params.Limit, params.Offset)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	response := ListGenreBooksResponse{Items: books, Total: total}
-
-	return errors.WithStack(c.JSON(http.StatusOK, response))
-}
-
 func (h *handler) merge(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := httputil.ParamID(c, "id", "Genre")

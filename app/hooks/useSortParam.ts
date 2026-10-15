@@ -1,22 +1,20 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import type { ResourceSortConfig } from "@/libraries/resourceSort";
 import {
   parseSortSpecFor,
   serializeSortSpec,
   sortSpecsEqual,
+  type SortConfig,
   type SortLevel,
 } from "@/libraries/sortSpec";
 
 /**
- * Hook that keeps a resource list's sort in the URL `?sort=` param. The param
- * is omitted when the sort equals the list's default, and a sort with a field
- * the list does not offer is ignored.
+ * Hook that keeps a view's sort in the URL `?sort=` param. The param is
+ * omitted when the sort equals the view's default, and a sort with a field
+ * the view does not offer is ignored.
  */
-export function useResourceSortParam<F extends string>(
-  config: ResourceSortConfig<F>,
-) {
+export function useSortParam<F extends string>(config: SortConfig<F>) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSort = parseSortSpecFor(
     searchParams.get("sort") ?? "",
@@ -39,7 +37,7 @@ export function useResourceSortParam<F extends string>(
         } else {
           params.delete("sort");
         }
-        params.set("page", "1");
+        params.delete("page");
         return params;
       });
     },
@@ -52,9 +50,14 @@ export function useResourceSortParam<F extends string>(
     config,
     levels,
     isDirty,
-    /** The effective sort to send to the API. */
-    param: serializeSortSpec(levels),
+    /**
+     * The effective sort to send to the API, or undefined when the default is
+     * the endpoint's own order.
+     */
+    param: serializeSortSpec(levels) || undefined,
     apply,
     reset,
   };
 }
+
+export type SortParam<F extends string> = ReturnType<typeof useSortParam<F>>;

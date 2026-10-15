@@ -4,13 +4,14 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { PERSON_SORT } from "@/libraries/resourceSort";
+import { SERIES_BOOKS_SORT } from "@/libraries/sortSpec";
 
-import { useResourceSortParam } from "./useResourceSortParam";
+import { useSortParam } from "./useSortParam";
 
 const renderAt = (entry: string) =>
   renderHook(
     () => ({
-      sort: useResourceSortParam(PERSON_SORT),
+      sort: useSortParam(PERSON_SORT),
       location: useLocation(),
     }),
     {
@@ -20,7 +21,7 @@ const renderAt = (entry: string) =>
     },
   );
 
-describe("useResourceSortParam", () => {
+describe("useSortParam", () => {
   it("uses the default sort when the URL has none", () => {
     const { result } = renderAt("/");
     expect(result.current.sort.levels).toEqual([
@@ -57,7 +58,7 @@ describe("useResourceSortParam", () => {
     );
     const params = new URLSearchParams(result.current.location.search);
     expect(params.get("sort")).toBe("narrated_file_count:desc");
-    expect(params.get("page")).toBe("1");
+    expect(params.get("page")).toBeNull();
     expect(params.get("search")).toBe("jo");
   });
 
@@ -71,5 +72,40 @@ describe("useResourceSortParam", () => {
     );
     act(() => result.current.sort.reset());
     expect(result.current.location.search).not.toContain("sort=");
+  });
+
+  describe("with no default levels", () => {
+    const renderSeriesAt = (entry: string) =>
+      renderHook(
+        () => ({
+          sort: useSortParam(SERIES_BOOKS_SORT),
+          location: useLocation(),
+        }),
+        {
+          wrapper: ({ children }: { children: ReactNode }) => (
+            <MemoryRouter initialEntries={[entry]}>{children}</MemoryRouter>
+          ),
+        },
+      );
+
+    it("sends no sort so the endpoint keeps its own order", () => {
+      const { result } = renderSeriesAt("/");
+      expect(result.current.sort.levels).toEqual([]);
+      expect(result.current.sort.isDirty).toBe(false);
+      expect(result.current.sort.param).toBeUndefined();
+    });
+
+    it("sends a sort chosen in the URL", () => {
+      const { result } = renderSeriesAt("/?sort=date_released:desc");
+      expect(result.current.sort.isDirty).toBe(true);
+      expect(result.current.sort.param).toBe("date_released:desc");
+    });
+
+    it("returns to the endpoint's order when the last level is removed", () => {
+      const { result } = renderSeriesAt("/?sort=title:asc");
+      act(() => result.current.sort.apply([]));
+      expect(result.current.location.search).not.toContain("sort=");
+      expect(result.current.sort.param).toBeUndefined();
+    });
   });
 });

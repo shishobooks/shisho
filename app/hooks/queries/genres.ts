@@ -6,14 +6,9 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type {
-  GenreResponse,
-  ListGenreBooksResponse,
-  ListGenresResponse,
-} from "@/types";
+import type { GenreResponse, ListGenresResponse } from "@/types";
 import type {
   ListGenresQuery,
-  SubResourceQuery,
   UpdateGenrePayload,
 } from "@/types/generated/genres";
 
@@ -23,7 +18,6 @@ import { useRequires } from "./permissions";
 export enum QueryKey {
   ListGenres = "ListGenres",
   RetrieveGenre = "RetrieveGenre",
-  GenreBooks = "GenreBooks",
 }
 
 export type ListGenresData = ListGenresResponse;
@@ -61,36 +55,6 @@ export const useGenre = (
     },
   });
 };
-
-// Alias of the generated query type; imported directly from the generated
-// module because every sub-resource package emits a `SubResourceQuery` and
-// the barrel cannot re-export them all under one name.
-export type GenreBooksQuery = SubResourceQuery;
-
-export const useGenreBooks = (
-  genreId?: number,
-  query: GenreBooksQuery = {},
-  options: Omit<
-    UseQueryOptions<ListGenreBooksResponse, ShishoAPIError>,
-    "queryKey" | "queryFn"
-  > = {},
-) => {
-  return useQuery<ListGenreBooksResponse, ShishoAPIError>({
-    ...options,
-    enabled: useRequires("books:read", options.enabled ?? Boolean(genreId)),
-    queryKey: [QueryKey.GenreBooks, genreId, query],
-    queryFn: ({ signal }) => {
-      return API.request(
-        "GET",
-        `/genres/${genreId}/books`,
-        null,
-        query,
-        signal,
-      );
-    },
-  });
-};
-
 export const useUpdateGenre = () => {
   const queryClient = useQueryClient();
 
@@ -152,10 +116,6 @@ export const useMergeGenre = () => {
         queryKey: [QueryKey.RetrieveGenre, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
-      // Invalidate detail-page book list since books moved from source to target
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.GenreBooks, variables.targetId],
-      });
       // Invalidate book queries since they display genre info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });

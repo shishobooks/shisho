@@ -7,13 +7,13 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
+  ListSeriesBooksQuery,
   ListSeriesBooksResponse,
   ListSeriesResponse,
   SeriesResponse,
 } from "@/types";
 import type {
   ListSeriesQuery,
-  SubResourceQuery,
   UpdateSeriesPayload,
 } from "@/types/generated/series";
 
@@ -65,14 +65,9 @@ export const useSeries = (
   });
 };
 
-// Alias of the generated query type; imported directly from the generated
-// module because every sub-resource package emits a `SubResourceQuery` and
-// the barrel cannot re-export them all under one name.
-export type SeriesBooksQuery = SubResourceQuery;
-
 export const useSeriesBooks = (
   seriesId?: number,
-  query: SeriesBooksQuery = {},
+  query: ListSeriesBooksQuery = {},
   options: Omit<
     UseQueryOptions<ListSeriesBooksResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
@@ -81,7 +76,9 @@ export const useSeriesBooks = (
   return useQuery<ListSeriesBooksResponse, ShishoAPIError>({
     ...options,
     enabled: useRequires("series:read", options.enabled ?? Boolean(seriesId)),
-    queryKey: [QueryKey.SeriesBooks, seriesId, query],
+    // Under the ListBooks prefix: the page can sort by any book field, so
+    // every change that refreshes the book gallery refreshes it too.
+    queryKey: [BooksQueryKey.ListBooks, QueryKey.SeriesBooks, seriesId, query],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
@@ -147,11 +144,8 @@ export const useMergeSeries = () => {
         queryKey: [QueryKey.RetrieveSeries, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListSeries] });
-      // Invalidate series books query since books moved from source to target
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.SeriesBooks, variables.targetId],
-      });
-      // Invalidate book queries since they display series info
+      // Invalidate book queries, the series page's included, since books
+      // moved from source to target and display series info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
       // Series name shows up in search — invalidate global search results.

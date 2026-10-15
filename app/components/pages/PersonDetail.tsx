@@ -8,12 +8,12 @@ import {
 } from "@/components/library/FileListSection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import { Badge } from "@/components/ui/badge";
+import { useBooks } from "@/hooks/queries/books";
 import {
   useDeletePerson,
   useMergePerson,
   usePeopleList,
   usePerson,
-  usePersonAuthoredBooks,
   usePersonNarratedFiles,
   useUpdatePerson,
 } from "@/hooks/queries/people";
@@ -21,7 +21,10 @@ import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSortParam } from "@/hooks/useSortParam";
+import { firstFailedQuery } from "@/libraries/api";
 import { parsePageParam } from "@/libraries/pagination";
+import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const PersonDetail = () => {
@@ -41,11 +44,14 @@ const PersonDetail = () => {
   const personQuery = usePerson(personId);
   usePageTitle(personQuery.data?.name ?? "Person");
 
-  const authoredBooksQuery = usePersonAuthoredBooks(
-    personId,
+  const sort = useSortParam(BOOK_DETAIL_SORT);
+  const authoredBooksQuery = useBooks(
     {
+      person_id: personId,
+      library_id: libraryId ? parseInt(libraryId, 10) : undefined,
       limit: itemsPerPage,
       offset,
+      sort: sort.param,
     },
     {
       enabled: userSettingsResolved && Boolean(personId),
@@ -88,6 +94,18 @@ const PersonDetail = () => {
   const aliases = person?.aliases ?? [];
   const bookCount = person?.authored_book_count ?? 0;
   const narratedFileCount = person?.narrated_file_count ?? 0;
+
+  // Show only the sections with something in them. The person's counts
+  // decide on first render; the lists also count, because a scan refreshes
+  // them but not the person, and a failed list shows so its error is seen.
+  const showAuthored =
+    bookCount > 0 ||
+    (authoredBooksQuery.data?.total ?? 0) > 0 ||
+    Boolean(firstFailedQuery(authoredBooksQuery));
+  const showNarrated =
+    narratedFileCount > 0 ||
+    (narratedFilesQuery.data?.total ?? 0) > 0 ||
+    Boolean(firstFailedQuery(narratedFilesQuery));
 
   const handleEdit = async (data: {
     name: string;
@@ -171,19 +189,29 @@ const PersonDetail = () => {
       query={personQuery}
       sortName={person?.sort_name}
     >
-      <BookGallerySection
-        emptyMessage="This person has no authored books."
-        libraryId={libraryId!}
-        query={authoredBooksQuery}
-        title="Books Authored"
-      />
-      <FileListSection
-        emptyMessage="This person has no narrated files."
-        libraryId={libraryId!}
-        pageParam="filePage"
-        query={narratedFilesQuery}
-        title="Files Narrated"
-      />
+      {showAuthored && (
+        <BookGallerySection
+          emptyMessage="This person has no authored books."
+          libraryId={libraryId!}
+          query={authoredBooksQuery}
+          sort={sort}
+          title="Books Authored"
+        />
+      )}
+      {showNarrated && (
+        <FileListSection
+          emptyMessage="This person has no narrated files."
+          libraryId={libraryId!}
+          pageParam="filePage"
+          query={narratedFilesQuery}
+          title="Files Narrated"
+        />
+      )}
+      {!showAuthored && !showNarrated && (
+        <div className="text-center py-8 text-muted-foreground">
+          This person has no authored books or narrated files.
+        </div>
+      )}
     </ResourceDetail>
   );
 };

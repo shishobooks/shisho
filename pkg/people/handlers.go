@@ -297,41 +297,6 @@ func (h *handler) update(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
-func (h *handler) authoredBooks(c echo.Context) error {
-	ctx := c.Request().Context()
-	id, err := httputil.ParamID(c, "id", "Person")
-	if err != nil {
-		return err
-	}
-
-	params := SubResourceQuery{}
-	if err := c.Bind(&params); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Fetch the person to check library access
-	person, err := h.personService.RetrievePerson(ctx, RetrievePersonOptions{
-		ID: &id,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Check library access
-	if err := auth.RequireLibraryAccessFor(c, person.LibraryID); err != nil {
-		return err
-	}
-
-	books, total, err := h.personService.GetAuthoredBooksPaginated(ctx, id, params.Limit, params.Offset)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	response := ListAuthoredBooksResponse{Items: books, Total: total}
-
-	return errors.WithStack(c.JSON(http.StatusOK, response))
-}
-
 func (h *handler) narratedFiles(c echo.Context) error {
 	ctx := c.Request().Context()
 	id, err := httputil.ParamID(c, "id", "Person")

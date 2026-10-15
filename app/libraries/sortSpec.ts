@@ -46,6 +46,22 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
   duration: "Duration",
 };
 
+/**
+ * The fields a sorted view offers and the order it shows when the URL has no
+ * sort. Each view's fields must match what its endpoint accepts.
+ */
+export interface SortConfig<F extends string> {
+  /** Fields in UI display order. */
+  fields: readonly F[];
+  labels: Record<F, string>;
+  /**
+   * The order without a URL sort. Empty means the endpoint's own order,
+   * which `emptyLabel` names in lowercase ("series order").
+   */
+  defaultSort: readonly SortLevel<F>[];
+  emptyLabel?: string;
+}
+
 /** Hard cap matching pkg/sortspec.MaxLevels. */
 export const MAX_SORT_LEVELS = 10;
 
@@ -136,3 +152,31 @@ export function sortSpecsEqual(
     (l, i) => l.field === b[i].field && l.direction === b[i].direction,
   );
 }
+
+/**
+ * Books on tag, genre, and person pages: newest release first. Books without
+ * a release date sort last in either direction. Keep the default non-empty:
+ * these pages list through /books with a library_id, which applies the
+ * user's saved gallery sort whenever no sort is sent.
+ */
+export const BOOK_DETAIL_SORT: SortConfig<SortField> = {
+  fields: SORT_FIELDS,
+  labels: SORT_FIELD_LABELS,
+  defaultSort: [
+    { field: "date_released", direction: "desc" },
+    { field: "title", direction: "asc" },
+  ],
+};
+
+/**
+ * Books on a series page keep series order until a sort is chosen. Series is
+ * left out because it orders by each book's first series, not this one.
+ */
+export const SERIES_BOOKS_SORT: SortConfig<Exclude<SortField, "series">> = {
+  fields: SORT_FIELDS.filter(
+    (f): f is Exclude<SortField, "series"> => f !== "series",
+  ),
+  labels: SORT_FIELD_LABELS,
+  defaultSort: [],
+  emptyLabel: "series order",
+};

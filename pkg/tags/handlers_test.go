@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -74,110 +73,6 @@ func seedTagWithBooks(t *testing.T, db *bun.DB, lib *models.Library, tagName str
 	}
 
 	return tag
-}
-
-func TestBooks_DefaultPagination(t *testing.T) {
-	t.Parallel()
-	db := testdb.New(t)
-	lib := createTestLibrary(t, db)
-	h := newTestHandler(db)
-
-	// Seed one more book than the default limit so the test pins the
-	// default-limit=24 contract instead of passing for any bind default.
-	titles := make([]string, 25)
-	for i := range titles {
-		titles[i] = fmt.Sprintf("Book %02d", i+1)
-	}
-	tag := seedTagWithBooks(t, db, lib, "Fantasy", titles)
-
-	e := newTestEcho(t)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAllAccessUser(c)
-	c.SetParamNames("id")
-	c.SetParamValues(strconv.Itoa(tag.ID))
-
-	err := h.books(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp map[string]json.RawMessage
-	err = json.Unmarshal(rec.Body.Bytes(), &resp)
-	require.NoError(t, err)
-
-	var total int
-	err = json.Unmarshal(resp["total"], &total)
-	require.NoError(t, err)
-	assert.Equal(t, 25, total)
-
-	var items []json.RawMessage
-	err = json.Unmarshal(resp["items"], &items)
-	require.NoError(t, err)
-	require.Len(t, items, 24, "default limit must be 24")
-}
-
-func TestBooks_ExplicitLimitOffset(t *testing.T) {
-	t.Parallel()
-	db := testdb.New(t)
-	lib := createTestLibrary(t, db)
-	h := newTestHandler(db)
-
-	tag := seedTagWithBooks(t, db, lib, "Sci-Fi", []string{"B1", "B2", "B3", "B4", "B5"})
-
-	e := newTestEcho(t)
-	req := httptest.NewRequest(http.MethodGet, "/?limit=2&offset=1", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAllAccessUser(c)
-	c.SetParamNames("id")
-	c.SetParamValues(strconv.Itoa(tag.ID))
-
-	err := h.books(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp map[string]json.RawMessage
-	err = json.Unmarshal(rec.Body.Bytes(), &resp)
-	require.NoError(t, err)
-
-	var total int
-	err = json.Unmarshal(resp["total"], &total)
-	require.NoError(t, err)
-	assert.Equal(t, 5, total)
-
-	var items []json.RawMessage
-	err = json.Unmarshal(resp["items"], &items)
-	require.NoError(t, err)
-	assert.Len(t, items, 2)
-}
-
-func TestBooks_ResponseShape(t *testing.T) {
-	t.Parallel()
-	db := testdb.New(t)
-	lib := createTestLibrary(t, db)
-	h := newTestHandler(db)
-
-	tag := seedTagWithBooks(t, db, lib, "Horror", []string{"H1"})
-
-	e := newTestEcho(t)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAllAccessUser(c)
-	c.SetParamNames("id")
-	c.SetParamValues(strconv.Itoa(tag.ID))
-
-	err := h.books(c)
-	require.NoError(t, err)
-
-	var resp map[string]json.RawMessage
-	err = json.Unmarshal(rec.Body.Bytes(), &resp)
-	require.NoError(t, err)
-
-	assert.Len(t, resp, 2, "response should have exactly 2 keys")
-	assert.Contains(t, resp, "items")
-	assert.Contains(t, resp, "total")
 }
 
 func TestList_ResponseUsesItemsKey(t *testing.T) {

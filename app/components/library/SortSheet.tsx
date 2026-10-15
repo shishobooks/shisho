@@ -73,6 +73,8 @@ interface SortSheetProps<F extends string> {
   fieldLabels: Record<F, string>;
   levels: readonly SortLevel<F>[];
   onChange: (levels: SortLevel<F>[]) => void;
+  /** Names the order shown while there are no levels ("series order"). */
+  emptyLabel?: string;
   /** Omit where the sort cannot be saved; the save prompt is then hidden. */
   onSaveAsDefault?: () => void;
   isDirty: boolean;
@@ -193,6 +195,7 @@ const SortSheetContent = <F extends string>({
   fieldLabels,
   levels,
   onChange,
+  emptyLabel,
   onSaveAsDefault,
   isDirty,
   isSaving = false,
@@ -240,6 +243,9 @@ const SortSheetContent = <F extends string>({
 
   return (
     <div className="flex flex-col gap-4 py-4">
+      {levels.length === 0 && emptyLabel && (
+        <p className="text-sm text-muted-foreground">Sorted by {emptyLabel}.</p>
+      )}
       {levels.length > 0 && (
         <DndContext
           collisionDetection={closestCenter}

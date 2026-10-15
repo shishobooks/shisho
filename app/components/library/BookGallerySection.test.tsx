@@ -1,11 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { useSortParam } from "@/hooks/useSortParam";
 import { ShishoAPIError } from "@/libraries/api";
+import {
+  BOOK_DETAIL_SORT,
+  SERIES_BOOKS_SORT,
+  type SortConfig,
+} from "@/libraries/sortSpec";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, ResourceListResponse } from "@/types";
@@ -301,5 +307,66 @@ describe("BookGallerySection", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  describe("sort", () => {
+    const Sorted = <F extends string>({
+      config,
+    }: {
+      config: SortConfig<F>;
+    }) => {
+      const sort = useSortParam(config);
+      return (
+        <>
+          <BookGallerySection
+            libraryId="1"
+            query={makeQueryResult([makeBook(1)], 1)}
+            sort={sort}
+            title="Books"
+          />
+          <output data-testid="location">{useLocation().search}</output>
+        </>
+      );
+    };
+
+    it("has no Sort control without a sort", () => {
+      render(
+        wrap(
+          <BookGallerySection
+            libraryId="1"
+            query={makeQueryResult([makeBook(1)], 1)}
+            title="Books"
+          />,
+        ),
+      );
+      expect(
+        screen.queryByRole("button", { name: /^Sort/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("writes a chosen field to the URL and shows it as a chip", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(wrap(<Sorted config={BOOK_DETAIL_SORT} />));
+      expect(screen.queryByText("Sorted by:")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /^Sort/ }));
+      await user.click(screen.getByRole("button", { name: /Page count/ }));
+
+      expect(screen.getByTestId("location").textContent).toContain(
+        "sort=date_released%3Adesc%2Ctitle%3Aasc%2Cpage_count%3Aasc",
+      );
+      expect(screen.getByText("Sorted by:")).toBeInTheDocument();
+    });
+
+    it("names the endpoint's own order when the default has no levels", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(wrap(<Sorted config={SERIES_BOOKS_SORT} />));
+
+      await user.click(screen.getByRole("button", { name: /^Sort/ }));
+      expect(screen.getByText("Sorted by series order.")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Series$/ }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

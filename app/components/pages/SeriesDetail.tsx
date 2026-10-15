@@ -25,7 +25,9 @@ import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSortParam } from "@/hooks/useSortParam";
 import { isLoadFailure } from "@/libraries/api";
+import { SERIES_BOOKS_SORT } from "@/libraries/sortSpec";
 
 const SeriesDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -44,11 +46,13 @@ const SeriesDetail = () => {
   const canWriteSeries = useCan("series:write");
 
   usePageTitle(seriesQuery.data?.name ?? "Series");
+  const sort = useSortParam(SERIES_BOOKS_SORT);
   const seriesBooksQuery = useSeriesBooks(
     seriesId,
     {
       limit: itemsPerPage,
       offset,
+      sort: sort.param,
     },
     {
       enabled: userSettingsResolved && Boolean(seriesId),
@@ -227,6 +231,7 @@ const SeriesDetail = () => {
         libraryId={libraryId!}
         query={seriesBooksQuery}
         seriesId={seriesId}
+        sort={sort}
         title="Books in Series"
       />
 

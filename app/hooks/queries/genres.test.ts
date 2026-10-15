@@ -23,32 +23,6 @@ const makeWrapper = (client: QueryClient) => {
 };
 
 describe("useMergeGenre", () => {
-  it("invalidates GenreBooks for the target id on success", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    client.setQueryData([QueryKey.GenreBooks, 1, { limit: 50, offset: 0 }], {
-      items: [],
-      total: 0,
-    });
-
-    const { result } = renderHook(() => useMergeGenre(), {
-      wrapper: makeWrapper(client),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({ targetId: 1, sourceId: 2 });
-    });
-
-    await waitFor(() => {
-      expect(
-        client.getQueryState([QueryKey.GenreBooks, 1, { limit: 50, offset: 0 }])
-          ?.isInvalidated,
-      ).toBe(true);
-    });
-  });
-
   it("invalidates RetrieveGenre, ListGenres, and book queries on success", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

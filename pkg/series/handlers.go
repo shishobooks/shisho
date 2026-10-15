@@ -262,9 +262,17 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		return err
 	}
 
-	params := SubResourceQuery{}
+	params := ListSeriesBooksQuery{}
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
+	}
+
+	var sortLevels []sortspec.SortLevel
+	if params.Sort != "" {
+		sortLevels, err = sortspec.Parse(params.Sort)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Fetch the series to check library access
@@ -284,6 +292,7 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		SeriesID: &id,
 		Limit:    &params.Limit,
 		Offset:   &params.Offset,
+		Sort:     sortLevels,
 	})
 	if err != nil {
 		return errors.WithStack(err)

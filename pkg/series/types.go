@@ -41,9 +41,12 @@ type ListSeriesQuery struct {
 	Sort      string  `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 }
 
-type SubResourceQuery struct {
+// ListSeriesBooksQuery is the query for the series books sub-resource.
+type ListSeriesBooksQuery struct {
 	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
 	Offset int `query:"offset" json:"offset,omitempty" validate:"min=0"`
+	// Sort is a book sort spec, as on GET /books. Omitted, books keep series order.
+	Sort string `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 }
 
 type UpdateSeriesPayload struct {

@@ -24,35 +24,6 @@ const makeWrapper = (client: QueryClient) => {
 };
 
 describe("useMergePerson", () => {
-  it("invalidates PersonAuthoredBooks for the target id on success", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    client.setQueryData(
-      [QueryKey.PersonAuthoredBooks, 1, { limit: 50, offset: 0 }],
-      { items: [], total: 0 },
-    );
-
-    const { result } = renderHook(() => useMergePerson(), {
-      wrapper: makeWrapper(client),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({ targetId: 1, sourceId: 2 });
-    });
-
-    await waitFor(() => {
-      expect(
-        client.getQueryState([
-          QueryKey.PersonAuthoredBooks,
-          1,
-          { limit: 50, offset: 0 },
-        ])?.isInvalidated,
-      ).toBe(true);
-    });
-  });
-
   it("invalidates PersonNarratedFiles for the target id on success", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

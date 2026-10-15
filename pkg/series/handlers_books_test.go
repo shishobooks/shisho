@@ -200,3 +200,45 @@ func TestSeriesBooks_ExplicitLimitOffset(t *testing.T) {
 	assert.Equal(t, "Beta", resp.Items[0].Title)
 	assert.Equal(t, "Charlie", resp.Items[1].Title)
 }
+
+func seriesBookTitles(t *testing.T, rec *httptest.ResponseRecorder) []string {
+	t.Helper()
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp ListSeriesBooksResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	titles := make([]string, len(resp.Items))
+	for i, b := range resp.Items {
+		titles[i] = b.Title
+	}
+	return titles
+}
+
+func TestSeriesBooks_SortParamOverridesSeriesOrder(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	// Insertion (id) order is Bravo, Alpha, Charlie. Renumbering makes series
+	// order Charlie, Alpha, Bravo, so neither id nor title order can pass for it.
+	seriesID := seedSeriesWithBooks(t, db, []string{"Bravo", "Alpha", "Charlie"})
+	for title, number := range map[string]float64{"Bravo": 3, "Alpha": 2, "Charlie": 1} {
+		_, err := db.NewUpdate().Model((*models.BookSeries)(nil)).
+			Set("series_number = ?", number).
+			Where("series_id = ? AND book_id = (SELECT id FROM books WHERE title = ?)", seriesID, title).
+			Exec(context.Background())
+		require.NoError(t, err)
+	}
+	h := newSeriesHandler(db)
+
+	// No sort keeps series order.
+	assert.Equal(t, []string{"Charlie", "Alpha", "Bravo"}, seriesBookTitles(t, getSeriesBooks(t, h, seriesID, "")))
+	// An explicit sort replaces it.
+	assert.Equal(t, []string{"Alpha", "Bravo", "Charlie"}, seriesBookTitles(t, getSeriesBooks(t, h, seriesID, "?sort=title:asc")))
+}
+
+func TestSeriesBooks_InvalidSortReturns422(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	seriesID := seedSeriesWithBooks(t, db, []string{"Alpha"})
+
+	rec := getSeriesBooks(t, newSeriesHandler(db), seriesID, "?sort=book_count:desc")
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}

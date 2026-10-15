@@ -3,10 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { BookGallerySection } from "@/components/library/BookGallerySection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
+import { useBooks } from "@/hooks/queries/books";
 import {
   useDeleteGenre,
   useGenre,
-  useGenreBooks,
   useGenresList,
   useMergeGenre,
   useUpdateGenre,
@@ -15,6 +15,8 @@ import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSortParam } from "@/hooks/useSortParam";
+import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const GenreDetail = () => {
@@ -31,11 +33,14 @@ const GenreDetail = () => {
   const genreQuery = useGenre(genreId);
   usePageTitle(genreQuery.data?.name ?? "Genre");
 
-  const genreBooksQuery = useGenreBooks(
-    genreId,
+  const sort = useSortParam(BOOK_DETAIL_SORT);
+  const genreBooksQuery = useBooks(
     {
+      genre_ids: genreId ? [genreId] : undefined,
+      library_id: libraryId ? parseInt(libraryId, 10) : undefined,
       limit: itemsPerPage,
       offset,
+      sort: sort.param,
     },
     {
       enabled: userSettingsResolved && Boolean(genreId),
@@ -130,6 +135,7 @@ const GenreDetail = () => {
         emptyMessage="This genre has no associated books."
         libraryId={libraryId!}
         query={genreBooksQuery}
+        sort={sort}
         title="Books"
       />
     </ResourceDetail>

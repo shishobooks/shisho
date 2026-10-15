@@ -348,3 +348,73 @@ func TestListHandler_CoverCacheKeyEmptyWhenNoCover(t *testing.T) {
 	require.Len(t, resp.Items, 1)
 	assert.Empty(t, resp.Items[0].CoverCacheKey)
 }
+
+// TestListHandler_FiltersByPersonID verifies person_id limits the list to
+// the books the person authored, each once even with several roles.
+func TestListHandler_FiltersByPersonID(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	ctx := context.Background()
+	lib := seedLibrary(t, db, "Library A")
+	user := seedUserWithLibAccess(t, db, "alice", lib)
+
+	now := time.Now()
+	authored := seedBook(t, db, lib, "Authored", "Authored", now)
+	seedBook(t, db, lib, "Other", "Other", now)
+
+	person := &models.Person{LibraryID: lib.ID, Name: "Jane Doe", SortName: "Doe, Jane", SortNameSource: models.DataSourceFilepath}
+	_, err := db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+	writer, inker := models.AuthorRoleWriter, models.AuthorRoleInker
+	for i, role := range []*string{&writer, &inker} {
+		_, err = db.NewInsert().Model(&models.Author{BookID: authored.ID, PersonID: person.ID, SortOrder: i + 1, Role: role}).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
+	e := newTestEchoBooks(t)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/books?library_id=%d&person_id=%d", lib.ID, person.ID), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	auth.SetUser(c, user)
+
+	require.NoError(t, h.list(c))
+	var resp ListBooksResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, 1, resp.Total)
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, authored.ID, resp.Items[0].ID)
+}
+
+// TestListHandler_PersonIDKeepsLibraryAccess verifies person_id cannot reach
+// books in a library the user has no access to.
+func TestListHandler_PersonIDKeepsLibraryAccess(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	ctx := context.Background()
+	allowed := seedLibrary(t, db, "Allowed")
+	hidden := seedLibrary(t, db, "Hidden")
+	user := seedUserWithLibAccess(t, db, "alice", allowed)
+
+	book := seedBook(t, db, hidden, "Hidden Book", "Hidden Book", time.Now())
+	person := &models.Person{LibraryID: hidden.ID, Name: "Jane Doe", SortName: "Doe, Jane", SortNameSource: models.DataSourceFilepath}
+	_, err := db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Author{BookID: book.ID, PersonID: person.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
+	e := newTestEchoBooks(t)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/books?person_id=%d", person.ID), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	auth.SetUser(c, user)
+
+	require.NoError(t, h.list(c))
+	var resp ListBooksResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, 0, resp.Total)
+	assert.Empty(t, resp.Items)
+}
