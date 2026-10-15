@@ -1441,9 +1441,9 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			// Sidecar genres are written sorted by BookSidecarFromModel; sort
-			// the existing names too so the order-sensitive comparison sees
-			// identical slices when nothing has changed.
+			// Genres are an unordered set; sort both sides so the
+			// order-sensitive comparison ignores whatever order the sidecar
+			// lists them in.
 			sort.Strings(bookSidecarData.Genres)
 			sort.Strings(existingGenreNames)
 
@@ -1542,8 +1542,8 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			// Sidecar tags are written sorted; sort the existing names too so
-			// the order-sensitive comparison is stable.
+			// Tags are an unordered set; sort both sides so the order-sensitive
+			// comparison ignores whatever order the sidecar lists them in.
 			sort.Strings(bookSidecarData.Tags)
 			sort.Strings(existingTagNames)
 

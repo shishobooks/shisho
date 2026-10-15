@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -318,10 +319,16 @@ func TestEPUBGenerator_RetitleDropsStaleTitleAttributes(t *testing.T) {
 func TestEPUBGenerator_ChapterEditsLeaveOPFAlone(t *testing.T) {
 	t.Parallel()
 
+	// The EPUB 3 source has no dcterms:modified, so the generator stamps the
+	// book's UpdatedAt, or the current second when that is zero. Pin it so
+	// the two generations can't straddle a second boundary.
+	book := coverBook()
+	book.UpdatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	for _, version := range []string{"2.0", "3.0"} {
-		plain := zipEntries(t, generateVersioned(t, tocEPUB(version), coverBook(), nil, nil, ""))
+		plain := zipEntries(t, generateVersioned(t, tocEPUB(version), book, nil, nil, ""))
 		file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters(editedTOC(version))}
-		edited := zipEntries(t, generateVersioned(t, tocEPUB(version), coverBook(), file, nil, ""))
+		edited := zipEntries(t, generateVersioned(t, tocEPUB(version), book, file, nil, ""))
 		assert.Equal(t, string(plain["OEBPS/content.opf"]), string(edited["OEBPS/content.opf"]), version)
 		assert.NotEqual(t, string(plain["OEBPS/toc.ncx"]), string(edited["OEBPS/toc.ncx"]), version)
 	}
