@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -245,24 +245,46 @@ func BookSidecarFromModel(book *models.Book) *BookSidecar {
 	}
 
 	// Genres and tags are sets without an explicit sort order on the join
-	// rows, so canonicalize to alphabetical order. This keeps sidecar diffs
-	// stable across writes and lets the scanner round-trip compare against
-	// existing names without spurious "update from sidecar" thrash.
+	// rows, so canonicalize to the order the book loaders return them in.
+	// This keeps sidecar diffs stable across writes and matches what the UI
+	// shows. The scanner re-sorts both sides before comparing, so it never
+	// depends on this order.
 	for _, bg := range book.BookGenres {
 		if bg.Genre != nil {
 			s.Genres = append(s.Genres, bg.Genre.Name)
 		}
 	}
-	sort.Strings(s.Genres)
+	sortNamesLikeBookLoaders(s.Genres)
 
 	for _, bt := range book.BookTags {
 		if bt.Tag != nil {
 			s.Tags = append(s.Tags, bt.Tag.Name)
 		}
 	}
-	sort.Strings(s.Tags)
+	sortNamesLikeBookLoaders(s.Tags)
 
 	return s
+}
+
+// sortNamesLikeBookLoaders sorts genre or tag names the way the book loaders
+// do (SQLite's COLLATE NOCASE, which folds only ASCII letters), breaking ties
+// by byte order so the result is deterministic.
+func sortNamesLikeBookLoaders(names []string) {
+	slices.SortFunc(names, func(a, b string) int {
+		if c := strings.Compare(asciiLower(a), asciiLower(b)); c != 0 {
+			return c
+		}
+		return strings.Compare(a, b)
+	})
+}
+
+func asciiLower(s string) string {
+	return strings.Map(func(r rune) rune {
+		if 'A' <= r && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, s)
 }
 
 // FileSidecarFromModel creates a FileSidecar from a File model.

@@ -549,6 +549,25 @@ func TestBookSidecarFromModel_GenresAndTagsSortedAlphabetically(t *testing.T) {
 	assert.Equal(t, []string{"abandoned", "favorite", "re-read"}, s.Tags)
 }
 
+func TestBookSidecarFromModel_GenresAndTagsSortLikeBookLoaders(t *testing.T) {
+	t.Parallel()
+	// The book loaders sort with SQLite's NOCASE, which folds only ASCII to
+	// lowercase, so "action" sorts before "Mystery", "_unsorted" (0x5F sits
+	// between the cases) sorts before both, and "Érotique" sorts last.
+	names := []string{"Zombies", "Érotique", "action", "_unsorted", "Mystery"}
+	want := []string{"_unsorted", "action", "Mystery", "Zombies", "Érotique"}
+	book := &models.Book{Title: "Mixed Case Book"}
+	for _, name := range names {
+		book.BookGenres = append(book.BookGenres, &models.BookGenre{Genre: &models.Genre{Name: name}})
+		book.BookTags = append(book.BookTags, &models.BookTag{Tag: &models.Tag{Name: name}})
+	}
+
+	s := BookSidecarFromModel(book)
+	require.NotNil(t, s)
+	assert.Equal(t, want, s.Genres)
+	assert.Equal(t, want, s.Tags)
+}
+
 func TestWriteBookSidecarFromModel_RoundTripGenresAndTags(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
