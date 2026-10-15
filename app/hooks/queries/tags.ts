@@ -6,16 +6,8 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type {
-  ListTagBooksResponse,
-  ListTagsResponse,
-  TagResponse,
-} from "@/types";
-import type {
-  ListTagsQuery,
-  SubResourceQuery,
-  UpdateTagPayload,
-} from "@/types/generated/tags";
+import type { ListTagsResponse, TagResponse } from "@/types";
+import type { ListTagsQuery, UpdateTagPayload } from "@/types/generated/tags";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
@@ -23,7 +15,6 @@ import { useRequires } from "./permissions";
 export enum QueryKey {
   ListTags = "ListTags",
   RetrieveTag = "RetrieveTag",
-  TagBooks = "TagBooks",
 }
 
 export type ListTagsData = ListTagsResponse;
@@ -61,30 +52,6 @@ export const useTag = (
     },
   });
 };
-
-// Alias of the generated query type; imported directly from the generated
-// module because every sub-resource package emits a `SubResourceQuery` and
-// the barrel cannot re-export them all under one name.
-export type TagBooksQuery = SubResourceQuery;
-
-export const useTagBooks = (
-  tagId?: number,
-  query: TagBooksQuery = {},
-  options: Omit<
-    UseQueryOptions<ListTagBooksResponse, ShishoAPIError>,
-    "queryKey" | "queryFn"
-  > = {},
-) => {
-  return useQuery<ListTagBooksResponse, ShishoAPIError>({
-    ...options,
-    enabled: useRequires("books:read", options.enabled ?? Boolean(tagId)),
-    queryKey: [QueryKey.TagBooks, tagId, query],
-    queryFn: ({ signal }) => {
-      return API.request("GET", `/tags/${tagId}/books`, null, query, signal);
-    },
-  });
-};
-
 export const useUpdateTag = () => {
   const queryClient = useQueryClient();
 
@@ -146,10 +113,6 @@ export const useMergeTag = () => {
         queryKey: [QueryKey.RetrieveTag, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
-      // Invalidate detail-page book list since books moved from source to target
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.TagBooks, variables.targetId],
-      });
       // Invalidate book queries since they display tag info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });

@@ -171,6 +171,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
 		},
 		{
+			name:   "series books with a sort field books do not offer",
+			method: http.MethodGet, path: "/api/series/999999/books?sort=book_count:desc",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "book_count".`,
+		},
+		{
+			name:   "books list with a person id below 1",
+			method: http.MethodGet, path: "/api/books?person_id=0",
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "publisher set-child with a child that does not exist",
 			method: http.MethodPost, path: fmt.Sprintf("/api/publishers/%d/set-child", parent.ID),
 			body:   `{"child_id":999999}`,

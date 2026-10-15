@@ -283,42 +283,6 @@ func (svc *Service) GetBookCount(ctx context.Context, tagID int) (int, error) {
 	return int(count), errors.WithStack(err)
 }
 
-// GetBooks returns all books with this tag.
-func (svc *Service) GetBooks(ctx context.Context, tagID int) ([]*models.Book, error) {
-	var books []*models.Book
-
-	err := svc.db.NewSelect().
-		Model(&books).
-		Join("INNER JOIN book_tags bt ON bt.book_id = b.id").
-		Where("bt.tag_id = ?", tagID).
-		Order("b.title ASC").
-		Scan(ctx)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return books, nil
-}
-
-// GetBooksPaginated returns a paginated list of books with this tag.
-func (svc *Service) GetBooksPaginated(ctx context.Context, tagID, limit, offset int) ([]*models.Book, int, error) {
-	var books []*models.Book
-
-	total, err := svc.db.NewSelect().
-		Model(&books).
-		Join("INNER JOIN book_tags bt ON bt.book_id = b.id").
-		Where("bt.tag_id = ?", tagID).
-		Order("b.title ASC").
-		Limit(int64(limit)).
-		Offset(int64(offset)).
-		ScanAndCount(ctx)
-	if err != nil {
-		return nil, 0, errors.WithStack(err)
-	}
-
-	return books, int(total), nil
-}
-
 // MergeTags merges sourceTag into targetTag (moves all associations, deletes source).
 // A Tag cannot be merged into itself.
 func (svc *Service) MergeTags(ctx context.Context, targetID, sourceID int) error {

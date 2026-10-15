@@ -7,6 +7,7 @@ type ListBooksQuery struct {
 	Offset         int      `query:"offset" json:"offset,omitempty" validate:"min=0"`
 	LibraryID      *int     `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	SeriesID       *int     `query:"series_id" json:"series_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
+	PersonID       *int     `query:"person_id" json:"person_id,omitempty" validate:"omitempty,min=1" tstype:"number"` // Filter to books this person authored
 	Search         *string  `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
 	FileTypes      []string `query:"file_types" json:"file_types,omitempty"`                                         // Filter by file types (e.g., ["epub", "m4b"])
 	GenreIDs       []int    `query:"genre_ids" json:"genre_ids,omitempty"`                                           // Filter by genre IDs

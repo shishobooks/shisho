@@ -196,6 +196,7 @@ func (h *handler) list(c echo.Context) error {
 		Offset:         &params.Offset,
 		LibraryID:      params.LibraryID,
 		SeriesID:       params.SeriesID,
+		PersonID:       params.PersonID,
 		Search:         params.Search,
 		FileTypes:      params.FileTypes,
 		GenreIDs:       params.GenreIDs,

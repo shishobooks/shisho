@@ -105,19 +105,19 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/people"
     output_path: "app/types/generated/people.ts"
     frontmatter: |
-      import { Book, File, Person } from "@/types";
+      import { File, Person } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/genres"
     output_path: "app/types/generated/genres.ts"
     frontmatter: |
-      import { Book, Genre } from "@/types";
+      import { Genre } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/tags"
     output_path: "app/types/generated/tags.ts"
     frontmatter: |
-      import { Book, Tag } from "@/types";
+      import { Tag } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/publishers"

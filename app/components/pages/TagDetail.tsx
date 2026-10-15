@@ -3,11 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { BookGallerySection } from "@/components/library/BookGallerySection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
+import { useBooks } from "@/hooks/queries/books";
 import {
   useDeleteTag,
   useMergeTag,
   useTag,
-  useTagBooks,
   useTagsList,
   useUpdateTag,
 } from "@/hooks/queries/tags";
@@ -15,6 +15,8 @@ import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSortParam } from "@/hooks/useSortParam";
+import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
 import { writePermissionForEntity } from "@/utils/permissions";
 
 const TagDetail = () => {
@@ -31,11 +33,14 @@ const TagDetail = () => {
   const tagQuery = useTag(tagId);
   usePageTitle(tagQuery.data?.name ?? "Tag");
 
-  const tagBooksQuery = useTagBooks(
-    tagId,
+  const sort = useSortParam(BOOK_DETAIL_SORT);
+  const tagBooksQuery = useBooks(
     {
+      tag_ids: tagId ? [tagId] : undefined,
+      library_id: libraryId ? parseInt(libraryId, 10) : undefined,
       limit: itemsPerPage,
       offset,
+      sort: sort.param,
     },
     {
       enabled: userSettingsResolved && Boolean(tagId),
@@ -130,6 +135,7 @@ const TagDetail = () => {
         emptyMessage="This tag has no associated books."
         libraryId={libraryId!}
         query={tagBooksQuery}
+        sort={sort}
         title="Books"
       />
     </ResourceDetail>

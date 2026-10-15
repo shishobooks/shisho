@@ -107,7 +107,6 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   // genres
   useGenresList: requires("books:read", [{}, on]),
   useGenre: requires("books:read", [1, on]),
-  useGenreBooks: requires("books:read", [1, {}, on]),
   // jobs
   useJob: authenticated(["1", on]),
   useJobs: requires("jobs:read", [{}, on]),
@@ -134,7 +133,6 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   // people
   usePeopleList: requires("people:read", [{}, on]),
   usePerson: requires("people:read", [1, on]),
-  usePersonAuthoredBooks: requires("people:read", [1, {}, on]),
   usePersonNarratedFiles: requires("people:read", [1, {}, on]),
   // plugins
   usePluginsInstalled: requires("config:read", []),
@@ -173,7 +171,6 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   // tags
   useTagsList: requires("books:read", [{}, on]),
   useTag: requires("books:read", [1, on]),
-  useTagBooks: requires("books:read", [1, {}, on]),
   // users
   useUser: requires("users:read", ["1", on]),
   useUsers: requires("users:read", [{}, on]),

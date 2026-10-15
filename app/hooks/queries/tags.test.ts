@@ -23,32 +23,6 @@ const makeWrapper = (client: QueryClient) => {
 };
 
 describe("useMergeTag", () => {
-  it("invalidates TagBooks for the target id on success", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    client.setQueryData([QueryKey.TagBooks, 1, { limit: 50, offset: 0 }], {
-      items: [],
-      total: 0,
-    });
-
-    const { result } = renderHook(() => useMergeTag(), {
-      wrapper: makeWrapper(client),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({ targetId: 1, sourceId: 2 });
-    });
-
-    await waitFor(() => {
-      expect(
-        client.getQueryState([QueryKey.TagBooks, 1, { limit: 50, offset: 0 }])
-          ?.isInvalidated,
-      ).toBe(true);
-    });
-  });
-
   it("invalidates RetrieveTag, ListTags, and book queries on success", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

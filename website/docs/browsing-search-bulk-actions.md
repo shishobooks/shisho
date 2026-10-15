@@ -40,6 +40,15 @@ The **Series**, **People**, **Genres**, **Tags**, and **Publishers** pages have 
 
 These pages sort by **Name** until you choose another sort. Their sort lives only in the page URL and cannot be saved as a default.
 
+## Books on Series, Person, Genre, and Tag Pages
+
+The book section of a series, person, genre, or tag page has a **Sort** control with the [gallery sort](#gallery-sort) fields. A series page leaves out **Series**.
+
+- Person, genre, and tag pages list books by **Date released** with the newest first, then by **Title**. Books with no release date come last.
+- A series page keeps series order until you choose a sort, and returns to it when you remove every level.
+
+As on the list pages, the sort lives only in the page URL. Your saved gallery default does not apply here.
+
 ## Gallery Size
 
 Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is available on the library home, the series list, list detail pages, and the book sections of series, person, genre, and tag pages. It is not a per-library setting.

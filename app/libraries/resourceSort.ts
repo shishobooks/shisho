@@ -1,4 +1,4 @@
-import type { SortLevel } from "@/libraries/sortSpec";
+import type { SortConfig } from "@/libraries/sortSpec";
 
 /**
  * Sort fields for the resource lists (tags, genres, series, people,
@@ -7,17 +7,9 @@ import type { SortLevel } from "@/libraries/sortSpec";
  * pkg/sortspec/resource.go. The server rejects a field its list does not
  * accept.
  */
-export interface ResourceSortConfig<F extends string> {
-  /** Fields in UI display order. */
-  fields: readonly F[];
-  labels: Record<F, string>;
-  /** The server's order when no sort is sent: name ascending. */
-  defaultSort: readonly SortLevel<F>[];
-}
-
 const resourceSort = <F extends string>(
   labels: Record<"name" | F, string>,
-): ResourceSortConfig<"name" | F> => ({
+): SortConfig<"name" | F> => ({
   fields: Object.keys(labels) as ("name" | F)[],
   labels,
   defaultSort: [{ field: "name", direction: "asc" }],

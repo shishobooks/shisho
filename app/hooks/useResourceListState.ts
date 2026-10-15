@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
-import { useResourceSortParam } from "@/hooks/useResourceSortParam";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
+import { useSortParam } from "@/hooks/useSortParam";
 import { parsePageParam } from "@/libraries/pagination";
-import type { ResourceSortConfig } from "@/libraries/resourceSort";
+import type { SortConfig } from "@/libraries/sortSpec";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -18,13 +18,13 @@ export interface ResourceListQuery {
 
 /** Hook that manages URL-driven search, sort, and pagination state for resource lists. */
 export function useResourceListState<F extends string>(
-  sortConfig: ResourceSortConfig<F>,
+  sortConfig: SortConfig<F>,
 ) {
   const { libraryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parsePageParam(searchParams.get("page"));
   const { searchQuery, setSearchQuery } = useSearchQueryParam();
-  const sort = useResourceSortParam(sortConfig);
+  const sort = useSortParam(sortConfig);
 
   const limit = ITEMS_PER_PAGE;
   const offset = (currentPage - 1) * limit;

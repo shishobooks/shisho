@@ -7,7 +7,6 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
-  ListAuthoredBooksResponse,
   ListNarratedFilesResponse,
   ListPeopleResponse,
   PersonResponse,
@@ -25,7 +24,6 @@ import { QueryKey as SearchQueryKey } from "./search";
 export enum QueryKey {
   ListPeople = "ListPeople",
   RetrievePerson = "RetrievePerson",
-  PersonAuthoredBooks = "PersonAuthoredBooks",
   PersonNarratedFiles = "PersonNarratedFiles",
 }
 
@@ -69,30 +67,6 @@ export const usePerson = (
 // module because every sub-resource package emits a `SubResourceQuery` and
 // the barrel cannot re-export them all under one name.
 export type PersonSubResourceQuery = SubResourceQuery;
-
-export const usePersonAuthoredBooks = (
-  personId?: number,
-  query: PersonSubResourceQuery = {},
-  options: Omit<
-    UseQueryOptions<ListAuthoredBooksResponse, ShishoAPIError>,
-    "queryKey" | "queryFn"
-  > = {},
-) => {
-  return useQuery<ListAuthoredBooksResponse, ShishoAPIError>({
-    ...options,
-    enabled: useRequires("people:read", options.enabled ?? Boolean(personId)),
-    queryKey: [QueryKey.PersonAuthoredBooks, personId, query],
-    queryFn: ({ signal }) => {
-      return API.request(
-        "GET",
-        `/people/${personId}/authored-books`,
-        null,
-        query,
-        signal,
-      );
-    },
-  });
-};
 
 export const usePersonNarratedFiles = (
   personId?: number,
@@ -171,10 +145,7 @@ export const useMergePerson = () => {
         queryKey: [QueryKey.RetrievePerson, variables.targetId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPeople] });
-      // Invalidate detail-page lists since books/files moved from source to target
-      queryClient.invalidateQueries({
-        queryKey: [QueryKey.PersonAuthoredBooks, variables.targetId],
-      });
+      // Invalidate the detail-page file list since files moved from source to target
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PersonNarratedFiles, variables.targetId],
       });

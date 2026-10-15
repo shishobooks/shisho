@@ -7,7 +7,10 @@ import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
+import SortedByChips from "@/components/library/SortedByChips";
+import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
+import type { SortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
 import type { Book, GallerySize, ResourceListResponse } from "@/types";
 
@@ -17,7 +20,7 @@ interface BookGalleryQuery extends RetryableQuery {
   isError: boolean;
 }
 
-interface BookGallerySectionProps {
+interface BookGallerySectionProps<F extends string> {
   libraryId: string;
   query: BookGalleryQuery;
   title: string;
@@ -28,9 +31,11 @@ interface BookGallerySectionProps {
   onPageChange?: (page: number) => void;
   /** Called when gallery size changes */
   onSizeChange?: (size: GallerySize) => void;
+  /** Adds the Sort control; the page passes its param to the query. */
+  sort?: SortParam<F>;
 }
 
-export function BookGallerySection({
+export function BookGallerySection<F extends string>({
   libraryId,
   query,
   title,
@@ -38,7 +43,8 @@ export function BookGallerySection({
   seriesId,
   onPageChange,
   onSizeChange,
-}: BookGallerySectionProps) {
+  sort,
+}: BookGallerySectionProps<F>) {
   const [, setSearchParams] = useSearchParams();
   const {
     savedSize,
@@ -110,17 +116,41 @@ export function BookGallerySection({
     <section className="mb-10">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold">{title}</h2>
-        <div className="hidden sm:flex">
-          <SizePopover
-            effectiveSize={effectiveSize}
-            isSaving={isSaving}
-            onChange={applyGallerySize}
-            onSaveAsDefault={saveSizeAsDefault}
-            savedSize={savedSize}
-            trigger={<SizeButton isDirty={isSizeDirty} />}
-          />
+        <div className="flex items-center gap-2">
+          {sort && (
+            <SortSheet
+              emptyLabel={sort.config.emptyLabel}
+              fieldLabels={sort.config.labels}
+              fields={sort.config.fields}
+              isDirty={sort.isDirty}
+              levels={sort.levels}
+              onChange={sort.apply}
+              trigger={<SortButton isDirty={sort.isDirty} />}
+            />
+          )}
+          <div className="hidden sm:flex">
+            <SizePopover
+              effectiveSize={effectiveSize}
+              isSaving={isSaving}
+              onChange={applyGallerySize}
+              onSaveAsDefault={saveSizeAsDefault}
+              savedSize={savedSize}
+              trigger={<SizeButton isDirty={isSizeDirty} />}
+            />
+          </div>
         </div>
       </div>
+
+      {sort && (
+        <SortedByChips
+          fieldLabels={sort.config.labels}
+          levels={sort.isDirty ? sort.levels : []}
+          onRemoveLevel={(index) =>
+            sort.apply(sort.levels.filter((_, i) => i !== index))
+          }
+          onReset={sort.reset}
+        />
+      )}
 
       <div className="mb-4 text-sm text-muted-foreground">
         Showing {offset + 1}-{Math.min(offset + itemsPerPage, total)} of {total}{" "}
