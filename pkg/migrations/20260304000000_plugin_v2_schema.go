@@ -54,36 +54,23 @@ func init() {
 		return nil
 	}
 
-	down := func(_ context.Context, db *bun.DB) error {
-		_, err := db.Exec(`DROP INDEX IF EXISTS ix_plugins_status`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		_, err = db.Exec(`ALTER TABLE plugins ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT true`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		_, err = db.Exec(`UPDATE plugins SET enabled = CASE WHEN status = 0 THEN true ELSE false END`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		_, err = db.Exec(`ALTER TABLE plugins DROP COLUMN status`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		_, err = db.Exec(`ALTER TABLE plugins DROP COLUMN auto_update`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		_, err = db.Exec(`ALTER TABLE plugins DROP COLUMN repository_scope`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		_, err = db.Exec(`ALTER TABLE plugins DROP COLUMN repository_url`)
-		return errors.WithStack(err)
+	down := func(ctx context.Context, db *bun.DB) error {
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			for _, q := range []string{
+				`DROP INDEX IF EXISTS ix_plugins_status`,
+				`ALTER TABLE plugins ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT true`,
+				`UPDATE plugins SET enabled = CASE WHEN status = 0 THEN true ELSE false END`,
+				`ALTER TABLE plugins DROP COLUMN status`,
+				`ALTER TABLE plugins DROP COLUMN auto_update`,
+				`ALTER TABLE plugins DROP COLUMN repository_scope`,
+				`ALTER TABLE plugins DROP COLUMN repository_url`,
+			} {
+				if _, err := tx.ExecContext(ctx, q); err != nil {
+					return errors.Wrap(err, q)
+				}
+			}
+			return nil
+		})
 	}
 
 	Migrations.MustRegister(up, down)

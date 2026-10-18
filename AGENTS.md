@@ -71,7 +71,7 @@ While iterating, run only the checks for what you touched. Separate mise tasks w
 - Go → `mise run lint ::: test`
 - Frontend → `mise run lint:js ::: test:unit`
 - Scripts under `scripts/` → `mise test:scripts`
-- Migrations → also `mise db:rollback && mise db:migrate`
+- Migrations → also `mise db:rollback && mise db:migrate`. `db:rollback` rolls back the last migration group, so the round trip only checks your migration when it is alone in its group. Run `mise db:migrate` before adding the migration so it lands in a group of its own. If `mise start` applied every migration as one group, the rollback runs every down, including the initial schema's, which drops every table.
 - App E2E flows you touched → `mise e2e:chromium`; documentation theme flows → `mise e2e:docs`
 
 Run `mise check:quiet` once when the work is done, before pushing or opening a PR.
@@ -112,7 +112,7 @@ Not enforced, so read these:
 - **The authors/narrators table is `persons`, not `people`**, even though the package is `pkg/people` and the model is `models.Person`.
 - **Column `DEFAULT`s never apply when Bun inserts a zero `time.Time` into a field without `nullzero`**: Bun writes `0001-01-01 00:00:00`. Set `CreatedAt`/`UpdatedAt` explicitly on insert or tag the field `bun:",nullzero,notnull,default:current_timestamp"`. Updates that list `updated_at` in `Column(...)` write whatever the struct holds, so set `UpdatedAt = time.Now()` first.
 - **`nullzero` on a non-pointer field writes NULL for its zero value**, which a `NOT NULL` column rejects. Use it only where zero is invalid (IDs, required names, 1-based sort orders), not where zero is real, like the size of an empty file.
-- **SQLite table rebuilds use the helpers in `pkg/migrations/rebuild.go`**, never a hand-rolled copy like the `recreateTable` inside an older migration: with `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent cascades deletes into every child, and the pragma is a no-op inside a transaction.
+- **SQLite table rebuilds use the helpers in `pkg/migrations/rebuild.go`**, never a hand-rolled copy. `INSERT ... SELECT *` matches columns by position, so a later migration that reorders the table shifts values into the wrong columns. With `PRAGMA foreign_keys=ON`, `DROP TABLE` on a parent cascades deletes into every child, and the pragma is a no-op inside a transaction.
 - **`database/sql` replaces a connection whose query is canceled mid-statement.** Connection pragmas apply per connection, so a test that opens its own database uses `pkg/sqliteconn.NewConnector` as `database.New` and `testdb.New(t)` do. An in-memory database also has to outlive the discarded connection, which capping the pool does not do; `testdb` handles both, so prefer it to opening your own.
 - **CASCADE does not clean up FTS indexes or the links that say which rows copied a deleted entity.** Collect affected ids with `searchService.CollectAffected` before the delete and `defer searchService.ReindexAffected` after it; see `docs/agents/backend/search-fts.md`.
 

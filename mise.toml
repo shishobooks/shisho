@@ -230,7 +230,7 @@ usage = 'arg "<name>" help="Migration name, e.g. add_books_index"'
 run = 'go run ./cmd/migrations create "$usage_name"'
 
 [tasks."db:rollback"]
-description = "Rollback last migration"
+description = "Roll back the last migration group"
 env = { CONFIG_FILE = "./shisho.dev.yaml" }
 run = "go run ./cmd/migrations rollback"
 
