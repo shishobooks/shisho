@@ -48,9 +48,9 @@ Keep the database on persistent storage. The standard image layout persists it t
 | `server_host` | `SERVER_HOST` | `0.0.0.0` | Address to bind the HTTP listener to. Use `127.0.0.1` to accept only local connections outside Docker |
 | `server_port` | `SERVER_PORT` | `3689` | HTTP port for both the web interface and API. The production image sets `SERVER_PORT=5173` |
 
-The built-in port default stays `3689` for local development and non-container runs. The production image's `SERVER_PORT=5173` environment variable overrides a YAML `server_port` value. Publish container port `5173` for normal Docker deployments. To change only the host-facing port, change the left side of the Compose mapping, for example `8080:5173`. A Kobo that syncs without a reverse proxy needs the `5173:5173` mapping; see [Device URLs](./deployment-and-maintenance.md#device-urls).
+The built-in port default stays `3689` for local development and non-container runs. The production image's `SERVER_PORT=5173` environment variable overrides a YAML `server_port` value. Publish container port `5173` for normal Docker deployments. To change only the host-facing port, change the left side of the Compose mapping, for example `8080:5173`. A Kobo that syncs without a reverse proxy needs the same port on both sides instead; see [Device URLs](./deployment-and-maintenance.md#device-urls).
 
-Keep `SERVER_HOST=0.0.0.0` inside Docker so published ports can reach the listener. If you override the container's `SERVER_PORT`, update its port mapping and health check URL too; the image's health check targets port `5173`. See [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies) for reverse proxy routing and forwarded-header trust.
+Keep `SERVER_HOST=0.0.0.0` inside Docker so published ports can reach the listener. If you override the container's `SERVER_PORT`, publish that port in the mapping too, such as `SERVER_PORT=8080` with `8080:8080`. The image's health check follows `SERVER_PORT`. See [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies) for reverse proxy routing and forwarded-header trust.
 
 ### Application
 

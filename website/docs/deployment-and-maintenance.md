@@ -144,7 +144,7 @@ Kobo sync and OPDS send devices absolute URLs for downloads and covers. Shisho b
 
 Kobo devices leave the port out of `Host`, so this matters most for Kobo sync:
 
-- **Direct access**, such as `http://nas:5173` with no proxy, works when the host port matches Shisho's listening port, as in the default `5173:5173` mapping. URLs carry `:5173`. With a remapped port such as `8080:5173`, Shisho only sees `5173`, so Kobo URLs point at the wrong port. Keep the `5173:5173` mapping for direct Kobo access, or put a proxy in front.
+- **Direct access**, such as `http://nas:5173` with no proxy, works when the host port matches Shisho's listening port, as in the default `5173:5173` mapping. URLs carry `:5173`. With a remapped port such as `8080:5173`, Shisho only sees `5173`, so Kobo URLs point at the wrong port. For direct Kobo access on another port, set `SERVER_PORT` to that port and publish it on both sides, such as `SERVER_PORT=8080` with `8080:8080`, or put a proxy in front.
 - **Behind a proxy on `443` or `80`** needs nothing extra. Shisho does not add its own container port to proxied requests.
 - **Behind a proxy on another public port**, such as `https://books.example.com:8443`, have the proxy send that public port as `X-Forwarded-Port` or include it in `X-Forwarded-Host`. Without either, Kobo downloads and covers point at the default port and fail.
 

@@ -87,7 +87,7 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Verify:** Check whether `api_endpoint` uses a port other than `80` or `443`, and whether a Docker port mapping or reverse proxy sits between the Kobo and Shisho.
 
-**Fix:** Without a proxy, keep the `5173:5173` Docker mapping and use port `5173` in `api_endpoint`. Behind a proxy on a non-default port, have the proxy send its public port as `X-Forwarded-Port`. Then sync again.
+**Fix:** Without a proxy, publish the same port on both sides of the Docker mapping, setting `SERVER_PORT` to it if it is not `5173`. Behind a proxy on a non-default port, have the proxy send its public port as `X-Forwarded-Port`. Then sync again.
 
 ### Books or Metadata Are Stale
 

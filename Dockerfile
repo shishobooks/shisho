@@ -110,8 +110,9 @@ ENV PGID=1000
 # Expose HTTP port
 EXPOSE 5173
 
-# Health check (start-period allows time for initial migrations on slow storage)
+# Health check (start-period allows time for initial migrations on slow storage).
+# Shell form, so an overridden SERVER_PORT is read at runtime.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=120s --retries=3 \
-    CMD wget -q --spider http://localhost:5173/health || exit 1
+    CMD wget -q --spider "http://localhost:${SERVER_PORT}/health" || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
