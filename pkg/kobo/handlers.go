@@ -12,7 +12,6 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -693,25 +692,6 @@ func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey strin
 // getBaseURL returns the full base URL for the current Kobo scope.
 // Uses scope from context since routes don't have a :scopeType param.
 func getBaseURL(c echo.Context) string {
-	scheme := "http"
-	if c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-
-	// Use X-Forwarded-Host if available (set by proxy), otherwise use Host header
-	host := c.Request().Header.Get("X-Forwarded-Host")
-	if host == "" {
-		host = c.Request().Host
-	}
-
-	// If host doesn't include a port and X-Forwarded-Port is set, append it
-	// This handles clients (like Kobo) that don't include port in Host header
-	if !strings.Contains(host, ":") {
-		if port := c.Request().Header.Get("X-Forwarded-Port"); port != "" && port != "80" && port != "443" {
-			host = host + ":" + port
-		}
-	}
-
 	apiKey := c.Param("apiKey")
 	scope := GetScopeFromContext(c.Request().Context())
 
@@ -722,7 +702,7 @@ func getBaseURL(c echo.Context) string {
 		basePath += fmt.Sprintf("/%d", *scope.ListID)
 	}
 
-	return fmt.Sprintf("%s://%s%s", scheme, host, basePath)
+	return httputil.PublicOrigin(c.Request()) + basePath
 }
 
 // fitDimensions calculates target dimensions maintaining aspect ratio.

@@ -116,7 +116,7 @@ The image emits JSON logs by default. Set `LOG_FORMAT=console` for human-readabl
 Shisho trusts forwarded headers from private-network peers. A client that can reach the origin through such a peer can influence generated URLs and secure-cookie handling if the proxy passes through client-supplied headers. Restrict origin access to your trusted proxy and have it overwrite forwarded headers before exposing the service. Keep direct access on a trusted local network if you do not need public access.
 :::
 
-Terminate HTTPS at a trusted reverse proxy and proxy to Shisho's container port `5173`. Preserve the original `Host` and supply `X-Forwarded-Proto` for the public scheme. Kobo also uses `X-Forwarded-Host` and `X-Forwarded-Port` when provided.
+Terminate HTTPS at a trusted reverse proxy and proxy to Shisho's container port `5173`. Preserve the original `Host` and supply `X-Forwarded-Proto` for the public scheme. See [Device URLs](#device-urls) if the public address uses a non-default port.
 
 Shisho accepts `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Prefix`, and `X-Forwarded-For` only when the direct TCP peer is loopback, link-local, an RFC 1918 IPv4 address, or an IPv6 unique-local address in `fc00::/7`. It strips these headers from public-address peers. Trust depends on the direct connection, not an address claimed in `X-Forwarded-For`. Connect a remote proxy over a private network if its public address would otherwise reach Shisho directly.
 
@@ -133,6 +133,20 @@ The reverse proxy must pass all of these public route families without rewriting
 Do not strip `/api` before forwarding it. Also pass `/health` if your external monitor uses it. Avoid response buffering for streaming API responses. The browser interface and API must share an origin; Shisho does not send CORS permission headers for cross-origin browser access.
 
 Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and API keys as secrets.
+
+### Device URLs
+
+Kobo sync and OPDS send devices absolute URLs for downloads and covers. Shisho builds them from the address the device used:
+
+- **Scheme**: `https` when Shisho terminates TLS itself or a trusted proxy sends `X-Forwarded-Proto: https`, otherwise `http`.
+- **Host**: `X-Forwarded-Host` from a trusted proxy, otherwise the request's `Host` header.
+- **Port**: a port already in that host is kept. Otherwise Shisho adds `X-Forwarded-Port` when a trusted proxy sends it. A request with none of `X-Forwarded-Proto`, `X-Forwarded-Host`, or `X-Forwarded-Port` is treated as direct and gets the port the connection arrived on. The scheme's default port (`80` for `http`, `443` for `https`) is never added.
+
+Kobo devices leave the port out of `Host`, so this matters most for Kobo sync:
+
+- **Direct access**, such as `http://nas:5173` with no proxy, works when the host port matches Shisho's listening port, as in the default `5173:5173` mapping. URLs carry `:5173`. With a remapped port such as `8080:5173`, Shisho only sees `5173`, so Kobo URLs point at the wrong port. Publish the same port on both sides, or put a proxy in front.
+- **Behind a proxy on `443` or `80`** needs nothing extra. Shisho does not add its own container port to proxied requests.
+- **Behind a proxy on another public port**, such as `https://books.example.com:8443`, have the proxy send `X-Forwarded-Port` or include the port in `X-Forwarded-Host`. Without either, Kobo downloads and covers point at the default port and fail.
 
 ### Response Handling
 
