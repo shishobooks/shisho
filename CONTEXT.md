@@ -11,11 +11,15 @@ A logical work in the library, composed of one or more files.
 _Avoid_: title, item
 
 **File**:
-A single media file (EPUB, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to a book. MOBI is the older Kindle format and AZW3 the newer KF8 one.
+A single media file (EPUB, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to a book. MOBI is the older Kindle File Type and AZW3 the newer KF8 one.
 _Avoid_: asset, media
 
+**File Type**:
+The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. KePub is a File Type even when it exists only as a delivery.
+_Avoid_: format, file format
+
 **Reflowable**:
-An ebook **File** whose text re-wraps to fit the screen (EPUB, MOBI, AZW3). Classified by file type, so a fixed-layout EPUB is still reflowable. Positions within it are locations in the text, not page numbers.
+An ebook **File** whose text re-wraps to fit the screen (EPUB, MOBI, AZW3). Classified by **File Type**, so a fixed-layout EPUB is still reflowable. Positions within it are locations in the text, not page numbers.
 _Avoid_: text book, ebook (ebook also includes page-based files)
 
 **Page-based**:
@@ -27,7 +31,7 @@ A **File** exactly as it sits in the library on disk.
 _Avoid_: source file, raw file
 
 **Generated File**:
-A **File** rebuilt at download time to carry Shisho's current metadata, and for KePub, converted for Kobo devices. It is the default download; the **Original File** is the alternative.
+A **File** rebuilt at delivery time to carry Shisho's current metadata, possibly after a **Conversion**. It is the default download; the **Original File** is the alternative.
 _Avoid_: converted file, processed file
 
 **Library**:
@@ -69,8 +73,26 @@ The canonical display name of a resource, shown in the UI and used as the author
 _Avoid_: canonical name, display name
 
 **Preferred Cover**:
-A per-file designation that prioritizes one file's cover over others in the same format category (ebook or audiobook) when representing the book. At most one file per category per book can be preferred.
+A per-file designation that prioritizes one file's cover over others in the same category (ebook or audiobook) when representing the book. At most one file per category per book can be preferred.
 _Avoid_: primary cover, default cover, canonical cover
+
+### Delivery
+
+**Device**:
+One reading app on one piece of hardware, however it connects to Shisho. A Kobo running both Kobo's own reader and KOReader is two Devices, while Kobo's reader syncing and also using the eReader browser is one Device with two connections. A Device belongs to one user, and its Device type (such as Kobo or Kindle) limits the File Types it can receive and supplies preset **Delivery Rules**.
+_Avoid_: client, connection, API key (the credential is part of the Device, not the Device itself)
+
+**Delivery Rules**:
+An ordered list of rules, at most one per source **File Type**, each naming the File Type to deliver it as (itself, or another reachable through **Conversion**). A source File Type with no rule is not delivered. Among a book's **Files** in one category (ebook or audiobook), the File matching the earliest rule is delivered, along with any File tied with it on that rule.
+_Avoid_: format preference, download preference, conversion settings
+
+**Conversion**:
+Delivering a **File** as a File Type other than its own, done at delivery time and never stored in the library. Conversions chain: a File Type reachable only through an intermediate one still counts as reachable.
+_Avoid_: transcoding, export
+
+**Input Conversion**:
+A plugin turning a file into a new **File** of another File Type during a **Scan**. Unlike a **Conversion**, its result is stored in the library.
+_Avoid_: conversion (alone)
 
 ### Workflows
 
@@ -142,6 +164,8 @@ _Avoid_: sample library, fixtures (those are test data)
 - A **Book** belongs to a given **Series** at most once, at a **series number** that is a single position or a contiguous range (an **omnibus**)
 - A **File** has at most one **Publisher** and many **Narrators** (persons)
 - A **Publisher** has at most one parent **Publisher** and many child **Publishers** (self-referential hierarchy)
+- A user has many **Devices**; a **Device** belongs to exactly one user and may connect several ways
+- A user has one set of default **Delivery Rules**, which follow Shisho's built-in rules until edited; a **Device** follows them, follows its Device type's preset, or has its own
 - A **Book** has many **Share Links**; a **Share Link** belongs to exactly one **Book** and is created by one user
 - A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
@@ -156,5 +180,6 @@ _Avoid_: sample library, fixtures (those are test data)
 
 ## Flagged ambiguities
 
+- Older UI copy and the "Supported Formats" docs page say "format" where the domain term is **File Type**.
 - The database table for persons is `persons`, but the URL path uses `people` and the Go package is `pkg/people`. The domain term is **Person**.
 - **Publisher** is file-level metadata, not book-level. This differs from series/genre/tag/author which are book-level.
