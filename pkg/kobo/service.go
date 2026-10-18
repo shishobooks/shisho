@@ -230,6 +230,70 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 	return changes, nil
 }
 
+// EnsureRevisionIDs returns the RevisionId recorded for each file under
+// apiKeyID, first recording a new one for any file that has none. A recorded
+// RevisionId is reused for every later sync, and a new one is a random UUID
+// so nothing about the file (path, size, metadata) feeds into it.
+func (svc *Service) EnsureRevisionIDs(ctx context.Context, apiKeyID string, fileIDs []int) (map[int]string, error) {
+	revs := make(map[int]string, len(fileIDs))
+	if len(fileIDs) == 0 {
+		return revs, nil
+	}
+
+	now := time.Now()
+	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		// A paginated sync pages out a frozen snapshot, so a file may have been
+		// deleted since. It gets no entry, and the caller drops it from the page.
+		var existing []int
+		err := tx.NewSelect().
+			Model((*models.File)(nil)).
+			Column("f.id").
+			Where("f.id IN (?)", bun.List(fileIDs)).
+			Scan(ctx, &existing)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if len(existing) == 0 {
+			return nil
+		}
+
+		entries := make([]*SyncEntry, len(existing))
+		for i, fileID := range existing {
+			entries[i] = &SyncEntry{
+				APIKeyID:   apiKeyID,
+				FileID:     fileID,
+				RevisionID: uuid.New().String(),
+				CreatedAt:  now,
+			}
+		}
+		_, err = tx.NewInsert().
+			Model(&entries).
+			On("CONFLICT (api_key_id, file_id) DO NOTHING").
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		var recorded []*SyncEntry
+		err = tx.NewSelect().
+			Model(&recorded).
+			Where("kse.api_key_id = ?", apiKeyID).
+			Where("kse.file_id IN (?)", bun.List(fileIDs)).
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		for _, e := range recorded {
+			revs[e.FileID] = e.RevisionID
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return revs, nil
+}
+
 // GetScopedFiles queries all Kobo-compatible main files (EPUB, CBZ) in scope,
 // filtered by library access. A library or list scope the user cannot see
 // returns an empty slice rather than an error. Supplement files and non-Kobo

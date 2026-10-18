@@ -37,3 +37,18 @@ type SyncScope struct {
 	LibraryID *int
 	ListID    *int
 }
+
+// SyncEntry records, per API key, the RevisionId a File was first sent to
+// the Kobo with. A Kobo treats every new RevisionId as a new book, and
+// ignores a change sent under a RevisionId it does not have, so the
+// RevisionId never changes once recorded (ADR 0012). Entries outlive sync
+// points: clearing sync history forces a fresh sync, but the books already
+// on the device keep their RevisionIds.
+type SyncEntry struct {
+	bun.BaseModel `bun:"table:kobo_sync_entries,alias:kse"`
+
+	APIKeyID   string    `bun:"api_key_id,pk"`
+	FileID     int       `bun:"file_id,pk"`
+	RevisionID string    `bun:"revision_id,notnull"`
+	CreatedAt  time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp"`
+}

@@ -130,8 +130,13 @@ func (h *handler) handleSync(c echo.Context) error {
 	}
 	page := allEntries[start:end]
 
+	revisionIDs, err := h.service.EnsureRevisionIDs(ctx, apiKey.ID, entitledFileIDs(page))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	baseURL := getBaseURL(c)
-	response := buildSyncResponseFromEntries(ctx, page, baseURL, h.bookService)
+	response := buildSyncResponseFromEntries(ctx, page, revisionIDs, baseURL, h.bookService)
 
 	// Token + completion bookkeeping.
 	var outToken SyncToken
@@ -490,20 +495,43 @@ func combineChanges(c *SyncChanges) []changeEntry {
 	return out
 }
 
+// entitledFileIDs returns the files in a page that go out with a full
+// entitlement, which are the ones that need a recorded RevisionId.
+func entitledFileIDs(entries []changeEntry) []int {
+	ids := make([]int, 0, len(entries))
+	for _, e := range entries {
+		if e.Kind != changeRemoved {
+			ids = append(ids, e.File.FileID)
+		}
+	}
+	return ids
+}
+
 // buildSyncResponseFromEntries materializes a slice of changeEntry into the
-// JSON array Kobo expects. nil result for missing books (e.g. deleted between
+// JSON array Kobo expects. revisionIDs holds the recorded RevisionId for each
+// added or changed file. nil result for missing books (e.g. deleted between
 // snapshot and emit) is silently dropped.
-func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, baseURL string, bookService *books.Service) []interface{} {
+func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, revisionIDs map[int]string, baseURL string, bookService *books.Service) []interface{} {
 	response := make([]interface{}, 0, len(entries))
 	for _, e := range entries {
+		revisionID, recorded := revisionIDs[e.File.FileID]
+		if e.Kind != changeRemoved && !recorded {
+			// The file was deleted after the snapshot.
+			continue
+		}
 		switch e.Kind {
-		case changeAdded, changeChanged:
-			entry := buildNewEntitlement(ctx, e.File, baseURL, bookService)
+		case changeAdded:
+			entry := buildEntitlement(ctx, e.File, revisionID, baseURL, bookService)
 			if entry != nil {
-				response = append(response, entry)
+				response = append(response, &NewEntitlement{NewEntitlement: entry})
+			}
+		case changeChanged:
+			entry := buildEntitlement(ctx, e.File, revisionID, baseURL, bookService)
+			if entry != nil {
+				response = append(response, &ChangedEntitlement{ChangedEntitlement: entry})
 			}
 		case changeRemoved:
-			response = append(response, &ChangedEntitlement{
+			response = append(response, &RemovedEntitlement{
 				ChangedEntitlement: &EntitlementChangeWrapper{
 					BookEntitlement: &BookEntitlementChange{
 						ID:        ShishoID(e.File.FileID),
@@ -539,8 +567,10 @@ func buildRemovedBookMetadata(fileID int) *BookMetadata {
 	}
 }
 
-// buildNewEntitlement creates a NewEntitlement sync entry for a file.
-func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, bookService *books.Service) *NewEntitlement {
+// buildEntitlement creates the entitlement and metadata for a file, sent
+// under revisionID. The same body goes out for an added book and a changed
+// one; only the wrapper differs.
+func buildEntitlement(ctx context.Context, f ScopedFile, revisionID string, baseURL string, bookService *books.Service) *EntitlementWrapper {
 	file, err := bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &f.FileID})
 	if err != nil {
 		return nil
@@ -561,32 +591,22 @@ func buildNewEntitlement(ctx context.Context, f ScopedFile, baseURL string, book
 	metadata := buildBookMetadata(book, file, coverCacheKey, baseURL)
 	now := time.Now()
 
-	// Mirror the coverCacheKey guard above — computeFileHash returns 16 chars
-	// today, but that's not statically enforced and a future hash change
-	// shouldn't be able to panic the sync loop.
-	revisionSuffix := f.FileHash
-	if len(revisionSuffix) >= 8 {
-		revisionSuffix = revisionSuffix[:8]
-	}
-
-	return &NewEntitlement{
-		NewEntitlement: &EntitlementWrapper{
-			BookEntitlement: &BookEntitlement{
-				Accessibility:       "Full",
-				ActivePeriod:        &ActivePeriod{From: book.CreatedAt},
-				Created:             book.CreatedAt,
-				CrossRevisionID:     ShishoID(f.FileID),
-				ID:                  ShishoID(f.FileID),
-				IsHiddenFromArchive: false,
-				IsLocked:            false,
-				IsRemoved:           false,
-				LastModified:        now,
-				OriginCategory:      "Imported",
-				RevisionID:          fmt.Sprintf("%s-%s", ShishoID(f.FileID), revisionSuffix),
-				Status:              "Active",
-			},
-			BookMetadata: metadata,
+	return &EntitlementWrapper{
+		BookEntitlement: &BookEntitlement{
+			Accessibility:       "Full",
+			ActivePeriod:        &ActivePeriod{From: book.CreatedAt},
+			Created:             book.CreatedAt,
+			CrossRevisionID:     ShishoID(f.FileID),
+			ID:                  ShishoID(f.FileID),
+			IsHiddenFromArchive: false,
+			IsLocked:            false,
+			IsRemoved:           false,
+			LastModified:        now,
+			OriginCategory:      "Imported",
+			RevisionID:          revisionID,
+			Status:              "Active",
 		},
+		BookMetadata: metadata,
 	}
 }
 
