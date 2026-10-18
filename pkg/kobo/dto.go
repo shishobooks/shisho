@@ -4,13 +4,22 @@ import "time"
 
 // All types use PascalCase JSON to match Kobo's API expectations.
 
-// NewEntitlement represents a new or changed book in the sync response.
+// NewEntitlement represents a book added to the device in the sync response.
 type NewEntitlement struct {
 	NewEntitlement *EntitlementWrapper `json:"NewEntitlement"`
 }
 
-// ChangedEntitlement represents a removed book in the sync response.
+// ChangedEntitlement represents a book already on the device whose file or
+// metadata changed. It carries the full entitlement and metadata under the
+// ids the book was first sent with, so the Kobo re-downloads it in place and
+// keeps the reading position. A NewEntitlement here would add a second copy.
 type ChangedEntitlement struct {
+	ChangedEntitlement *EntitlementWrapper `json:"ChangedEntitlement"`
+}
+
+// RemovedEntitlement represents a removed book in the sync response. Kobo
+// reads removals from the same ChangedEntitlement key as changes.
+type RemovedEntitlement struct {
 	ChangedEntitlement *EntitlementChangeWrapper `json:"ChangedEntitlement"`
 }
 

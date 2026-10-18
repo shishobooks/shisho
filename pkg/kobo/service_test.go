@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -409,4 +412,89 @@ func TestCleanupOldSyncPoints(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, got3)
 	assert.Equal(t, sp3.ID, got3.ID)
+}
+
+// insertSyncEntryFile creates a library, book, and EPUB file for the
+// sync entry tests, returning the file id.
+func insertSyncEntryFile(t *testing.T, db *bun.DB) int {
+	t.Helper()
+	ctx := context.Background()
+	lib := insertScopeLibrary(ctx, t, db, "Library")
+	_, file := insertScopeBookWithFile(ctx, t, db, lib.ID, "Book", models.FileTypeEPUB, models.FileRoleMain)
+	return file.ID
+}
+
+// The first time a file is synced for a key it gets a RevisionId of its own,
+// and every later lookup returns that same RevisionId.
+func TestEnsureRevisionIDs_AssignsOnceAndKeeps(t *testing.T) {
+	t.Parallel()
+	db := newSyncPointTestDB(t)
+	insertTestAPIKey(t, db, "api-key-2")
+	ctx := context.Background()
+	svc := NewService(db)
+	fileID := insertSyncEntryFile(t, db)
+
+	first, err := svc.EnsureRevisionIDs(ctx, "api-key-1", []int{fileID})
+	require.NoError(t, err)
+	rev := first[fileID]
+	require.NotEmpty(t, rev)
+	assert.NotContains(t, rev, ShishoID(fileID), "a new RevisionId must not come from the file")
+
+	again, err := svc.EnsureRevisionIDs(ctx, "api-key-1", []int{fileID})
+	require.NoError(t, err)
+	assert.Equal(t, rev, again[fileID])
+
+	other, err := svc.EnsureRevisionIDs(ctx, "api-key-2", []int{fileID})
+	require.NoError(t, err)
+	assert.NotEqual(t, rev, other[fileID], "each key records its own entries")
+}
+
+// An entry recorded before the upgrade keeps its hash-form RevisionId.
+func TestEnsureRevisionIDs_KeepsRecordedRevisionID(t *testing.T) {
+	t.Parallel()
+	db := newSyncPointTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+	fileID := insertSyncEntryFile(t, db)
+	hashForm := ShishoID(fileID) + "-abcdef12"
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO kobo_sync_entries (api_key_id, file_id, revision_id) VALUES (?, ?, ?)`,
+		"api-key-1", fileID, hashForm)
+	require.NoError(t, err)
+
+	revs, err := svc.EnsureRevisionIDs(ctx, "api-key-1", []int{fileID})
+	require.NoError(t, err)
+	assert.Equal(t, map[int]string{fileID: hashForm}, revs)
+}
+
+// Clearing a key's sync history forces a fresh sync but keeps its recorded
+// entries, so books already on the Kobo come back under their RevisionIds.
+func TestEnsureRevisionIDs_SurvivesSyncHistoryReset(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+	ctx := context.Background()
+	svc := NewService(f.db)
+
+	first, err := svc.EnsureRevisionIDs(ctx, f.key.ID, []int{f.fileA.ID})
+	require.NoError(t, err)
+	require.NoError(t, apikeys.NewService(f.db).ClearKoboSyncHistory(ctx, f.user.ID, f.key.ID))
+
+	again, err := svc.EnsureRevisionIDs(ctx, f.key.ID, []int{f.fileA.ID})
+	require.NoError(t, err)
+	assert.Equal(t, first, again)
+}
+
+// A book without a cover keeps the CoverImageId suffix it had before cover
+// times were tracked: the metadata hash prefix alone.
+func TestCoverCacheKey(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "0123abcd", coverCacheKey("0123abcd99999999", nil))
+	assert.Equal(t, "abc", coverCacheKey("abc", nil))
+
+	mtime := time.Unix(1700000000, 0)
+	withCover := coverCacheKey("0123abcd99999999", &mtime)
+	assert.Len(t, withCover, 8)
+	assert.NotEqual(t, "0123abcd", withCover)
+	later := mtime.Add(time.Microsecond)
+	assert.NotEqual(t, withCover, coverCacheKey("0123abcd99999999", &later))
 }
