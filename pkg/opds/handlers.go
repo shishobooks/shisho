@@ -58,19 +58,9 @@ func (h *handler) resolveSort(ctx context.Context, user *models.User, libraryID 
 
 // getBaseURL returns the base URL for OPDS feeds.
 func getBaseURL(c echo.Context) string {
-	scheme := "http"
-	if c.Request().TLS != nil {
-		scheme = "https"
-	}
-	// Check for X-Forwarded-Proto header (for reverse proxies)
-	if proto := c.Request().Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	}
-
-	// Check for X-Forwarded-Prefix header (set by reverse proxies that strip path prefixes)
+	// X-Forwarded-Prefix is set by reverse proxies that strip path prefixes.
 	prefix := c.Request().Header.Get("X-Forwarded-Prefix")
-
-	return scheme + "://" + c.Request().Host + prefix + "/opds/v1"
+	return httputil.PublicOrigin(c.Request()) + prefix + "/opds/v1"
 }
 
 // getBaseURLKepub returns the base URL for KePub OPDS feeds.

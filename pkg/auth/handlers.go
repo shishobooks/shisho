@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -82,7 +83,7 @@ func (h *handler) login(c echo.Context) error {
 		Path:     "/",
 		MaxAge:   int(h.authService.sessionDuration.Seconds()),
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
+		Secure:   httputil.PublicScheme(c.Request()) == "https",
 		SameSite: http.SameSiteLaxMode,
 	}
 	c.SetCookie(cookie)
@@ -99,7 +100,7 @@ func (h *handler) logout(c echo.Context) error {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
+		Secure:   httputil.PublicScheme(c.Request()) == "https",
 		SameSite: http.SameSiteLaxMode,
 	}
 	c.SetCookie(cookie)
@@ -182,7 +183,7 @@ func (h *handler) setup(c echo.Context) error {
 		Path:     "/",
 		MaxAge:   int(h.authService.sessionDuration.Seconds()),
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
+		Secure:   httputil.PublicScheme(c.Request()) == "https",
 		SameSite: http.SameSiteLaxMode,
 	}
 	c.SetCookie(cookie)

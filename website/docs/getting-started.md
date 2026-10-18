@@ -37,7 +37,7 @@ services:
 
 Replace `/path/to/your/books` with the host path to your media. The container path `/media` is the path you will enter when creating the library.
 
-The `5173:5173` mapping exposes both the web interface and API. No separate frontend container is needed. For another host port, change only the left side of the mapping. See [Configuration](./configuration.md#server) for listener settings.
+The `5173:5173` mapping exposes both the web interface and API. No separate frontend container is needed. For another host port, change only the left side of the mapping, unless a Kobo will sync without a reverse proxy, which needs `SERVER_PORT` changed instead; see [Device URLs](./deployment-and-maintenance.md#device-urls). See [Configuration](./configuration.md#server) for listener settings.
 
 The single `/config` mount persists the default SQLite database at `/config/shisho.db`, caches, installed plugins, and plugin data. `DATABASE_FILE_PATH` does not need to be set for this layout.
 

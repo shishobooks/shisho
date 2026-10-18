@@ -79,6 +79,16 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Fix:** Select the intended scope value, copy the new URL in full, update `Kobo eReader.conf`, and forward `/kobo/` without removing route segments.
 
+### Books Sync but Never Download, or Covers Are Missing
+
+**Symptom:** Books appear on the Kobo after a sync, but downloading them fails and covers do not load.
+
+**Likely cause:** The download and cover URLs Shisho sends point at a different port than the one in `api_endpoint`. Kobo devices leave the port out of their requests, so Shisho works it out as described in [Device URLs](./deployment-and-maintenance.md#device-urls).
+
+**Verify:** Check whether `api_endpoint` uses a port other than `80` or `443`, and whether a Docker port mapping or reverse proxy sits between the Kobo and Shisho.
+
+**Fix:** Without a proxy, publish the same port on both sides of the Docker mapping, setting `SERVER_PORT` to it if it is not `5173`. Behind a proxy on a non-default port, have the proxy send its public port as `X-Forwarded-Port`. Then sync again.
+
 ### Books or Metadata Are Stale
 
 **Symptom:** Removed books remain, metadata is old, or the device shows the wrong scope.
