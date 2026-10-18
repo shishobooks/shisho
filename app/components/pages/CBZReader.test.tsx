@@ -68,6 +68,8 @@ describe("page readers", () => {
 
   it.each([
     ["CBZReader", CBZReader, FileTypeCBZ, undefined],
+    ["CBZReader", CBZReader, FileTypeCBZ, ""],
+    ["PDFReader", PDFReader, FileTypePDF, undefined],
     ["PDFReader", PDFReader, FileTypePDF, ""],
   ] as const)(
     "%s falls back to the book's title without a file name",

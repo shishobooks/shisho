@@ -512,9 +512,17 @@ func coverCacheKey(metadataHash string, coverModifiedAt *time.Time) string {
 // book separately because handleMetadata loads it with its own query rather
 // than through the file's Book relation.
 func computeMetadataHash(book *models.Book, file *models.File) string {
-	var parts []string
+	var bookTitle string
 	if book != nil {
-		parts = append(parts, file.ResolveTitle(book.Title))
+		bookTitle = book.Title
+	}
+	var parts []string
+	// A loaded book always contributes its title, even an empty one, so
+	// hashes stored before file names counted stay the same.
+	if title := file.ResolveTitle(bookTitle); book != nil || title != "" {
+		parts = append(parts, title)
+	}
+	if book != nil {
 		for _, a := range book.Authors {
 			if a.Person != nil {
 				parts = append(parts, a.Person.Name)

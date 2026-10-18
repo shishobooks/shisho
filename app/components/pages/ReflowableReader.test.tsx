@@ -80,15 +80,18 @@ describe("ReflowableReader", () => {
     expect(document.title).toBe("Reading: File Name - Shisho");
   });
 
-  it("sets the tab title to the book's title without a file name", () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
-      isLoading: true,
-      isError: false,
-      refetch: vi.fn(),
-    } as never);
-    renderReader("epub", "");
-    expect(document.title).toBe("Reading: Test Book - Shisho");
-  });
+  it.each([undefined, ""])(
+    "sets the tab title to the book's title when the file's name is %j",
+    (name) => {
+      vi.mocked(useReflowableBlob).mockReturnValue({
+        isLoading: true,
+        isError: false,
+        refetch: vi.fn(),
+      } as never);
+      renderReader("epub", name);
+      expect(document.title).toBe("Reading: Test Book - Shisho");
+    },
+  );
 
   it("shows the heading as the current entry when the location is under it", async () => {
     mockToc = [

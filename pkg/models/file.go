@@ -198,10 +198,9 @@ func (f *File) ResolveDisplayName() string {
 
 // ResolveTitle returns the title a reader sees for this file: its name when
 // set, otherwise the book's title, even when the book has only one file.
-// Generated files, download filenames, organization, Kobo, and the eReader
-// browser all use it. Unlike ResolveDisplayName it never falls back to the
-// filename. A whitespace-only name does not count as set. A nil file gives
-// the book's title.
+// Unlike ResolveDisplayName it never falls back to the filename. A
+// whitespace-only name does not count as set. A nil file gives the book's
+// title.
 func (f *File) ResolveTitle(bookTitle string) string {
 	if f != nil && f.Name != nil && strings.TrimSpace(*f.Name) != "" {
 		return *f.Name
