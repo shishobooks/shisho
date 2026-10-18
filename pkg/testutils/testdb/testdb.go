@@ -47,11 +47,12 @@ func NewShared(t testing.TB) *bun.DB {
 // open returns a migrated database whose pool opens at most maxOpen
 // connections, or any number when maxOpen is 0.
 //
-// database/sql discards a connection whose query is canceled mid-statement and
-// opens a replacement. Every connection to a named shared-cache memory
-// database sees the same data, so the replacement finds the schema, but the
-// database is destroyed when its last connection closes, and the discarded one
-// is often the only one in the pool. A keeper connection held outside the pool
+// database/sql discards a connection the driver reports bad and opens a
+// replacement. (A query canceled mid-statement does this on a file database;
+// the driver keeps an interrupted in-memory connection.) Every connection to a
+// named shared-cache memory database sees the same data, so the replacement
+// finds the schema, but the database is destroyed when its last connection
+// closes, and the discarded one is often the only one in the pool. A keeper connection held outside the pool
 // until the test ends keeps it alive. PRAGMA foreign_keys applies only to the
 // connection that ran it, so sqliteconn runs it on every connection the pool
 // opens, as pkg/database does.

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/joblogs"
@@ -158,9 +159,11 @@ func TestShutdown_PersistsFailedJobStatus(t *testing.T) {
 }
 
 // TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery covers a handler
-// whose query is running when Shutdown cancels it. database/sql discards the
-// interrupted connection, which is the only one the pool holds, and the status
-// write must still reach the same database on a replacement connection.
+// whose query is running when Shutdown cancels it. On a file database,
+// database/sql discards the interrupted connection, which is the only one the
+// pool holds, and the status write must still reach the same database on a
+// replacement connection. The driver keeps an interrupted connection to an
+// in-memory database, so the handler reports it bad to get the same discard.
 func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
@@ -173,6 +176,7 @@ func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 	// Shutdown's cancel cannot land while it waits for one.
 	jobStarted := make(chan struct{})
 	interrupted := make(chan bool, 1)
+	discarded := make(chan bool, 1)
 	w.processFuncs[models.JobTypeScan] = func(ctx context.Context, _ *models.Job, _ *joblogs.JobLogger) error {
 		conn, err := tc.db.Conn(ctx)
 		if err != nil {
@@ -182,12 +186,9 @@ func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 		close(jobStarted)
 		// This query never finishes on its own.
 		_, err = conn.ExecContext(ctx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
-		// The driver marks a connection invalid only when it interrupted a
-		// running statement, which is what makes database/sql discard it.
-		_ = conn.Raw(func(dc any) error {
-			interrupted <- !dc.(driver.Validator).IsValid()
-			return nil
-		})
+		interrupted <- errors.Is(err, context.Canceled)
+		discardErr := conn.Raw(func(any) error { return driver.ErrBadConn })
+		discarded <- errors.Is(discardErr, driver.ErrBadConn)
 		return err
 	}
 
@@ -222,6 +223,7 @@ func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 	}
 
 	require.True(t, <-interrupted, "Shutdown interrupts the running query")
+	require.True(t, <-discarded, "the interrupted connection is discarded")
 
 	retrieved, err := tc.jobService.RetrieveJob(tc.ctx, jobs.RetrieveJobOptions{ID: &job.ID})
 	require.NoError(t, err)
