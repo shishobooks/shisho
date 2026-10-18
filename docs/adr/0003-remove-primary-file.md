@@ -1,5 +1,7 @@
 # Remove the primary file concept
 
+The Kobo sync, eReader browser, and OPDS rows below are narrowed by ADR 0011: a Device receives the Files its Delivery Rules select, not every compatible File.
+
 A book can have multiple files (editions, formats, multi-part audiobooks). Since v0.0.12, a persisted `primary_file_id` FK on the `books` table designated one file as the default for device sync, eReader downloads, OPDS metadata priority, gallery sorting, batch downloads, and identify-dialog defaults. The user could override the auto-selected primary via a "Set as primary" action. Write-side logic auto-assigned the primary on first file creation and auto-promoted a new primary when the current one was deleted or moved — non-trivial code that is also removed.
 
 We're removing the concept because every consumer either doesn't need a persisted selection or is better served by a different mechanism:
