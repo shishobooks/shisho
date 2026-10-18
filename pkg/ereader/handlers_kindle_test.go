@@ -235,7 +235,7 @@ func TestDownload_KindleGetsMOBI(t *testing.T) {
 		assert.NotContains(t, body, f.fileLinkPrefix("All Formats", fileType), fileType)
 	}
 	assert.NotContains(t, body, "Unavailable on Kindle")
-	assert.NotContains(t, body, "may refuse")
+	assert.NotContains(t, body, "refuse AZW3")
 }
 
 func TestDownload_KindleGetsAZW3WithoutMOBI(t *testing.T) {
@@ -246,7 +246,7 @@ func TestDownload_KindleGetsAZW3WithoutMOBI(t *testing.T) {
 
 	assert.Contains(t, body, f.kindleLink("Has AZW3", models.FileTypeAZW3, "Has_AZW3.azw3"))
 	assert.Contains(t, body, "Download AZW3")
-	assert.Contains(t, body, "Newer Kindles may refuse AZW3 downloads")
+	assert.Contains(t, body, "Some Kindles refuse AZW3 downloads. If yours does, add a MOBI file to this book.")
 	assert.NotContains(t, body, f.fileLinkPrefix("Has AZW3", models.FileTypeEPUB))
 }
 
