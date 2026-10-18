@@ -54,52 +54,32 @@ func init() {
 		return errors.WithStack(err)
 	}
 
-	down := func(_ context.Context, db *bun.DB) error {
-		// Reverse: drop new index
-		_, err := db.Exec(`DROP INDEX IF EXISTS idx_library_plugin_hook_config_order`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Add enabled column back
-		_, err = db.Exec(`ALTER TABLE library_plugin_hook_config ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT true`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Migrate mode -> enabled
-		_, err = db.Exec(`UPDATE library_plugin_hook_config SET enabled = CASE WHEN mode = 'enabled' THEN true ELSE false END`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Drop mode column
-		_, err = db.Exec(`ALTER TABLE library_plugin_hook_config DROP COLUMN mode`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Rename library_plugin_hook_config -> library_plugins
-		_, err = db.Exec(`ALTER TABLE library_plugin_hook_config RENAME TO library_plugins`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Recreate old index
-		_, err = db.Exec(`CREATE INDEX idx_library_plugins_order ON library_plugins(library_id, hook_type, position)`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Drop mode column from plugin_hook_config
-		_, err = db.Exec(`ALTER TABLE plugin_hook_config DROP COLUMN mode`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		// Rename plugin_hook_config -> plugin_order
-		_, err = db.Exec(`ALTER TABLE plugin_hook_config RENAME TO plugin_order`)
-		return errors.WithStack(err)
+	down := func(ctx context.Context, db *bun.DB) error {
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			for _, q := range []string{
+				// Reverse: drop new index
+				`DROP INDEX IF EXISTS idx_library_plugin_hook_config_order`,
+				// Add enabled column back
+				`ALTER TABLE library_plugin_hook_config ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT true`,
+				// Migrate mode -> enabled
+				`UPDATE library_plugin_hook_config SET enabled = CASE WHEN mode = 'enabled' THEN true ELSE false END`,
+				// Drop mode column
+				`ALTER TABLE library_plugin_hook_config DROP COLUMN mode`,
+				// Rename library_plugin_hook_config -> library_plugins
+				`ALTER TABLE library_plugin_hook_config RENAME TO library_plugins`,
+				// Recreate old index
+				`CREATE INDEX idx_library_plugins_order ON library_plugins(library_id, hook_type, position)`,
+				// Drop mode column from plugin_hook_config
+				`ALTER TABLE plugin_hook_config DROP COLUMN mode`,
+				// Rename plugin_hook_config -> plugin_order
+				`ALTER TABLE plugin_hook_config RENAME TO plugin_order`,
+			} {
+				if _, err := tx.ExecContext(ctx, q); err != nil {
+					return errors.Wrap(err, q)
+				}
+			}
+			return nil
+		})
 	}
 
 	Migrations.MustRegister(up, down)

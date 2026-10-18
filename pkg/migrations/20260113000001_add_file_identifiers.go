@@ -52,12 +52,18 @@ func init() {
 		return nil
 	}
 
-	down := func(_ context.Context, db *bun.DB) error {
-		// SQLite doesn't support DROP COLUMN in older versions, so we skip dropping identifier_source
-		// The column will just be unused after rollback
-
-		_, err := db.Exec("DROP TABLE IF EXISTS file_identifiers")
-		return errors.WithStack(err)
+	down := func(ctx context.Context, db *bun.DB) error {
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			for _, q := range []string{
+				"DROP TABLE IF EXISTS file_identifiers",
+				"ALTER TABLE files DROP COLUMN identifier_source",
+			} {
+				if _, err := tx.ExecContext(ctx, q); err != nil {
+					return errors.Wrap(err, q)
+				}
+			}
+			return nil
+		})
 	}
 
 	Migrations.MustRegister(up, down)

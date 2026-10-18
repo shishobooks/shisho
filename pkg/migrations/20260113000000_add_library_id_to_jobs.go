@@ -24,14 +24,18 @@ func init() {
 		return nil
 	}
 
-	down := func(_ context.Context, db *bun.DB) error {
-		_, err := db.Exec(`DROP INDEX IF EXISTS ix_jobs_type_library_created`)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		// SQLite doesn't support DROP COLUMN, so we'd need to recreate the table
-		// For simplicity, we'll leave the column in place on rollback
-		return nil
+	down := func(ctx context.Context, db *bun.DB) error {
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			for _, q := range []string{
+				`DROP INDEX IF EXISTS ix_jobs_type_library_created`,
+				`ALTER TABLE jobs DROP COLUMN library_id`,
+			} {
+				if _, err := tx.ExecContext(ctx, q); err != nil {
+					return errors.Wrap(err, q)
+				}
+			}
+			return nil
+		})
 	}
 
 	Migrations.MustRegister(up, down)
