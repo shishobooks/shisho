@@ -1035,12 +1035,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 		for _, file := range files {
 			// Set file type, title, and narrator names for proper naming
 			organizeOpts.FileType = file.FileType
-			// Use file.Name for title if available, otherwise book.Title
-			if file.Name != nil && *file.Name != "" {
-				organizeOpts.Title = *file.Name
-			} else {
-				organizeOpts.Title = book.Title
-			}
+			organizeOpts.Title = file.ResolveTitle(book.Title)
 			organizeOpts.NarratorNames = nil
 			for _, n := range file.Narrators {
 				if n.Person != nil {
@@ -1117,11 +1112,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// isDirectoryBased and else branches below). Without this, a
 			// user-edited file name on a root-level file would be dropped
 			// when organize moves the file into its folder.
-			if file.Name != nil && *file.Name != "" {
-				organizeOpts.Title = *file.Name
-			} else {
-				organizeOpts.Title = book.Title
-			}
+			organizeOpts.Title = file.ResolveTitle(book.Title)
 
 			// Populate narrator names from file's narrators for M4B files
 			organizeOpts.NarratorNames = nil
@@ -1203,12 +1194,7 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 			// Set file type for proper volume formatting
 			organizeOpts.FileType = file.FileType
 
-			// Use file.Name for title if available, otherwise book.Title
-			if file.Name != nil && *file.Name != "" {
-				organizeOpts.Title = *file.Name
-			} else {
-				organizeOpts.Title = book.Title
-			}
+			organizeOpts.Title = file.ResolveTitle(book.Title)
 
 			// Populate narrator names from file's narrators for M4B files
 			organizeOpts.NarratorNames = nil

@@ -20,6 +20,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { File, UserSettingsPayload } from "@/types";
+import { fileTitle } from "@/utils/format";
 
 import "@/libraries/foliate/view.js";
 
@@ -67,7 +68,8 @@ export default function ReflowableReader({
   file,
   bookTitle,
 }: ReflowableReaderProps) {
-  usePageTitle(bookTitle ? `Reading: ${bookTitle}` : "Reader");
+  const title = fileTitle(file, bookTitle);
+  usePageTitle(title ? `Reading: ${title}` : "Reader");
 
   const {
     data: blob,

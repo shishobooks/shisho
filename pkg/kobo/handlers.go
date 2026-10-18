@@ -432,11 +432,7 @@ func (h *handler) handleMetadata(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	var coverFilename string
-	if file.CoverImageFilename != nil {
-		coverFilename = *file.CoverImageFilename
-	}
-	cacheKey := coverCacheKey(ComputeMetadataHashFromBook(book, coverFilename), coverModifiedAt(ctx, file))
+	cacheKey := coverCacheKey(computeMetadataHash(book, file), coverModifiedAt(ctx, file))
 	metadata := buildBookMetadata(book, file, cacheKey, baseURL)
 
 	// Kobo expects metadata wrapped in an array
@@ -633,7 +629,7 @@ func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey strin
 		Genre:         dummyCategoryID,
 		Language:      language,
 		RevisionID:    bookID,
-		Title:         book.Title,
+		Title:         file.ResolveTitle(book.Title),
 		WorkID:        bookID,
 		DownloadUrls: []*DownloadURL{
 			{

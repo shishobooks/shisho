@@ -173,6 +173,22 @@ describe("M4BReader", () => {
     expect(document.title).toContain("The Test Audiobook");
   });
 
+  it("shows a named file's name in the heading and tab title", () => {
+    renderReader({ file: { ...file, name: "The Named Edition" } as File });
+    expect(
+      screen.getByRole("heading", { name: "The Named Edition" }),
+    ).toBeInTheDocument();
+    expect(document.title).toBe("Listening: The Named Edition - Shisho");
+  });
+
+  it("falls back to the book title when the file's name is empty", () => {
+    renderReader({ file: { ...file, name: "" } as File });
+    expect(
+      screen.getByRole("heading", { name: "The Test Audiobook" }),
+    ).toBeInTheDocument();
+    expect(document.title).toBe("Listening: The Test Audiobook - Shisho");
+  });
+
   it("uses the file's audiobook_duration_seconds as the total time", () => {
     renderReader();
     // 3600s => 1:00:00

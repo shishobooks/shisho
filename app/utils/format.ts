@@ -28,6 +28,17 @@ export const fileLabel = (file: {
 }): string => file.display_name || file.file_type.toUpperCase();
 
 /**
+ * The title a reader sees for one file: its name when set, otherwise the
+ * book's title, even when the book has only one file. Matches the server's
+ * File.ResolveTitle, so a whitespace-only name does not count. Unlike
+ * fileLabel it never falls back to the filename.
+ * @example fileTitle({ name: "Special Edition" }, "Book") // "Special Edition"
+ * @example fileTitle({ name: "" }, "Book") // "Book"
+ */
+export const fileTitle = (file: { name?: string }, bookTitle = ""): string =>
+  file.name?.trim() ? file.name : bookTitle;
+
+/**
  * Formats a page count with the right plural.
  * @example formatPageCount(1) // "1 page"
  * @example formatPageCount(1200) // "1,200 pages"

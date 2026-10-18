@@ -801,10 +801,7 @@ func kindleFiles(files []*models.File) []*models.File {
 // digits joined by underscores, plus its type as the extension. A Kindle
 // checks the extension and has failed on non-ASCII filenames.
 func kindleFilename(bookTitle string, f *models.File) string {
-	name := bookTitle
-	if f.Name != nil && *f.Name != "" {
-		name = *f.Name
-	}
+	name := f.ResolveTitle(bookTitle)
 	// Decompose accented letters so "É" keeps its "E".
 	name = norm.NFD.String(name)
 	if ext := "." + f.FileType; strings.HasSuffix(strings.ToLower(name), ext) {
@@ -884,11 +881,7 @@ func formatFileSize(bytes int64) string {
 // type badge, file size, and download link. Uses block-level elements with
 // large tap targets for eReader compatibility (no flexbox).
 func fileDownloadEntry(baseURL, bookTitle string, f *models.File, dev device) string {
-	// Determine display name: file name if set, otherwise book title
-	displayName := bookTitle
-	if f.Name != nil && *f.Name != "" {
-		displayName = *f.Name
-	}
+	displayName := f.ResolveTitle(bookTitle)
 
 	// Build download URL (KePub for Kobo when applicable, and a URL ending
 	// in the filename for a Kindle)

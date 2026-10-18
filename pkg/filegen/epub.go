@@ -234,10 +234,7 @@ func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.F
 
 	navPath, ncxPath := tocPaths(pkg, opfPath)
 	addModifiedDate(pkg, book, file)
-	title := book.Title
-	if file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
+	title := file.ResolveTitle(book.Title)
 	addedNavPath, addedNav := addNavDocument(pkg, opfPath, navPath, srcNames, title, file.Chapters)
 
 	opfContent, err := modifyOPF(pkg, book, file, coverInfo, newCoverMimeType)
@@ -438,11 +435,7 @@ func addCoverImage(pkg *opfPackage, opfPath string, srcNames map[string]bool, co
 // modifyOPF applies the book and file metadata to the parsed OPF and returns
 // the marshaled document.
 func modifyOPF(pkg *opfPackage, book *models.Book, file *models.File, coverInfo *coverImageInfo, newCoverMimeType string) ([]byte, error) {
-	// Determine title - prefer file.Name over book.Title
-	title := book.Title
-	if file != nil && file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
+	title := file.ResolveTitle(book.Title)
 
 	// Update title. A retitled element drops its unmodeled attributes
 	// (xml:lang, dir, opf:file-as): they described the old text.

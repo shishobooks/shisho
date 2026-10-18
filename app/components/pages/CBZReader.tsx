@@ -1,6 +1,7 @@
 import PageReader from "@/components/pages/PageReader";
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import type { File } from "@/types";
+import { fileTitle } from "@/utils/format";
 
 interface CBZReaderProps {
   file: File;
@@ -20,7 +21,7 @@ export default function CBZReader({
       fileId={file.id}
       getPageUrl={(page) => filePageUrl(file, page)}
       libraryId={libraryId}
-      title={bookTitle}
+      title={fileTitle(file, bookTitle)}
       totalPages={file.page_count || 0}
     />
   );

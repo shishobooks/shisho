@@ -40,11 +40,7 @@ var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|
 // If no series: [Author] Title.ext.
 // If no author: Title.ext.
 func FormatDownloadFilename(book *models.Book, file *models.File) string {
-	// Use file.Name if available, otherwise fall back to book.Title
-	titleSource := book.Title
-	if file.Name != nil && *file.Name != "" {
-		titleSource = *file.Name
-	}
+	titleSource := file.ResolveTitle(book.Title)
 	// Pad volume numbers for lexicographic sorting, then sanitize
 	title := sanitizeFilename(padVolumeNumber(titleSource))
 	author := getFirstAuthorName(book)
@@ -193,11 +189,7 @@ func sanitizeKoboFilename(s string) string {
 // Uses Kobo-safe characters only to ensure compatibility with Kobo e-readers.
 // Format: Author - Series Number - Title.kepub.epub (no brackets, no hash symbols).
 func FormatKepubDownloadFilename(book *models.Book, file *models.File) string {
-	// Use file.Name if available, otherwise fall back to book.Title
-	titleSource := book.Title
-	if file.Name != nil && *file.Name != "" {
-		titleSource = *file.Name
-	}
+	titleSource := file.ResolveTitle(book.Title)
 	// Pad volume numbers for lexicographic sorting, then sanitize for Kobo
 	title := sanitizeKoboFilename(padVolumeNumber(titleSource))
 	author := sanitizeKoboFilename(getFirstAuthorName(book))

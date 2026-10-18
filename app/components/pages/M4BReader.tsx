@@ -49,7 +49,7 @@ import {
 } from "@/utils/chapters";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { fileStreamUrl } from "@/utils/downloadUrl";
-import { formatPlayerTime } from "@/utils/format";
+import { fileTitle, formatPlayerTime } from "@/utils/format";
 
 interface M4BReaderProps {
   file: File;
@@ -71,7 +71,8 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const navigate = useNavigate();
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  usePageTitle(book?.title ? `Listening: ${book.title}` : "Audiobook Player");
+  const title = fileTitle(file, book?.title);
+  usePageTitle(title ? `Listening: ${title}` : "Audiobook Player");
 
   const streamUrl = fileStreamUrl(file.id);
 
@@ -328,7 +329,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <span className="truncate text-sm font-medium">
-          {book?.title ?? "Audiobook"}
+          {title || "Audiobook"}
         </span>
       </header>
 
@@ -338,7 +339,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           <div className="aspect-square w-48 sm:w-56 md:w-64 shrink-0">
             {coverUrl && !coverError ? (
               <CoverImage
-                alt={`${book?.title ?? "Audiobook"} cover`}
+                alt={`${title || "Audiobook"} cover`}
                 className="h-full w-full rounded-md border border-border object-cover shadow-sm"
                 key={coverUrl}
                 onError={() => setCoverError(true)}
@@ -354,7 +355,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
 
           <div className="w-full text-center">
             <h1 className="text-xl font-semibold break-words md:text-2xl">
-              {book?.title ?? "Audiobook"}
+              {title || "Audiobook"}
             </h1>
             {authorNames && (
               <p className="mt-1 text-sm text-muted-foreground break-words">

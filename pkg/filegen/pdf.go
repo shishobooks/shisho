@@ -404,13 +404,7 @@ func convertModelChaptersToPDFBookmarks(chapters []*models.Chapter, pageCount in
 func (g *PDFGenerator) buildProperties(book *models.Book, file *models.File) map[string]string {
 	props := make(map[string]string)
 
-	// Title — prefer file.Name over book.Title per the file-level vs
-	// book-level convention in pkg/AGENTS.md, matching the M4B generator.
-	title := book.Title
-	if file != nil && file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
-	if title != "" {
+	if title := file.ResolveTitle(book.Title); title != "" {
 		props["Title"] = title
 	}
 

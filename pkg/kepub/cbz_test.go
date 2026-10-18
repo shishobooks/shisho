@@ -697,87 +697,29 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 	})
 }
 
-func TestConverter_ConvertCBZWithMetadata_UsesNameForTitle(t *testing.T) {
+func TestConverter_ConvertCBZWithMetadata_UsesTitle(t *testing.T) {
 	t.Parallel()
-	t.Run("uses Name for title when provided", func(t *testing.T) {
-		tmpDir := t.TempDir()
+	tmpDir := t.TempDir()
 
-		srcPath := filepath.Join(tmpDir, "comic.cbz")
-		createTestCBZ(t, srcPath, testCBZOptions{})
+	srcPath := filepath.Join(tmpDir, "comic.cbz")
+	createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+	destPath := filepath.Join(tmpDir, "comic.kepub.epub")
 
-		name := "Custom File Name"
-		metadata := &CBZMetadata{
-			Title: "Book Title",
-			Name:  &name,
-		}
+	metadata := &CBZMetadata{Title: "Custom File Name"}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
-		require.NoError(t, err)
+	converter := NewConverter()
+	err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+	require.NoError(t, err)
 
-		// Verify OPF uses Name, not Title
-		opfData := readFileFromKepub(t, destPath, "content.opf")
-		opfContent := string(opfData)
-		assert.Contains(t, opfContent, `<dc:title>Custom File Name</dc:title>`)
-		assert.NotContains(t, opfContent, `<dc:title>Book Title</dc:title>`)
+	opfData := readFileFromKepub(t, destPath, "content.opf")
+	assert.Contains(t, string(opfData), `<dc:title>Custom File Name</dc:title>`)
 
-		// Verify NCX uses Name
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
-		ncxContent := string(ncxData)
-		assert.Contains(t, ncxContent, `Custom File Name`)
+	ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+	assert.Contains(t, string(ncxData), `Custom File Name`)
 
-		// Verify nav.xhtml uses Name
-		navData := readFileFromKepub(t, destPath, "nav.xhtml")
-		navContent := string(navData)
-		assert.Contains(t, navContent, `Custom File Name`)
-	})
-
-	t.Run("falls back to Title when Name is nil", func(t *testing.T) {
-		tmpDir := t.TempDir()
-
-		srcPath := filepath.Join(tmpDir, "comic.cbz")
-		createTestCBZ(t, srcPath, testCBZOptions{})
-
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
-
-		metadata := &CBZMetadata{
-			Title: "Book Title",
-			Name:  nil,
-		}
-
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
-		require.NoError(t, err)
-
-		opfData := readFileFromKepub(t, destPath, "content.opf")
-		opfContent := string(opfData)
-		assert.Contains(t, opfContent, `<dc:title>Book Title</dc:title>`)
-	})
-
-	t.Run("falls back to Title when Name is empty", func(t *testing.T) {
-		tmpDir := t.TempDir()
-
-		srcPath := filepath.Join(tmpDir, "comic.cbz")
-		createTestCBZ(t, srcPath, testCBZOptions{})
-
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
-
-		emptyName := ""
-		metadata := &CBZMetadata{
-			Title: "Book Title",
-			Name:  &emptyName,
-		}
-
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
-		require.NoError(t, err)
-
-		opfData := readFileFromKepub(t, destPath, "content.opf")
-		opfContent := string(opfData)
-		assert.Contains(t, opfContent, `<dc:title>Book Title</dc:title>`)
-	})
+	navData := readFileFromKepub(t, destPath, "nav.xhtml")
+	assert.Contains(t, string(navData), `Custom File Name`)
 }
 
 func TestGenerateNCX_WithChapters(t *testing.T) {

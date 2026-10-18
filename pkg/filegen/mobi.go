@@ -77,10 +77,7 @@ func (p *mobiPrepared) Write(ctx context.Context, w io.Writer) error {
 // mobiMetadata collects what a MOBI file can hold. Like the EPUB generator,
 // it leaves the file's own value where Shisho has none.
 func mobiMetadata(book *models.Book, file *models.File) (*mobi.Metadata, error) {
-	meta := &mobi.Metadata{Title: book.Title}
-	if file.Name != nil && *file.Name != "" {
-		meta.Title = *file.Name
-	}
+	meta := &mobi.Metadata{Title: file.ResolveTitle(book.Title)}
 
 	authors := make([]*models.Author, len(book.Authors))
 	copy(authors, book.Authors)

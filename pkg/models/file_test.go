@@ -76,6 +76,56 @@ func TestFile_ResolveDisplayName(t *testing.T) {
 	}
 }
 
+func TestFile_ResolveTitle(t *testing.T) {
+	t.Parallel()
+
+	str := func(s string) *string { return &s }
+	tests := []struct {
+		name string
+		file *File
+		want string
+	}{
+		{
+			name: "a named file uses its name",
+			file: &File{Name: str("Harry Potter and the Sorcerer's Stone")},
+			want: "Harry Potter and the Sorcerer's Stone",
+		},
+		{
+			name: "a file without a name uses the book's title",
+			file: &File{},
+			want: "Harry Potter and the Philosopher's Stone",
+		},
+		{
+			name: "an empty name uses the book's title",
+			file: &File{Name: str("")},
+			want: "Harry Potter and the Philosopher's Stone",
+		},
+		{
+			// Nothing a reader could recognize, so it does not count as set.
+			name: "a whitespace-only name uses the book's title",
+			file: &File{Name: str(" \t ")},
+			want: "Harry Potter and the Philosopher's Stone",
+		},
+		{
+			// Unlike ResolveDisplayName, the filename is never the title.
+			name: "a supplement without a name uses the book's title, not its filename",
+			file: &File{FileRole: FileRoleSupplement, Filepath: "/lib/Book/notes.pdf"},
+			want: "Harry Potter and the Philosopher's Stone",
+		},
+		{
+			name: "a nil file uses the book's title",
+			file: nil,
+			want: "Harry Potter and the Philosopher's Stone",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.file.ResolveTitle("Harry Potter and the Philosopher's Stone"))
+		})
+	}
+}
+
 func TestFile_AfterScanRowResolvesDisplayName(t *testing.T) {
 	t.Parallel()
 

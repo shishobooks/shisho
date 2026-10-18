@@ -1921,11 +1921,7 @@ func (w *Worker) scanFileCore(
 				}
 			}
 
-			// Use file.Name for title if available, otherwise book.Title
-			title := book.Title
-			if file.Name != nil && *file.Name != "" {
-				title = *file.Name
-			}
+			title := file.ResolveTitle(book.Title)
 
 			// Generate organized name options (no AuthorNames - see comment above)
 			organizeOpts := fileutils.OrganizedNameOptions{

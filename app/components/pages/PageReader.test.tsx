@@ -33,7 +33,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const renderReader = (totalPages = 10) =>
+const renderReader = (totalPages = 10, title?: string) =>
   render(
     <MemoryRouter>
       <PageReader
@@ -41,10 +41,19 @@ const renderReader = (totalPages = 10) =>
         fileId={42}
         getPageUrl={(page) => `/page-${page}`}
         libraryId="1"
+        title={title}
         totalPages={totalPages}
       />
     </MemoryRouter>,
   );
+
+describe("PageReader title", () => {
+  it("sets the tab title to the title it is given", () => {
+    settings.mutate = vi.fn();
+    renderReader(10, "File Name");
+    expect(document.title).toBe("Reading: File Name - Shisho");
+  });
+});
 
 describe("PageReader settings", () => {
   it("toasts when saving a reader setting fails", async () => {

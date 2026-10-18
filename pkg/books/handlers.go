@@ -1330,10 +1330,7 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 			authorNames = append(authorNames, a.Person.Name)
 		}
 	}
-	title := book.Title
-	if file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
+	title := file.ResolveTitle(book.Title)
 	// File-level renames intentionally omit SeriesNumber/SeriesNumberUnit:
 	// GenerateOrganizedFileName clears them before generating the filename
 	// since the series number is already encoded in the parent folder name.

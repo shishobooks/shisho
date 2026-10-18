@@ -76,11 +76,7 @@ func (p *m4bPrepared) Write(ctx context.Context, w io.Writer) error {
 
 // buildMetadata constructs new Metadata from book/file models while preserving source metadata.
 func (g *M4BGenerator) buildMetadata(book *models.Book, file *models.File, src *mp4.Metadata) *mp4.Metadata {
-	// Use file.Name for title if set, otherwise fall back to book.Title
-	title := book.Title
-	if file != nil && file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
+	title := file.ResolveTitle(book.Title)
 
 	meta := &mp4.Metadata{
 		// From book/file model

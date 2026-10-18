@@ -46,12 +46,13 @@ vi.mock("@/hooks/queries/settings", () => ({
   useUpdateUserSettings: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
-const renderReader = (fileType = "epub") => {
+const renderReader = (fileType = "epub", name?: string) => {
   const client = new QueryClient();
   const file = {
     id: 7,
     book_id: 3,
     file_type: fileType,
+    name,
   } as never;
   return render(
     <QueryClientProvider client={client}>
@@ -69,6 +70,26 @@ const pageTapZones = () =>
     .filter((button) => button.getAttribute("aria-hidden") === "true");
 
 describe("ReflowableReader", () => {
+  it("sets the tab title to the file's name", () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    renderReader("epub", "File Name");
+    expect(document.title).toBe("Reading: File Name - Shisho");
+  });
+
+  it("sets the tab title to the book's title without a file name", () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never);
+    renderReader("epub", "");
+    expect(document.title).toBe("Reading: Test Book - Shisho");
+  });
+
   it("shows the heading as the current entry when the location is under it", async () => {
     mockToc = [
       {

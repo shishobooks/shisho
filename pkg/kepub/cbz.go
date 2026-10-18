@@ -25,7 +25,6 @@ import (
 // CBZMetadata holds metadata for CBZ to KePub conversion.
 type CBZMetadata struct {
 	Title       string
-	Name        *string // Name takes precedence over Title when non-empty
 	Subtitle    *string
 	Description *string
 	Authors     []CBZAuthor
@@ -289,13 +288,9 @@ func writeZipFile(zw *zip.Writer, name string, data []byte) error {
 }
 
 // getEffectiveTitle returns the title to use for the EPUB.
-// It prefers Name over Title when Name is non-nil and non-empty.
 func getEffectiveTitle(metadata *CBZMetadata) string {
 	if metadata == nil {
 		return "Comic Book"
-	}
-	if metadata.Name != nil && *metadata.Name != "" {
-		return *metadata.Name
 	}
 	if metadata.Title != "" {
 		return metadata.Title
