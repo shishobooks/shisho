@@ -240,7 +240,11 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 // previous sync point. A previous row without a cover time predates cover
 // tracking, so it never counts as a change; otherwise the first sync after
 // the upgrade would re-send every book. A cover added or removed also
-// changes the cover filename, which the metadata hash already catches.
+// changes the cover filename, which the metadata hash already catches. A
+// cover that could not be read at either sync also has no time, so a cover
+// missing at one sync and back under the same name later goes unnoticed, as
+// does a replacement within one mtime tick on a coarse filesystem. Both fail
+// toward sending nothing rather than re-sending books.
 func coverChanged(prev, curr *time.Time) bool {
 	if prev == nil || curr == nil {
 		return false
@@ -350,7 +354,7 @@ func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope
 			FileHash:        computeFileHash(&f),
 			FileSize:        f.FilesizeBytes,
 			MetadataHash:    computeMetadataHash(&f),
-			CoverModifiedAt: coverModifiedAt(&f),
+			CoverModifiedAt: coverModifiedAt(ctx, &f),
 		}
 	}
 
@@ -477,12 +481,20 @@ func computeMetadataHash(file *models.File) string {
 // it has none. Scans only write a cover that is missing, so the mtime changes
 // when a cover is uploaded or replaced, not on every rescan. It is truncated
 // to the microsecond so it compares equal after a database round trip.
-func coverModifiedAt(file *models.File) *time.Time {
+func coverModifiedAt(ctx context.Context, file *models.File) *time.Time {
 	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
 		return nil
 	}
-	info, err := os.Stat(covers.FileCoverPath(file))
+	path := covers.FileCoverPath(file)
+	info, err := os.Stat(path)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.FromContext(ctx).Warn("kobo could not stat cover", logger.Data{
+				"file_id": file.ID,
+				"path":    path,
+				"error":   err.Error(),
+			})
+		}
 		return nil
 	}
 	t := info.ModTime().UTC().Truncate(time.Microsecond)

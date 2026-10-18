@@ -296,3 +296,21 @@ func TestHandleSync_SnapshotWithoutCoverTimeIsNotChanged(t *testing.T) {
 	items, _ := f.sync(t, token)
 	assert.Empty(t, items)
 }
+
+// The metadata route builds the same CoverImageId as the sync entry, so the
+// device asks for the thumbnail it already cached.
+func TestHandleMetadata_CoverImageIDMatchesSync(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+	f.replaceCover(t, f.fileA)
+
+	items, _ := f.sync(t, "")
+	synced := itemFor(t, items, f.fileA.ID).NewEntitlement.BookMetadata["CoverImageId"]
+
+	rec := f.serve(http.MethodGet, f.prefix("all")+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var metadata []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))
+	require.Len(t, metadata, 1)
+	assert.Equal(t, synced, metadata[0]["CoverImageId"])
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/apikeys"
@@ -481,4 +482,19 @@ func TestEnsureRevisionIDs_SurvivesSyncHistoryReset(t *testing.T) {
 	again, err := svc.EnsureRevisionIDs(ctx, f.key.ID, []int{f.fileA.ID})
 	require.NoError(t, err)
 	assert.Equal(t, first, again)
+}
+
+// A book without a cover keeps the CoverImageId suffix it had before cover
+// times were tracked: the metadata hash prefix alone.
+func TestCoverCacheKey(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "0123abcd", coverCacheKey("0123abcd99999999", nil))
+	assert.Equal(t, "abc", coverCacheKey("abc", nil))
+
+	mtime := time.Unix(1700000000, 0)
+	withCover := coverCacheKey("0123abcd99999999", &mtime)
+	assert.Len(t, withCover, 8)
+	assert.NotEqual(t, "0123abcd", withCover)
+	later := mtime.Add(time.Microsecond)
+	assert.NotEqual(t, withCover, coverCacheKey("0123abcd99999999", &later))
 }

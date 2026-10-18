@@ -437,7 +437,7 @@ func (h *handler) handleMetadata(c echo.Context) error {
 	if file.CoverImageFilename != nil {
 		coverFilename = *file.CoverImageFilename
 	}
-	cacheKey := coverCacheKey(ComputeMetadataHashFromBook(book, coverFilename), coverModifiedAt(file))
+	cacheKey := coverCacheKey(ComputeMetadataHashFromBook(book, coverFilename), coverModifiedAt(ctx, file))
 	metadata := buildBookMetadata(book, file, cacheKey, baseURL)
 
 	// Kobo expects metadata wrapped in an array
