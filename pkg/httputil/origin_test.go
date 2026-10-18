@@ -99,6 +99,27 @@ func TestPublicOrigin(t *testing.T) {
 			want:      "https://shisho.example.com",
 		},
 		{
+			name:      "X-Forwarded-Port 80 behind an upstream TLS terminator adds none",
+			host:      "shisho.example.com",
+			headers:   map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Port": "80"},
+			localPort: 5173,
+			want:      "https://shisho.example.com",
+		},
+		{
+			name:      "X-Forwarded-For alone marks a proxied request",
+			host:      "192.168.1.10",
+			headers:   map[string]string{"X-Forwarded-For": "192.168.1.50"},
+			localPort: 5173,
+			want:      "http://192.168.1.10",
+		},
+		{
+			name:      "X-Forwarded-Prefix alone marks a proxied request",
+			host:      "192.168.1.10",
+			headers:   map[string]string{"X-Forwarded-Prefix": "/books"},
+			localPort: 5173,
+			want:      "http://192.168.1.10",
+		},
+		{
 			name:      "X-Forwarded-Port does not override a port already in the host",
 			host:      "shisho.example.com:9000",
 			headers:   map[string]string{"X-Forwarded-Port": "8443"},
@@ -124,7 +145,6 @@ func TestPublicOrigin(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Host = tt.host
-			req.TLS = nil
 			if tt.tls {
 				req.TLS = &tls.ConnectionState{}
 			}

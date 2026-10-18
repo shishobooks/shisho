@@ -138,15 +138,15 @@ Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publ
 
 Kobo sync and OPDS send devices absolute URLs for downloads and covers. Shisho builds them from the address the device used:
 
-- **Scheme**: `https` when Shisho terminates TLS itself or a trusted proxy sends `X-Forwarded-Proto: https`, otherwise `http`.
+- **Scheme**: `https` when a trusted proxy sends `X-Forwarded-Proto: https`, otherwise `http`.
 - **Host**: `X-Forwarded-Host` from a trusted proxy, otherwise the request's `Host` header.
-- **Port**: a port already in that host is kept. Otherwise Shisho adds `X-Forwarded-Port` when a trusted proxy sends it. A request with none of `X-Forwarded-Proto`, `X-Forwarded-Host`, or `X-Forwarded-Port` is treated as direct and gets the port the connection arrived on. The scheme's default port (`80` for `http`, `443` for `https`) is never added.
+- **Port**: a port already in that host is kept. Otherwise Shisho adds `X-Forwarded-Port` when a trusted proxy sends it. A request with none of `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Prefix`, or `X-Forwarded-For` is treated as direct and gets the port the connection arrived on. Ports `80` and `443` are never added.
 
 Kobo devices leave the port out of `Host`, so this matters most for Kobo sync:
 
-- **Direct access**, such as `http://nas:5173` with no proxy, works when the host port matches Shisho's listening port, as in the default `5173:5173` mapping. URLs carry `:5173`. With a remapped port such as `8080:5173`, Shisho only sees `5173`, so Kobo URLs point at the wrong port. Publish the same port on both sides, or put a proxy in front.
+- **Direct access**, such as `http://nas:5173` with no proxy, works when the host port matches Shisho's listening port, as in the default `5173:5173` mapping. URLs carry `:5173`. With a remapped port such as `8080:5173`, Shisho only sees `5173`, so Kobo URLs point at the wrong port. Keep the `5173:5173` mapping for direct Kobo access, or put a proxy in front.
 - **Behind a proxy on `443` or `80`** needs nothing extra. Shisho does not add its own container port to proxied requests.
-- **Behind a proxy on another public port**, such as `https://books.example.com:8443`, have the proxy send `X-Forwarded-Port` or include the port in `X-Forwarded-Host`. Without either, Kobo downloads and covers point at the default port and fail.
+- **Behind a proxy on another public port**, such as `https://books.example.com:8443`, have the proxy send that public port as `X-Forwarded-Port` or include it in `X-Forwarded-Host`. Without either, Kobo downloads and covers point at the default port and fail.
 
 ### Response Handling
 

@@ -32,7 +32,9 @@ func PublicOrigin(r *http.Request) string {
 	}
 
 	if (&url.URL{Host: host}).Port() == "" {
-		if port := originPort(r); port != "" && port != defaultPort(scheme) {
+		// 80 and 443 are skipped under either scheme: a proxy behind an
+		// upstream TLS terminator sends X-Forwarded-Port: 80 with https.
+		if port := originPort(r); port != "" && port != "80" && port != "443" {
 			host += ":" + port
 		}
 	}
@@ -42,11 +44,12 @@ func PublicOrigin(r *http.Request) string {
 
 // originPort returns the port to add to a host that has none: X-Forwarded-Port
 // when sent, otherwise the local port of a request with no forwarded headers.
+// Any of them marks a proxy, whose local port is not the one the client used.
 func originPort(r *http.Request) string {
 	if port := firstForwardedValue(r.Header.Get("X-Forwarded-Port")); port != "" {
 		return port
 	}
-	for _, name := range []string{"X-Forwarded-Proto", "X-Forwarded-Host"} {
+	for _, name := range []string{"X-Forwarded-Proto", "X-Forwarded-Host", "X-Forwarded-Prefix", "X-Forwarded-For"} {
 		if r.Header.Get(name) != "" {
 			return ""
 		}
@@ -60,13 +63,6 @@ func originPort(r *http.Request) string {
 		return ""
 	}
 	return port
-}
-
-func defaultPort(scheme string) string {
-	if scheme == "https" {
-		return "443"
-	}
-	return "80"
 }
 
 // firstForwardedValue returns the client-facing entry of a header that a
