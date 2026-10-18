@@ -592,7 +592,7 @@ func (h *handler) Download(c echo.Context) error {
 		case len(files) == 0:
 			content.WriteString(`<p><b>Unavailable on Kindle.</b> This book has no MOBI or AZW3 file.</p>`)
 		case files[0].FileType == models.FileTypeAZW3:
-			content.WriteString(`<p><i>Newer Kindles may refuse AZW3 downloads. If yours does, add a MOBI file to this book.</i></p>`)
+			content.WriteString(`<p><i>Some Kindles refuse AZW3 downloads. If yours does, add a MOBI file to this book.</i></p>`)
 		}
 		for _, f := range files {
 			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, dev))
@@ -780,7 +780,7 @@ func isKindle(userAgent string) bool {
 // kindleFiles returns the main files a Kindle should download: the MOBI
 // files, or else the AZW3 files, or nil when there are neither. A Kindle's
 // browser refuses every other format, PDF included. MOBI comes first because
-// every firmware downloads it, while firmware from 5.16.4 on refuses AZW3.
+// every Kindle downloads it, while some Kindles refuse AZW3.
 func kindleFiles(files []*models.File) []*models.File {
 	for _, fileType := range []string{models.FileTypeMOBI, models.FileTypeAZW3} {
 		var matches []*models.File
