@@ -17,14 +17,7 @@ import (
 // one the client used, so a proxy must send X-Forwarded-Port or put the port
 // in the host it forwards.
 func PublicOrigin(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	proto := strings.ToLower(firstForwardedValue(r.Header.Get("X-Forwarded-Proto")))
-	if proto == "http" || proto == "https" {
-		scheme = proto
-	}
+	scheme := PublicScheme(r)
 
 	host := firstForwardedValue(r.Header.Get("X-Forwarded-Host"))
 	if host == "" {
@@ -40,6 +33,20 @@ func PublicOrigin(r *http.Request) string {
 	}
 
 	return scheme + "://" + host
+}
+
+// PublicScheme returns "https" or "http", whichever the client used to reach
+// r. Session cookies are Secure exactly when this is "https", so they agree
+// with the URLs PublicOrigin builds.
+func PublicScheme(r *http.Request) string {
+	proto := strings.ToLower(firstForwardedValue(r.Header.Get("X-Forwarded-Proto")))
+	if proto == "http" || proto == "https" {
+		return proto
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
 }
 
 // originPort returns the port to add to a host that has none: X-Forwarded-Port
