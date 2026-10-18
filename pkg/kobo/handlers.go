@@ -437,11 +437,8 @@ func (h *handler) handleMetadata(c echo.Context) error {
 	if file.CoverImageFilename != nil {
 		coverFilename = *file.CoverImageFilename
 	}
-	coverCacheKey := ComputeMetadataHashFromBook(book, coverFilename)
-	if len(coverCacheKey) > 8 {
-		coverCacheKey = coverCacheKey[:8]
-	}
-	metadata := buildBookMetadata(book, file, coverCacheKey, baseURL)
+	cacheKey := coverCacheKey(ComputeMetadataHashFromBook(book, coverFilename), coverModifiedAt(file))
+	metadata := buildBookMetadata(book, file, cacheKey, baseURL)
 
 	// Kobo expects metadata wrapped in an array
 	return c.JSON(http.StatusOK, []*BookMetadata{metadata})
@@ -581,14 +578,7 @@ func buildEntitlement(ctx context.Context, f ScopedFile, revisionID string, base
 		return nil
 	}
 
-	// MetadataHash already captures title + author + cover filename. Use a
-	// short prefix as the device-cache-busting suffix so the device refreshes
-	// thumbnails when any of those change.
-	coverCacheKey := ""
-	if len(f.MetadataHash) >= 8 {
-		coverCacheKey = f.MetadataHash[:8]
-	}
-	metadata := buildBookMetadata(book, file, coverCacheKey, baseURL)
+	metadata := buildBookMetadata(book, file, coverCacheKey(f.MetadataHash, f.CoverModifiedAt), baseURL)
 	now := time.Now()
 
 	return &EntitlementWrapper{

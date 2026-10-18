@@ -29,6 +29,10 @@ type SyncPointBook struct {
 	FileSize     int64  `bun:"file_size,notnull"`
 	MetadataHash string `bun:"metadata_hash,notnull"`
 	Synced       bool   `bun:"synced,notnull,default:false"`
+	// CoverModifiedAt is the cover image's mtime, so a cover replaced under
+	// the same filename counts as a change. Nil on rows stored before it was
+	// tracked, and for files without a cover on disk.
+	CoverModifiedAt *time.Time `bun:"cover_modified_at"`
 }
 
 // SyncScope represents the scope of books to sync (parsed from URL).

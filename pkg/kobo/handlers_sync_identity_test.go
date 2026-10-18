@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -248,4 +251,48 @@ func TestHandleSync_FileDeletedAfterSnapshotIsDropped(t *testing.T) {
 	items, _ := f.sync(t, token)
 	require.Len(t, items, 1)
 	require.NotNil(t, itemFor(t, items, f.fileA.ID).NewEntitlement)
+}
+
+// replaceCover overwrites the file's cover in place, under the same
+// filename, the way re-uploading a cover of the same type does.
+func (f *koboScopeFixture) replaceCover(t *testing.T, file *models.File) {
+	t.Helper()
+	path := covers.FileCoverPath(file)
+	require.NoError(t, os.WriteFile(path, []byte("a different cover"), 0o600))
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(path, later, later))
+}
+
+// A cover replaced under the same filename goes out as a change, with a new
+// CoverImageId so the Kobo refreshes its thumbnail.
+func TestHandleSync_CoverReplacedUnderSameFilenameIsChanged(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+
+	items, token := f.sync(t, "")
+	first := itemFor(t, items, f.fileA.ID)
+	rev := entitlementRevisionID(t, first.NewEntitlement)
+	coverID := first.NewEntitlement.BookMetadata["CoverImageId"]
+
+	f.replaceCover(t, f.fileA)
+
+	items, _ = f.sync(t, token)
+	require.Len(t, items, 1)
+	assertChangedUnder(t, items[0], f.fileA.ID, rev)
+	assert.NotEqual(t, coverID, items[0].ChangedEntitlement.BookMetadata["CoverImageId"])
+}
+
+// Sync points stored before covers were tracked hold no cover time. The
+// first sync after the upgrade must not report every book as changed.
+func TestHandleSync_SnapshotWithoutCoverTimeIsNotChanged(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+	ctx := context.Background()
+
+	_, token := f.sync(t, "")
+	_, err := f.db.ExecContext(ctx, `UPDATE kobo_sync_point_books SET cover_modified_at = NULL`)
+	require.NoError(t, err)
+
+	items, _ := f.sync(t, token)
+	assert.Empty(t, items)
 }

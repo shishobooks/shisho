@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -19,10 +21,11 @@ import (
 
 // ScopedFile represents a file in the current sync scope with its hashes.
 type ScopedFile struct {
-	FileID       int
-	FileHash     string
-	FileSize     int64
-	MetadataHash string
+	FileID          int
+	FileHash        string
+	FileSize        int64
+	MetadataHash    string
+	CoverModifiedAt *time.Time
 }
 
 // SyncChanges contains the detected changes between two sync points.
@@ -66,12 +69,13 @@ func (svc *Service) CreateSyncPoint(ctx context.Context, apiKeyID string, files 
 			books := make([]*SyncPointBook, len(files))
 			for i, f := range files {
 				books[i] = &SyncPointBook{
-					ID:           uuid.New().String(),
-					SyncPointID:  sp.ID,
-					FileID:       f.FileID,
-					FileHash:     f.FileHash,
-					FileSize:     f.FileSize,
-					MetadataHash: f.MetadataHash,
+					ID:              uuid.New().String(),
+					SyncPointID:     sp.ID,
+					FileID:          f.FileID,
+					FileHash:        f.FileHash,
+					FileSize:        f.FileSize,
+					MetadataHash:    f.MetadataHash,
+					CoverModifiedAt: f.CoverModifiedAt,
 				}
 			}
 			_, err = tx.NewInsert().Model(&books).Exec(ctx)
@@ -116,10 +120,11 @@ func ScopedFilesFromSnapshot(books []*SyncPointBook) []ScopedFile {
 	out := make([]ScopedFile, len(books))
 	for i, b := range books {
 		out[i] = ScopedFile{
-			FileID:       b.FileID,
-			FileHash:     b.FileHash,
-			FileSize:     b.FileSize,
-			MetadataHash: b.MetadataHash,
+			FileID:          b.FileID,
+			FileHash:        b.FileHash,
+			FileSize:        b.FileSize,
+			MetadataHash:    b.MetadataHash,
+			CoverModifiedAt: b.CoverModifiedAt,
 		}
 	}
 	return out
@@ -210,7 +215,7 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 		prev, exists := prevMap[curr.FileID]
 		if !exists {
 			changes.Added = append(changes.Added, curr)
-		} else if prev.FileHash != curr.FileHash || prev.MetadataHash != curr.MetadataHash {
+		} else if prev.FileHash != curr.FileHash || prev.MetadataHash != curr.MetadataHash || coverChanged(prev.CoverModifiedAt, curr.CoverModifiedAt) {
 			changes.Changed = append(changes.Changed, curr)
 		}
 	}
@@ -219,15 +224,28 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 	for _, prev := range sp.Books {
 		if _, exists := currMap[prev.FileID]; !exists {
 			changes.Removed = append(changes.Removed, ScopedFile{
-				FileID:       prev.FileID,
-				FileHash:     prev.FileHash,
-				FileSize:     prev.FileSize,
-				MetadataHash: prev.MetadataHash,
+				FileID:          prev.FileID,
+				FileHash:        prev.FileHash,
+				FileSize:        prev.FileSize,
+				MetadataHash:    prev.MetadataHash,
+				CoverModifiedAt: prev.CoverModifiedAt,
 			})
 		}
 	}
 
 	return changes, nil
+}
+
+// coverChanged reports whether a file's cover was replaced since the
+// previous sync point. A previous row without a cover time predates cover
+// tracking, so it never counts as a change; otherwise the first sync after
+// the upgrade would re-send every book. A cover added or removed also
+// changes the cover filename, which the metadata hash already catches.
+func coverChanged(prev, curr *time.Time) bool {
+	if prev == nil || curr == nil {
+		return false
+	}
+	return !prev.Equal(*curr)
 }
 
 // EnsureRevisionIDs returns the RevisionId recorded for each file under
@@ -328,10 +346,11 @@ func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope
 	result := make([]ScopedFile, len(files))
 	for i, f := range files {
 		result[i] = ScopedFile{
-			FileID:       f.ID,
-			FileHash:     computeFileHash(&f),
-			FileSize:     f.FilesizeBytes,
-			MetadataHash: computeMetadataHash(&f),
+			FileID:          f.ID,
+			FileHash:        computeFileHash(&f),
+			FileSize:        f.FilesizeBytes,
+			MetadataHash:    computeMetadataHash(&f),
+			CoverModifiedAt: coverModifiedAt(&f),
 		}
 	}
 
@@ -444,14 +463,45 @@ func computeFileHash(file *models.File) string {
 
 // computeMetadataHash creates a hash from title, author names, and cover
 // filename, truncated to 16 hex chars. Used both as a sync-diff signal (a
-// metadata change marks the book as Changed) and as a CoverImageID suffix
-// for the device thumbnail cache (see ComputeMetadataHashFromBook).
+// metadata change marks the book as Changed) and as the base of the
+// CoverImageID suffix for the device thumbnail cache (see coverCacheKey).
 func computeMetadataHash(file *models.File) string {
 	var coverFilename string
 	if file.CoverImageFilename != nil {
 		coverFilename = *file.CoverImageFilename
 	}
 	return ComputeMetadataHashFromBook(file.Book, coverFilename)
+}
+
+// coverModifiedAt returns the mtime of the file's cover on disk, or nil when
+// it has none. Scans only write a cover that is missing, so the mtime changes
+// when a cover is uploaded or replaced, not on every rescan. It is truncated
+// to the microsecond so it compares equal after a database round trip.
+func coverModifiedAt(file *models.File) *time.Time {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+		return nil
+	}
+	info, err := os.Stat(covers.FileCoverPath(file))
+	if err != nil {
+		return nil
+	}
+	t := info.ModTime().UTC().Truncate(time.Microsecond)
+	return &t
+}
+
+// coverCacheKey returns the short suffix added to CoverImageID so the
+// device's thumbnail cache refreshes when the book's metadata or its cover
+// image changes. Without a cover time it is the metadata hash prefix alone.
+func coverCacheKey(metadataHash string, coverModifiedAt *time.Time) string {
+	key := metadataHash
+	if coverModifiedAt != nil {
+		h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", metadataHash, coverModifiedAt.UnixNano())))
+		key = hex.EncodeToString(h[:])
+	}
+	if len(key) > 8 {
+		key = key[:8]
+	}
+	return key
 }
 
 // ComputeMetadataHashFromBook produces the same hash as computeMetadataHash
