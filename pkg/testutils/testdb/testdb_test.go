@@ -2,6 +2,7 @@ package testdb
 
 import (
 	"context"
+	"database/sql/driver"
 	"testing"
 	"time"
 
@@ -79,34 +80,31 @@ func TestNew_DatabasesAreIsolated(t *testing.T) {
 	assert.Zero(t, count)
 }
 
-// interruptStatement cancels a statement that never finishes on its own, so
-// database/sql discards the connection it ran on. The driver reports only the
-// context error, so the test checks the pool instead: a cancel that lands
-// before the statement starts never takes a connection, and would let the test
-// pass without a discard.
-func interruptStatement(t *testing.T, db *bun.DB) {
+// discardConnection makes database/sql throw away a pool connection, as it
+// does when a query on a file database is canceled mid-statement. The driver
+// keeps an interrupted connection to an in-memory database, so the test
+// reports the connection bad instead, which database/sql discards the same way.
+func discardConnection(t *testing.T, db *bun.DB) {
 	t.Helper()
-	// The template copy runs outside the pool, so open a pool connection first.
-	require.NoError(t, db.PingContext(t.Context()))
+	conn, err := db.Conn(t.Context())
+	require.NoError(t, err)
 	open := db.DB.Stats().OpenConnections
 	require.Positive(t, open)
 
-	cancelCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-	defer cancel()
-	_, err := db.ExecContext(cancelCtx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Equal(t, open-1, db.DB.Stats().OpenConnections, "the interrupted connection is discarded")
+	err = conn.Raw(func(any) error { return driver.ErrBadConn })
+	require.ErrorIs(t, err, driver.ErrBadConn)
+	require.Equal(t, open-1, db.DB.Stats().OpenConnections, "the connection is discarded")
 }
 
-// A connection whose query is canceled mid-statement is replaced. Foreign keys
-// apply per connection, so the replacement must turn them on too, and it must
-// open the same database, so the schema is still there.
+// A discarded connection is replaced. Foreign keys apply per connection, so
+// the replacement must turn them on too, and it must open the same database,
+// so the schema is still there.
 func TestNew_SurvivesConnectionReplacement(t *testing.T) {
 	t.Parallel()
 	db := New(t)
 	ctx := context.Background()
 
-	interruptStatement(t, db)
+	discardConnection(t, db)
 
 	var foreignKeys int
 	require.NoError(t, db.NewRaw("PRAGMA foreign_keys").Scan(ctx, &foreignKeys))
@@ -128,7 +126,7 @@ func TestNewShared_SurvivesConnectionReplacement(t *testing.T) {
 	db := NewShared(t)
 	ctx := context.Background()
 
-	interruptStatement(t, db)
+	discardConnection(t, db)
 
 	var foreignKeys int
 	require.NoError(t, db.NewRaw("PRAGMA foreign_keys").Scan(ctx, &foreignKeys))
