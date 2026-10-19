@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +53,7 @@ const shared = {
       filepath: "",
       filesize_bytes: 1000,
       name: "The Shared Book",
+      reachable_file_types: ["epub", "kepub"],
       is_preferred_cover: false,
     },
   ],
@@ -128,6 +129,45 @@ describe("SharedBook", () => {
     expect(
       screen.getAllByRole("button", { name: "Download" }).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("offers every File Type a file can become, each from the public endpoint", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    const cbz = {
+      ...shared.files![0],
+      file_type: "cbz",
+      reachable_file_types: ["cbz", "kepub", "epub"],
+    };
+    respondWith(200, { ...shared, files: [cbz] });
+    renderPage();
+
+    await screen.findByRole("heading", { name: "The Shared Book" });
+    await user.click(screen.getAllByRole("button", { name: "Download as" })[0]);
+    expect(
+      within(screen.getByRole("menu"))
+        .getAllByRole("menuitem")
+        .map((item) => item.getAttribute("aria-label")),
+    ).toEqual([
+      "Download The Shared Book as CBZ",
+      "Download The Shared Book as KePub",
+      "Download The Shared Book as EPUB",
+    ]);
+
+    fetchMock.mockResolvedValue(new Response(null));
+    await user.click(
+      screen.getByRole("menuitem", {
+        name: "Download The Shared Book as EPUB",
+      }),
+    );
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/share/${TOKEN}/files/42/download/epub`,
+      expect.objectContaining({ method: "HEAD" }),
+    );
+    expect(assign).toHaveBeenCalledWith(
+      `/api/share/${TOKEN}/files/42/download/epub`,
+    );
   });
 
   it("shows no links into the app and no app controls", async () => {

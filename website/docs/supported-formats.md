@@ -17,13 +17,13 @@ Generated downloads are format-specific. Each format can represent a different s
 
 Downloads are sent with the format's media type, whatever the server's operating system knows about file extensions: `application/epub+zip` for EPUB and KePub, `application/vnd.comicbook+zip` for CBZ, `audio/mp4` for M4B, `application/pdf` for PDF, `application/x-mobipocket-ebook` for MOBI, and `application/vnd.amazon.mobi8-ebook` for AZW3. [Kobo Sync](./kobo-sync.md) downloads are sent as `application/octet-stream`. Other files, such as supplements, are typed by their extension.
 
-The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file when a generated one cannot be made: for a supplement, a format only a plugin can read, a KePub request for M4B or PDF, or a file whose contents Shisho cannot rewrite, such as a damaged EPUB. The failure is written to the server log. A source file Shisho cannot read, for example because of its permissions, fails the download with an error instead. In the web app, a failed download reports an error, and **Download Original** sends the file as it is. See [Troubleshooting](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high).
+The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file when a generated one cannot be made: for a supplement, a format only a plugin can read, a KePub request for M4B or PDF, or a file whose contents Shisho cannot rewrite, such as a damaged EPUB. The failure is written to the server log. A source file Shisho cannot read, for example because of its permissions, fails the download with an error instead. So does a conversion picked from a Share Link's **Download as** menu, such as a KePub made from a damaged EPUB, because the original is a different file type than the one the recipient picked. In the web app, a failed download reports an error, and **Download Original** sends the file as it is. See [Troubleshooting](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high).
 
 CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parsers or converters for CBR and other formats.
 
 ## First Downloads
 
-A generated download starts as soon as it is requested and is built while it is sent. EPUB, M4B, MOBI, AZW3, and PDF downloads know their size before they start, so the device or browser shows progress even the first time. A CBZ or a KePub, whether made from an EPUB or a CBZ, does not: its first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+A generated download starts as soon as it is requested and is built while it is sent. EPUB, M4B, MOBI, AZW3, and PDF downloads know their size before they start, so the device or browser shows progress even the first time. A CBZ, a KePub, and an EPUB made from a CBZ do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
 
 ## MOBI and AZW3
 
@@ -58,7 +58,7 @@ Native CBZ parsing recognizes these page image formats:
 - WebP
 - GIF
 
-Pages are read in file name order, folder names included, with numbers compared by value: `page2.jpg` comes before `page10.jpg`, and `Chapter 2/` before `Chapter 10/`. macOS metadata such as `._page1.jpg` files and anything under `__MACOSX/` is not a page. The reader, the `ComicInfo.xml` cover index, and KePub downloads count pages in this order, and so do the cover page and chapter start pages that a scan records. A comic scanned by an earlier version can keep cover page and chapter numbers counted the old way; see [Troubleshooting](./troubleshooting.md#a-comics-cover-page-or-chapters-point-at-the-wrong-page).
+Pages are read in file name order, folder names included, with numbers compared by value: `page2.jpg` comes before `page10.jpg`, and `Chapter 2/` before `Chapter 10/`. macOS metadata such as `._page1.jpg` files and anything under `__MACOSX/` is not a page. The reader, the `ComicInfo.xml` cover index, and KePub and EPUB downloads of a CBZ count pages in this order, and so do the cover page and chapter start pages that a scan records. A comic scanned by an earlier version can keep cover page and chapter numbers counted the old way; see [Troubleshooting](./troubleshooting.md#a-comics-cover-page-or-chapters-point-at-the-wrong-page).
 
 ## CBZ Downloads
 
@@ -74,9 +74,21 @@ A downloaded PDF is the original file, unchanged, with Shisho's metadata and boo
 
 A permission-restricted PDF, one that opens without a password but limits actions such as printing or copying, gets Shisho's metadata too, and keeps its original encryption and permissions. Shisho cannot add its metadata to a PDF that needs a password to open or to one whose internal structure it cannot read, so these count as files whose contents Shisho cannot rewrite, and downloads of them [fall back as described above](#capability-matrix).
 
-## KePub Generation
+## Conversions
 
-Shisho can generate Kobo-optimized KePub downloads from **EPUB and CBZ only**. M4B, PDF, MOBI, and AZW3 remain in their native formats. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for device delivery options.
+A file can be downloaded as its own file type or as another one Shisho converts it to while the download is sent. The file in your library is not changed. These conversions exist:
+
+| From | To | Result |
+|------|----|--------|
+| **EPUB** | **KePub** | A Kobo-optimized EPUB with the book's metadata, named `.kepub.epub` |
+| **CBZ** | **KePub** | A fixed-layout KePub with one page per image, named `.kepub.epub` |
+| **CBZ** | **EPUB** | A fixed-layout EPUB 3 with one page per image, for readers that open EPUB but not CBZ |
+
+M4B, PDF, MOBI, and AZW3 files download only as themselves. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
+
+Each file type a file is downloaded as is generated and cached on its own, so downloading a CBZ as EPUB does not replace its cached CBZ or KePub. Editing the book's metadata regenerates each of them on its next download.
+
+In the web app, each file's download button has a menu beside it, **Download as**, headed by the file's title, that lists every file type the file can become, its own first. The download button itself follows the library's [download format preference](./libraries.md#cover-and-download-preferences). [Share Links](./sharing.md#what-recipients-see) offer the same menu. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for the file types each device receives.
 
 ## Audiobook Browser Compatibility
 

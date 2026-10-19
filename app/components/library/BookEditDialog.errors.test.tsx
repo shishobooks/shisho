@@ -40,6 +40,7 @@ const book: Book = {
       file_role: "main",
       filesize_bytes: 100,
       is_preferred_cover: false,
+      reachable_file_types: [],
       reviewed: false,
     },
   ],

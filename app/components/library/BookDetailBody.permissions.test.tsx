@@ -31,6 +31,8 @@ const book = {
 
 const shareLink: ShareLinkContext = {
   downloadUrl: (file) => `/api/share/tok/files/${file.id}/download`,
+  downloadAsUrl: (file, fileType) =>
+    `/api/share/tok/files/${file.id}/download/${fileType}`,
   bookCoverUrl: () => "/api/share/tok/cover",
   fileCoverUrl: (file) => `/api/share/tok/files/${file.id}/cover`,
 };

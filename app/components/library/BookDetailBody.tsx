@@ -86,8 +86,10 @@ import { cn } from "@/libraries/utils";
 import {
   DownloadFormatKepub,
   FileTypeCBZ,
+  FileTypeKePub,
   type Book,
   type CoverAspectRatio,
+  type DeliveredFileType,
   type File,
   type LibrarySummary,
   type PluginIdentifierType,
@@ -98,8 +100,8 @@ import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import {
+  fileDownloadAsUrl,
   fileDownloadUrl,
-  fileKepubDownloadUrl,
   fileOriginalDownloadUrl,
 } from "@/utils/downloadUrl";
 import {
@@ -118,7 +120,6 @@ import { getIdentifierUrl } from "@/utils/identifiers";
 import { anyOf } from "@/utils/permissions";
 import { getReadingAction } from "@/utils/readingAction";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
-import { supportsKepub } from "@/utils/supportsKepub";
 
 /**
  * Set by a parent that renders a book for someone outside the library, such as
@@ -131,6 +132,8 @@ import { supportsKepub } from "@/utils/supportsKepub";
 export interface ShareLinkContext {
   /** Endpoint the file's download button fetches (HEAD, then navigates). */
   downloadUrl: (file: File) => string;
+  /** Endpoint for a download menu entry: the file as one File Type. */
+  downloadAsUrl: (file: File, fileType: DeliveredFileType) => string;
   /** The book cover URL, or null when the book has no cover. */
   bookCoverUrl: (book: Book) => string | null;
   /** A file's cover URL, or null when the file has no cover. */
@@ -198,15 +201,15 @@ interface FileRowProps {
   canWriteBooks: boolean;
   pluginIdentifierTypes: PluginIdentifierType[] | undefined;
   getCoverUrl?: (file: File) => string | null;
+  bookTitle: string;
   libraryDownloadPreference: string | undefined;
   isExpanded: boolean;
   hasExpandableMetadata: boolean;
   onToggleExpand: () => void;
   isDownloading: boolean;
   onDownload: () => void;
-  onDownloadKepub: () => void;
+  onDownloadAs: (fileType: DeliveredFileType) => void;
   onDownloadOriginal: () => void;
-  onDownloadWithEndpoint: (endpoint: string) => void;
   onCancelDownload: () => void;
   onEdit: () => void;
   onRescan: () => void;
@@ -227,15 +230,15 @@ const FileRow = ({
   canWriteBooks,
   pluginIdentifierTypes,
   getCoverUrl,
+  bookTitle,
   libraryDownloadPreference,
   isExpanded,
   hasExpandableMetadata,
   onToggleExpand,
   isDownloading,
   onDownload,
-  onDownloadKepub,
+  onDownloadAs,
   onDownloadOriginal,
-  onDownloadWithEndpoint,
   onCancelDownload,
   onEdit,
   onRescan,
@@ -386,15 +389,15 @@ const FileRow = ({
 
             {/* Download button/popover */}
             <FileDownloadControl
+              bookTitle={bookTitle}
               file={file}
               isDownloading={isDownloading}
               isSupplement={isSupplement}
               libraryDownloadPreference={libraryDownloadPreference}
               onCancelDownload={onCancelDownload}
               onDownload={onDownload}
-              onDownloadKepub={onDownloadKepub}
+              onDownloadAs={onDownloadAs}
               onDownloadOriginal={onDownloadOriginal}
-              onDownloadWithEndpoint={onDownloadWithEndpoint}
             />
 
             {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
@@ -491,15 +494,15 @@ const FileRow = ({
 
           {/* Download button/popover */}
           <FileDownloadControl
+            bookTitle={bookTitle}
             file={file}
             isDownloading={isDownloading}
             isSupplement={isSupplement}
             libraryDownloadPreference={libraryDownloadPreference}
             onCancelDownload={onCancelDownload}
             onDownload={onDownload}
-            onDownloadKepub={onDownloadKepub}
+            onDownloadAs={onDownloadAs}
             onDownloadOriginal={onDownloadOriginal}
-            onDownloadWithEndpoint={onDownloadWithEndpoint}
           />
 
           {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
@@ -925,18 +928,28 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
 
     const preference = library?.download_format_preference;
 
-    // For kepub preference with supported files, use kepub endpoint
-    if (preference === DownloadFormatKepub && supportsKepub(file.file_type)) {
-      await handleDownloadWithEndpoint(file.id, fileKepubDownloadUrl(file.id));
+    // The KePub preference applies to files that can become KePub; others
+    // download as their own File Type.
+    if (
+      preference === DownloadFormatKepub &&
+      file.reachable_file_types.includes(FileTypeKePub)
+    ) {
+      await handleDownloadWithEndpoint(
+        file.id,
+        fileDownloadAsUrl(file.id, FileTypeKePub),
+      );
     } else {
-      // Original format for unsupported files or "original" preference
       await handleDownloadWithEndpoint(file.id, fileDownloadUrl(file.id));
     }
   };
 
-  const handleDownloadKepub = async (fileId: number) => {
-    if (shareLink) return;
-    await handleDownloadWithEndpoint(fileId, fileKepubDownloadUrl(fileId));
+  const handleDownloadAs = async (file: File, fileType: DeliveredFileType) => {
+    await handleDownloadWithEndpoint(
+      file.id,
+      shareLink
+        ? shareLink.downloadAsUrl(file, fileType)
+        : fileDownloadAsUrl(file.id, fileType),
+    );
   };
 
   const handleDownloadOriginal = (fileId: number) => {
@@ -1122,6 +1135,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
 
   const renderFileRow = (file: File, isSupplement: boolean) => (
     <FileRow
+      bookTitle={book.title}
       canWriteBooks={canWriteBooks}
       file={file}
       getCoverUrl={shareLink?.fileCoverUrl}
@@ -1135,7 +1149,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       isShareLink={isShareLink}
       isSupplement={isSupplement}
       key={file.id}
-      // Share Link context offers one download per file: no format choice.
+      // The library download setting is the library's, not a recipient's.
       libraryDownloadPreference={
         isShareLink ? undefined : library?.download_format_preference
       }
@@ -1143,11 +1157,8 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       onCancelDownload={handleCancelDownload}
       onDeleteFile={() => setFileToDelete(file)}
       onDownload={() => handleDownload(file)}
-      onDownloadKepub={() => handleDownloadKepub(file.id)}
+      onDownloadAs={(fileType) => handleDownloadAs(file, fileType)}
       onDownloadOriginal={() => handleDownloadOriginal(file.id)}
-      onDownloadWithEndpoint={(endpoint) =>
-        handleDownloadWithEndpoint(file.id, endpoint)
-      }
       onEdit={() => setEditingFile(file)}
       onMoveFile={isSupplement ? undefined : () => setSingleFileMoveId(file.id)}
       onRescan={() => setRescanFileId(file.id)}

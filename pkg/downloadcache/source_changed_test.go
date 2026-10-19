@@ -45,7 +45,7 @@ func TestCache_SourceChangedDuringCopy(t *testing.T) {
 			require.True(t, ok)
 			attached := make(chan struct{})
 			attach := sync.OnceFunc(func() { close(attached) })
-			cache := NewCache(cacheDir, 1<<30, WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+			cache := NewCache(cacheDir, 1<<30, WithGenerators(func(string, string) (filegen.StreamGenerator, error) {
 				return changesSource{StreamGenerator: streaming, path: srcPath, attached: attached}, nil
 			}))
 			t.Cleanup(cache.Wait)
@@ -53,7 +53,7 @@ func TestCache_SourceChangedDuringCopy(t *testing.T) {
 			book := &models.Book{Title: "New"}
 			file := &models.File{ID: 1, FileType: name, Filepath: srcPath}
 
-			g, err := cache.Open(context.Background(), book, file, false)
+			g, err := cache.Open(context.Background(), book, file, file.FileType)
 			require.NoError(t, err)
 			require.NotNil(t, g.Body)
 			defer g.Body.Close()

@@ -14,7 +14,10 @@ import { isNotFoundError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { SharedBookResponse } from "@/types";
 import { shareBookCoverUrl, shareFileCoverUrl } from "@/utils/coverUrl";
-import { shareFileDownloadUrl } from "@/utils/downloadUrl";
+import {
+  shareFileDownloadAsUrl,
+  shareFileDownloadUrl,
+} from "@/utils/downloadUrl";
 import { formatDateTime } from "@/utils/format";
 
 // Builds the public endpoints the body uses in place of the authenticated
@@ -26,6 +29,8 @@ const shareLinkContext = (
   shared: SharedBookResponse,
 ): ShareLinkContext => ({
   downloadUrl: (file) => shareFileDownloadUrl(token, file.id),
+  downloadAsUrl: (file, fileType) =>
+    shareFileDownloadAsUrl(token, file.id, fileType),
   // An empty key means the book has no cover file to show.
   bookCoverUrl: (book) =>
     book.cover_cache_key ? shareBookCoverUrl(token, book) : null,

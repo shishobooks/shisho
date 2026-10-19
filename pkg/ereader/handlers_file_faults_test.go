@@ -139,9 +139,9 @@ func TestDownloadHandlers_UnreadableFileIsServerError(t *testing.T) {
 			f := newDownloadFixture(t, "Cached")
 			file := f.addEPUB()
 			require.Equal(t, http.StatusOK, f.serve(file, kepub).Code)
-			ext := ".epub"
+			ext := "-epub"
 			if kepub {
-				ext = ".kepub.epub"
+				ext = "-kepub"
 			}
 			lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+ext))
 			assertServerFault(t, f.serve(file, kepub))

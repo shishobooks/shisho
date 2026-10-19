@@ -1631,8 +1631,21 @@ func (h *handler) bookCover(c echo.Context) error {
 	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 
-// downloadFile handles downloading a file with generated metadata embedded.
+// downloadFile handles downloading a file with generated metadata embedded,
+// as its own File Type.
 func (h *handler) downloadFile(c echo.Context) error {
+	return h.serveDownloadAs(c, "")
+}
+
+// downloadFileAs handles downloading a file as the File Type in the path:
+// its own, or one a Conversion reaches.
+func (h *handler) downloadFileAs(c echo.Context) error {
+	return h.serveDownloadAs(c, c.Param("fileType"))
+}
+
+// serveDownloadAs serves the file delivered as deliveredType, or as its own
+// File Type when deliveredType is "".
+func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 	ctx := c.Request().Context()
 
 	id, err := httputil.ParamID(c, "id", "File")
@@ -1647,9 +1660,18 @@ func (h *handler) downloadFile(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if deliveredType == "" {
+		deliveredType = file.FileType
+	}
+	if deliveredType != file.FileType && !models.IsDeliveredFileType(deliveredType) {
+		return errcodes.ValidationError(fmt.Sprintf("Unknown file type %q.", deliveredType))
+	}
 
-	// Supplements download as-is, no processing
+	// Supplements download as-is, no processing, and only as themselves
 	if file.FileRole == models.FileRoleSupplement {
+		if deliveredType != file.FileType {
+			return errcodes.InvalidState(noConversionMessage(file.FileType, deliveredType))
+		}
 		return h.downloadOriginalFile(c)
 	}
 
@@ -1683,16 +1705,19 @@ func (h *handler) downloadFile(c echo.Context) error {
 		return err
 	}
 
-	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, false)
+	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, deliveredType)
 	if err != nil {
 		// A type with no generator, a file Shisho cannot decrypt, and a file
 		// whose earlier build failed partway (logged when it happened), are
 		// ones the user can work around with Download Original (422); any
-		// other generation failure is a server fault. The device routes fall
-		// back to the original instead (ResolveFallbackDownload), since a
-		// device has no such button.
+		// other generation failure, a failed Conversion included, is a
+		// server fault. The device routes fall back to the original instead
+		// (ResolveFallbackDownload), since a device has no such button.
 		if errors.Is(err, filegen.ErrNotImplemented) {
 			return errcodes.InvalidState("Generated downloads are not supported for " + file.FileType + " files")
+		}
+		if errors.Is(err, filegen.ErrNoConversion) {
+			return errcodes.InvalidState(noConversionMessage(file.FileType, deliveredType))
 		}
 		if errors.Is(err, filegen.ErrCannotDecrypt) {
 			return errcodes.InvalidState(CannotDecryptMessage)
@@ -1703,6 +1728,20 @@ func (h *handler) downloadFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	return download.Serve(c)
+}
+
+// noConversionMessage is the answer to a download as a File Type no
+// Conversion reaches, which the UI never offers.
+func noConversionMessage(fileType, deliveredType string) string {
+	return fmt.Sprintf("%s files can't be downloaded as %s", fileTypeLabel(fileType), fileTypeLabel(deliveredType))
+}
+
+// fileTypeLabel is how a File Type is written in a message.
+func fileTypeLabel(fileType string) string {
+	if fileType == models.FileTypeKePub {
+		return "KePub"
+	}
+	return strings.ToUpper(fileType)
 }
 
 // downloadOriginalFile handles downloading the original file without any modifications.
@@ -1733,71 +1772,6 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 	}
 
 	return OriginalDownload(file).Serve(c)
-}
-
-// downloadKepubFile handles downloading a file converted to KePub format.
-// KePub conversion is only supported for EPUB and CBZ files.
-func (h *handler) downloadKepubFile(c echo.Context) error {
-	ctx := c.Request().Context()
-
-	id, err := httputil.ParamID(c, "id", "File")
-	if err != nil {
-		return err
-	}
-
-	// Fetch the file with its book
-	file, err := h.bookService.RetrieveFile(ctx, RetrieveFileOptions{
-		ID: &id,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Check library access
-	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
-		return err
-	}
-
-	// Get the full book with relations for generation
-	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{
-		ID: &file.BookID,
-	})
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Find the file with all relations from the book's files (includes identifiers for fingerprinting)
-	var fileWithRelations *models.File
-	for _, f := range book.Files {
-		if f.ID == file.ID {
-			fileWithRelations = f
-			break
-		}
-	}
-	if fileWithRelations == nil {
-		fileWithRelations = file // Fallback to original file if not found
-	}
-
-	// Check if the source file exists
-	if err := RequireFileOnDisk(c, fileWithRelations, "Source file"); err != nil {
-		return err
-	}
-
-	download, err := GeneratedDownload(c, h.downloadCache, book, fileWithRelations, true)
-	if err != nil {
-		// A file type KePub cannot convert, and a file whose earlier build
-		// failed partway (logged when it happened), are the failures the
-		// user can work around; any other generation failure is a server
-		// fault.
-		if errors.Is(err, filegen.ErrKepubNotSupported) {
-			return errcodes.InvalidState("KePub conversion is not supported for " + file.FileType + " files")
-		}
-		if errors.Is(err, downloadcache.ErrFailedPartway) {
-			return errcodes.InvalidState(FailedPartwayMessage)
-		}
-		return errors.WithStack(err)
-	}
-	return download.Serve(c)
 }
 
 func (h *handler) resyncFile(c echo.Context) error {

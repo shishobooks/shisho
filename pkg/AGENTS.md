@@ -31,7 +31,7 @@ Lower priority number wins (`pkg/models/data-source.go`).
 
 ## Core gotchas
 
-- **Loaders that select books with `Relation("Files")` and reach a JSON response call `models.ResolveBookFileDisplayNames`** after scanning. Bun runs no row hooks for has-many relations, so `display_name` is otherwise empty. Code that changes a file's `Name` or `Filepath` in memory before responding re-resolves.
+- **Loaders that select books with `Relation("Files")` and reach a JSON response call `models.ResolveBookFileDisplayNames`** after scanning. Bun runs no row hooks for has-many relations, so `display_name` and `reachable_file_types` are otherwise empty. Code that changes a file's `Name` or `Filepath` in memory before responding re-resolves.
 - **Sidecar writes and fingerprints need full relations.** `RetrieveFile` loads too few, and the write silently drops data. Use `RetrieveFileWithRelations`, or a file from `RetrieveBook`'s `book.Files`; the writers' doc comments name what they read.
 - **Code that replaces a file's bytes on disk invalidates its CBZ and PDF page caches**, as the scan does in `invalidatePageCaches`. The caches key on file id and never notice a swap, so the reader keeps serving the old pages.
 - **Find-or-create finishes with `database.RetrieveOnUniqueViolation`**, which returns the winner's row when a concurrent insert lost on the unique index. Detect UNIQUE violations elsewhere with `database.IsUniqueViolation`.

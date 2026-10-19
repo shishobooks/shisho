@@ -199,22 +199,50 @@ func (h *publicHandler) fileCover(c echo.Context) error {
 	return covers.ServeFileCover(c, file, covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 
-// download serves the generated file with metadata injected, the same file
-// the authenticated download route serves. Supplements and formats with no
-// generator download as-is. Original and KePub variants are not offered.
+// download serves the generated file with metadata injected, as its own
+// File Type: the same file the authenticated download route serves.
+// Supplements and formats with no generator download as-is.
 func (h *publicHandler) download(c echo.Context) error {
+	return h.serveDownload(c, "")
+}
+
+// downloadAs serves the file as the File Type in the path: its own, or one a
+// Conversion reaches. A failed Conversion is an error, never the original,
+// which is another File Type than the one the recipient picked.
+func (h *publicHandler) downloadAs(c echo.Context) error {
+	return h.serveDownload(c, c.Param("fileType"))
+}
+
+// serveDownload serves the file delivered as deliveredType, or as its own
+// File Type when deliveredType is "".
+func (h *publicHandler) serveDownload(c echo.Context, deliveredType string) error {
 	ctx := c.Request().Context()
 	link, book, file, err := h.resolveFile(c)
 	if err != nil {
 		return err
 	}
+	if deliveredType == "" {
+		deliveredType = file.FileType
+	}
+	// Only the File Types the page offers, and like every refusal in this
+	// family a 404: ResolveFallbackDownload would answer any other with the
+	// original.
+	if _, ok := models.ConversionChain(file.FileType, deliveredType); !ok ||
+		(file.FileRole == models.FileRoleSupplement && deliveredType != file.FileType) {
+		return errcodes.NotFound("File")
+	}
 	if err := books.RequireFileOnDisk(c, file, "File"); err != nil {
 		return err
 	}
 
-	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, file, false)
+	var download *books.Download
+	if deliveredType == file.FileType {
+		download, err = books.ResolveFallbackDownload(c, h.downloadCache, book, file, deliveredType)
+	} else {
+		download, err = books.GeneratedDownload(c, h.downloadCache, book, file, deliveredType)
+	}
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	// Count a download once it starts sending, not when it completes: a
 	// Generated File streams while it is built, and a large one may take a

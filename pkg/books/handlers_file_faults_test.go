@@ -1,7 +1,10 @@
 package books
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -133,7 +136,7 @@ func TestFileServing_UnreadableFileIsServerError(t *testing.T) {
 		file := f.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(t, f.dir, "book.epub", testgen.EPUBOptions{Title: "Download Book"}))
 		require.Equal(t, http.StatusOK, f.get(fileURL(file, "/download")).Code)
 
-		lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+".epub"))
+		lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+"-epub"))
 		assertServerFault(t, f.get(fileURL(file, "/download")))
 	})
 
@@ -153,7 +156,7 @@ func TestFileServing_UnreadableFileIsServerError(t *testing.T) {
 		file := f.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(t, f.dir, "book.epub", testgen.EPUBOptions{Title: "Kepub Book"}))
 		require.Equal(t, http.StatusOK, f.get(fileURL(file, "/download/kepub")).Code)
 
-		lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+".kepub.epub"))
+		lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+"-kepub"))
 		assertServerFault(t, f.get(fileURL(file, "/download/kepub")))
 	})
 
@@ -257,6 +260,9 @@ func TestDownload_ContentTypeFromFileType(t *testing.T) {
 		{"generated epub", models.FileTypeEPUB, "/download", "application/epub+zip"},
 		{"generated cbz", models.FileTypeCBZ, "/download", "application/vnd.comicbook+zip"},
 		{"kepub", models.FileTypeEPUB, "/download/kepub", "application/epub+zip"},
+		{"kepub from cbz", models.FileTypeCBZ, "/download/kepub", "application/epub+zip"},
+		{"epub from cbz", models.FileTypeCBZ, "/download/epub", "application/epub+zip"},
+		{"cbz as itself", models.FileTypeCBZ, "/download/cbz", "application/vnd.comicbook+zip"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -282,6 +288,47 @@ func TestDownload_ContentTypeFromFileType(t *testing.T) {
 			assert.Equal(t, tt.want, rr.Header().Get("Content-Type"))
 		})
 	}
+}
+
+// HEAD on the original download checks the file as GET would, rather than
+// reaching the route for a File Type named "original".
+func TestDownloadOriginal_Head(t *testing.T) {
+	t.Parallel()
+	f := newServingFixture(t, "Original Book")
+	file := f.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(t, f.dir, "book.epub", testgen.EPUBOptions{Title: "Original Book"}))
+
+	req := httptest.NewRequest(http.MethodHead, fileURL(file, "/download/original"), nil)
+	rr := executeRequestWithUser(t, f.e, req, f.user)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, `attachment; filename="book.epub"`, rr.Header().Get("Content-Disposition"))
+}
+
+// A CBZ downloaded as EPUB is a fixed-layout EPUB named for the EPUB.
+func TestDownload_CBZAsEPUB(t *testing.T) {
+	t.Parallel()
+	f := newServingFixture(t, "Comic")
+	file := f.addFile(models.FileTypeCBZ, testgen.GenerateCBZ(t, f.dir, "book.cbz", testgen.CBZOptions{Title: "Comic", PageCount: 4}))
+
+	rr := f.get(fileURL(file, "/download/epub"))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Header().Get("Content-Disposition"), `.epub"`)
+	assert.NotContains(t, rr.Header().Get("Content-Disposition"), ".kepub.epub")
+	zr, err := zip.NewReader(bytes.NewReader(rr.Body.Bytes()), int64(rr.Body.Len()))
+	require.NoError(t, err)
+	assert.Equal(t, "mimetype", zr.File[0].Name)
+	var opf string
+	for _, zf := range zr.File {
+		if zf.Name == "OEBPS/content.opf" {
+			rc, err := zf.Open()
+			require.NoError(t, err)
+			data, err := io.ReadAll(rc)
+			require.NoError(t, err)
+			require.NoError(t, rc.Close())
+			opf = string(data)
+		}
+	}
+	assert.Contains(t, opf, `<meta property="rendition:layout">pre-paginated</meta>`)
+	assert.Equal(t, 4, strings.Count(opf, "<itemref "), "every page is in the spine")
 }
 
 // A title with quotes and non-ASCII letters is sent as an escaped ASCII

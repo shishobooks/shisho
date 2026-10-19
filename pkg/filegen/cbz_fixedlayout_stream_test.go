@@ -22,19 +22,26 @@ import (
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
-	"github.com/shishobooks/shisho/pkg/kepub"
+	"github.com/shishobooks/shisho/pkg/fixedlayout"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newKepubCBZGenerator(t *testing.T) filegen.StreamGenerator {
+// conversionGenerator returns the generator that delivers a File of type
+// from as type to, failing the test when it does not stream.
+func conversionGenerator(t *testing.T, from, to string) filegen.StreamGenerator {
 	t.Helper()
-	gen, err := filegen.GetKepubGenerator(models.FileTypeCBZ)
+	gen, err := filegen.GeneratorFor(from, to)
 	require.NoError(t, err)
 	sg, ok := gen.(filegen.StreamGenerator)
-	require.True(t, ok, "the KePub-from-CBZ generator does not stream")
+	require.True(t, ok, "the %s to %s generator does not stream", from, to)
 	return sg
+}
+
+func newKepubCBZGenerator(t *testing.T) filegen.StreamGenerator {
+	t.Helper()
+	return conversionGenerator(t, models.FileTypeCBZ, models.FileTypeKePub)
 }
 
 type kepubManifestItem struct {
@@ -45,7 +52,11 @@ type kepubManifestItem struct {
 }
 
 type kepubOPF struct {
-	Title    string              `xml:"metadata>title"`
+	Title string `xml:"metadata>title"`
+	Meta  []struct {
+		Property string `xml:"property,attr"`
+		Value    string `xml:",chardata"`
+	} `xml:"metadata>meta"`
 	Manifest []kepubManifestItem `xml:"manifest>item"`
 	Spine    []struct {
 		IDRef string `xml:"idref,attr"`
@@ -54,8 +65,18 @@ type kepubOPF struct {
 
 var viewportRE = regexp.MustCompile(`<meta name="viewport" content="width=(\d+), height=(\d+)"/>`)
 
-func TestKepubCBZGenerator_Conformance(t *testing.T) {
+// CBZ to KePub and CBZ to EPUB write the same fixed-layout EPUB.
+func TestCBZFixedLayoutConversions_Conformance(t *testing.T) {
 	t.Parallel()
+	for _, to := range []string{models.FileTypeKePub, models.FileTypeEPUB} {
+		t.Run(to, func(t *testing.T) {
+			t.Parallel()
+			testCBZFixedLayoutConformance(t, to)
+		})
+	}
+}
+
+func testCBZFixedLayoutConformance(t *testing.T, to string) {
 	dir := t.TempDir()
 	pages := manyPages()
 	source := testgen.GenerateCBZ(t, dir, "source.cbz", testgen.CBZOptions{
@@ -77,7 +98,7 @@ func TestKepubCBZGenerator_Conformance(t *testing.T) {
 	}
 
 	filegentest.Run(t, filegentest.Case{
-		Generator: newKepubCBZGenerator(t),
+		Generator: conversionGenerator(t, models.FileTypeCBZ, to),
 		Source:    source,
 		Book:      book,
 		File:      file,
@@ -113,6 +134,13 @@ func TestKepubCBZGenerator_Conformance(t *testing.T) {
 			var opf kepubOPF
 			require.NoError(t, xml.Unmarshal(readEntry(t, entries["OEBPS/content.opf"]), &opf))
 			assert.Equal(t, "Streamed Comic", opf.Title)
+			layout := ""
+			for _, m := range opf.Meta {
+				if m.Property == "rendition:layout" {
+					layout = m.Value
+				}
+			}
+			assert.Equal(t, "pre-paginated", layout, "the EPUB is fixed-layout")
 			images := map[string]kepubManifestItem{}
 			for _, item := range opf.Manifest {
 				if strings.HasPrefix(item.Href, "images/") {
@@ -129,7 +157,7 @@ func TestKepubCBZGenerator_Conformance(t *testing.T) {
 			assert.Contains(t, nav, `<a href="page0006.xhtml">Chapter Two</a>`)
 
 			for i, srcPage := range srcPages {
-				want := kepub.ProcessImageForEreader(readEntry(t, srcPage), strings.ToLower(filepath.Ext(srcPage.Name)))
+				want := fixedlayout.ProcessImageForEreader(readEntry(t, srcPage), strings.ToLower(filepath.Ext(srcPage.Name)))
 				item, ok := images[fmt.Sprintf("img%04d", i+1)]
 				require.True(t, ok, "page %d is in the manifest", i+1)
 				imgName := "OEBPS/" + item.Href
@@ -263,27 +291,28 @@ func (failingWriter) Write([]byte) (int, error) {
 	return 0, errors.New("disk on fire")
 }
 
-// A KePub generator's errors name the KePub being generated, not the source
-// format, and keep the cause, which the logs and the remembered failure
+// A Conversion's errors name the File Type being delivered, not the source
+// File Type, and keep the cause, which the logs and the remembered failure
 // show only through the message.
-func TestKepubGenerators_ErrorsNameKepub(t *testing.T) {
+func TestConversionGenerators_ErrorsNameDeliveredType(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	broken := filepath.Join(dir, "broken.bin")
 	require.NoError(t, os.WriteFile(broken, []byte("not a zip"), 0o600))
+	cbzSource := testgen.GenerateCBZ(t, dir, "source.cbz", testgen.CBZOptions{})
 	for name, tc := range map[string]struct {
 		fileType string
+		to       string
 		source   string
 	}{
-		"cbz":  {models.FileTypeCBZ, testgen.GenerateCBZ(t, dir, "source.cbz", testgen.CBZOptions{})},
-		"epub": {models.FileTypeEPUB, testgen.GenerateEPUB(t, dir, "source.epub", testgen.EPUBOptions{Title: "Book"})},
+		"cbz to kepub":  {models.FileTypeCBZ, models.FileTypeKePub, cbzSource},
+		"cbz to epub":   {models.FileTypeCBZ, models.FileTypeEPUB, cbzSource},
+		"epub to kepub": {models.FileTypeEPUB, models.FileTypeKePub, testgen.GenerateEPUB(t, dir, "source.epub", testgen.EPUBOptions{Title: "Book"})},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			gen, err := filegen.GetKepubGenerator(tc.fileType)
-			require.NoError(t, err)
-			sg, ok := gen.(filegen.StreamGenerator)
-			require.True(t, ok)
+			sg := conversionGenerator(t, tc.fileType, tc.to)
+			prefix := "failed to generate " + tc.to + " file: "
 			book := &models.Book{Title: "Book"}
 			file := &models.File{FileType: tc.fileType}
 
@@ -292,7 +321,7 @@ func TestKepubGenerators_ErrorsNameKepub(t *testing.T) {
 			defer src.Close()
 			_, err = sg.Prepare(context.Background(), src, book, file)
 			require.Error(t, err)
-			assert.True(t, strings.HasPrefix(err.Error(), "failed to generate kepub file: "), err.Error())
+			assert.True(t, strings.HasPrefix(err.Error(), prefix), err.Error())
 
 			src, err = filegen.OpenSource(tc.source)
 			require.NoError(t, err)
@@ -301,7 +330,7 @@ func TestKepubGenerators_ErrorsNameKepub(t *testing.T) {
 			require.NoError(t, err)
 			err = prepared.Write(context.Background(), failingWriter{})
 			require.Error(t, err)
-			assert.True(t, strings.HasPrefix(err.Error(), "failed to generate kepub file: "), err.Error())
+			assert.True(t, strings.HasPrefix(err.Error(), prefix), err.Error())
 			assert.Contains(t, err.Error(), "disk on fire")
 		})
 	}

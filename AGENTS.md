@@ -18,7 +18,7 @@ Guidance for coding agents (Claude Code, Codex, Pi, etc.) working in this reposi
 | `pkg/epub/AGENTS.md` | EPUB format: parsing and generation |
 | `pkg/cbz/AGENTS.md` | CBZ format: ComicInfo.xml, page order |
 | `pkg/covers/AGENTS.md` | Cover serving and the shared thumbnail cache |
-| `pkg/kepub/AGENTS.md` | KePub conversion from EPUB and CBZ |
+| `pkg/kepub/AGENTS.md` | KePub conversion from EPUB |
 | `pkg/mp4/AGENTS.md` | M4B format: reading, rewriting, chapters |
 | `pkg/pdf/AGENTS.md` | PDF format: pdfcpu and PDFium, page numbering |
 | `pkg/events/AGENTS.md` | Server-sent events broker and stream |

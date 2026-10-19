@@ -157,6 +157,7 @@ const epub = {
   file_role: "main",
   filepath: "",
   filesize_bytes: 1000,
+  reachable_file_types: ["epub", "kepub"],
   reviewed: true,
   is_preferred_cover: false,
   cover_image_filename: "",
@@ -173,6 +174,7 @@ const m4b = {
   file_role: "main",
   filepath: "",
   filesize_bytes: 2000,
+  reachable_file_types: ["m4b"],
   reviewed: true,
   is_preferred_cover: false,
   narrators: [
@@ -203,6 +205,8 @@ const book = {
 
 const shareLink: ShareLinkContext = {
   downloadUrl: (file) => `/api/share/tok/files/${file.id}/download`,
+  downloadAsUrl: (file, fileType) =>
+    `/api/share/tok/files/${file.id}/download/${fileType}`,
   bookCoverUrl: (b) => `/api/share/tok/cover?v=${b.cover_cache_key}`,
   fileCoverUrl: (file) => `/api/share/tok/files/${file.id}/cover`,
 };
@@ -364,6 +368,29 @@ describe("BookDetailBody in Share Link context", () => {
       expect.objectContaining({ method: "HEAD" }),
     );
     expect(assign).toHaveBeenCalledWith("/api/share/tok/files/42/download");
+  });
+
+  it("downloads each File Type a file can become through the supplied builder", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+
+    renderBody({ shareLink });
+
+    await user.click(screen.getAllByRole("button", { name: "Download as" })[0]);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Download Test Book as KePub" }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/share/tok/files/42/download/kepub",
+      expect.objectContaining({ method: "HEAD" }),
+    );
+    expect(assign).toHaveBeenCalledWith(
+      "/api/share/tok/files/42/download/kepub",
+    );
   });
 
   it.each([
@@ -744,6 +771,41 @@ describe("BookDetailBody file rows", () => {
     await user.click(screen.getByRole("button", { name: "Show file details" }));
     const label = screen.getByText("Abridged");
     expect(label.nextElementSibling).toHaveTextContent("No");
+  });
+
+  it("downloads a CBZ as EPUB from the download menu", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    const cbz = {
+      ...epub,
+      file_type: "cbz",
+      name: "Deluxe",
+      reachable_file_types: ["cbz", "kepub", "epub"],
+    } as File;
+    renderBody({ book: { ...book, files: [cbz] } });
+
+    await user.click(screen.getAllByRole("button", { name: "Download as" })[0]);
+    expect(
+      within(screen.getByRole("menu"))
+        .getAllByRole("menuitem")
+        .map((item) => item.getAttribute("aria-label")),
+    ).toEqual([
+      "Download Deluxe as CBZ",
+      "Download Deluxe as KePub",
+      "Download Deluxe as EPUB",
+    ]);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Download Deluxe as EPUB" }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/books/files/42/download/epub",
+      expect.objectContaining({ method: "HEAD" }),
+    );
+    expect(assign).toHaveBeenCalledWith("/api/books/files/42/download/epub");
   });
 
   it("uses the singular for a one-page file", () => {

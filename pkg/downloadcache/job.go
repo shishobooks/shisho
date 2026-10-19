@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -403,9 +404,16 @@ func createPartial(dir string) (*os.File, error) {
 	return f, errors.Wrap(err, "failed to create partial file")
 }
 
+// legacyEntryPattern matches the files of an entry cached before each File
+// Type had its own entry: `{id}.{ext}` and `{id}.meta.json`, and for a KePub
+// `{id}.kepub.epub` and `{id}.kepub.meta.json`. They are never served, so
+// RemoveLeftovers removes them.
+var legacyEntryPattern = regexp.MustCompile(`^\d+\.(kepub\.epub|kepub\.meta\.json|meta\.json|[a-z0-9]+)$`)
+
 // RemoveLeftovers deletes the partial files, scratch directories, and cleanup
-// lock a crash or a killed process left in the cache. Call it at startup,
-// before any download runs.
+// lock a crash or a killed process left in the cache, and the entries cached
+// before each File Type had its own entry. Call it at startup, before any
+// download runs.
 func (c *Cache) RemoveLeftovers() error {
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
@@ -416,7 +424,7 @@ func (c *Cache) RemoveLeftovers() error {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if !strings.HasPrefix(name, partialPrefix) && !strings.HasPrefix(name, stagingPrefix) && name != cleanupLockName {
+		if !strings.HasPrefix(name, partialPrefix) && !strings.HasPrefix(name, stagingPrefix) && name != cleanupLockName && !legacyEntryPattern.MatchString(name) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(c.dir, name)); err != nil {

@@ -1,4 +1,4 @@
-package kepub
+package fixedlayout
 
 import (
 	"bytes"

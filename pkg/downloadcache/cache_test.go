@@ -41,7 +41,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 			Filepath: srcPath,
 		}
 
-		cachedPath, downloadFilename, err := cache.GetOrGenerate(context.Background(), book, file)
+		cachedPath, downloadFilename, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, cachedPath)
@@ -52,7 +52,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify metadata was written
-		meta, err := ReadMetadata(cacheDir, file.ID)
+		meta, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		require.NotNil(t, meta)
 		assert.Equal(t, file.ID, meta.FileID)
@@ -86,7 +86,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		}
 
 		// First call - generates the file
-		cachedPath1, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		cachedPath1, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Get the file's mod time
@@ -95,7 +95,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		modTime1 := info1.ModTime()
 
 		// Second call - should return cached file
-		cachedPath2, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		cachedPath2, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Should be the same path
@@ -134,11 +134,11 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		}
 
 		// First call
-		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		_, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Get the original fingerprint hash
-		meta1, err := ReadMetadata(cacheDir, file.ID)
+		meta1, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		hash1 := meta1.FingerprintHash
 
@@ -146,13 +146,13 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		book.Title = "New Title"
 
 		// Second call - should regenerate
-		_, downloadFilename, err := cache.GetOrGenerate(context.Background(), book, file)
+		_, downloadFilename, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		assert.Equal(t, "[Author] New Title.epub", downloadFilename)
 
 		// Fingerprint should have changed
-		meta2, err := ReadMetadata(cacheDir, file.ID)
+		meta2, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		assert.NotEqual(t, hash1, meta2.FingerprintHash)
 
@@ -175,7 +175,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 			Filepath: "/some/path",
 		}
 
-		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		_, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported")
 	})
@@ -217,11 +217,11 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 		}
 
 		// First call - generates the file
-		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		_, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Get the original fingerprint hash
-		meta1, err := ReadMetadata(cacheDir, file.ID)
+		meta1, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		originalHash := meta1.FingerprintHash
 
@@ -275,7 +275,7 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 		}
 
 		// First call - generates the file
-		cachedPath1, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		cachedPath1, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Get the file's mod time to verify it wasn't regenerated
@@ -284,7 +284,7 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 		modTime1 := info1.ModTime()
 
 		// Second call without changing chapters
-		cachedPath2, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		cachedPath2, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Verify same cached path returned
@@ -321,7 +321,7 @@ func TestCache_Invalidate(t *testing.T) {
 		}
 
 		// Generate a cached file
-		cachedPath, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		cachedPath, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
 		// Verify it exists
@@ -337,7 +337,7 @@ func TestCache_Invalidate(t *testing.T) {
 		assert.True(t, os.IsNotExist(err))
 
 		// Verify metadata is gone
-		meta, err := ReadMetadata(cacheDir, file.ID)
+		meta, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		assert.Nil(t, meta)
 

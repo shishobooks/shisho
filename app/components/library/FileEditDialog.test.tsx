@@ -264,6 +264,7 @@ describe("FileEditDialog", () => {
     narrators: [],
     identifiers: [],
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const renderDialog = (props = {}) => {
@@ -615,6 +616,59 @@ describe("FileEditDialog", () => {
       });
       const call = mockUpdateFile.mock.calls[0][0];
       expect(call.payload.release_date).toBe("");
+    });
+  });
+
+  describe("name", () => {
+    it("clears the name when the field is emptied", async () => {
+      const user = createUser();
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <FileEditDialog
+            file={{ ...mockFile, name: "Special Edition" }}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const input = screen.getByDisplayValue("Special Edition");
+      await user.clear(input);
+      await user.click(screen.getByRole("button", { name: /save/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateFile).toHaveBeenCalled();
+      });
+      const call = mockUpdateFile.mock.calls[0][0];
+      // The server clears the name on "", and leaves it untouched when the
+      // field is missing, which JSON makes of undefined.
+      expect(call.payload).toHaveProperty("name", "");
+    });
+
+    it("sends a whitespace-only name as cleared", async () => {
+      const user = createUser();
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <FileEditDialog
+            file={{ ...mockFile, name: "Special Edition" }}
+            onOpenChange={vi.fn()}
+            open={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const input = screen.getByDisplayValue("Special Edition");
+      await user.clear(input);
+      await user.type(input, "   ");
+      await user.click(screen.getByRole("button", { name: /save/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateFile).toHaveBeenCalled();
+      });
+      expect(mockUpdateFile.mock.calls[0][0].payload).toHaveProperty(
+        "name",
+        "",
+      );
     });
   });
 

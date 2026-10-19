@@ -61,9 +61,9 @@ type Cache struct {
 // happened, so callers that answer it with an error need not log it again.
 var ErrFailedPartway = errors.New("an earlier download failed partway")
 
-// GeneratorLookup returns the generator for a file type, or its KePub
-// generator when kepub is set.
-type GeneratorLookup func(fileType string, kepub bool) (filegen.StreamGenerator, error)
+// GeneratorLookup returns the generator that delivers a File of type
+// fileType as type deliveredType.
+type GeneratorLookup func(fileType, deliveredType string) (filegen.StreamGenerator, error)
 
 // Option configures a Cache.
 type Option func(*Cache)
@@ -107,12 +107,13 @@ type Generated struct {
 	Body io.ReadCloser
 }
 
-// Open returns the cached Generated File for the book's file, or starts
-// building it (or joins the build already running) and streams it. An error
-// from the preparation step is returned before anything is sent. The build
-// keeps running if ctx ends.
-func (c *Cache) Open(ctx context.Context, book *models.Book, file *models.File, kepub bool) (*Generated, error) {
-	e, err := c.entryFor(book, file, kepub)
+// Open returns the cached Generated File for the book's file delivered as
+// deliveredType, or starts building it (or joins the build already running)
+// and streams it. An error from the preparation step is returned before
+// anything is sent. The build keeps running if ctx ends. It returns
+// filegen.ErrNoConversion when no Conversion reaches deliveredType.
+func (c *Cache) Open(ctx context.Context, book *models.Book, file *models.File, deliveredType string) (*Generated, error) {
+	e, err := c.entryFor(book, file, deliveredType)
 	if err != nil {
 		return nil, err
 	}
@@ -125,19 +126,20 @@ func (c *Cache) Open(ctx context.Context, book *models.Book, file *models.File, 
 // generated, except by generators that build a whole file before streaming
 // it: their preparation step is the build, so Head starts it as Open would
 // and the build lands in the cache.
-func (c *Cache) Head(ctx context.Context, book *models.Book, file *models.File, kepub bool) (*Generated, error) {
-	e, err := c.entryFor(book, file, kepub)
+func (c *Cache) Head(ctx context.Context, book *models.Book, file *models.File, deliveredType string) (*Generated, error) {
+	e, err := c.entryFor(book, file, deliveredType)
 	if err != nil {
 		return nil, err
 	}
 	return c.open(ctx, e, true)
 }
 
-// GetOrGenerate returns the path to a cached file, generating it if necessary
-// and waiting until it is complete. It returns the cached file path, the
-// formatted download filename, and any error.
-func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *models.File) (cachedPath string, downloadFilename string, err error) {
-	e, err := c.entryFor(book, file, false)
+// GetOrGenerate returns the path to the cached file delivered as
+// deliveredType, generating it if necessary and waiting until it is
+// complete. It returns the cached file path, the formatted download
+// filename, and any error.
+func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *models.File, deliveredType string) (cachedPath string, downloadFilename string, err error) {
+	e, err := c.entryFor(book, file, deliveredType)
 	if err != nil {
 		return "", "", err
 	}
@@ -145,25 +147,13 @@ func (c *Cache) GetOrGenerate(ctx context.Context, book *models.Book, file *mode
 	return path, e.filename, err
 }
 
-// GetOrGenerateKepub returns the path to a cached KePub file, generating it
-// if necessary and waiting until it is complete. It returns the cached file
-// path, the formatted download filename, and any error. Returns
-// ErrKepubNotSupported if the file type cannot be converted to KePub.
-func (c *Cache) GetOrGenerateKepub(ctx context.Context, book *models.Book, file *models.File) (cachedPath string, downloadFilename string, err error) {
-	e, err := c.entryFor(book, file, true)
-	if err != nil {
-		return "", "", err
-	}
-	path, err := c.complete(ctx, e)
-	return path, e.filename, err
-}
-
-// entry describes one cache entry: a file in one output format, at one
+// entry describes one cache entry: a file delivered as one File Type, at one
 // fingerprint.
 type entry struct {
-	book *models.Book
-	file *models.File
-	hash string
+	book          *models.Book
+	file          *models.File
+	deliveredType string
+	hash          string
 	// destPath is where the complete file is published. Fingerprints of one
 	// file share it.
 	destPath string
@@ -188,71 +178,53 @@ func (e *entry) key() string {
 	return e.destPath + "\x00" + e.hash
 }
 
-// entryFor describes the cache entry for the book's file, or its KePub
-// conversion when kepub is set.
-func (c *Cache) entryFor(book *models.Book, file *models.File, kepub bool) (*entry, error) {
-	if kepub && !filegen.SupportsKepub(file.FileType) {
-		return nil, filegen.ErrKepubNotSupported
+// entryFor describes the cache entry for the book's file delivered as
+// deliveredType.
+func (c *Cache) entryFor(book *models.Book, file *models.File, deliveredType string) (*entry, error) {
+	if _, ok := models.ConversionChain(file.FileType, deliveredType); !ok {
+		return nil, errors.Wrapf(filegen.ErrNoConversion, "%s to %s", file.FileType, deliveredType)
 	}
 
 	fp, err := ComputeFingerprint(book, file)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to compute fingerprint")
 	}
-	if kepub {
-		fp.Format = FormatKepub
-	}
+	fp.Format = deliveredType
 	hash, err := fp.Hash()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to hash fingerprint")
 	}
 
-	e := &entry{book: book, file: file, hash: hash}
-	e.generator = func() (filegen.StreamGenerator, error) { return c.generatorFor(e, kepub) }
-	if kepub {
-		e.destPath = kepubCachedFilename(c.dir, file.ID)
-		e.filename = FormatKepubDownloadFilename(book, file)
-		e.lookup = func() (string, error) { return GetKepubCachedFilePath(c.dir, file.ID, hash) }
-		e.touch = func() { _ = UpdateKepubLastAccessed(c.dir, file.ID) }
-		e.readMeta = func() (*CacheMetadata, error) { return ReadKepubMetadata(c.dir, file.ID) }
-		e.writeMeta = func(meta *CacheMetadata) error {
-			return errors.Wrap(WriteKepubMetadata(c.dir, meta), "failed to write kepub cache metadata")
-		}
-		e.meta = CacheMetadata{FileID: file.ID, Format: FormatKepub, FingerprintHash: hash}
-		return e, nil
-	}
-	e.destPath = cachedFilename(c.dir, file.ID, file.FileType)
-	e.filename = FormatDownloadFilename(book, file)
-	e.lookup = func() (string, error) { return GetCachedFilePath(c.dir, file.ID, file.FileType, hash) }
-	e.touch = func() { _ = UpdateLastAccessed(c.dir, file.ID) }
-	e.readMeta = func() (*CacheMetadata, error) { return ReadMetadata(c.dir, file.ID) }
+	e := &entry{book: book, file: file, deliveredType: deliveredType, hash: hash}
+	e.generator = func() (filegen.StreamGenerator, error) { return c.generatorFor(e) }
+	e.destPath = cachedFilename(c.dir, file.ID, deliveredType)
+	e.filename = DownloadFilename(book, file, deliveredType)
+	e.lookup = func() (string, error) { return GetCachedFilePath(c.dir, file.ID, deliveredType, hash) }
+	e.touch = func() { _ = UpdateLastAccessed(c.dir, file.ID, deliveredType) }
+	e.readMeta = func() (*CacheMetadata, error) { return ReadMetadata(c.dir, file.ID, deliveredType) }
 	e.writeMeta = func(meta *CacheMetadata) error {
 		return errors.Wrap(WriteMetadata(c.dir, meta), "failed to write cache metadata")
 	}
-	e.meta = CacheMetadata{FileID: file.ID, FingerprintHash: hash}
+	e.meta = CacheMetadata{FileID: file.ID, DeliveredFileType: deliveredType, FingerprintHash: hash}
 	return e, nil
 }
 
 // generatorFor returns the generator for e's file. A built-in generator
 // that does not stream yet is adapted with fullBuild.
-func (c *Cache) generatorFor(e *entry, kepub bool) (filegen.StreamGenerator, error) {
+func (c *Cache) generatorFor(e *entry) (filegen.StreamGenerator, error) {
 	if c.generators != nil {
-		return c.generators(e.file.FileType, kepub)
+		return c.generators(e.file.FileType, e.deliveredType)
 	}
-	var gen filegen.Generator
-	var err error
-	what := "failed to generate file"
-	if kepub {
-		gen, err = filegen.GetKepubGenerator(e.file.FileType)
-		what = "failed to generate kepub file"
-	} else {
-		gen, err = filegen.GetGenerator(e.file.FileType)
-	}
+	gen, err := filegen.GeneratorFor(e.file.FileType, e.deliveredType)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get generator")
 	}
 	if sg, ok := gen.(filegen.StreamGenerator); ok {
 		return sg, nil
+	}
+	what := "failed to generate file"
+	if e.deliveredType != e.file.FileType {
+		what = "failed to generate " + e.deliveredType + " file"
 	}
 	return fullBuild{gen: gen, dir: c.dir, name: filepath.Base(e.destPath), what: what}, nil
 }
@@ -624,10 +596,10 @@ func (c *Cache) failedPartway(ctx context.Context, e *entry, err error) {
 
 func (c *Cache) logData(e *entry, err error) logger.Data {
 	return logger.Data{
-		"file_id":  e.file.ID,
-		"filepath": e.file.Filepath,
-		"format":   e.meta.Format,
-		"error":    err.Error(),
+		"file_id":             e.file.ID,
+		"filepath":            e.file.Filepath,
+		"delivered_file_type": e.deliveredType,
+		"error":               err.Error(),
 	}
 }
 
@@ -772,30 +744,9 @@ func (c *Cache) Close(ctx context.Context) {
 	}
 }
 
-// Invalidate removes the cached file for a given file ID.
+// Invalidate removes the cached file for a file delivered as fileType.
 func (c *Cache) Invalidate(fileID int, fileType string) error {
 	return DeleteCachedFile(c.dir, fileID, fileType)
-}
-
-// InvalidateKepub removes the cached KePub file for a given file ID.
-func (c *Cache) InvalidateKepub(fileID int) error {
-	return DeleteKepubCachedFile(c.dir, fileID)
-}
-
-// GetCachedPath returns the path to a cached file if it exists and is valid.
-// Returns empty string if the cache doesn't exist or is invalid.
-func (c *Cache) GetCachedPath(fileID int, fileType string, book *models.Book, file *models.File) (string, error) {
-	fp, err := ComputeFingerprint(book, file)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to compute fingerprint")
-	}
-
-	hash, err := fp.Hash()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to hash fingerprint")
-	}
-
-	return GetCachedFilePath(c.dir, fileID, fileType, hash)
 }
 
 // BulkZipDir returns the directory path for bulk zip files.

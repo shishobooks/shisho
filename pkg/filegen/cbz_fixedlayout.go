@@ -6,72 +6,61 @@ import (
 	"io"
 	"sort"
 
-	"github.com/shishobooks/shisho/pkg/kepub"
+	"github.com/shishobooks/shisho/pkg/fixedlayout"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// KepubCBZGenerator generates KePub files from CBZ sources.
-// It converts CBZ comic archives to fixed-layout EPUBs with KePub enhancements.
-type KepubCBZGenerator struct {
-	converter *kepub.Converter
+// cbzFixedLayout is the Conversion step from CBZ to a fixed-layout EPUB,
+// one page per image. Its output is plain EPUB 3, so the CBZ to KePub and
+// CBZ to EPUB steps both run it; fileType names the one delivered.
+type cbzFixedLayout struct {
+	fileType string
 }
 
-// NewKepubCBZGenerator creates a new KepubCBZGenerator.
-func NewKepubCBZGenerator() *KepubCBZGenerator {
-	return &KepubCBZGenerator{
-		converter: kepub.NewConverter(),
+// prepare reads the source's zip directory and checks that every page can
+// be read. Pages are read and processed only while writing. It reads the
+// Original CBZ, so it can only be a chain's first step.
+func (s cbzFixedLayout) prepare(_ context.Context, in stepInput) (Prepared, error) {
+	if in.entries != nil {
+		return nil, NewGenerationError(s.fileType, nil, "a CBZ Conversion must read the Original File")
 	}
-}
-
-// SupportedType returns the file type this generator handles.
-func (g *KepubCBZGenerator) SupportedType() string {
-	return models.FileTypeCBZ
-}
-
-// Generate creates a KePub file at destPath from a CBZ source.
-func (g *KepubCBZGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	return generateFile(ctx, g, kepubFormat, srcPath, destPath, book, file)
-}
-
-// Prepare reads the source's zip directory and checks that every page can
-// be read. Pages are read and processed only while writing.
-func (g *KepubCBZGenerator) Prepare(_ context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
-	srcZip, err := zip.NewReader(src, src.Size())
+	srcZip, err := zip.NewReader(in.src, in.src.Size())
 	if err != nil {
-		return nil, NewGenerationError(kepubFormat, err, "failed to read source CBZ as zip")
+		return nil, NewGenerationError(s.fileType, err, "failed to read source CBZ as zip")
 	}
-	conversion, err := g.converter.PrepareCBZ(srcZip, buildCBZMetadata(book, file))
+	conversion, err := fixedlayout.PrepareCBZ(srcZip, buildCBZMetadata(in.book, in.file))
 	if err != nil {
-		return nil, NewGenerationError(kepubFormat, err, "failed to convert CBZ: "+err.Error())
+		return nil, NewGenerationError(s.fileType, err, "failed to convert CBZ: "+err.Error())
 	}
-	return &kepubCBZPrepared{conversion: conversion}, nil
+	return &cbzFixedLayoutPrepared{fileType: s.fileType, conversion: conversion}, nil
 }
 
-// kepubCBZPrepared writes a fixed-layout KePub converted from a CBZ.
-type kepubCBZPrepared struct {
-	conversion *kepub.CBZConversion
+// cbzFixedLayoutPrepared writes a fixed-layout EPUB converted from a CBZ.
+type cbzFixedLayoutPrepared struct {
+	fileType   string
+	conversion *fixedlayout.Conversion
 }
 
 // Size reports no size: processed pages are only measured once written.
-func (p *kepubCBZPrepared) Size() (int64, bool) {
+func (p *cbzFixedLayoutPrepared) Size() (int64, bool) {
 	return 0, false
 }
 
-// Write writes the KePub to w, about one page at a time.
-func (p *kepubCBZPrepared) Write(ctx context.Context, w io.Writer) error {
+// Write writes the EPUB to w, about one page at a time.
+func (p *cbzFixedLayoutPrepared) Write(ctx context.Context, w io.Writer) error {
 	if err := p.conversion.Write(ctx, w); err != nil {
-		return NewGenerationError(kepubFormat, err, "failed to convert CBZ: "+err.Error())
+		return NewGenerationError(p.fileType, err, "failed to convert CBZ: "+err.Error())
 	}
 	return nil
 }
 
-// buildCBZMetadata creates CBZMetadata from a book and file model.
-func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
+// buildCBZMetadata creates the fixed-layout EPUB metadata from a book and file model.
+func buildCBZMetadata(book *models.Book, file *models.File) *fixedlayout.Metadata {
 	if book == nil {
 		return nil
 	}
 
-	metadata := &kepub.CBZMetadata{
+	metadata := &fixedlayout.Metadata{
 		Title:    file.ResolveTitle(book.Title),
 		Subtitle: book.Subtitle,
 	}
@@ -86,7 +75,7 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 			if author.Role != nil {
 				role = *author.Role
 			}
-			metadata.Authors = append(metadata.Authors, kepub.CBZAuthor{
+			metadata.Authors = append(metadata.Authors, fixedlayout.Author{
 				Name:     author.Person.Name,
 				SortName: author.Person.SortName,
 				Role:     role,
@@ -97,7 +86,7 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 	// Add series information
 	for _, bs := range book.BookSeries {
 		if bs.Series != nil {
-			metadata.Series = append(metadata.Series, kepub.CBZSeries{
+			metadata.Series = append(metadata.Series, fixedlayout.Series{
 				Name:   bs.Series.Name,
 				Number: bs.SeriesNumber,
 			})
@@ -134,10 +123,10 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 // convertModelChaptersToCBZ converts model chapters to CBZ chapters.
 // Only top-level chapters are included (children are flattened/ignored).
 //
-// Sorts by StartPage so the generated KePub's chapter navigation is in page
+// Sorts by StartPage so the generated EPUB's chapter navigation is in page
 // order even if the DB's SortOrder disagrees. Ties break on SortOrder for
 // stability. Chapters with nil StartPage are treated as page 0.
-func convertModelChaptersToCBZ(chapters []*models.Chapter) []kepub.CBZChapter {
+func convertModelChaptersToCBZ(chapters []*models.Chapter) []fixedlayout.Chapter {
 	// Copy to avoid modifying the original slice
 	sorted := make([]*models.Chapter, len(chapters))
 	copy(sorted, chapters)
@@ -158,13 +147,13 @@ func convertModelChaptersToCBZ(chapters []*models.Chapter) []kepub.CBZChapter {
 		return sorted[i].SortOrder < sorted[j].SortOrder
 	})
 
-	result := make([]kepub.CBZChapter, 0, len(sorted))
+	result := make([]fixedlayout.Chapter, 0, len(sorted))
 	for _, ch := range sorted {
 		startPage := 0
 		if ch.StartPage != nil {
 			startPage = *ch.StartPage
 		}
-		result = append(result, kepub.CBZChapter{
+		result = append(result, fixedlayout.Chapter{
 			Title:     ch.Title,
 			StartPage: startPage,
 		})

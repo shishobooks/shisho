@@ -79,6 +79,7 @@ describe("FileChaptersTab - Play Promise handling", () => {
     filesize_bytes: 1000000,
     audiobook_duration_seconds: 3600,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const mockChapters: Chapter[] = [
@@ -203,6 +204,7 @@ describe("FileChaptersTab - M4B Playback", () => {
     filesize_bytes: 1000000,
     audiobook_duration_seconds: 3600, // 1 hour
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const mockChapters: Chapter[] = [
@@ -562,6 +564,7 @@ describe("FileChaptersTab - Edit mode play after timestamp change", () => {
     filesize_bytes: 1000000,
     audiobook_duration_seconds: 3600,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const mockChapters: Chapter[] = [
@@ -740,6 +743,7 @@ describe("FileChaptersTab - PDF chapter page increment regression", () => {
     filesize_bytes: 1000000,
     page_count: 100,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const mockChapters: Chapter[] = [
@@ -873,6 +877,7 @@ describe("FileChaptersTab - adding a PDF chapter", () => {
     filesize_bytes: 1000,
     page_count: 6,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const chapterAt = (id: number, title: string, page: number): Chapter => ({
@@ -936,6 +941,7 @@ describe("FileChaptersTab - uncovered pages banner", () => {
     filesize_bytes: 1000000,
     page_count: 100,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   beforeEach(() => {
@@ -1007,6 +1013,7 @@ describe("FileChaptersTab - EPUB heading left without chapters", () => {
     display_name: "book.epub",
     filesize_bytes: 1000000,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const chapter = (
@@ -1115,6 +1122,7 @@ describe("FileChaptersTab - EPUB chapters nested three deep", () => {
     display_name: "book.epub",
     filesize_bytes: 1000000,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const chapter = (
@@ -1197,6 +1205,7 @@ describe("FileChaptersTab - EPUB edit state", () => {
     display_name: "book.epub",
     filesize_bytes: 1000000,
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const chapter = (
@@ -1352,6 +1361,7 @@ describe.each<FileType>([FileTypeMOBI, FileTypeAZW3])(
       display_name: `book.${fileType}`,
       filesize_bytes: 1000000,
       is_preferred_cover: false,
+      reachable_file_types: [],
     };
 
     const chapter = (

@@ -46,43 +46,43 @@ func TestCache_MidStreamFailureIsRemembered(t *testing.T) {
 	cache, book, file := pausingCache(t, gen)
 	ctx := context.Background()
 
-	failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(ctx, book, file, false) })
+	failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(ctx, book, file, file.FileType) })
 
 	var genErr *filegen.GenerationError
-	_, err := cache.Open(ctx, book, file, false)
+	_, err := cache.Open(ctx, book, file, file.FileType)
 	require.ErrorAs(t, err, &genErr)
 	require.ErrorIs(t, err, ErrFailedPartway)
 	assert.Contains(t, err.Error(), "page 3 is corrupt")
-	_, err = cache.Head(ctx, book, file, false)
+	_, err = cache.Head(ctx, book, file, file.FileType)
 	require.ErrorAs(t, err, &genErr)
 	require.ErrorIs(t, err, ErrFailedPartway)
-	_, _, err = cache.GetOrGenerate(ctx, book, file)
+	_, _, err = cache.GetOrGenerate(ctx, book, file, file.FileType)
 	require.ErrorAs(t, err, &genErr)
 	assert.Equal(t, 1, gen.Writes(), "a remembered failure was built again")
 	assertNoStagingLeftovers(t, cache.Dir())
 
 	// The KePub conversion of the same file has its own record.
-	g, err := cache.Head(ctx, book, file, true)
+	g, err := cache.Head(ctx, book, file, models.FileTypeKePub)
 	require.NoError(t, err)
 	assert.Empty(t, g.Path)
 
 	// The record survives a restart.
-	restarted := NewCache(cache.Dir(), 1<<30, WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+	restarted := NewCache(cache.Dir(), 1<<30, WithGenerators(func(string, string) (filegen.StreamGenerator, error) {
 		return gen, nil
 	}))
 	t.Cleanup(restarted.Wait)
-	_, err = restarted.Open(ctx, book, file, false)
+	_, err = restarted.Open(ctx, book, file, file.FileType)
 	require.ErrorAs(t, err, &genErr)
 	assert.Equal(t, 1, gen.Writes())
 
 	// New metadata builds again, and a success clears the record.
 	gen.WriteErr = nil
 	book.Title = "Fixed Book"
-	g, err = restarted.Open(ctx, book, file, false)
+	g, err = restarted.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	assert.Equal(t, gen.Output(), readGenerated(t, g))
 	restarted.Wait()
-	g, err = restarted.Open(ctx, book, file, false)
+	g, err = restarted.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	assert.NotEmpty(t, g.Path)
 	assert.Equal(t, 2, gen.Writes())
@@ -96,13 +96,13 @@ func TestCache_CanceledBuildIsNotRemembered(t *testing.T) {
 	cache, book, file := pausingCache(t, gen)
 	ctx := context.Background()
 
-	g, err := cache.Open(ctx, book, file, false)
+	g, err := cache.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	readN(t, g.Body, len(gen.First))
 	cache.Close(ctx)
 	require.NoError(t, g.Body.Close())
 
-	meta, err := ReadMetadata(cache.Dir(), file.ID)
+	meta, err := ReadMetadata(cache.Dir(), file.ID, file.FileType)
 	require.NoError(t, err)
 	assert.Nil(t, meta)
 }
@@ -148,7 +148,7 @@ func TestCache_MidStreamFailureLogsAWarning(t *testing.T) {
 	gen.WriteErr = errors.New("page 3 is corrupt")
 	cache, book, file := pausingCache(t, gen)
 
-	failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(context.Background(), book, file, false) })
+	failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(context.Background(), book, file, file.FileType) })
 
 	lines := warnings()
 	require.Len(t, lines, 1)
@@ -197,11 +197,11 @@ func TestCache_CacheWriteFailurePartwayKeepsStreaming(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	a, err := cache.Open(ctx, book, file, false)
+	a, err := cache.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	defer a.Body.Close()
 	assert.Equal(t, "first,", readN(t, a.Body, len(gen.First)))
-	b, err := cache.Open(ctx, book, file, false)
+	b, err := cache.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	defer b.Body.Close()
 
@@ -236,7 +236,7 @@ func TestCache_CacheWriteFailurePartwayKeepsStreaming(t *testing.T) {
 
 	// The failure was the cache's, not the file's, so nothing is remembered:
 	// the next download builds again.
-	g, err := cache.Open(ctx, book, file, false)
+	g, err := cache.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	data, err := io.ReadAll(g.Body)
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestCache_CacheWriteFailureStopsWhenTheLastDownloadLeaves(t *testing.T) {
 		return &failingPartial{File: f, limit: 0}, nil
 	}
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	gen.Release()
 	assert.Equal(t, "first,", readN(t, g.Body, len(gen.First)))
@@ -294,14 +294,14 @@ func TestCache_UncachedStreamFailures(t *testing.T) {
 		cache, book, file := pausingCache(t, gen)
 		unwritableCache(cache)
 
-		g, err := cache.Open(ctx, book, file, false)
+		g, err := cache.Open(ctx, book, file, file.FileType)
 		require.NoError(t, err)
 		assert.Equal(t, "first,", readN(t, g.Body, len(gen.First)))
 		require.NoError(t, g.Body.Close())
 		gen.Release()
 		cache.Wait()
 
-		meta, err := ReadMetadata(cache.Dir(), file.ID)
+		meta, err := ReadMetadata(cache.Dir(), file.ID, file.FileType)
 		require.NoError(t, err)
 		assert.Nil(t, meta)
 	})
@@ -312,9 +312,9 @@ func TestCache_UncachedStreamFailures(t *testing.T) {
 		cache, book, file := pausingCache(t, gen)
 		unwritableCache(cache)
 
-		failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(ctx, book, file, false) })
+		failMidStream(t, cache, gen, func() (*Generated, error) { return cache.Open(ctx, book, file, file.FileType) })
 		var genErr *filegen.GenerationError
-		_, err := cache.Open(ctx, book, file, false)
+		_, err := cache.Open(ctx, book, file, file.FileType)
 		require.ErrorAs(t, err, &genErr)
 	})
 }
@@ -326,14 +326,15 @@ func TestCache_FailureFromAnotherReleaseIsIgnored(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	gen.Release()
 	cache, book, file := pausingCache(t, gen)
-	e, err := cache.entryFor(book, file, false)
+	e, err := cache.entryFor(book, file, file.FileType)
 	require.NoError(t, err)
 	require.NoError(t, WriteMetadata(cache.Dir(), &CacheMetadata{
-		FileID:  file.ID,
-		Failure: &FailureRecord{FingerprintHash: e.hash, Version: "0.0.1-old", Message: "broken"},
+		FileID:            file.ID,
+		DeliveredFileType: file.FileType,
+		Failure:           &FailureRecord{FingerprintHash: e.hash, Version: "0.0.1-old", Message: "broken"},
 	}))
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	assert.Equal(t, gen.Output(), readGenerated(t, g))
 }
@@ -388,7 +389,7 @@ func TestCache_FileBuiltOutsideTheCacheIsCopied(t *testing.T) {
 		return &failingPartial{File: f, limit: 3}, nil
 	}
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	assert.Equal(t, "whole file", string(readGenerated(t, g)))
 	cache.Wait()

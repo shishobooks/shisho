@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // bulkZipEntry holds information about a bulk zip file for cleanup.
@@ -93,14 +92,7 @@ func RunCleanup(cacheDir string, maxSizeBytes int64) error {
 			break
 		}
 
-		// Try to determine the file extension from the cache
-		// We need to find the actual file to know its extension
-		ext := findCachedFileExtension(cacheDir, entry.FileID)
-		if ext == "" {
-			continue // Skip if we can't find the file
-		}
-
-		if err := DeleteCachedFile(cacheDir, entry.FileID, ext); err != nil {
+		if err := DeleteCachedFile(cacheDir, entry.FileID, entry.DeliveredFileType); err != nil {
 			// Log error but continue with other files
 			continue
 		}
@@ -125,19 +117,6 @@ func RunCleanup(cacheDir string, maxSizeBytes int64) error {
 	}
 
 	return nil
-}
-
-// findCachedFileExtension finds the extension of a cached file by file ID.
-// A generated file is cached under its file type, so each built-in type is
-// tried.
-func findCachedFileExtension(cacheDir string, fileID int) string {
-	for _, ext := range models.BuiltInFileTypes {
-		path := cachedFilename(cacheDir, fileID, ext)
-		if _, err := os.Stat(path); err == nil {
-			return ext
-		}
-	}
-	return ""
 }
 
 // CleanupStats holds statistics about a cleanup operation.

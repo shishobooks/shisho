@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,7 +6,9 @@ import { setAuth } from "@/testing/auth";
 import {
   DownloadFormatAsk,
   DownloadFormatOriginal,
+  FileTypeCBZ,
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeM4B,
 } from "@/types";
 
@@ -18,14 +20,18 @@ type Props = React.ComponentProps<typeof FileDownloadControl>;
 
 const renderControl = (overrides: Partial<Props> = {}) => {
   const props: Props = {
-    file: { id: 7, file_type: FileTypeEPUB },
+    file: {
+      id: 7,
+      file_type: FileTypeEPUB,
+      reachable_file_types: [FileTypeEPUB, FileTypeKePub],
+    },
+    bookTitle: "The Book",
     libraryDownloadPreference: DownloadFormatOriginal,
     isSupplement: false,
     isDownloading: false,
     onDownload: vi.fn(),
-    onDownloadKepub: vi.fn(),
+    onDownloadAs: vi.fn(),
     onDownloadOriginal: vi.fn(),
-    onDownloadWithEndpoint: vi.fn(),
     onCancelDownload: vi.fn(),
     ...overrides,
   };
@@ -35,9 +41,8 @@ const renderControl = (overrides: Partial<Props> = {}) => {
 
 const callbacks = [
   "onDownload",
-  "onDownloadKepub",
+  "onDownloadAs",
   "onDownloadOriginal",
-  "onDownloadWithEndpoint",
   "onCancelDownload",
 ] as const;
 
@@ -49,6 +54,13 @@ const expectOnlyCalled = (props: Props, called: (typeof callbacks)[number]) => {
       expect(props[name]).not.toHaveBeenCalled();
     }
   }
+};
+
+const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole("button", { name: "Download as" }));
+  return within(screen.getByRole("menu"))
+    .getAllByRole("menuitem")
+    .map((item) => item.getAttribute("aria-label"));
 };
 
 describe("FileDownloadControl", () => {
@@ -65,63 +77,132 @@ describe("FileDownloadControl", () => {
       isDownloading: true,
     });
 
+    expect(screen.getAllByRole("button")).toHaveLength(1);
     await user.click(screen.getByRole("button"));
 
     expectOnlyCalled(props, "onDownloadOriginal");
   });
 
-  it("shows the format popover for the Ask preference with a KePub-capable file", async () => {
+  it.each<[string, Props["file"], string[]]>([
+    [
+      "an EPUB",
+      {
+        id: 7,
+        file_type: FileTypeEPUB,
+        reachable_file_types: [FileTypeEPUB, FileTypeKePub],
+      },
+      ["Download The Book as EPUB", "Download The Book as KePub"],
+    ],
+    [
+      "a CBZ",
+      {
+        id: 7,
+        file_type: FileTypeCBZ,
+        reachable_file_types: [FileTypeCBZ, FileTypeKePub, FileTypeEPUB],
+      },
+      [
+        "Download The Book as CBZ",
+        "Download The Book as KePub",
+        "Download The Book as EPUB",
+      ],
+    ],
+    [
+      "an M4B",
+      { id: 7, file_type: FileTypeM4B, reachable_file_types: [FileTypeM4B] },
+      ["Download The Book as M4B"],
+    ],
+  ])(
+    "lists exactly the File Types %s can become, its own first",
+    async (_, file, entries) => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderControl({ file });
+
+      expect(await openMenu(user)).toEqual(entries);
+    },
+  );
+
+  it("heads the menu with the File's own title and shows only the File Type in each entry", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderControl({
+      file: {
+        id: 7,
+        file_type: FileTypeEPUB,
+        name: "Special Edition",
+        reachable_file_types: [FileTypeEPUB, FileTypeKePub],
+      },
+    });
+
+    expect(await openMenu(user)).toEqual([
+      "Download Special Edition as EPUB",
+      "Download Special Edition as KePub",
+    ]);
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveTextContent(/^Special Edition/);
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["EPUB", "KePub"]);
+  });
+
+  it.each([FileTypeCBZ, FileTypeKePub, FileTypeEPUB])(
+    "downloads the %s entry as that File Type",
+    async (fileType) => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { props } = renderControl({
+        file: {
+          id: 7,
+          file_type: FileTypeCBZ,
+          reachable_file_types: [FileTypeCBZ, FileTypeKePub, FileTypeEPUB],
+        },
+      });
+
+      await openMenu(user);
+      await user.click(
+        screen.getByRole("menuitem", {
+          name: new RegExp(` as ${fileType}$`, "i"),
+        }),
+      );
+
+      expectOnlyCalled(props, "onDownloadAs");
+      expect(props.onDownloadAs).toHaveBeenCalledWith(fileType);
+    },
+  );
+
+  it("downloads with the library preference from the main button", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { props } = renderControl();
+
+    await user.click(screen.getByRole("button", { name: "Download" }));
+
+    expectOnlyCalled(props, "onDownload");
+  });
+
+  it("opens the menu from the main button for the Ask preference", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { props } = renderControl({
       libraryDownloadPreference: DownloadFormatAsk,
     });
 
     await user.click(screen.getByRole("button", { name: "Download" }));
-    expect(screen.getByText("Download format")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Original" }));
-    expectOnlyCalled(props, "onDownloadWithEndpoint");
-    expect(props.onDownloadWithEndpoint).toHaveBeenCalledWith(
-      "/api/books/files/7/download",
-    );
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(props.onDownload).not.toHaveBeenCalled();
   });
 
-  it("downloads KePub from the format popover", async () => {
+  it("downloads from the main button for the Ask preference when the file has one File Type", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { props } = renderControl({
+      file: {
+        id: 7,
+        file_type: FileTypeM4B,
+        reachable_file_types: [FileTypeM4B],
+      },
       libraryDownloadPreference: DownloadFormatAsk,
     });
 
     await user.click(screen.getByRole("button", { name: "Download" }));
-    await user.click(screen.getByRole("button", { name: /kepub/i }));
 
-    expectOnlyCalled(props, "onDownloadKepub");
-  });
-
-  it("uses the format popover's cancel button for the Ask preference while a download is in flight", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { props } = renderControl({
-      libraryDownloadPreference: DownloadFormatAsk,
-      isDownloading: true,
-    });
-
-    // Only the popover's loading state titles its cancel button. The generic
-    // in-flight branch labels it with a tooltip instead.
-    await user.click(screen.getByTitle("Cancel download"));
-
-    expectOnlyCalled(props, "onCancelDownload");
-  });
-
-  it("shows a plain download button for the Ask preference when the file cannot be KePub", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { props } = renderControl({
-      file: { id: 7, file_type: FileTypeM4B },
-      libraryDownloadPreference: DownloadFormatAsk,
-    });
-
-    await user.click(screen.getByRole("button"));
-
-    expect(screen.queryByText("Download format")).not.toBeInTheDocument();
     expectOnlyCalled(props, "onDownload");
   });
 
@@ -130,23 +211,14 @@ describe("FileDownloadControl", () => {
     const { container, props } = renderControl({ isDownloading: true });
 
     expect(container.querySelector(".animate-spin")).toBeInTheDocument();
-    await user.click(screen.getByRole("button"));
+    await user.click(screen.getByRole("button", { name: "Cancel download" }));
 
     expectOnlyCalled(props, "onCancelDownload");
   });
 
-  it("downloads with the library preference by default", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { props } = renderControl();
-
-    await user.click(screen.getByRole("button"));
-
-    expectOnlyCalled(props, "onDownload");
-  });
-
   it.each<[string, Partial<Props>]>([
     ["supplement", { isSupplement: true }],
-    ["format popover", { libraryDownloadPreference: DownloadFormatAsk }],
+    ["Ask preference", { libraryDownloadPreference: DownloadFormatAsk }],
     ["in-flight download", { isDownloading: true }],
     ["default download", {}],
   ])("renders nothing in Demo Mode (%s)", (_, overrides) => {

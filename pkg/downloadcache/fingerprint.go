@@ -12,12 +12,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// Download format constants.
-const (
-	FormatOriginal = "original"
-	FormatKepub    = "kepub"
-)
-
 // GeneratorVersion is a cache-busting token incorporated into every fingerprint.
 // Bump this when a generator's output changes in a way that existing cached
 // files no longer reflect — e.g. a bug fix that affects the bytes produced
@@ -35,16 +29,19 @@ const (
 //     the NCX index (pkg/filegen/mobi_toc.go).
 //   - 5: Generated files pass epubcheck: KePubs declare kobo.js and mark
 //     EPUB 3 documents scripted (pkg/kepub/opf.go), KePubs from CBZ give
-//     the NCX the OPF's identifier (pkg/kepub/cbz.go), and EPUB 3 downloads
+//     the NCX the OPF's identifier (pkg/fixedlayout/cbz.go), and EPUB 3 downloads
 //     gain a missing nav document and modified date
 //     (pkg/filegen/epub_repair.go).
 //   - 6: CBZ and KePub-from-CBZ pages keep their gray levels and color
-//     (pkg/kepub/cbz.go): no 16-level reduction, and no conversion of
+//     (pkg/fixedlayout/cbz.go): no 16-level reduction, and no conversion of
 //     mostly gray pages to gray. Pages are resized by area averaging
-//     (pkg/kepub/resize.go).
+//     (pkg/fixedlayout/resize.go).
 //   - 7: CBZ downloads write chapters as folders of pages
 //     (pkg/cbz/chapterlayout.go).
-const GeneratorVersion = 7
+//   - 8: Each File Type a File is delivered as has its own cache entry
+//     (pkg/downloadcache/metadata.go), so entries cached under the old
+//     names are abandoned.
+const GeneratorVersion = 8
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
@@ -65,7 +62,7 @@ type Fingerprint struct {
 	Cover            *FingerprintCover       `json:"cover,omitempty"`
 	CoverPage        *int                    `json:"cover_page,omitempty"` // For page-based files (CBZ, PDF): page index of cover
 	Chapters         []FingerprintChapter    `json:"chapters,omitempty"`
-	Format           string                  `json:"format,omitempty"` // Download format: original or kepub
+	Format           string                  `json:"format,omitempty"` // Delivered File Type
 	Name             *string                 `json:"name,omitempty"`   // File name (edition name)
 	Language         *string                 `json:"language,omitempty"`
 	Abridged         *bool                   `json:"abridged,omitempty"`

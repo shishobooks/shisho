@@ -947,7 +947,7 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 			// Advertise the type a converted KePub is served as. KOReader drops
 			// a link whose type it does not know, such as application/kepub+zip.
 			// A failed conversion sends the original, which keeps its own type.
-			mimeType = books.KepubContentType
+			mimeType = models.FileTypeMimeType(models.FileTypeKePub)
 			formatLabel = "KePub"
 		} else {
 			downloadURL = fmt.Sprintf("%s/opds/download/%d", apiBase, file.ID)
@@ -958,9 +958,10 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 	return entry
 }
 
-// supportsKepub returns true if the file type can be converted to KePub.
+// supportsKepub reports whether a Conversion reaches KePub from the file type.
 func supportsKepub(fileType string) bool {
-	return fileType == models.FileTypeEPUB || fileType == models.FileTypeCBZ
+	_, ok := models.ConversionChain(fileType, models.FileTypeKePub)
+	return ok
 }
 
 // addPaginationLinks adds pagination links to a feed.

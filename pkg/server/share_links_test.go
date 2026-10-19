@@ -501,6 +501,52 @@ func TestShareLinks_RecipientDownloads(t *testing.T) {
 	}
 }
 
+// The recipient page offers each File as every File Type it can become, and
+// each downloads without signing in. A File Type the File cannot become is
+// refused rather than answered with another.
+func TestShareLinks_RecipientDownloadsAsReachableFileTypes(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	link := f.mustCreate(f.admin, f.bookA, `{}`)
+
+	rec := f.do(nil, http.MethodGet, "/api/share/"+link.Token, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var shared sharelinks.SharedBookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &shared))
+	reachable := map[int][]string{}
+	for _, file := range shared.Files {
+		reachable[file.ID] = file.ReachableFileTypes
+	}
+	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub}, reachable[f.epubA.ID])
+	assert.Equal(t, []string{models.FileTypePDF}, reachable[f.suppA.ID], "a supplement downloads only as itself")
+
+	downloadAs := func(file *models.File, fileType string) string {
+		return fmt.Sprintf("/api/share/%s/files/%d/download/%s", link.Token, file.ID, fileType)
+	}
+	for _, method := range []string{http.MethodHead, http.MethodGet} {
+		rec = f.do(nil, method, downloadAs(f.epubA, models.FileTypeKePub), "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Header().Get("Content-Disposition"), ".kepub.epub")
+	}
+	rec = f.do(nil, http.MethodGet, downloadAs(f.epubA, models.FileTypeEPUB), "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Header().Get("Content-Disposition"), ".epub")
+
+	for _, tc := range []struct {
+		file     *models.File
+		fileType string
+	}{
+		{f.epubA, models.FileTypeCBZ},
+		{f.epubA, "nonsense"},
+		{f.suppA, models.FileTypeKePub},
+	} {
+		rec = f.do(nil, http.MethodGet, downloadAs(tc.file, tc.fileType), "")
+		assert.Equal(t, http.StatusNotFound, rec.Code, "%s of file %d", tc.fileType, tc.file.ID)
+		assert.Empty(t, rec.Header().Get("Content-Disposition"))
+	}
+}
+
 func TestShareLinks_UnavailableLinksShareOneResponse(t *testing.T) {
 	t.Parallel()
 	f := newShareLinksFixture(t)

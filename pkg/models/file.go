@@ -174,6 +174,11 @@ type File struct {
 	// call ResolveBookFileDisplayNames for Book.Files, which Bun loads as a
 	// has-many relation without row hooks.
 	DisplayName string `bun:"-" json:"display_name"`
+	// ReachableFileTypes are the File Types the file can be downloaded as:
+	// its own first, then every one reachable through Conversion. A
+	// supplement downloads only as itself. Like DisplayName it is not
+	// stored, and is resolved alongside it.
+	ReachableFileTypes []string `bun:"-" json:"reachable_file_types" tstype:"DeliveredFileType[]"`
 }
 
 // ResolveDisplayName returns the label for the file. A main file shows its
@@ -238,6 +243,10 @@ func FileTypeMimeType(fileType string) string {
 	switch fileType {
 	case FileTypeEPUB:
 		return "application/epub+zip"
+	case FileTypeKePub:
+		// A KePub keeps the registered EPUB type: it is an EPUB with Kobo's
+		// span markup, and KOReader recognizes downloads by it.
+		return "application/epub+zip"
 	case FileTypeCBZ:
 		return "application/vnd.comicbook+zip"
 	case FileTypeM4B:
@@ -259,24 +268,37 @@ func IsPageBasedFileType(fileType string) bool {
 	return fileType == FileTypeCBZ || fileType == FileTypePDF
 }
 
-// AfterScanRow is a Bun hook that resolves DisplayName for files loaded by a
-// direct query (a single file, or a slice of files). It does not run for
-// Book.Files: Bun scans has-many relations without row hooks.
+// AfterScanRow is a Bun hook that resolves DisplayName and
+// ReachableFileTypes for files loaded by a direct query (a single file, or a
+// slice of files). It does not run for Book.Files: Bun scans has-many
+// relations without row hooks.
 func (f *File) AfterScanRow(_ context.Context) error {
-	f.DisplayName = f.ResolveDisplayName()
+	f.resolveUnstored()
 	return nil
 }
 
-// ResolveFileDisplayNames sets DisplayName on each file.
+// resolveUnstored sets the fields computed rather than stored.
+func (f *File) resolveUnstored() {
+	f.DisplayName = f.ResolveDisplayName()
+	if f.FileRole == FileRoleSupplement {
+		f.ReachableFileTypes = []string{f.FileType}
+	} else {
+		f.ReachableFileTypes = ReachableFileTypes(f.FileType)
+	}
+}
+
+// ResolveFileDisplayNames sets DisplayName and ReachableFileTypes on each
+// file.
 func ResolveFileDisplayNames(files []*File) {
 	for _, f := range files {
 		if f != nil {
-			f.DisplayName = f.ResolveDisplayName()
+			f.resolveUnstored()
 		}
 	}
 }
 
-// ResolveBookFileDisplayNames sets DisplayName on every file of each book.
+// ResolveBookFileDisplayNames sets DisplayName and ReachableFileTypes on
+// every file of each book.
 // Call it wherever books are loaded with their Files relation.
 func ResolveBookFileDisplayNames(books ...*Book) {
 	for _, b := range books {

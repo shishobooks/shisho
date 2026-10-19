@@ -54,8 +54,8 @@ func ProcessInOrder[T any](ctx context.Context, pages []*zip.File, process func(
 const pageMemoryBudget = 256 << 20
 
 // estimatePageMemory guesses the most memory processing f takes, for the
-// callers in pkg/filegen and pkg/kepub, which read the page and decode it
-// with kepub.ProcessImageForEreader: its data twice, since reading it grows
+// callers in pkg/filegen and pkg/fixedlayout, which read the page and decode it
+// with fixedlayout.ProcessImageForEreader: its data twice, since reading it grows
 // a buffer, and its decoded pixels. A resized page is small next to its
 // source. A page whose header cannot be read is passed through without
 // decoding, so only its data counts. It runs outside any recovery, so a

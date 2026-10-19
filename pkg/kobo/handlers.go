@@ -302,9 +302,9 @@ func (h *handler) handleDownload(c echo.Context) error {
 	}
 
 	// Generate KePub, named with the Kobo-safe filename. The scope holds only
-	// EPUB and CBZ files, which KePub converts, so the original fallback in
-	// ResolveFallbackDownload is not expected here.
-	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, true)
+	// EPUB and CBZ files, which KePub converts, so ResolveFallbackDownload
+	// sends the original only when the conversion fails.
+	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, models.FileTypeKePub)
 	if err != nil {
 		return err
 	}

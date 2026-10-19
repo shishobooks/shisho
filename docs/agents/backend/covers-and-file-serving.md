@@ -28,6 +28,6 @@ Every file-serving response carries `Cache-Control`; without it, reverse proxies
 
 ## Downloads
 
-Book downloads go through `books.Download.Serve`. **Device and Share Link downloads fall back to the original; web routes do not.** OPDS, eReader, Kobo, and Share Link routes choose what to send with `books.ResolveFallbackDownload`, because a device or recipient has no Download Original. The web app's download routes report the generation error instead.
+Book downloads go through `books.Download.Serve`. **Device and Share Link downloads fall back to the original; web routes and download menu entries do not.** OPDS, eReader, Kobo, and Share Link routes choose what to send with `books.ResolveFallbackDownload`, because a device or recipient has no Download Original. The web app's download routes report the generation error instead, and so does a Share Link's Download as entry for another File Type, through `books.GeneratedDownload`: the original is not the File Type the recipient picked.
 
 **A route that serves a Generated File gets it from `books.GeneratedDownload` or `books.ResolveFallbackDownload`**, which stream the file while it is built and answer HEAD from the preparation step alone (ADR 0010). The cache's `GetOrGenerate` waits for the whole build, so a route calling it sends nothing until the file is complete and devices time out; it is for bulk download, which runs as a job.

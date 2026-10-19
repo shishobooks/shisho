@@ -29,13 +29,6 @@ type Download struct {
 	building *downloadcache.Generated
 }
 
-// KepubContentType is the media type a KePub download is served as (Kobo
-// overrides it with application/octet-stream). A KePub is an EPUB with Kobo's
-// span markup, so it keeps the registered EPUB type. The OPDS KePub feed
-// advertises its links with this type too: KOReader offers no download for a
-// link typed application/kepub+zip.
-const KepubContentType = "application/epub+zip"
-
 // OriginalDownload is the file as it is on disk, under its own name.
 func OriginalDownload(file *models.File) *Download {
 	return &Download{
@@ -55,43 +48,44 @@ const FailedPartwayMessage = "This file's generated download failed partway thro
 const CannotDecryptMessage = "This file is password-protected or encrypted in a way Shisho can't open, so its metadata can't be added. Download the original instead."
 
 // ResolveFallbackDownload returns what the OPDS, eReader, Kobo, and Share
-// Link download routes send: the file generated with the book's metadata (its
-// KePub conversion when kepub is set), or the original when generation is not
-// possible. A device or a Share recipient has no Download Original to turn
-// to, so a supplement, a type with no generator (filegen.ErrNotImplemented),
-// a KePub request for a type KePub cannot convert
-// (filegen.ErrKepubNotSupported), and any other filegen.GenerationError get
-// the original. The exceptions are a permission error and a canceled or
-// timed-out request, which are faults the original cannot fix; they and any
-// error outside generation are a 500. The original is still served through
-// httputil.ServeFile, so a source that cannot be opened ends as a 500 too.
+// Link download routes send for the file delivered as deliveredType: the
+// Generated File, or the Original File when generation is not possible. A
+// device or a Share recipient has no Download Original to turn to, so a
+// supplement, a type with no generator (filegen.ErrNotImplemented), a File
+// Type no Conversion reaches (filegen.ErrNoConversion), and any other
+// filegen.GenerationError get the original. The exceptions are a permission
+// error and a canceled or timed-out request, which are faults the original
+// cannot fix; they and any error outside generation are a 500. The original
+// is still served through httputil.ServeFile, so a source that cannot be
+// opened ends as a 500 too.
 //
-// The web app's download routes do not fall back: a browser user sees the
-// error and has Download Original.
-func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, kepub bool) (*Download, error) {
+// The devices fall back from a failed Conversion too, as they did before
+// Delivery Rules (#731), which move each channel onto the rule that a failed
+// Conversion is an error. A download menu entry asks for one File Type, so
+// it uses GeneratedDownload, which never falls back. The web app's download
+// routes do not fall back either: a browser user sees the error and has
+// Download Original.
+func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, deliveredType string) (*Download, error) {
 	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {
 		return OriginalDownload(file), nil
 	}
 	// Check for a generator before the cache is touched, so a full or
 	// read-only cache cannot fail a file there is nothing to generate for.
-	// The cache makes the same check for KePub itself.
-	if _, err := filegen.GetGenerator(file.FileType); !kepub && errors.Is(err, filegen.ErrNotImplemented) {
+	if _, err := filegen.GeneratorFor(file.FileType, deliveredType); errors.Is(err, filegen.ErrNotImplemented) || errors.Is(err, filegen.ErrNoConversion) {
 		return OriginalDownload(file), nil
 	}
 
-	download, err := GeneratedDownload(c, cache, book, file, kepub)
+	download, err := GeneratedDownload(c, cache, book, file, deliveredType)
 	switch {
 	case err == nil:
 		return download, nil
-	case errors.Is(err, filegen.ErrNotImplemented), errors.Is(err, filegen.ErrKepubNotSupported):
-		return OriginalDownload(file), nil
 	case isGenerationFallback(err):
 		logger.FromContext(ctx).Warn("file generation failed, serving the original", logger.Data{
-			"file_id":   file.ID,
-			"file_type": file.FileType,
-			"kepub":     kepub,
-			"error":     err.Error(),
+			"file_id":             file.ID,
+			"file_type":           file.FileType,
+			"delivered_file_type": deliveredType,
+			"error":               err.Error(),
 		})
 		return OriginalDownload(file), nil
 	}
@@ -111,30 +105,28 @@ func isGenerationFallback(err error) bool {
 		!errors.Is(err, context.DeadlineExceeded)
 }
 
-// GeneratedDownload returns the Generated File for the book's file, or its
-// KePub conversion when kepub is set: the cached file, or the file streamed
-// while it is built (ADR 0010). A HEAD request runs only the preparation
-// step, so it reports an error or the size without generating. Errors from
-// the preparation step are returned before anything is sent. A Download
-// returned here must be served: a file still being built holds the cache's
-// handle on it until Serve has read it.
-func GeneratedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, kepub bool) (*Download, error) {
+// GeneratedDownload returns the Generated File for the book's file delivered
+// as deliveredType: the cached file, or the file streamed while it is built
+// (ADR 0010). A HEAD request runs only the preparation step, so it reports
+// an error or the size without generating. Errors from the preparation step
+// are returned before anything is sent, and a File Type no Conversion
+// reaches returns filegen.ErrNoConversion. A Download returned here must be
+// served: a file still being built holds the cache's handle on it until
+// Serve has read it.
+func GeneratedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, deliveredType string) (*Download, error) {
 	ctx := c.Request().Context()
 	var generated *downloadcache.Generated
 	var err error
 	if c.Request().Method == http.MethodHead {
-		generated, err = cache.Head(ctx, book, file, kepub)
+		generated, err = cache.Head(ctx, book, file, deliveredType)
 	} else {
-		generated, err = cache.Open(ctx, book, file, kepub)
+		generated, err = cache.Open(ctx, book, file, deliveredType)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	download := &Download{Path: generated.Path, Filename: generated.Filename, ContentType: models.FileTypeMimeType(file.FileType)}
-	if kepub {
-		download.ContentType = KepubContentType
-	}
+	download := &Download{Path: generated.Path, Filename: generated.Filename, ContentType: models.FileTypeMimeType(deliveredType)}
 	if generated.Path == "" {
 		download.building = generated
 	}
