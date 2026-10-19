@@ -28,6 +28,7 @@ type ListPeopleOptions struct {
 	Offset     *int
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
+	ListID     *int  // Filter to authors of a book on this list
 	Search     *string
 	Sort       []sortspec.SortLevel // Defaults to name ascending
 
@@ -176,6 +177,9 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 	}
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("p.library_id IN (?)", bun.List(opts.LibraryIDs))
+	}
+	if opts.ListID != nil {
+		q = q.Where("p.id IN (SELECT a.person_id FROM authors a JOIN list_books lb ON lb.book_id = a.book_id WHERE lb.list_id = ?)", *opts.ListID)
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

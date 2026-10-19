@@ -6,12 +6,12 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// SyncPoint tracks the state of the library at a sync, per API key.
+// SyncPoint tracks the state of the library at a sync, per Device.
 type SyncPoint struct {
 	bun.BaseModel `bun:"table:kobo_sync_points,alias:ksp"`
 
 	ID          string     `bun:"id,pk"`
-	APIKeyID    string     `bun:"api_key_id,notnull"`
+	DeviceID    string     `bun:"device_id,notnull"`
 	CreatedAt   time.Time  `bun:"created_at,notnull"`
 	CompletedAt *time.Time `bun:"completed_at"`
 
@@ -35,14 +35,7 @@ type SyncPointBook struct {
 	CoverModifiedAt *time.Time `bun:"cover_modified_at"`
 }
 
-// SyncScope represents the scope of books to sync (parsed from URL).
-type SyncScope struct {
-	Type      string // "all", "library", "list"
-	LibraryID *int
-	ListID    *int
-}
-
-// SyncEntry records, per API key, the RevisionId a File was first sent to
+// SyncEntry records, per Device, the RevisionId a File was first sent to
 // the Kobo with. A Kobo treats every new RevisionId as a new book, and
 // ignores a change sent under a RevisionId it does not have, so the
 // RevisionId never changes once recorded (ADR 0012). Entries outlive sync
@@ -51,7 +44,7 @@ type SyncScope struct {
 type SyncEntry struct {
 	bun.BaseModel `bun:"table:kobo_sync_entries,alias:kse"`
 
-	APIKeyID   string    `bun:"api_key_id,pk"`
+	DeviceID   string    `bun:"device_id,pk"`
 	FileID     int       `bun:"file_id,pk"`
 	RevisionID string    `bun:"revision_id,notnull"`
 	CreatedAt  time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp"`

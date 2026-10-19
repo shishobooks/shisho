@@ -75,7 +75,7 @@ func (f *koboDownloadFixture) serve(file *models.File) *httptest.ResponseRecorde
 	f.t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-	withKeyOwner(c)
+	withDeviceOwner(c)
 	c.SetParamNames("bookId")
 	c.SetParamValues(ShishoID(file.ID))
 	if err := f.h.handleDownload(c); err != nil {

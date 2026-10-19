@@ -1,9 +1,9 @@
 import { describe, expectTypeOf, it } from "vitest";
 
-import type * as APIKeys from "@/types/generated/apikeys";
 import type * as Books from "@/types/generated/books";
 import type * as Cache from "@/types/generated/cache";
 import type * as Chapters from "@/types/generated/chapters";
+import type * as Devices from "@/types/generated/devices";
 import type * as Libraries from "@/types/generated/libraries";
 import type * as Lists from "@/types/generated/lists";
 
@@ -11,42 +11,33 @@ import type * as Lists from "@/types/generated/lists";
 // tygo generates from the Go types. A Go shape change that breaks one of
 // them fails `pnpm lint:types`.
 describe("generated API contract", () => {
-  it("serializes API keys with snake_case keys", () => {
-    expectTypeOf<APIKeys.APIKey>().toHaveProperty("user_id");
-    expectTypeOf<APIKeys.APIKey>().toHaveProperty("created_at");
-    expectTypeOf<APIKeys.APIKey>().toHaveProperty("updated_at");
-    expectTypeOf<APIKeys.APIKey>().toHaveProperty("last_accessed_at");
+  it("serializes Devices with snake_case keys", () => {
+    expectTypeOf<Devices.DeviceResponse>().toHaveProperty("user_id");
+    expectTypeOf<Devices.DeviceResponse>().toHaveProperty("device_type");
+    expectTypeOf<Devices.DeviceResponse>().toHaveProperty("credential");
+    expectTypeOf<Devices.DeviceResponse>().toHaveProperty("last_accessed_at");
     expectTypeOf<
       Extract<
-        keyof APIKeys.APIKey,
-        "userId" | "createdAt" | "updatedAt" | "lastAccessedAt"
+        keyof Devices.DeviceResponse,
+        "userId" | "deviceType" | "createdAt" | "lastAccessedAt"
       >
     >().toBeNever();
 
-    expectTypeOf<APIKeys.APIKeyPermission>().toHaveProperty("api_key_id");
-    expectTypeOf<APIKeys.APIKeyPermission>().toHaveProperty("created_at");
+    expectTypeOf<Devices.DeviceShortURL>().toHaveProperty("device_id");
+    expectTypeOf<Devices.DeviceShortURL>().toHaveProperty("short_code");
     expectTypeOf<
-      Extract<keyof APIKeys.APIKeyPermission, "apiKeyId" | "createdAt">
-    >().toBeNever();
-
-    expectTypeOf<APIKeys.APIKeyShortURL>().toHaveProperty("api_key_id");
-    expectTypeOf<APIKeys.APIKeyShortURL>().toHaveProperty("short_code");
-    expectTypeOf<APIKeys.APIKeyShortURL>().toHaveProperty("expires_at");
-    expectTypeOf<
-      Extract<
-        keyof APIKeys.APIKeyShortURL,
-        "apiKeyId" | "shortCode" | "expiresAt" | "createdAt"
-      >
+      Extract<keyof Devices.DeviceShortURL, "deviceId" | "shortCode">
     >().toBeNever();
   });
 
+  it("never gives admins a Device credential", () => {
+    expectTypeOf<
+      Extract<keyof Devices.AdminDeviceResponse, "credential">
+    >().toBeNever();
+    expectTypeOf<Devices.AdminDeviceResponse>().toHaveProperty("owner");
+  });
+
   it("emits the request payloads that used to live outside types.go", () => {
-    expectTypeOf<APIKeys.CreateAPIKeyPayload>().toEqualTypeOf<{
-      name: string;
-    }>();
-    expectTypeOf<APIKeys.UpdateAPIKeyNamePayload>().toEqualTypeOf<{
-      name: string;
-    }>();
     expectTypeOf<Books.UpdateFileCoverPagePayload>().toEqualTypeOf<{
       page: number;
     }>();

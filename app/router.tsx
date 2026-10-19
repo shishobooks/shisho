@@ -6,6 +6,7 @@ import {
 
 import ProtectedRoute from "@/components/library/ProtectedRoute";
 import AdminCache from "@/components/pages/AdminCache";
+import AdminDevices from "@/components/pages/AdminDevices";
 import AdminJobs from "@/components/pages/AdminJobs";
 import AdminLayout from "@/components/pages/AdminLayout";
 import AdminLibraries from "@/components/pages/AdminLibraries";
@@ -18,6 +19,8 @@ import AdminUsers from "@/components/pages/AdminUsers";
 import BookDetail from "@/components/pages/BookDetail";
 import CreateLibrary from "@/components/pages/CreateLibrary";
 import CreateUser from "@/components/pages/CreateUser";
+import DeviceDetail from "@/components/pages/DeviceDetail";
+import Devices from "@/components/pages/Devices";
 import FileDetail from "@/components/pages/FileDetail";
 import FileReader from "@/components/pages/FileReader";
 import GenreDetail from "@/components/pages/GenreDetail";
@@ -123,6 +126,16 @@ export const routes: RouteObject[] = [
                 requiredPermission={ROUTE_PERMISSIONS.settingsUsers}
               >
                 <UserDetail />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "devices",
+            element: (
+              <ProtectedRoute
+                requiredPermission={ROUTE_PERMISSIONS.settingsDevices}
+              >
+                <AdminDevices />
               </ProtectedRoute>
             ),
           },
@@ -271,6 +284,22 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute>
             <UserSettings />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "user/devices",
+        element: (
+          <ProtectedRoute>
+            <Devices />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "user/devices/:id",
+        element: (
+          <ProtectedRoute>
+            <DeviceDetail />
           </ProtectedRoute>
         ),
       },

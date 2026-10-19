@@ -90,5 +90,6 @@ export const ROUTE_PERMISSIONS = {
   settingsLibraries: "libraries:read",
   settingsUsers: "users:read",
   settingsCreateUser: "users:write",
+  settingsDevices: "users:read",
   settingsJobs: "jobs:read",
 } as const satisfies Record<string, Requirement>;

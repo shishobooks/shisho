@@ -11,14 +11,15 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/series"
@@ -36,6 +37,7 @@ type handler struct {
 	peopleService   *people.Service
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
+	listService     *lists.Service
 }
 
 func newHandler(
@@ -45,6 +47,7 @@ func newHandler(
 	peopleService *people.Service,
 	downloadCache *downloadcache.Cache,
 	settingsService *settings.Service,
+	listService *lists.Service,
 ) *handler {
 	return &handler{
 		libraryService:  libraryService,
@@ -53,18 +56,18 @@ func newHandler(
 		peopleService:   peopleService,
 		downloadCache:   downloadCache,
 		settingsService: settingsService,
+		listService:     listService,
 	}
 }
 
 func (h *handler) baseURL(c echo.Context) string {
-	apiKey := c.Param("apiKey")
-	return "/ereader/key/" + apiKey
+	return "/ereader/key/" + c.Param("credential")
 }
 
-// requireEntityAccess returns resource's 404 when the key's owner cannot
+// requireEntityAccess returns resource's 404 when the Device's owner cannot
 // access libraryID, the same response as an id with no row. It matches the
-// Kobo per-file rule, so a key cannot probe for books or files outside its
-// owner's libraries. Library paths use auth.RequireLibraryAccessFor instead.
+// Kobo per-file rule, so a Device cannot probe for books or files outside its
+// owner's libraries. Library paths use requireLibrary instead.
 func requireEntityAccess(c echo.Context, libraryID int, resource string) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {
@@ -77,7 +80,7 @@ func requireEntityAccess(c echo.Context, libraryID int, resource string) error {
 }
 
 // resolveSort returns the stored user-library sort preference for the
-// API-key-authenticated caller, falling back to sortspec.BuiltinDefault
+// Device's owner, falling back to sortspec.BuiltinDefault
 // when no preference is set. The eReader browser has no explicit URL
 // sort input — the stored preference (or builtin default) is the only
 // input.
@@ -88,11 +91,8 @@ func requireEntityAccess(c echo.Context, libraryID int, resource string) error {
 // eReader UI from a future change to the service's default. It also
 // guarantees this function never returns nil, so callers can rely on
 // the result without guarding.
-func (h *handler) resolveSort(ctx context.Context, apiKey *apikeys.APIKey, libraryID int) []sortspec.SortLevel {
-	if apiKey == nil {
-		return sortspec.BuiltinDefault()
-	}
-	resolved := sortspec.ResolveForLibrary(ctx, h.settingsService, apiKey.UserID, libraryID, nil)
+func (h *handler) resolveSort(ctx context.Context, userID int, libraryID int) []sortspec.SortLevel {
+	resolved := sortspec.ResolveForLibrary(ctx, h.settingsService, userID, libraryID, nil)
 	if resolved == nil {
 		return sortspec.BuiltinDefault()
 	}
@@ -102,22 +102,31 @@ func (h *handler) resolveSort(ctx context.Context, apiKey *apikeys.APIKey, libra
 // Libraries lists all libraries the user has access to.
 func (h *handler) Libraries(c echo.Context) error {
 	ctx := c.Request().Context()
-	_, err := apikeys.RequireKey(c)
-	if err != nil {
-		return err
-	}
-
 	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
+	scope, err := h.scope(c)
+	if err != nil {
+		return err
+	}
 
-	// List the libraries the key's owner can access
-	libs, err := h.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{
+	// List the libraries the Device's owner can access, within its scope
+	allLibs, err := h.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{
 		LibraryIDs: user.GetAccessibleLibraryIDs(),
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+	var libs []*models.Library
+	for _, lib := range allLibs {
+		hasBooks, err := h.libraryHasBooks(ctx, scope, lib.ID)
+		if err != nil {
+			return err
+		}
+		if hasBooks {
+			libs = append(libs, lib)
+		}
 	}
 
 	var content strings.Builder
@@ -138,6 +147,14 @@ func (h *handler) LibraryNav(c echo.Context) error {
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
 
+	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
+	if err != nil {
+		return err
+	}
+	if _, err := h.requireLibrary(c, libraryIDInt); err != nil {
+		return err
+	}
+
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
 	content.WriteString("<h1>Library</h1>")
@@ -156,7 +173,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	apiKey, err := apikeys.RequireKey(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -173,13 +190,14 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 		return err
 	}
 
-	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
+	scope, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
 	}
 
-	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
-	booksResult, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
+	booksResult, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		Sort:      sort,
 	}, page, typesFilter)
@@ -213,23 +231,20 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	_, err := apikeys.RequireKey(c)
-	if err != nil {
-		return err
-	}
-
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
 		return err
 	}
 
-	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
+	scope, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
 	}
 
 	// Get series for this library
 	seriesList, _, err := h.seriesService.ListSeriesWithTotal(ctx, series.ListSeriesOptions{
 		LibraryID: &libraryIDInt,
+		ListID:    scope.listID,
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -253,7 +268,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	libraryID := c.Param("libraryId")
 	seriesID := c.Param("seriesId")
 	baseURL := h.baseURL(c)
-	apiKey, err := apikeys.RequireKey(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -275,11 +290,12 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		return err
 	}
 
-	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
+	scope, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
 	}
 
-	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
 	// Get series info
 	s, err := h.seriesService.RetrieveSeriesByID(ctx, seriesIDInt)
@@ -291,9 +307,12 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	if s == nil || s.LibraryID != libraryIDInt {
 		return errcodes.NotFound("Series")
 	}
+	if err := h.requireListedBooks(ctx, scope, books.ListBooksOptions{LibraryID: &libraryIDInt, SeriesID: &seriesIDInt}, "Series"); err != nil {
+		return err
+	}
 
 	// Get books in series (paginated)
-	booksResult, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
+	booksResult, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		SeriesID:  &seriesIDInt,
 		Sort:      sort,
@@ -328,23 +347,20 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	_, err := apikeys.RequireKey(c)
-	if err != nil {
-		return err
-	}
-
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
 		return err
 	}
 
-	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
+	scope, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
 	}
 
 	// Get authors for this library (people with books in this library)
 	authorsList, _, err := h.peopleService.ListPeopleWithTotal(ctx, people.ListPeopleOptions{
 		LibraryID: &libraryIDInt,
+		ListID:    scope.listID,
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -368,7 +384,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	libraryID := c.Param("libraryId")
 	authorID := c.Param("authorId")
 	baseURL := h.baseURL(c)
-	apiKey, err := apikeys.RequireKey(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -390,7 +406,8 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return err
 	}
 
-	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
+	scope, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
 	}
 
@@ -409,8 +426,11 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 
 	// Fetch books for this author and library through the books service,
 	// which applies the user's stored sort preference.
-	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
-	booksInLibrary, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
+	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
+	if err := h.requireListedBooks(ctx, scope, books.ListBooksOptions{LibraryID: &libraryIDInt, PersonID: &authorIDInt}, "Author"); err != nil {
+		return err
+	}
+	booksInLibrary, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		PersonID:  &authorIDInt,
 		Sort:      sort,
@@ -445,7 +465,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	ctx := c.Request().Context()
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
-	apiKey, err := apikeys.RequireKey(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
@@ -462,11 +482,12 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		return err
 	}
 
-	if err := auth.RequireLibraryAccessFor(c, libraryIDInt); err != nil {
+	scope, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
 	}
 
-	sort := h.resolveSort(ctx, apiKey, libraryIDInt)
+	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
@@ -478,7 +499,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 
 	if query != "" {
 		// Search for books (paginated)
-		booksResult, total, err := h.listBooksPaginated(ctx, books.ListBooksOptions{
+		booksResult, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
 			LibraryID: &libraryIDInt,
 			Search:    &query,
 			Sort:      sort,
@@ -508,11 +529,6 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 func (h *handler) Download(c echo.Context) error {
 	ctx := c.Request().Context()
 	baseURL := h.baseURL(c)
-	_, err := apikeys.RequireKey(c)
-	if err != nil {
-		return err
-	}
-
 	// Parse cover toggle
 	coversParam := c.QueryParam("covers")
 	showCover := coversParam == "on"
@@ -533,7 +549,7 @@ func (h *handler) Download(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	if err := requireEntityAccess(c, book.LibraryID, "Book"); err != nil {
+	if err := h.requireBookInScope(c, book.LibraryID, book.ID, "Book"); err != nil {
 		return err
 	}
 
@@ -609,11 +625,6 @@ func (h *handler) Download(c echo.Context) error {
 // Cover serves a book cover image.
 func (h *handler) Cover(c echo.Context) error {
 	ctx := c.Request().Context()
-	_, err := apikeys.RequireKey(c)
-	if err != nil {
-		return err
-	}
-
 	bookIDInt, err := httputil.ParamID(c, "bookId", "Book")
 	if err != nil {
 		return err
@@ -630,7 +641,7 @@ func (h *handler) Cover(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	if err := requireEntityAccess(c, book.LibraryID, "Book"); err != nil {
+	if err := h.requireBookInScope(c, book.LibraryID, book.ID, "Book"); err != nil {
 		return err
 	}
 
@@ -645,15 +656,14 @@ func (h *handler) Cover(c echo.Context) error {
 	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlNoCache, "Cover")
 }
 
-// DownloadFile handles file downloads with API key authentication. When
+// DownloadFile handles file downloads for a Device. When
 // there is nothing to generate (a supplement or a type with no generator),
 // the reader gets the original file.
 func (h *handler) DownloadFile(c echo.Context) error {
 	return h.serveDownload(c, false)
 }
 
-// DownloadFileKepub handles KePub file downloads with API key
-// authentication. Types KePub cannot convert get the original file.
+// DownloadFileKepub handles KePub file downloads for a Device. Types KePub cannot convert get the original file.
 func (h *handler) DownloadFileKepub(c echo.Context) error {
 	return h.serveDownload(c, true)
 }
@@ -672,11 +682,6 @@ func (h *handler) DownloadFileKindle(c echo.Context) error {
 // download's defaults.
 func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.ServeOption) error {
 	ctx := c.Request().Context()
-	_, err := apikeys.RequireKey(c)
-	if err != nil {
-		return err
-	}
-
 	fileID, err := httputil.ParamID(c, "fileId", "File")
 	if err != nil {
 		return err
@@ -689,7 +694,7 @@ func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.Ser
 		return errors.WithStack(err)
 	}
 
-	if err := requireEntityAccess(c, file.LibraryID, "File"); err != nil {
+	if err := h.requireBookInScope(c, file.LibraryID, file.BookID, "File"); err != nil {
 		return err
 	}
 
@@ -962,11 +967,12 @@ func parsePageParam(raw string) int {
 	return 1
 }
 
-// listBooksPaginated fetches a single page of books, filtered to books
-// with a main file of typesFilter's type unless it is empty or "all".
+// listBooksPaginated fetches a single page of books in scope, filtered to
+// books with a main file of typesFilter's type unless it is empty or "all".
 // Returns the books for the requested page and the total count used to
 // drive the pagination UI.
-func (h *handler) listBooksPaginated(ctx context.Context, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
+func (h *handler) listBooksPaginated(ctx context.Context, scope deviceScope, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
+	opts.ListID = scope.listID
 	if typesFilter != "" && typesFilter != "all" {
 		opts.MainFileTypes = []string{strings.ToLower(typesFilter)}
 	}
@@ -982,22 +988,23 @@ func (h *handler) listBooksPaginated(ctx context.Context, opts books.ListBooksOp
 }
 
 // ResolveShortURL redirects a short code to the full eReader URL.
-func ResolveShortURL(c echo.Context, apiKeyService *apikeys.Service) error {
+func ResolveShortURL(c echo.Context, deviceService *devices.Service) error {
 	shortCode := c.Param("shortCode")
 
-	apiKey, err := apiKeyService.ResolveShortCode(c.Request().Context(), shortCode)
+	device, err := deviceService.ResolveShortCode(c.Request().Context(), shortCode)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if apiKey == nil {
+	if device == nil || !device.HasConnection(devices.ConnectionEReaderBrowser) {
 		return errcodes.NotFound("Short URL")
 	}
 
-	// Refuse before revealing the key URL when the owner can no longer use it.
-	if _, err := apiKeyService.AuthenticateOwner(c.Request().Context(), apiKey); err != nil {
+	// Refuse before revealing the Device's URL when the owner can no longer
+	// use it.
+	if _, err := deviceService.AuthenticateOwner(c.Request().Context(), device); err != nil {
 		return errors.WithStack(err)
 	}
 
-	redirectURL := fmt.Sprintf("/ereader/key/%s/", apiKey.Key)
+	redirectURL := fmt.Sprintf("/ereader/key/%s/", device.Credential)
 	return c.Redirect(http.StatusFound, redirectURL)
 }

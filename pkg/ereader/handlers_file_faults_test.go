@@ -11,9 +11,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -33,7 +33,7 @@ type downloadFixture struct {
 	book     *models.Book
 	dir      string
 	cacheDir string
-	apiKey   *apikeys.APIKey
+	device   *devices.Device
 }
 
 func newDownloadFixture(t *testing.T, title string) *downloadFixture {
@@ -47,7 +47,7 @@ func newDownloadFixture(t *testing.T, title string) *downloadFixture {
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", user.ID)
 	require.NoError(t, err)
-	apiKey, err := apikeys.NewService(db).Create(ctx, user.ID, "Test Key")
+	device, err := devices.NewService(db).Create(ctx, user.ID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
 	_, err = db.NewInsert().Model(lib).Exec(ctx)
@@ -68,7 +68,7 @@ func newDownloadFixture(t *testing.T, title string) *downloadFixture {
 	cache := downloadcache.NewCache(cacheDir, 1<<30)
 	t.Cleanup(cache.Wait)
 	return &downloadFixture{
-		t: t, db: db, lib: lib, book: book, dir: dir, cacheDir: cacheDir, apiKey: apiKey,
+		t: t, db: db, lib: lib, book: book, dir: dir, cacheDir: cacheDir, device: device,
 		h: &handler{bookService: books.NewService(db, appsettings.NewService(db)), downloadCache: cache},
 	}
 }
@@ -92,9 +92,9 @@ func (f *downloadFixture) serve(file *models.File, kepub bool) *httptest.Respons
 	f.t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-	withKey(c, f.t, f.db, f.apiKey)
-	c.SetParamNames("apiKey", "fileId")
-	c.SetParamValues(f.apiKey.Key, strconv.Itoa(file.ID))
+	withDevice(c, f.t, f.db, f.device)
+	c.SetParamNames("credential", "fileId")
+	c.SetParamValues(f.device.Credential, strconv.Itoa(file.ID))
 	var err error
 	if kepub {
 		err = f.h.DownloadFileKepub(c)

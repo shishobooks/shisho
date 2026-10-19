@@ -132,7 +132,7 @@ The reverse proxy must pass all of these public route families without rewriting
 
 Do not strip `/api` before forwarding it. Also pass `/health` if your external monitor uses it. Avoid response buffering for streaming API responses. The browser interface and API must share an origin; Shisho does not send CORS permission headers for cross-origin browser access.
 
-Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and API keys as secrets.
+Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and [Device credentials](./users-and-permissions.md#credential) as secrets.
 
 ### Device URLs
 

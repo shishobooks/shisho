@@ -28,14 +28,14 @@ func (f *koboScopeFixture) serveDirect(t *testing.T, path string) *httptest.Resp
 }
 
 func (f *koboScopeFixture) directBase() string {
-	return "http://192.168.1.10:5173" + f.prefix("all")
+	return "http://192.168.1.10:5173" + f.prefix()
 }
 
 func TestHandleInitialization_DirectNonDefaultPort_URLsCarryPort(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 
-	rec := f.serveDirect(t, f.prefix("all")+"/v1/initialization")
+	rec := f.serveDirect(t, f.prefix()+"/v1/initialization")
 
 	var body map[string]map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
@@ -50,7 +50,7 @@ func TestHandleSync_DirectNonDefaultPort_DownloadURLsCarryPort(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 
-	rec := f.serveDirect(t, f.prefix("all")+"/v1/library/sync")
+	rec := f.serveDirect(t, f.prefix()+"/v1/library/sync")
 
 	var items []syncItem
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
@@ -63,7 +63,7 @@ func TestHandleMetadata_DirectNonDefaultPort_DownloadURLsCarryPort(t *testing.T)
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 
-	rec := f.serveDirect(t, f.prefix("all")+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
+	rec := f.serveDirect(t, f.prefix()+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
 
 	var metadata []map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))

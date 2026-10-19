@@ -1,35 +1,49 @@
 package kobo
 
 import (
-	"context"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
-type contextKey string
-
-const contextKeyScope contextKey = "kobo_scope"
-
-// ScopeParser parses the sync scope from URL params based on the given scope type.
-// The scope type is passed as a parameter since each route group knows its type:
-//   - "all" -> SyncScope{Type: "all"}
-//   - "library" -> SyncScope{Type: "library", LibraryID: &id} (parses scopeId param)
-//   - "list" -> SyncScope{Type: "list", ListID: &id} (parses scopeId param)
-func ScopeParser(scopeType string) echo.MiddlewareFunc {
+// legacyURLScope serves the sync URLs API keys used, whose path carries a
+// scope segment ("all", "library/:scopeId", or "list/:scopeId"), so a Kobo
+// configured before Devices keeps syncing. A migrated Kobo takes its scope
+// from the segment on its first request after upgrading; after that, and
+// for every Device created since, the segment is ignored and the Device's
+// own scope applies.
+func legacyURLScope(service *devices.Service, scopeType string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			scope := &SyncScope{Type: scopeType}
+			device, err := devices.RequireDevice(c)
+			if err != nil {
+				return err
+			}
+			if !device.URLScopePending {
+				return next(c)
+			}
 
+			scope := devices.Scope{Type: scopeType}
 			switch scopeType {
-			case "library":
+			case devices.ScopeLibrary:
 				id, err := httputil.ParamID(c, "scopeId", "Library")
 				if err != nil {
 					return err
 				}
-				scope.LibraryID = &id
-			case "list":
+				// A library the owner cannot access synced nothing, and
+				// keeps syncing nothing.
+				user, err := auth.RequireUser(c)
+				if err != nil {
+					return err
+				}
+				if user.HasLibraryAccess(id) {
+					scope.LibraryID = &id
+				}
+			case devices.ScopeList:
 				id, err := httputil.ParamID(c, "scopeId", "List")
 				if err != nil {
 					return err
@@ -37,25 +51,30 @@ func ScopeParser(scopeType string) echo.MiddlewareFunc {
 				scope.ListID = &id
 			}
 
-			ctx := context.WithValue(c.Request().Context(), contextKeyScope, scope)
-			c.SetRequest(c.Request().WithContext(ctx))
-
+			device, err = service.ApplyURLScope(c.Request().Context(), device, scope)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			devices.SetDevice(c, device)
 			return next(c)
 		}
 	}
 }
 
-// GetScopeFromContext retrieves the sync scope from context.
-// Returns a default scope of {Type: "all"} if not found.
-func GetScopeFromContext(ctx context.Context) *SyncScope {
-	if scope, ok := ctx.Value(contextKeyScope).(*SyncScope); ok {
-		return scope
+// basePath returns the part of a Kobo request's path before the Kobo API
+// path, such as "/kobo/<credential>" or a legacy "/kobo/<credential>/all",
+// so the URLs Shisho hands the Kobo come back through the same route.
+func basePath(path string) string {
+	for _, marker := range []string{"/v1/", "/download/"} {
+		if idx := strings.Index(path, marker); idx != -1 {
+			return path[:idx]
+		}
 	}
-	return &SyncScope{Type: "all"}
+	return path
 }
 
 // StripKoboPrefix strips everything before /v1/ to get the Kobo API path.
-// For example, "/kobo/ak_123/all/v1/library/sync" becomes "/v1/library/sync".
+// For example, "/kobo/abc/v1/library/sync" becomes "/v1/library/sync".
 func StripKoboPrefix(path string) string {
 	if idx := strings.Index(path, "/v1/"); idx != -1 {
 		return path[idx:]

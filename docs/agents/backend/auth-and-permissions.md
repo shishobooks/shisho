@@ -20,7 +20,7 @@ Load every user through `auth.LoadUser`. On an authenticating path a missing or 
 ## Device routes (Kobo, eReader, OPDS)
 
 - **An entity loaded by URL id is re-checked against the route's listing scope**, because the id is attacker-chosen, and is a 404 outside it (never 403, which confirms it exists). An entity nested under a library path must belong to that library.
-- **A new API-key-authenticated family mounts `apikeys.Middleware.APIKeyAuth`**, and its handlers read the owner with `auth.RequireUser`.
+- **A new family authenticated by a Device credential mounts `devices.Middleware.DeviceAuth`** for its connection, and its handlers read the owner with `auth.RequireUser` and the Device with `devices.RequireDevice`. Listings and by-id lookups apply the Device's scope as well as the owner's library access.
 
 ## Adding a permission resource
 

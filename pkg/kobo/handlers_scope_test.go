@@ -2,7 +2,6 @@ package kobo
 
 import (
 	"context"
-	"fmt"
 	"image"
 	"image/jpeg"
 	"net/http"
@@ -13,10 +12,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -25,21 +24,21 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// koboScopeFixture wires the real Kobo routes (API key middleware, scope
-// parser and handlers) against a database holding two libraries, each with
-// one EPUB that exists on disk and has a cover. The key's owner is a viewer
-// with access to every library unless a test narrows it.
+// koboScopeFixture wires the real Kobo routes (Device middleware, legacy URL
+// scope and handlers) against a database holding two libraries, each with
+// one EPUB that exists on disk and has a cover. The Device's owner is a
+// viewer with access to every library unless a test narrows it.
 type koboScopeFixture struct {
-	db    *bun.DB
-	e     *echo.Echo
-	user  *models.User
-	key   *apikeys.APIKey
-	libA  *models.Library
-	libB  *models.Library
-	bookA *models.Book
-	bookB *models.Book
-	fileA *models.File
-	fileB *models.File
+	db     *bun.DB
+	e      *echo.Echo
+	user   *models.User
+	device *devices.Device
+	libA   *models.Library
+	libB   *models.Library
+	bookA  *models.Book
+	bookB  *models.Book
+	fileA  *models.File
+	fileB  *models.File
 }
 
 func newKoboScopeFixture(t *testing.T) *koboScopeFixture {
@@ -64,10 +63,7 @@ func newKoboScopeFixture(t *testing.T) *koboScopeFixture {
 	_, err = db.NewInsert().Model(&models.UserLibraryAccess{UserID: f.user.ID}).Exec(ctx)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	key, err := apiKeyService.Create(ctx, f.user.ID, "Kobo")
-	require.NoError(t, err)
-	f.key, err = apiKeyService.AddPermission(ctx, f.user.ID, key.ID, apikeys.PermissionKoboSync)
+	f.device, err = devices.NewService(db).Create(ctx, f.user.ID, "Kobo", devices.DeviceTypeKobo)
 	require.NoError(t, err)
 
 	f.bookA, f.fileA = insertScopeBookWithFile(ctx, t, db, f.libA.ID, "Alpha", models.FileTypeEPUB, models.FileRoleMain)
@@ -112,17 +108,30 @@ func (f *koboScopeFixture) serve(method, path string) *httptest.ResponseRecorder
 	return rec
 }
 
-// prefix returns the route prefix for a scope segment such as "all",
-// "library/3" or "list/7".
-func (f *koboScopeFixture) prefix(scope string) string {
-	return "/kobo/" + f.key.Key + "/" + scope
+// prefix returns the Device's Kobo sync URL, which has no scope segment.
+func (f *koboScopeFixture) prefix() string {
+	return "/kobo/" + f.device.Credential
 }
 
-// downloadPaths returns both download routes for a file under a scope.
-func (f *koboScopeFixture) downloadPaths(scope string, fileID int) []string {
+// legacyPrefix returns a sync URL as API keys had them, with a scope
+// segment such as "all", "library/3" or "list/7".
+func (f *koboScopeFixture) legacyPrefix(scope string) string {
+	return f.prefix() + "/" + scope
+}
+
+// setScope saves scope on the Device.
+func (f *koboScopeFixture) setScope(t *testing.T, scope devices.Scope) {
+	t.Helper()
+	var err error
+	f.device, err = devices.NewService(f.db).Update(context.Background(), f.user.ID, f.device.ID, devices.UpdateDeviceOptions{Scope: &scope})
+	require.NoError(t, err)
+}
+
+// downloadPaths returns both download routes for a file under prefix.
+func downloadPaths(prefix string, fileID int) []string {
 	return []string{
-		f.prefix(scope) + "/v1/books/" + ShishoID(fileID) + "/file/epub",
-		f.prefix(scope) + "/download/" + ShishoID(fileID) + "/kepub",
+		prefix + "/v1/books/" + ShishoID(fileID) + "/file/epub",
+		prefix + "/download/" + ShishoID(fileID) + "/kepub",
 	}
 }
 
@@ -191,10 +200,10 @@ func insertScopeFile(ctx context.Context, t *testing.T, db *bun.DB, book *models
 	return file
 }
 
-// withKeyOwner stores an all-libraries key owner in c, as APIKeyAuth does,
-// for tests that call a handler directly. With no scope in context the
-// handlers use the "all" scope.
-func withKeyOwner(c echo.Context) {
+// withDeviceOwner stores an all-libraries Kobo Device and its owner in c, as
+// DeviceAuth does, for tests that call a handler directly.
+func withDeviceOwner(c echo.Context) {
+	devices.SetDevice(c, &devices.Device{ID: "kobo", UserID: 1, DeviceType: devices.DeviceTypeKobo, ScopeType: devices.ScopeAll})
 	auth.SetUser(c, &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{}}})
 }
 
@@ -206,14 +215,14 @@ func assertFileNotFound(t *testing.T, rec *httptest.ResponseRecorder, method str
 	}
 }
 
-// A key scoped to library A cannot download a file from library B, even
+// A Device scoped to library A cannot download a file from library B, even
 // though its owner can access library B, on either download route, GET or HEAD.
 func TestHandleDownload_FileOutsideLibraryScope_Returns404(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
-	scope := fmt.Sprintf("library/%d", f.libA.ID)
+	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID})
 
-	for _, path := range f.downloadPaths(scope, f.fileB.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.fileB.ID) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			t.Run(method+" "+path, func(t *testing.T) {
 				t.Parallel()
@@ -223,44 +232,44 @@ func TestHandleDownload_FileOutsideLibraryScope_Returns404(t *testing.T) {
 	}
 
 	// Positive control: the in-scope file still downloads on both routes.
-	for _, path := range f.downloadPaths(scope, f.fileA.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.fileA.ID) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			assert.Equal(t, http.StatusOK, f.serve(method, path).Code, "%s %s", method, path)
 		}
 	}
 }
 
-// An "all" scope key cannot download a file from a library its owner has no
-// access to.
+// An "all" scope Device cannot download a file from a library its owner has
+// no access to.
 func TestHandleDownload_AllScope_FileInInaccessibleLibrary_Returns404(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 	f.restrictToLibrary(t, f.libA.ID)
 
-	for _, path := range f.downloadPaths("all", f.fileB.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.fileB.ID) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			assertFileNotFound(t, f.serve(method, path), method)
 		}
 	}
-	for _, path := range f.downloadPaths("all", f.fileA.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.fileA.ID) {
 		assert.Equal(t, http.StatusOK, f.serve(http.MethodGet, path).Code, path)
 	}
 }
 
-// A list scope key only downloads files of books on the list.
+// A list scope Device only downloads files of books on the list.
 func TestHandleDownload_ListScope_FileNotInList_Returns404(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 	list := f.insertList(t, f.bookA.ID)
-	scope := fmt.Sprintf("list/%d", list.ID)
+	f.setScope(t, devices.Scope{Type: devices.ScopeList, ListID: &list.ID})
 
-	for _, path := range f.downloadPaths(scope, f.fileB.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.fileB.ID) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			assertFileNotFound(t, f.serve(method, path), method)
 		}
 	}
 	// Positive control: the listed book's file downloads.
-	for _, path := range f.downloadPaths(scope, f.fileA.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.fileA.ID) {
 		assert.Equal(t, http.StatusOK, f.serve(http.MethodGet, path).Code, path)
 	}
 }
@@ -268,7 +277,8 @@ func TestHandleDownload_ListScope_FileNotInList_Returns404(t *testing.T) {
 func TestHandleCover_FileOutsideScope_Returns404(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
-	prefix := f.prefix(fmt.Sprintf("library/%d", f.libA.ID))
+	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID})
+	prefix := f.prefix()
 
 	rec := f.serve(http.MethodGet, prefix+"/v1/books/"+ShishoID(f.fileB.ID)+"/thumbnail/100/150/false/image.jpg")
 	assertFileNotFound(t, rec, http.MethodGet)
@@ -280,7 +290,8 @@ func TestHandleCover_FileOutsideScope_Returns404(t *testing.T) {
 func TestHandleMetadata_FileOutsideScope_Returns404(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
-	prefix := f.prefix(fmt.Sprintf("library/%d", f.libA.ID))
+	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID})
+	prefix := f.prefix()
 
 	rec := f.serve(http.MethodGet, prefix+"/v1/library/"+ShishoID(f.fileB.ID)+"/metadata")
 	assertFileNotFound(t, rec, http.MethodGet)
@@ -291,23 +302,23 @@ func TestHandleMetadata_FileOutsideScope_Returns404(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Alpha")
 }
 
-// A deactivated user's key stops working on every Kobo route.
-func TestKoboAPIKeyAuth_InactiveUser_Returns401(t *testing.T) {
+// A deactivated user's Device stops working on every Kobo route.
+func TestKoboDeviceAuth_InactiveUser_Returns401(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 	_, err := f.db.NewUpdate().Model((*models.User)(nil)).Set("is_active = ?", false).Where("id = ?", f.user.ID).Exec(context.Background())
 	require.NoError(t, err)
 
 	for _, path := range []string{
-		f.prefix("all") + "/v1/library/sync",
-		f.downloadPaths("all", f.fileA.ID)[0],
+		f.prefix() + "/v1/library/sync",
+		downloadPaths(f.prefix(), f.fileA.ID)[0],
 	} {
 		assert.Equal(t, http.StatusUnauthorized, f.serve(http.MethodGet, path).Code, path)
 	}
 }
 
-// A key whose owner's role lacks books:read cannot sync or download.
-func TestKoboAPIKeyAuth_RoleWithoutBooksRead_Returns403(t *testing.T) {
+// A Device whose owner's role lacks books:read cannot sync or download.
+func TestKoboDeviceAuth_RoleWithoutBooksRead_Returns403(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 	ctx := context.Background()
@@ -318,8 +329,8 @@ func TestKoboAPIKeyAuth_RoleWithoutBooksRead_Returns403(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, path := range []string{
-		f.prefix("all") + "/v1/library/sync",
-		f.downloadPaths("all", f.fileA.ID)[0],
+		f.prefix() + "/v1/library/sync",
+		downloadPaths(f.prefix(), f.fileA.ID)[0],
 	} {
 		assert.Equal(t, http.StatusForbidden, f.serve(http.MethodGet, path).Code, path)
 	}

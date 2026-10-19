@@ -5,11 +5,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
@@ -425,26 +424,29 @@ func (h *handler) createSeries(c echo.Context) error {
 	})
 }
 
-// createAPIKeyRequest is the request body for creating a test API key.
-type createAPIKeyRequest struct {
-	UserID      int      `json:"userId" validate:"required"`
-	Name        string   `json:"name" validate:"required"`
-	Permissions []string `json:"permissions"` // e.g., ["ereader_browser"]
+// createDeviceRequest is the request body for creating a test Device.
+type createDeviceRequest struct {
+	UserID     int    `json:"userId" validate:"required"`
+	Name       string `json:"name" validate:"required"`
+	DeviceType string `json:"deviceType"` // defaults to "browser"
+	// Connections replaces the type's connections when set, e.g. [] for a
+	// Device that cannot connect at all.
+	Connections *[]string `json:"connections"`
 }
 
-// createAPIKeyResponse is the response body for creating a test API key.
-type createAPIKeyResponse struct {
+// createDeviceResponse is the response body for creating a test Device.
+type createDeviceResponse struct {
 	ID          string   `json:"id"`
-	Key         string   `json:"key"`
-	Permissions []string `json:"permissions"`
+	Credential  string   `json:"credential"`
+	Connections []string `json:"connections"`
 }
 
-// createAPIKey creates a test API key with permissions.
-// POST /test/api-keys.
-func (h *handler) createAPIKey(c echo.Context) error {
+// createDevice creates a test Device.
+// POST /test/devices.
+func (h *handler) createDevice(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	var req createAPIKeyRequest
+	var req createDeviceRequest
 	if err := c.Bind(&req); err != nil {
 		return errors.WithStack(err)
 	}
@@ -452,48 +454,30 @@ func (h *handler) createAPIKey(c echo.Context) error {
 	if req.UserID == 0 || req.Name == "" {
 		return errcodes.ValidationError("userId and name are required.")
 	}
-
-	now := time.Now()
-
-	// Generate API key
-	keyBytes := make([]byte, 32)
-	for i := range keyBytes {
-		keyBytes[i] = byte(i + 65) // Simple deterministic key for testing
-	}
-	key := "ak_test_" + uuid.New().String()[:8]
-
-	apiKey := &apikeys.APIKey{
-		ID:        uuid.New().String(),
-		UserID:    req.UserID,
-		Name:      req.Name,
-		Key:       key,
-		CreatedAt: now,
-		UpdatedAt: now,
+	deviceType := req.DeviceType
+	if deviceType == "" {
+		deviceType = devices.DeviceTypeBrowser
 	}
 
-	_, err := h.db.NewInsert().Model(apiKey).Exec(ctx)
+	service := devices.NewService(h.db)
+	device, err := service.Create(ctx, req.UserID, req.Name, deviceType)
 	if err != nil {
-		return errors.Wrap(err, "failed to create api key")
+		return errors.Wrap(err, "failed to create device")
 	}
-
-	// Add permissions (only if provided)
-	for _, perm := range req.Permissions {
-		permission := &apikeys.APIKeyPermission{
-			ID:         uuid.New().String(),
-			APIKeyID:   apiKey.ID,
-			Permission: perm,
-			CreatedAt:  now,
-		}
-		_, err = h.db.NewInsert().Model(permission).Exec(ctx)
+	if req.Connections != nil {
+		device, err = service.Update(ctx, req.UserID, device.ID, devices.UpdateDeviceOptions{
+			Connections:    *req.Connections,
+			SetConnections: true,
+		})
 		if err != nil {
-			return errors.Wrap(err, "failed to create permission")
+			return errors.Wrap(err, "failed to set device connections")
 		}
 	}
 
-	return c.JSON(http.StatusCreated, createAPIKeyResponse{
-		ID:          apiKey.ID,
-		Key:         key,
-		Permissions: req.Permissions,
+	return c.JSON(http.StatusCreated, createDeviceResponse{
+		ID:          device.ID,
+		Credential:  device.Credential,
+		Connections: device.ConnectionNames(),
 	})
 }
 
@@ -502,7 +486,7 @@ type deleteAllEReaderDataResponse struct {
 	Libraries int `json:"libraries"`
 	Books     int `json:"books"`
 	Files     int `json:"files"`
-	APIKeys   int `json:"apiKeys"`
+	Devices   int `json:"devices"`
 }
 
 // deleteAllEReaderData deletes all eReader-related test data.
@@ -523,25 +507,23 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 		_ = os.RemoveAll(h.fileRoot)
 	}
 
-	// Delete API key permissions
+	// Delete Device connections and short URLs
 	_, _ = h.db.NewDelete().
-		Model((*apikeys.APIKeyPermission)(nil)).
+		Model((*devices.DeviceConnection)(nil)).
+		Where("1=1").
+		Exec(ctx)
+	_, _ = h.db.NewDelete().
+		Model((*devices.DeviceShortURL)(nil)).
 		Where("1=1").
 		Exec(ctx)
 
-	// Delete API key short URLs
-	_, _ = h.db.NewDelete().
-		Model((*apikeys.APIKeyShortURL)(nil)).
-		Where("1=1").
-		Exec(ctx)
-
-	// Delete API keys
+	// Delete Devices
 	result, _ := h.db.NewDelete().
-		Model((*apikeys.APIKey)(nil)).
+		Model((*devices.Device)(nil)).
 		Where("1=1").
 		Exec(ctx)
 	if n, _ := result.RowsAffected(); n > 0 {
-		resp.APIKeys = int(n)
+		resp.Devices = int(n)
 	}
 
 	// Delete authors

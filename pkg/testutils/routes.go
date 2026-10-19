@@ -24,7 +24,7 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, manager *plugins.Manager, install
 	test.POST("/books", h.createBook)
 	test.POST("/persons", h.createPerson)
 	test.POST("/series", h.createSeries)
-	test.POST("/api-keys", h.createAPIKey)
+	test.POST("/devices", h.createDevice)
 	test.DELETE("/ereader", h.deleteAllEReaderData)
 
 	// Plugin fixture endpoints — serve the fixture plugin as a zip so the

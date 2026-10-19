@@ -126,8 +126,10 @@ packages:
       import { File, Publisher } from "@/types";
     include_files:
       - types.go
-  - path: "github.com/shishobooks/shisho/pkg/apikeys"
-    output_path: "app/types/generated/apikeys.ts"
+  - path: "github.com/shishobooks/shisho/pkg/devices"
+    output_path: "app/types/generated/devices.ts"
+    frontmatter: |
+      import { UserRef } from "@/types";
     include_files:
       - model.go
       - types.go

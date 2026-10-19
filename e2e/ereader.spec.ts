@@ -2,7 +2,7 @@
  * E2E tests for the eReader browser UI.
  *
  * Tests the eReader routes that serve HTML pages for e-reader devices.
- * These pages are authenticated via API key in the URL path.
+ * These pages are authenticated by the Device credential in the URL path.
  *
  * Running:
  *   pnpm test:e2e                        # Run all E2E tests
@@ -16,7 +16,7 @@ interface TestData {
   libraryId: number;
   bookId: number;
   pdfBookId: number;
-  apiKey: string;
+  credential: string;
   seriesId: number;
   authorId: number;
 }
@@ -100,22 +100,21 @@ test.describe("eReader Browser UI", () => {
     });
     const pdfBook = (await pdfBookResp.json()) as { id: number };
 
-    // Create API key with eReader permission
-    const apiKeyResp = await apiContext.post("/api/test/api-keys", {
+    // Create a Browser Device, which has the eReader browser connection
+    const deviceResp = await apiContext.post("/api/test/devices", {
       data: {
         userId: user.id,
-        name: "Test eReader Key",
-        permissions: ["ereader_browser"],
+        name: "Test eReader",
       },
     });
-    const apiKeyData = (await apiKeyResp.json()) as { key: string };
+    const deviceData = (await deviceResp.json()) as { credential: string };
 
     testData = {
       userId: user.id,
       libraryId: library.id,
       bookId: book1.id,
       pdfBookId: pdfBook.id,
-      apiKey: apiKeyData.key,
+      credential: deviceData.credential,
       seriesId: series.id,
       authorId: author.id,
     };
@@ -132,36 +131,40 @@ test.describe("eReader Browser UI", () => {
   });
 
   test.describe("Authentication", () => {
-    test("returns 401 for invalid API key", async ({ page }) => {
+    test("returns 401 for an invalid credential", async ({ page }) => {
       const response = await page.goto("/ereader/key/invalid-key/");
       expect(response?.status()).toBe(401);
     });
 
-    test("returns 403 for API key without permission", async ({ browser }) => {
+    test("returns 403 for a Device without the eReader browser connection", async ({
+      browser,
+    }) => {
       const apiBaseURL = getApiBaseURL(browser.browserType().name());
       const apiContext = await request.newContext({ baseURL: apiBaseURL });
 
-      // Create API key without eReader permission
-      const apiKeyResp = await apiContext.post("/api/test/api-keys", {
+      // Create a Device with no connections
+      const deviceResp = await apiContext.post("/api/test/devices", {
         data: {
           userId: testData.userId,
-          name: "No Permission Key",
-          permissions: [], // No permissions
+          name: "No Connection Device",
+          connections: [],
         },
       });
-      const apiKeyData = (await apiKeyResp.json()) as { key: string };
+      const deviceData = (await deviceResp.json()) as { credential: string };
       await apiContext.dispose();
 
       const page = await browser.newPage();
-      const response = await page.goto(`/ereader/key/${apiKeyData.key}/`);
+      const response = await page.goto(
+        `/ereader/key/${deviceData.credential}/`,
+      );
       expect(response?.status()).toBe(403);
       await page.close();
     });
 
-    test("allows access with valid API key and permission", async ({
+    test("allows access with a valid credential and connection", async ({
       page,
     }) => {
-      const response = await page.goto(`/ereader/key/${testData.apiKey}/`);
+      const response = await page.goto(`/ereader/key/${testData.credential}/`);
       expect(response?.status()).toBe(200);
       await expect(page.getByText("Libraries")).toBeVisible();
     });
@@ -169,7 +172,7 @@ test.describe("eReader Browser UI", () => {
 
   test.describe("Libraries Page", () => {
     test("shows list of libraries", async ({ page }) => {
-      await page.goto(`/ereader/key/${testData.apiKey}/`);
+      await page.goto(`/ereader/key/${testData.credential}/`);
       await expect(
         page.getByRole("heading", { name: "Libraries" }),
       ).toBeVisible();
@@ -177,7 +180,7 @@ test.describe("eReader Browser UI", () => {
     });
 
     test("can navigate to library", async ({ page }) => {
-      await page.goto(`/ereader/key/${testData.apiKey}/`);
+      await page.goto(`/ereader/key/${testData.credential}/`);
       await page.locator(".item-title", { hasText: "Test Library" }).click();
       await expect(
         page.getByRole("heading", { name: "Library" }),
@@ -201,7 +204,7 @@ test.describe("eReader Browser UI", () => {
   test.describe("Library Navigation", () => {
     test("shows navigation options", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}`,
       );
       await expect(
         page.locator(".item-title", { hasText: "All Books" }),
@@ -221,7 +224,7 @@ test.describe("eReader Browser UI", () => {
   test.describe("All Books", () => {
     test("shows list of books", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/all`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/all`,
       );
       await expect(
         page.getByRole("heading", { name: "All Books" }),
@@ -234,7 +237,7 @@ test.describe("eReader Browser UI", () => {
 
     test("shows file type filter options", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/all`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/all`,
       );
       // Check for filter buttons specifically (not book metadata)
       await expect(
@@ -253,7 +256,7 @@ test.describe("eReader Browser UI", () => {
 
     test("can filter by file type", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/all?types=epub`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/all?types=epub`,
       );
       await expect(page.getByText("Test Book 1")).toBeVisible();
       await expect(page.getByText("Test Book 2")).not.toBeVisible();
@@ -263,7 +266,7 @@ test.describe("eReader Browser UI", () => {
 
     test("can filter by PDF file type", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/all?types=pdf`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/all?types=pdf`,
       );
       await expect(page.getByText("PDF Document Test")).toBeVisible();
       await expect(page.getByText("Test Book 1")).not.toBeVisible();
@@ -275,7 +278,7 @@ test.describe("eReader Browser UI", () => {
   test.describe("Series", () => {
     test("shows list of series", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/series`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/series`,
       );
       await expect(page.getByRole("heading", { name: "Series" })).toBeVisible();
       await expect(page.getByText("Test Series")).toBeVisible();
@@ -283,7 +286,7 @@ test.describe("eReader Browser UI", () => {
 
     test("shows books in series", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/series/${testData.seriesId}`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/series/${testData.seriesId}`,
       );
       await expect(
         page.getByRole("heading", { name: "Test Series" }),
@@ -295,7 +298,7 @@ test.describe("eReader Browser UI", () => {
   test.describe("Authors", () => {
     test("shows list of authors", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/authors`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/authors`,
       );
       await expect(
         page.getByRole("heading", { name: "Authors" }),
@@ -305,7 +308,7 @@ test.describe("eReader Browser UI", () => {
 
     test("shows books by author", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/authors/${testData.authorId}`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/authors/${testData.authorId}`,
       );
       await expect(
         page.getByRole("heading", { name: "Test Author" }),
@@ -319,7 +322,7 @@ test.describe("eReader Browser UI", () => {
   test.describe("Search", () => {
     test("shows search form", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/search`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/search`,
       );
       await expect(page.getByRole("heading", { name: "Search" })).toBeVisible();
       await expect(page.getByRole("textbox")).toBeVisible();
@@ -327,7 +330,7 @@ test.describe("eReader Browser UI", () => {
 
     test("can search for books", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/search?q=Test+Book`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/search?q=Test+Book`,
       );
       await expect(page.getByText("Test Book 1")).toBeVisible();
       await expect(page.getByText("Test Book 2")).toBeVisible();
@@ -335,7 +338,7 @@ test.describe("eReader Browser UI", () => {
 
     test("shows no results for non-matching query", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/libraries/${testData.libraryId}/search?q=nonexistent`,
+        `/ereader/key/${testData.credential}/libraries/${testData.libraryId}/search?q=nonexistent`,
       );
       await expect(page.getByText("Found 0 results")).toBeVisible();
     });
@@ -344,7 +347,7 @@ test.describe("eReader Browser UI", () => {
   test.describe("Book Download Page", () => {
     test("shows book details", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/download/${testData.bookId}`,
+        `/ereader/key/${testData.credential}/download/${testData.bookId}`,
       );
       await expect(
         page.getByRole("heading", { name: "Test Book 1" }),
@@ -354,7 +357,7 @@ test.describe("eReader Browser UI", () => {
 
     test("shows download link", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/download/${testData.bookId}`,
+        `/ereader/key/${testData.credential}/download/${testData.bookId}`,
       );
       await expect(
         page.getByRole("link", { name: /Download EPUB/i }),
@@ -363,7 +366,7 @@ test.describe("eReader Browser UI", () => {
 
     test("shows PDF book details and download link", async ({ page }) => {
       await page.goto(
-        `/ereader/key/${testData.apiKey}/download/${testData.pdfBookId}`,
+        `/ereader/key/${testData.credential}/download/${testData.pdfBookId}`,
       );
       await expect(
         page.getByRole("heading", { name: "PDF Document Test" }),

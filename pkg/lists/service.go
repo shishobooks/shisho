@@ -787,6 +787,15 @@ func (svc *Service) CanView(ctx context.Context, listID, userID int) (bool, erro
 	return count > 0, errors.WithStack(err)
 }
 
+// ContainsBook reports whether bookID is on listID.
+func (svc *Service) ContainsBook(ctx context.Context, listID, bookID int) (bool, error) {
+	exists, err := svc.db.NewSelect().
+		Model((*models.ListBook)(nil)).
+		Where("list_id = ? AND book_id = ?", listID, bookID).
+		Exists(ctx)
+	return exists, errors.WithStack(err)
+}
+
 // CanEdit returns true if the user can add/remove books.
 func (svc *Service) CanEdit(ctx context.Context, listID, userID int) (bool, error) {
 	ownerID, found, err := svc.getListOwnerID(ctx, listID)

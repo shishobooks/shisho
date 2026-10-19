@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/apikeys"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -17,18 +17,18 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// newSyncPointTestDB returns testdb.New with the API key the sync point
+// newSyncPointTestDB returns testdb.New with the Device the sync point
 // tests reference.
 func newSyncPointTestDB(t *testing.T) *bun.DB {
 	t.Helper()
 	db := testdb.New(t)
-	// Insert a test API key that all sync point tests reference
-	insertTestAPIKey(t, db, "api-key-1")
+	// Insert a test Device that all sync point tests reference
+	insertTestDevice(t, db, "api-key-1")
 	return db
 }
 
-// insertTestAPIKey creates a user and API key for FK-valid test data.
-func insertTestAPIKey(t *testing.T, db *bun.DB, keyID string) {
+// insertTestDevice creates a user and Device for FK-valid test data.
+func insertTestDevice(t *testing.T, db *bun.DB, keyID string) {
 	t.Helper()
 
 	// Get admin role ID (seeded by migrations)
@@ -38,7 +38,7 @@ func insertTestAPIKey(t *testing.T, db *bun.DB, keyID string) {
 
 	// Insert a user (use the keyID as a suffix so the helper can be called
 	// more than once per DB without colliding on the unique username).
-	username := "_apikey_owner_" + keyID
+	username := "_device_owner_" + keyID
 	_, err = db.Exec("INSERT INTO users (username, password_hash, role_id, is_active) VALUES (?, ?, ?, ?)",
 		username, "fakehash", roleID, true)
 	require.NoError(t, err)
@@ -47,9 +47,8 @@ func insertTestAPIKey(t *testing.T, db *bun.DB, keyID string) {
 	err = db.QueryRow("SELECT id FROM users WHERE username = ?", username).Scan(&userID)
 	require.NoError(t, err)
 
-	// Insert API key
-	_, err = db.Exec("INSERT INTO api_keys (id, user_id, name, key, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-		keyID, userID, "test-key", "ak_test_"+keyID)
+	_, err = db.Exec("INSERT INTO devices (id, user_id, name, device_type, credential, created_at, updated_at) VALUES (?, ?, ?, 'kobo', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+		keyID, userID, "test-device", "ak_test_"+keyID)
 	require.NoError(t, err)
 }
 
@@ -68,7 +67,7 @@ func TestCreateSyncPoint(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, sp.ID, "SyncPoint should have a generated ID")
-	assert.Equal(t, "api-key-1", sp.APIKeyID)
+	assert.Equal(t, "api-key-1", sp.DeviceID)
 	assert.Nil(t, sp.CompletedAt, "SyncPoint should be created as in-progress")
 	assert.Len(t, sp.Books, 2, "SyncPoint should have 2 books")
 
@@ -95,7 +94,7 @@ func TestCreateSyncPoint_Empty(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, sp.ID)
-	assert.Equal(t, "api-key-1", sp.APIKeyID)
+	assert.Equal(t, "api-key-1", sp.DeviceID)
 	assert.Nil(t, sp.CompletedAt, "SyncPoint should be created as in-progress")
 	assert.Empty(t, sp.Books)
 }
@@ -103,7 +102,7 @@ func TestCreateSyncPoint_Empty(t *testing.T) {
 func TestGetSyncPointByID_RejectsOtherTenant(t *testing.T) {
 	t.Parallel()
 	db := newSyncPointTestDB(t)
-	insertTestAPIKey(t, db, "api-key-2")
+	insertTestDevice(t, db, "api-key-2")
 	ctx := context.Background()
 	svc := NewService(db)
 
@@ -117,7 +116,7 @@ func TestGetSyncPointByID_RejectsOtherTenant(t *testing.T) {
 	_, err = svc.GetSyncPointByID(ctx, "api-key-2", sp.ID)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, sql.ErrNoRows),
-		"GetSyncPointByID must return ErrNoRows when api_key_id does not match the row owner")
+		"GetSyncPointByID must return ErrNoRows when device_id does not match the row owner")
 
 	// MarkSyncPointCompleted from the wrong owner must be a no-op (the WHERE
 	// clause matches no rows, so completed_at stays nil for the real owner).
@@ -431,7 +430,7 @@ func insertSyncEntryFile(t *testing.T, db *bun.DB) int {
 func TestEnsureRevisionIDs_AssignsOnceAndKeeps(t *testing.T) {
 	t.Parallel()
 	db := newSyncPointTestDB(t)
-	insertTestAPIKey(t, db, "api-key-2")
+	insertTestDevice(t, db, "api-key-2")
 	ctx := context.Background()
 	svc := NewService(db)
 	fileID := insertSyncEntryFile(t, db)
@@ -460,7 +459,7 @@ func TestEnsureRevisionIDs_KeepsRecordedRevisionID(t *testing.T) {
 	fileID := insertSyncEntryFile(t, db)
 	hashForm := ShishoID(fileID) + "-abcdef12"
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO kobo_sync_entries (api_key_id, file_id, revision_id) VALUES (?, ?, ?)`,
+		`INSERT INTO kobo_sync_entries (device_id, file_id, revision_id) VALUES (?, ?, ?)`,
 		"api-key-1", fileID, hashForm)
 	require.NoError(t, err)
 
@@ -477,11 +476,11 @@ func TestEnsureRevisionIDs_SurvivesSyncHistoryReset(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(f.db)
 
-	first, err := svc.EnsureRevisionIDs(ctx, f.key.ID, []int{f.fileA.ID})
+	first, err := svc.EnsureRevisionIDs(ctx, f.device.ID, []int{f.fileA.ID})
 	require.NoError(t, err)
-	require.NoError(t, apikeys.NewService(f.db).ClearKoboSyncHistory(ctx, f.user.ID, f.key.ID))
+	require.NoError(t, devices.NewService(f.db).ClearKoboSyncHistory(ctx, f.user.ID, f.device.ID))
 
-	again, err := svc.EnsureRevisionIDs(ctx, f.key.ID, []int{f.fileA.ID})
+	again, err := svc.EnsureRevisionIDs(ctx, f.device.ID, []int{f.fileA.ID})
 	require.NoError(t, err)
 	assert.Equal(t, first, again)
 }
