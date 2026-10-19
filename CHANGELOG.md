@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-19
+
+### Features
+- Let users choose the default library the home page opens (#723)
+- Add a page picker and thousands separators for large libraries (#720)
+- Sort the books on series, person, genre, and tag pages (#719)
+- Sort book genres and tags alphabetically (#717)
+- Add sort options to the series, people, genre, tag, and publisher lists (#716)
+
+### Bug Fixes
+- Label OPDS download links and make KePub links downloadable in KOReader (#751)
+- Show the File's name as the title on Kobo and in the in-app readers, through one shared helper (#750)
+- Kobo downloads and covers work when Shisho is reached directly on a non-default port (#749)
+- Make migration rollback safe on a database with rows (#748)
+- Keep one copy on a Kobo when a synced file is moved, renamed, or rewritten (#747)
+- Stop saying newer Kindle firmware refuses AZW3 downloads (#745)
+- Group thousands in counts across the app and label merge dialog counts by entity (#722)
+- Match sidecar genre and tag order to the UI and pin the EPUB OPF test's modified date (#718)
+
+### Documentation
+- Add Devices and Delivery Rules to the glossary and record ADRs 0011 and 0012 (#725)
+
+### Other
+- Bump the minor-and-patch group across 1 directory with 9 updates (#724)
+
 ## [0.3.1] - 2026-10-14
 
 ### Features

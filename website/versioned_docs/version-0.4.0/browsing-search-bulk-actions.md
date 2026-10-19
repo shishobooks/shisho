@@ -1,0 +1,108 @@
+# Browsing, Search, and Bulk Actions
+
+Shisho provides library-scoped search, gallery controls, and selection tools for working with many books at once.
+
+To choose which library opens from the home page, open the user menu, select **User Settings**, and pick a **Default library** under **Library**.
+
+## Search
+
+The global search field in the header is scoped to the current library. It searches **Books**, **Series**, and **People**, then groups matching results by resource type. Search requires Books Read. Series results appear only for roles with Series Read, and People results only for roles with People Read. Switch libraries before searching if the item belongs elsewhere.
+
+The search field in the library gallery searches books only. Use it with **Filter** to narrow the gallery without searching series or people.
+
+## Filters
+
+Open **Filter** on the library gallery to combine any of these criteria:
+
+- **File type**
+- **Genres**
+- **Tags**
+- **Language**
+- **Review state**, including **Needs review** and **Reviewed**
+
+Active filters appear as removable chips. Filters apply together, so a book must satisfy the current combination.
+
+## Gallery Sort
+
+Open **Sort** to build a multi-level sort. Add levels, choose ascending or descending direction, remove levels, and drag them into priority order. Available fields include **Title**, **Author**, **Series**, **Date added**, **Date released**, **Page count**, and **Duration**.
+
+A sort in the page URL is temporary and can be bookmarked or shared. **Save as my default for this library** stores the current sort for the current user and library. Each user can therefore choose a different default for every library.
+
+Without a saved default, books sort by **Date added** with the newest first.
+
+The saved default also controls book ordering in that library's [OPDS](./opds.md) feed and [eReader Browser](./ereader-browser.md), which use the same fallback. A temporary browser URL sort does not change those views.
+
+## Series, People, Genres, Tags, and Publishers Sort
+
+The **Series**, **People**, **Genres**, **Tags**, and **Publishers** pages have the same multi-level **Sort** control. Every page offers **Name** and **Date added**, plus the counts the page shows:
+
+- **Series**, **Genres**, and **Tags**: **Book count**
+- **People**: **Books authored** and **Files narrated**
+- **Publishers**: **File count**, which includes the files of sub-publishers
+
+These pages sort by **Name** until you choose another sort. Their sort lives only in the page URL and cannot be saved as a default.
+
+## Books on Series, Person, Genre, and Tag Pages
+
+The book section of a series, person, genre, or tag page has a **Sort** control with the [gallery sort](#gallery-sort) fields. A series page leaves out **Series**.
+
+- Person, genre, and tag pages list books by **Date released** with the newest first, then by **Title**. Books with no release date come last.
+- A series page keeps series order until you choose a sort, and returns to it when you remove every level.
+
+As on the list pages, the sort lives only in the page URL. Your saved gallery default does not apply here.
+
+## Gallery Size
+
+Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is available on the library home, the series list, list detail pages, and the book sections of series, person, genre, and tag pages. It is not a per-library setting.
+
+**Save as my default everywhere** stores one global gallery-size preference for the current user. A size in the page URL temporarily overrides that preference on the current page.
+
+The inline **Size** control is hidden on small screens. On those devices, open the user menu, select **User Settings**, and change the gallery size under **Appearance**.
+
+Covers use thumbnails sized for their display size and screen pixel density. A new size is generated when first needed, so its initial load can take longer. Subsequent views reuse cached thumbnails. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for cache limits and clearing.
+
+## Jump to a Page
+
+Long lists are split into pages, with controls below the last item. The double arrows go to the first and last page. To reach a page in between, open **Page _N_ of _M_** and type its number: the list narrows to pages that start with what you typed, and **Enter** opens the first match.
+
+## Selecting Books
+
+Click the explicit **Select** button on the library gallery to enter selection mode. Click books to add or remove them from the selection. Selections remain active as you move between gallery pages.
+
+Shift-click selects a range only within the current page. It cannot create a range across pagination boundaries.
+
+The selection toolbar provides these actions:
+
+- **Add** opens **Add to List**.
+- **More** includes **Mark reviewed** and **Mark needs review**.
+- **Merge** combines two or more selected books in the same library.
+- **Delete** deletes the selected books and their disk content.
+- **Download** creates a bulk download.
+
+Merge and delete can have destructive filesystem effects. Read [Managing Books and Files](./managing-books-and-files.md) first.
+
+Merge, delete, and the review actions require Books Write. Users without it still see the selection toolbar for list actions and downloads, but those three actions are hidden. See [Users and Permissions](./users-and-permissions.md#what-a-read-only-role-sees).
+
+## Bulk Downloads
+
+Select books, click **Download**, and choose from the available **EPUB**, **AZW3**, **MOBI**, **M4B**, **CBZ**, and **PDF** types. Shisho includes every matching main file, so a book with multiple editions of the same type contributes each edition. Supplements and sidecar files are not included.
+
+Shisho generates download copies with format-specific metadata:
+
+- EPUB metadata and cover data are written into the EPUB, and renamed or deleted chapters into its table of contents.
+- CBZ metadata is written to `ComicInfo.xml`.
+- M4B metadata and edited chapters are written into MP4 metadata and chapter structures.
+- PDF metadata and edited chapters are written into the PDF information and outline.
+- MOBI and AZW3 metadata and cover data are written into the file, and renamed or deleted chapters into its table of contents; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for the fields.
+
+The source files in the library are not replaced by these generated copies. Shisho prepares the ZIP in a background job, and you can navigate elsewhere while it runs.
+
+### Bulk Download Permissions
+
+Bulk download requires Books Read and access to the library of every selected file. The built-in **admin**, **editor**, and **viewer** roles all have Books Read, so users with any of them can create bulk downloads. If any selected file is in a library the user cannot access, Shisho rejects the whole request and does not start the job.
+
+Jobs permissions are not needed for a bulk download. The user who started it can follow its progress and download the ZIP. Other users can see that job only with Jobs Read, and downloading it also needs Books Read and access to its libraries. See [Users and Permissions](./users-and-permissions.md) for roles and library access.
+
+### Bulk Download Cache
+
+Generated files and ZIP archives use the download cache. Cached output has no time-to-live expiration. Shisho evicts older cached output based on usage when the cache size limit is exceeded. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) to change or lift the limit.

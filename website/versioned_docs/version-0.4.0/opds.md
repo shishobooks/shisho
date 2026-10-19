@@ -1,0 +1,93 @@
+# OPDS Catalog
+
+Shisho provides an OPDS 1.2 catalog for browsing and downloading books from compatible reading apps.
+
+## Catalog URLs
+
+Use this root catalog URL:
+
+```text
+https://your-server/opds/v1/{types}/catalog
+```
+
+Replace `{types}` with one or more of `epub`, `cbz`, `m4b`, `pdf`, `mobi`, and `azw3`. Join multiple types with `+`:
+
+```text
+https://your-server/opds/v1/epub/catalog
+https://your-server/opds/v1/epub+cbz/catalog
+https://your-server/opds/v1/mobi+azw3/catalog
+https://your-server/opds/v1/epub+cbz+m4b+pdf+mobi+azw3/catalog
+```
+
+Any non-empty combination of those six types is accepted. Order does not change the catalog behavior. `mobi` covers `.mobi`, `.azw`, and `.prc` files. For a reading app that opens only Kindle formats, use `mobi+azw3`.
+
+Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it, and a title naming its format and the file's name, or the book's title when the file has no name, such as `EPUB · Illustrated Edition`. Reading apps that label downloads by title use it to tell a book's files apart. Downloads are generated with the book's current metadata, as that page describes for each format. The first download of some formats shows no progress or size in the reading app; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
+
+### KePub Catalog
+
+To request KePub downloads where conversion is supported, insert `/kepub` before the type selection:
+
+```text
+https://your-server/opds/v1/kepub/epub+cbz/catalog
+```
+
+In a KePub catalog, EPUB and CBZ files are converted to KePub, and their download titles start with `KePub`. M4B and PDF files remain in their native formats. KePub catalogs are for Kobo devices, which cannot open MOBI or AZW3, so they skip `mobi` and `azw3` in the type selection and refuse a selection with no other type. See [Supported Formats](./supported-formats.md) for generated-download limitations.
+
+## Authentication and Access
+
+OPDS uses HTTP Basic Authentication. Add the catalog with the same Shisho username and password used for the web interface. Use HTTPS whenever the catalog is reachable outside a trusted local network.
+
+The user's role needs Books Read. Without it, every catalog feed, cover, and download returns `403 Forbidden`, the same rule [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs follow.
+
+The root catalog lists only libraries the authenticated user can access, followed by a **Lists** entry when the user owns or has been shared at least one [list](./lists.md). Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client.
+
+## Catalog Structure
+
+After the root catalog, clients follow these routes under `/opds/v1/{types}`:
+
+| Catalog | Route |
+|---------|-------|
+| Library navigation | `/libraries/{libraryID}` |
+| All books | `/libraries/{libraryID}/all` |
+| Series list | `/libraries/{libraryID}/series` |
+| Books in a series | `/libraries/{libraryID}/series/{seriesID}` |
+| Authors list | `/libraries/{libraryID}/authors` |
+| Books by an author | `/libraries/{libraryID}/authors/{authorName}` |
+| Search | `/libraries/{libraryID}/search?q={query}` |
+| Lists the user owns or has been shared | `/lists` |
+| Books in a list | `/lists/{listID}` |
+| Search within a list | `/lists/{listID}/search?q={query}` |
+
+KePub catalogs use the same routes under `/opds/v1/kepub/{types}`. There are no separate genre, tag, or recently added routes. A list can hold books from several libraries; its feed shows only the books in libraries the user can access, and a list the user neither owns nor has been shared returns `404 Not Found`.
+
+## Search and Sort
+
+Search inside a library covers that library's books, and search inside a list covers only that list's books. Either search matches book titles, subtitles, book and file paths, authors, narrators, and series. Author, narrator, and series aliases are searchable. It does not search genres, tags, or descriptions.
+
+The **All Books**, author, and search book feeds use the authenticated user's [saved sort](./browsing-search-bulk-actions.md#gallery-sort) for that library. Books within a series follow series-number order. Books in a list follow the list's default sort.
+
+## Client Compatibility
+
+Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clients may work, but client support for authentication, search, multiple acquisition links, and file types varies. Consult the client's documentation when adding the catalog.
+
+## Troubleshooting
+
+### Repeated Login Prompts or 401 Responses
+
+**Symptom:** The root catalog opens, but a sub-feed or download prompts again or returns `401 Unauthorized`.
+
+**Likely cause:** The reverse proxy dropped the `Authorization` header or generated an incorrect scheme. An HTTP-to-HTTPS redirect can make an OPDS client drop Basic Auth.
+
+**Verify:** Confirm that `/opds/` reaches Shisho without a redirect and that generated links use the external HTTPS scheme.
+
+**Fix:** Forward `/opds/`, preserve `Authorization` and the public `Host`, and pass the original scheme with `X-Forwarded-Proto: https`. Shisho trusts forwarded headers only from private-network direct peers, so the proxy's connection to Shisho must meet the [forwarded-header trust rules](./deployment-and-maintenance.md#https-and-reverse-proxies). OPDS also honors `X-Forwarded-Prefix` from a trusted peer when a proxy strips a catalog URL prefix; this does not make a path-prefixed deployment of the web interface supported. See [Troubleshooting](./troubleshooting.md) for other proxy symptoms.
+
+### Missing Libraries or Books
+
+**Symptom:** A library or expected book is absent from the catalog.
+
+**Likely cause:** The account lacks library access, the `{types}` selection excludes the book's main formats, or the file is a supplement.
+
+**Verify:** Check the user's library access and compare the book's main-file types with the type segment in the catalog URL.
+
+**Fix:** Grant the intended [library access](./users-and-permissions.md) or update the catalog URL to include the required type. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).
