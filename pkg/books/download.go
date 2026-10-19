@@ -31,8 +31,9 @@ type Download struct {
 
 // KepubContentType is the media type a KePub download is served as (Kobo
 // overrides it with application/octet-stream). A KePub is an EPUB with Kobo's
-// span markup, so it keeps the registered EPUB type, even though the OPDS
-// KePub feed advertises its links as application/kepub+zip.
+// span markup, so it keeps the registered EPUB type. The OPDS KePub feed
+// advertises its links with this type too: KOReader offers no download for a
+// link typed application/kepub+zip.
 const KepubContentType = "application/epub+zip"
 
 // OriginalDownload is the file as it is on disk, under its own name.

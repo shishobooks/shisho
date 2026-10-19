@@ -38,7 +38,6 @@ const (
 	MimeTypeAcquisition = "application/atom+xml;profile=opds-catalog;kind=acquisition"
 	MimeTypeOpenSearch  = "application/opensearchdescription+xml"
 	MimeTypeEPUB        = "application/epub+zip"
-	MimeTypeKepub       = "application/kepub+zip"
 	MimeTypeCBZ         = "application/vnd.comicbook+zip"
 	MimeTypeM4B         = "audio/mp4"
 	MimeTypePDF         = "application/pdf"

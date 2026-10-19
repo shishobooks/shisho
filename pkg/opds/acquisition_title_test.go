@@ -85,6 +85,31 @@ func TestBookToEntry_KepubAcquisitionLinkTitlesSayKePub(t *testing.T) {
 	assert.Equal(t, "PDF · Saga", links[2].Title)
 }
 
+// KOReader shows a download button only for a link whose type it knows, and
+// it has no entry for application/kepub+zip. A KePub is an EPUB, and the
+// download is served as one, so the link says so too.
+func TestBookToEntry_KepubAcquisitionLinksAdvertiseEPUBType(t *testing.T) {
+	t.Parallel()
+
+	book := &models.Book{
+		ID:    1,
+		Title: "Saga",
+		Files: []*models.File{
+			{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
+			{ID: 2, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
+			{ID: 3, FileType: models.FileTypePDF, FileRole: models.FileRoleMain},
+		},
+	}
+
+	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1/kepub", book, "", nil, true)
+
+	links := acquisitionLinks(entry)
+	require.Len(t, links, 3)
+	assert.Equal(t, "application/epub+zip", links[0].Type)
+	assert.Equal(t, "application/epub+zip", links[1].Type)
+	assert.Equal(t, "application/pdf", links[2].Type)
+}
+
 func TestBookToEntry_AcquisitionLinkTitleIsXMLEscaped(t *testing.T) {
 	t.Parallel()
 
