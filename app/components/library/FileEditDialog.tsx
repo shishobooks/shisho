@@ -402,8 +402,9 @@ export function FileEditDialog({
     // Check if name changed
     const originalName = file.name || "";
     if (name !== originalName) {
-      // When cleared, set to null; otherwise use the trimmed value
-      payload.name = name.trim() || undefined;
+      // The server clears the name on "", and ignores a missing field, which
+      // is what JSON makes of undefined.
+      payload.name = name.trim();
     }
 
     // Check if narrators changed
