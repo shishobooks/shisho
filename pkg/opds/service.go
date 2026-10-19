@@ -939,16 +939,18 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		}
 
 		mimeType := FileTypeMimeType(file.FileType)
+		formatLabel := strings.ToUpper(file.FileType)
 		var downloadURL string
 		// Use KePub download URL for supported file types in KePub mode
 		if kepubMode && supportsKepub(file.FileType) {
 			downloadURL = fmt.Sprintf("%s/opds/download/%d/kepub", apiBase, file.ID)
 			// KePub files use application/kepub+zip mime type
 			mimeType = MimeTypeKepub
+			formatLabel = "KePub"
 		} else {
 			downloadURL = fmt.Sprintf("%s/opds/download/%d", apiBase, file.ID)
 		}
-		entry.AddAcquisitionLink(downloadURL, mimeType)
+		entry.AddAcquisitionLink(downloadURL, mimeType, formatLabel+" · "+file.ResolveTitle(book.Title))
 	}
 
 	return entry

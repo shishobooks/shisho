@@ -67,7 +67,7 @@ func (f *kindleFormatsFixture) get(t *testing.T, path string) (int, string) {
 
 // acquisitionLink is the XML an entry carries for a file's plain download.
 func (f *kindleFormatsFixture) acquisitionLink(fileType, mimeType string) string {
-	return fmt.Sprintf(`<link rel="http://opds-spec.org/acquisition" href="http://example.com/opds/download/%d" type="%s">`, f.files[fileType].ID, mimeType)
+	return fmt.Sprintf(`<link rel="http://opds-spec.org/acquisition" href="http://example.com/opds/download/%d" type="%s"`, f.files[fileType].ID, mimeType)
 }
 
 func TestOPDS_MOBIAndAZW3Feeds(t *testing.T) {
