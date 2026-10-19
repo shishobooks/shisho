@@ -891,7 +891,7 @@ func TestKepubEPUBGenerator_AddedCoverIsMarkedCoverImage(t *testing.T) {
 	}
 
 	destPath := filepath.Join(tmpDir, "dest.kepub.epub")
-	require.NoError(t, NewKepubEPUBGenerator().Generate(context.Background(), srcPath, destPath, coverBook(), file))
+	require.NoError(t, conversionFor(t, models.FileTypeEPUB, models.FileTypeKePub).Generate(context.Background(), srcPath, destPath, coverBook(), file))
 
 	entries := zipEntries(t, destPath)
 	els := opfElements(t, entries["content.opf"])
@@ -1232,7 +1232,7 @@ func TestKepubEPUBGenerator_WritesChapterEdits(t *testing.T) {
 	file := &models.File{FileType: models.FileTypeEPUB, Filepath: srcPath, Chapters: storedChapters(editedTOC("3.0"))}
 
 	destPath := filepath.Join(tmpDir, "dest.kepub.epub")
-	require.NoError(t, NewKepubEPUBGenerator().Generate(context.Background(), srcPath, destPath, coverBook(), file))
+	require.NoError(t, conversionFor(t, models.FileTypeEPUB, models.FileTypeKePub).Generate(context.Background(), srcPath, destPath, coverBook(), file))
 
 	// KePub wraps the body and every label in Kobo spans, so the nav is
 	// checked as text rather than parsed.
@@ -1566,7 +1566,7 @@ func navItemHrefs(els map[string][]opfElement) []string {
 // and lists the file's chapters with their hrefs as stored.
 func TestEPUBGenerators_AddMissingEPUB3Requirements(t *testing.T) {
 	t.Parallel()
-	for name, gen := range map[string]Generator{"epub": &EPUBGenerator{}, "kepub": NewKepubEPUBGenerator()} {
+	for name, gen := range map[string]Generator{"epub": &EPUBGenerator{}, "kepub": conversionFor(t, models.FileTypeEPUB, models.FileTypeKePub)} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()

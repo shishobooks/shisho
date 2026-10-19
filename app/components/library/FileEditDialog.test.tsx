@@ -264,6 +264,7 @@ describe("FileEditDialog", () => {
     narrators: [],
     identifiers: [],
     is_preferred_cover: false,
+    reachable_file_types: [],
   };
 
   const renderDialog = (props = {}) => {

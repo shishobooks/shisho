@@ -43,7 +43,7 @@ func TestCache_GetOrGenerate_M4BWorldReadableMetadataPrivate(t *testing.T) {
 	}
 	file := &models.File{ID: 1, FileType: models.FileTypeM4B, Filepath: srcPath}
 
-	cachedPath, _, err := cache.GetOrGenerate(context.Background(), book, file)
+	cachedPath, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 
 	info, err := os.Stat(cachedPath)
@@ -51,7 +51,7 @@ func TestCache_GetOrGenerate_M4BWorldReadableMetadataPrivate(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm())
 
 	// The cache metadata stays private.
-	metaInfo, err := os.Stat(metadataFilename(cacheDir, file.ID))
+	metaInfo, err := os.Stat(metadataFilename(cacheDir, file.ID, file.FileType))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), metaInfo.Mode().Perm())
 }

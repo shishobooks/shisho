@@ -13,12 +13,14 @@ import (
 
 // CacheMetadata stores information about a cached file.
 type CacheMetadata struct {
-	FileID          int       `json:"file_id"`
-	Format          string    `json:"format,omitempty"` // "original" or "kepub"
-	FingerprintHash string    `json:"fingerprint_hash"`
-	GeneratedAt     time.Time `json:"generated_at"`
-	LastAccessedAt  time.Time `json:"last_accessed_at"`
-	SizeBytes       int64     `json:"size_bytes"`
+	FileID int `json:"file_id"`
+	// DeliveredFileType is the File Type the entry delivers its File as.
+	// Each one has its own entry.
+	DeliveredFileType string    `json:"delivered_file_type"`
+	FingerprintHash   string    `json:"fingerprint_hash"`
+	GeneratedAt       time.Time `json:"generated_at"`
+	LastAccessedAt    time.Time `json:"last_accessed_at"`
+	SizeBytes         int64     `json:"size_bytes"`
 	// Failure records a build that failed after bytes were sent. It applies
 	// only while the file's fingerprint still matches, and a successful
 	// build replaces it.
@@ -35,30 +37,22 @@ type FailureRecord struct {
 	FailedAt time.Time `json:"failed_at"`
 }
 
-// metadataFilename returns the metadata file path for a given file ID.
-func metadataFilename(cacheDir string, fileID int) string {
-	return filepath.Join(cacheDir, fmt.Sprintf("%d.meta.json", fileID))
+// metadataFilename returns the metadata file path for a file delivered as
+// fileType.
+func metadataFilename(cacheDir string, fileID int, fileType string) string {
+	return filepath.Join(cacheDir, fmt.Sprintf("%d-%s.meta.json", fileID, fileType))
 }
 
-// kepubMetadataFilename returns the metadata file path for a KePub cache entry.
-func kepubMetadataFilename(cacheDir string, fileID int) string {
-	return filepath.Join(cacheDir, fmt.Sprintf("%d.kepub.meta.json", fileID))
+// cachedFilename returns the cached file path for a file delivered as
+// fileType. Downloads are named separately, so it carries no extension.
+func cachedFilename(cacheDir string, fileID int, fileType string) string {
+	return filepath.Join(cacheDir, fmt.Sprintf("%d-%s", fileID, fileType))
 }
 
-// cachedFilename returns the cached file path for a given file ID and extension.
-func cachedFilename(cacheDir string, fileID int, ext string) string {
-	return filepath.Join(cacheDir, fmt.Sprintf("%d.%s", fileID, ext))
-}
-
-// kepubCachedFilename returns the cached file path for a KePub file.
-func kepubCachedFilename(cacheDir string, fileID int) string {
-	return filepath.Join(cacheDir, fmt.Sprintf("%d.kepub.epub", fileID))
-}
-
-// ReadMetadata reads the cache metadata for a file ID.
+// ReadMetadata reads the cache metadata for a file delivered as fileType.
 // Returns nil if the metadata file doesn't exist.
-func ReadMetadata(cacheDir string, fileID int) (*CacheMetadata, error) {
-	path := metadataFilename(cacheDir, fileID)
+func ReadMetadata(cacheDir string, fileID int, fileType string) (*CacheMetadata, error) {
+	path := metadataFilename(cacheDir, fileID, fileType)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -76,9 +70,9 @@ func ReadMetadata(cacheDir string, fileID int) (*CacheMetadata, error) {
 	return &meta, nil
 }
 
-// WriteMetadata writes the cache metadata for a file ID.
+// WriteMetadata writes the cache metadata for the entry meta describes.
 func WriteMetadata(cacheDir string, meta *CacheMetadata) error {
-	path := metadataFilename(cacheDir, meta.FileID)
+	path := metadataFilename(cacheDir, meta.FileID, meta.DeliveredFileType)
 
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -93,8 +87,8 @@ func WriteMetadata(cacheDir string, meta *CacheMetadata) error {
 }
 
 // UpdateLastAccessed updates the last accessed time for a cached file.
-func UpdateLastAccessed(cacheDir string, fileID int) error {
-	meta, err := ReadMetadata(cacheDir, fileID)
+func UpdateLastAccessed(cacheDir string, fileID int, fileType string) error {
+	meta, err := ReadMetadata(cacheDir, fileID, fileType)
 	if err != nil {
 		return err
 	}
@@ -107,26 +101,24 @@ func UpdateLastAccessed(cacheDir string, fileID int) error {
 }
 
 // DeleteCachedFile removes both the cached file and its metadata.
-func DeleteCachedFile(cacheDir string, fileID int, ext string) error {
-	// Delete the cached file
-	cachedPath := cachedFilename(cacheDir, fileID, ext)
-	if err := os.Remove(cachedPath); err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to delete cached file: %s", cachedPath)
-	}
+func DeleteCachedFile(cacheDir string, fileID int, fileType string) error {
+	return removeAll(cachedFilename(cacheDir, fileID, fileType), metadataFilename(cacheDir, fileID, fileType))
+}
 
-	// Delete the metadata file
-	metaPath := metadataFilename(cacheDir, fileID)
-	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to delete cache metadata: %s", metaPath)
+// removeAll removes each path, ignoring ones that do not exist.
+func removeAll(paths ...string) error {
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return errors.Wrapf(err, "failed to delete cache file: %s", path)
+		}
 	}
-
 	return nil
 }
 
 // GetCachedFilePath returns the path to a cached file if it exists and is valid.
 // Returns empty string if the cache is invalid or doesn't exist.
-func GetCachedFilePath(cacheDir string, fileID int, ext string, currentHash string) (string, error) {
-	meta, err := ReadMetadata(cacheDir, fileID)
+func GetCachedFilePath(cacheDir string, fileID int, fileType string, currentHash string) (string, error) {
+	meta, err := ReadMetadata(cacheDir, fileID, fileType)
 	if err != nil {
 		return "", err
 	}
@@ -142,102 +134,7 @@ func GetCachedFilePath(cacheDir string, fileID int, ext string, currentHash stri
 	}
 
 	// Check if cached file exists
-	cachedPath := cachedFilename(cacheDir, fileID, ext)
-	if _, err := os.Stat(cachedPath); os.IsNotExist(err) {
-		return "", nil
-	}
-
-	return cachedPath, nil
-}
-
-// ReadKepubMetadata reads the cache metadata for a KePub cache entry.
-// Returns nil if the metadata file doesn't exist.
-func ReadKepubMetadata(cacheDir string, fileID int) (*CacheMetadata, error) {
-	path := kepubMetadataFilename(cacheDir, fileID)
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, errors.Wrapf(err, "failed to read kepub cache metadata: %s", path)
-	}
-
-	var meta CacheMetadata
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse kepub cache metadata: %s", path)
-	}
-
-	return &meta, nil
-}
-
-// WriteKepubMetadata writes the cache metadata for a KePub cache entry.
-func WriteKepubMetadata(cacheDir string, meta *CacheMetadata) error {
-	path := kepubMetadataFilename(cacheDir, meta.FileID)
-
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal kepub cache metadata")
-	}
-
-	if err := fileutils.WriteFileAtomic(path, data, 0600); err != nil {
-		return errors.Wrapf(err, "failed to write kepub cache metadata: %s", path)
-	}
-
-	return nil
-}
-
-// UpdateKepubLastAccessed updates the last accessed time for a cached KePub file.
-func UpdateKepubLastAccessed(cacheDir string, fileID int) error {
-	meta, err := ReadKepubMetadata(cacheDir, fileID)
-	if err != nil {
-		return err
-	}
-	if meta == nil {
-		return errors.New("kepub cache metadata not found")
-	}
-
-	meta.LastAccessedAt = time.Now()
-	return WriteKepubMetadata(cacheDir, meta)
-}
-
-// DeleteKepubCachedFile removes both the cached KePub file and its metadata.
-func DeleteKepubCachedFile(cacheDir string, fileID int) error {
-	// Delete the cached file
-	cachedPath := kepubCachedFilename(cacheDir, fileID)
-	if err := os.Remove(cachedPath); err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to delete cached kepub file: %s", cachedPath)
-	}
-
-	// Delete the metadata file
-	metaPath := kepubMetadataFilename(cacheDir, fileID)
-	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to delete kepub cache metadata: %s", metaPath)
-	}
-
-	return nil
-}
-
-// GetKepubCachedFilePath returns the path to a cached KePub file if it exists and is valid.
-// Returns empty string if the cache is invalid or doesn't exist.
-func GetKepubCachedFilePath(cacheDir string, fileID int, currentHash string) (string, error) {
-	meta, err := ReadKepubMetadata(cacheDir, fileID)
-	if err != nil {
-		return "", err
-	}
-
-	// No metadata means no cached file
-	if meta == nil {
-		return "", nil
-	}
-
-	// Check if fingerprint matches
-	if meta.FingerprintHash != currentHash {
-		return "", nil
-	}
-
-	// Check if cached file exists
-	cachedPath := kepubCachedFilename(cacheDir, fileID)
+	cachedPath := cachedFilename(cacheDir, fileID, fileType)
 	if _, err := os.Stat(cachedPath); os.IsNotExist(err) {
 		return "", nil
 	}

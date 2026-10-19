@@ -167,7 +167,7 @@ func TestCBZPageOrder_AllConsumersAgree(t *testing.T) {
 	}
 	book := &models.Book{Title: "Unpadded"}
 	kepubPath := filepath.Join(dir, "unpadded.kepub.epub")
-	require.NoError(t, filegen.NewKepubCBZGenerator().Generate(context.Background(), cbzPath, kepubPath, book, file))
+	require.NoError(t, mustGenerator(t, models.FileTypeCBZ, models.FileTypeKePub).Generate(context.Background(), cbzPath, kepubPath, book, file))
 
 	kepubPageWidth := func(href string) int {
 		xhtml := string(readZipEntry(t, kepubPath, "OEBPS/"+href))
@@ -193,4 +193,11 @@ func TestCBZPageOrder_AllConsumersAgree(t *testing.T) {
 		assert.Equal(t, pageWidth(gotChapters[i].StartPage), kepubPageWidth(link[1]),
 			"KePub link for %s must open its first page", link[2])
 	}
+}
+
+func mustGenerator(t *testing.T, fileType, deliveredType string) filegen.Generator {
+	t.Helper()
+	gen, err := filegen.GeneratorFor(fileType, deliveredType)
+	require.NoError(t, err)
+	return gen
 }

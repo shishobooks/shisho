@@ -244,7 +244,7 @@ func TestEPUBGenerator_Conformance(t *testing.T) {
 
 func TestKepubEPUBGenerator_Conformance(t *testing.T) {
 	t.Parallel()
-	filegentest.Run(t, streamConformanceCase(t, filegen.NewKepubEPUBGenerator(), true))
+	filegentest.Run(t, streamConformanceCase(t, conversionGenerator(t, models.FileTypeEPUB, models.FileTypeKePub), true))
 }
 
 // prepareAndWrite runs gen over the EPUB at path.
@@ -270,7 +270,7 @@ func TestEPUBGenerator_MimetypeFirst(t *testing.T) {
 	missing := streamEPUBEntries()[1:]
 
 	for name, entries := range map[string][]streamEPUBEntry{"elsewhere": moved, "missing": missing} {
-		for genName, gen := range map[string]filegen.StreamGenerator{"epub": &filegen.EPUBGenerator{}, "kepub": filegen.NewKepubEPUBGenerator()} {
+		for genName, gen := range map[string]filegen.StreamGenerator{"epub": &filegen.EPUBGenerator{}, "kepub": conversionGenerator(t, models.FileTypeEPUB, models.FileTypeKePub)} {
 			t.Run(genName+"/"+name, func(t *testing.T) {
 				t.Parallel()
 				src := filepath.Join(t.TempDir(), "source.epub")
@@ -439,7 +439,7 @@ func rawZip(t *testing.T, entries []streamEPUBEntry, zip64 bool) []byte {
 // while preparing, rather than copied short partway through a download.
 func TestEPUBGenerators_RejectEntryPastEndOfSource(t *testing.T) {
 	t.Parallel()
-	for name, gen := range map[string]filegen.StreamGenerator{"epub": &filegen.EPUBGenerator{}, "kepub": filegen.NewKepubEPUBGenerator()} {
+	for name, gen := range map[string]filegen.StreamGenerator{"epub": &filegen.EPUBGenerator{}, "kepub": conversionGenerator(t, models.FileTypeEPUB, models.FileTypeKePub)} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			src := filepath.Join(t.TempDir(), "source.epub")

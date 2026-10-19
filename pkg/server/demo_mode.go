@@ -14,9 +14,9 @@ import (
 // reachable through the generated download: the demo corpus must not include
 // them.
 var deniedDownloads = map[string]bool{
-	"/api/books/files/:id/download/original": true,
-	"/api/books/files/:id/download/kepub":    true,
-	"/api/jobs/:id/download":                 true,
+	"/api/books/files/:id/download/original":  true,
+	"/api/books/files/:id/download/:fileType": true,
+	"/api/jobs/:id/download":                  true,
 }
 
 // demoModeMiddleware must be registered with Use, not Pre, so Path contains

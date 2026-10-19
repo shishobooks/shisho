@@ -752,7 +752,11 @@ func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 		}
 	}
 
-	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, kepub)
+	deliveredType := fileWithRelations.FileType
+	if kepub {
+		deliveredType = models.FileTypeKePub
+	}
+	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, deliveredType)
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   fileLabel,
   fileTitle,
+  fileTypeLabel,
   formatCount,
   formatDate,
   formatDateTime,
@@ -221,5 +222,16 @@ describe("formatPersonCredits", () => {
 
   it("says there is nothing for a person with no credits", () => {
     expect(formatPersonCredits(0, 0)).toBe("0 books authored");
+  });
+});
+
+describe("fileTypeLabel", () => {
+  it("writes KePub in Kobo's casing", () => {
+    expect(fileTypeLabel("kepub")).toBe("KePub");
+  });
+
+  it("writes every other File Type in capitals", () => {
+    expect(fileTypeLabel("epub")).toBe("EPUB");
+    expect(fileTypeLabel("cbz")).toBe("CBZ");
   });
 });

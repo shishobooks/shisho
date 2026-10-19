@@ -40,13 +40,26 @@ var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|
 // If no series: [Author] Title.ext.
 // If no author: Title.ext.
 func FormatDownloadFilename(book *models.Book, file *models.File) string {
+	return formatDownloadFilename(book, file, file.FileType)
+}
+
+// DownloadFilename returns the filename for downloading the file delivered
+// as deliveredType: FormatKepubDownloadFilename for a KePub, and
+// FormatDownloadFilename with the delivered File Type's extension otherwise.
+func DownloadFilename(book *models.Book, file *models.File, deliveredType string) string {
+	if deliveredType == models.FileTypeKePub {
+		return FormatKepubDownloadFilename(book, file)
+	}
+	return formatDownloadFilename(book, file, deliveredType)
+}
+
+func formatDownloadFilename(book *models.Book, file *models.File, ext string) string {
 	titleSource := file.ResolveTitle(book.Title)
 	// Pad volume numbers for lexicographic sorting, then sanitize
 	title := sanitizeFilename(padVolumeNumber(titleSource))
 	author := getFirstAuthorName(book)
 	series, number, numberEnd := getFirstSeries(book)
 	narrator := getFirstNarratorName(file)
-	ext := file.FileType
 
 	var parts []string
 

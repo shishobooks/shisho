@@ -34,7 +34,7 @@ func TestCache_GetOrGenerate_MOBIRegeneratesOnMetadataChange(t *testing.T) {
 			book := &models.Book{Title: "First"}
 			file := &models.File{ID: 7, FileType: tc.fileType, Filepath: srcPath}
 
-			path, filename, err := cache.GetOrGenerate(context.Background(), book, file)
+			path, filename, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 			require.NoError(t, err)
 			assert.Equal(t, "First."+tc.fileType, filename)
 			meta, err := mobi.Parse(path)
@@ -42,7 +42,7 @@ func TestCache_GetOrGenerate_MOBIRegeneratesOnMetadataChange(t *testing.T) {
 			assert.Equal(t, "First", meta.Title)
 
 			book.Title = "Second"
-			path, _, err = cache.GetOrGenerate(context.Background(), book, file)
+			path, _, err = cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 			require.NoError(t, err)
 			meta, err = mobi.Parse(path)
 			require.NoError(t, err)

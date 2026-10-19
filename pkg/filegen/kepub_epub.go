@@ -8,41 +8,28 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// KepubEPUBGenerator generates KePub files from EPUB sources.
-type KepubEPUBGenerator struct {
+// epubToKepub is the Conversion step from EPUB to KePub. It converts the
+// entries of a Generated EPUB in a single pass, so no Generated EPUB is
+// written first, and the size is not known up front.
+type epubToKepub struct {
 	converter *kepub.Converter
 }
 
-// NewKepubEPUBGenerator creates a new KepubEPUBGenerator.
-func NewKepubEPUBGenerator() *KepubEPUBGenerator {
-	return &KepubEPUBGenerator{
-		converter: kepub.NewConverter(),
+// prepare does the EPUB generator's preparation when it is a chain's first
+// step, and converts the entries of the step before it otherwise.
+func (s epubToKepub) prepare(ctx context.Context, in stepInput) (Prepared, error) {
+	entries := in.entries
+	if entries == nil {
+		plan, err := planEPUB(ctx, in.src, in.book, in.file)
+		if err != nil {
+			return nil, relabelError(err, models.FileTypeKePub)
+		}
+		entries = make([]kepub.Entry, 0, len(plan.entries))
+		for _, e := range plan.entries {
+			entries = append(entries, kepub.Entry{Name: e.name, File: e.source, Content: e.content})
+		}
 	}
-}
-
-// SupportedType returns the file type this generator handles.
-func (g *KepubEPUBGenerator) SupportedType() string {
-	return models.FileTypeEPUB
-}
-
-// Generate creates a KePub file at destPath from an EPUB source.
-func (g *KepubEPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	return generateFile(ctx, g, kepubFormat, srcPath, destPath, book, file)
-}
-
-// Prepare does the EPUB generator's preparation. Writing converts its
-// entries to KePub in a single pass over the source, so no Generated EPUB
-// is built first, and the size is not known up front.
-func (g *KepubEPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
-	plan, err := planEPUB(ctx, src, book, file)
-	if err != nil {
-		return nil, asKepubError(err)
-	}
-	entries := make([]kepub.Entry, 0, len(plan.entries))
-	for _, e := range plan.entries {
-		entries = append(entries, kepub.Entry{Name: e.name, File: e.source, Content: e.content})
-	}
-	return &preparedKepubEPUB{converter: g.converter, entries: entries}, nil
+	return &preparedKepubEPUB{converter: s.converter, entries: entries}, nil
 }
 
 // preparedKepubEPUB is a KePub ready to be converted from an EPUB.
@@ -57,7 +44,7 @@ func (p *preparedKepubEPUB) Size() (int64, bool) {
 
 func (p *preparedKepubEPUB) Write(ctx context.Context, w io.Writer) error {
 	if err := p.converter.WriteEPUB(ctx, w, p.entries); err != nil {
-		return NewGenerationError(kepubFormat, err, "failed to convert EPUB: "+err.Error())
+		return NewGenerationError(models.FileTypeKePub, err, "failed to convert EPUB: "+err.Error())
 	}
 	return nil
 }

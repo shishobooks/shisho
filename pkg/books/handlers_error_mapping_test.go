@@ -54,7 +54,17 @@ func TestFileStateChecksAreInvalidState(t *testing.T) {
 		{
 			name: "KePub download of an audiobook", fileType: models.FileTypeM4B, role: models.FileRoleMain,
 			method: http.MethodGet, path: "/download/kepub",
-			message: "KePub conversion is not supported for m4b files",
+			message: "M4B files can't be downloaded as KePub",
+		},
+		{
+			name: "EPUB download of a PDF", fileType: models.FileTypePDF, role: models.FileRoleMain,
+			method: http.MethodGet, path: "/download/epub",
+			message: "PDF files can't be downloaded as EPUB",
+		},
+		{
+			name: "KePub download of a supplement", fileType: models.FileTypeEPUB, role: models.FileRoleSupplement,
+			method: http.MethodGet, path: "/download/kepub",
+			message: "EPUB files can't be downloaded as KePub",
 		},
 	}
 	for _, tt := range tests {

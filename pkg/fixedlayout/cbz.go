@@ -1,4 +1,8 @@
-package kepub
+// Package fixedlayout writes a fixed-layout EPUB 3 from the pages of a CBZ:
+// one XHTML page per image, each sized for e-reader screens. It is plain
+// EPUB with no Kobo markup, so both the CBZ to EPUB and the CBZ to KePub
+// Conversions write it.
+package fixedlayout
 
 import (
 	"archive/zip"
@@ -22,38 +26,38 @@ import (
 	"github.com/shishobooks/shisho/pkg/cbz"
 )
 
-// CBZMetadata holds metadata for CBZ to KePub conversion.
-type CBZMetadata struct {
+// Metadata is the book metadata written into the EPUB.
+type Metadata struct {
 	Title       string
 	Subtitle    *string
 	Description *string
-	Authors     []CBZAuthor
-	Series      []CBZSeries
+	Authors     []Author
+	Series      []Series
 	Genres      []string
 	Tags        []string
 	URL         *string
 	Publisher   *string
 	ReleaseDate *time.Time
-	Chapters    []CBZChapter
+	Chapters    []Chapter
 	CoverPage   *int    // 0-indexed page number for cover (nil = first page)
 	Language    *string // BCP 47 language tag
 }
 
-// CBZAuthor represents an author/creator for CBZ metadata.
-type CBZAuthor struct {
+// Author represents an author/creator for CBZ metadata.
+type Author struct {
 	Name     string
 	SortName string // e.g., "Doe, Jane" for sorting/file-as
 	Role     string // writer, penciller, inker, etc.
 }
 
-// CBZSeries represents series information for CBZ metadata.
-type CBZSeries struct {
+// Series represents series information for CBZ metadata.
+type Series struct {
 	Name   string
 	Number *float64
 }
 
-// CBZChapter represents a chapter/section for CBZ metadata.
-type CBZChapter struct {
+// Chapter represents a chapter/section for CBZ metadata.
+type Chapter struct {
 	Title     string
 	StartPage int // 0-indexed page number
 }
@@ -67,19 +71,10 @@ type pageInfo struct {
 	mediaType string
 }
 
-// ConvertCBZ converts a CBZ file to a fixed-layout KePub EPUB.
-// JPEG/PNG images taller than 2000px are resized to 2000px height.
-// PNG images are converted to JPEG for smaller file size.
-func (c *Converter) ConvertCBZ(ctx context.Context, srcPath, destPath string) error {
-	return c.ConvertCBZWithMetadata(ctx, srcPath, destPath, nil)
-}
-
-// ConvertCBZWithMetadata converts a CBZ file to a fixed-layout KePub EPUB with metadata.
-// It is a path-based wrapper over PrepareCBZ and CBZConversion.Write; downloads
-// call those directly through pkg/filegen.
-// JPEG/PNG images taller than 2000px are resized to 2000px height.
-// PNG images are converted to JPEG for smaller file size.
-func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPath string, metadata *CBZMetadata) error {
+// ConvertCBZ converts the CBZ at srcPath to a fixed-layout EPUB at
+// destPath. It is a path-based wrapper over PrepareCBZ and Conversion.Write;
+// downloads call those directly through pkg/filegen. metadata may be nil.
+func ConvertCBZ(ctx context.Context, srcPath, destPath string, metadata *Metadata) error {
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to open source file")
@@ -96,7 +91,7 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 		return errors.Wrap(err, "failed to read source CBZ as zip")
 	}
 
-	conversion, err := c.PrepareCBZ(srcZip, metadata)
+	conversion, err := PrepareCBZ(srcZip, metadata)
 	if err != nil {
 		return err
 	}
@@ -133,17 +128,17 @@ func (c *Converter) ConvertCBZWithMetadata(ctx context.Context, srcPath, destPat
 	return nil
 }
 
-// CBZConversion is a CBZ ready to be converted to a fixed-layout KePub.
-type CBZConversion struct {
+// Conversion is a CBZ ready to be converted to a fixed-layout EPUB.
+type Conversion struct {
 	pages    []*zip.File
-	metadata *CBZMetadata
+	metadata *Metadata
 }
 
 // PrepareCBZ finds the pages of the CBZ in srcZip and checks that each can
 // be opened, so a CBZ the conversion cannot use fails before anything is
 // written. Pages are read only by Write, and srcZip must stay readable
 // until it returns.
-func (c *Converter) PrepareCBZ(srcZip *zip.Reader, metadata *CBZMetadata) (*CBZConversion, error) {
+func PrepareCBZ(srcZip *zip.Reader, metadata *Metadata) (*Conversion, error) {
 	pages := cbz.PageImages(srcZip)
 	if len(pages) == 0 {
 		return nil, errors.New("no images found in CBZ file")
@@ -153,16 +148,16 @@ func (c *Converter) PrepareCBZ(srcZip *zip.Reader, metadata *CBZMetadata) (*CBZC
 			return nil, err
 		}
 	}
-	return &CBZConversion{pages: pages, metadata: metadata}, nil
+	return &Conversion{pages: pages, metadata: metadata}, nil
 }
 
-// Write writes the KePub to w front to back. Each page's XHTML and image
+// Write writes the EPUB to w front to back. Each page's XHTML and image
 // are written as soon as the page is processed, a bounded number of pages
 // ahead, and the zip writer is flushed after each page so output arrives
 // about once per page. The OPF, NCX, and nav list every page with its
 // dimensions, so they come last; the container only requires mimetype
 // first, and container.xml points to the OPF by path.
-func (cv *CBZConversion) Write(ctx context.Context, w io.Writer) error {
+func (cv *Conversion) Write(ctx context.Context, w io.Writer) error {
 	destZip := zip.NewWriter(w)
 
 	// Write mimetype first (uncompressed, as per EPUB spec)
@@ -252,6 +247,17 @@ func (cv *CBZConversion) Write(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
+// readZipFile reads the contents of a zip file entry.
+func readZipFile(f *zip.File) ([]byte, error) {
+	r, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	return io.ReadAll(r)
+}
+
 // processCBZPage reads a page and processes it for e-readers.
 func processCBZPage(imgFile *zip.File) (*ProcessedImage, error) {
 	data, err := readZipFile(imgFile)
@@ -288,7 +294,7 @@ func writeZipFile(zw *zip.Writer, name string, data []byte) error {
 }
 
 // getEffectiveTitle returns the title to use for the EPUB.
-func getEffectiveTitle(metadata *CBZMetadata) string {
+func getEffectiveTitle(metadata *Metadata) string {
 	if metadata == nil {
 		return "Comic Book"
 	}
@@ -299,7 +305,7 @@ func getEffectiveTitle(metadata *CBZMetadata) string {
 }
 
 // generateFixedLayoutOPF generates the OPF file for a fixed-layout EPUB.
-func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata, uid string) []byte {
+func generateFixedLayoutOPF(pages []pageInfo, metadata *Metadata, uid string) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -504,7 +510,7 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *CBZMetadata, uid string)
 // generateNCX generates the NCX navigation file.
 // If chapters are provided in metadata, uses chapter-based navigation.
 // Otherwise, falls back to page-based navigation.
-func generateNCX(pages []pageInfo, metadata *CBZMetadata, uid string) []byte {
+func generateNCX(pages []pageInfo, metadata *Metadata, uid string) []byte {
 	var buf bytes.Buffer
 
 	// Determine title
@@ -623,7 +629,7 @@ body { display: block; margin: 0; padding: 0; }
 // This is required for EPUB3 and helps with Kobo navigation.
 // If chapters are provided in metadata, creates chapter-based TOC.
 // Otherwise, uses a single title entry (current behavior).
-func generateNavXHTML(pages []pageInfo, metadata *CBZMetadata) []byte {
+func generateNavXHTML(pages []pageInfo, metadata *Metadata) []byte {
 	var buf bytes.Buffer
 
 	// Determine title

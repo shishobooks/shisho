@@ -92,7 +92,7 @@ func TestKepubCBZGenerator_Generate(t *testing.T) {
 			Name:     &name,
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 
@@ -119,7 +119,7 @@ func TestKepubCBZGenerator_Generate(t *testing.T) {
 			Name:     nil,
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 
@@ -146,7 +146,7 @@ func TestKepubCBZGenerator_Generate(t *testing.T) {
 			Name:     &emptyName,
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 
@@ -168,7 +168,7 @@ func TestKepubCBZGenerator_Generate(t *testing.T) {
 			Title: "Book Title",
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, nil)
 		require.NoError(t, err)
 
@@ -444,7 +444,7 @@ func TestKepubCBZGenerator_Generate_WithChapters(t *testing.T) {
 			},
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 
@@ -487,7 +487,7 @@ func TestKepubCBZGenerator_Generate_WithChapters(t *testing.T) {
 			},
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 
@@ -520,7 +520,7 @@ func TestKepubCBZGenerator_Generate_WithChapters(t *testing.T) {
 			Chapters: nil, // No chapters
 		}
 
-		gen := NewKepubCBZGenerator()
+		gen := conversionFor(t, models.FileTypeCBZ, models.FileTypeKePub)
 		err := gen.Generate(context.Background(), srcPath, destPath, book, file)
 		require.NoError(t, err)
 

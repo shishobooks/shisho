@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   bulkDownloadUrl,
+  fileDownloadAsUrl,
   fileDownloadUrl,
-  fileKepubDownloadUrl,
   fileOriginalDownloadUrl,
   fileStreamUrl,
+  shareFileDownloadAsUrl,
   shareFileDownloadUrl,
 } from "./downloadUrl";
 
@@ -14,8 +15,13 @@ describe("download URLs", () => {
     expect(fileDownloadUrl(42)).toBe("/api/books/files/42/download");
   });
 
-  it("builds the KePub download URL", () => {
-    expect(fileKepubDownloadUrl(42)).toBe("/api/books/files/42/download/kepub");
+  it("builds the download URL for a File Type the file can become", () => {
+    expect(fileDownloadAsUrl(42, "kepub")).toBe(
+      "/api/books/files/42/download/kepub",
+    );
+    expect(fileDownloadAsUrl(42, "epub")).toBe(
+      "/api/books/files/42/download/epub",
+    );
   });
 
   it("builds the original-file download URL", () => {
@@ -35,6 +41,12 @@ describe("download URLs", () => {
   it("scopes a Share Link download to the encoded token", () => {
     expect(shareFileDownloadUrl("a/b", 42)).toBe(
       "/api/share/a%2Fb/files/42/download",
+    );
+  });
+
+  it("scopes a Share Link download as a File Type to the encoded token", () => {
+    expect(shareFileDownloadAsUrl("a/b", 42, "epub")).toBe(
+      "/api/share/a%2Fb/files/42/download/epub",
     );
   });
 });

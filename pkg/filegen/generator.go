@@ -21,8 +21,7 @@ type Generator interface {
 // Error prints only Message, so a message that should reach the logs and a
 // remembered failure carries its cause's text.
 type GenerationError struct {
-	// FileType is the format being generated: a file type, or kepubFormat
-	// for a KePub.
+	// FileType is the File Type being delivered.
 	FileType string
 	Err      error
 	Message  string
@@ -45,22 +44,16 @@ func NewGenerationError(fileType string, err error, message string) *GenerationE
 	}
 }
 
-// kepubFormat labels the errors of the KePub generators, which would
-// otherwise name their source's file type as the format being generated.
-const kepubFormat = "kepub"
-
-// asKepubError relabels a GenerationError from code a KePub generator shares
-// with its source format's generator, so it names the KePub.
-func asKepubError(err error) error {
+// relabelError relabels a GenerationError from code a Conversion step shares
+// with its source File Type's generator, so it names the File Type
+// delivered.
+func relabelError(err error, fileType string) error {
 	var genErr *GenerationError
 	if errors.As(err, &genErr) {
-		return NewGenerationError(kepubFormat, genErr.Err, genErr.Message)
+		return NewGenerationError(fileType, genErr.Err, genErr.Message)
 	}
 	return err
 }
-
-// ErrKepubNotSupported is returned when KePub conversion is not supported for a file type.
-var ErrKepubNotSupported = errors.New("KePub conversion not supported for this file type")
 
 // ErrNotImplemented is returned for a file type with no generator, such as a
 // format only a plugin parses. The device and share download routes serve
@@ -87,32 +80,5 @@ func GetGenerator(fileType string) (Generator, error) {
 		return &MOBIGenerator{fileType: fileType}, nil
 	default:
 		return nil, errors.Wrapf(ErrNotImplemented, "unsupported file type: %s", fileType)
-	}
-}
-
-// GetKepubGenerator returns the appropriate KePub generator for a file type.
-// Returns ErrKepubNotSupported for file types that don't support KePub conversion (M4B).
-func GetKepubGenerator(fileType string) (Generator, error) {
-	switch fileType {
-	case models.FileTypeEPUB:
-		return NewKepubEPUBGenerator(), nil
-	case models.FileTypeCBZ:
-		return NewKepubCBZGenerator(), nil
-	case models.FileTypeM4B:
-		return nil, ErrKepubNotSupported
-	case models.FileTypePDF:
-		return nil, ErrKepubNotSupported
-	default:
-		return nil, errors.Wrapf(ErrNotImplemented, "unsupported file type: %s", fileType)
-	}
-}
-
-// SupportsKepub returns true if the file type can be converted to KePub format.
-func SupportsKepub(fileType string) bool {
-	switch fileType {
-	case models.FileTypeEPUB, models.FileTypeCBZ:
-		return true
-	default:
-		return false
 	}
 }

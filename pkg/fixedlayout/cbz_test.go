@@ -1,4 +1,4 @@
-package kepub
+package fixedlayout
 
 import (
 	"archive/zip"
@@ -95,11 +95,11 @@ func createTestCBZ(t *testing.T, path string, opts testCBZOptions) {
 	require.NoError(t, w.Close())
 }
 
-// readFileFromKepub reads a file from a KePub (EPUB) archive.
-func readFileFromKepub(t *testing.T, kepubPath, fileName string) []byte {
+// readFileFromEPUB reads a file from an EPUB archive.
+func readFileFromEPUB(t *testing.T, epubPath, fileName string) []byte {
 	t.Helper()
 
-	r, err := zip.OpenReader(kepubPath)
+	r, err := zip.OpenReader(epubPath)
 	require.NoError(t, err)
 	defer r.Close()
 
@@ -115,15 +115,15 @@ func readFileFromKepub(t *testing.T, kepubPath, fileName string) []byte {
 		}
 	}
 
-	t.Fatalf("file %s not found in KePub", fileName)
+	t.Fatalf("file %s not found in EPUB", fileName)
 	return nil
 }
 
-// listFilesInKepub returns all file paths in a KePub.
-func listFilesInKepub(t *testing.T, kepubPath string) []string {
+// listFilesInEPUB returns all file paths in an EPUB.
+func listFilesInEPUB(t *testing.T, epubPath string) []string {
 	t.Helper()
 
-	r, err := zip.OpenReader(kepubPath)
+	r, err := zip.OpenReader(epubPath)
 	require.NoError(t, err)
 	defer r.Close()
 
@@ -142,19 +142,18 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
 		// Verify EPUB structure
-		files := listFilesInKepub(t, destPath)
+		files := listFilesInEPUB(t, destPath)
 		assert.Contains(t, files, "mimetype")
 		assert.Contains(t, files, "META-INF/container.xml")
 
 		// Check mimetype is correct
-		mimetypeData := readFileFromKepub(t, destPath, "mimetype")
+		mimetypeData := readFileFromEPUB(t, destPath, "mimetype")
 		assert.Equal(t, "application/epub+zip", string(mimetypeData))
 	})
 
@@ -164,13 +163,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 
 		// Should have cover image property and page references
@@ -196,14 +194,13 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		require.NoError(t, w.Close())
 		f.Close()
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err = converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err = ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
 		// Read the image from the converted file
-		resultImage := readFileFromKepub(t, destPath, "page0001.jpg")
+		resultImage := readFileFromEPUB(t, destPath, "page0001.jpg")
 
 		// Verify byte-for-byte equality
 		assert.Equal(t, originalImageData, resultImage, "image should be preserved byte-for-byte")
@@ -219,13 +216,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		pageData := readFileFromKepub(t, destPath, "page0001.xhtml")
+		pageData := readFileFromEPUB(t, destPath, "page0001.xhtml")
 		pageContent := string(pageData)
 
 		// Should use KCC-style div+img structure (not SVG)
@@ -247,14 +243,13 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
 		// Check XHTML references images correctly via img tag
-		pageData := readFileFromKepub(t, destPath, "page0001.xhtml")
+		pageData := readFileFromEPUB(t, destPath, "page0001.xhtml")
 		pageContent := string(pageData)
 
 		assert.Contains(t, pageContent, `src="images/page0001.jpg"`)
@@ -274,16 +269,15 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		// Each source page has its own width, so the width on each KePub
+		// Each source page has its own width, so the width on each EPUB
 		// page names the image it shows: page1, page2, then page10.
 		for i, width := range []int{101, 102, 110} {
-			pageContent := string(readFileFromKepub(t, destPath, fmt.Sprintf("page%04d.xhtml", i+1)))
+			pageContent := string(readFileFromEPUB(t, destPath, fmt.Sprintf("page%04d.xhtml", i+1)))
 			assert.Contains(t, pageContent, fmt.Sprintf(`<img width="%d"`, width), "page %d", i+1)
 		}
 	})
@@ -294,13 +288,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 		ncxContent := string(ncxData)
 
 		assert.Contains(t, ncxContent, "<ncx")
@@ -314,13 +307,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		cssData := readFileFromKepub(t, destPath, "styles.css")
+		cssData := readFileFromEPUB(t, destPath, "styles.css")
 		cssContent := string(cssData)
 
 		// CSS should have basic reset styles
@@ -339,13 +331,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			extraFile: "readme.txt",
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		files := listFilesInKepub(t, destPath)
+		files := listFilesInEPUB(t, destPath)
 
 		// Should not contain readme.txt
 		for _, f := range files {
@@ -364,13 +355,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 
 		// PNG should be converted to JPEG
@@ -392,14 +382,13 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
 		// Read the resized image
-		imgData := readFileFromKepub(t, destPath, "page0001.jpg")
+		imgData := readFileFromEPUB(t, destPath, "page0001.jpg")
 
 		// Decode and check dimensions
 		img, _, err := image.DecodeConfig(bytes.NewReader(imgData))
@@ -423,14 +412,13 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
 		// Read the image
-		imgData := readFileFromKepub(t, destPath, "page0001.jpg")
+		imgData := readFileFromEPUB(t, destPath, "page0001.jpg")
 
 		// Decode and check dimensions
 		img, _, err := image.DecodeConfig(bytes.NewReader(imgData))
@@ -457,10 +445,9 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		require.NoError(t, w.Close())
 		f.Close()
 
-		destPath := filepath.Join(tmpDir, "empty.kepub.epub")
+		destPath := filepath.Join(tmpDir, "empty.epub")
 
-		converter := NewConverter()
-		err = converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err = ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no images found")
 	})
@@ -469,10 +456,9 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		srcPath := filepath.Join(tmpDir, "nonexistent.cbz")
-		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+		destPath := filepath.Join(tmpDir, "output.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(context.Background(), srcPath, destPath)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to open source file")
 	})
@@ -483,13 +469,12 @@ func TestConverter_ConvertCBZ(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		converter := NewConverter()
-		err := converter.ConvertCBZ(ctx, srcPath, destPath)
+		err := ConvertCBZ(ctx, srcPath, destPath, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cancelled")
 	})
@@ -525,21 +510,20 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Batman: Year One",
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 		assert.Contains(t, opfContent, `<dc:title>Batman: Year One</dc:title>`)
 
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 		ncxContent := string(ncxData)
 		assert.Contains(t, ncxContent, `Batman: Year One`)
 	})
@@ -550,21 +534,20 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Authors: []CBZAuthor{
+			Authors: []Author{
 				{Name: "Frank Miller", Role: "writer"},
 				{Name: "David Mazzucchelli", Role: "penciller"},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 		assert.Contains(t, opfContent, `>Frank Miller</dc:creator>`)
 		assert.Contains(t, opfContent, `>David Mazzucchelli</dc:creator>`)
@@ -576,20 +559,19 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Authors: []CBZAuthor{
+			Authors: []Author{
 				{Name: "Jane Doe", SortName: "Doe, Jane", Role: "writer"},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 		assert.Contains(t, opfContent, `<dc:creator id="author0">Jane Doe</dc:creator>`)
 		assert.Contains(t, opfContent, `<meta refines="#author0" property="file-as">Doe, Jane</meta>`)
@@ -601,22 +583,21 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Authors: []CBZAuthor{
+			Authors: []Author{
 				{Name: "Jim Lee", Role: "writer"},
 				{Name: "Jim Lee", Role: "penciller"},
 				{Name: "Jim Lee", Role: "writer"}, // Duplicate - should be skipped
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 
 		// Count occurrences of Jim Lee (now with id attribute)
@@ -630,21 +611,20 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
 		seriesNum := 5.0
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Series: []CBZSeries{
+			Series: []Series{
 				{Name: "Batman", Number: &seriesNum},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 		// Verify EPUB3 series metadata with proper id and refines attributes
 		assert.Contains(t, opfContent, `<meta property="belongs-to-collection" id="series-1">Batman</meta>`)
@@ -658,20 +638,19 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Batman & Robin: <Heroes>",
-			Authors: []CBZAuthor{
+			Authors: []Author{
 				{Name: "O'Neil & Adams", Role: "writer"},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 
 		// Should be XML-escaped
@@ -685,13 +664,12 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		srcPath := filepath.Join(tmpDir, "comic.cbz")
 		createTestCBZ(t, srcPath, testCBZOptions{})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, nil)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		opfData := readFileFromKepub(t, destPath, "content.opf")
+		opfData := readFileFromEPUB(t, destPath, "content.opf")
 		opfContent := string(opfData)
 		assert.Contains(t, opfContent, `<dc:title>Comic Book</dc:title>`)
 	})
@@ -704,21 +682,20 @@ func TestConverter_ConvertCBZWithMetadata_UsesTitle(t *testing.T) {
 	srcPath := filepath.Join(tmpDir, "comic.cbz")
 	createTestCBZ(t, srcPath, testCBZOptions{})
 
-	destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+	destPath := filepath.Join(tmpDir, "comic.epub")
 
-	metadata := &CBZMetadata{Title: "Custom File Name"}
+	metadata := &Metadata{Title: "Custom File Name"}
 
-	converter := NewConverter()
-	err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+	err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 	require.NoError(t, err)
 
-	opfData := readFileFromKepub(t, destPath, "content.opf")
+	opfData := readFileFromEPUB(t, destPath, "content.opf")
 	assert.Contains(t, string(opfData), `<dc:title>Custom File Name</dc:title>`)
 
-	ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+	ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 	assert.Contains(t, string(ncxData), `Custom File Name`)
 
-	navData := readFileFromKepub(t, destPath, "nav.xhtml")
+	navData := readFileFromEPUB(t, destPath, "nav.xhtml")
 	assert.Contains(t, string(navData), `Custom File Name`)
 }
 
@@ -736,21 +713,20 @@ func TestGenerateNCX_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Chapters: []CBZChapter{
+			Chapters: []Chapter{
 				{Title: "Chapter 1", StartPage: 0},
 				{Title: "Chapter 2", StartPage: 2},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 		ncxContent := string(ncxData)
 
 		// Should have chapter navPoints
@@ -775,18 +751,17 @@ func TestGenerateNCX_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title:    "Test Comic",
 			Chapters: nil, // No chapters
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 		ncxContent := string(ncxData)
 
 		// Should have page-based navPoints
@@ -804,20 +779,19 @@ func TestGenerateNCX_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Chapters: []CBZChapter{
+			Chapters: []Chapter{
 				{Title: "Part 1 & <Beginning>", StartPage: 0},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 		ncxContent := string(ncxData)
 
 		// Should be XML-escaped
@@ -835,21 +809,20 @@ func TestGenerateNCX_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Chapters: []CBZChapter{
+			Chapters: []Chapter{
 				{Title: "Chapter 1", StartPage: 0},
 				{Title: "Chapter 2", StartPage: 10}, // Beyond page count (only 2 pages)
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		ncxData := readFileFromKepub(t, destPath, "toc.ncx")
+		ncxData := readFileFromEPUB(t, destPath, "toc.ncx")
 		ncxContent := string(ncxData)
 
 		// Should only have Chapter 1
@@ -872,21 +845,20 @@ func TestGenerateNavXHTML_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Chapters: []CBZChapter{
+			Chapters: []Chapter{
 				{Title: "Chapter 1", StartPage: 0},
 				{Title: "Chapter 2", StartPage: 2},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navData := readFileFromEPUB(t, destPath, "nav.xhtml")
 		navContent := string(navData)
 
 		// Should have chapter entries in the TOC
@@ -905,18 +877,17 @@ func TestGenerateNavXHTML_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title:    "Test Comic",
 			Chapters: nil, // No chapters
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navData := readFileFromEPUB(t, destPath, "nav.xhtml")
 		navContent := string(navData)
 
 		// Should have single title entry (current behavior)
@@ -936,20 +907,19 @@ func TestGenerateNavXHTML_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Chapters: []CBZChapter{
+			Chapters: []Chapter{
 				{Title: "Part 1 & <Beginning>", StartPage: 0},
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navData := readFileFromEPUB(t, destPath, "nav.xhtml")
 		navContent := string(navData)
 
 		// Should be XML-escaped
@@ -967,21 +937,20 @@ func TestGenerateNavXHTML_WithChapters(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "comic.kepub.epub")
+		destPath := filepath.Join(tmpDir, "comic.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title: "Test Comic",
-			Chapters: []CBZChapter{
+			Chapters: []Chapter{
 				{Title: "Chapter 1", StartPage: 0},
 				{Title: "Chapter 2", StartPage: 10}, // Beyond page count (only 2 pages)
 			},
 		}
 
-		converter := NewConverter()
-		err := converter.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		navData := readFileFromKepub(t, destPath, "nav.xhtml")
+		navData := readFileFromEPUB(t, destPath, "nav.xhtml")
 		navContent := string(navData)
 
 		// Should only have Chapter 1
@@ -1122,20 +1091,19 @@ func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+		destPath := filepath.Join(tmpDir, "output.epub")
 
 		coverPage := 2 // Third page (0-indexed)
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title:     "Test Comic",
 			CoverPage: &coverPage,
 		}
 
-		c := NewConverter()
-		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
 		// Verify the OPF has cover-image on the correct page
-		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+		opfContent := string(readFileFromEPUB(t, destPath, "content.opf"))
 
 		// Check that cover meta tag references the correct image (img0003 for page index 2)
 		assert.Contains(t, opfContent, `<meta name="cover" content="img0003"/>`)
@@ -1160,18 +1128,17 @@ func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+		destPath := filepath.Join(tmpDir, "output.epub")
 
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title:     "Test Comic",
 			CoverPage: nil, // Not specified
 		}
 
-		c := NewConverter()
-		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+		opfContent := string(readFileFromEPUB(t, destPath, "content.opf"))
 
 		// Should default to first page (img0001)
 		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
@@ -1189,13 +1156,12 @@ func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+		destPath := filepath.Join(tmpDir, "output.epub")
 
-		c := NewConverter()
-		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, nil)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, nil)
 		require.NoError(t, err)
 
-		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+		opfContent := string(readFileFromEPUB(t, destPath, "content.opf"))
 
 		// Should default to first page (img0001)
 		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
@@ -1213,20 +1179,19 @@ func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+		destPath := filepath.Join(tmpDir, "output.epub")
 
 		// Cover page index 10 is out of bounds for a 2-page CBZ
 		coverPage := 10
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title:     "Test Comic",
 			CoverPage: &coverPage,
 		}
 
-		c := NewConverter()
-		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+		opfContent := string(readFileFromEPUB(t, destPath, "content.opf"))
 
 		// Should clamp to first page (img0001) since index 10 exceeds page count
 		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
@@ -1244,20 +1209,19 @@ func TestConvertCBZWithMetadata_CoverPage(t *testing.T) {
 			},
 		})
 
-		destPath := filepath.Join(tmpDir, "output.kepub.epub")
+		destPath := filepath.Join(tmpDir, "output.epub")
 
 		// Negative cover page index
 		coverPage := -1
-		metadata := &CBZMetadata{
+		metadata := &Metadata{
 			Title:     "Test Comic",
 			CoverPage: &coverPage,
 		}
 
-		c := NewConverter()
-		err := c.ConvertCBZWithMetadata(context.Background(), srcPath, destPath, metadata)
+		err := ConvertCBZ(context.Background(), srcPath, destPath, metadata)
 		require.NoError(t, err)
 
-		opfContent := string(readFileFromKepub(t, destPath, "content.opf"))
+		opfContent := string(readFileFromEPUB(t, destPath, "content.opf"))
 
 		// Should clamp to first page (img0001) since index -1 is invalid
 		assert.Contains(t, opfContent, `<meta name="cover" content="img0001"/>`)
@@ -1271,13 +1235,13 @@ func TestConvertCBZ_NCXIdentifierMatchesOPF(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	srcPath := filepath.Join(dir, "comic.cbz")
-	destPath := filepath.Join(dir, "comic.kepub.epub")
+	destPath := filepath.Join(dir, "comic.epub")
 	createTestCBZ(t, srcPath, testCBZOptions{})
-	require.NoError(t, NewConverter().ConvertCBZ(context.Background(), srcPath, destPath))
+	require.NoError(t, ConvertCBZ(context.Background(), srcPath, destPath, nil))
 
-	opfID := regexp.MustCompile(`<dc:identifier id="uid">([^<]+)</dc:identifier>`).FindStringSubmatch(string(readFileFromKepub(t, destPath, "content.opf")))
+	opfID := regexp.MustCompile(`<dc:identifier id="uid">([^<]+)</dc:identifier>`).FindStringSubmatch(string(readFileFromEPUB(t, destPath, "content.opf")))
 	require.NotNil(t, opfID)
-	ncxID := regexp.MustCompile(`<meta name="dtb:uid" content="([^"]+)"/>`).FindStringSubmatch(string(readFileFromKepub(t, destPath, "toc.ncx")))
+	ncxID := regexp.MustCompile(`<meta name="dtb:uid" content="([^"]+)"/>`).FindStringSubmatch(string(readFileFromEPUB(t, destPath, "toc.ncx")))
 	require.NotNil(t, ncxID)
 	assert.Equal(t, opfID[1], ncxID[1])
 }

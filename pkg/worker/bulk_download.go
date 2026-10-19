@@ -220,7 +220,7 @@ func (w *Worker) ProcessBulkDownloadJob(ctx context.Context, job *models.Job, jo
 			return errors.Wrap(err, "job cancelled")
 		}
 
-		cachedPath, downloadFilename, err := w.downloadCache.GetOrGenerate(ctx, fw.book, fw.file)
+		cachedPath, downloadFilename, err := w.downloadCache.GetOrGenerate(ctx, fw.book, fw.file, fw.file.FileType)
 		if err != nil {
 			jobLog.Warn(fmt.Sprintf("failed to generate file %d (%s): %v", fw.file.ID, fw.file.Filepath, err), nil)
 			continue

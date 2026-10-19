@@ -17,7 +17,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
-	"github.com/shishobooks/shisho/pkg/kepub"
+	"github.com/shishobooks/shisho/pkg/fixedlayout"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/seriesnum"
@@ -251,7 +251,7 @@ func processCBZPage(imgFile *zip.File) (processedPage, error) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(imgFile.Name))
-	processed := kepub.ProcessImageForEreader(data, ext)
+	processed := fixedlayout.ProcessImageForEreader(data, ext)
 
 	// Determine the new filename (may change extension if PNG→JPEG)
 	newName := imgFile.Name

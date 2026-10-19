@@ -111,7 +111,7 @@ func TestHandleDownload_UnreadableFileIsServerError(t *testing.T) {
 		f := newKoboDownloadFixture(t, "Cached")
 		file := f.addEPUB()
 		require.Equal(t, http.StatusOK, f.serve(file).Code)
-		lockKoboFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+".kepub.epub"))
+		lockKoboFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+"-kepub"))
 		assertKoboServerFault(t, f.serve(file))
 	})
 	t.Run("with an unreadable source", func(t *testing.T) {

@@ -64,4 +64,6 @@ func RegisterPublicRoutes(api *echo.Group, shareLinkService *Service, bookServic
 	g.GET("/:token/files/:fileId/cover", h.fileCover)
 	g.GET("/:token/files/:fileId/download", h.download)
 	g.HEAD("/:token/files/:fileId/download", h.download)
+	g.GET("/:token/files/:fileId/download/:fileType", h.downloadAs)
+	g.HEAD("/:token/files/:fileId/download/:fileType", h.downloadAs)
 }

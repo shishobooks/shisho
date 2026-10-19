@@ -18,7 +18,7 @@ import (
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
-	"github.com/shishobooks/shisho/pkg/kepub"
+	"github.com/shishobooks/shisho/pkg/fixedlayout"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,7 +85,7 @@ func TestCBZGenerator_Conformance(t *testing.T) {
 			// Every page is processed for e-readers and kept in order.
 			for i, srcPage := range src.File[1:] {
 				ext := strings.ToLower(filepath.Ext(srcPage.Name))
-				want := kepub.ProcessImageForEreader(readEntry(t, srcPage), ext)
+				want := fixedlayout.ProcessImageForEreader(readEntry(t, srcPage), ext)
 				got := out.File[i+1]
 				assert.Equal(t, strings.TrimSuffix(srcPage.Name, filepath.Ext(srcPage.Name))+want.Ext, got.Name)
 				assert.Equal(t, want.Data, readEntry(t, got), "page %d", i)

@@ -223,6 +223,18 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			message: books.CannotDecryptMessage,
 		},
 		{
+			name:   "download as a File Type no Conversion reaches",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download/epub", lockedFile.ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+			message: "PDF files can't be downloaded as EPUB",
+		},
+		{
+			name:   "download as a value that is not a File Type",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download/nonsense", cbzFile.ID),
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+			message: `Unknown file type "nonsense".`,
+		},
+		{
 			name:   "page past the end of a file with no stored page count",
 			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/page/99", cbzFile.ID),
 			status: http.StatusNotFound, code: "not_found", message: "Page not found.",

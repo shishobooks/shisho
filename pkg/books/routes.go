@@ -90,8 +90,10 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, cfg *config.Config, authMiddlewar
 	g.GET("/files/:id/download", h.downloadFile)
 	g.HEAD("/files/:id/download", h.downloadFile)
 	g.GET("/files/:id/download/original", h.downloadOriginalFile)
-	g.GET("/files/:id/download/kepub", h.downloadKepubFile)
-	g.HEAD("/files/:id/download/kepub", h.downloadKepubFile)
+	// Without its own HEAD route, a HEAD here reaches /download/:fileType.
+	g.HEAD("/files/:id/download/original", h.downloadOriginalFile)
+	g.GET("/files/:id/download/:fileType", h.downloadFileAs)
+	g.HEAD("/files/:id/download/:fileType", h.downloadFileAs)
 	g.GET("/files/:id/page/:pageNum", h.getPage)
 	g.GET("/files/:id/stream", h.streamFile)
 	g.POST("/files/:id/resync", h.resyncFile, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))

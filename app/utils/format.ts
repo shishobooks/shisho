@@ -1,5 +1,7 @@
 // Shared formatting utilities
 
+import { FileTypeKePub } from "@/types";
+
 /**
  * Formats bytes into a human-readable size in 1024-byte units, rounded to two
  * decimals. Values past the largest unit stay in terabytes.
@@ -37,6 +39,15 @@ export const fileLabel = (file: {
  */
 export const fileTitle = (file: { name?: string }, bookTitle = ""): string =>
   file.name?.trim() ? file.name : bookTitle;
+
+/**
+ * How a File Type is written for people: KePub in Kobo's casing, every other
+ * in capitals.
+ * @example fileTypeLabel("kepub") // "KePub"
+ * @example fileTypeLabel("cbz") // "CBZ"
+ */
+export const fileTypeLabel = (fileType: string): string =>
+  fileType === FileTypeKePub ? "KePub" : fileType.toUpperCase();
 
 /**
  * Formats a page count with the right plural.

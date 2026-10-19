@@ -146,11 +146,12 @@ func createCachedFile(t *testing.T, cacheDir string, fileID int, ext string, siz
 
 	// Create the metadata
 	meta := &CacheMetadata{
-		FileID:          fileID,
-		FingerprintHash: "test-hash",
-		GeneratedAt:     lastAccessed.Add(-1 * time.Minute),
-		LastAccessedAt:  lastAccessed,
-		SizeBytes:       sizeBytes,
+		FileID:            fileID,
+		DeliveredFileType: ext,
+		FingerprintHash:   "test-hash",
+		GeneratedAt:       lastAccessed.Add(-1 * time.Minute),
+		LastAccessedAt:    lastAccessed,
+		SizeBytes:         sizeBytes,
 	}
 	err = WriteMetadata(cacheDir, meta)
 	require.NoError(t, err)

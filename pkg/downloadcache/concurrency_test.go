@@ -66,7 +66,7 @@ func TestCache_GetOrGenerate_ConcurrentColdReads(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			paths[i], _, errs[i] = cache.GetOrGenerate(context.Background(), book, file)
+			paths[i], _, errs[i] = cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		}(i)
 	}
 	close(start)
@@ -77,15 +77,15 @@ func TestCache_GetOrGenerate_ConcurrentColdReads(t *testing.T) {
 		assert.Contains(t, readZipEntry(t, paths[i], "content.opf"), "Shared Title")
 	}
 
-	meta, err := ReadMetadata(cacheDir, file.ID)
+	meta, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 	require.NoError(t, err)
 	require.NotNil(t, meta)
 
 	// A later read is a cache hit on the same generation.
-	path, _, err := cache.GetOrGenerate(context.Background(), book, file)
+	path, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	assert.Equal(t, paths[0], path)
-	after, err := ReadMetadata(cacheDir, file.ID)
+	after, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 	require.NoError(t, err)
 	assert.True(t, meta.GeneratedAt.Equal(after.GeneratedAt))
 
@@ -107,7 +107,7 @@ func TestCache_GetOrGenerate_FailureLeavesNoPartialOutput(t *testing.T) {
 	t.Cleanup(cache.Wait)
 
 	file := &models.File{ID: 3, FileType: models.FileTypeEPUB, Filepath: srcPath}
-	_, _, err := cache.GetOrGenerate(context.Background(), &models.Book{Title: "x"}, file)
+	_, _, err := cache.GetOrGenerate(context.Background(), &models.Book{Title: "x"}, file, file.FileType)
 	require.Error(t, err)
 
 	entries, err := os.ReadDir(cacheDir)
@@ -138,7 +138,7 @@ func pausingCache(t *testing.T, gen filegen.StreamGenerator) (*Cache, *models.Bo
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 	src := filepath.Join(dir, "source.epub")
 	require.NoError(t, os.WriteFile(src, []byte("source"), 0o600))
-	cache := NewCache(cacheDir, 1<<30, WithGenerators(func(string, bool) (filegen.StreamGenerator, error) {
+	cache := NewCache(cacheDir, 1<<30, WithGenerators(func(string, string) (filegen.StreamGenerator, error) {
 		return gen, nil
 	}))
 	t.Cleanup(cache.Wait)
@@ -161,7 +161,7 @@ func TestCache_Open_StreamsWhileGenerating(t *testing.T) {
 	gen := filegentest.NewPausing("first part,", " rest")
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	require.NotNil(t, g.Body)
 	defer g.Body.Close()
@@ -170,7 +170,7 @@ func TestCache_Open_StreamsWhileGenerating(t *testing.T) {
 
 	assert.Equal(t, "first part,", readN(t, g.Body, len(gen.First)))
 
-	hit, err := cache.GetCachedPath(file.ID, file.FileType, book, file)
+	hit, err := cachedPathFor(t, cache, book, file)
 	require.NoError(t, err)
 	assert.Empty(t, hit, "a partial file was a cache hit")
 	_, err = os.Stat(cachedFilename(cache.Dir(), file.ID, file.FileType))
@@ -182,7 +182,7 @@ func TestCache_Open_StreamsWhileGenerating(t *testing.T) {
 	assert.Equal(t, " rest", string(rest))
 
 	cache.Wait()
-	hit, err = cache.GetCachedPath(file.ID, file.FileType, book, file)
+	hit, err = cachedPathFor(t, cache, book, file)
 	require.NoError(t, err)
 	require.NotEmpty(t, hit)
 	data, err := os.ReadFile(hit)
@@ -198,11 +198,11 @@ func TestCache_Open_SecondDownloadJoinsTheBuild(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	cache, book, file := pausingCache(t, gen)
 
-	a, err := cache.Open(context.Background(), book, file, false)
+	a, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	defer a.Body.Close()
 	<-gen.Started()
-	b, err := cache.Open(context.Background(), book, file, false)
+	b, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	defer b.Body.Close()
 
@@ -227,7 +227,7 @@ func TestCache_Open_DisconnectLeavesTheBuildRunning(t *testing.T) {
 	cache, book, file := pausingCache(t, gen)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	g, err := cache.Open(ctx, book, file, false)
+	g, err := cache.Open(ctx, book, file, file.FileType)
 	require.NoError(t, err)
 	readN(t, g.Body, len(gen.First))
 	cancel()
@@ -238,7 +238,7 @@ func TestCache_Open_DisconnectLeavesTheBuildRunning(t *testing.T) {
 	gen.Release()
 	cache.Wait()
 
-	again, err := cache.Open(context.Background(), book, file, false)
+	again, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	require.NotEmpty(t, again.Path, "the next download was not served from the cache")
 	data, err := os.ReadFile(again.Path)
@@ -254,7 +254,7 @@ func TestCache_Head_PreparesOnly(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Head(context.Background(), book, file, false)
+	g, err := cache.Head(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	assert.Nil(t, g.Body)
 	assert.Empty(t, g.Path)
@@ -274,7 +274,7 @@ func TestCache_Head_UnknownSize(t *testing.T) {
 	gen.UnknownSize = true
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Head(context.Background(), book, file, false)
+	g, err := cache.Head(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	assert.Equal(t, int64(-1), g.Size)
 }
@@ -291,9 +291,9 @@ func TestCache_PrepareFailure(t *testing.T) {
 
 		var err error
 		if head {
-			_, err = cache.Head(context.Background(), book, file, false)
+			_, err = cache.Head(context.Background(), book, file, file.FileType)
 		} else {
-			_, err = cache.Open(context.Background(), book, file, false)
+			_, err = cache.Open(context.Background(), book, file, file.FileType)
 		}
 		require.ErrorIs(t, err, boom)
 		cache.Wait()
@@ -310,7 +310,7 @@ func TestCache_SizeMismatchFailsTheBuild(t *testing.T) {
 	t.Parallel()
 	cache, book, file := pausingCache(t, wrongSize{})
 
-	_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+	_, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 	require.ErrorContains(t, err, "reported 100 bytes and wrote 5")
 	cache.Wait()
 	assertOnlyFailureRemembered(t, cache, file)
@@ -323,8 +323,8 @@ func assertOnlyFailureRemembered(t *testing.T, cache *Cache, file *models.File) 
 	entries, err := os.ReadDir(cache.Dir())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	assert.Equal(t, filepath.Base(metadataFilename(cache.Dir(), file.ID)), entries[0].Name())
-	meta, err := ReadMetadata(cache.Dir(), file.ID)
+	assert.Equal(t, filepath.Base(metadataFilename(cache.Dir(), file.ID, file.FileType)), entries[0].Name())
+	meta, err := ReadMetadata(cache.Dir(), file.ID, file.FileType)
 	require.NoError(t, err)
 	require.NotNil(t, meta.Failure)
 	assert.Empty(t, meta.FingerprintHash)
@@ -347,18 +347,18 @@ func TestCache_GetOrGenerate_CanceledWaiterReturnsPromptly(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	defer g.Body.Close()
 	<-gen.Started()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, _, err = cache.GetOrGenerate(ctx, book, file)
+	_, _, err = cache.GetOrGenerate(ctx, book, file, file.FileType)
 	require.ErrorIs(t, err, context.Canceled)
 
 	gen.Release()
-	path, _, err := cache.GetOrGenerate(context.Background(), book, file)
+	path, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -372,7 +372,7 @@ func TestCache_UnrelatedFilesDoNotWait(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	defer g.Body.Close()
 	<-gen.Started()
@@ -381,7 +381,7 @@ func TestCache_UnrelatedFilesDoNotWait(t *testing.T) {
 	other.ID = 2
 	done := make(chan error, 1)
 	go func() {
-		g2, err := cache.Open(context.Background(), book, &other, false)
+		g2, err := cache.Open(context.Background(), book, &other, other.FileType)
 		if err == nil {
 			g2.Body.Close()
 		}
@@ -403,7 +403,7 @@ func TestCache_CloseCancelsBuilds(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	defer g.Body.Close()
 	readN(t, g.Body, len(gen.First))
@@ -424,8 +424,8 @@ func TestCache_RemoveLeftovers(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, partialPrefix+"123"), []byte("half"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, stagingPrefix+"456"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, stagingPrefix+"456", "1.epub"), []byte("half"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.epub"), []byte("whole"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.meta.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1-epub"), []byte("whole"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1-epub.meta.json"), []byte("{}"), 0o600))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bulk"), 0o755))
 	// A stale lock would make every later cleanup, including the one a lower
 	// limit runs, return without evicting anything.
@@ -439,7 +439,7 @@ func TestCache_RemoveLeftovers(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	assert.ElementsMatch(t, []string{"1.epub", "1.meta.json", "bulk"}, names)
+	assert.ElementsMatch(t, []string{"1-epub", "1-epub.meta.json", "bulk"}, names)
 	require.NoError(t, NewCache(filepath.Join(dir, "missing"), 1<<30).RemoveLeftovers())
 }
 
@@ -450,7 +450,7 @@ func TestCache_GeneratorPanicFailsTheBuild(t *testing.T) {
 	for _, step := range []string{"prepare", "write"} {
 		cache, book, file := pausingCache(t, panicking{step: step})
 
-		_, _, err := cache.GetOrGenerate(context.Background(), book, file)
+		_, _, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.ErrorContains(t, err, "generator panicked")
 		cache.Wait()
 		if step == "write" {
@@ -484,10 +484,10 @@ func TestCache_Open_JoinAfterFinishServesPublishedFile(t *testing.T) {
 	gen := filegentest.NewPausing("first,", "second")
 	cache, book, file := pausingCache(t, gen)
 
-	g, err := cache.Open(context.Background(), book, file, false)
+	g, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.NoError(t, err)
 	require.NoError(t, g.Body.Close())
-	e, err := cache.entryFor(book, file, false)
+	e, err := cache.entryFor(book, file, file.FileType)
 	require.NoError(t, err)
 	cache.mu.Lock()
 	j := cache.jobs[e.key()]
@@ -512,9 +512,18 @@ func TestCache_OpenAfterCloseFails(t *testing.T) {
 	t.Parallel()
 	cache, book, file := pausingCache(t, filegentest.NewPausing("a", "b"))
 	cache.Close(context.Background())
-	_, err := cache.Open(context.Background(), book, file, false)
+	_, err := cache.Open(context.Background(), book, file, file.FileType)
 	require.ErrorContains(t, err, "closed")
 	entries, err := os.ReadDir(cache.Dir())
 	require.NoError(t, err)
 	assert.Empty(t, entries)
+}
+
+// cachedPathFor returns the cached path of the file delivered as itself
+// when the cache holds it at its current fingerprint, and "" otherwise.
+func cachedPathFor(t *testing.T, cache *Cache, book *models.Book, file *models.File) (string, error) {
+	t.Helper()
+	e, err := cache.entryFor(book, file, file.FileType)
+	require.NoError(t, err)
+	return e.lookup()
 }

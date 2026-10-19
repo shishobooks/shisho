@@ -72,9 +72,21 @@ func TestShareLinks_UnreadableFileIsServerError(t *testing.T) {
 		f.setSharing(true, false)
 		link := f.mustCreate(f.admin, f.bookA, `{}`)
 		require.Equal(t, http.StatusOK, f.shareGet(link.Token, shareFilePath(f.epubA, "/download")).Code)
-		lockPath(t, filepath.Join(f.cacheDir, strconv.Itoa(f.epubA.ID)+".epub"))
+		lockPath(t, filepath.Join(f.cacheDir, strconv.Itoa(f.epubA.ID)+"-epub"))
 
 		assertFileServerFault(t, f.shareGet(link.Token, shareFilePath(f.epubA, "/download")))
+		assert.Equal(t, 1, f.listed(f.bookA)[link.ID].DownloadCount)
+	})
+
+	t.Run("download as KePub from the cache", func(t *testing.T) {
+		t.Parallel()
+		f := newShareLinksFixture(t)
+		f.setSharing(true, false)
+		link := f.mustCreate(f.admin, f.bookA, `{}`)
+		require.Equal(t, http.StatusOK, f.shareGet(link.Token, shareFilePath(f.epubA, "/download/kepub")).Code)
+		lockPath(t, filepath.Join(f.cacheDir, strconv.Itoa(f.epubA.ID)+"-kepub"))
+
+		assertFileServerFault(t, f.shareGet(link.Token, shareFilePath(f.epubA, "/download/kepub")))
 		assert.Equal(t, 1, f.listed(f.bookA)[link.ID].DownloadCount)
 	})
 
