@@ -106,6 +106,15 @@ func (f *koboScopeFixture) retitleBook(t *testing.T, book *models.Book, title st
 	require.NoError(t, err)
 }
 
+func (f *koboScopeFixture) nameFile(t *testing.T, file *models.File, name string) {
+	t.Helper()
+	_, err := f.db.NewUpdate().Model((*models.File)(nil)).
+		Set("name = ?", name).
+		Where("id = ?", file.ID).
+		Exec(context.Background())
+	require.NoError(t, err)
+}
+
 // A moved, renamed, or rewritten file comes back as a ChangedEntitlement
 // under the ids it was first sent with, so the Kobo updates it in place
 // instead of adding a second copy.
@@ -138,6 +147,26 @@ func TestHandleSync_MetadataChangeIsChangedEntitlementUnderSameIDs(t *testing.T)
 	require.Len(t, items, 1)
 	assertChangedUnder(t, items[0], f.fileA.ID, rev)
 	assert.Equal(t, "Alpha, Revised", items[0].ChangedEntitlement.BookMetadata["Title"])
+}
+
+// The Kobo shows a file's name as its title, so changing only the name has
+// to reach a Kobo that already synced the file.
+func TestHandleSync_FileNameChangeIsChangedEntitlement(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+
+	f.nameFile(t, f.fileA, "")
+	items, token := f.sync(t, "")
+	first := itemFor(t, items, f.fileA.ID)
+	rev := entitlementRevisionID(t, first.NewEntitlement)
+	assert.Equal(t, f.bookA.Title, first.NewEntitlement.BookMetadata["Title"], "an empty name falls back to the book's title")
+
+	f.nameFile(t, f.fileA, "Alpha: Special Edition")
+
+	items, _ = f.sync(t, token)
+	require.Len(t, items, 1)
+	assertChangedUnder(t, items[0], f.fileA.ID, rev)
+	assert.Equal(t, "Alpha: Special Edition", items[0].ChangedEntitlement.BookMetadata["Title"])
 }
 
 // A file first synced after the upgrade gets a RevisionId that does not

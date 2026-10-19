@@ -186,6 +186,30 @@ func TestBuildBookMetadata_WithSubtitle(t *testing.T) {
 	assert.Equal(t, subtitle, metadata.SubTitle)
 }
 
+func TestBuildBookMetadata_NamedFileUsesItsNameAsTitle(t *testing.T) {
+	t.Parallel()
+	subtitle := "Book One"
+	name := "Harry Potter and the Sorcerer's Stone"
+	book := &models.Book{ID: 1, Title: "Harry Potter and the Philosopher's Stone", Subtitle: &subtitle}
+	file := &models.File{ID: 1, FilesizeBytes: 1024, Name: &name}
+
+	metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+	assert.Equal(t, name, metadata.Title)
+	assert.Equal(t, subtitle, metadata.SubTitle, "the subtitle still comes from the book")
+}
+
+func TestBuildBookMetadata_UnnamedFileUsesBookTitle(t *testing.T) {
+	t.Parallel()
+	empty := ""
+	for _, name := range []*string{nil, &empty} {
+		book := &models.Book{ID: 1, Title: "Harry Potter and the Philosopher's Stone"}
+		file := &models.File{ID: 1, FilesizeBytes: 1024, Name: name}
+
+		metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+		assert.Equal(t, "Harry Potter and the Philosopher's Stone", metadata.Title)
+	}
+}
+
 func TestBuildBookMetadata_WithRelations(t *testing.T) {
 	t.Parallel()
 	personName := "Test Author"

@@ -1766,6 +1766,29 @@ func TestUpdateBook_Title_UpdatesEmptyFileName_ToNewTitle(t *testing.T) {
 	assert.Equal(t, "Bar", *updated.Name)
 }
 
+func TestUpdateBook_Title_UpdatesWhitespaceFileName_ToNewTitle(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	blankName := "  "
+	filepathSource := models.DataSourceFilepath
+	library, book, file := seedBookAndFile(t, db, "Foo", &blankName, &filepathSource, models.FileRoleMain)
+	user := loadUserWithRole(t, db, setupTestUser(t, db, library.ID, true))
+
+	e := setupTestServer(t, db)
+	req := newUpdateTitleRequest(book.ID, "Bar")
+	rr := executeRequestWithUser(t, e, req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	var updated models.File
+	err := db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	assert.Equal(t, "Bar", *updated.Name, "a whitespace-only name counts as unset")
+}
+
 func TestUpdateBook_Title_MatchesWithTrimAndCasefold(t *testing.T) {
 	t.Parallel()
 

@@ -41,7 +41,7 @@ Lower priority number wins (`pkg/models/data-source.go`).
 
 ### File-level vs book-level fields
 
-When both levels exist (`file.Name` vs `book.Title`), download filenames and file organization prefer the file-level value when non-empty; display uses file-level in file contexts and book-level in book contexts.
+When both levels exist (`file.Name` vs `book.Title`), anything that presents one File to a reader uses the file-level value when set, even when the book has one File (a Generated File, a download filename, a Kobo entry, a reader's title). Get the title from `File.ResolveTitle` (`fileTitle` in `app/utils/format.ts`), never an inline check. Anything that presents the Book uses book-level values. Subtitle stays book-level everywhere.
 
 ### Organization
 

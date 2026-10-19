@@ -320,7 +320,7 @@ func TestBuildCBZMetadata_Chapters(t *testing.T) {
 
 func TestBuildCBZMetadata(t *testing.T) {
 	t.Parallel()
-	t.Run("sets Name from file when available", func(t *testing.T) {
+	t.Run("uses the file's name as the title when set", func(t *testing.T) {
 		name := "Custom Name"
 		book := &models.Book{
 			Title: "Book Title",
@@ -332,12 +332,10 @@ func TestBuildCBZMetadata(t *testing.T) {
 		metadata := buildCBZMetadata(book, file)
 
 		require.NotNil(t, metadata)
-		assert.Equal(t, "Book Title", metadata.Title)
-		require.NotNil(t, metadata.Name)
-		assert.Equal(t, "Custom Name", *metadata.Name)
+		assert.Equal(t, "Custom Name", metadata.Title)
 	})
 
-	t.Run("does not set Name when file is nil", func(t *testing.T) {
+	t.Run("uses the book's title when file is nil", func(t *testing.T) {
 		book := &models.Book{
 			Title: "Book Title",
 		}
@@ -346,10 +344,9 @@ func TestBuildCBZMetadata(t *testing.T) {
 
 		require.NotNil(t, metadata)
 		assert.Equal(t, "Book Title", metadata.Title)
-		assert.Nil(t, metadata.Name)
 	})
 
-	t.Run("does not set Name when file.Name is nil", func(t *testing.T) {
+	t.Run("uses the book's title when file.Name is nil", func(t *testing.T) {
 		book := &models.Book{
 			Title: "Book Title",
 		}
@@ -361,7 +358,6 @@ func TestBuildCBZMetadata(t *testing.T) {
 
 		require.NotNil(t, metadata)
 		assert.Equal(t, "Book Title", metadata.Title)
-		assert.Nil(t, metadata.Name)
 	})
 
 	t.Run("returns nil when book is nil", func(t *testing.T) {

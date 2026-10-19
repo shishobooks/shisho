@@ -353,7 +353,7 @@ func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope
 			FileID:          f.ID,
 			FileHash:        computeFileHash(&f),
 			FileSize:        f.FilesizeBytes,
-			MetadataHash:    computeMetadataHash(&f),
+			MetadataHash:    computeMetadataHash(f.Book, &f),
 			CoverModifiedAt: coverModifiedAt(ctx, &f),
 		}
 	}
@@ -465,18 +465,6 @@ func computeFileHash(file *models.File) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
-// computeMetadataHash creates a hash from title, author names, and cover
-// filename, truncated to 16 hex chars. Used both as a sync-diff signal (a
-// metadata change marks the book as Changed) and as the base of the
-// CoverImageID suffix for the device thumbnail cache (see coverCacheKey).
-func computeMetadataHash(file *models.File) string {
-	var coverFilename string
-	if file.CoverImageFilename != nil {
-		coverFilename = *file.CoverImageFilename
-	}
-	return ComputeMetadataHashFromBook(file.Book, coverFilename)
-}
-
 // coverModifiedAt returns the mtime of the file's cover on disk, or nil when
 // it has none. Scans only write a cover that is missing, so the mtime changes
 // when a cover is uploaded or replaced, not on every rescan. It is truncated
@@ -516,22 +504,33 @@ func coverCacheKey(metadataHash string, coverModifiedAt *time.Time) string {
 	return key
 }
 
-// ComputeMetadataHashFromBook produces the same hash as computeMetadataHash
-// but accepts the book and cover filename directly, for callers (like
-// handleMetadata) that loaded the book via a separate query rather than via
-// the file's Book relation.
-func ComputeMetadataHashFromBook(book *models.Book, coverFilename string) string {
-	var parts []string
+// computeMetadataHash creates a hash from the title the Kobo shows (the
+// file's name, or the book's title), author names, and cover filename,
+// truncated to 16 hex chars. Used both as a sync-diff signal (a metadata
+// change marks the book as Changed) and as the base of the CoverImageID
+// suffix for the device thumbnail cache (see coverCacheKey). It takes the
+// book separately because handleMetadata loads it with its own query rather
+// than through the file's Book relation.
+func computeMetadataHash(book *models.Book, file *models.File) string {
+	var bookTitle string
 	if book != nil {
-		parts = append(parts, book.Title)
+		bookTitle = book.Title
+	}
+	var parts []string
+	// A loaded book always contributes its title, even an empty one, so
+	// hashes stored before file names counted stay the same.
+	if title := file.ResolveTitle(bookTitle); book != nil || title != "" {
+		parts = append(parts, title)
+	}
+	if book != nil {
 		for _, a := range book.Authors {
 			if a.Person != nil {
 				parts = append(parts, a.Person.Name)
 			}
 		}
 	}
-	if coverFilename != "" {
-		parts = append(parts, coverFilename)
+	if file != nil && file.CoverImageFilename != nil && *file.CoverImageFilename != "" {
+		parts = append(parts, *file.CoverImageFilename)
 	}
 	data := strings.Join(parts, "\x00")
 	h := sha256.Sum256([]byte(data))

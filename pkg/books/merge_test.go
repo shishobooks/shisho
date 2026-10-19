@@ -351,6 +351,52 @@ func TestMoveFilesToBook_CreateNewBook_UsesFileMetadataName(t *testing.T) {
 	assert.Equal(t, models.DataSourceFileMetadata, result.TargetBook.TitleSource)
 }
 
+func TestMoveFilesToBook_CreateNewBook_WhitespaceNameUsesFilename(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	library := setupTestLibrary(t, db)
+	libraryPath := t.TempDir()
+	_, err := db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryPath}).Exec(ctx)
+	require.NoError(t, err)
+
+	sourceBook, _ := setupTestBookWithFile(t, db, library, "Source Book")
+
+	newFileDir := filepath.Join(libraryPath, "New Book Dir")
+	require.NoError(t, os.MkdirAll(newFileDir, 0755))
+	sourceFile2Path := filepath.Join(newFileDir, "Name From Disk.epub")
+	require.NoError(t, os.WriteFile(sourceFile2Path, []byte("test epub content 2"), 0644))
+
+	blankName := "  "
+	nameSource := models.DataSourceSidecar
+	sourceFile2 := &models.File{
+		LibraryID:     library.ID,
+		BookID:        sourceBook.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      sourceFile2Path,
+		FilesizeBytes: 19,
+		Name:          &blankName,
+		NameSource:    &nameSource,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	_, err = db.NewInsert().Model(sourceFile2).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db, appsettings.NewService(db))
+	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:   []int{sourceFile2.ID},
+		LibraryID: library.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, result.NewBookCreated)
+
+	assert.Equal(t, "Name From Disk", result.TargetBook.Title, "a whitespace-only name counts as unset")
+	assert.Equal(t, models.DataSourceFilepath, result.TargetBook.TitleSource)
+}
+
 func TestMoveFilesToBook_CreateNewBook_TitleKeepsFileNameSource(t *testing.T) {
 	t.Parallel()
 

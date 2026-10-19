@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   fileLabel,
+  fileTitle,
   formatCount,
   formatDate,
   formatDateTime,
@@ -100,6 +101,29 @@ describe("fileLabel", () => {
 
   it("falls back to the file type when there is no display name", () => {
     expect(fileLabel({ display_name: "", file_type: "epub" })).toBe("EPUB");
+  });
+});
+
+describe("fileTitle", () => {
+  it("uses the file's name when set", () => {
+    expect(
+      fileTitle(
+        { name: "Harry Potter and the Sorcerer's Stone" },
+        "Harry Potter and the Philosopher's Stone",
+      ),
+    ).toBe("Harry Potter and the Sorcerer's Stone");
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["whitespace-only", "  "],
+  ])("falls back to the book's title when the name is %s", (_, name) => {
+    expect(fileTitle({ name }, "Book Title")).toBe("Book Title");
+  });
+
+  it("is empty when there is neither a name nor a book title", () => {
+    expect(fileTitle({}, undefined)).toBe("");
   });
 });
 

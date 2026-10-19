@@ -266,6 +266,37 @@ describe("IdentifyBookDialog search sequencing", () => {
     expect(screen.queryByText("Result A")).not.toBeInTheDocument();
   });
 
+  it("searches a picked file's filename when its name is only whitespace", async () => {
+    const user = createUser();
+    renderDialog(
+      makeBook({
+        title: "Query A",
+        files: [
+          makeFile({ id: 1, name: "Query A" }),
+          makeFile({
+            id: 2,
+            name: "  ",
+            filepath: "/test/Second Edition.epub",
+            display_name: "Second Edition.epub",
+          }),
+        ],
+      }),
+    );
+
+    const picker = screen.getByRole("group", { name: "Apply to file" });
+    await user.click(within(picker).getAllByRole("button")[1]);
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "POST",
+        "/plugins/search",
+        expect.objectContaining({ query: "Second Edition.epub" }),
+        null,
+        expect.anything(),
+      ),
+    );
+  });
+
   it("enables the search button only while the query has text", async () => {
     const user = createUser();
     renderDialog(makeBook({ title: "Query A" }));

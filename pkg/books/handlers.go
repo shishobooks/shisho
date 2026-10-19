@@ -307,7 +307,7 @@ func (h *handler) update(c echo.Context) error {
 			if f.FileRole != models.FileRoleMain {
 				continue
 			}
-			currentEmpty := f.Name == nil || *f.Name == ""
+			currentEmpty := !f.HasName()
 			currentMatches := false
 			if f.Name != nil {
 				currentMatches = strings.EqualFold(strings.TrimSpace(*f.Name), strings.TrimSpace(oldTitle))
@@ -1330,10 +1330,7 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 			authorNames = append(authorNames, a.Person.Name)
 		}
 	}
-	title := book.Title
-	if file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
+	title := file.ResolveTitle(book.Title)
 	// File-level renames intentionally omit SeriesNumber/SeriesNumberUnit:
 	// GenerateOrganizedFileName clears them before generating the filename
 	// since the series number is already encoded in the parent folder name.

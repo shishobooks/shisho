@@ -112,11 +112,7 @@ func (fo *fileOrganizer) RenameNarratedFile(ctx context.Context, fileID int) (st
 		}
 	}
 
-	// Use file.Name for title if available, otherwise book.Title
-	title := book.Title
-	if file.Name != nil && *file.Name != "" {
-		title = *file.Name
-	}
+	title := file.ResolveTitle(book.Title)
 
 	// Generate organized name options
 	organizeOpts := fileutils.OrganizedNameOptions{

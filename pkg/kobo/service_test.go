@@ -2,7 +2,9 @@ package kobo
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -497,4 +499,35 @@ func TestCoverCacheKey(t *testing.T) {
 	assert.NotEqual(t, "0123abcd", withCover)
 	later := mtime.Add(time.Microsecond)
 	assert.NotEqual(t, withCover, coverCacheKey("0123abcd99999999", &later))
+}
+
+// The hash input for a file whose Kobo title is its book's title must not
+// change, or every synced book would go out as changed after an upgrade.
+func TestComputeMetadataHash_UnchangedWhenTitleIsBookTitle(t *testing.T) {
+	t.Parallel()
+	cover := "cover.jpg"
+	book := &models.Book{
+		Title:   "Alpha",
+		Authors: []*models.Author{{Person: &models.Person{Name: "Ann Author"}}},
+	}
+	sum := sha256.Sum256([]byte("Alpha\x00Ann Author\x00cover.jpg"))
+	want := hex.EncodeToString(sum[:])[:16]
+
+	sameName := "Alpha"
+	empty := ""
+	for _, name := range []*string{nil, &empty, &sameName} {
+		file := &models.File{Name: name, CoverImageFilename: &cover}
+		assert.Equal(t, want, computeMetadataHash(book, file))
+	}
+
+	other := "Alpha: Special Edition"
+	assert.NotEqual(t, want, computeMetadataHash(book, &models.File{Name: &other, CoverImageFilename: &cover}))
+}
+
+func TestComputeMetadataHash_NamedFileWithoutBookKeepsName(t *testing.T) {
+	t.Parallel()
+	a, b := "First", "Second"
+	assert.NotEqual(t,
+		computeMetadataHash(nil, &models.File{Name: &a}),
+		computeMetadataHash(nil, &models.File{Name: &b}))
 }

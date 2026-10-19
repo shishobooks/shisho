@@ -72,15 +72,10 @@ func buildCBZMetadata(book *models.Book, file *models.File) *kepub.CBZMetadata {
 	}
 
 	metadata := &kepub.CBZMetadata{
-		Title:    book.Title,
+		Title:    file.ResolveTitle(book.Title),
 		Subtitle: book.Subtitle,
 	}
-
-	// Set Name and Language from file if available
 	if file != nil {
-		if file.Name != nil {
-			metadata.Name = file.Name
-		}
 		metadata.Language = file.Language
 	}
 
