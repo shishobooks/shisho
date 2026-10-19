@@ -889,7 +889,7 @@ func fileDownloadEntry(baseURL, bookTitle string, f *models.File, dev device) st
 
 	// Build download URL (KePub for Kobo when applicable, and a URL ending
 	// in the filename for a Kindle)
-	supportsKepub := f.FileType == models.FileTypeEPUB || f.FileType == models.FileTypeCBZ
+	_, supportsKepub := models.ConversionChain(f.FileType, models.FileTypeKePub)
 	isKobo := dev == deviceKobo
 	var downloadURL string
 	switch {
