@@ -4,7 +4,10 @@ import {
   DeviceTypeBrowser,
   DeviceTypeKindle,
   DeviceTypeKobo,
+  ScopeLibrary,
+  ScopeList,
   type Connection,
+  type DeviceResponse,
   type DeviceType,
 } from "@/types/generated/devices";
 
@@ -48,3 +51,19 @@ export const eReaderBrowserURL = (credential: string) =>
 
 export const shortURL = (shortCode: string) =>
   `${window.location.origin}/e/${shortCode}`;
+
+// scopeLabel describes which books a Device reaches, for lists of Devices.
+export const scopeLabel = (device: DeviceResponse): string => {
+  switch (device.scope_type) {
+    case ScopeLibrary:
+      return device.scope_name
+        ? `Library: ${device.scope_name}`
+        : "Library: deleted, reaches no books";
+    case ScopeList:
+      return device.scope_name
+        ? `List: ${device.scope_name}`
+        : "List: unavailable, reaches no books";
+    default:
+      return "All books";
+  }
+};

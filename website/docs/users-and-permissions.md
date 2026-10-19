@@ -149,7 +149,7 @@ Choose the type when adding a Device. It decides which connections the Device ca
 | **Kindle** | eReader browser |
 | **Browser** | eReader browser, for any other e-reader's web browser |
 
-A new Device has every connection its type allows. Each connection has a switch on the Device's page; a connection that is off refuses the Device with a forbidden response.
+The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response. To change a Device's type, add a new Device.
 
 ### Credential
 

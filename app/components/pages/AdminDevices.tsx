@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAllDevices, useRevokeDevice } from "@/hooks/queries/devices";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { toastRequestError } from "@/libraries/api";
+import { isDemoModeError, toastRequestError } from "@/libraries/api";
 import type { AdminDeviceResponse } from "@/types/generated/devices";
 import { CONNECTION_LABELS, DEVICE_TYPE_LABELS } from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
@@ -30,6 +30,7 @@ const AdminDevices = () => {
       toast.success("Device revoked");
       setRevoking(null);
     } catch (error) {
+      if (isDemoModeError(error)) setRevoking(null);
       toastRequestError(error, "Failed to revoke device");
     }
   };
@@ -39,7 +40,8 @@ const AdminDevices = () => {
       <div className="mb-6 md:mb-8">
         <h1 className="mb-1 text-2xl font-semibold md:mb-2">Devices</h1>
         <p className="text-sm text-muted-foreground md:text-base">
-          Every user's Devices. Revoke a lost or stolen one to cut it off.
+          Every user's Devices.
+          {canRevoke && " Revoke a lost or stolen one to cut it off."}
         </p>
       </div>
 
@@ -96,7 +98,7 @@ const AdminDevices = () => {
       {canRevoke && (
         <ConfirmDialog
           confirmLabel="Revoke"
-          description={`"${revoking?.name ?? ""}" (${revoking?.owner.username ?? ""}) will stop reaching the library right away, and is deleted. Its owner can add it again.`}
+          description={`"${revoking?.name ?? ""}" (${revoking?.owner.username ?? ""}) stops reaching the library right away and is deleted. To use that device again, its owner must add a new Device and set it up again.`}
           isPending={revokeDevice.isPending}
           onConfirm={handleRevoke}
           onOpenChange={(open) => !open && setRevoking(null)}

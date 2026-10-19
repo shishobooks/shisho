@@ -127,18 +127,19 @@ func TestHandleSync_DownloadURLsFollowTheRouteUsed(t *testing.T) {
 	}
 }
 
-// A Device without the Kobo sync connection cannot sync.
-func TestKoboDeviceAuth_WithoutKoboSyncConnection_Returns403(t *testing.T) {
+// Only a Kobo Device can sync; a Browser or Kindle Device's credential is
+// refused.
+func TestKoboDeviceAuth_NonKoboDevice_Returns403(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
-	_, err := devices.NewService(f.db).Update(context.Background(), f.user.ID, f.device.ID, devices.UpdateDeviceOptions{
-		Connections: []string{devices.ConnectionEReaderBrowser}, SetConnections: true,
-	})
-	require.NoError(t, err)
+	for _, deviceType := range []string{devices.DeviceTypeBrowser, devices.DeviceTypeKindle} {
+		device, err := devices.NewService(f.db).Create(context.Background(), f.user.ID, "Reader", deviceType)
+		require.NoError(t, err)
 
-	rec := f.serve(http.MethodGet, f.prefix()+"/v1/library/sync")
-	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), "This Device does not have Kobo sync turned on.")
+		rec := f.serve(http.MethodGet, "/kobo/"+device.Credential+"/v1/library/sync")
+		assert.Equal(t, http.StatusForbidden, rec.Code, deviceType)
+		assert.Contains(t, rec.Body.String(), "Only a Kobo Device can use Kobo sync.")
+	}
 }
 
 // A migrated URL naming a library its owner cannot access synced nothing,

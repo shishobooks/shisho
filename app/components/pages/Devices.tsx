@@ -11,7 +11,11 @@ import { Button } from "@/components/ui/button";
 import { useDevices } from "@/hooks/queries/devices";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { DeviceResponse } from "@/types/generated/devices";
-import { CONNECTION_LABELS, DEVICE_TYPE_LABELS } from "@/utils/devices";
+import {
+  CONNECTION_LABELS,
+  DEVICE_TYPE_LABELS,
+  scopeLabel,
+} from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
 
 const DeviceRow = ({ device }: { device: DeviceResponse }) => {
@@ -36,7 +40,7 @@ const DeviceRow = ({ device }: { device: DeviceResponse }) => {
           </Badge>
         </div>
         <p className="mt-1 text-xs text-muted-foreground md:text-sm">
-          {connections || "No connections"}
+          {scopeLabel(device)} · {connections}
           {device.last_accessed_at &&
             ` · Last used ${formatDateTime(device.last_accessed_at)}`}
         </p>
@@ -76,7 +80,7 @@ const Devices = () => {
           </div>
         </div>
 
-        <div className="max-w-2xl">
+        <div>
           {isLoading ? (
             <LoadingSpinner />
           ) : devicesQuery.error && !devices ? (

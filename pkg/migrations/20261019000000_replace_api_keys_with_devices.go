@@ -10,8 +10,10 @@ import (
 // API keys become Devices (ADR 0011). Each key keeps its id, and its key
 // becomes the Device's credential, so saved Kobo sync URLs, eReader browser
 // bookmarks, and Kobo sync state keep working. A key with kobo_sync becomes a
-// Kobo Device and any other key a Browser Device; each permission becomes the
-// connection of the same name. A migrated Kobo takes its scope from the scope
+// Kobo Device and any other key a Browser Device. A Device's type decides how
+// it connects, so permissions are not kept: every Kobo Device can also use the
+// eReader browser, and a key with no permissions becomes a working Browser
+// Device. A migrated Kobo takes its scope from the scope
 // segment of its sync URL on its first request, so url_scope_pending marks
 // the Devices still waiting for one.
 //
@@ -80,12 +82,6 @@ func init() {
 				`CREATE INDEX ix_devices_user_id ON devices (user_id)`,
 				`CREATE INDEX ix_devices_scope_library_id ON devices (scope_library_id)`,
 				`CREATE INDEX ix_devices_scope_list_id ON devices (scope_list_id)`,
-				`CREATE TABLE device_connections (
-					device_id TEXT NOT NULL REFERENCES devices (id) ON DELETE CASCADE,
-					connection TEXT NOT NULL,
-					created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					PRIMARY KEY (device_id, connection)
-				)`,
 				`CREATE TABLE device_short_urls (
 					id TEXT PRIMARY KEY,
 					device_id TEXT NOT NULL REFERENCES devices (id) ON DELETE CASCADE,
@@ -100,9 +96,6 @@ func init() {
 						k.key, kobo.api_key_id IS NOT NULL, k.created_at, k.updated_at, k.last_accessed_at
 					FROM api_keys k
 					LEFT JOIN api_key_permissions kobo ON kobo.api_key_id = k.id AND kobo.permission = 'kobo_sync'`,
-				`INSERT INTO device_connections (device_id, connection, created_at)
-					SELECT api_key_id, permission, created_at FROM api_key_permissions
-					WHERE permission IN ('kobo_sync', 'ereader_browser')`,
 				`INSERT INTO device_short_urls (id, device_id, short_code, expires_at, created_at)
 					SELECT id, api_key_id, short_code, expires_at, created_at FROM api_key_short_urls`,
 			} {
@@ -129,7 +122,7 @@ func init() {
 				}
 			}
 
-			return checkForeignKeys(ctx, tx, []string{"devices", "device_connections", "device_short_urls", "kobo_sync_points", "kobo_sync_entries"})
+			return checkForeignKeys(ctx, tx, []string{"devices", "device_short_urls", "kobo_sync_points", "kobo_sync_entries"})
 		})
 	}
 
@@ -167,7 +160,9 @@ func init() {
 				`INSERT INTO api_keys (id, user_id, name, key, created_at, updated_at, last_accessed_at)
 					SELECT id, user_id, name, credential, created_at, updated_at, last_accessed_at FROM devices`,
 				`INSERT INTO api_key_permissions (id, api_key_id, permission, created_at)
-					SELECT lower(hex(randomblob(16))), device_id, connection, created_at FROM device_connections`,
+					SELECT lower(hex(randomblob(16))), id, 'ereader_browser', created_at FROM devices`,
+				`INSERT INTO api_key_permissions (id, api_key_id, permission, created_at)
+					SELECT lower(hex(randomblob(16))), id, 'kobo_sync', created_at FROM devices WHERE device_type = 'kobo'`,
 				`INSERT INTO api_key_short_urls (id, api_key_id, short_code, expires_at, created_at)
 					SELECT id, device_id, short_code, expires_at, created_at FROM device_short_urls`,
 				`DROP INDEX ix_kobo_sync_points_device_id`,
@@ -186,7 +181,6 @@ func init() {
 
 			for _, stmt := range []string{
 				`DROP TABLE device_short_urls`,
-				`DROP TABLE device_connections`,
 				`DROP TABLE devices`,
 			} {
 				if _, err := tx.ExecContext(ctx, stmt); err != nil {

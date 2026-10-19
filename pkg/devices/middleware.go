@@ -12,11 +12,10 @@ import (
 // deviceContextKey is the echo context key DeviceAuth stores the Device under.
 const deviceContextKey = "device"
 
-// connectionDeniedMessages holds the 403 message for a Device without a
-// connection, worded for the connection's own clients.
+// connectionDeniedMessages holds the 403 message for a Device whose type
+// does not use a connection, worded for the connection's own clients.
 var connectionDeniedMessages = map[string]string{
-	ConnectionKoboSync:       "This Device does not have Kobo sync turned on.",
-	ConnectionEReaderBrowser: "This Device does not have the eReader browser turned on.",
+	ConnectionKoboSync: "Only a Kobo Device can use Kobo sync.",
 }
 
 // Middleware authenticates the device routes (Kobo and eReader) that carry a
@@ -31,7 +30,7 @@ func NewMiddleware(service *Service) *Middleware {
 }
 
 // DeviceAuth validates the credential in c.Param("credential"), checks that
-// its Device has connection, and loads its owner with AuthenticateOwner,
+// its Device's type uses connection, and loads its owner with AuthenticateOwner,
 // which rejects a missing or deactivated owner (401) and one without
 // books:read (403). It touches the Device's last accessed time without
 // waiting, stores the Device for RequireDevice, and stores the owner with

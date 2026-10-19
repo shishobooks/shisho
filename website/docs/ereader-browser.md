@@ -10,13 +10,13 @@ Open the user menu and select **Devices**. Click **Add Device**, enter a name, s
 
 ### 2. Generate the Setup URL
 
-Under **Connections** on the Device's page, make sure **eReader browser** is on, then click **Get Setup URL**. Shisho displays a short URL such as:
+Under **eReader browser** on the Device's page, click **Get Setup URL**. Shisho displays a short URL such as:
 
 ```text
 https://your-server/e/abc123
 ```
 
-The short URL is reusable for 30 minutes. Opening it redirects to a full URL under `/ereader/key/...` that contains the Device's credential. Expiration of the short URL does not expire the full URL. The Device's page also shows the full URL, for an e-reader where typing it is easier than following a redirect.
+The short URL is reusable for 30 minutes, until you get another one for the same Device. Opening it redirects to a full URL under `/ereader/key/...` that contains the Device's credential. Expiration of the short URL does not expire the full URL. The Device's page also shows the full URL, for an e-reader where typing it is easier than following a redirect.
 
 ### 3. Bookmark the Full URL
 
@@ -31,7 +31,6 @@ Open the short URL in the eReader's browser. After the redirect, bookmark the re
 The full URL keeps working only while all of these hold. The same rules apply to a [Kobo Sync](./kobo-sync.md) URL.
 
 - The Device still appears under **Devices**, and its credential has not been regenerated. Deleting the Device, an administrator revoking it, or regenerating its credential revokes the URL permanently.
-- The Device's **eReader browser** connection is on. While it is off, the URL returns a forbidden response.
 - The Device owner's account is active. A [deactivated](./users-and-permissions.md#deactivate-users) owner's URL returns an unauthorized response.
 - The owner's role has Books Read. Without it, the URL returns a forbidden response, and it works again once Books Read is restored.
 
@@ -85,7 +84,7 @@ To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the f
 
 **Symptom:** A previously working bookmark returns an unauthorized or forbidden response.
 
-**Likely cause:** The bookmark is incomplete, the Device was deleted or revoked, its credential was regenerated, its **eReader browser** connection is off, the owner was deactivated, or the owner's role lost Books Read. See [How Long the URL Works](#how-long-the-url-works).
+**Likely cause:** The bookmark is incomplete, the Device was deleted or revoked, its credential was regenerated, the owner was deactivated, or the owner's role lost Books Read. See [How Long the URL Works](#how-long-the-url-works).
 
 **Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that its credential matches the one on the Device's page. Ask an administrator to check the owner's account status and role under **Settings > Users**.
 

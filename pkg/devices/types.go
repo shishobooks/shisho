@@ -16,9 +16,6 @@ type UpdateDevicePayload struct {
 	// Scope replaces the Device's scope, and stops a migrated Kobo from
 	// taking its scope from its old sync URL.
 	Scope *DeviceScopePayload `json:"scope,omitempty" tstype:"DeviceScopePayload"`
-	// Connections replaces the Device's connections. Each must be one its
-	// type can use.
-	Connections *[]string `json:"connections,omitempty" tstype:"Connection[]"`
 }
 
 // DeviceScopePayload sets a Device's scope. LibraryID is required for a
@@ -29,16 +26,17 @@ type DeviceScopePayload struct {
 	ListID    *int   `json:"list_id,omitempty" tstype:"number"`
 }
 
-// DeviceResponse is a Device as its owner sees it, with its credential and
-// connections. Only routes under /user/devices, which return the caller's
-// own Devices, send it.
+// DeviceResponse is a Device as its owner sees it, with its credential, the
+// connections its type uses, and the name of its scope's library or list.
+// Only routes under /user/devices, which return the caller's own Devices,
+// send it.
 type DeviceResponse struct {
 	Device      `tstype:",extends"`
 	Credential  string   `json:"credential"`
 	Connections []string `json:"connections" tstype:"Connection[]"`
-	// AvailableConnections lists every connection the Device's type can
-	// use, in the order setup instructions show them.
-	AvailableConnections []string `json:"available_connections" tstype:"Connection[]"`
+	// ScopeName is the name of the scope's library or list. It is omitted
+	// for All Books, and for a scope whose library or list was deleted.
+	ScopeName string `json:"scope_name,omitempty"`
 }
 
 // AdminDeviceResponse is a Device in the admin listing of every user's

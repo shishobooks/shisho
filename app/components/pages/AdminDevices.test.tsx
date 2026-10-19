@@ -78,5 +78,6 @@ describe("AdminDevices", () => {
 
     expect(await screen.findByText("Reader's Kobo")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Revoke/ })).toBeNull();
+    expect(screen.queryByText(/Revoke a lost or stolen one/)).toBeNull();
   });
 });

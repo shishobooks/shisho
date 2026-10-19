@@ -26,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   useClearKoboSync,
   useDeleteDevice,
@@ -39,7 +38,11 @@ import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { isLoadFailure, toastRequestError } from "@/libraries/api";
+import {
+  isDemoModeError,
+  isLoadFailure,
+  toastRequestError,
+} from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   ConnectionEReaderBrowser,
@@ -70,10 +73,16 @@ const copyToClipboard = async (value: string) => {
   }
 };
 
-// CopyField shows a value in monospace, unbroken, with a copy button.
+// CopyField shows a value in monospace with a copy button. A long URL
+// wraps rather than scrolling inside a field, so it can be read on a phone.
 const CopyField = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex gap-2">
-    <Input aria-label={label} className="font-mono" readOnly value={value} />
+  <div className="flex items-start gap-2">
+    <code
+      aria-label={label}
+      className="min-w-0 flex-1 break-all rounded-md border border-input px-3 py-2 font-mono text-sm"
+    >
+      {value}
+    </code>
     <Button
       aria-label={`Copy ${label.toLowerCase()}`}
       onClick={() => copyToClipboard(value)}
@@ -116,6 +125,9 @@ const CredentialSection = ({ device }: { device: DeviceResponse }) => {
       toast.success("Credential regenerated");
       setConfirmOpen(false);
     } catch (error) {
+      // Demo Mode already toasted the rejection; nothing will change, so
+      // there is nothing left to confirm.
+      if (isDemoModeError(error)) setConfirmOpen(false);
       toastRequestError(error, "Failed to regenerate credential");
     }
   };
@@ -279,6 +291,11 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
           </SelectContent>
         </Select>
       )}
+      {scopeType !== device.scope_type && scopeType !== ScopeAll && (
+        <p className="text-sm text-muted-foreground">
+          Nothing is saved until you choose a {scopeType}.
+        </p>
+      )}
       {device.scope_type !== ScopeAll &&
         !device.scope_library_id &&
         !device.scope_list_id &&
@@ -318,7 +335,7 @@ const KoboSyncSetup = ({ device }: { device: DeviceResponse }) => {
         </li>
         <li>
           Find{" "}
-          <code className="rounded bg-muted px-1">
+          <code className="break-all rounded bg-muted px-1">
             api_endpoint=https://storeapi.kobo.com
           </code>{" "}
           and replace the URL with the one above.
@@ -397,64 +414,30 @@ const CONNECTION_SETUP: Record<
   [ConnectionEReaderBrowser]: EReaderBrowserSetup,
 };
 
-// ConnectionsSection turns each connection on or off as the switch flips,
-// and shows setup instructions for the ones that are on.
-const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
-  const updateDevice = useUpdateDevice();
-
-  const toggle = async (connection: Connection, on: boolean) => {
-    const connections = device.available_connections.filter((c) =>
-      c === connection ? on : device.connections.includes(c),
-    );
-    try {
-      await updateDevice.mutateAsync({
-        id: device.id,
-        payload: { connections },
-      });
-    } catch (error) {
-      toastRequestError(error, "Failed to update connections");
-    }
-  };
-
-  return (
-    <Section
-      description="How this Device connects to Shisho."
-      id="connections-heading"
-      title="Connections"
-    >
-      <div
-        aria-labelledby="connections-heading"
-        className="space-y-4"
-        role="group"
-      >
-        {device.available_connections.map((connection) => {
-          const on = device.connections.includes(connection);
-          const Setup = CONNECTION_SETUP[connection];
-          const switchId = `connection-${connection}`;
-          return (
-            <div
-              className="space-y-4 border-t border-border pt-4 first:border-t-0 first:pt-0"
-              key={connection}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-base font-medium" htmlFor={switchId}>
-                  {CONNECTION_LABELS[connection]}
-                </Label>
-                <Switch
-                  checked={on}
-                  disabled={updateDevice.isPending}
-                  id={switchId}
-                  onCheckedChange={(checked) => toggle(connection, checked)}
-                />
-              </div>
-              {on && <Setup device={device} key={device.credential} />}
-            </div>
-          );
-        })}
-      </div>
-    </Section>
-  );
-};
+// ConnectionsSection shows setup instructions for each connection the
+// Device's type uses.
+const ConnectionsSection = ({ device }: { device: DeviceResponse }) => (
+  <Section
+    description="How this Device connects to Shisho."
+    id="connections-heading"
+    title="Connections"
+  >
+    {device.connections.map((connection) => {
+      const Setup = CONNECTION_SETUP[connection];
+      return (
+        <div
+          className="space-y-4 border-t border-border pt-4 first:border-t-0 first:pt-0"
+          key={connection}
+        >
+          <h3 className="text-base font-medium">
+            {CONNECTION_LABELS[connection]}
+          </h3>
+          <Setup device={device} key={device.credential} />
+        </div>
+      );
+    })}
+  </Section>
+);
 
 const RenameDeviceDialog = ({
   device,
@@ -542,6 +525,7 @@ const DeviceDetail = () => {
       setDeleteOpen(false);
       navigate("/user/devices");
     } catch (error) {
+      if (isDemoModeError(error)) setDeleteOpen(false);
       toastRequestError(error, "Failed to delete device");
     }
   };
@@ -601,10 +585,14 @@ const DeviceDetail = () => {
           </div>
         </div>
 
-        <div className="max-w-2xl space-y-6">
-          <CredentialSection device={device} />
-          <ScopeSection device={device} />
-          <ConnectionsSection device={device} />
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+          <div className="min-w-0 space-y-6">
+            <CredentialSection device={device} />
+            <ScopeSection device={device} />
+          </div>
+          <div className="min-w-0">
+            <ConnectionsSection device={device} />
+          </div>
         </div>
 
         <RenameDeviceDialog

@@ -47,7 +47,7 @@ A Device has one scope. If several Kobos shared one sync URL credential with dif
 
 ### How Long the URL Works
 
-The **Kobo sync URL** follows the same rules as an [eReader Browser URL](./ereader-browser.md#how-long-the-url-works): syncs fail once the Device is deleted, revoked, or its credential is regenerated, while its owner is deactivated, and until the owner's role has Books Read again. Syncs also fail while the Device's **Kobo sync** connection is off.
+The **Kobo sync URL** follows the same rules as an [eReader Browser URL](./ereader-browser.md#how-long-the-url-works): syncs fail once the Device is deleted, revoked, or its credential is regenerated, while its owner is deactivated, and until the owner's role has Books Read again. A Kindle or Browser Device's credential cannot sync; only a Kobo Device can.
 
 ## Reset or Remove Sync
 

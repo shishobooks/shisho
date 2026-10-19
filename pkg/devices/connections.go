@@ -1,51 +1,24 @@
 package devices
 
-import (
-	"slices"
-	"time"
+import "slices"
 
-	"github.com/uptrace/bun"
-)
-
-// DeviceConnection records that a Device may connect one way.
-type DeviceConnection struct {
-	bun.BaseModel `bun:"table:device_connections,alias:dc"`
-
-	DeviceID   string    `bun:"device_id,pk"`
-	Connection string    `bun:"connection,pk"`
-	CreatedAt  time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp"`
-}
-
-// typeConnections lists the connections each Device type can use, in the
-// order setup instructions show them.
+// typeConnections lists the connections each Device type uses, in the order
+// setup instructions show them. A Device's type alone decides how it can
+// connect: every connection uses the same credential and reaches the same
+// scope, so turning one off would protect nothing.
 var typeConnections = map[string][]string{
 	DeviceTypeKobo:    {ConnectionKoboSync, ConnectionEReaderBrowser},
 	DeviceTypeKindle:  {ConnectionEReaderBrowser},
 	DeviceTypeBrowser: {ConnectionEReaderBrowser},
 }
 
-// TypeAllowsConnection reports whether deviceType can use connection.
-func TypeAllowsConnection(deviceType, connection string) bool {
-	return slices.Contains(typeConnections[deviceType], connection)
-}
-
-// HasConnection reports whether the Device may connect through connection.
+// HasConnection reports whether the Device's type connects through
+// connection.
 func (d *Device) HasConnection(connection string) bool {
-	for _, c := range d.Connections {
-		if c.Connection == connection {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(typeConnections[d.DeviceType], connection)
 }
 
-// ConnectionNames returns the Device's connections in its type's order.
+// ConnectionNames returns the connections the Device's type uses.
 func (d *Device) ConnectionNames() []string {
-	names := []string{}
-	for _, connection := range typeConnections[d.DeviceType] {
-		if d.HasConnection(connection) {
-			names = append(names, connection)
-		}
-	}
-	return names
+	return slices.Clone(typeConnections[d.DeviceType])
 }

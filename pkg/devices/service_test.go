@@ -203,3 +203,28 @@ func TestService_RegenerateCredential_StopsTheURLScope(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, device.URLScopePending)
 }
+
+// A Device keeps one setup URL at a time, so making a new one retires the
+// last.
+func TestService_GenerateShortURL_ReplacesThePreviousOne(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	service := NewService(db)
+	insertTestUser(t, db, 1, "reader")
+	ctx := context.Background()
+	device, err := service.Create(ctx, 1, "Browser", DeviceTypeBrowser)
+	require.NoError(t, err)
+
+	first, err := service.GenerateShortURL(ctx, 1, device.ID)
+	require.NoError(t, err)
+	second, err := service.GenerateShortURL(ctx, 1, device.ID)
+	require.NoError(t, err)
+
+	resolved, err := service.ResolveShortCode(ctx, first.ShortCode)
+	require.NoError(t, err)
+	assert.Nil(t, resolved)
+	resolved, err = service.ResolveShortCode(ctx, second.ShortCode)
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, device.ID, resolved.ID)
+}

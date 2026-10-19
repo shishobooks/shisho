@@ -76,7 +76,6 @@ func TestHandler_Create_ReturnsTheCredentialAndConnections(t *testing.T) {
 	assert.Equal(t, DeviceTypeKobo, resp.DeviceType)
 	assert.Len(t, resp.Credential, credentialLength)
 	assert.Equal(t, []string{ConnectionKoboSync, ConnectionEReaderBrowser}, resp.Connections)
-	assert.Equal(t, []string{ConnectionKoboSync, ConnectionEReaderBrowser}, resp.AvailableConnections)
 	assert.Equal(t, ScopeAll, resp.ScopeType)
 }
 
@@ -114,6 +113,7 @@ func TestHandler_Update_SetsScope(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, ScopeLibrary, resp.ScopeType)
 	assert.Equal(t, intPtr(1), resp.ScopeLibraryID)
+	assert.Equal(t, "Library", resp.ScopeName)
 
 	rec, err = f.call(f.h.Update, user, `{"scope":{"type":"list","list_id":`+itoa(ownList.ID)+`}}`, device.ID)
 	require.NoError(t, err)
@@ -122,6 +122,7 @@ func TestHandler_Update_SetsScope(t *testing.T) {
 	assert.Equal(t, ScopeList, resp.ScopeType)
 	assert.Nil(t, resp.ScopeLibraryID)
 	assert.Equal(t, intPtr(ownList.ID), resp.ScopeListID)
+	assert.Equal(t, "Mine", resp.ScopeName)
 
 	for name, body := range map[string]string{
 		"library without access": `{"scope":{"type":"library","library_id":2}}`,
@@ -135,27 +136,6 @@ func TestHandler_Update_SetsScope(t *testing.T) {
 			requireStatus(t, err, http.StatusUnprocessableEntity)
 		})
 	}
-}
-
-func TestHandler_Update_Connections(t *testing.T) {
-	t.Parallel()
-	f := newHandlerFixture(t)
-	insertTestUser(t, f.db, 1, "reader")
-	device, err := f.h.service.Create(context.Background(), 1, "Kobo", DeviceTypeKobo)
-	require.NoError(t, err)
-
-	rec, err := f.call(f.h.Update, libraryUser(1), `{"connections":["kobo_sync"]}`, device.ID)
-	require.NoError(t, err)
-	var resp DeviceResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, []string{ConnectionKoboSync}, resp.Connections)
-
-	kindle, err := f.h.service.Create(context.Background(), 1, "Kindle", DeviceTypeKindle)
-	require.NoError(t, err)
-	_, err = f.call(f.h.Update, libraryUser(1), `{"connections":["kobo_sync"]}`, kindle.ID)
-	requireStatus(t, err, http.StatusUnprocessableEntity)
-	_, err = f.call(f.h.Update, libraryUser(1), `{"connections":["ereader_browser","ereader_browser"]}`, kindle.ID)
-	requireStatus(t, err, http.StatusUnprocessableEntity)
 }
 
 func TestHandler_OtherUsersDevice_Returns404(t *testing.T) {

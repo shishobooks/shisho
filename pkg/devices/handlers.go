@@ -3,7 +3,6 @@ package devices
 import (
 	"context"
 	"net/http"
-	"slices"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -23,12 +22,18 @@ func newHandler(service *Service, listService *lists.Service) *handler {
 }
 
 func buildDeviceResponse(device *Device) DeviceResponse {
-	return DeviceResponse{
-		Device:               *device,
-		Credential:           device.Credential,
-		Connections:          device.ConnectionNames(),
-		AvailableConnections: slices.Clone(typeConnections[device.DeviceType]),
+	resp := DeviceResponse{
+		Device:      *device,
+		Credential:  device.Credential,
+		Connections: device.ConnectionNames(),
 	}
+	switch {
+	case device.ScopeType == ScopeLibrary && device.ScopeLibrary != nil:
+		resp.ScopeName = device.ScopeLibrary.Name
+	case device.ScopeType == ScopeList && device.ScopeList != nil:
+		resp.ScopeName = device.ScopeList.Name
+	}
+	return resp
 }
 
 func buildAdminDeviceResponse(device *Device) AdminDeviceResponse {
@@ -103,7 +108,7 @@ func (h *handler) Retrieve(c echo.Context) error {
 	return c.JSON(http.StatusOK, buildDeviceResponse(device))
 }
 
-// Update renames a Device, sets its scope, or sets its connections.
+// Update renames a Device or sets its scope.
 func (h *handler) Update(c echo.Context) error {
 	ctx := c.Request().Context()
 	user, err := auth.RequireUser(c)
@@ -129,20 +134,6 @@ func (h *handler) Update(c echo.Context) error {
 			return err
 		}
 		opts.Scope = &scope
-	}
-
-	if payload.Connections != nil {
-		connections := *payload.Connections
-		for i, connection := range connections {
-			if !TypeAllowsConnection(device.DeviceType, connection) {
-				return errcodes.ValidationError("This Device type cannot use the " + connection + " connection.")
-			}
-			if slices.Contains(connections[:i], connection) {
-				return errcodes.ValidationError("A connection is listed more than once.")
-			}
-		}
-		opts.Connections = connections
-		opts.SetConnections = true
 	}
 
 	device, err = h.service.Update(ctx, user.ID, device.ID, opts)

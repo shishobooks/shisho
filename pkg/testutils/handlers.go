@@ -429,9 +429,6 @@ type createDeviceRequest struct {
 	UserID     int    `json:"userId" validate:"required"`
 	Name       string `json:"name" validate:"required"`
 	DeviceType string `json:"deviceType"` // defaults to "browser"
-	// Connections replaces the type's connections when set, e.g. [] for a
-	// Device that cannot connect at all.
-	Connections *[]string `json:"connections"`
 }
 
 // createDeviceResponse is the response body for creating a test Device.
@@ -459,19 +456,9 @@ func (h *handler) createDevice(c echo.Context) error {
 		deviceType = devices.DeviceTypeBrowser
 	}
 
-	service := devices.NewService(h.db)
-	device, err := service.Create(ctx, req.UserID, req.Name, deviceType)
+	device, err := devices.NewService(h.db).Create(ctx, req.UserID, req.Name, deviceType)
 	if err != nil {
 		return errors.Wrap(err, "failed to create device")
-	}
-	if req.Connections != nil {
-		device, err = service.Update(ctx, req.UserID, device.ID, devices.UpdateDeviceOptions{
-			Connections:    *req.Connections,
-			SetConnections: true,
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to set device connections")
-		}
 	}
 
 	return c.JSON(http.StatusCreated, createDeviceResponse{
@@ -507,11 +494,7 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 		_ = os.RemoveAll(h.fileRoot)
 	}
 
-	// Delete Device connections and short URLs
-	_, _ = h.db.NewDelete().
-		Model((*devices.DeviceConnection)(nil)).
-		Where("1=1").
-		Exec(ctx)
+	// Delete Device short URLs
 	_, _ = h.db.NewDelete().
 		Model((*devices.DeviceShortURL)(nil)).
 		Where("1=1").

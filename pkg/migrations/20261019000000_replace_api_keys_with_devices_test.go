@@ -71,10 +71,6 @@ func TestReplaceAPIKeysWithDevices_KeysBecomeDevices(t *testing.T) {
 		{ID: "none", UserID: 1, Name: "No permissions", DeviceType: "browser", Credential: "ak_none", ScopeType: "all"},
 	}, devices)
 
-	var connections []string
-	require.NoError(t, db.NewRaw(`SELECT device_id || '/' || connection FROM device_connections ORDER BY device_id, connection`).Scan(ctx, &connections))
-	assert.Equal(t, []string{"both/ereader_browser", "both/kobo_sync", "browser/ereader_browser", "kobo/kobo_sync"}, connections)
-
 	var shortURLs []string
 	require.NoError(t, db.NewRaw(`SELECT device_id || '/' || short_code FROM device_short_urls`).Scan(ctx, &shortURLs))
 	assert.Equal(t, []string{"browser/abc123"}, shortURLs)
@@ -105,7 +101,7 @@ func TestReplaceAPIKeysWithDevices_KeysBecomeDevices(t *testing.T) {
 }
 
 // Rolling back turns each Device back into an API key with the permissions
-// its connections stand for, keeping its short URLs and Kobo sync state.
+// its type's connections stand for, keeping its short URLs and Kobo sync state.
 func TestReplaceAPIKeysWithDevices_RollbackRestoresAPIKeys(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

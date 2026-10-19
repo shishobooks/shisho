@@ -56,9 +56,6 @@ func (s *Service) Create(ctx context.Context, userID int, name, deviceType strin
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	for _, connection := range typeConnections[deviceType] {
-		device.Connections = append(device.Connections, &DeviceConnection{DeviceID: device.ID, Connection: connection, CreatedAt: now})
-	}
 
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		credential, err := s.newCredential(ctx, tx)
@@ -66,15 +63,8 @@ func (s *Service) Create(ctx context.Context, userID int, name, deviceType strin
 			return err
 		}
 		device.Credential = credential
-		if _, err := tx.NewInsert().Model(device).Exec(ctx); err != nil {
-			return errors.WithStack(err)
-		}
-		if len(device.Connections) > 0 {
-			if _, err := tx.NewInsert().Model(&device.Connections).Exec(ctx); err != nil {
-				return errors.WithStack(err)
-			}
-		}
-		return nil
+		_, err = tx.NewInsert().Model(device).Exec(ctx)
+		return errors.WithStack(err)
 	})
 	if err != nil {
 		return nil, err
@@ -83,7 +73,7 @@ func (s *Service) Create(ctx context.Context, userID int, name, deviceType strin
 }
 
 func (s *Service) selectDevices(model any) *bun.SelectQuery {
-	return s.db.NewSelect().Model(model).Relation("Connections")
+	return s.db.NewSelect().Model(model).Relation("ScopeLibrary").Relation("ScopeList")
 }
 
 // List returns userID's Devices, oldest first.
@@ -153,12 +143,8 @@ func (s *Service) GetByCredential(ctx context.Context, credential string) (*Devi
 // unchanged. Callers check that a scope's library or list is one the owner
 // can see.
 type UpdateDeviceOptions struct {
-	Name        *string
-	Scope       *Scope
-	Connections []string
-	// SetConnections replaces the connections with Connections, which
-	// may be empty.
-	SetConnections bool
+	Name  *string
+	Scope *Scope
 }
 
 // Update applies opts to userID's Device id and returns it.
@@ -184,28 +170,8 @@ func (s *Service) Update(ctx context.Context, userID int, id string, opts Update
 	}
 	device.UpdatedAt = time.Now()
 
-	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewUpdate().Model(device).Column(columns...).WherePK().Exec(ctx); err != nil {
-			return errors.WithStack(err)
-		}
-		if !opts.SetConnections {
-			return nil
-		}
-		if _, err := tx.NewDelete().Model((*DeviceConnection)(nil)).Where("device_id = ?", device.ID).Exec(ctx); err != nil {
-			return errors.WithStack(err)
-		}
-		if len(opts.Connections) == 0 {
-			return nil
-		}
-		connections := make([]*DeviceConnection, len(opts.Connections))
-		for i, connection := range opts.Connections {
-			connections[i] = &DeviceConnection{DeviceID: device.ID, Connection: connection, CreatedAt: device.UpdatedAt}
-		}
-		_, err := tx.NewInsert().Model(&connections).Exec(ctx)
-		return errors.WithStack(err)
-	})
-	if err != nil {
-		return nil, err
+	if _, err := s.db.NewUpdate().Model(device).Column(columns...).WherePK().Exec(ctx); err != nil {
+		return nil, errors.WithStack(err)
 	}
 	return s.Retrieve(ctx, userID, id)
 }
@@ -355,6 +321,12 @@ func (s *Service) GenerateShortURL(ctx context.Context, userID int, id string) (
 	}
 	if shortCode == "" {
 		return nil, errors.New("could not generate a unique short code")
+	}
+
+	// A Device keeps one setup URL at a time, so an earlier one stops
+	// working once a new one is made.
+	if _, err := s.db.NewDelete().Model((*DeviceShortURL)(nil)).Where("device_id = ?", id).Exec(ctx); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	now := time.Now()

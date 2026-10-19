@@ -31,8 +31,9 @@ type Device struct {
 	UpdatedAt       time.Time  `bun:"updated_at,notnull" json:"updated_at"`
 	LastAccessedAt  *time.Time `bun:"last_accessed_at" json:"last_accessed_at"`
 
-	Connections []*DeviceConnection `bun:"rel:has-many,join:id=device_id" json:"-"`
-	Owner       *models.UserRef     `bun:"rel:belongs-to,join:user_id=id" json:"-"`
+	Owner        *models.UserRef `bun:"rel:belongs-to,join:user_id=id" json:"-"`
+	ScopeLibrary *models.Library `bun:"rel:belongs-to,join:scope_library_id=id" json:"-"`
+	ScopeList    *models.List    `bun:"rel:belongs-to,join:scope_list_id=id" json:"-"`
 }
 
 // DeviceShortURL is a short-lived code that redirects to a Device's eReader

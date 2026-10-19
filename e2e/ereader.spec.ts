@@ -136,31 +136,6 @@ test.describe("eReader Browser UI", () => {
       expect(response?.status()).toBe(401);
     });
 
-    test("returns 403 for a Device without the eReader browser connection", async ({
-      browser,
-    }) => {
-      const apiBaseURL = getApiBaseURL(browser.browserType().name());
-      const apiContext = await request.newContext({ baseURL: apiBaseURL });
-
-      // Create a Device with no connections
-      const deviceResp = await apiContext.post("/api/test/devices", {
-        data: {
-          userId: testData.userId,
-          name: "No Connection Device",
-          connections: [],
-        },
-      });
-      const deviceData = (await deviceResp.json()) as { credential: string };
-      await apiContext.dispose();
-
-      const page = await browser.newPage();
-      const response = await page.goto(
-        `/ereader/key/${deviceData.credential}/`,
-      );
-      expect(response?.status()).toBe(403);
-      await page.close();
-    });
-
     test("allows access with a valid credential and connection", async ({
       page,
     }) => {

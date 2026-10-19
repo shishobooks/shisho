@@ -102,8 +102,6 @@ func TestDeviceAuth_AcceptsAMigratedKey(t *testing.T) {
 		INSERT INTO devices (id, user_id, name, device_type, credential, created_at, updated_at)
 		VALUES ('legacy', 1, 'Old key', 'browser', 'ak_LegacyKey-With_Symbols=', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
 	require.NoError(t, err)
-	_, err = db.ExecContext(context.Background(), `INSERT INTO device_connections (device_id, connection) VALUES ('legacy', 'ereader_browser')`)
-	require.NoError(t, err)
 
 	seen, err := runDeviceAuth(t, service, ConnectionEReaderBrowser, "ak_LegacyKey-With_Symbols=")
 	require.NoError(t, err)
@@ -113,7 +111,8 @@ func TestDeviceAuth_AcceptsAMigratedKey(t *testing.T) {
 	requireStatus(t, err, http.StatusUnauthorized)
 }
 
-// Each connection words the 403 for a Device without it.
+// A Device whose type does not use a connection is refused it, with the
+// connection's own wording.
 func TestDeviceAuth_ConnectionDeniedMessage(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
@@ -121,14 +120,14 @@ func TestDeviceAuth_ConnectionDeniedMessage(t *testing.T) {
 	insertTestUser(t, db, 1, "reader")
 	device, err := service.Create(context.Background(), 1, "Kindle", DeviceTypeKindle)
 	require.NoError(t, err)
-	_, err = service.Update(context.Background(), 1, device.ID, UpdateDeviceOptions{SetConnections: true})
-	require.NoError(t, err)
 
-	for connection, message := range connectionDeniedMessages {
-		_, err := runDeviceAuth(t, service, connection, device.Credential)
-		ec := requireStatus(t, err, http.StatusForbidden)
-		assert.Equal(t, message, ec.Message)
-	}
+	_, err = runDeviceAuth(t, service, ConnectionKoboSync, device.Credential)
+	ec := requireStatus(t, err, http.StatusForbidden)
+	assert.Equal(t, "Only a Kobo Device can use Kobo sync.", ec.Message)
+
+	seen, err := runDeviceAuth(t, service, ConnectionEReaderBrowser, device.Credential)
+	require.NoError(t, err)
+	assert.Equal(t, device.ID, seen.ID)
 }
 
 func TestDeviceAuth_MissingCredential_Returns401(t *testing.T) {

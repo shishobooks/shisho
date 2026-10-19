@@ -407,7 +407,7 @@ func TestAPIContract_DeviceJSONIsSnakeCase(t *testing.T) {
 	created := f.request(http.MethodPost, "/api/user/devices", `{"name":"Reader","device_type":"kobo"}`, http.StatusCreated)
 	var device map[string]any
 	require.NoError(t, json.Unmarshal([]byte(created), &device))
-	for _, k := range []string{"id", "user_id", "name", "device_type", "credential", "scope_type", "scope_library_id", "scope_list_id", "url_scope_pending", "connections", "available_connections", "created_at", "updated_at", "last_accessed_at"} {
+	for _, k := range []string{"id", "user_id", "name", "device_type", "credential", "scope_type", "scope_library_id", "scope_list_id", "url_scope_pending", "connections", "created_at", "updated_at", "last_accessed_at"} {
 		assert.Contains(t, device, k)
 	}
 	for _, k := range []string{"userId", "deviceType", "createdAt", "updatedAt", "lastAccessedAt", "urlScopePending"} {

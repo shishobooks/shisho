@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import type {
   DeviceResponse,
@@ -32,7 +32,6 @@ const kobo = (overrides: Partial<DeviceResponse> = {}): DeviceResponse => ({
   url_scope_pending: false,
   credential: "abcdefghjkmnpqrs",
   connections: ["kobo_sync", "ereader_browser"],
-  available_connections: ["kobo_sync", "ereader_browser"],
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   ...overrides,
@@ -56,7 +55,6 @@ const stubAPI = (initial: DeviceResponse) => {
           name: payload.name,
           device_type: payload.device_type,
           connections: ["ereader_browser"],
-          available_connections: ["ereader_browser"],
         });
         devices = [...devices, device];
         return device;
@@ -71,9 +69,14 @@ const stubAPI = (initial: DeviceResponse) => {
                 scope_type: payload.scope.type,
                 scope_library_id: payload.scope.library_id,
                 scope_list_id: payload.scope.list_id,
+                scope_name:
+                  payload.scope.type === "library"
+                    ? "Comics"
+                    : payload.scope.type === "list"
+                      ? "To Read"
+                      : undefined,
               }
             : {}),
-          ...(payload.connections ? { connections: payload.connections } : {}),
         };
         return device;
       }
@@ -132,7 +135,7 @@ describe("Devices", () => {
 
     const link = await screen.findByRole("link", { name: /Libra 2/ });
     expect(link).toHaveAttribute("href", "/user/devices/kobo-1");
-    expect(link).toHaveTextContent("Kobo sync · eReader browser");
+    expect(link).toHaveTextContent("All books · Kobo sync · eReader browser");
   });
 
   it("creates a Device with a name and type, then opens it", async () => {
@@ -175,10 +178,10 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    expect(await screen.findByLabelText("Credential")).toHaveValue(
+    expect(await screen.findByLabelText("Credential")).toHaveTextContent(
       "abcdefghjkmnpqrs",
     );
-    expect(screen.getByLabelText("Kobo sync URL")).toHaveValue(
+    expect(screen.getByLabelText("Kobo sync URL")).toHaveTextContent(
       `${window.location.origin}/kobo/abcdefghjkmnpqrs`,
     );
 
@@ -236,7 +239,7 @@ describe("DeviceDetail", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Credential")).toHaveValue(
+      expect(screen.getByLabelText("Credential")).toHaveTextContent(
         "zyxwvutsrqpnmkjh",
       ),
     );
@@ -244,7 +247,7 @@ describe("DeviceDetail", () => {
       "POST",
       "/user/devices/kobo-1/credential",
     ]);
-    expect(screen.getByLabelText("Kobo sync URL")).toHaveValue(
+    expect(screen.getByLabelText("Kobo sync URL")).toHaveTextContent(
       `${window.location.origin}/kobo/zyxwvutsrqpnmkjh`,
     );
   });
@@ -264,6 +267,9 @@ describe("DeviceDetail", () => {
     await user.click(within(scope).getByRole("button", { name: "Library" }));
     expect(calls(request, "PATCH")).toHaveLength(0);
 
+    expect(
+      screen.getByText("Nothing is saved until you choose a library."),
+    ).toBeInTheDocument();
     await user.click(await screen.findByRole("combobox", { name: "Library" }));
     await user.click(await screen.findByRole("option", { name: "Comics" }));
 
@@ -296,26 +302,48 @@ describe("DeviceDetail", () => {
     );
   });
 
-  it("turns a connection off and hides its setup", async () => {
+  it("shows setup for every connection the Device's type uses", async () => {
+    stubAPI(kobo());
+    renderAt("/user/devices/kobo-1");
+
+    expect(
+      await screen.findByRole("heading", { name: "Kobo sync" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "eReader browser" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("eReader browser URL")).toHaveTextContent(
+      `${window.location.origin}/ereader/key/abcdefghjkmnpqrs/`,
+    );
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("closes the regenerate confirmation when Demo Mode rejects it", async () => {
     const request = stubAPI(kobo());
+    const stubbed = request.getMockImplementation()!;
+    request.mockImplementation(async (method, path, ...rest) => {
+      if (method === "POST" && path === "/user/devices/kobo-1/credential") {
+        throw new ShishoAPIError(
+          "This action is unavailable in the demo.",
+          "demo_mode",
+          403,
+        );
+      }
+      return stubbed(method, path, ...rest);
+    });
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
+    await user.click(await screen.findByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("dialog");
     await user.click(
-      await screen.findByRole("switch", { name: "eReader browser" }),
+      within(dialog).getByRole("button", { name: "Regenerate" }),
     );
 
-    await waitFor(() =>
-      expect(calls(request, "PATCH")).toContainEqual([
-        "PATCH",
-        "/user/devices/kobo-1",
-        { connections: ["kobo_sync"] },
-      ]),
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByLabelText("Credential")).toHaveTextContent(
+      "abcdefghjkmnpqrs",
     );
-    await waitFor(() =>
-      expect(screen.queryByLabelText("eReader browser URL")).toBeNull(),
-    );
-    expect(screen.getByLabelText("Kobo sync URL")).toBeInTheDocument();
   });
 
   it("deletes the Device after confirming and returns to the list", async () => {

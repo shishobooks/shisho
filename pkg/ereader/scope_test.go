@@ -210,18 +210,6 @@ func TestEReaderScope_ListNotVisibleShowsNothing(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, f.serve(fmt.Sprintf("/download/%d", listed.book.ID)).Code)
 }
 
-// A Device without the eReader browser connection cannot browse.
-func TestEReaderDeviceAuth_WithoutConnection_Returns403(t *testing.T) {
-	t.Parallel()
-	f := newEReaderAccessFixture(t)
-	_, err := devices.NewService(f.db).Update(context.Background(), f.user.ID, f.device.ID, devices.UpdateDeviceOptions{SetConnections: true})
-	require.NoError(t, err)
-
-	rec := f.serve("/")
-	assert.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Contains(t, rec.Body.String(), "This Device does not have the eReader browser turned on.")
-}
-
 // A list scope that cannot be checked is a server error, not the 404 a book
 // off the list gets.
 func TestEReaderScope_ListCheckFailureReturns500(t *testing.T) {
