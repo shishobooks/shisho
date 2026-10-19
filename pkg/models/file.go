@@ -182,9 +182,10 @@ type File struct {
 // the filename stem as the name when it first sees a supplement, and that
 // stored value goes stale when the book is renamed or reorganized. A sidecar
 // source does not count, because book edits write every file's sidecar with
-// its stored name, so a rescan can restore the stale stem as sidecar.
+// its stored name, so a rescan can restore the stale stem as sidecar. As in
+// ResolveTitle, a whitespace-only name does not count as set.
 func (f *File) ResolveDisplayName() string {
-	if f.Name != nil && *f.Name != "" {
+	if f.hasName() {
 		manual := f.NameSource != nil && *f.NameSource == DataSourceManual
 		if f.FileRole != FileRoleSupplement || manual {
 			return *f.Name
@@ -202,10 +203,16 @@ func (f *File) ResolveDisplayName() string {
 // whitespace-only name does not count as set. A nil file gives the book's
 // title.
 func (f *File) ResolveTitle(bookTitle string) string {
-	if f != nil && f.Name != nil && strings.TrimSpace(*f.Name) != "" {
+	if f.hasName() {
 		return *f.Name
 	}
 	return bookTitle
+}
+
+// hasName reports whether the file has a name ResolveTitle and
+// ResolveDisplayName can use. A whitespace-only name does not count.
+func (f *File) hasName() bool {
+	return f != nil && f.Name != nil && strings.TrimSpace(*f.Name) != ""
 }
 
 func (f *File) CoverExtension() string {

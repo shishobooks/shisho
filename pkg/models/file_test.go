@@ -23,6 +23,22 @@ func TestFile_ResolveDisplayName(t *testing.T) {
 			want: "Edition Title",
 		},
 		{
+			// Matches ResolveTitle: a blank name is not a label.
+			name: "main file with a whitespace-only name falls back to the filename",
+			file: File{FileRole: FileRoleMain, Name: str("  "), Filepath: "/lib/Book/book.epub"},
+			want: "book.epub",
+		},
+		{
+			name: "supplement with a whitespace-only manual name shows its filename",
+			file: File{
+				FileRole:   FileRoleSupplement,
+				Name:       str(" "),
+				NameSource: str(DataSourceManual),
+				Filepath:   "/lib/Book/maps.pdf",
+			},
+			want: "maps.pdf",
+		},
+		{
 			name: "main file without a name falls back to the filename",
 			file: File{FileRole: FileRoleMain, Filepath: "/lib/Book/book.epub"},
 			want: "book.epub",

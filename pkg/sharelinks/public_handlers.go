@@ -164,10 +164,7 @@ func blankForRecipient(book *models.Book) {
 		if f.FileRole == models.FileRoleSupplement {
 			f.DisplayName = f.ResolveDisplayName()
 		} else {
-			f.DisplayName = ""
-			if f.Name != nil {
-				f.DisplayName = *f.Name
-			}
+			f.DisplayName = f.ResolveTitle("")
 		}
 		f.Filepath = ""
 		f.CoverImageFilename = nil
