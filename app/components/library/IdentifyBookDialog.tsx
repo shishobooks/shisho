@@ -275,7 +275,7 @@ export function IdentifyBookDialog({
                         setIdentifiers(fileIds);
                         if (!queryUserTouched.current) {
                           const fileTitle =
-                            file.name || getFilename(file.filepath);
+                            file.name?.trim() || getFilename(file.filepath);
                           setQuery(fileTitle);
                           submitSearch({
                             query: fileTitle,

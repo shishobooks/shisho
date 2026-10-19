@@ -307,7 +307,7 @@ func (h *handler) update(c echo.Context) error {
 			if f.FileRole != models.FileRoleMain {
 				continue
 			}
-			currentEmpty := f.Name == nil || *f.Name == ""
+			currentEmpty := !f.HasName()
 			currentMatches := false
 			if f.Name != nil {
 				currentMatches = strings.EqualFold(strings.TrimSpace(*f.Name), strings.TrimSpace(oldTitle))

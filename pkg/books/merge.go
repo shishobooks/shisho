@@ -471,7 +471,7 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 	// manual and a later scan cannot replace it with the embedded title.
 	var title string
 	var titleSource string
-	if file.Name != nil && *file.Name != "" {
+	if file.HasName() {
 		title = *file.Name
 		titleSource = models.DataSourceFileMetadata
 		if file.NameSource != nil && *file.NameSource != "" {

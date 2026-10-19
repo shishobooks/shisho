@@ -185,7 +185,7 @@ type File struct {
 // its stored name, so a rescan can restore the stale stem as sidecar. As in
 // ResolveTitle, a whitespace-only name does not count as set.
 func (f *File) ResolveDisplayName() string {
-	if f.hasName() {
+	if f.HasName() {
 		manual := f.NameSource != nil && *f.NameSource == DataSourceManual
 		if f.FileRole != FileRoleSupplement || manual {
 			return *f.Name
@@ -203,15 +203,15 @@ func (f *File) ResolveDisplayName() string {
 // whitespace-only name does not count as set. A nil file gives the book's
 // title.
 func (f *File) ResolveTitle(bookTitle string) string {
-	if f.hasName() {
+	if f.HasName() {
 		return *f.Name
 	}
 	return bookTitle
 }
 
-// hasName reports whether the file has a name ResolveTitle and
-// ResolveDisplayName can use. A whitespace-only name does not count.
-func (f *File) hasName() bool {
+// HasName reports whether the file has a name. A whitespace-only name does
+// not count. Check it rather than comparing Name with "".
+func (f *File) HasName() bool {
 	return f != nil && f.Name != nil && strings.TrimSpace(*f.Name) != ""
 }
 
