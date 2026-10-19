@@ -93,6 +93,7 @@ const FileDownloadControl = ({
     );
   }
 
+  const title = fileTitle(file, bookTitle);
   const menu = (trigger: ReactNode, tooltip: string) => (
     <DropdownMenu>
       <Tooltip>
@@ -101,12 +102,14 @@ const FileDownloadControl = ({
         </TooltipTrigger>
         <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-          Download as
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel
+          className="truncate text-xs font-medium text-muted-foreground"
+          title={title}
+        >
+          {title}
         </DropdownMenuLabel>
         {file.reachable_file_types.map((fileType) => {
-          const title = fileTitle(file, bookTitle);
           const label = fileTypeLabel(fileType);
           return (
             <DropdownMenuItem
@@ -114,12 +117,7 @@ const FileDownloadControl = ({
               key={fileType}
               onSelect={() => onDownloadAs(fileType)}
             >
-              <span className="min-w-0 truncate" title={title}>
-                {title}
-              </span>
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                {label}
-              </span>
+              {label}
             </DropdownMenuItem>
           );
         })}

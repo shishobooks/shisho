@@ -121,7 +121,7 @@ describe("FileDownloadControl", () => {
     },
   );
 
-  it("labels each entry with the File's own title", async () => {
+  it("heads the menu with the File's own title and shows only the File Type in each entry", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderControl({
       file: {
@@ -136,11 +136,13 @@ describe("FileDownloadControl", () => {
       "Download Special Edition as EPUB",
       "Download Special Edition as KePub",
     ]);
-    const entry = screen.getByRole("menuitem", {
-      name: "Download Special Edition as KePub",
-    });
-    expect(entry).toHaveTextContent("Special Edition");
-    expect(entry).toHaveTextContent("KePub");
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveTextContent(/^Special Edition/);
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["EPUB", "KePub"]);
   });
 
   it.each([FileTypeCBZ, FileTypeKePub, FileTypeEPUB])(

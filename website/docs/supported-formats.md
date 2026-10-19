@@ -88,7 +88,7 @@ M4B, PDF, MOBI, and AZW3 files download only as themselves. A comic converted fr
 
 Each file type a file is downloaded as is generated and cached on its own, so downloading a CBZ as EPUB does not replace its cached CBZ or KePub. Editing the book's metadata regenerates each of them on its next download.
 
-In the web app, each file's download button has a menu beside it, **Download as**, that lists every file type the file can become, its own first, each labeled with the file's title and file type. The download button itself follows the library's [download format preference](./libraries.md#cover-and-download-preferences). [Share Links](./sharing.md#what-recipients-see) offer the same menu. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for the file types each device receives.
+In the web app, each file's download button has a menu beside it, **Download as**, headed by the file's title, that lists every file type the file can become, its own first. The download button itself follows the library's [download format preference](./libraries.md#cover-and-download-preferences). [Share Links](./sharing.md#what-recipients-see) offer the same menu. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for the file types each device receives.
 
 ## Audiobook Browser Compatibility
 
