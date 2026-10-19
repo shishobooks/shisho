@@ -939,16 +939,20 @@ func (svc *Service) bookToEntryWithKepub(baseURL string, book *models.Book, cove
 		}
 
 		mimeType := FileTypeMimeType(file.FileType)
+		formatLabel := strings.ToUpper(file.FileType)
 		var downloadURL string
 		// Use KePub download URL for supported file types in KePub mode
 		if kepubMode && supportsKepub(file.FileType) {
 			downloadURL = fmt.Sprintf("%s/opds/download/%d/kepub", apiBase, file.ID)
-			// KePub files use application/kepub+zip mime type
-			mimeType = MimeTypeKepub
+			// Advertise the type a converted KePub is served as. KOReader drops
+			// a link whose type it does not know, such as application/kepub+zip.
+			// A failed conversion sends the original, which keeps its own type.
+			mimeType = books.KepubContentType
+			formatLabel = "KePub"
 		} else {
 			downloadURL = fmt.Sprintf("%s/opds/download/%d", apiBase, file.ID)
 		}
-		entry.AddAcquisitionLink(downloadURL, mimeType)
+		entry.AddAcquisitionLink(downloadURL, mimeType, formatLabel+" · "+file.ResolveTitle(book.Title))
 	}
 
 	return entry

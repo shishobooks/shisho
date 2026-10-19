@@ -21,7 +21,7 @@ https://your-server/opds/v1/epub+cbz+m4b+pdf+mobi+azw3/catalog
 
 Any non-empty combination of those six types is accepted. Order does not change the catalog behavior. `mobi` covers `.mobi`, `.azw`, and `.prc` files. For a reading app that opens only Kindle formats, use `mobi+azw3`.
 
-Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it. Downloads are generated with the book's current metadata, as that page describes for each format. The first download of some formats shows no progress or size in the reading app; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
+Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it, and a title naming its format and the file's name, or the book's title when the file has no name, such as `EPUB · Illustrated Edition`. Reading apps that label downloads by title use it to tell a book's files apart. Downloads are generated with the book's current metadata, as that page describes for each format. The first download of some formats shows no progress or size in the reading app; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
 
 ### KePub Catalog
 
@@ -31,7 +31,7 @@ To request KePub downloads where conversion is supported, insert `/kepub` before
 https://your-server/opds/v1/kepub/epub+cbz/catalog
 ```
 
-In a KePub catalog, EPUB and CBZ files are converted to KePub. M4B and PDF files remain in their native formats. KePub catalogs are for Kobo devices, which cannot open MOBI or AZW3, so they skip `mobi` and `azw3` in the type selection and refuse a selection with no other type. See [Supported Formats](./supported-formats.md) for generated-download limitations.
+In a KePub catalog, EPUB and CBZ files are converted to KePub, and their download titles start with `KePub`. M4B and PDF files remain in their native formats. KePub catalogs are for Kobo devices, which cannot open MOBI or AZW3, so they skip `mobi` and `azw3` in the type selection and refuse a selection with no other type. See [Supported Formats](./supported-formats.md) for generated-download limitations.
 
 ## Authentication and Access
 

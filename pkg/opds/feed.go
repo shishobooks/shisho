@@ -38,7 +38,6 @@ const (
 	MimeTypeAcquisition = "application/atom+xml;profile=opds-catalog;kind=acquisition"
 	MimeTypeOpenSearch  = "application/opensearchdescription+xml"
 	MimeTypeEPUB        = "application/epub+zip"
-	MimeTypeKepub       = "application/kepub+zip"
 	MimeTypeCBZ         = "application/vnd.comicbook+zip"
 	MimeTypeM4B         = "audio/mp4"
 	MimeTypePDF         = "application/pdf"
@@ -124,12 +123,15 @@ func (e *Entry) AddLink(rel, href, linkType string) {
 	})
 }
 
-// AddAcquisitionLink adds a download link for a file.
-func (e *Entry) AddAcquisitionLink(href, mimeType string) {
+// AddAcquisitionLink adds a download link for a file. Readers such as
+// KOReader label the download button with the title, so it must tell a
+// book's files apart.
+func (e *Entry) AddAcquisitionLink(href, mimeType, title string) {
 	e.Links = append(e.Links, Link{
-		Rel:  RelAcquisition,
-		Href: href,
-		Type: mimeType,
+		Rel:   RelAcquisition,
+		Href:  href,
+		Type:  mimeType,
+		Title: title,
 	})
 }
 
