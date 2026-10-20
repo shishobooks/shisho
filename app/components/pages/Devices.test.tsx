@@ -318,6 +318,35 @@ describe("DeviceDetail", () => {
     expect(screen.queryByRole("switch")).toBeNull();
   });
 
+  it("gets a new setup URL in place of the shown one", async () => {
+    const request = stubAPI(kobo());
+    const stubbed = request.getMockImplementation()!;
+    let code = 0;
+    request.mockImplementation(async (method, path, ...rest) => {
+      if (method === "POST" && path === "/user/devices/kobo-1/short-url") {
+        code += 1;
+        return { short_code: `code${code}` };
+      }
+      return stubbed(method, path, ...rest);
+    });
+    const user = setupUser();
+    renderAt("/user/devices/kobo-1");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Get Setup URL" }),
+    );
+    expect(await screen.findByLabelText("Setup URL")).toHaveTextContent(
+      `${window.location.origin}/e/code1`,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Get New Setup URL" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Setup URL")).toHaveTextContent(
+        `${window.location.origin}/e/code2`,
+      ),
+    );
+  });
+
   it("closes the regenerate confirmation when Demo Mode rejects it", async () => {
     const request = stubAPI(kobo());
     const stubbed = request.getMockImplementation()!;

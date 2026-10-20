@@ -377,24 +377,27 @@ const EReaderBrowserSetup = ({ device }: { device: DeviceResponse }) => {
         Open the setup URL in the e-reader's web browser, then bookmark the page
         it opens.
       </p>
-      {short ? (
+      {short && (
         <>
           <CopyField label="Setup URL" value={shortURL(short.short_code)} />
           <p className="text-sm text-muted-foreground">
-            The setup URL expires in 30 minutes. The page it opens keeps
-            working.
+            The setup URL expires in 30 minutes, or when you get a new one. The
+            page it opens keeps working.
           </p>
         </>
-      ) : (
-        <Button
-          disabled={generateShortUrl.isPending}
-          onClick={handleGenerate}
-          size="sm"
-          variant="outline"
-        >
-          {generateShortUrl.isPending ? "Generating..." : "Get Setup URL"}
-        </Button>
       )}
+      <Button
+        disabled={generateShortUrl.isPending}
+        onClick={handleGenerate}
+        size="sm"
+        variant="outline"
+      >
+        {generateShortUrl.isPending
+          ? "Generating..."
+          : short
+            ? "Get New Setup URL"
+            : "Get Setup URL"}
+      </Button>
       <div className="space-y-2">
         <p className="text-sm font-medium">Or bookmark this URL</p>
         <CopyField

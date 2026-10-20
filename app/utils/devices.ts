@@ -23,7 +23,7 @@ export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
     {
       type: DeviceTypeKobo,
       description:
-        "Kobo's own reader, through Kobo sync and the Kobo's web browser.",
+        "A Kobo's built-in reader. Syncs over Wi-Fi and can also browse from the Kobo's web browser.",
     },
     {
       type: DeviceTypeKindle,
