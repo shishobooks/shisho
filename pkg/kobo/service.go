@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -51,11 +52,11 @@ func NewService(db *bun.DB) *Service {
 // emitted, via MarkSyncPointCompleted. CleanupOldSyncPoints and
 // GetLastSyncPoint both filter on completed_at, so an abandoned in-progress
 // snapshot is invisible to the next fresh sync.
-func (svc *Service) CreateSyncPoint(ctx context.Context, apiKeyID string, files []ScopedFile) (*SyncPoint, error) {
+func (svc *Service) CreateSyncPoint(ctx context.Context, deviceID string, files []ScopedFile) (*SyncPoint, error) {
 	now := time.Now()
 	sp := &SyncPoint{
 		ID:        uuid.New().String(),
-		APIKeyID:  apiKeyID,
+		DeviceID:  deviceID,
 		CreatedAt: now,
 	}
 
@@ -98,16 +99,16 @@ func (svc *Service) CreateSyncPoint(ctx context.Context, apiKeyID string, files 
 // in-progress sync point, making it eligible to act as the prev baseline for
 // future syncs and eligible for cleanup.
 //
-// apiKeyID is required at the SQL layer (defense-in-depth alongside the
+// deviceID is required at the SQL layer (defense-in-depth alongside the
 // resolveSyncPoint ownership check) so a stale or forged sync-point ID can't
 // finalize someone else's snapshot.
-func (svc *Service) MarkSyncPointCompleted(ctx context.Context, apiKeyID, syncPointID string) error {
+func (svc *Service) MarkSyncPointCompleted(ctx context.Context, deviceID, syncPointID string) error {
 	now := time.Now()
 	_, err := svc.db.NewUpdate().
 		Model((*SyncPoint)(nil)).
 		Set("completed_at = ?", now).
 		Where("id = ?", syncPointID).
-		Where("api_key_id = ?", apiKeyID).
+		Where("device_id = ?", deviceID).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -132,16 +133,16 @@ func ScopedFilesFromSnapshot(books []*SyncPointBook) []ScopedFile {
 
 // GetSyncPointByID retrieves a sync point by ID with its Books relation loaded.
 //
-// apiKeyID is enforced at the SQL layer so a token bearing another tenant's
+// deviceID is enforced at the SQL layer so a token bearing another tenant's
 // sync-point UUID can't surface that tenant's snapshot. Returns sql.ErrNoRows
 // (wrapped) when no point matches both ID and owner.
-func (svc *Service) GetSyncPointByID(ctx context.Context, apiKeyID, syncPointID string) (*SyncPoint, error) {
+func (svc *Service) GetSyncPointByID(ctx context.Context, deviceID, syncPointID string) (*SyncPoint, error) {
 	sp := new(SyncPoint)
 	err := svc.db.NewSelect().
 		Model(sp).
 		Relation("Books").
 		Where("ksp.id = ?", syncPointID).
-		Where("ksp.api_key_id = ?", apiKeyID).
+		Where("ksp.device_id = ?", deviceID).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -149,13 +150,13 @@ func (svc *Service) GetSyncPointByID(ctx context.Context, apiKeyID, syncPointID 
 	return sp, nil
 }
 
-// GetLastSyncPoint returns the most recent completed sync point for an API key.
-func (svc *Service) GetLastSyncPoint(ctx context.Context, apiKeyID string) (*SyncPoint, error) {
+// GetLastSyncPoint returns the most recent completed sync point for a Device.
+func (svc *Service) GetLastSyncPoint(ctx context.Context, deviceID string) (*SyncPoint, error) {
 	sp := new(SyncPoint)
 	err := svc.db.NewSelect().
 		Model(sp).
 		Relation("Books").
-		Where("ksp.api_key_id = ?", apiKeyID).
+		Where("ksp.device_id = ?", deviceID).
 		Where("ksp.completed_at IS NOT NULL").
 		Order("ksp.completed_at DESC").
 		Limit(1).
@@ -169,11 +170,11 @@ func (svc *Service) GetLastSyncPoint(ctx context.Context, apiKeyID string) (*Syn
 // DetectChanges compares currentFiles against the last sync point.
 // If lastSyncPointID is empty, this is the first sync and all files are Added.
 //
-// apiKeyID scopes the prev-snapshot lookup so a forged or stale ID can't
+// deviceID scopes the prev-snapshot lookup so a forged or stale ID can't
 // surface another tenant's snapshot as our baseline. If the named sync point
-// doesn't exist or doesn't belong to this api key, we silently degrade to a
+// doesn't exist or doesn't belong to this Device, we silently degrade to a
 // fresh sync (logging at warn so the unexpected re-send is observable).
-func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID string, currentFiles []ScopedFile) (*SyncChanges, error) {
+func (svc *Service) DetectChanges(ctx context.Context, deviceID, lastSyncPointID string, currentFiles []ScopedFile) (*SyncChanges, error) {
 	log := logger.FromContext(ctx)
 	changes := &SyncChanges{}
 
@@ -185,11 +186,11 @@ func (svc *Service) DetectChanges(ctx context.Context, apiKeyID, lastSyncPointID
 	}
 
 	// Load previous sync point books.
-	sp, err := svc.GetSyncPointByID(ctx, apiKeyID, lastSyncPointID)
+	sp, err := svc.GetSyncPointByID(ctx, deviceID, lastSyncPointID)
 	if err != nil {
 		// If the sync point was deleted or is invalid, treat as fresh sync.
 		log.Warn("kobo prev sync point not found, falling back to fresh sync", logger.Data{
-			"api_key_id":         apiKeyID,
+			"device_id":          deviceID,
 			"last_sync_point_id": lastSyncPointID,
 			"error":              err.Error(),
 		})
@@ -253,10 +254,10 @@ func coverChanged(prev, curr *time.Time) bool {
 }
 
 // EnsureRevisionIDs returns the RevisionId recorded for each file under
-// apiKeyID, first recording a new one for any file that has none. A recorded
+// deviceID, first recording a new one for any file that has none. A recorded
 // RevisionId is reused for every later sync, and a new one is a random UUID
 // so nothing about the file (path, size, metadata) feeds into it.
-func (svc *Service) EnsureRevisionIDs(ctx context.Context, apiKeyID string, fileIDs []int) (map[int]string, error) {
+func (svc *Service) EnsureRevisionIDs(ctx context.Context, deviceID string, fileIDs []int) (map[int]string, error) {
 	revs := make(map[int]string, len(fileIDs))
 	if len(fileIDs) == 0 {
 		return revs, nil
@@ -282,7 +283,7 @@ func (svc *Service) EnsureRevisionIDs(ctx context.Context, apiKeyID string, file
 		entries := make([]*SyncEntry, len(existing))
 		for i, fileID := range existing {
 			entries[i] = &SyncEntry{
-				APIKeyID:   apiKeyID,
+				DeviceID:   deviceID,
 				FileID:     fileID,
 				RevisionID: uuid.New().String(),
 				CreatedAt:  now,
@@ -290,7 +291,7 @@ func (svc *Service) EnsureRevisionIDs(ctx context.Context, apiKeyID string, file
 		}
 		_, err = tx.NewInsert().
 			Model(&entries).
-			On("CONFLICT (api_key_id, file_id) DO NOTHING").
+			On("CONFLICT (device_id, file_id) DO NOTHING").
 			Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)
@@ -299,7 +300,7 @@ func (svc *Service) EnsureRevisionIDs(ctx context.Context, apiKeyID string, file
 		var recorded []*SyncEntry
 		err = tx.NewSelect().
 			Model(&recorded).
-			Where("kse.api_key_id = ?", apiKeyID).
+			Where("kse.device_id = ?", deviceID).
 			Where("kse.file_id IN (?)", bun.List(fileIDs)).
 			Scan(ctx)
 		if err != nil {
@@ -321,9 +322,9 @@ func (svc *Service) EnsureRevisionIDs(ctx context.Context, apiKeyID string, file
 // returns an empty slice rather than an error. Supplement files and non-Kobo
 // formats (M4B, PDF) are excluded. A book with multiple compatible files (e.g.
 // two EPUBs) will have all of them returned. Each gets its own content ID on
-// the device. The user must be loaded with LibraryAccess, as the API key
+// the device. The user must be loaded with LibraryAccess, as the Device
 // middleware does.
-func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope *SyncScope) ([]ScopedFile, error) {
+func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope devices.Scope) ([]ScopedFile, error) {
 	var files []models.File
 	q, closed, err := svc.scopedFilesQuery(ctx, user, scope, &files)
 	if err != nil {
@@ -363,9 +364,9 @@ func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope
 
 // FileInScope reports whether fileID is one of the files GetScopedFiles
 // would sync for this user and scope. The by-id Kobo routes (download, cover,
-// metadata) call it before loading the file, so a key can only fetch what it
+// metadata) call it before loading the file, so a Device can only fetch what it
 // syncs. The user must be loaded with LibraryAccess.
-func (svc *Service) FileInScope(ctx context.Context, user *models.User, scope *SyncScope, fileID int) (bool, error) {
+func (svc *Service) FileInScope(ctx context.Context, user *models.User, scope devices.Scope, fileID int) (bool, error) {
 	q, closed, err := svc.scopedFilesQuery(ctx, user, scope, (*models.File)(nil))
 	if err != nil {
 		return false, err
@@ -388,7 +389,7 @@ func (svc *Service) FileInScope(ctx context.Context, user *models.User, scope *S
 // non-nil user (the handlers reject a request without one). The nil guard
 // exists so a future caller that forgets fails closed with an error instead
 // of failing open or panicking on a nil dereference.
-func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, scope *SyncScope, model any) (q *bun.SelectQuery, closed bool, err error) {
+func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, scope devices.Scope, model any) (q *bun.SelectQuery, closed bool, err error) {
 	if user == nil {
 		return nil, true, errors.New("scoped files query requires a user")
 	}
@@ -399,14 +400,14 @@ func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, sco
 		Where("f.file_role = ?", models.FileRoleMain)
 
 	switch scope.Type {
-	case "library":
+	case devices.ScopeLibrary:
 		// A library scope without an id fails closed rather than syncing
 		// every library.
 		if scope.LibraryID == nil || !user.HasLibraryAccess(*scope.LibraryID) {
 			return nil, true, nil
 		}
 		q = q.Where("f.library_id = ?", *scope.LibraryID)
-	case "list":
+	case devices.ScopeList:
 		// A list scope without an id fails closed, like the library scope.
 		if scope.ListID == nil {
 			return nil, true, nil
@@ -428,7 +429,7 @@ func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, sco
 		if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
 			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
 		}
-	default: // "all"
+	default: // devices.ScopeAll
 		if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
 			q = q.Where("f.library_id IN (?)", bun.List(libraryIDs))
 		}
@@ -437,19 +438,19 @@ func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, sco
 	return q, false, nil
 }
 
-// CleanupOldSyncPoints removes completed sync points older than the most recent one per API key.
+// CleanupOldSyncPoints removes completed sync points older than the most recent one per Device.
 // This prevents the database from growing unbounded.
-func (svc *Service) CleanupOldSyncPoints(ctx context.Context, apiKeyID string) error {
-	// Keep only the most recent completed sync point per API key
+func (svc *Service) CleanupOldSyncPoints(ctx context.Context, deviceID string) error {
+	// Keep only the most recent completed sync point per Device
 	_, err := svc.db.NewDelete().
 		Model((*SyncPoint)(nil)).
-		Where("api_key_id = ?", apiKeyID).
+		Where("device_id = ?", deviceID).
 		Where("completed_at IS NOT NULL").
 		Where("id NOT IN (?)",
 			svc.db.NewSelect().
 				Model((*SyncPoint)(nil)).
 				ColumnExpr("id").
-				Where("api_key_id = ?", apiKeyID).
+				Where("device_id = ?", deviceID).
 				Where("completed_at IS NOT NULL").
 				OrderExpr("created_at DESC").
 				Limit(1),

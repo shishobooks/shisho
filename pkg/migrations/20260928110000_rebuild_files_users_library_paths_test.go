@@ -187,7 +187,8 @@ func TestRebuildFilesUsersLibraryPaths(t *testing.T) {
 	ctx := context.Background()
 	db := openMigrationTestDB(t)
 
-	migrateBeforeRebuild(ctx, t, db)
+	// Later migrations change the child tables, so only the rebuild runs.
+	migrator := migrateToBefore(ctx, t, db, rebuildFKMigrationName)
 	seedRebuildRows(ctx, t, db)
 
 	var textIDs int
@@ -209,8 +210,6 @@ func TestRebuildFilesUsersLibraryPaths(t *testing.T) {
 		beforeColumns[table] = columnNames(ctx, t, db, table)
 	}
 
-	migrator := NewMigrator(db)
-	require.NoError(t, migrator.Init(ctx))
 	for pass := range 2 {
 		_, err := migrator.Migrate(ctx)
 		require.NoError(t, err, "pass %d", pass)

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -23,15 +23,15 @@ import (
 )
 
 // eReaderAccessFixture wires the real eReader routes against a database with
-// two libraries and a viewer who owns an eReader API key and can access
-// every library.
+// two libraries and a viewer who owns a Browser Device and can access every
+// library.
 type eReaderAccessFixture struct {
-	db   *bun.DB
-	e    *echo.Echo
-	user *models.User
-	key  *apikeys.APIKey
-	libA *models.Library
-	libB *models.Library
+	db     *bun.DB
+	e      *echo.Echo
+	user   *models.User
+	device *devices.Device
+	libA   *models.Library
+	libB   *models.Library
 }
 
 func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
@@ -60,10 +60,7 @@ func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 	_, err = db.NewInsert().Model(&models.UserLibraryAccess{UserID: f.user.ID}).Exec(ctx)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	key, err := apiKeyService.Create(ctx, f.user.ID, "eReader")
-	require.NoError(t, err)
-	f.key, err = apiKeyService.AddPermission(ctx, f.user.ID, key.ID, apikeys.PermissionEReaderBrowser)
+	f.device, err = devices.NewService(db).Create(ctx, f.user.ID, "eReader", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	f.e = echo.New()
@@ -72,24 +69,24 @@ func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 	return f
 }
 
-// withKey stores apiKey and its owner, loaded from the database, in c as
-// APIKeyAuth does. Tests that call a handler directly use it.
-func withKey(c echo.Context, t *testing.T, db *bun.DB, apiKey *apikeys.APIKey) {
+// withDevice stores device and its owner, loaded from the database, in c as
+// DeviceAuth does. Tests that call a handler directly use it.
+func withDevice(c echo.Context, t *testing.T, db *bun.DB, device *devices.Device) {
 	t.Helper()
-	owner, err := apikeys.NewService(db).AuthenticateOwner(context.Background(), apiKey)
+	owner, err := devices.NewService(db).AuthenticateOwner(context.Background(), device)
 	require.NoError(t, err)
-	apikeys.SetKey(c, apiKey)
+	devices.SetDevice(c, device)
 	auth.SetUser(c, owner)
 }
 
 func (f *eReaderAccessFixture) serve(path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	f.e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ereader/key/"+f.key.Key+path, nil))
+	f.e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ereader/key/"+f.device.Credential+path, nil))
 	return rec
 }
 
-// A deactivated user's eReader key stops working.
-func TestEReaderAPIKeyAuth_InactiveUser_Returns401(t *testing.T) {
+// A deactivated user's Device stops working.
+func TestEReaderDeviceAuth_InactiveUser_Returns401(t *testing.T) {
 	t.Parallel()
 	f := newEReaderAccessFixture(t)
 	_, err := f.db.NewUpdate().Model((*models.User)(nil)).Set("is_active = ?", false).Where("id = ?", f.user.ID).Exec(context.Background())
@@ -98,8 +95,8 @@ func TestEReaderAPIKeyAuth_InactiveUser_Returns401(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, f.serve("/").Code)
 }
 
-// A key whose owner's role lacks books:read cannot browse.
-func TestEReaderAPIKeyAuth_RoleWithoutBooksRead_Returns403(t *testing.T) {
+// A Device whose owner's role lacks books:read cannot browse.
+func TestEReaderDeviceAuth_RoleWithoutBooksRead_Returns403(t *testing.T) {
 	t.Parallel()
 	f := newEReaderAccessFixture(t)
 	ctx := context.Background()
@@ -139,12 +136,12 @@ func TestEReaderSeriesBooks_SeriesFromOtherLibrary_Returns404(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Secret Series")
 }
 
-// A short URL for a deactivated user's key does not redirect to the key URL.
+// A short URL for a deactivated user's Device does not redirect to its URL.
 func TestResolveShortURL_InactiveOwner_Returns401(t *testing.T) {
 	t.Parallel()
 	f := newEReaderAccessFixture(t)
 	ctx := context.Background()
-	short, err := apikeys.NewService(f.db).GenerateShortURL(ctx, f.user.ID, f.key.ID)
+	short, err := devices.NewService(f.db).GenerateShortURL(ctx, f.user.ID, f.device.ID)
 	require.NoError(t, err)
 
 	serveShort := func() *httptest.ResponseRecorder {
@@ -161,10 +158,10 @@ func TestResolveShortURL_InactiveOwner_Returns401(t *testing.T) {
 
 	rec := serveShort()
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Empty(t, rec.Header().Get(echo.HeaderLocation), "the key URL must not be revealed")
+	assert.Empty(t, rec.Header().Get(echo.HeaderLocation), "the Device URL must not be revealed")
 }
 
-// A file, or a book, in a library the key's owner cannot access is not found,
+// A file, or a book, in a library the Device's owner cannot access is not found,
 // the same rule Kobo applies to its per-file routes, so the id does not leak
 // whether it exists.
 func TestEReaderDownload_FileOutsideAccess_Returns404(t *testing.T) {

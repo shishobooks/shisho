@@ -21,7 +21,7 @@ type LoadUserOptions struct {
 
 // LoadUser loads one user with Role, Role.Permissions and LibraryAccess, the
 // relations every permission and library access check reads. It is the one
-// loader behind login, session and Basic Auth authentication, API key owners,
+// loader behind login, session and Basic Auth authentication, Device owners,
 // and user administration. When no user matches it returns an error wrapping
 // sql.ErrNoRows.
 func LoadUser(ctx context.Context, db bun.IDB, opts LoadUserOptions) (*models.User, error) {

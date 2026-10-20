@@ -55,7 +55,7 @@ linters:
         # auth.RequireLibraryAccessFor, and auth.SetUser (tests) instead.
         - pattern: ^echo\.Context\.(Get|Set)$
           pkg: ^github\.com/labstack/echo/v4$
-          msg: use auth.RequireUser, auth.RequireLibraryAccessFor or auth.SetUser (apikeys.RequireKey for the API key) instead of reading or writing echo context values
+          msg: use auth.RequireUser, auth.RequireLibraryAccessFor or auth.SetUser (devices.RequireDevice for the Device) instead of reading or writing echo context values
         # c.File (which c.Attachment and c.Inline wrap) and http.ServeFile turn
         # every open failure, a permission error included, into a 404, and
         # headers set before them ride on the error response. httputil.ServeFile
@@ -132,7 +132,7 @@ linters:
       # These packages own the echo context values they read and write.
       - linters:
           - forbidigo
-        path: ^pkg/(auth|apikeys|binder)/
+        path: ^pkg/(auth|devices|binder)/
         text: echo context values
       - linters:
           - forbidigo

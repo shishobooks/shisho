@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -45,8 +45,8 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", userID)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	apiKey, err := apiKeyService.Create(ctx, userID, "Test Key")
+	deviceService := devices.NewService(db)
+	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -115,9 +115,9 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	withKey(c, t, db, apiKey)
-	c.SetParamNames("apiKey", "bookId")
-	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
+	withDevice(c, t, db, device)
+	c.SetParamNames("credential", "bookId")
+	c.SetParamValues(device.Credential, strconv.Itoa(book.ID))
 
 	require.NoError(t, h.Download(c))
 
@@ -163,8 +163,8 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", userID)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	apiKey, err := apiKeyService.Create(ctx, userID, "Test Key")
+	deviceService := devices.NewService(db)
+	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -210,9 +210,9 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	withKey(c, t, db, apiKey)
-	c.SetParamNames("apiKey", "bookId")
-	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
+	withDevice(c, t, db, device)
+	c.SetParamNames("credential", "bookId")
+	c.SetParamValues(device.Credential, strconv.Itoa(book.ID))
 
 	require.NoError(t, h.Download(c))
 
@@ -249,8 +249,8 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", userID)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	apiKey, err := apiKeyService.Create(ctx, userID, "Test Key")
+	deviceService := devices.NewService(db)
+	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -308,9 +308,9 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; U; Android 2.0; Kobo Touch)")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	withKey(c, t, db, apiKey)
-	c.SetParamNames("apiKey", "bookId")
-	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
+	withDevice(c, t, db, device)
+	c.SetParamNames("credential", "bookId")
+	c.SetParamValues(device.Credential, strconv.Itoa(book.ID))
 
 	require.NoError(t, h.Download(c))
 
@@ -347,8 +347,8 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", userID)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	apiKey, err := apiKeyService.Create(ctx, userID, "Test Key")
+	deviceService := devices.NewService(db)
+	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -409,9 +409,9 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	withKey(c, t, db, apiKey)
-	c.SetParamNames("apiKey", "bookId")
-	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
+	withDevice(c, t, db, device)
+	c.SetParamNames("credential", "bookId")
+	c.SetParamValues(device.Credential, strconv.Itoa(book.ID))
 
 	require.NoError(t, h.Download(c))
 

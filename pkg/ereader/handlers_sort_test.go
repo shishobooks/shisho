@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -131,30 +130,12 @@ func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 
 	settingsSvc := settings.NewService(db)
 	// Other deps are unused by resolveSort; nil keeps the test focused.
-	h := newHandler(nil, nil, nil, nil, nil, settingsSvc)
+	h := newHandler(nil, nil, nil, nil, nil, settingsSvc, nil)
 
-	apiKey := &apikeys.APIKey{UserID: user.ID}
-	got := h.resolveSort(context.Background(), apiKey, lib.ID)
+	got := h.resolveSort(context.Background(), user.ID, lib.ID)
 
 	assert.Equal(t, sortspec.BuiltinDefault(), got,
 		"no stored preference → handler falls back to BuiltinDefault")
-}
-
-// TestHandlerResolveSort_NilApiKeyFallsBackToBuiltinDefault is a
-// belt-and-suspenders check: the handler's other call sites already
-// short-circuit on missing API keys with an Unauthorized response, but
-// resolveSort is independently safe — it never returns nil, so callers
-// don't have to guard.
-func TestHandlerResolveSort_NilApiKeyFallsBackToBuiltinDefault(t *testing.T) {
-	t.Parallel()
-
-	db := testdb.New(t)
-	settingsSvc := settings.NewService(db)
-	h := newHandler(nil, nil, nil, nil, nil, settingsSvc)
-
-	got := h.resolveSort(context.Background(), nil, 1)
-
-	assert.Equal(t, sortspec.BuiltinDefault(), got)
 }
 
 // TestNoStoredSortResolvesToNil pins the lower-level

@@ -34,7 +34,7 @@ func TestSeedingRoutes_ReturnErrcodesBodies(t *testing.T) {
 		"/api/test/books",
 		"/api/test/persons",
 		"/api/test/series",
-		"/api/test/api-keys",
+		"/api/test/devices",
 		"/api/test/plugins",
 	}
 	for _, path := range paths {

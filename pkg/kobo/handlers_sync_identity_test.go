@@ -29,11 +29,11 @@ type syncItemBody struct {
 	BookMetadata    map[string]any `json:"BookMetadata"`
 }
 
-// sync runs one /v1/library/sync request under the "all" scope with the
+// sync runs one /v1/library/sync request on the Device's sync URL with the
 // given token and returns the decoded items and the next token.
 func (f *koboScopeFixture) sync(t *testing.T, token string) ([]syncItem, string) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, f.prefix("all")+"/v1/library/sync", nil)
+	req := httptest.NewRequest(http.MethodGet, f.prefix()+"/v1/library/sync", nil)
 	if token != "" {
 		req.Header.Set("X-Kobo-SyncToken", token)
 	}
@@ -201,17 +201,17 @@ func TestHandleSync_PreUpgradeEntryKeepsHashFormRevisionID(t *testing.T) {
 	ctx := context.Background()
 
 	hashForm := ShishoID(f.fileA.ID) + "-" + computeFileHash(f.fileA)[:8]
-	sp, err := NewService(f.db).CreateSyncPoint(ctx, f.key.ID, []ScopedFile{{
+	sp, err := NewService(f.db).CreateSyncPoint(ctx, f.device.ID, []ScopedFile{{
 		FileID:       f.fileA.ID,
 		FileHash:     computeFileHash(f.fileA),
 		FileSize:     f.fileA.FilesizeBytes,
 		MetadataHash: "pre-upgrade",
 	}})
 	require.NoError(t, err)
-	require.NoError(t, NewService(f.db).MarkSyncPointCompleted(ctx, f.key.ID, sp.ID))
+	require.NoError(t, NewService(f.db).MarkSyncPointCompleted(ctx, f.device.ID, sp.ID))
 	_, err = f.db.ExecContext(ctx,
-		`INSERT INTO kobo_sync_entries (api_key_id, file_id, revision_id) VALUES (?, ?, ?)`,
-		f.key.ID, f.fileA.ID, hashForm)
+		`INSERT INTO kobo_sync_entries (device_id, file_id, revision_id) VALUES (?, ?, ?)`,
+		f.device.ID, f.fileA.ID, hashForm)
 	require.NoError(t, err)
 	token := encodeTestSyncToken(t, SyncToken{LastSyncPointID: sp.ID})
 
@@ -270,7 +270,7 @@ func TestHandleSync_FileDeletedAfterSnapshotIsDropped(t *testing.T) {
 	ctx := context.Background()
 
 	const deletedFileID = 9999
-	sp, err := NewService(f.db).CreateSyncPoint(ctx, f.key.ID, []ScopedFile{
+	sp, err := NewService(f.db).CreateSyncPoint(ctx, f.device.ID, []ScopedFile{
 		{FileID: f.fileA.ID, FileHash: computeFileHash(f.fileA), FileSize: f.fileA.FilesizeBytes, MetadataHash: "m"},
 		{FileID: deletedFileID, FileHash: "0123456789abcdef", FileSize: 1, MetadataHash: "m"},
 	})
@@ -336,7 +336,7 @@ func TestHandleMetadata_CoverImageIDMatchesSync(t *testing.T) {
 	items, _ := f.sync(t, "")
 	synced := itemFor(t, items, f.fileA.ID).NewEntitlement.BookMetadata["CoverImageId"]
 
-	rec := f.serve(http.MethodGet, f.prefix("all")+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
+	rec := f.serve(http.MethodGet, f.prefix()+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var metadata []map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))

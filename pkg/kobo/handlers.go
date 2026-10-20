@@ -17,10 +17,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -67,7 +67,8 @@ func (h *handler) handleInitialization(c echo.Context) error {
 }
 
 // handleAuth handles POST /v1/auth/device.
-// Returns dummy auth tokens since we use API key auth.
+// Returns dummy auth tokens since Devices authenticate by the credential
+// in the URL.
 func (h *handler) handleAuth(c echo.Context) error {
 	return c.JSON(http.StatusOK, DeviceAuthResponse{
 		AccessToken:  "shisho-access-token",
@@ -91,7 +92,7 @@ func (h *handler) handleAuth(c echo.Context) error {
 func (h *handler) handleSync(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
-	apiKey, err := apikeys.RequireKey(c)
+	device, err := devices.RequireDevice(c)
 	if err != nil {
 		return err
 	}
@@ -99,11 +100,11 @@ func (h *handler) handleSync(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	scope := GetScopeFromContext(ctx)
+	scope := device.Scope()
 
 	inToken := decodeSyncToken(c.Request().Header.Get("X-Kobo-SyncToken"))
 
-	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, apiKey.ID, user, scope, inToken)
+	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, device.ID, user, scope, inToken)
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func (h *handler) handleSync(c echo.Context) error {
 	// completed sync point. For continuations, we re-derive ScopedFiles from
 	// the frozen snapshot so paging stays consistent across calls.
 	currentFiles := ScopedFilesFromSnapshot(ongoing.Books)
-	changes, err := h.service.DetectChanges(ctx, apiKey.ID, prevID, currentFiles)
+	changes, err := h.service.DetectChanges(ctx, device.ID, prevID, currentFiles)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -129,7 +130,7 @@ func (h *handler) handleSync(c echo.Context) error {
 	}
 	page := allEntries[start:end]
 
-	revisionIDs, err := h.service.EnsureRevisionIDs(ctx, apiKey.ID, entitledFileIDs(page))
+	revisionIDs, err := h.service.EnsureRevisionIDs(ctx, device.ID, entitledFileIDs(page))
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -148,7 +149,7 @@ func (h *handler) handleSync(c echo.Context) error {
 			Cursor:             end,
 		}
 	} else {
-		if err := h.service.MarkSyncPointCompleted(ctx, apiKey.ID, ongoing.ID); err != nil {
+		if err := h.service.MarkSyncPointCompleted(ctx, device.ID, ongoing.ID); err != nil {
 			return errors.WithStack(err)
 		}
 		outToken = SyncToken{LastSyncPointID: ongoing.ID}
@@ -158,10 +159,10 @@ func (h *handler) handleSync(c echo.Context) error {
 		// is observable instead of silently swallowed.
 		cleanupLog := log
 		go func() {
-			if err := h.service.CleanupOldSyncPoints(context.Background(), apiKey.ID); err != nil {
+			if err := h.service.CleanupOldSyncPoints(context.Background(), device.ID); err != nil {
 				cleanupLog.Warn("kobo cleanup old sync points failed", logger.Data{
-					"api_key_id": apiKey.ID,
-					"error":      err.Error(),
+					"device_id": device.ID,
+					"error":     err.Error(),
 				})
 			}
 		}()
@@ -171,7 +172,7 @@ func (h *handler) handleSync(c echo.Context) error {
 	c.Response().Header().Set("X-Kobo-SyncToken", base64.StdEncoding.EncodeToString(tokenJSON))
 
 	log.Info("kobo sync page emitted", logger.Data{
-		"api_key_id":     apiKey.ID,
+		"device_id":      device.ID,
 		"scope":          scope.Type,
 		"continuation":   isContinuation,
 		"page_start":     start,
@@ -213,15 +214,15 @@ func decodeSyncToken(header string) SyncToken {
 //     and use the inbound LastSyncPointID as the prev baseline.
 func (h *handler) resolveSyncPoint(
 	ctx context.Context,
-	apiKeyID string,
+	deviceID string,
 	user *models.User,
-	scope *SyncScope,
+	scope devices.Scope,
 	inToken SyncToken,
 ) (*SyncPoint, string, bool, error) {
 	if inToken.OngoingSyncPointID != "" {
-		// GetSyncPointByID enforces apiKeyID at the SQL layer, so a token
+		// GetSyncPointByID enforces deviceID at the SQL layer, so a token
 		// bearing another tenant's sync-point UUID won't match.
-		sp, err := h.service.GetSyncPointByID(ctx, apiKeyID, inToken.OngoingSyncPointID)
+		sp, err := h.service.GetSyncPointByID(ctx, deviceID, inToken.OngoingSyncPointID)
 		// Only honor the ongoing point if it still exists and has not been
 		// completed by another concurrent caller (which would mean re-emitting
 		// changes we've already sent).
@@ -235,23 +236,28 @@ func (h *handler) resolveSyncPoint(
 	if err != nil {
 		return nil, "", false, errors.WithStack(err)
 	}
-	sp, err := h.service.CreateSyncPoint(ctx, apiKeyID, scopedFiles)
+	sp, err := h.service.CreateSyncPoint(ctx, deviceID, scopedFiles)
 	if err != nil {
 		return nil, "", false, errors.WithStack(err)
 	}
 	return sp, inToken.LastSyncPointID, false, nil
 }
 
-// requireFileInScope returns a 404 for a file outside the key's sync scope,
-// the same response as a file that does not exist, so a key cannot probe or
-// fetch files it does not sync. Kobo routes never return 403 for this.
+// requireFileInScope returns a 404 for a file outside the Device's sync
+// scope, the same response as a file that does not exist, so a Device cannot
+// probe or fetch files it does not sync. Kobo routes never return 403 for
+// this.
 func (h *handler) requireFileInScope(c echo.Context, fileID int) error {
 	ctx := c.Request().Context()
+	device, err := devices.RequireDevice(c)
+	if err != nil {
+		return err
+	}
 	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
-	inScope, err := h.service.FileInScope(ctx, user, GetScopeFromContext(ctx), fileID)
+	inScope, err := h.service.FileInScope(ctx, user, device.Scope(), fileID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -685,20 +691,10 @@ func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey strin
 	return metadata
 }
 
-// getBaseURL returns the full base URL for the current Kobo scope.
-// Uses scope from context since routes don't have a :scopeType param.
+// getBaseURL returns the full base URL of the Kobo route the request came
+// through, so download and cover URLs work however the Kobo was set up.
 func getBaseURL(c echo.Context) string {
-	apiKey := c.Param("apiKey")
-	scope := GetScopeFromContext(c.Request().Context())
-
-	basePath := fmt.Sprintf("/kobo/%s/%s", apiKey, scope.Type)
-	if scope.Type == "library" && scope.LibraryID != nil {
-		basePath += fmt.Sprintf("/%d", *scope.LibraryID)
-	} else if scope.Type == "list" && scope.ListID != nil {
-		basePath += fmt.Sprintf("/%d", *scope.ListID)
-	}
-
-	return httputil.PublicOrigin(c.Request()) + basePath
+	return httputil.PublicOrigin(c.Request()) + basePath(c.Request().URL.Path)
 }
 
 // fitDimensions calculates target dimensions maintaining aspect ratio.

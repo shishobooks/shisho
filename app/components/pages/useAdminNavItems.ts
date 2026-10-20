@@ -7,6 +7,7 @@ import {
   Puzzle,
   ScrollText,
   Share2,
+  TabletSmartphone,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -66,6 +67,13 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       Icon: Users,
       label: "Users",
       isActive: location.pathname.startsWith("/settings/users"),
+      show: canViewUsers,
+    },
+    {
+      to: "/settings/devices",
+      Icon: TabletSmartphone,
+      label: "Devices",
+      isActive: location.pathname.startsWith("/settings/devices"),
       show: canViewUsers,
     },
     {

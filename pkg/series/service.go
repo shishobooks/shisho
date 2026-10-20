@@ -28,6 +28,7 @@ type ListSeriesOptions struct {
 	Offset     *int
 	LibraryID  *int
 	LibraryIDs []int                // Filter by multiple library IDs (for access control)
+	ListID     *int                 // Filter to series with a book on this list
 	Search     *string              // FTS5 search query
 	Sort       []sortspec.SortLevel // Defaults to name ascending
 
@@ -202,6 +203,9 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 	}
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("s.library_id IN (?)", bun.List(opts.LibraryIDs))
+	}
+	if opts.ListID != nil {
+		q = q.Where("s.id IN (SELECT bs.series_id FROM book_series bs JOIN list_books lb ON lb.book_id = bs.book_id WHERE lb.list_id = ?)", *opts.ListID)
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

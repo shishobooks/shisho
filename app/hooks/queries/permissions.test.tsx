@@ -40,7 +40,8 @@ const AUTHENTICATED_ONLY: RegExp[] = [
   /^\/lists\/templates$/,
   /^\/lists\/\d+$/,
   /^\/lists\/\d+\/shares$/,
-  /^\/user\/api-keys$/,
+  /^\/user\/devices$/,
+  /^\/user\/devices\/[^/]+$/,
   /^\/user\/libraries$/,
   /^\/users\/directory$/,
   /^\/settings\/libraries\/\d+$/,
@@ -77,8 +78,6 @@ const authenticated = (args: unknown[]): HookCase => ({
 });
 const on = { enabled: true };
 const QUERY_HOOKS: Record<string, HookCase> = {
-  // apiKeys
-  useApiKeys: authenticated([]),
   // audnexus
   useAudnexusChapters: requires("books:write", ["B000000000", on]),
   // books
@@ -92,6 +91,10 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useFileChapters: requires("books:read", [1, on]),
   // config
   useConfig: requires("config:read", []),
+  // devices
+  useDevices: authenticated([]),
+  useDevice: authenticated(["abc"]),
+  useAllDevices: requires("users:read", []),
   // entity-search
   usePeopleSearch: requires("people:read", [1, true, "a"]),
   useAuthorSearch: requires("people:read", [1, true, "a"]),

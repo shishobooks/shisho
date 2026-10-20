@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -46,8 +46,8 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", userID)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	apiKey, err := apiKeyService.Create(ctx, userID, "Test Key")
+	deviceService := devices.NewService(db)
+	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -108,7 +108,7 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	withKey(c, t, db, apiKey)
+	withDevice(c, t, db, device)
 	c.SetParamNames("bookId")
 	c.SetParamValues(strconv.Itoa(book.ID))
 
@@ -148,8 +148,8 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", userID)
 	require.NoError(t, err)
 
-	apiKeyService := apikeys.NewService(db)
-	apiKey, err := apiKeyService.Create(ctx, userID, "Test Key 304")
+	deviceService := devices.NewService(db)
+	device, err := deviceService.Create(ctx, userID, "Test Key 304", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -209,7 +209,7 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec1 := httptest.NewRecorder()
 	c1 := e.NewContext(req1, rec1)
-	withKey(c1, t, db, apiKey)
+	withDevice(c1, t, db, device)
 	c1.SetParamNames("bookId")
 	c1.SetParamValues(strconv.Itoa(book.ID))
 	require.NoError(t, h.Cover(c1))
@@ -221,7 +221,7 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	req2.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
-	withKey(c2, t, db, apiKey)
+	withDevice(c2, t, db, device)
 	c2.SetParamNames("bookId")
 	c2.SetParamValues(strconv.Itoa(book.ID))
 	require.NoError(t, h.Cover(c2))

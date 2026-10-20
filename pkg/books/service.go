@@ -47,6 +47,7 @@ type ListBooksOptions struct {
 	TagIDs         []int    // Filter by tag IDs
 	Language       *string  // Filter by language tag (matches exact tag and subtag variants, e.g. "en" matches "en-US")
 	IDs            []int    // Filter by specific book IDs
+	ListID         *int     // Filter to books on this list
 	Search         *string  // Search query for title/author
 	ReviewedFilter string   // "" (default = all), "needs_review", "reviewed"
 
@@ -435,6 +436,9 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	// Filter by specific book IDs
 	if len(opts.IDs) > 0 {
 		q = q.Where("b.id IN (?)", bun.List(opts.IDs))
+	}
+	if opts.ListID != nil {
+		q = q.Where("b.id IN (SELECT lb.book_id FROM list_books lb WHERE lb.list_id = ?)", *opts.ListID)
 	}
 
 	// Filter by author (person). Subquery rather than JOIN so it composes

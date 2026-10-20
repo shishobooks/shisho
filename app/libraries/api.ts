@@ -1,12 +1,6 @@
 import QueryString from "qs";
 import { toast } from "sonner";
 
-import type {
-  APIKey,
-  APIKeyShortURL,
-  CreateAPIKeyPayload,
-} from "@/types/generated/apikeys";
-
 export class ShishoAPIError extends Error {
   // The Shisho error code. Undefined when the response did not carry a
   // Shisho error body (e.g. a reverse proxy's HTML 502/504 page).
@@ -207,35 +201,6 @@ class ShishoAPI {
       body,
       signal,
     }).then((response) => this.checkStatus<T>(response));
-  }
-
-  // API Key methods
-  listApiKeys(): Promise<APIKey[]> {
-    return this.request("GET", "/user/api-keys");
-  }
-
-  createApiKey(name: string): Promise<APIKey> {
-    const payload: CreateAPIKeyPayload = { name };
-    return this.request("POST", "/user/api-keys", payload);
-  }
-
-  deleteApiKey(id: string): Promise<void> {
-    return this.request("DELETE", `/user/api-keys/${id}`);
-  }
-
-  addApiKeyPermission(id: string, permission: string): Promise<APIKey> {
-    return this.request(
-      "POST",
-      `/user/api-keys/${id}/permissions/${permission}`,
-    );
-  }
-
-  generateApiKeyShortUrl(id: string): Promise<APIKeyShortURL> {
-    return this.request("POST", `/user/api-keys/${id}/short-url`);
-  }
-
-  clearKoboSync(id: string): Promise<void> {
-    return this.request("DELETE", `/user/api-keys/${id}/kobo-sync`);
   }
 }
 

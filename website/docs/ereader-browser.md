@@ -6,32 +6,32 @@ The eReader Browser is a lightweight, server-rendered interface for downloading 
 
 ### 1. Add a Device
 
-Open the user menu and select **Security**. Under **eReader Browser Access**, click **Add Device**, enter a device name, and click **Add Device**.
+Open the user menu and select **Devices**. Click **Add Device**, enter a name, select the type that matches the e-reader (**Kobo**, **Kindle**, or **Browser** for any other e-reader), and click **Add Device**. Shisho opens the new Device's page. A Kobo that already syncs with [Kobo Sync](./kobo-sync.md) can use its existing Kobo Device. See [Devices](./users-and-permissions.md#devices) for types, credentials, and scope.
 
 ### 2. Generate the Setup URL
 
-Click **Setup** for the device. Shisho displays a short URL such as:
+Under **eReader browser** on the Device's page, click **Get Setup URL**. Shisho displays a short URL such as:
 
 ```text
 https://your-server/e/abc123
 ```
 
-The short URL is reusable for 30 minutes. Opening it redirects to a full URL under `/ereader/key/...` that contains the device API key. Expiration of the short URL does not expire the full URL.
+The short URL is reusable for 30 minutes, until you get another one for the same Device. Opening it redirects to a full URL under `/ereader/key/...` that contains the Device's credential. Expiration of the short URL does not expire the full URL. The Device's page also shows the full URL, for an e-reader where typing it is easier than following a redirect.
 
 ### 3. Bookmark the Full URL
 
 :::warning
-The redirected full URL contains the device API key. Treat it like a password. Do not share it, publish it, include it in screenshots, or bookmark it on a device you do not control. Removing the device under **Security** revokes the URL and cannot be undone. If access may be needed later, keep the device entry and protect its URL instead.
+The redirected full URL contains the Device's credential. Treat it like a password. Do not share it, publish it, include it in screenshots, or bookmark it on a device you do not control. Deleting the Device revokes the URL and cannot be undone. If access may be needed later, keep the Device and protect its URL instead.
 :::
 
-Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL.
+Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. Bookmarks saved before Devices existed keep working.
 
 ### How Long the URL Works
 
-The full URL keeps working only while all three of these hold. The same rules apply to a [Kobo Sync](./kobo-sync.md) URL.
+The full URL keeps working only while all of these hold. The same rules apply to a [Kobo Sync](./kobo-sync.md) URL.
 
-- The device still appears under **Security**. Removing it revokes the URL permanently.
-- The device owner's account is active. A [deactivated](./users-and-permissions.md#deactivate-users) owner's URL returns an unauthorized response.
+- The Device still appears under **Devices**, and its credential has not been regenerated. Deleting the Device, an administrator revoking it, or regenerating its credential revokes the URL permanently.
+- The Device owner's account is active. A [deactivated](./users-and-permissions.md#deactivate-users) owner's URL returns an unauthorized response.
 - The owner's role has Books Read. Without it, the URL returns a forbidden response, and it works again once Books Read is restored.
 
 The short setup URL refuses to redirect in the same cases.
@@ -40,7 +40,7 @@ The short setup URL refuses to redirect in the same cases.
 
 The current browser provides:
 
-- A list of libraries the device owner's user can access.
+- A list of the libraries the Device's [scope](./users-and-permissions.md#scope) reaches. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
 - EPUB, CBZ, M4B, PDF, MOBI, and AZW3 type filters. A filter shows the books with a main file of that type.
 - Book details and a separate download for every main-file edition, except on a Kindle (see [On a Kindle](#on-a-kindle)).
@@ -78,17 +78,17 @@ To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the f
 
 **Verify:** Try the bookmarked full `/ereader/key/...` URL, if one was saved.
 
-**Fix:** Keep using a valid full bookmark, or open the device's **Setup** dialog and generate another short URL.
+**Fix:** Keep using a valid full bookmark, or click **Get Setup URL** on the Device's page for another short URL.
 
 ### The Bookmark Stops Working
 
 **Symptom:** A previously working bookmark returns an unauthorized or forbidden response.
 
-**Likely cause:** The bookmark is incomplete, the device was removed, the owner was deactivated, or the owner's role lost Books Read. See [How Long the URL Works](#how-long-the-url-works).
+**Likely cause:** The bookmark is incomplete, the Device was deleted or revoked, its credential was regenerated, the owner was deactivated, or the owner's role lost Books Read. See [How Long the URL Works](#how-long-the-url-works).
 
-**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that the device still appears under **Security**. Ask an administrator to check the owner's account status and role under **Settings > Users**.
+**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that its credential matches the one on the Device's page. Ask an administrator to check the owner's account status and role under **Settings > Users**.
 
-**Fix:** If the device was removed, add it again and replace the bookmark. The old key cannot be restored. If the role lost Books Read, an administrator can add it back under **Settings > Users** by selecting the role in the **Roles** section. See [Custom Roles](./users-and-permissions.md#custom-roles). A deactivated owner cannot be reactivated from the web interface, so add a device under an active account instead, or see [Deactivate Users](./users-and-permissions.md#deactivate-users).
+**Fix:** If the credential changed, replace the bookmark with the new URL. If the Device was deleted, add it again and replace the bookmark. A deleted Device's credential cannot be restored. If the role lost Books Read, an administrator can add it back under **Settings > Users** by selecting the role in the **Roles** section. See [Custom Roles](./users-and-permissions.md#custom-roles). A deactivated owner cannot be reactivated from the web interface, so add a device under an active account instead, or see [Deactivate Users](./users-and-permissions.md#deactivate-users).
 
 ### The Page Does Not Load Through a Proxy
 
@@ -104,8 +104,8 @@ To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the f
 
 **Symptom:** The browser opens, but an expected library or book is absent, or a saved book, cover, or download link returns **not found**.
 
-**Likely cause:** The owning user lacks library access, a file-type filter is active, or the expected file is a supplement. A book or file in a library the user cannot access returns **not found**, the same as one that does not exist, so the URL does not reveal whether it exists.
+**Likely cause:** The Device's scope leaves it out, the owning user lacks library access, a file-type filter is active, or the expected file is a supplement. A book or file outside the scope or in a library the user cannot access returns **not found**, the same as one that does not exist, so the URL does not reveal whether it exists.
 
-**Verify:** Check the user's library access, clear the filter, and confirm the book has a main file.
+**Verify:** Check **Scope** on the Device's page and the user's library access, clear the filter, and confirm the book has a main file.
 
-**Fix:** Grant the intended [library access](./users-and-permissions.md) or select a matching main-file type. Supplements are not offered.
+**Fix:** Change the Device's [scope](./users-and-permissions.md#scope), grant the intended [library access](./users-and-permissions.md#library-access), or select a matching main-file type. Supplements are not offered.

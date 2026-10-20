@@ -7,7 +7,7 @@ import (
 )
 
 // userContextKey is the echo context key every authenticating middleware
-// (Authenticate, BasicAuth, and apikeys.Middleware) stores the user under.
+// (Authenticate, BasicAuth, and devices.Middleware) stores the user under.
 const userContextKey = "user"
 
 // SetUser stores the authenticated user for RequireUser to read. Only

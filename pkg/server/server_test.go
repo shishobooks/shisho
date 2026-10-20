@@ -54,7 +54,7 @@ func TestNew_RoutingBoundary(t *testing.T) {
 			}
 		}
 	}
-	for _, path := range []string{"/api/books/42/missing", "/opds/v1/epub/missing", "/ereader/key/missing/unknown", "/kobo/missing/all/unknown"} {
+	for _, path := range []string{"/api/books/42/missing", "/opds/v1/epub/missing", "/ereader/key/missing/unknown", "/kobo/missing/unknown", "/kobo/missing/all/unknown"} {
 		rec := httptest.NewRecorder()
 		srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, rec.Code, path)
@@ -163,9 +163,11 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 
 			for _, route := range []string{
 				"GET /opds/v1/:types/catalog",
-				"GET /ereader/key/:apiKey/",
+				"GET /ereader/key/:credential/",
 				"GET /e/:shortCode",
-				"GET /kobo/:apiKey/all/v1/library/sync",
+				"GET /kobo/:credential/v1/library/sync",
+				"GET /kobo/:credential/all/v1/library/sync",
+				"GET /kobo/:credential/library/:scopeId/v1/library/sync",
 				"GET /api/plugins/installed",
 				"GET /api/plugins/identifier-types",
 				"GET /api/plugins/order/:hookType",
@@ -189,6 +191,12 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/books/:id/share-links", "POST /api/books/:id/share-links",
 				"POST /api/books/:id/share-links/:linkId/revoke", "DELETE /api/books/:id/share-links/:linkId",
 				"GET /api/user/libraries",
+				// Devices can be viewed in Demo Mode; the middleware rejects
+				// every change to them.
+				"GET /api/user/devices", "POST /api/user/devices", "GET /api/user/devices/:id",
+				"PATCH /api/user/devices/:id", "DELETE /api/user/devices/:id",
+				"POST /api/user/devices/:id/credential", "POST /api/user/devices/:id/short-url",
+				"DELETE /api/user/devices/:id/kobo-sync", "GET /api/devices", "DELETE /api/devices/:id",
 			} {
 				assert.True(t, routes[route], route)
 			}
@@ -196,7 +204,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			if demo {
 				for _, path := range []string{
 					"/opds", "/opds/v1/epub/catalog", "/ereader", "/ereader/key/example/", "/e", "/e/example",
-					"/kobo", "/kobo/example/all/v1/library/sync", "/api/plugins/installed",
+					"/kobo", "/kobo/example/v1/library/sync", "/kobo/example/all/v1/library/sync", "/api/plugins/installed",
 					"/api/test/plugins/fixture-info", "/api/share/example", "/api/share/example/files/1/download",
 				} {
 					rec := httptest.NewRecorder()
@@ -218,6 +226,13 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/books/42/share-links"},
 				{http.MethodPost, "/api/books/42/share-links/1/revoke"},
 				{http.MethodDelete, "/api/books/42/share-links/1"},
+				{http.MethodPost, "/api/user/devices"},
+				{http.MethodPatch, "/api/user/devices/abc"},
+				{http.MethodDelete, "/api/user/devices/abc"},
+				{http.MethodPost, "/api/user/devices/abc/credential"},
+				{http.MethodPost, "/api/user/devices/abc/short-url"},
+				{http.MethodDelete, "/api/user/devices/abc/kobo-sync"},
+				{http.MethodDelete, "/api/devices/abc"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

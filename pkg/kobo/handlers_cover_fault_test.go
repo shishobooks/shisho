@@ -85,7 +85,7 @@ func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 			h := &handler{service: NewService(db), bookService: books.NewService(db, appsettings.NewService(db))}
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-			withKeyOwner(c)
+			withDeviceOwner(c)
 			c.SetParamNames("imageId", "w", "h")
 			c.SetParamValues(fmt.Sprintf("shisho-%d", file.ID), tt.w, tt.h)
 

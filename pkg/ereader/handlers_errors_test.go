@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -54,7 +55,8 @@ func TestEReaderHandlers_NonNumericIDReturnsNotFound(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
-			apikeys.SetKey(c, &apikeys.APIKey{Key: "key"})
+			devices.SetDevice(c, &devices.Device{Credential: "key", ScopeType: devices.ScopeAll})
+			auth.SetUser(c, &models.User{ID: 1, LibraryAccess: []*models.UserLibraryAccess{{}}})
 			var names, values []string
 			for i := 0; i < len(tt.params); i += 2 {
 				names = append(names, tt.params[i])
@@ -82,7 +84,7 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", user.ID)
 	require.NoError(t, err)
-	apiKey, err := apikeys.NewService(db).Create(ctx, user.ID, "Test Key")
+	device, err := devices.NewService(db).Create(ctx, user.ID, "Test Key", devices.DeviceTypeBrowser)
 	require.NoError(t, err)
 
 	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
@@ -99,9 +101,9 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := echo.New().NewContext(req, httptest.NewRecorder())
-	withKey(c, t, db, apiKey)
-	c.SetParamNames("apiKey", "bookId")
-	c.SetParamValues(apiKey.Key, strconv.Itoa(book.ID))
+	withDevice(c, t, db, device)
+	c.SetParamNames("credential", "bookId")
+	c.SetParamValues(device.Credential, strconv.Itoa(book.ID))
 
 	requireErrcode(t, h.Download(c), http.StatusNotFound, "not_found", "File not found.")
 }
@@ -114,5 +116,5 @@ func TestResolveShortURL_UnknownCodeReturnsErrcodesNotFound(t *testing.T) {
 	c.SetParamNames("shortCode")
 	c.SetParamValues("nope")
 
-	requireErrcode(t, ResolveShortURL(c, apikeys.NewService(db)), http.StatusNotFound, "not_found", "Short URL not found.")
+	requireErrcode(t, ResolveShortURL(c, devices.NewService(db)), http.StatusNotFound, "not_found", "Short URL not found.")
 }

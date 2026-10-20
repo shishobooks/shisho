@@ -200,7 +200,7 @@ func newKindleFixture(t *testing.T) *kindleFixture {
 
 func (f *kindleFixture) page(t *testing.T, path, userAgent string) string {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/ereader/key/"+f.key.Key+path, nil)
+	req := httptest.NewRequest(http.MethodGet, "/ereader/key/"+f.device.Credential+path, nil)
 	req.Header.Set("User-Agent", userAgent)
 	rec := httptest.NewRecorder()
 	f.e.ServeHTTP(rec, req)
@@ -383,9 +383,9 @@ func (f *downloadFixture) serveKindle(file *models.File) *httptest.ResponseRecor
 	f.t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-	withKey(c, f.t, f.db, f.apiKey)
-	c.SetParamNames("apiKey", "fileId", "filename")
-	c.SetParamValues(f.apiKey.Key, strconv.Itoa(file.ID), "book."+file.FileType)
+	withDevice(c, f.t, f.db, f.device)
+	c.SetParamNames("credential", "fileId", "filename")
+	c.SetParamValues(f.device.Credential, strconv.Itoa(file.ID), "book."+file.FileType)
 	if err := f.h.DownloadFileKindle(c); err != nil {
 		errcodes.NewHandler().Handle(err, c)
 	}

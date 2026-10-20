@@ -100,6 +100,23 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		message string
 	}{
 		{
+			name:   "device with an unknown type",
+			method: http.MethodPost, path: "/api/user/devices",
+			body:   `{"name":"Tablet","device_type":"tablet"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
+			name:   "device that does not exist",
+			method: http.MethodPatch, path: "/api/user/devices/missing",
+			body:   `{"name":"Renamed"}`,
+			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
+			name:   "device revoke for a device that does not exist",
+			method: http.MethodDelete, path: "/api/devices/missing",
+			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
 			name:   "cache settings with a negative limit",
 			method: http.MethodPut, path: "/api/settings/cache",
 			body:   `{"cover_thumbnails":{"max_size_gb":-1,"unlimited":false}}`,
@@ -381,38 +398,38 @@ func TestAPIContract_ResponseShapes(t *testing.T) {
 	assert.Equal(t, "Library", lib["name"])
 }
 
-// API keys serialize with snake_case keys like every other /api payload.
-func TestAPIContract_APIKeyJSONIsSnakeCase(t *testing.T) {
+// Devices serialize with snake_case keys like every other /api payload, and
+// the admin listing never carries a credential.
+func TestAPIContract_DeviceJSONIsSnakeCase(t *testing.T) {
 	t.Parallel()
 	f := newResourceDeleteFixture(t)
 
-	created := f.request(http.MethodPost, "/api/user/api-keys", `{"name":"Reader"}`, http.StatusCreated)
-	var key map[string]any
-	require.NoError(t, json.Unmarshal([]byte(created), &key))
-	for _, k := range []string{"id", "user_id", "name", "key", "created_at", "updated_at", "last_accessed_at", "permissions"} {
-		assert.Contains(t, key, k)
+	created := f.request(http.MethodPost, "/api/user/devices", `{"name":"Reader","device_type":"kobo"}`, http.StatusCreated)
+	var device map[string]any
+	require.NoError(t, json.Unmarshal([]byte(created), &device))
+	for _, k := range []string{"id", "user_id", "name", "device_type", "credential", "scope_type", "scope_library_id", "scope_list_id", "url_scope_pending", "connections", "created_at", "updated_at", "last_accessed_at"} {
+		assert.Contains(t, device, k)
 	}
-	for _, k := range []string{"userId", "createdAt", "updatedAt", "lastAccessedAt"} {
-		assert.NotContains(t, key, k)
+	for _, k := range []string{"userId", "deviceType", "createdAt", "updatedAt", "lastAccessedAt", "urlScopePending"} {
+		assert.NotContains(t, device, k)
 	}
 
-	id, ok := key["id"].(string)
+	id, ok := device["id"].(string)
 	require.True(t, ok)
-	withPermission := f.request(http.MethodPost, fmt.Sprintf("/api/user/api-keys/%s/permissions/%s", id, "ereader_browser"), "", http.StatusOK)
-	var keyWithPermission struct {
-		Permissions []map[string]any `json:"permissions"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(withPermission), &keyWithPermission))
-	require.Len(t, keyWithPermission.Permissions, 1)
-	assert.Contains(t, keyWithPermission.Permissions[0], "api_key_id")
-	assert.Contains(t, keyWithPermission.Permissions[0], "created_at")
-
-	shortURL := f.request(http.MethodPost, fmt.Sprintf("/api/user/api-keys/%s/short-url", id), "", http.StatusCreated)
+	shortURL := f.request(http.MethodPost, fmt.Sprintf("/api/user/devices/%s/short-url", id), "", http.StatusCreated)
 	var short map[string]any
 	require.NoError(t, json.Unmarshal([]byte(shortURL), &short))
-	for _, k := range []string{"id", "api_key_id", "short_code", "expires_at", "created_at"} {
+	for _, k := range []string{"id", "device_id", "short_code", "expires_at", "created_at"} {
 		assert.Contains(t, short, k)
 	}
+
+	all := f.request(http.MethodGet, "/api/devices", "", http.StatusOK)
+	var listed []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(all), &listed))
+	require.Len(t, listed, 1)
+	assert.Contains(t, listed[0], "owner")
+	assert.NotContains(t, listed[0], "credential")
+	assert.NotContains(t, all, device["credential"])
 }
 
 // A failed count or alias lookup fails the request with a 500 rather than

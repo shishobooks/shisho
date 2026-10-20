@@ -2,32 +2,27 @@ package kobo
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all Kobo sync routes.
 func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service) {
-	apiKeyService := apikeys.NewService(db)
+	deviceService := devices.NewService(db)
 	syncService := NewService(db)
 
-	mw := apikeys.NewMiddleware(apiKeyService)
+	deviceAuth := devices.NewMiddleware(deviceService).DeviceAuth(devices.ConnectionKoboSync)
 	h := newHandler(syncService, bookService, downloadCache)
 
-	// Kobo routes with scope-based URL structure
-	// "all" scope: /kobo/:apiKey/all/v1/...
-	koboAll := e.Group("/kobo/:apiKey/all", mw.APIKeyAuth(apikeys.PermissionKoboSync), ScopeParser("all"))
-	registerKoboEndpoints(koboAll, h)
+	// /kobo/:credential/v1/... syncs the Device's scope.
+	registerKoboEndpoints(e.Group("/kobo/:credential", deviceAuth), h)
 
-	// "library" scope: /kobo/:apiKey/library/:scopeId/v1/...
-	koboLibrary := e.Group("/kobo/:apiKey/library/:scopeId", mw.APIKeyAuth(apikeys.PermissionKoboSync), ScopeParser("library"))
-	registerKoboEndpoints(koboLibrary, h)
-
-	// "list" scope: /kobo/:apiKey/list/:scopeId/v1/...
-	koboList := e.Group("/kobo/:apiKey/list/:scopeId", mw.APIKeyAuth(apikeys.PermissionKoboSync), ScopeParser("list"))
-	registerKoboEndpoints(koboList, h)
+	// The sync URLs API keys used, with a scope segment. See legacyURLScope.
+	registerKoboEndpoints(e.Group("/kobo/:credential/all", deviceAuth, legacyURLScope(deviceService, devices.ScopeAll)), h)
+	registerKoboEndpoints(e.Group("/kobo/:credential/library/:scopeId", deviceAuth, legacyURLScope(deviceService, devices.ScopeLibrary)), h)
+	registerKoboEndpoints(e.Group("/kobo/:credential/list/:scopeId", deviceAuth, legacyURLScope(deviceService, devices.ScopeList)), h)
 }
 
 // registerKoboEndpoints registers the Kobo API endpoints on a group.

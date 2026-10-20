@@ -69,7 +69,7 @@ func TestHandleDownload_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			e := echo.New()
 			req := httptest.NewRequest(method, "/", nil)
 			c := e.NewContext(req, httptest.NewRecorder())
-			withKeyOwner(c)
+			withDeviceOwner(c)
 			c.SetParamNames("bookId")
 			c.SetParamValues(ShishoID(file.ID))
 

@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -48,7 +48,7 @@ func TestDownloadFileHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T
 			require.NoError(t, err)
 			_, err = db.ExecContext(ctx, "INSERT INTO user_library_access (user_id, library_id) VALUES (?, NULL)", user.ID)
 			require.NoError(t, err)
-			apiKey, err := apikeys.NewService(db).Create(ctx, user.ID, "Test Key")
+			device, err := devices.NewService(db).Create(ctx, user.ID, "Test Key", devices.DeviceTypeBrowser)
 			require.NoError(t, err)
 
 			lib := &models.Library{
@@ -88,9 +88,9 @@ func TestDownloadFileHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T
 			e := echo.New()
 			req := httptest.NewRequest(tt.method, "/", nil)
 			c := e.NewContext(req, httptest.NewRecorder())
-			withKey(c, t, db, apiKey)
-			c.SetParamNames("apiKey", "fileId")
-			c.SetParamValues(apiKey.Key, strconv.Itoa(file.ID))
+			withDevice(c, t, db, device)
+			c.SetParamNames("credential", "fileId")
+			c.SetParamValues(device.Credential, strconv.Itoa(file.ID))
 
 			if tt.kepub {
 				err = h.DownloadFileKepub(c)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,7 +114,7 @@ func TestGetScopedFiles_TwoEPUBsSyncsBoth(t *testing.T) {
 	file1 := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/two-epubs/edition1.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	file2 := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/two-epubs/edition2.epub", models.FileTypeEPUB, models.FileRoleMain, 2000)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -128,7 +129,7 @@ func TestGetScopedFiles_EPUBPlusM4BSyncsOnlyEPUB(t *testing.T) {
 	epub := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/epub-m4b/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/epub-m4b/book.m4b", models.FileTypeM4B, models.FileRoleMain, 5000)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -143,7 +144,7 @@ func TestGetScopedFiles_OnlyM4BSyncsNothing(t *testing.T) {
 	book := createBook(ctx, t, bookSvc, library.ID, "M4B Only")
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/m4b-only/audiobook.m4b", models.FileTypeM4B, models.FileRoleMain, 5000)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -157,7 +158,7 @@ func TestGetScopedFiles_SingleEPUBSyncsNormally(t *testing.T) {
 	book := createBook(ctx, t, bookSvc, library.ID, "Single EPUB")
 	epub := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/single-epub/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -173,7 +174,7 @@ func TestGetScopedFiles_SupplementFilesExcluded(t *testing.T) {
 	mainFile := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/supplement/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/supplement/guide.epub", models.FileTypeEPUB, models.FileRoleSupplement, 500)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -189,7 +190,7 @@ func TestGetScopedFiles_CBZFilesSyncToo(t *testing.T) {
 	epub := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/epub-cbz/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	cbz := createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/epub-cbz/book.cbz", models.FileTypeCBZ, models.FileRoleMain, 2000)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -208,7 +209,7 @@ func TestGetScopedFiles_MOBIAndAZW3Excluded(t *testing.T) {
 	kindleOnly := createBook(ctx, t, bookSvc, library.ID, "Kindle Only")
 	_ = createFile(ctx, t, bookSvc, library.ID, kindleOnly.ID, "/tmp/test/kindle-only/book.azw3", models.FileTypeAZW3, models.FileRoleMain, 3000)
 
-	scope := &SyncScope{Type: "all"}
+	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -275,7 +276,7 @@ func TestGetScopedFiles_ListScopeFiltersByLibraryAccess(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, other.ID, theirs.ID, "/tmp/test/list/theirs.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	list := insertList(ctx, t, koboSvc, user.ID, mine.ID, theirs.ID)
 
-	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	scope := devices.Scope{Type: devices.ScopeList, ListID: &list.ID}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -308,7 +309,7 @@ func TestGetScopedFiles_ListScopeWithAllLibraryAccess(t *testing.T) {
 	theirsFile := createFile(ctx, t, bookSvc, other.ID, theirs.ID, "/tmp/test/list-all/theirs.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	list := insertList(ctx, t, koboSvc, user.ID, mine.ID, theirs.ID)
 
-	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	scope := devices.Scope{Type: devices.ScopeList, ListID: &list.ID}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -327,7 +328,7 @@ func TestGetScopedFiles_ListScopeWithoutLibraryAccessSyncsNothing(t *testing.T) 
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-none/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	list := insertList(ctx, t, koboSvc, user.ID, book.ID)
 
-	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	scope := devices.Scope{Type: devices.ScopeList, ListID: &list.ID}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -345,7 +346,7 @@ func TestGetScopedFiles_ListScopeUnsharedListSyncsNothing(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-unshared/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 	list := insertList(ctx, t, koboSvc, owner.ID, book.ID)
 
-	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	scope := devices.Scope{Type: devices.ScopeList, ListID: &list.ID}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -373,7 +374,7 @@ func TestGetScopedFiles_ListScopeSharedListSyncs(t *testing.T) {
 	}).Exec(ctx)
 	require.NoError(t, err)
 
-	scope := &SyncScope{Type: "list", ListID: &list.ID}
+	scope := devices.Scope{Type: devices.ScopeList, ListID: &list.ID}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -388,7 +389,7 @@ func TestGetScopedFiles_ListScopeMissingListSyncsNothing(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/list-missing/book.epub", models.FileTypeEPUB, models.FileRoleMain, 1000)
 
 	missingID := 999999
-	scope := &SyncScope{Type: "list", ListID: &missingID}
+	scope := devices.Scope{Type: devices.ScopeList, ListID: &missingID}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), scope)
 	require.NoError(t, err)
 
@@ -406,7 +407,7 @@ func TestGetScopedFiles_ScopeWithoutIDSyncsNothing(t *testing.T) {
 	// A library or list scope missing its id must fail closed instead of
 	// falling through to every file.
 	for _, scopeType := range []string{"library", "list"} {
-		files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), &SyncScope{Type: scopeType})
+		files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), devices.Scope{Type: scopeType})
 		require.NoError(t, err)
 		assert.NotNil(t, files, scopeType)
 		assert.Empty(t, files, scopeType)

@@ -135,6 +135,52 @@ Any signed-in user can open the user menu, select **Security**, and use **Change
 
 A user with Users Write permission can open another account under **Settings > Users**, select **Reset Password**, and optionally select **Require user to reset password on next login**. A user marked for forced reset must choose a new password before continuing in Shisho.
 
+## Devices
+
+A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md) and the [eReader Browser](./ereader-browser.md) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
+
+### Device Types
+
+Choose the type when adding a Device. It decides which connections the Device can use:
+
+| Type | Connections |
+|------|-------------|
+| **Kobo** | Kobo sync and the eReader browser |
+| **Kindle** | eReader browser |
+| **Browser** | eReader browser, for any other e-reader's web browser |
+
+The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response. To change a Device's type, add a new Device.
+
+### Credential
+
+Each Device has one credential that all its connections use. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page always shows the credential, with a copy button.
+
+:::warning[Regenerating a Credential]
+**Regenerate** on a Device's page replaces its credential immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, and any unexpired setup URL stops redirecting. Set up each connection again with the new credential. Regenerate when a credential may have leaked; delete the Device when the hardware is lost for good.
+:::
+
+Treat the credential, and every URL that contains it, like a password.
+
+### Scope
+
+A Device's scope decides which books it reaches, through every connection:
+
+| Scope | Books |
+|-------|-------|
+| **All Books** | Books in every library the Device's owner can access |
+| **Library** | Books in one library the owner can access |
+| **List** | Books on one list the owner owns or that is shared with them, in libraries the owner can access |
+
+A list shared with you can hold books from libraries you cannot access; those books stay out of the scope. If the scope's library or list is deleted, or the list stops being shared with you, the Device reaches no books until you choose another scope. A scope change applies on the Device's next request, without changing anything on the device itself.
+
+### Delete a Device
+
+Deleting a Device under **Devices** cannot be undone. Every connection stops working immediately, and Shisho forgets what it has synced to the Device. To use the hardware again, add a new Device and set it up again.
+
+### Manage Every User's Devices
+
+A user with Users Read can open **Settings > Devices** to see every user's Devices: their names, types, connections, owners, and when each was last used. The list never shows credentials, so an administrator cannot sign in as another user's Device. A user with Users Write can **Revoke** a Device, which deletes it as above, for example to cut off a lost device for someone.
+
 ## Deactivate Users
 
 :::warning[Verify the Account Before Deactivation]
@@ -143,7 +189,7 @@ Deactivation immediately prevents that user from logging in. An [OPDS](./opds.md
 
 A user with Users Write permission can select another active account and choose **Deactivate User**. The account and its historical records remain stored.
 
-Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can revoke or delete them. It disables the user's API keys too, so their [Kobo Sync](./kobo-sync.md#how-long-the-url-works) and [eReader Browser](./ereader-browser.md#how-long-the-url-works) URLs stop working.
+Deactivation also stops every [Share Link](./sharing.md#when-a-link-stops-working) the user created. The links stay listed in each book's Share dialog, where anyone with Shares Write can revoke or delete them. It disables the user's [Devices](#devices) too, so their [Kobo Sync](./kobo-sync.md#how-long-the-url-works) and [eReader Browser](./ereader-browser.md#how-long-the-url-works) URLs stop working.
 
 ## Sessions
 

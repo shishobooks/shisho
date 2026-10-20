@@ -1,4 +1,11 @@
-import { KeyRound, List, LogOut, User, UserCog } from "lucide-react";
+import {
+  KeyRound,
+  List,
+  LogOut,
+  TabletSmartphone,
+  User,
+  UserCog,
+} from "lucide-react";
 import { useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -55,6 +62,12 @@ const UserMenu = () => {
           <Link to="/lists">
             <List className="h-4 w-4" />
             Lists
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/user/devices">
+            <TabletSmartphone className="h-4 w-4" />
+            Devices
           </Link>
         </DropdownMenuItem>
         {!demoMode && (

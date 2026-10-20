@@ -15,7 +15,6 @@ import (
 	"github.com/robinjoseph08/golib/echo/v4/health"
 	"github.com/robinjoseph08/golib/echo/v4/middleware/recovery"
 	"github.com/robinjoseph08/golib/logger"
-	"github.com/shishobooks/shisho/pkg/apikeys"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/audnexus"
 	"github.com/shishobooks/shisho/pkg/auth"
@@ -26,6 +25,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/ereader"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -156,8 +156,8 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	}
 	roles.RegisterRoutes(api, db, authMiddleware)
 
-	// API Keys routes
-	apikeys.RegisterRoutes(api, db, authMiddleware)
+	// Device management routes
+	devices.RegisterRoutes(api, db, authMiddleware)
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
@@ -167,10 +167,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		// Register OPDS routes with Basic Auth
 		opds.RegisterRoutes(e, db, authMiddleware, svcs.dlCache, svcs.books)
 
-		// Register eReader routes (API key auth for stock browser support)
+		// Register eReader routes (Device credential auth for stock browser support)
 		ereader.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 
-		// Register Kobo sync routes (API key auth for Kobo device sync)
+		// Register Kobo sync routes (Device credential auth for Kobo sync)
 		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 
 		// Register the anonymous Share Link recipient routes
@@ -245,7 +245,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 // and injects into every route family that needs them. The app settings,
 // plugin, and Share Link services hold only the database handle but are
 // shared so each has one construction site. Other database-only services
-// (search, aliases, libraries, jobs, settings, API keys, and the entity
+// (search, aliases, libraries, jobs, settings, Devices, and the entity
 // services) are cheap and stateless, so route packages may still build those
 // locally.
 type sharedServices struct {
