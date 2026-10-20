@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
@@ -66,8 +67,8 @@ func newKoboScopeFixture(t *testing.T) *koboScopeFixture {
 	f.device, err = devices.NewService(db).Create(ctx, f.user.ID, "Kobo", devices.DeviceTypeKobo)
 	require.NoError(t, err)
 
-	f.bookA, f.fileA = insertScopeBookWithFile(ctx, t, db, f.libA.ID, "Alpha", models.FileTypeEPUB, models.FileRoleMain)
-	f.bookB, f.fileB = insertScopeBookWithFile(ctx, t, db, f.libB.ID, "Bravo", models.FileTypeEPUB, models.FileRoleMain)
+	f.bookA, f.fileA = insertScopeBookWithFile(ctx, t, db, f.libA.ID, "Alpha", models.FileTypeEPUB)
+	f.bookB, f.fileB = insertScopeBookWithFile(ctx, t, db, f.libB.ID, "Bravo", models.FileTypeEPUB)
 
 	f.e = echo.New()
 	f.e.HTTPErrorHandler = errcodes.NewHandler().Handle
@@ -127,11 +128,11 @@ func (f *koboScopeFixture) setScope(t *testing.T, scope devices.Scope) {
 	require.NoError(t, err)
 }
 
-// downloadPaths returns both download routes for a file under prefix.
-func downloadPaths(prefix string, fileID int) []string {
+// downloadPaths returns both download routes for an entry under prefix.
+func downloadPaths(prefix, entryID string) []string {
 	return []string{
-		prefix + "/v1/books/" + ShishoID(fileID) + "/file/epub",
-		prefix + "/download/" + ShishoID(fileID) + "/kepub",
+		prefix + "/v1/books/" + entryID + "/file/epub",
+		prefix + "/download/" + entryID + "/kepub",
 	}
 }
 
@@ -148,9 +149,9 @@ func insertScopeLibrary(ctx context.Context, t *testing.T, db *bun.DB, name stri
 	return lib
 }
 
-// insertScopeBookWithFile creates a book with one file that exists on disk
+// insertScopeBookWithFile creates a book with one main file that exists on disk
 // and has a cover image next to it.
-func insertScopeBookWithFile(ctx context.Context, t *testing.T, db *bun.DB, libraryID int, title, fileType, fileRole string) (*models.Book, *models.File) {
+func insertScopeBookWithFile(ctx context.Context, t *testing.T, db *bun.DB, libraryID int, title, fileType string) (*models.Book, *models.File) {
 	t.Helper()
 	dir := t.TempDir()
 	book := &models.Book{
@@ -166,14 +167,23 @@ func insertScopeBookWithFile(ctx context.Context, t *testing.T, db *bun.DB, libr
 	}
 	_, err := db.NewInsert().Model(book).Exec(ctx)
 	require.NoError(t, err)
-	file := insertScopeFile(ctx, t, db, book, dir, title, fileType, fileRole)
+	file := insertScopeFile(ctx, t, db, book, dir, title, fileType, models.FileRoleMain)
 	return book, file
 }
 
 func insertScopeFile(ctx context.Context, t *testing.T, db *bun.DB, book *models.Book, dir, name, fileType, fileRole string) *models.File {
 	t.Helper()
-	filePath := filepath.Join(dir, name+"."+fileType)
-	require.NoError(t, os.WriteFile(filePath, []byte("not a real "+fileType), 0o600))
+	// EPUBs and CBZs are real, since the Kobo preset converts them.
+	var filePath string
+	switch fileType {
+	case models.FileTypeEPUB:
+		filePath = testgen.GenerateEPUB(t, dir, name+".epub", testgen.EPUBOptions{Title: name})
+	case models.FileTypeCBZ:
+		filePath = testgen.GenerateCBZ(t, dir, name+".cbz", testgen.CBZOptions{Title: name})
+	default:
+		filePath = filepath.Join(dir, name+"."+fileType)
+		require.NoError(t, os.WriteFile(filePath, []byte("not a real "+fileType), 0o600))
+	}
 
 	coverFilename := name + "." + fileType + ".cover.jpg"
 	coverFile, err := os.Create(filepath.Join(dir, coverFilename))
@@ -199,10 +209,11 @@ func insertScopeFile(ctx context.Context, t *testing.T, db *bun.DB, book *models
 	return file
 }
 
-// withDeviceOwner stores an all-libraries Kobo Device and its owner in c, as
-// DeviceAuth does, for tests that call a handler directly.
+// withDeviceOwner stores newSyncPointTestDB's Device, as an all-libraries
+// Kobo on its preset, and its owner in c, as DeviceAuth does, for tests that
+// call a handler directly.
 func withDeviceOwner(c echo.Context) {
-	devices.SetDevice(c, &devices.Device{ID: "kobo", UserID: 1, DeviceType: devices.DeviceTypeKobo, ScopeType: devices.ScopeAll})
+	devices.SetDevice(c, &devices.Device{ID: testDeviceID, UserID: 1, DeviceType: devices.DeviceTypeKobo, ScopeType: devices.ScopeAll, DeliveryRulesMode: devices.RulesModePreset})
 	auth.SetUser(c, &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{}}})
 }
 
@@ -221,7 +232,7 @@ func TestHandleDownload_FileOutsideLibraryScope_Returns404(t *testing.T) {
 	f := newKoboScopeFixture(t)
 	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID})
 
-	for _, path := range downloadPaths(f.prefix(), f.fileB.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.addEntry(t, f.fileB.ID, models.FileTypeKePub)) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			t.Run(method+" "+path, func(t *testing.T) {
 				t.Parallel()
@@ -231,7 +242,7 @@ func TestHandleDownload_FileOutsideLibraryScope_Returns404(t *testing.T) {
 	}
 
 	// Positive control: the in-scope file still downloads on both routes.
-	for _, path := range downloadPaths(f.prefix(), f.fileA.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.addEntry(t, f.fileA.ID, models.FileTypeKePub)) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			assert.Equal(t, http.StatusOK, f.serve(method, path).Code, "%s %s", method, path)
 		}
@@ -245,12 +256,12 @@ func TestHandleDownload_AllScope_FileInInaccessibleLibrary_Returns404(t *testing
 	f := newKoboScopeFixture(t)
 	f.restrictToLibrary(t, f.libA.ID)
 
-	for _, path := range downloadPaths(f.prefix(), f.fileB.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.addEntry(t, f.fileB.ID, models.FileTypeKePub)) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			assertFileNotFound(t, f.serve(method, path), method)
 		}
 	}
-	for _, path := range downloadPaths(f.prefix(), f.fileA.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.addEntry(t, f.fileA.ID, models.FileTypeKePub)) {
 		assert.Equal(t, http.StatusOK, f.serve(http.MethodGet, path).Code, path)
 	}
 }
@@ -262,13 +273,13 @@ func TestHandleDownload_ListScope_FileNotInList_Returns404(t *testing.T) {
 	list := f.insertList(t, f.bookA.ID)
 	f.setScope(t, devices.Scope{Type: devices.ScopeList, ListID: &list.ID})
 
-	for _, path := range downloadPaths(f.prefix(), f.fileB.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.addEntry(t, f.fileB.ID, models.FileTypeKePub)) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			assertFileNotFound(t, f.serve(method, path), method)
 		}
 	}
 	// Positive control: the listed book's file downloads.
-	for _, path := range downloadPaths(f.prefix(), f.fileA.ID) {
+	for _, path := range downloadPaths(f.prefix(), f.addEntry(t, f.fileA.ID, models.FileTypeKePub)) {
 		assert.Equal(t, http.StatusOK, f.serve(http.MethodGet, path).Code, path)
 	}
 }
@@ -279,10 +290,10 @@ func TestHandleCover_FileOutsideScope_Returns404(t *testing.T) {
 	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID})
 	prefix := f.prefix()
 
-	rec := f.serve(http.MethodGet, prefix+"/v1/books/"+ShishoID(f.fileB.ID)+"/thumbnail/100/150/false/image.jpg")
+	rec := f.serve(http.MethodGet, prefix+"/v1/books/"+f.addEntry(t, f.fileB.ID, models.FileTypeKePub)+"/thumbnail/100/150/false/image.jpg")
 	assertFileNotFound(t, rec, http.MethodGet)
 
-	rec = f.serve(http.MethodGet, prefix+"/v1/books/"+ShishoID(f.fileA.ID)+"/thumbnail/100/150/false/image.jpg")
+	rec = f.serve(http.MethodGet, prefix+"/v1/books/"+f.addEntry(t, f.fileA.ID, models.FileTypeKePub)+"/thumbnail/100/150/false/image.jpg")
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
@@ -292,11 +303,11 @@ func TestHandleMetadata_FileOutsideScope_Returns404(t *testing.T) {
 	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID})
 	prefix := f.prefix()
 
-	rec := f.serve(http.MethodGet, prefix+"/v1/library/"+ShishoID(f.fileB.ID)+"/metadata")
+	rec := f.serve(http.MethodGet, prefix+"/v1/library/"+f.addEntry(t, f.fileB.ID, models.FileTypeKePub)+"/metadata")
 	assertFileNotFound(t, rec, http.MethodGet)
 	assert.NotContains(t, rec.Body.String(), "Bravo", "metadata of an out-of-scope file must not leak")
 
-	rec = f.serve(http.MethodGet, prefix+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
+	rec = f.serve(http.MethodGet, prefix+"/v1/library/"+f.addEntry(t, f.fileA.ID, models.FileTypeKePub)+"/metadata")
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Alpha")
 }
@@ -310,7 +321,7 @@ func TestKoboDeviceAuth_InactiveUser_Returns401(t *testing.T) {
 
 	for _, path := range []string{
 		f.prefix() + "/v1/library/sync",
-		downloadPaths(f.prefix(), f.fileA.ID)[0],
+		downloadPaths(f.prefix(), f.addEntry(t, f.fileA.ID, models.FileTypeKePub))[0],
 	} {
 		assert.Equal(t, http.StatusUnauthorized, f.serve(http.MethodGet, path).Code, path)
 	}
@@ -329,7 +340,7 @@ func TestKoboDeviceAuth_RoleWithoutBooksRead_Returns403(t *testing.T) {
 
 	for _, path := range []string{
 		f.prefix() + "/v1/library/sync",
-		downloadPaths(f.prefix(), f.fileA.ID)[0],
+		downloadPaths(f.prefix(), f.addEntry(t, f.fileA.ID, models.FileTypeKePub))[0],
 	} {
 		assert.Equal(t, http.StatusForbidden, f.serve(http.MethodGet, path).Code, path)
 	}

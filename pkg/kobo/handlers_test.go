@@ -50,9 +50,9 @@ func TestHandleInitialization_ReturnsNativeResourcesWithoutProxying(t *testing.T
 func TestCombineChanges_OrdersDeterministically(t *testing.T) {
 	t.Parallel()
 	changes := &SyncChanges{
-		Added:   []ScopedFile{{FileID: 5}, {FileID: 1}, {FileID: 3}},
-		Changed: []ScopedFile{{FileID: 7}, {FileID: 4}},
-		Removed: []ScopedFile{{FileID: 9}, {FileID: 2}},
+		Added:   []ScopedFile{{FileID: 5, EntryID: "shisho-5"}, {FileID: 1, EntryID: "shisho-1"}, {FileID: 3, EntryID: "shisho-3"}},
+		Changed: []ScopedFile{{FileID: 7, EntryID: "shisho-7"}, {FileID: 4, EntryID: "shisho-4"}},
+		Removed: []ScopedFile{{FileID: 9, EntryID: "shisho-9"}, {FileID: 2, EntryID: "shisho-2"}},
 	}
 
 	entries := combineChanges(changes)
@@ -126,7 +126,7 @@ func TestBuildBookMetadata(t *testing.T) {
 		FilesizeBytes: 1024,
 	}
 
-	metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+	metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "", "http://localhost:8080/kobo/key123/all")
 	assert.Equal(t, "Test Book", metadata.Title)
 	assert.Equal(t, "shisho-1", metadata.EntitlementID)
 	assert.Len(t, metadata.DownloadUrls, 1)
@@ -135,7 +135,7 @@ func TestBuildBookMetadata(t *testing.T) {
 
 func TestBuildRemovedBookMetadata_HasRequiredFields(t *testing.T) {
 	t.Parallel()
-	m := buildRemovedBookMetadata(42)
+	m := buildRemovedBookMetadata("shisho-42")
 	bookID := "shisho-42"
 	assert.Equal(t, bookID, m.EntitlementID)
 	assert.Equal(t, bookID, m.RevisionID)
@@ -153,7 +153,7 @@ func TestBuildBookMetadata_CoverImageIDIncludesCacheKey(t *testing.T) {
 	book := &models.Book{ID: 1, Title: "Test Book"}
 	file := &models.File{ID: 51, FilesizeBytes: 1024}
 
-	metadata := buildBookMetadata(book, file, "abc12345", "http://localhost/kobo/k/all")
+	metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "abc12345", "http://localhost/kobo/k/all")
 
 	assert.Equal(t, "shisho-51-abc12345", metadata.CoverImageID,
 		"CoverImageID must include cache key suffix to bust device thumbnail cache")
@@ -170,7 +170,7 @@ func TestBuildBookMetadata_NoCoverCacheKey(t *testing.T) {
 	book := &models.Book{ID: 1, Title: "Test Book"}
 	file := &models.File{ID: 51, FilesizeBytes: 1024}
 
-	metadata := buildBookMetadata(book, file, "", "http://localhost/kobo/k/all")
+	metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "", "http://localhost/kobo/k/all")
 
 	assert.Equal(t, "shisho-51", metadata.CoverImageID,
 		"CoverImageID falls back to bare ID when no cache key is supplied")
@@ -182,7 +182,7 @@ func TestBuildBookMetadata_WithSubtitle(t *testing.T) {
 	book := &models.Book{ID: 1, Title: "Test Book", Subtitle: &subtitle}
 	file := &models.File{ID: 1, FilesizeBytes: 1024}
 
-	metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+	metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "", "http://localhost:8080/kobo/key123/all")
 	assert.Equal(t, subtitle, metadata.SubTitle)
 }
 
@@ -193,7 +193,7 @@ func TestBuildBookMetadata_NamedFileUsesItsNameAsTitle(t *testing.T) {
 	book := &models.Book{ID: 1, Title: "Harry Potter and the Philosopher's Stone", Subtitle: &subtitle}
 	file := &models.File{ID: 1, FilesizeBytes: 1024, Name: &name}
 
-	metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+	metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "", "http://localhost:8080/kobo/key123/all")
 	assert.Equal(t, name, metadata.Title)
 	assert.Equal(t, subtitle, metadata.SubTitle, "the subtitle still comes from the book")
 }
@@ -205,7 +205,7 @@ func TestBuildBookMetadata_UnnamedFileUsesBookTitle(t *testing.T) {
 		book := &models.Book{ID: 1, Title: "Harry Potter and the Philosopher's Stone"}
 		file := &models.File{ID: 1, FilesizeBytes: 1024, Name: name}
 
-		metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+		metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "", "http://localhost:8080/kobo/key123/all")
 		assert.Equal(t, "Harry Potter and the Philosopher's Stone", metadata.Title)
 	}
 }
@@ -237,7 +237,7 @@ func TestBuildBookMetadata_WithRelations(t *testing.T) {
 		FilesizeBytes: 2048,
 	}
 
-	metadata := buildBookMetadata(book, file, "", "http://localhost:8080/kobo/key123/all")
+	metadata := buildBookMetadata(book, file, ShishoID(file.ID), models.FileTypeKePub, "", "http://localhost:8080/kobo/key123/all")
 	assert.Equal(t, "Test Book With Relations", metadata.Title)
 	assert.Equal(t, "A test description", metadata.Description)
 	assert.Len(t, metadata.ContributorRoles, 1)
@@ -246,4 +246,25 @@ func TestBuildBookMetadata_WithRelations(t *testing.T) {
 	assert.Equal(t, "Test Series", metadata.Series.Name)
 	assert.InDelta(t, 3.0, metadata.Series.Number, 0.001, "Kobo numeric metadata uses the range start only")
 	assert.InDelta(t, 3.0, metadata.Series.NumberFloat, 0.001, "Kobo floating-point metadata uses the range start only")
+}
+
+// A Kobo is told KEPUB for a KePub, and EPUB3 or EPUB3FL for an EPUB, never
+// EPUB, which it does not offer. An EPUB made from a CBZ has a fixed layout.
+func TestBuildBookMetadata_DownloadFormat(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		sourceType, deliveredType, want string
+	}{
+		{models.FileTypeEPUB, models.FileTypeKePub, "KEPUB"},
+		{models.FileTypeCBZ, models.FileTypeKePub, "KEPUB"},
+		{models.FileTypeEPUB, models.FileTypeEPUB, "EPUB3"},
+		{models.FileTypeCBZ, models.FileTypeEPUB, "EPUB3FL"},
+	} {
+		book := &models.Book{ID: 1, Title: "Book"}
+		file := &models.File{ID: 1, FileType: tt.sourceType, FilesizeBytes: 1024}
+		metadata := buildBookMetadata(book, file, "shisho-eabc", tt.deliveredType, "", "http://localhost/kobo/k")
+		require.Len(t, metadata.DownloadUrls, 1)
+		assert.Equal(t, tt.want, metadata.DownloadUrls[0].Format, "%s as %s", tt.sourceType, tt.deliveredType)
+		assert.Equal(t, "shisho-eabc", metadata.EntitlementID)
+	}
 }

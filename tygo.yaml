@@ -133,6 +133,13 @@ packages:
     include_files:
       - model.go
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/reach"
+    output_path: "app/types/generated/reach.ts"
+    frontmatter: |
+      import { DeliveredFileType, FileType } from "@/types";
+      import { DeliveryRulesMode, DeviceType } from "@/types/generated/devices";
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/delivery"
     output_path: "app/types/generated/delivery.ts"
     frontmatter: |

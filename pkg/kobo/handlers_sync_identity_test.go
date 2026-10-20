@@ -46,9 +46,11 @@ func (f *koboScopeFixture) sync(t *testing.T, token string) ([]syncItem, string)
 	return items, rec.Header().Get("X-Kobo-SyncToken")
 }
 
-// itemFor returns the single item whose entitlement id is the given file's.
-func itemFor(t *testing.T, items []syncItem, fileID int) syncItem {
+// itemFor returns the single item whose entitlement id is the entry that
+// holds the given file.
+func (f *koboScopeFixture) itemFor(t *testing.T, items []syncItem, fileID int) syncItem {
 	t.Helper()
+	entryID := f.entryID(t, fileID)
 	var found []syncItem
 	for _, item := range items {
 		body := item.NewEntitlement
@@ -56,7 +58,7 @@ func itemFor(t *testing.T, items []syncItem, fileID int) syncItem {
 			body = item.ChangedEntitlement
 		}
 		require.NotNil(t, body)
-		if body.BookEntitlement["Id"] == ShishoID(fileID) {
+		if body.BookEntitlement["Id"] == entryID {
 			found = append(found, item)
 		}
 	}
@@ -73,13 +75,13 @@ func entitlementRevisionID(t *testing.T, body *syncItemBody) string {
 }
 
 // assertChangedUnder checks that item is a full ChangedEntitlement for the
-// file under the given RevisionId, carrying metadata for an in-place update.
-func assertChangedUnder(t *testing.T, item syncItem, fileID int, rev string) {
+// entry under the given RevisionId, carrying metadata for an in-place update.
+func assertChangedUnder(t *testing.T, item syncItem, entryID string, rev string) {
 	t.Helper()
 	require.Nil(t, item.NewEntitlement, "a change must not go out as a NewEntitlement")
 	require.NotNil(t, item.ChangedEntitlement)
 	ent := item.ChangedEntitlement.BookEntitlement
-	assert.Equal(t, ShishoID(fileID), ent["Id"])
+	assert.Equal(t, entryID, ent["Id"])
 	assert.Equal(t, rev, ent["RevisionId"])
 	assert.Equal(t, false, ent["IsRemoved"])
 	assert.Equal(t, "Active", ent["Status"])
@@ -123,7 +125,7 @@ func TestHandleSync_PathOrSizeChangeIsChangedEntitlementUnderSameIDs(t *testing.
 	f := newKoboScopeFixture(t)
 
 	items, token := f.sync(t, "")
-	first := itemFor(t, items, f.fileA.ID)
+	first := f.itemFor(t, items, f.fileA.ID)
 	require.NotNil(t, first.NewEntitlement)
 	rev := entitlementRevisionID(t, first.NewEntitlement)
 
@@ -131,7 +133,7 @@ func TestHandleSync_PathOrSizeChangeIsChangedEntitlementUnderSameIDs(t *testing.
 
 	items, _ = f.sync(t, token)
 	require.Len(t, items, 1)
-	assertChangedUnder(t, items[0], f.fileA.ID, rev)
+	assertChangedUnder(t, items[0], f.entryID(t, f.fileA.ID), rev)
 }
 
 func TestHandleSync_MetadataChangeIsChangedEntitlementUnderSameIDs(t *testing.T) {
@@ -139,13 +141,13 @@ func TestHandleSync_MetadataChangeIsChangedEntitlementUnderSameIDs(t *testing.T)
 	f := newKoboScopeFixture(t)
 
 	items, token := f.sync(t, "")
-	rev := entitlementRevisionID(t, itemFor(t, items, f.fileA.ID).NewEntitlement)
+	rev := entitlementRevisionID(t, f.itemFor(t, items, f.fileA.ID).NewEntitlement)
 
 	f.retitleBook(t, f.bookA, "Alpha, Revised")
 
 	items, _ = f.sync(t, token)
 	require.Len(t, items, 1)
-	assertChangedUnder(t, items[0], f.fileA.ID, rev)
+	assertChangedUnder(t, items[0], f.entryID(t, f.fileA.ID), rev)
 	assert.Equal(t, "Alpha, Revised", items[0].ChangedEntitlement.BookMetadata["Title"])
 }
 
@@ -157,7 +159,7 @@ func TestHandleSync_FileNameChangeIsChangedEntitlement(t *testing.T) {
 
 	f.nameFile(t, f.fileA, "")
 	items, token := f.sync(t, "")
-	first := itemFor(t, items, f.fileA.ID)
+	first := f.itemFor(t, items, f.fileA.ID)
 	rev := entitlementRevisionID(t, first.NewEntitlement)
 	assert.Equal(t, f.bookA.Title, first.NewEntitlement.BookMetadata["Title"], "an empty name falls back to the book's title")
 
@@ -165,7 +167,7 @@ func TestHandleSync_FileNameChangeIsChangedEntitlement(t *testing.T) {
 
 	items, _ = f.sync(t, token)
 	require.Len(t, items, 1)
-	assertChangedUnder(t, items[0], f.fileA.ID, rev)
+	assertChangedUnder(t, items[0], f.entryID(t, f.fileA.ID), rev)
 	assert.Equal(t, "Alpha: Special Edition", items[0].ChangedEntitlement.BookMetadata["Title"])
 }
 
@@ -176,20 +178,20 @@ func TestHandleSync_NewEntryKeepsOneRevisionIDAcrossChanges(t *testing.T) {
 	f := newKoboScopeFixture(t)
 
 	items, token := f.sync(t, "")
-	rev := entitlementRevisionID(t, itemFor(t, items, f.fileA.ID).NewEntitlement)
+	rev := entitlementRevisionID(t, f.itemFor(t, items, f.fileA.ID).NewEntitlement)
 	assert.NotContains(t, rev, computeFileHash(f.fileA)[:8], "a new RevisionId must not depend on the file")
 
 	f.moveFile(t, f.fileA, f.fileA.Filepath+".moved", f.fileA.FilesizeBytes)
 	items, token = f.sync(t, token)
-	assertChangedUnder(t, itemFor(t, items, f.fileA.ID), f.fileA.ID, rev)
+	assertChangedUnder(t, f.itemFor(t, items, f.fileA.ID), f.entryID(t, f.fileA.ID), rev)
 
 	f.moveFile(t, f.fileA, f.fileA.Filepath+".moved", 1234)
 	items, token = f.sync(t, token)
-	assertChangedUnder(t, itemFor(t, items, f.fileA.ID), f.fileA.ID, rev)
+	assertChangedUnder(t, f.itemFor(t, items, f.fileA.ID), f.entryID(t, f.fileA.ID), rev)
 
 	f.retitleBook(t, f.bookA, "Alpha Again")
 	items, _ = f.sync(t, token)
-	assertChangedUnder(t, itemFor(t, items, f.fileA.ID), f.fileA.ID, rev)
+	assertChangedUnder(t, f.itemFor(t, items, f.fileA.ID), f.entryID(t, f.fileA.ID), rev)
 }
 
 // Sync state from before the upgrade holds the hash-form RevisionId each
@@ -202,23 +204,25 @@ func TestHandleSync_PreUpgradeEntryKeepsHashFormRevisionID(t *testing.T) {
 
 	hashForm := ShishoID(f.fileA.ID) + "-" + computeFileHash(f.fileA)[:8]
 	sp, err := NewService(f.db).CreateSyncPoint(ctx, f.device.ID, []ScopedFile{{
-		FileID:       f.fileA.ID,
-		FileHash:     computeFileHash(f.fileA),
-		FileSize:     f.fileA.FilesizeBytes,
-		MetadataHash: "pre-upgrade",
+		FileID:            f.fileA.ID,
+		FileHash:          computeFileHash(f.fileA),
+		FileSize:          f.fileA.FilesizeBytes,
+		MetadataHash:      "pre-upgrade",
+		EntryID:           ShishoID(f.fileA.ID),
+		DeliveredFileType: models.FileTypeKePub,
+		RevisionID:        hashForm,
 	}})
 	require.NoError(t, err)
 	require.NoError(t, NewService(f.db).MarkSyncPointCompleted(ctx, f.device.ID, sp.ID))
-	_, err = f.db.ExecContext(ctx,
-		`INSERT INTO kobo_sync_entries (device_id, file_id, revision_id) VALUES (?, ?, ?)`,
-		f.device.ID, f.fileA.ID, hashForm)
+	f.addEntry(t, f.fileA.ID, models.FileTypeKePub)
+	_, err = f.db.ExecContext(ctx, `UPDATE kobo_sync_entries SET revision_id = ? WHERE entry_id = ?`, hashForm, ShishoID(f.fileA.ID))
 	require.NoError(t, err)
 	token := encodeTestSyncToken(t, SyncToken{LastSyncPointID: sp.ID})
 
 	f.moveFile(t, f.fileA, f.fileA.Filepath+".moved", 4321)
 
 	items, _ := f.sync(t, token)
-	assertChangedUnder(t, itemFor(t, items, f.fileA.ID), f.fileA.ID, hashForm)
+	assertChangedUnder(t, f.itemFor(t, items, f.fileA.ID), ShishoID(f.fileA.ID), hashForm)
 }
 
 // A fresh sync (no token, as after clearing sync history) still sends every
@@ -229,13 +233,13 @@ func TestHandleSync_FreshSyncResendsRecordedRevisionID(t *testing.T) {
 
 	items, _ := f.sync(t, "")
 	require.Len(t, items, 2)
-	rev := entitlementRevisionID(t, itemFor(t, items, f.fileA.ID).NewEntitlement)
+	rev := entitlementRevisionID(t, f.itemFor(t, items, f.fileA.ID).NewEntitlement)
 
 	f.moveFile(t, f.fileA, f.fileA.Filepath+".moved", 777)
 
 	items, _ = f.sync(t, "")
 	require.Len(t, items, 2)
-	item := itemFor(t, items, f.fileA.ID)
+	item := f.itemFor(t, items, f.fileA.ID)
 	require.NotNil(t, item.NewEntitlement, "a fresh sync sends every book as new")
 	assert.Equal(t, rev, entitlementRevisionID(t, item.NewEntitlement))
 }
@@ -246,13 +250,14 @@ func TestHandleSync_RemovalUnchanged(t *testing.T) {
 	f := newKoboScopeFixture(t)
 
 	_, token := f.sync(t, "")
+	entryB := f.entryID(t, f.fileB.ID)
 	f.restrictToLibrary(t, f.libA.ID)
 
 	items, _ := f.sync(t, token)
 	require.Len(t, items, 1)
 	require.NotNil(t, items[0].ChangedEntitlement)
-	assert.Equal(t, map[string]any{"Id": ShishoID(f.fileB.ID), "IsRemoved": true}, items[0].ChangedEntitlement.BookEntitlement)
-	assert.Equal(t, ShishoID(f.fileB.ID), items[0].ChangedEntitlement.BookMetadata["EntitlementId"])
+	assert.Equal(t, map[string]any{"Id": entryB, "IsRemoved": true}, items[0].ChangedEntitlement.BookEntitlement)
+	assert.Equal(t, entryB, items[0].ChangedEntitlement.BookMetadata["EntitlementId"])
 }
 
 func encodeTestSyncToken(t *testing.T, token SyncToken) string {
@@ -271,15 +276,16 @@ func TestHandleSync_FileDeletedAfterSnapshotIsDropped(t *testing.T) {
 
 	const deletedFileID = 9999
 	sp, err := NewService(f.db).CreateSyncPoint(ctx, f.device.ID, []ScopedFile{
-		{FileID: f.fileA.ID, FileHash: computeFileHash(f.fileA), FileSize: f.fileA.FilesizeBytes, MetadataHash: "m"},
-		{FileID: deletedFileID, FileHash: "0123456789abcdef", FileSize: 1, MetadataHash: "m"},
+		{FileID: f.fileA.ID, FileHash: computeFileHash(f.fileA), FileSize: f.fileA.FilesizeBytes, MetadataHash: "m", EntryID: "shisho-ea", DeliveredFileType: models.FileTypeKePub, RevisionID: "rev-a"},
+		{FileID: deletedFileID, FileHash: "0123456789abcdef", FileSize: 1, MetadataHash: "m", EntryID: "shisho-eb", DeliveredFileType: models.FileTypeKePub, RevisionID: "rev-b"},
 	})
 	require.NoError(t, err)
 	token := encodeTestSyncToken(t, SyncToken{OngoingSyncPointID: sp.ID})
 
 	items, _ := f.sync(t, token)
 	require.Len(t, items, 1)
-	require.NotNil(t, itemFor(t, items, f.fileA.ID).NewEntitlement)
+	require.NotNil(t, items[0].NewEntitlement)
+	assert.Equal(t, "shisho-ea", items[0].NewEntitlement.BookEntitlement["Id"])
 }
 
 // replaceCover overwrites the file's cover in place, under the same
@@ -299,7 +305,7 @@ func TestHandleSync_CoverReplacedUnderSameFilenameIsChanged(t *testing.T) {
 	f := newKoboScopeFixture(t)
 
 	items, token := f.sync(t, "")
-	first := itemFor(t, items, f.fileA.ID)
+	first := f.itemFor(t, items, f.fileA.ID)
 	rev := entitlementRevisionID(t, first.NewEntitlement)
 	coverID := first.NewEntitlement.BookMetadata["CoverImageId"]
 
@@ -307,7 +313,7 @@ func TestHandleSync_CoverReplacedUnderSameFilenameIsChanged(t *testing.T) {
 
 	items, _ = f.sync(t, token)
 	require.Len(t, items, 1)
-	assertChangedUnder(t, items[0], f.fileA.ID, rev)
+	assertChangedUnder(t, items[0], f.entryID(t, f.fileA.ID), rev)
 	assert.NotEqual(t, coverID, items[0].ChangedEntitlement.BookMetadata["CoverImageId"])
 }
 
@@ -334,9 +340,9 @@ func TestHandleMetadata_CoverImageIDMatchesSync(t *testing.T) {
 	f.replaceCover(t, f.fileA)
 
 	items, _ := f.sync(t, "")
-	synced := itemFor(t, items, f.fileA.ID).NewEntitlement.BookMetadata["CoverImageId"]
+	synced := f.itemFor(t, items, f.fileA.ID).NewEntitlement.BookMetadata["CoverImageId"]
 
-	rec := f.serve(http.MethodGet, f.prefix()+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
+	rec := f.serve(http.MethodGet, f.prefix()+"/v1/library/"+f.entryID(t, f.fileA.ID)+"/metadata")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var metadata []map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))

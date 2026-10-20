@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/kobo"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -99,6 +100,7 @@ type Service struct {
 	bookService     *books.Service
 	seriesService   *series.Service
 	peopleService   *people.Service
+	koboService     *kobo.Service
 }
 
 // NewService returns a Service. bookService is the shared books service.
@@ -112,6 +114,7 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 		bookService:     bookService,
 		seriesService:   series.NewService(db),
 		peopleService:   people.NewService(db),
+		koboService:     kobo.NewService(db),
 	}
 }
 

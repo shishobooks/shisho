@@ -1,17 +1,28 @@
+import { useQueryClient } from "@tanstack/react-query";
 import equal from "fast-deep-equal";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import KoboWarning from "@/components/devices/KoboWarning";
 import RulesListEditor from "@/components/devices/RulesListEditor";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
+import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useUpdateDevice } from "@/hooks/queries/devices";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  fetchDeliveryPreview,
+  useDeliveryPreview,
+  useUpdateDevice,
+  type RulesProposal,
+} from "@/hooks/queries/devices";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { Rule } from "@/types";
 import {
+  DeviceTypeKobo,
   RulesModeCustom,
   RulesModeDefault,
   RulesModePreset,
@@ -25,7 +36,7 @@ import {
   type DraftRule,
 } from "@/utils/delivery";
 import { DEVICE_TYPE_LABELS } from "@/utils/devices";
-import { fileTypeLabel } from "@/utils/format";
+import { fileTypeLabel, formatCount } from "@/utils/format";
 
 interface DeviceRulesSectionProps {
   device: DeviceResponse;
@@ -64,6 +75,75 @@ const ReadOnlyRules = ({ rules }: { rules: Rule[] }) => (
   </ol>
 );
 
+// movedWarning and retypedWarning say what a Kobo's next sync does to books
+// already on it (ADR 0012).
+const movedWarning = (books: number) =>
+  `${formatCount(books, "book")} on this Kobo will move to a different edition at its next sync, and may reopen at the start.`;
+const retypedWarning = (books: number) =>
+  `${formatCount(books, "book")} on this Kobo will switch between KePub and EPUB. The Kobo removes each one and adds it again as a new book, which loses its reading position and highlights.`;
+
+// DeliveryPreview shows how many books a Device receives under the rules it
+// follows, or under the change being edited, and how many it doesn't by
+// File Type. On a Kobo it also warns about books already on it that the
+// rules move to another edition or File Type.
+const DeliveryPreview = ({
+  device,
+  proposal,
+}: {
+  device: DeviceResponse;
+  proposal?: RulesProposal;
+}) => {
+  const preview = useDeliveryPreview(device.id, proposal);
+  if (preview.error && !preview.data) {
+    return (
+      <QueryError
+        fallback="Failed to load what this Device receives"
+        query={preview}
+      />
+    );
+  }
+  if (!preview.data) return <LoadingSpinner />;
+  const { received_books, not_received, moved_books, retyped_books } =
+    preview.data;
+  const isKobo = device.device_type === DeviceTypeKobo;
+  return (
+    <div
+      aria-busy={preview.isPlaceholderData}
+      aria-label="What this Device receives"
+      className={cn(
+        "space-y-2 text-sm transition-opacity",
+        // The last counts stay while the new ones load.
+        preview.isPlaceholderData && "opacity-50",
+      )}
+      role="status"
+    >
+      <p>
+        Receives {formatCount(received_books, "book")}.
+        {not_received.length > 0 && (
+          <span className="text-muted-foreground">
+            {" "}
+            Doesn't receive{" "}
+            {not_received
+              .map(
+                (n) =>
+                  `${formatCount(n.books, "book")} with ${fileTypeLabel(n.source_file_type)}`,
+              )
+              .join(", ")}
+            .
+          </span>
+        )}
+      </p>
+      {isKobo &&
+        [
+          retyped_books > 0 && retypedWarning(retyped_books),
+          moved_books > 0 && movedWarning(moved_books),
+        ]
+          .filter((warning): warning is string => Boolean(warning))
+          .map((warning) => <KoboWarning key={warning}>{warning}</KoboWarning>)}
+    </div>
+  );
+};
+
 // DeviceRulesBody chooses which Delivery Rules a Device follows: the user's
 // default, its type's preset, or a custom list. Following saves as soon as
 // it is chosen. Customizing opens an editor on a copy of what the Device
@@ -73,6 +153,15 @@ const DeviceRulesBody = ({
   onHasChangesChange,
 }: DeviceRulesSectionProps) => {
   const updateDevice = useUpdateDevice();
+  const queryClient = useQueryClient();
+  // A save held back until the reader confirms switching books already on
+  // a Kobo between KePub and EPUB.
+  const [pendingSave, setPendingSave] = useState<{
+    proposal: RulesProposal;
+    retypedBooks: number;
+    movedBooks: number;
+  } | null>(null);
+  const [checking, setChecking] = useState(false);
   const savedCustom = device.delivery_rules_mode === RulesModeCustom;
   // The custom list being edited, or null while the Device follows a list
   // and nobody is customizing it.
@@ -87,13 +176,11 @@ const DeviceRulesBody = ({
     onHasChangesChange?.(hasChanges);
   }, [hasChanges, onHasChangesChange]);
 
-  const save = async (mode: DeliveryRulesMode, rules?: DraftRule[]) => {
+  const commit = async ({ mode, rules }: RulesProposal) => {
     try {
       const saved = await updateDevice.mutateAsync({
         id: device.id,
-        payload: {
-          delivery_rules: { mode, rules: rules && withoutKeys(rules) },
-        },
+        payload: { delivery_rules: { mode, rules } },
       });
       setDraft(
         saved.delivery_rules_mode === RulesModeCustom
@@ -103,8 +190,46 @@ const DeviceRulesBody = ({
       toast.success("Delivery Rules saved");
     } catch (error) {
       toastRequestError(error, "Failed to save Delivery Rules");
+    } finally {
+      // The confirmation stays open, showing the save in progress, until
+      // it ends.
+      setPendingSave(null);
     }
   };
+
+  // save asks first when the change would switch books already on a Kobo
+  // between KePub and EPUB, which a Kobo can't do in place, or move them to
+  // a different edition, which may reopen at the start.
+  const save = async (mode: DeliveryRulesMode, rules?: DraftRule[]) => {
+    const proposal: RulesProposal = {
+      mode,
+      rules: rules && withoutKeys(rules),
+    };
+    if (device.device_type === DeviceTypeKobo) {
+      setChecking(true);
+      try {
+        const preview = await fetchDeliveryPreview(
+          queryClient,
+          device.id,
+          proposal,
+        );
+        if (preview.retyped_books > 0 || preview.moved_books > 0) {
+          setPendingSave({
+            proposal,
+            retypedBooks: preview.retyped_books,
+            movedBooks: preview.moved_books,
+          });
+          return;
+        }
+      } catch {
+        // The warning is advice; the save reports its own error.
+      } finally {
+        setChecking(false);
+      }
+    }
+    await commit(proposal);
+  };
+  const busy = updateDevice.isPending || checking;
 
   const typeLabel = DEVICE_TYPE_LABELS[device.device_type];
   // Short labels, so three fit side by side on one line.
@@ -146,7 +271,7 @@ const DeviceRulesBody = ({
                 ? "bg-primary text-primary-foreground"
                 : "hover:bg-muted",
             )}
-            disabled={updateDevice.isPending}
+            disabled={busy}
             key={option.mode}
             onClick={() => choose(option.mode)}
             variant="unstyled"
@@ -178,6 +303,7 @@ const DeviceRulesBody = ({
               </Link>
             </p>
           )}
+          <DeliveryPreview device={device} />
         </>
       ) : (
         <>
@@ -186,22 +312,28 @@ const DeviceRulesBody = ({
             options={device.delivery_rule_options}
             rules={draft}
           />
+          {draft.length > 0 && (
+            <DeliveryPreview
+              device={device}
+              proposal={
+                hasChanges
+                  ? { mode: RulesModeCustom, rules: withoutKeys(draft) }
+                  : undefined
+              }
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              disabled={
-                !hasChanges || draft.length === 0 || updateDevice.isPending
-              }
+              disabled={!hasChanges || draft.length === 0 || busy}
               onClick={() => save(RulesModeCustom, draft)}
               size="sm"
             >
-              {updateDevice.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save
             </Button>
             {hasChanges && (
               <Button
-                disabled={updateDevice.isPending}
+                disabled={busy}
                 onClick={() =>
                   setDraft(savedCustom ? withKeys(device.delivery_rules) : null)
                 }
@@ -214,6 +346,28 @@ const DeviceRulesBody = ({
           </div>
         </>
       )}
+      <ConfirmDialog
+        confirmLabel="Save rules"
+        description={[
+          pendingSave?.retypedBooks
+            ? retypedWarning(pendingSave.retypedBooks)
+            : "",
+          pendingSave?.movedBooks ? movedWarning(pendingSave.movedBooks) : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        isPending={updateDevice.isPending}
+        onConfirm={() => pendingSave && void commit(pendingSave.proposal)}
+        onOpenChange={(open) => {
+          if (!open) setPendingSave(null);
+        }}
+        open={pendingSave !== null}
+        title={
+          pendingSave?.retypedBooks
+            ? "Switch books between KePub and EPUB?"
+            : "Move books to a different edition?"
+        }
+      />
     </>
   );
 };

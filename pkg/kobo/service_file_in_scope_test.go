@@ -20,7 +20,14 @@ func (f *koboScopeFixture) loadScopeUser(t *testing.T) *models.User {
 	return user
 }
 
-func TestFileInScope(t *testing.T) {
+// addEntry records an entry for fileID on the fixture's Device, delivered
+// as deliveredType, and returns its id.
+func (f *koboScopeFixture) addEntry(t *testing.T, fileID int, deliveredType string) string {
+	t.Helper()
+	return insertEntry(t, f.db, f.device.ID, fileID, deliveredType)
+}
+
+func TestEntryInScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -81,8 +88,9 @@ func TestFileInScope(t *testing.T) {
 			m4b := insertScopeFile(ctx, t, f.db, f.bookA, filepath.Dir(f.fileA.Filepath), "audio", models.FileTypeM4B, models.FileRoleMain)
 			return devices.Scope{Type: devices.ScopeAll}, m4b.ID
 		}, false},
-		{"unknown file", func(_ *testing.T, _ *koboScopeFixture) (devices.Scope, int) {
-			return devices.Scope{Type: devices.ScopeAll}, 999999
+		{"CBZ beside an EPUB the rules rank first", func(t *testing.T, f *koboScopeFixture) (devices.Scope, int) {
+			cbz := insertScopeFile(ctx, t, f.db, f.bookA, filepath.Dir(f.fileA.Filepath), "comic", models.FileTypeCBZ, models.FileRoleMain)
+			return devices.Scope{Type: devices.ScopeAll}, cbz.ID
 		}, false},
 	}
 
@@ -91,21 +99,42 @@ func TestFileInScope(t *testing.T) {
 			t.Parallel()
 			f := newKoboScopeFixture(t)
 			scope, fileID := tt.setup(t, f)
+			entryID := f.addEntry(t, fileID, models.FileTypeKePub)
+			f.device.ScopeType, f.device.ScopeLibraryID, f.device.ScopeListID = scope.Type, scope.LibraryID, scope.ListID
 
-			got, err := NewService(f.db).FileInScope(ctx, f.loadScopeUser(t), scope, fileID)
+			got, err := NewService(f.db).EntryInScope(ctx, f.loadScopeUser(t), f.device, entryID)
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want, got != nil)
 		})
 	}
 }
 
-// A nil user fails closed with an error rather than matching every file or
-// panicking.
-func TestFileInScope_NilUserFailsClosed(t *testing.T) {
+// An entry is out of scope once its File is delivered as another File Type,
+// and an id with no entry is too.
+func TestEntryInScope_OtherTypeOrNoEntry(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
+	ctx := context.Background()
+	svc := NewService(f.db)
 
-	got, err := NewService(f.db).FileInScope(context.Background(), nil, devices.Scope{Type: devices.ScopeAll}, f.fileA.ID)
+	entryID := f.addEntry(t, f.fileA.ID, models.FileTypeEPUB)
+	got, err := svc.EntryInScope(ctx, f.loadScopeUser(t), f.device, entryID)
+	require.NoError(t, err)
+	assert.Nil(t, got, "the Kobo preset delivers EPUB as KePub")
+
+	got, err = svc.EntryInScope(ctx, f.loadScopeUser(t), f.device, "shisho-999999")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+// A nil user fails closed with an error rather than matching every file or
+// panicking.
+func TestEntryInScope_NilUserFailsClosed(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+	entryID := f.addEntry(t, f.fileA.ID, models.FileTypeKePub)
+
+	got, err := NewService(f.db).EntryInScope(context.Background(), nil, f.device, entryID)
 	require.Error(t, err)
-	assert.False(t, got)
+	assert.Nil(t, got)
 }

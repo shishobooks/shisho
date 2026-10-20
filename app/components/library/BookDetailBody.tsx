@@ -25,6 +25,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import AddToListPopover from "@/components/library/AddToListPopover";
+import BookDevicesPanel from "@/components/library/BookDevicesPanel";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import CoverGalleryTabs from "@/components/library/CoverGalleryTabs";
 import CoverImage from "@/components/library/CoverImage";
@@ -1575,6 +1576,9 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
                 </div>
               </>
             )}
+
+            {/* What each of the reader's Devices gets of the book */}
+            {!isShareLink && <BookDevicesPanel book={book} />}
           </div>
         </div>
       </div>

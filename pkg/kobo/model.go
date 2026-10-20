@@ -33,19 +33,37 @@ type SyncPointBook struct {
 	// the same filename counts as a change. Nil on rows stored before it was
 	// tracked, and for files without a cover on disk.
 	CoverModifiedAt *time.Time `bun:"cover_modified_at"`
+	// EntryID, DeliveredFileType, and RevisionID are the entry the file went
+	// out under (SyncEntry). Rows stored before entries had ids hold the
+	// file's Shisho id and KePub, and an empty RevisionID when the file had
+	// no entry.
+	EntryID           string `bun:"entry_id,notnull"`
+	DeliveredFileType string `bun:"delivered_file_type,notnull"`
+	RevisionID        string `bun:"revision_id,notnull"`
 }
 
-// SyncEntry records, per Device, the RevisionId a File was first sent to
-// the Kobo with. A Kobo treats every new RevisionId as a new book, and
-// ignores a change sent under a RevisionId it does not have, so the
-// RevisionId never changes once recorded (ADR 0012). Entries outlive sync
-// points: clearing sync history forces a fresh sync, but the books already
-// on the device keep their RevisionIds.
+// SyncEntry is one book Shisho has put on a Kobo, per Device (ADR 0012):
+// the book and delivered File Type it belongs to, the File it holds now,
+// and the id and RevisionId it was first sent with, which never change. A
+// Kobo treats every new RevisionId as a new book, and ignores a change sent
+// under a RevisionId it does not have. An entry stays with its File while
+// the Device's Delivery Rules still deliver that File as DeliveredFileType,
+// and is then handed to another File of the book delivered as the same type,
+// or removed. Entries outlive sync points: clearing sync history forces a
+// fresh sync, but the books already on the device keep their ids.
 type SyncEntry struct {
 	bun.BaseModel `bun:"table:kobo_sync_entries,alias:kse"`
 
-	DeviceID   string    `bun:"device_id,pk"`
-	FileID     int       `bun:"file_id,pk"`
-	RevisionID string    `bun:"revision_id,notnull"`
-	CreatedAt  time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	DeviceID string `bun:"device_id,pk"`
+	// EntryID is the id the Kobo knows the book by. Entries recorded before
+	// they had ids of their own are "shisho-{fileID}"; newer ones can never
+	// take that form (newEntryID).
+	EntryID string `bun:"entry_id,pk"`
+	// BookID and FileID are nil once their row is deleted. An entry without
+	// a File is handed over or removed by the next sync.
+	BookID            *int      `bun:"book_id"`
+	FileID            *int      `bun:"file_id"`
+	DeliveredFileType string    `bun:"delivered_file_type,notnull"`
+	RevisionID        string    `bun:"revision_id,notnull"`
+	CreatedAt         time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp"`
 }

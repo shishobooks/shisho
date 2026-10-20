@@ -1711,8 +1711,9 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 		// whose earlier build failed partway (logged when it happened), are
 		// ones the user can work around with Download Original (422); any
 		// other generation failure, a failed Conversion included, is a
-		// server fault. The device routes fall back to the original instead
-		// (ResolveFallbackDownload), since a device has no such button.
+		// server fault. Device routes fall back to the original for a File's
+		// own File Type instead (ResolveFallbackDownload), since a device has
+		// no such button.
 		if errors.Is(err, filegen.ErrNotImplemented) {
 			return errcodes.InvalidState("Generated downloads are not supported for " + file.FileType + " files")
 		}

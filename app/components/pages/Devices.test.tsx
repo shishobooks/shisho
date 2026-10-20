@@ -56,6 +56,13 @@ const stubAPI = (initial: DeviceResponse) => {
     .spyOn(API, "request")
     .mockImplementation(async (method, path, body) => {
       if (method === "GET" && path === "/user/devices") return devices;
+      // The delivery preview never answers: DeviceRulesSection.test.tsx
+      // covers it, and a preview landing as a test ends would update the
+      // page while vitest.setup.ts clears the timers React's scheduler is
+      // waiting on, stalling the next test.
+      if (method === "GET" && path.endsWith("/delivery-preview")) {
+        return new Promise(() => {});
+      }
       if (method === "GET" && path === `/user/devices/${device.id}`)
         return device;
       if (method === "POST" && path === "/user/devices") {

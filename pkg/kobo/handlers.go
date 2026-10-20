@@ -104,7 +104,7 @@ func (h *handler) handleSync(c echo.Context) error {
 
 	inToken := decodeSyncToken(c.Request().Header.Get("X-Kobo-SyncToken"))
 
-	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, device.ID, user, scope, inToken)
+	ongoing, prevID, isContinuation, err := h.resolveSyncPoint(ctx, device, user, inToken)
 	if err != nil {
 		return err
 	}
@@ -130,13 +130,8 @@ func (h *handler) handleSync(c echo.Context) error {
 	}
 	page := allEntries[start:end]
 
-	revisionIDs, err := h.service.EnsureRevisionIDs(ctx, device.ID, entitledFileIDs(page))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
 	baseURL := getBaseURL(c)
-	response := buildSyncResponseFromEntries(ctx, page, revisionIDs, baseURL, h.bookService)
+	response := buildSyncResponseFromEntries(ctx, page, baseURL, h.bookService)
 
 	// Token + completion bookkeeping.
 	var outToken SyncToken
@@ -214,15 +209,14 @@ func decodeSyncToken(header string) SyncToken {
 //     and use the inbound LastSyncPointID as the prev baseline.
 func (h *handler) resolveSyncPoint(
 	ctx context.Context,
-	deviceID string,
+	device *devices.Device,
 	user *models.User,
-	scope devices.Scope,
 	inToken SyncToken,
 ) (*SyncPoint, string, bool, error) {
 	if inToken.OngoingSyncPointID != "" {
-		// GetSyncPointByID enforces deviceID at the SQL layer, so a token
+		// GetSyncPointByID enforces the Device at the SQL layer, so a token
 		// bearing another tenant's sync-point UUID won't match.
-		sp, err := h.service.GetSyncPointByID(ctx, deviceID, inToken.OngoingSyncPointID)
+		sp, err := h.service.GetSyncPointByID(ctx, device.ID, inToken.OngoingSyncPointID)
 		// Only honor the ongoing point if it still exists and has not been
 		// completed by another concurrent caller (which would mean re-emitting
 		// changes we've already sent).
@@ -232,56 +226,56 @@ func (h *handler) resolveSyncPoint(
 	}
 
 	// Fresh sync: snapshot current state.
-	scopedFiles, err := h.service.GetScopedFiles(ctx, user, scope)
+	scopedFiles, err := h.service.GetScopedFiles(ctx, user, device)
 	if err != nil {
 		return nil, "", false, errors.WithStack(err)
 	}
-	sp, err := h.service.CreateSyncPoint(ctx, deviceID, scopedFiles)
+	sp, err := h.service.CreateSyncPoint(ctx, device.ID, scopedFiles)
 	if err != nil {
 		return nil, "", false, errors.WithStack(err)
 	}
 	return sp, inToken.LastSyncPointID, false, nil
 }
 
-// requireFileInScope returns a 404 for a file outside the Device's sync
-// scope, the same response as a file that does not exist, so a Device cannot
-// probe or fetch files it does not sync. Kobo routes never return 403 for
-// this.
-func (h *handler) requireFileInScope(c echo.Context, fileID int) error {
-	ctx := c.Request().Context()
+// requireEntry returns the Device's entry entryID (from parseEntryID). It
+// returns a 404 for an entry the Device no longer delivers within its scope,
+// the same response as one that does not exist, so a Device cannot probe or
+// fetch files it does not sync. Kobo routes never return 403 for this.
+func (h *handler) requireEntry(c echo.Context, entryID string) (*SyncEntry, error) {
 	device, err := devices.RequireDevice(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	user, err := auth.RequireUser(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	inScope, err := h.service.FileInScope(ctx, user, device.Scope(), fileID)
+	entry, err := h.service.EntryInScope(c.Request().Context(), user, device, entryID)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	if !inScope {
-		return errcodes.NotFound("File")
+	if entry == nil {
+		return nil, errcodes.NotFound("File")
 	}
-	return nil
+	return entry, nil
 }
 
-// handleDownload handles GET /v1/books/:bookId/file/epub.
-// Serves files as KePub.
+// handleDownload handles GET /v1/books/:bookId/file/epub, which serves the
+// entry's File delivered as the entry's File Type. A Conversion that fails,
+// now or partway through an earlier attempt, is a 500, never the Original
+// File, which is a File Type the Device's rules did not choose (ADR 0011).
 func (h *handler) handleDownload(c echo.Context) error {
 	ctx := c.Request().Context()
-	bookID := c.Param("bookId")
-
-	fileID, ok := ParseShishoID(bookID)
+	entryID, ok := parseEntryID(c.Param("bookId"))
 	if !ok {
 		return proxyToKoboStore(c)
 	}
-	if err := h.requireFileInScope(c, fileID); err != nil {
+	entry, err := h.requireEntry(c, entryID)
+	if err != nil {
 		return err
 	}
 
-	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
+	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: entry.FileID})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -307,10 +301,7 @@ func (h *handler) handleDownload(c echo.Context) error {
 		fileWithRelations = file
 	}
 
-	// Generate KePub, named with the Kobo-safe filename. The scope holds only
-	// EPUB and CBZ files, which KePub converts, so ResolveFallbackDownload
-	// sends the original only when the conversion fails.
-	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, models.FileTypeKePub)
+	download, err := books.ResolveDeliveryDownload(c, h.downloadCache, book, fileWithRelations, entry.DeliveredFileType)
 	if err != nil {
 		return err
 	}
@@ -321,17 +312,16 @@ func (h *handler) handleDownload(c echo.Context) error {
 // Serves resized cover images.
 func (h *handler) handleCover(c echo.Context) error {
 	ctx := c.Request().Context()
-	imageID := c.Param("imageId")
-
-	fileID, ok := ParseShishoID(imageID)
+	entryID, ok := parseEntryID(c.Param("imageId"))
 	if !ok {
 		return proxyToKoboStore(c)
 	}
-	if err := h.requireFileInScope(c, fileID); err != nil {
+	entry, err := h.requireEntry(c, entryID)
+	if err != nil {
 		return err
 	}
 
-	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
+	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: entry.FileID})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -417,17 +407,16 @@ func (h *handler) handleCover(c echo.Context) error {
 // Returns metadata for Shisho books, proxies for unknown books.
 func (h *handler) handleMetadata(c echo.Context) error {
 	ctx := c.Request().Context()
-	bookID := c.Param("bookId")
-
-	fileID, ok := ParseShishoID(bookID)
+	entryID, ok := parseEntryID(c.Param("bookId"))
 	if !ok {
 		return proxyToKoboStore(c)
 	}
-	if err := h.requireFileInScope(c, fileID); err != nil {
+	entry, err := h.requireEntry(c, entryID)
+	if err != nil {
 		return err
 	}
 
-	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
+	file, err := h.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: entry.FileID})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -439,7 +428,7 @@ func (h *handler) handleMetadata(c echo.Context) error {
 
 	baseURL := getBaseURL(c)
 	cacheKey := coverCacheKey(computeMetadataHash(book, file), coverModifiedAt(ctx, file))
-	metadata := buildBookMetadata(book, file, cacheKey, baseURL)
+	metadata := buildBookMetadata(book, file, entry.EntryID, entry.DeliveredFileType, cacheKey, baseURL)
 
 	// Kobo expects metadata wrapped in an array
 	return c.JSON(http.StatusOK, []*BookMetadata{metadata})
@@ -463,9 +452,8 @@ type changeEntry struct {
 }
 
 // combineChanges flattens Added/Changed/Removed into a single deterministically
-// ordered list. The order — Added (by FileID asc), Changed (by FileID asc),
-// Removed (by FileID asc) — must be stable across calls so a paginated cursor
-// remains valid.
+// ordered list. The order (Added, then Changed, then Removed, each by entry
+// id) must be stable across calls so a paginated cursor remains valid.
 //
 // Input slices are cloned before sorting so callers that retain a reference
 // to the source SyncChanges don't observe an ordering side effect.
@@ -473,7 +461,7 @@ func combineChanges(c *SyncChanges) []changeEntry {
 	sortedClone := func(in []ScopedFile) []ScopedFile {
 		out := make([]ScopedFile, len(in))
 		copy(out, in)
-		sort.Slice(out, func(i, j int) bool { return out[i].FileID < out[j].FileID })
+		sort.Slice(out, func(i, j int) bool { return out[i].EntryID < out[j].EntryID })
 		return out
 	}
 	added := sortedClone(c.Added)
@@ -493,38 +481,25 @@ func combineChanges(c *SyncChanges) []changeEntry {
 	return out
 }
 
-// entitledFileIDs returns the files in a page that go out with a full
-// entitlement, which are the ones that need a recorded RevisionId.
-func entitledFileIDs(entries []changeEntry) []int {
-	ids := make([]int, 0, len(entries))
-	for _, e := range entries {
-		if e.Kind != changeRemoved {
-			ids = append(ids, e.File.FileID)
-		}
-	}
-	return ids
-}
-
 // buildSyncResponseFromEntries materializes a slice of changeEntry into the
-// JSON array Kobo expects. revisionIDs holds the recorded RevisionId for each
-// added or changed file. nil result for missing books (e.g. deleted between
-// snapshot and emit) is silently dropped.
-func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, revisionIDs map[int]string, baseURL string, bookService *books.Service) []interface{} {
+// JSON array Kobo expects, each under its entry's id and RevisionId. nil
+// result for missing books (e.g. deleted between snapshot and emit) is
+// silently dropped, as is an entry with no recorded RevisionId, which only a
+// snapshot stored before entries had ids can hold.
+func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, baseURL string, bookService *books.Service) []interface{} {
 	response := make([]interface{}, 0, len(entries))
 	for _, e := range entries {
-		revisionID, recorded := revisionIDs[e.File.FileID]
-		if e.Kind != changeRemoved && !recorded {
-			// The file was deleted after the snapshot.
+		if e.Kind != changeRemoved && e.File.RevisionID == "" {
 			continue
 		}
 		switch e.Kind {
 		case changeAdded:
-			entry := buildEntitlement(ctx, e.File, revisionID, baseURL, bookService)
+			entry := buildEntitlement(ctx, e.File, baseURL, bookService)
 			if entry != nil {
 				response = append(response, &NewEntitlement{NewEntitlement: entry})
 			}
 		case changeChanged:
-			entry := buildEntitlement(ctx, e.File, revisionID, baseURL, bookService)
+			entry := buildEntitlement(ctx, e.File, baseURL, bookService)
 			if entry != nil {
 				response = append(response, &ChangedEntitlement{ChangedEntitlement: entry})
 			}
@@ -532,10 +507,10 @@ func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, re
 			response = append(response, &RemovedEntitlement{
 				ChangedEntitlement: &EntitlementChangeWrapper{
 					BookEntitlement: &BookEntitlementChange{
-						ID:        ShishoID(e.File.FileID),
+						ID:        e.File.EntryID,
 						IsRemoved: true,
 					},
-					BookMetadata: buildRemovedBookMetadata(e.File.FileID),
+					BookMetadata: buildRemovedBookMetadata(e.File.EntryID),
 				},
 			})
 		}
@@ -543,32 +518,31 @@ func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, re
 	return response
 }
 
-// buildRemovedBookMetadata returns a stub BookMetadata for a removed book.
-// The book record may already be gone, so we synthesize the required GUID-shaped
-// fields from the file ID. Kobo firmware requires a metadata object alongside
-// the IsRemoved entitlement to deindex the book on-device.
-func buildRemovedBookMetadata(fileID int) *BookMetadata {
-	bookID := ShishoID(fileID)
+// buildRemovedBookMetadata returns a stub BookMetadata for a removed entry.
+// The book record may already be gone, so we synthesize the required
+// GUID-shaped fields from the entry id. Kobo firmware requires a metadata
+// object alongside the IsRemoved entitlement to deindex the book on-device.
+func buildRemovedBookMetadata(entryID string) *BookMetadata {
 	return &BookMetadata{
 		Categories:      []string{dummyCategoryID},
-		CoverImageID:    bookID,
-		CrossRevisionID: bookID,
+		CoverImageID:    entryID,
+		CrossRevisionID: entryID,
 		CurrentDisplayPrice: &DisplayPrice{
 			CurrencyCode: "USD",
 			TotalAmount:  0,
 		},
-		EntitlementID: bookID,
+		EntitlementID: entryID,
 		Genre:         dummyCategoryID,
 		Language:      "en",
-		RevisionID:    bookID,
-		WorkID:        bookID,
+		RevisionID:    entryID,
+		WorkID:        entryID,
 	}
 }
 
 // buildEntitlement creates the entitlement and metadata for a file, sent
-// under revisionID. The same body goes out for an added book and a changed
-// one; only the wrapper differs.
-func buildEntitlement(ctx context.Context, f ScopedFile, revisionID string, baseURL string, bookService *books.Service) *EntitlementWrapper {
+// under its entry's id and RevisionId. The same body goes out for an added
+// book and a changed one; only the wrapper differs.
+func buildEntitlement(ctx context.Context, f ScopedFile, baseURL string, bookService *books.Service) *EntitlementWrapper {
 	file, err := bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &f.FileID})
 	if err != nil {
 		return nil
@@ -579,7 +553,7 @@ func buildEntitlement(ctx context.Context, f ScopedFile, revisionID string, base
 		return nil
 	}
 
-	metadata := buildBookMetadata(book, file, coverCacheKey(f.MetadataHash, f.CoverModifiedAt), baseURL)
+	metadata := buildBookMetadata(book, file, f.EntryID, f.DeliveredFileType, coverCacheKey(f.MetadataHash, f.CoverModifiedAt), baseURL)
 	now := time.Now()
 
 	return &EntitlementWrapper{
@@ -587,14 +561,14 @@ func buildEntitlement(ctx context.Context, f ScopedFile, revisionID string, base
 			Accessibility:       "Full",
 			ActivePeriod:        &ActivePeriod{From: book.CreatedAt},
 			Created:             book.CreatedAt,
-			CrossRevisionID:     ShishoID(f.FileID),
-			ID:                  ShishoID(f.FileID),
+			CrossRevisionID:     f.EntryID,
+			ID:                  f.EntryID,
 			IsHiddenFromArchive: false,
 			IsLocked:            false,
 			IsRemoved:           false,
 			LastModified:        now,
 			OriginCategory:      "Imported",
-			RevisionID:          revisionID,
+			RevisionID:          f.RevisionID,
 			Status:              "Active",
 		},
 		BookMetadata: metadata,
@@ -604,16 +578,17 @@ func buildEntitlement(ctx context.Context, f ScopedFile, revisionID string, base
 // Dummy UUID used for category/genre fields (same pattern as calibre-web).
 const dummyCategoryID = "00000000-0000-0000-0000-000000000001"
 
-// buildBookMetadata constructs the Kobo BookMetadata from our book/file.
+// buildBookMetadata constructs the Kobo BookMetadata for the entry entryID,
+// which holds file delivered as deliveredType.
 //
 // coverCacheKey is appended to CoverImageID so the device's thumbnail cache
 // refreshes whenever the underlying book/cover changes (otherwise the device
-// reuses the cached image at "shisho-{fileID}" indefinitely, even if the
-// underlying file ID gets remapped to a different book on a rescan). Pass an
-// empty string to disable suffixing — only safe when the caller has confirmed
-// no device-cache risk (e.g. unit tests).
-func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey string, baseURL string) *BookMetadata {
-	bookID := ShishoID(file.ID)
+// reuses the cached image at the entry id indefinitely, even after the entry
+// is handed to another File). Pass an empty string to disable suffixing,
+// which is only safe when the caller has confirmed no device-cache risk
+// (e.g. unit tests).
+func buildBookMetadata(book *models.Book, file *models.File, entryID, deliveredType, coverCacheKey, baseURL string) *BookMetadata {
+	bookID := entryID
 	coverImageID := bookID
 	if coverCacheKey != "" {
 		coverImageID = bookID + "-" + coverCacheKey
@@ -639,7 +614,7 @@ func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey strin
 		WorkID:        bookID,
 		DownloadUrls: []*DownloadURL{
 			{
-				Format:   "KEPUB",
+				Format:   downloadFormat(file.FileType, deliveredType),
 				Platform: "Generic",
 				Size:     file.FilesizeBytes,
 				URL:      fmt.Sprintf("%s/v1/books/%s/file/epub", baseURL, bookID),
@@ -689,6 +664,21 @@ func buildBookMetadata(book *models.Book, file *models.File, coverCacheKey strin
 	}
 
 	return metadata
+}
+
+// downloadFormat is the format a Kobo is told a File delivered as
+// deliveredType has: KEPUB, or EPUB3 for an EPUB, or EPUB3FL for one with a
+// fixed layout, as a CBZ becomes. A CBZ is the only fixed-layout source
+// Shisho knows of; an EPUB's own layout is not read. A Kobo never offers a
+// book reported as plain EPUB (ADR 0012).
+func downloadFormat(sourceType, deliveredType string) string {
+	switch {
+	case deliveredType == models.FileTypeKePub:
+		return "KEPUB"
+	case sourceType == models.FileTypeCBZ:
+		return "EPUB3FL"
+	}
+	return "EPUB3"
 }
 
 // getBaseURL returns the full base URL of the Kobo route the request came

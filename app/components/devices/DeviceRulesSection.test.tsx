@@ -2,10 +2,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type { Rule } from "@/types";
+import type {
+  DeliveryPreviewQuery,
+  DeliveryPreviewResponse,
+  Rule,
+} from "@/types";
 import type {
   DeviceResponse,
   UpdateDevicePayload,
@@ -47,28 +51,46 @@ const kobo = (overrides: Partial<DeviceResponse> = {}): DeviceResponse => ({
   ...overrides,
 });
 
-// Answers PATCH the way the server does: following a list resolves it, a
-// custom list is saved as sent, and an empty one is refused.
+const basePreview: DeliveryPreviewResponse = {
+  received_books: 1200,
+  not_received: [{ source_file_type: "pdf", books: 2 }],
+  moved_books: 0,
+  retyped_books: 0,
+};
+// What the delivery preview answers, by its query.
+let previewFor: (query: DeliveryPreviewQuery) => DeliveryPreviewResponse;
+
+// Answers the delivery preview with previewFor, and PATCH the way the
+// server does: following a list resolves it, a custom list is saved as
+// sent, and an empty one is refused.
 const mockServer = () =>
-  vi.spyOn(API, "request").mockImplementation(async (_method, _path, body) => {
-    const rules = (body as UpdateDevicePayload).delivery_rules!;
-    if (rules.mode === "custom" && !rules.rules?.length) {
-      throw new ShishoAPIError(
-        "Delivery Rules need at least one rule.",
-        "validation_error",
-        422,
-      );
-    }
-    return kobo({
-      delivery_rules_mode: rules.mode,
-      delivery_rules:
-        rules.mode === "custom"
-          ? rules.rules!
-          : rules.mode === "preset"
-            ? preset
-            : userDefault,
+  vi
+    .spyOn(API, "request")
+    .mockImplementation(async (method, path, body, query) => {
+      if (method === "GET" && path.endsWith("/delivery-preview")) {
+        return previewFor((query ?? {}) as DeliveryPreviewQuery);
+      }
+      const rules = (body as UpdateDevicePayload).delivery_rules!;
+      if (rules.mode === "custom" && !rules.rules?.length) {
+        throw new ShishoAPIError(
+          "Delivery Rules need at least one rule.",
+          "validation_error",
+          422,
+        );
+      }
+      return kobo({
+        delivery_rules_mode: rules.mode,
+        delivery_rules:
+          rules.mode === "custom"
+            ? rules.rules!
+            : rules.mode === "preset"
+              ? preset
+              : userDefault,
+      });
     });
-  });
+
+const previews = (request: ReturnType<typeof mockServer>) =>
+  request.mock.calls.filter((call) => call[0] === "GET").map((call) => call[3]);
 
 // Renders the section the way the Device page does, re-rendering with each
 // saved Device as the page's query would.
@@ -113,6 +135,10 @@ const modeButton = (name: string) =>
 const setup = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
 describe("DeviceRulesSection", () => {
+  beforeEach(() => {
+    previewFor = () => basePreview;
+    mockServer();
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it("shows the preset a new Kobo follows, read-only", () => {
@@ -310,5 +336,150 @@ describe("DeviceRulesSection", () => {
     );
 
     expect(screen.getByText(/so it receives nothing/)).toBeInTheDocument();
+  });
+
+  it("previews what the Device receives", async () => {
+    renderSection(kobo());
+
+    const preview = await screen.findByLabelText("What this Device receives");
+    await waitFor(() =>
+      expect(preview).toHaveTextContent(
+        "Receives 1,200 books. Doesn't receive 2 books with PDF.",
+      ),
+    );
+  });
+
+  it("previews a custom list while it is edited", async () => {
+    const user = setup();
+    const request = mockServer();
+    previewFor = (query) =>
+      query.mode === "custom"
+        ? {
+            ...basePreview,
+            received_books: 7,
+            not_received: [{ source_file_type: "cbz", books: 30 }],
+          }
+        : basePreview;
+    renderSection(kobo());
+
+    await user.click(modeButton("Custom"));
+    await user.click(
+      screen.getByRole("button", { name: "Remove the CBZ rule" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("What this Device receives"),
+      ).toHaveTextContent(
+        "Receives 7 books. Doesn't receive 30 books with CBZ.",
+      ),
+    );
+    expect(previews(request)).toContainEqual({
+      mode: "custom",
+      rules: "epub:kepub",
+    });
+  });
+
+  it("warns before saving a switch between KePub and EPUB", async () => {
+    const user = setup();
+    const request = mockServer();
+    previewFor = (query) =>
+      query.mode === "default"
+        ? { ...basePreview, retyped_books: 2 }
+        : basePreview;
+    renderSection(kobo());
+
+    await user.click(modeButton("My default"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Switch books between KePub and EPUB?",
+    });
+    expect(dialog).toHaveTextContent(
+      "2 books on this Kobo will switch between KePub and EPUB",
+    );
+    expect(dialog).toHaveTextContent("reading position and highlights");
+    expect(patches(request)).toEqual([]);
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save rules" }),
+    );
+    await waitFor(() =>
+      expect(patches(request)).toEqual([
+        { delivery_rules: { mode: "default", rules: undefined } },
+      ]),
+    );
+  });
+
+  it("saves nothing when the switch is canceled", async () => {
+    const user = setup();
+    const request = mockServer();
+    previewFor = () => ({ ...basePreview, retyped_books: 1 });
+    renderSection(kobo());
+
+    await user.click(modeButton("Custom"));
+    await user.click(
+      screen.getByRole("button", { name: "Remove the CBZ rule" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(patches(request)).toEqual([]);
+  });
+
+  it("never asks a Device that isn't a Kobo", async () => {
+    const user = setup();
+    const request = mockServer();
+    previewFor = () => ({ ...basePreview, retyped_books: 3 });
+    renderSection(
+      kobo({
+        device_type: "opds",
+        has_preset: false,
+        delivery_rules_mode: "default",
+        delivery_rules: userDefault,
+      }),
+    );
+
+    await user.click(modeButton("Custom"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(patches(request)).toHaveLength(1));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("warns when books on the Kobo move to a different edition", async () => {
+    previewFor = () => ({ ...basePreview, moved_books: 1 });
+    renderSection(kobo());
+
+    expect(
+      await screen.findByText(
+        "1 book on this Kobo will move to a different edition at its next sync, and may reopen at the start.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("asks before following rules that move books to a different edition", async () => {
+    const user = setup();
+    const request = mockServer();
+    previewFor = (query) =>
+      query.mode === "default"
+        ? { ...basePreview, moved_books: 3 }
+        : basePreview;
+    renderSection(kobo());
+
+    await user.click(modeButton("My default"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Move books to a different edition?",
+    });
+    expect(dialog).toHaveTextContent(
+      "3 books on this Kobo will move to a different edition",
+    );
+    expect(patches(request)).toEqual([]);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save rules" }),
+    );
+    await waitFor(() => expect(patches(request)).toHaveLength(1));
   });
 });

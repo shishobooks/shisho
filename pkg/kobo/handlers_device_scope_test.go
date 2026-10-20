@@ -12,19 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// syncedFileIDs runs a fresh sync at path and returns the file ids of the
-// books it sends.
-func (f *koboScopeFixture) syncedFileIDs(t *testing.T, path string) []string {
+// syncedFileIDs runs a fresh sync at path and returns the ids of the files
+// held by the entries it sends.
+func (f *koboScopeFixture) syncedFileIDs(t *testing.T, path string) []int {
 	t.Helper()
 	rec := f.serve(http.MethodGet, path+"/v1/library/sync")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var items []syncItem
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
-	ids := []string{}
+	ids := []int{}
 	for _, item := range items {
 		require.NotNil(t, item.NewEntitlement)
-		id, _ := item.NewEntitlement.BookEntitlement["Id"].(string)
-		ids = append(ids, id)
+		entryID, _ := item.NewEntitlement.BookEntitlement["Id"].(string)
+		var fileID int
+		require.NoError(t, f.db.NewRaw(`SELECT file_id FROM kobo_sync_entries WHERE device_id = ? AND entry_id = ?`, f.device.ID, entryID).Scan(context.Background(), &fileID))
+		ids = append(ids, fileID)
 	}
 	return ids
 }
@@ -57,16 +59,16 @@ func TestHandleSync_UsesTheDeviceScope(t *testing.T) {
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 
-	assert.ElementsMatch(t, []string{ShishoID(f.fileA.ID), ShishoID(f.fileB.ID)}, f.syncedFileIDs(t, f.prefix()))
+	assert.ElementsMatch(t, []int{f.fileA.ID, f.fileB.ID}, f.syncedFileIDs(t, f.prefix()))
 
 	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libB.ID})
 	f.resetSync(t)
-	assert.Equal(t, []string{ShishoID(f.fileB.ID)}, f.syncedFileIDs(t, f.prefix()))
+	assert.Equal(t, []int{f.fileB.ID}, f.syncedFileIDs(t, f.prefix()))
 
 	list := f.insertList(t, f.bookA.ID)
 	f.setScope(t, devices.Scope{Type: devices.ScopeList, ListID: &list.ID})
 	f.resetSync(t)
-	assert.Equal(t, []string{ShishoID(f.fileA.ID)}, f.syncedFileIDs(t, f.prefix()))
+	assert.Equal(t, []int{f.fileA.ID}, f.syncedFileIDs(t, f.prefix()))
 }
 
 // A migrated Kobo's first request after upgrading sets the Device's scope
@@ -77,14 +79,14 @@ func TestHandleSync_MigratedURLScopeAppliesOnce(t *testing.T) {
 	f.markMigrated(t)
 
 	legacyA := f.legacyPrefix(fmt.Sprintf("library/%d", f.libA.ID))
-	assert.Equal(t, []string{ShishoID(f.fileA.ID)}, f.syncedFileIDs(t, legacyA))
+	assert.Equal(t, []int{f.fileA.ID}, f.syncedFileIDs(t, legacyA))
 	assert.Equal(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID}, f.storedScope(t))
 
 	f.resetSync(t)
 	legacyB := f.legacyPrefix(fmt.Sprintf("library/%d", f.libB.ID))
-	assert.Equal(t, []string{ShishoID(f.fileA.ID)}, f.syncedFileIDs(t, legacyB), "a later URL scope is ignored")
+	assert.Equal(t, []int{f.fileA.ID}, f.syncedFileIDs(t, legacyB), "a later URL scope is ignored")
 	f.resetSync(t)
-	assert.Equal(t, []string{ShishoID(f.fileA.ID)}, f.syncedFileIDs(t, f.legacyPrefix("all")))
+	assert.Equal(t, []int{f.fileA.ID}, f.syncedFileIDs(t, f.legacyPrefix("all")))
 	assert.Equal(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libA.ID}, f.storedScope(t))
 }
 
@@ -95,7 +97,7 @@ func TestHandleSync_MigratedListURLSetsListScope(t *testing.T) {
 	list := f.insertList(t, f.bookB.ID)
 	f.markMigrated(t)
 
-	assert.Equal(t, []string{ShishoID(f.fileB.ID)}, f.syncedFileIDs(t, f.legacyPrefix(fmt.Sprintf("list/%d", list.ID))))
+	assert.Equal(t, []int{f.fileB.ID}, f.syncedFileIDs(t, f.legacyPrefix(fmt.Sprintf("list/%d", list.ID))))
 	assert.Equal(t, devices.Scope{Type: devices.ScopeList, ListID: &list.ID}, f.storedScope(t))
 }
 
@@ -106,7 +108,7 @@ func TestHandleSync_LegacyURLScopeIgnoredForNewDevices(t *testing.T) {
 	f.setScope(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libB.ID})
 
 	legacyA := f.legacyPrefix(fmt.Sprintf("library/%d", f.libA.ID))
-	assert.Equal(t, []string{ShishoID(f.fileB.ID)}, f.syncedFileIDs(t, legacyA))
+	assert.Equal(t, []int{f.fileB.ID}, f.syncedFileIDs(t, legacyA))
 	assert.Equal(t, devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.libB.ID}, f.storedScope(t))
 }
 
@@ -122,7 +124,7 @@ func TestHandleSync_DownloadURLsFollowTheRouteUsed(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		var items []syncItem
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
-		item := itemFor(t, items, f.fileA.ID)
+		item := f.itemFor(t, items, f.fileA.ID)
 		assertDownloadURLsUnder(t, item.NewEntitlement.BookMetadata["DownloadUrls"], "http://example.com"+prefix)
 	}
 }

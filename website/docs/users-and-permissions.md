@@ -178,13 +178,15 @@ A list shared with you can hold books from libraries you cannot access; those bo
 
 ### Delivery Rules of a Device
 
-Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer. Under **Delivery Rules** on its page, choose one:
+Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends. Under **Delivery Rules** on its page, choose one:
 
 - **My default**: your default rules from **User Settings > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
 - **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
 - **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **User Settings > Delivery Rules**.
 
-Kobo sync keeps sending KePub whatever a Kobo Device's rules say.
+Under the rules, the Device's page previews how many books in its scope the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
+
+Each book's page has an **On your Devices** panel with a row for each of your Devices: the file type each of the book's files goes out as, such as EPUB to KePub, or why it receives nothing, such as no rule for the book's file types or the book being outside its scope. For a Kobo, the row also warns when its next sync would move the book to a different edition or switch it between KePub and EPUB.
 
 ### Delete a Device
 

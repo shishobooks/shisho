@@ -46,6 +46,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
@@ -164,6 +165,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
 	registerProtectedRoutes(api, db, cfg, authMiddleware, w, pm, broker, svcs)
+
+	// What each Device gets: a book's "On your Devices" panel and a
+	// Device's delivery preview
+	reach.RegisterRoutes(api, db, svcs.books, authMiddleware)
 
 	if !cfg.DemoMode {
 		// Register OPDS routes with Basic Auth
