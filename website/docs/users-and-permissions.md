@@ -147,7 +147,7 @@ Choose the type when adding a Device. It decides which connections the Device ca
 |------|-------------|-------------|-------------|
 | **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: EPUB as KePub, then CBZ as KePub |
 | **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI |
-| **OPDS app** | OPDS, for reading apps such as KOReader or Panels | Any file type | Your default Delivery Rules |
+| **OPDS app** | OPDS, for reading apps such as KOReader, Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
 The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS gets `401 Unauthorized`.

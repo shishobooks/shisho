@@ -35,7 +35,7 @@ export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
     {
       type: DeviceTypeOPDS,
       description:
-        "A reading app that browses an OPDS catalog, such as KOReader or Panels.",
+        "A reading app that browses an OPDS catalog, such as KOReader, Thorium, Panels, etc.",
     },
     {
       type: DeviceTypeBrowser,
