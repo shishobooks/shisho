@@ -382,7 +382,7 @@ describe("ShareLinkDialog", () => {
     const link = within(screen.getByRole("status")).getByRole("link", {
       name: "Settings > Sharing",
     });
-    expect(link).toHaveAttribute("href", "/settings/sharing");
+    expect(link).toHaveAttribute("href", "/admin/sharing");
     await user.click(link);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

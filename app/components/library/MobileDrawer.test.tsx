@@ -84,22 +84,22 @@ const getActiveLabels = () =>
 
 describe("MobileDrawer", () => {
   it("casts no shadow while closed", () => {
-    renderDrawer("/settings/review-criteria");
+    renderDrawer("/admin/review-criteria");
 
     expect(getDrawer()).not.toHaveClass("shadow-2xl");
   });
 
   it("casts a shadow while open", () => {
     isOpen = true;
-    renderDrawer("/settings/review-criteria");
+    renderDrawer("/admin/review-criteria");
 
     expect(getDrawer()).toHaveClass("shadow-2xl");
   });
 
   it.each([
-    ["/settings/server", "Server"],
-    ["/settings/sharing", "Sharing"],
-    ["/settings/users/3", "Users"],
+    ["/admin/server", "Server"],
+    ["/admin/sharing", "Sharing"],
+    ["/admin/users/3", "Users"],
   ])("highlights exactly one item on %s", (path, expected) => {
     isOpen = true;
     renderDrawer(path);
@@ -107,17 +107,17 @@ describe("MobileDrawer", () => {
     expect(getActiveLabels()).toEqual([expected]);
   });
 
-  it("highlights Global Settings when no admin item matches the page", () => {
-    // /settings has no page of its own (it redirects to the first permitted
+  it("highlights Administration when no admin item matches the page", () => {
+    // /admin has no page of its own (it redirects to the first permitted
     // one), so no admin item matches it.
     setAuth({
       permissions: ["users:read", "users:write"],
       user: { username: "manager", role_name: "Manager" },
     });
     isOpen = true;
-    renderDrawer("/settings");
+    renderDrawer("/admin");
 
-    expect(getActiveLabels()).toEqual(["Global Settings"]);
+    expect(getActiveLabels()).toEqual(["Administration"]);
   });
 
   it("highlights only Lists outside settings pages", () => {
@@ -149,7 +149,7 @@ describe("MobileDrawer library picker", () => {
       permissions: ["shares:read"],
       user: { username: "reader", role_name: "Shares Only" },
     });
-    // The Kobo sync scope in Security Settings fills the same cache.
+    // A Device's scope picker fills the same cache.
     const queryClient = new QueryClient();
     queryClient.setQueryData(["UserLibraries"], [{ id: 1, name: "Fiction" }]);
     const request = renderDrawer("/lists/3", queryClient);

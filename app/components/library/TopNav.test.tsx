@@ -35,7 +35,7 @@ const renderNav = () =>
 const settingsLink = () =>
   screen
     .queryAllByRole("link")
-    .find((link) => link.getAttribute("href") === "/settings");
+    .find((link) => link.getAttribute("href") === "/admin");
 
 describe("TopNav", () => {
   beforeEach(() => {
@@ -98,20 +98,10 @@ describe("TopNav", () => {
     ).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("hides the settings gear when no settings page is permitted", () => {
-    setAuth({ permissions: ["books:read", "series:read", "people:read"] });
-    renderNav();
-
-    expect(settingsLink()).toBeUndefined();
-  });
-
-  it("shows the settings gear when a settings page is permitted", () => {
+  it("leaves the settings link to the account menu", () => {
     setAuth({ permissions: ["books:read", "libraries:read"] });
     renderNav();
 
-    expect(settingsLink()).toBeDefined();
-    expect(screen.getByRole("link", { name: "Global Settings" })).toBe(
-      settingsLink(),
-    );
+    expect(settingsLink()).toBeUndefined();
   });
 });

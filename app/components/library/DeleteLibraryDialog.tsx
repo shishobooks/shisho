@@ -45,7 +45,7 @@ export function DeleteLibraryDialog({
       await deleteMutation.mutateAsync({ id: library.id });
       toast.success(`Library "${library.name}" deleted.`);
       onOpenChange(false);
-      navigate("/settings/libraries");
+      navigate("/admin/libraries");
     } catch (e) {
       toastRequestError(e, "Failed to delete library");
     }

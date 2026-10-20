@@ -1,5 +1,5 @@
 /**
- * E2E tests for the redesigned Plugins admin UI (/settings/plugins).
+ * E2E tests for the redesigned Plugins admin UI (/admin/plugins).
  *
  * This file covers UI-structural behavior that does not require plugin
  * seeding: routing, tab selection, legacy redirects, empty-state copy.
@@ -23,7 +23,7 @@ async function loginAsAdmin(page: Page) {
   await page.getByLabel("Username").fill("plugintest");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL("/settings/libraries");
+  await expect(page).toHaveURL("/admin/libraries");
 }
 
 test.describe("Plugins UI (redesigned)", () => {
@@ -42,13 +42,13 @@ test.describe("Plugins UI (redesigned)", () => {
   });
 
   test("redirects unauthenticated users to /login", async ({ page }) => {
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
     await expect(page).toHaveURL(/\/login/);
   });
 
   test("Installed tab is the default view", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
 
     await expect(page.getByRole("heading", { name: "Plugins" })).toBeVisible();
 
@@ -60,11 +60,11 @@ test.describe("Plugins UI (redesigned)", () => {
 
   test("clicking Discover updates URL and selected tab", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
 
     await page.getByRole("tab", { name: "Discover" }).click();
 
-    await expect(page).toHaveURL(/\/settings\/plugins\/discover$/);
+    await expect(page).toHaveURL(/\/admin\/plugins\/discover$/);
     await expect(page.getByRole("tab", { name: "Discover" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -75,11 +75,11 @@ test.describe("Plugins UI (redesigned)", () => {
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins/discover");
+    await page.goto("/admin/plugins/discover");
 
     await page.getByRole("tab", { name: /Installed/ }).click();
 
-    await expect(page).toHaveURL(/\/settings\/plugins$/);
+    await expect(page).toHaveURL(/\/admin\/plugins$/);
     await expect(page.getByRole("tab", { name: /Installed/ })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -88,16 +88,16 @@ test.describe("Plugins UI (redesigned)", () => {
 
   test("legacy /browse redirects to /discover", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins/browse");
+    await page.goto("/admin/plugins/browse");
 
-    await expect(page).toHaveURL(/\/settings\/plugins\/discover$/);
+    await expect(page).toHaveURL(/\/admin\/plugins\/discover$/);
   });
 
   test("legacy /order opens Advanced dialog with Order tab active", async ({
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins/order");
+    await page.goto("/admin/plugins/order");
 
     const dialog = page.getByRole("dialog", {
       name: "Advanced plugin settings",
@@ -107,14 +107,14 @@ test.describe("Plugins UI (redesigned)", () => {
       "aria-selected",
       "true",
     );
-    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=order$/);
+    await expect(page).toHaveURL(/\/admin\/plugins\?advanced=order$/);
   });
 
   test("legacy /repositories opens Advanced dialog with Repositories tab active", async ({
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins/repositories");
+    await page.goto("/admin/plugins/repositories");
 
     const dialog = page.getByRole("dialog", {
       name: "Advanced plugin settings",
@@ -123,7 +123,7 @@ test.describe("Plugins UI (redesigned)", () => {
     await expect(
       dialog.getByRole("tab", { name: "Repositories" }),
     ).toHaveAttribute("aria-selected", "true");
-    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=repositories$/);
+    await expect(page).toHaveURL(/\/admin\/plugins\?advanced=repositories$/);
 
     // The section stays in the URL, so a reload reopens the same tab.
     await page.reload();
@@ -137,7 +137,7 @@ test.describe("Plugins UI (redesigned)", () => {
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
 
     await page
       .getByRole("button", { name: "Advanced plugin settings" })
@@ -151,21 +151,21 @@ test.describe("Plugins UI (redesigned)", () => {
     await expect(
       dialog.getByRole("tab", { name: "Repositories" }),
     ).toBeVisible();
-    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=order$/);
+    await expect(page).toHaveURL(/\/admin\/plugins\?advanced=order$/);
 
     await dialog.getByRole("tab", { name: "Repositories" }).click();
-    await expect(page).toHaveURL(/\/settings\/plugins\?advanced=repositories$/);
+    await expect(page).toHaveURL(/\/admin\/plugins\?advanced=repositories$/);
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(page).toHaveURL(/\/settings\/plugins$/);
+    await expect(page).toHaveURL(/\/admin\/plugins$/);
   });
 
   test("Installed tab shows empty state when no plugins installed", async ({
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
 
     await expect(
       page.getByText(

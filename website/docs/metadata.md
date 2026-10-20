@@ -51,7 +51,7 @@ If books or files still use a resource when it is deleted, for example because a
 ## Editing and Identify
 
 :::warning[Identify Can Move Files]
-When **Organize file structure during scans** is enabled, applying path-affecting fields can rename or move media files. These path changes are not automatically reversible. Back up the media and verify the selected library before applying changes, or turn off organization under **Settings > Libraries** first if you need to preserve the current layout.
+When **Organize file structure during scans** is enabled, applying path-affecting fields can rename or move media files. These path changes are not automatically reversible. Back up the media and verify the selected library before applying changes, or turn off organization under **Administration > Libraries** first if you need to preserve the current layout.
 :::
 
 Use **Edit** on a book or file for direct changes. Use **Identify** to search configured metadata plugins, compare proposed book and file values, and choose which fields to apply. Review every checked field when identifying a second edition because shared book metadata may differ between editions.
@@ -120,7 +120,7 @@ Use refresh or reset only after reviewing what will be replaced. Keep sidecars a
 
 Review state is tracked per main file. A book is **Reviewed** only when all of its main files are reviewed; if any main file needs review, the book appears under **Needs review**. Supplements do not affect the result.
 
-Automatic review checks the fields configured under **Settings > Review Criteria**. Defaults require authors, description, cover, and genres for every main file, plus narrators for M4B files. Adding a missing required value can mark the file reviewed, and removing one can return it to needs review.
+Automatic review checks the fields configured under **Administration > Review Criteria**. Defaults require authors, description, cover, and genres for every main file, plus narrators for M4B files. Adding a missing required value can mark the file reviewed, and removing one can return it to needs review.
 
 A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review state from **Review Criteria**.
 

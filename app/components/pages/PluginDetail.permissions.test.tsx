@@ -42,12 +42,9 @@ const renderDetail = () => {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/settings/plugins/local/sample"]}>
+      <MemoryRouter initialEntries={["/admin/plugins/local/sample"]}>
         <Routes>
-          <Route
-            element={<PluginDetail />}
-            path="/settings/plugins/:scope/:id"
-          />
+          <Route element={<PluginDetail />} path="/admin/plugins/:scope/:id" />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

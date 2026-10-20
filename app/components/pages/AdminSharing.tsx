@@ -163,10 +163,7 @@ const AdminSharing = () => {
             permission, which only the Admin role has by default. To let other
             roles share books, grant it to them in{" "}
             {canViewUsers ? (
-              <Link
-                className="text-primary hover:underline"
-                to="/settings/users"
-              >
+              <Link className="text-primary hover:underline" to="/admin/users">
                 Users
               </Link>
             ) : (

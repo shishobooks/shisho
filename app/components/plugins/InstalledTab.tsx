@@ -99,7 +99,7 @@ export const InstalledTab = () => {
         }
         capabilities={capabilityLabels}
         description={plugin.description}
-        href={`/settings/plugins/${plugin.scope}/${plugin.id}`}
+        href={`/admin/plugins/${plugin.scope}/${plugin.id}`}
         id={plugin.id}
         imageUrl={imageUrl}
         isOfficial={isOfficial}

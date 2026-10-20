@@ -26,7 +26,7 @@ export const SizeSelector = ({
       // square corners outside the rounded border).
       //
       // When the parent is itself a stretching flex container (e.g. the
-      // User Settings Appearance card uses flex flex-col), the
+      // Preferences Appearance card uses flex flex-col), the
       // align-items: stretch default fills the parent width naturally —
       // no className override needed for that case.
       className={cn(

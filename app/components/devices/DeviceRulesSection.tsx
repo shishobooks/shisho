@@ -297,7 +297,7 @@ const DeviceRulesBody = ({
               Changes to your default reach this Device too.{" "}
               <Link
                 className="underline underline-offset-4 hover:text-foreground"
-                to={`/user/settings#${DELIVERY_RULES_SECTION_ID}`}
+                to={`/user/preferences#${DELIVERY_RULES_SECTION_ID}`}
               >
                 Edit your default
               </Link>

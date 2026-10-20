@@ -61,10 +61,7 @@ const renderAt = (path: string) => {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route
-            element={<PluginDetail />}
-            path="/settings/plugins/:scope/:id"
-          />
+          <Route element={<PluginDetail />} path="/admin/plugins/:scope/:id" />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -72,10 +69,10 @@ const renderAt = (path: string) => {
 };
 
 describe("PluginDetail breadcrumb", () => {
-  it("renders Plugins as a link to /settings/plugins and the plugin name as current", () => {
-    renderAt("/settings/plugins/shisho/example");
+  it("renders Plugins as a link to /admin/plugins and the plugin name as current", () => {
+    renderAt("/admin/plugins/shisho/example");
     const pluginsLink = screen.getByRole("link", { name: /^plugins$/i });
-    expect(pluginsLink).toHaveAttribute("href", "/settings/plugins");
+    expect(pluginsLink).toHaveAttribute("href", "/admin/plugins");
     // Plugin name appears in breadcrumb current position AND in the hero —
     // at least one of them; ensure no back-button "Plugins" button remains.
     expect(screen.queryByRole("button", { name: /^plugins$/i })).toBeNull();

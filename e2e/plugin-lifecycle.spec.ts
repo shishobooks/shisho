@@ -38,7 +38,7 @@ test.describe("Plugin lifecycle flows", () => {
     });
 
     await loginAsPluginAdmin(page);
-    await page.goto("/settings/plugins/test/fixture");
+    await page.goto("/admin/plugins/test/fixture");
 
     // Danger zone has a single Uninstall button; the confirm dialog exposes
     // a second Uninstall button.
@@ -49,7 +49,7 @@ test.describe("Plugin lifecycle flows", () => {
       .click();
 
     // Redirected back to the Installed list; plugin no longer present.
-    await expect(page).toHaveURL(/\/settings\/plugins$/);
+    await expect(page).toHaveURL(/\/admin\/plugins$/);
     await expect(
       page.getByText(
         "No plugins installed yet. Browse available plugins to get started.",
@@ -75,7 +75,7 @@ test.describe("Plugin lifecycle flows", () => {
     });
 
     await loginAsPluginAdmin(page);
-    await page.goto("/settings/plugins/test/fixture");
+    await page.goto("/admin/plugins/test/fixture");
 
     // The hero exposes Enable/Disable as a labeled Switch, not a button.
     const enabledSwitch = page.getByRole("switch", { name: "Enabled" });
@@ -86,13 +86,13 @@ test.describe("Plugin lifecycle flows", () => {
     await expect(enabledSwitch).not.toBeChecked();
 
     // Back to the list: the plugin row is shown with a Disabled badge.
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
     const row = page.getByRole("link", { name: /Fixture Plugin/ });
     await expect(row).toBeVisible();
     await expect(row.getByText("Disabled")).toBeVisible();
 
     // Re-enable from the detail page.
-    await page.goto("/settings/plugins/test/fixture");
+    await page.goto("/admin/plugins/test/fixture");
     const enabledSwitchAgain = page.getByRole("switch", { name: "Enabled" });
     await expect(enabledSwitchAgain).not.toBeChecked();
     await enabledSwitchAgain.click();

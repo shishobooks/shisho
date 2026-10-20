@@ -28,80 +28,80 @@ export const useAdminNavItems = (): AdminNavItem[] => {
   const location = useLocation();
 
   // Each entry shows when the role passes its page's route guard.
-  const canViewConfig = useCan(ROUTE_PERMISSIONS.settingsConfig);
-  const canViewLibraries = useCan(ROUTE_PERMISSIONS.settingsLibraries);
-  const canViewUsers = useCan(ROUTE_PERMISSIONS.settingsUsers);
-  const canViewJobs = useCan(ROUTE_PERMISSIONS.settingsJobs);
+  const canViewConfig = useCan(ROUTE_PERMISSIONS.adminConfig);
+  const canViewLibraries = useCan(ROUTE_PERMISSIONS.adminLibraries);
+  const canViewUsers = useCan(ROUTE_PERMISSIONS.adminUsers);
+  const canViewJobs = useCan(ROUTE_PERMISSIONS.adminJobs);
 
   return [
     {
-      to: "/settings/server",
+      to: "/admin/server",
       Icon: Cog,
       label: "Server",
-      isActive: location.pathname === "/settings/server",
+      isActive: location.pathname === "/admin/server",
       show: canViewConfig,
     },
     {
-      to: "/settings/libraries",
+      to: "/admin/libraries",
       Icon: Library,
       label: "Libraries",
-      isActive: location.pathname.startsWith("/settings/libraries"),
+      isActive: location.pathname.startsWith("/admin/libraries"),
       show: canViewLibraries,
     },
     {
-      to: "/settings/review-criteria",
+      to: "/admin/review-criteria",
       Icon: BookCheck,
       label: "Review Criteria",
-      isActive: location.pathname.startsWith("/settings/review-criteria"),
+      isActive: location.pathname.startsWith("/admin/review-criteria"),
       show: canViewConfig,
     },
     {
-      to: "/settings/sharing",
+      to: "/admin/sharing",
       Icon: Share2,
       label: "Sharing",
-      isActive: location.pathname.startsWith("/settings/sharing"),
+      isActive: location.pathname.startsWith("/admin/sharing"),
       show: canViewConfig,
     },
     {
-      to: "/settings/users",
+      to: "/admin/users",
       Icon: Users,
       label: "Users",
-      isActive: location.pathname.startsWith("/settings/users"),
+      isActive: location.pathname.startsWith("/admin/users"),
       show: canViewUsers,
     },
     {
-      to: "/settings/devices",
+      to: "/admin/devices",
       Icon: TabletSmartphone,
       label: "Devices",
-      isActive: location.pathname.startsWith("/settings/devices"),
+      isActive: location.pathname.startsWith("/admin/devices"),
       show: canViewUsers,
     },
     {
-      to: "/settings/jobs",
+      to: "/admin/jobs",
       Icon: Briefcase,
       label: "Jobs",
-      isActive: location.pathname.startsWith("/settings/jobs"),
+      isActive: location.pathname.startsWith("/admin/jobs"),
       show: canViewJobs,
     },
     {
-      to: "/settings/plugins",
+      to: "/admin/plugins",
       Icon: Puzzle,
       label: "Plugins",
-      isActive: location.pathname.startsWith("/settings/plugins"),
+      isActive: location.pathname.startsWith("/admin/plugins"),
       show: canViewConfig,
     },
     {
-      to: "/settings/cache",
+      to: "/admin/cache",
       Icon: HardDrive,
       label: "Cache",
-      isActive: location.pathname.startsWith("/settings/cache"),
+      isActive: location.pathname.startsWith("/admin/cache"),
       show: canViewConfig,
     },
     {
-      to: "/settings/logs",
+      to: "/admin/logs",
       Icon: ScrollText,
       label: "Logs",
-      isActive: location.pathname.startsWith("/settings/logs"),
+      isActive: location.pathname.startsWith("/admin/logs"),
       show: canViewConfig,
     },
   ];

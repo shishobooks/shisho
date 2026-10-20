@@ -33,7 +33,7 @@ export const PluginDangerZone = ({
         onSuccess: () => {
           toast.success(`${plugin.name} uninstalled`);
           setConfirmOpen(false);
-          navigate("/settings/plugins");
+          navigate("/admin/plugins");
         },
       },
     );

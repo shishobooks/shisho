@@ -21,7 +21,7 @@ const base = {
   description: "A test plugin.",
   imageUrl: undefined,
   capabilities: [],
-  href: "/settings/plugins/shisho/test",
+  href: "/admin/plugins/shisho/test",
 };
 
 const wrap = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
@@ -95,7 +95,7 @@ describe("PluginRow", () => {
     render(wrap(<PluginRow {...base} />));
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
-      "/settings/plugins/shisho/test",
+      "/admin/plugins/shisho/test",
     );
   });
 

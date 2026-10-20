@@ -1,7 +1,6 @@
 import {
   Check,
   ChevronRight,
-  KeyRound,
   Library,
   List,
   LogOut,
@@ -132,10 +131,10 @@ const MobileDrawer = () => {
     (item) => item.show,
   );
 
-  const isAdminContext = location.pathname.startsWith("/settings");
+  const isAdminContext = location.pathname.startsWith("/admin");
   const visibleAdminItems = useAdminNavItems().filter((item) => item.show);
 
-  // Global Settings opens the first settings page the role may see.
+  // Administration opens the first settings page the role may see.
   const canAccessAdmin = visibleAdminItems.length > 0;
 
   return (
@@ -317,7 +316,7 @@ const MobileDrawer = () => {
             </nav>
           )}
 
-          {/* Admin Navigation (when on /settings routes) */}
+          {/* Admin Navigation (when on /admin routes) */}
           {isAdminContext && !demoMode && visibleAdminItems.length > 0 && (
             <nav className="py-2 border-b border-border">
               {visibleAdminItems.map((item) => (
@@ -351,9 +350,9 @@ const MobileDrawer = () => {
                   isAdminContext &&
                   !visibleAdminItems.some((item) => item.isActive)
                 }
-                label="Global Settings"
+                label="Administration"
                 onClick={close}
-                to="/settings"
+                to="/admin"
               />
             )}
           </nav>
@@ -368,21 +367,12 @@ const MobileDrawer = () => {
                 {user?.role_name}
               </div>
             </div>
-            {!demoMode && (
-              <NavItem
-                icon={<KeyRound className="h-5 w-5" />}
-                isActive={location.pathname === "/user/security"}
-                label="Security"
-                onClick={close}
-                to="/user/security"
-              />
-            )}
             <NavItem
               icon={<UserCog className="h-5 w-5" />}
-              isActive={location.pathname === "/user/settings"}
-              label="User Settings"
+              isActive={location.pathname === "/user/preferences"}
+              label="Preferences"
               onClick={close}
-              to="/user/settings"
+              to="/user/preferences"
             />
             <Button
               className="flex items-center gap-4 w-full px-4 py-3.5 text-base font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"

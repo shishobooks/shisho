@@ -108,7 +108,7 @@ Follow container output with:
 docker compose logs -f shisho
 ```
 
-The image emits JSON logs by default. Set `LOG_FORMAT=console` for human-readable output. Successful frontend asset requests are omitted from request logs; application API, integration, and error responses are logged. The **Settings > Logs** page shows recent application logs and streams new ones live to users with Config Read permission. Container logs remain important for startup failures and reverse proxy issues.
+The image emits JSON logs by default. Set `LOG_FORMAT=console` for human-readable output. Successful frontend asset requests are omitted from request logs; application API, integration, and error responses are logged. The **Administration > Logs** page shows recent application logs and streams new ones live to users with Config Read permission. Container logs remain important for startup failures and reverse proxy issues.
 
 ## HTTPS and Reverse Proxies
 
@@ -162,11 +162,11 @@ Core local library management does not require sending your library to a hosted 
 
 ## Maintain Server Caches
 
-Generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pages live under `CACHE_DIR`, which defaults to `/config/cache`. Each of these four caches has its own size limit under **Settings > Cache**.
+Generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pages live under `CACHE_DIR`, which defaults to `/config/cache`. Each of these four caches has its own size limit under **Administration > Cache**.
 
 Cover thumbnails are generated only when the web interface requests a size. Scanning a library does not generate every thumbnail size. The first view of an uncached cover or size can take longer; later requests reuse the saved thumbnail, including after a server restart. See [Gallery Size](./browsing-search-bulk-actions.md#gallery-size) for the display controls.
 
-To change a limit, set **Maximum size (GiB)** on the cache's card under **Settings > Cache**, then select **Save limit**. Fractional values are allowed, from 0 to 1024 GiB. Select **No limit** instead to let the cache use as much disk space as it needs; the size stays filled in, so clearing **No limit** later restores it. A saved limit applies immediately and survives restarts. Lowering a limit removes the least recently used files until the cache fits.
+To change a limit, set **Maximum size (GiB)** on the cache's card under **Administration > Cache**, then select **Save limit**. Fractional values are allowed, from 0 to 1024 GiB. Select **No limit** instead to let the cache use as much disk space as it needs; the size stays filled in, so clearing **No limit** later restores it. A saved limit applies immediately and survives restarts. Lowering a limit removes the least recently used files until the cache fits.
 
 | Cache | Default limit | Over the limit |
 |-------|---------------|----------------|
@@ -180,4 +180,4 @@ Changed covers get new thumbnails on demand, and their older versions are remove
 Clearing a cache permanently deletes its generated files, but does not delete the library database, source media, or original covers. Verify that you selected the intended cache. The content can be regenerated, although the next affected cover, download, or reader request may be slower.
 :::
 
-Users with Config Read permission can open **Settings > Cache** to inspect each cache. Config Write permission is required to change a limit or select **Clear**. See [Configuration](./configuration.md#cache) for the cache directory and PDF rendering options.
+Users with Config Read permission can open **Administration > Cache** to inspect each cache. Config Write permission is required to change a limit or select **Clear**. See [Configuration](./configuration.md#cache) for the cache directory and PDF rendering options.

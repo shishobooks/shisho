@@ -84,9 +84,9 @@ test.describe("Gallery sort", () => {
     await page.getByLabel("Username").fill("sortadmin");
     await page.getByLabel("Password").fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
-    // Redirect goes to /settings/libraries by default; go to the test
+    // Redirect goes to /admin/libraries by default; go to the test
     // library directly.
-    await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
     await page.goto(`/libraries/${testData.libraryId}`, {
       waitUntil: "domcontentloaded",
     });

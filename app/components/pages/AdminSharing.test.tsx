@@ -71,7 +71,7 @@ describe("AdminSharing", () => {
     expect(screen.getByText(/Shares/, { selector: "strong" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Users" })).toHaveAttribute(
       "href",
-      "/settings/users",
+      "/admin/users",
     );
   });
 

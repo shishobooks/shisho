@@ -77,6 +77,6 @@ test.describe("Login Flow", () => {
     await page.getByLabel("Username").fill("testadmin");
     await page.getByLabel("Password").fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL("/settings/libraries");
+    await expect(page).toHaveURL("/admin/libraries");
   });
 });

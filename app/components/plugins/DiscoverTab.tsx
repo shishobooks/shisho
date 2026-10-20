@@ -269,7 +269,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
                   }
                   capabilities={caps}
                   description={p.description || undefined}
-                  href={`/settings/plugins/${p.scope}/${p.id}`}
+                  href={`/admin/plugins/${p.scope}/${p.id}`}
                   id={p.id}
                   imageUrl={p.imageUrl || null}
                   isOfficial={p.is_official}

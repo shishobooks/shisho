@@ -49,4 +49,4 @@ Browser audio support depends on the file's codec, and some audiobooks play only
 
 ## Reader Settings
 
-Open the user menu and select **User Settings** for shared reader preferences such as **Auto-hide controls**. Format-specific settings are available from the reader itself.
+Open the user menu and select **Preferences** for shared reader preferences such as **Auto-hide controls**. Format-specific settings are available from the reader itself.

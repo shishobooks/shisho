@@ -1,12 +1,17 @@
-import { Check, KeyRound, Moon, Sun } from "lucide-react";
+import { Check, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
 import DeliveryRulesEditor from "@/components/devices/DeliveryRulesEditor";
 import QueryError from "@/components/library/QueryError";
 import { SizeSelector } from "@/components/library/SizeSelector";
 import TopNav from "@/components/library/TopNav";
+import {
+  ForcedPasswordReset,
+  PASSWORD_SECTION_ID,
+  PasswordSection,
+} from "@/components/pages/ChangePassword";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -68,8 +73,19 @@ const ThemeOption = ({
 // reserves the empty string.
 const FIRST_LIBRARY = "first";
 
-const UserSettings = () => {
-  usePageTitle("User Settings");
+const Preferences = () => {
+  const { demoMode, user } = useAuth();
+  // A temporary password has to be replaced before anything else, so the
+  // reset screen stands in for the whole page (ProtectedRoute sends every
+  // page here until then).
+  if (!demoMode && user?.must_change_password) {
+    return <ForcedPasswordReset />;
+  }
+  return <PreferencesPage />;
+};
+
+const PreferencesPage = () => {
+  usePageTitle("Preferences");
 
   const { theme, setTheme } = useTheme();
   const { demoMode } = useAuth();
@@ -99,28 +115,29 @@ const UserSettings = () => {
   };
 
   // Every other setting here saves as it changes; the Delivery Rules editor
-  // has its own Save.
+  // and the password form have their own Save.
   const [deliveryRulesHaveChanges, setDeliveryRulesHaveChanges] =
     useState(false);
+  const [passwordHasChanges, setPasswordHasChanges] = useState(false);
   const { showBlockerDialog, proceedNavigation, cancelNavigation } =
-    useUnsavedChanges(deliveryRulesHaveChanges);
+    useUnsavedChanges(deliveryRulesHaveChanges || passwordHasChanges);
 
-  // A Device page links straight to the Delivery Rules section. Scroll once
-  // the page's queries have loaded, since what they render above and in the
-  // section changes where it sits.
+  // A Device page links straight to the Delivery Rules section, and the old
+  // Security URL to the Password section. Scroll once the page's queries have
+  // loaded, since what they render above a section changes where it sits.
   const { hash } = useLocation();
   const deliveryRulesLoaded = useDeliveryRules().data !== undefined;
   const settingsLoaded =
     userSettingsQuery.data !== undefined && librariesQuery.data !== undefined;
   useEffect(() => {
+    const sectionId = hash.slice(1);
     if (
-      hash === `#${DELIVERY_RULES_SECTION_ID}` &&
+      (sectionId === DELIVERY_RULES_SECTION_ID ||
+        sectionId === PASSWORD_SECTION_ID) &&
       deliveryRulesLoaded &&
       settingsLoaded
     ) {
-      document
-        .getElementById(DELIVERY_RULES_SECTION_ID)
-        ?.scrollIntoView({ block: "start" });
+      document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
     }
   }, [hash, deliveryRulesLoaded, settingsLoaded]);
 
@@ -139,9 +156,9 @@ const UserSettings = () => {
       <TopNav />
       <div className="max-w-7xl w-full mx-auto px-6 py-8">
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl font-semibold mb-2">User Settings</h1>
+          <h1 className="text-2xl font-semibold mb-2">Preferences</h1>
           <p className="text-muted-foreground">
-            Manage your account preferences
+            Manage how Shisho looks and works for you
           </p>
         </div>
 
@@ -294,24 +311,8 @@ const UserSettings = () => {
             />
           </div>
 
-          {/* Security Settings Link */}
           {!demoMode && (
-            <div className="rounded-md border border-border p-4 md:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Security</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Manage your password and API keys
-                  </p>
-                </div>
-                <Button asChild variant="outline">
-                  <Link to="/user/security">
-                    <KeyRound className="mr-2 h-4 w-4" />
-                    Security Settings
-                  </Link>
-                </Button>
-              </div>
-            </div>
+            <PasswordSection onHasChangesChange={setPasswordHasChanges} />
           )}
         </div>
       </div>
@@ -324,4 +325,4 @@ const UserSettings = () => {
   );
 };
 
-export default UserSettings;
+export default Preferences;

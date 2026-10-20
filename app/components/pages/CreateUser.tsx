@@ -136,7 +136,7 @@ const CreateUser = () => {
 
       toast.success("User created successfully!");
       setChangesSaved(true);
-      requestNavigate(`/settings/users/${user.id}`);
+      requestNavigate(`/admin/users/${user.id}`);
     } catch (error) {
       toastRequestError(error, "Failed to create user");
     }

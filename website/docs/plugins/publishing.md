@@ -196,7 +196,7 @@ https://raw.githubusercontent.com/example/shisho-plugins/main/repository.json
 
 A normal `github.com` blob page, GitHub API URL, redirect service, GitLab raw URL, or custom website is rejected even if it serves the same JSON.
 
-After committing the index, test the exact raw URL without authentication. In Shisho, add that URL and the matching scope under **Settings > Plugins > Advanced plugin settings > Repositories**. **Discover** fetches the live index. **Sync** records fetch status and refreshes installed-plugin update indicators.
+After committing the index, test the exact raw URL without authentication. In Shisho, add that URL and the matching scope under **Administration > Plugins > Advanced plugin settings > Repositories**. **Discover** fetches the live index. **Sync** records fetch status and refreshes installed-plugin update indicators.
 
 ## Release Checklist
 

@@ -2,7 +2,7 @@
 
 Shisho combines role permissions with a per-user library access list. Both checks must allow an action.
 
-Open **Settings > Users** to manage accounts and roles. Access to this page and its actions depends on the current user's Users permissions.
+Open **Administration > Users** to manage accounts and roles. Access to this page and its actions depends on the current user's Users permissions.
 
 ## Built-In Roles
 
@@ -45,12 +45,12 @@ Some reads follow the data they return rather than the page that shows it:
 
 - A list's books need Books Read, like other book data. See [Lists](./lists.md#permissions) for what lists allow without role permissions.
 - Global search results follow the permission for each result type. See [Search](./browsing-search-bulk-actions.md#search).
-- The review criteria can be read with Books Read, for the review panel on book pages, or with Config Read, for **Settings > Review Criteria**. Changing them requires Config Write.
-- The plugin order under **Settings > Plugins** needs Books Read as well as Config Read. See [Plugins](./plugins/overview.md#open-the-plugin-manager) for the plugin manager's other permissions.
+- The review criteria can be read with Books Read, for the review panel on book pages, or with Config Read, for **Administration > Review Criteria**. Changing them requires Config Write.
+- The plugin order under **Administration > Plugins** needs Books Read as well as Config Read. See [Plugins](./plugins/overview.md#open-the-plugin-manager) for the plugin manager's other permissions.
 
 Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role. Shares permissions and library access are all the server checks; they do not depend on Books Read. The **Share** entry lives on the book page, though, and opening a book page needs Books Read.
 
-The server log under **Settings > Logs** requires Config Read. Live log updates follow the same rule, so users without Config Read never receive server log lines.
+The server log under **Administration > Logs** requires Config Read. Live log updates follow the same rule, so users without Config Read never receive server log lines.
 
 ## What a Read-Only Role Sees
 
@@ -75,16 +75,16 @@ Shisho hides pages and links that a role cannot read, rather than showing an err
 - **Books Read.** Library pages, book and file pages, and search are unavailable, and the library picker is hidden. The [OPDS Catalog](./opds.md), [Kobo Sync](./kobo-sync.md), and [eReader Browser](./ereader-browser.md) refuse the user too. The home page opens **Lists**, where a list's books are hidden. See [Lists](./lists.md#permissions).
 - **Series Read.** The library navigation has no **Series** entry, series names on book pages are plain text, and search shows no series. The edit dialogs suggest no existing series, but you can still type a name.
 - **People Read.** The library navigation has no **People** entry, author and narrator names are plain text, and search shows no people. The edit dialogs suggest no existing authors or narrators, but you can still type a name.
-- **Libraries Read.** Library settings and **Settings > Libraries** are unavailable. Every signed-in user still gets the name and display settings (cover aspect ratio and whether files are organized) of each library in their [library access](#library-access) list, never its folders. The library picker, breadcrumbs, cover shapes, and the merge and move dialogs use these. A role with Users Write can list libraries without Libraries Read, so it can assign library access when creating or editing a user.
-- **Users Read.** **Settings > Users** is unavailable. [List sharing](./lists.md#sharing) still works.
-- **Jobs Read.** **Settings > Jobs** is unavailable, and so are the library rescan button and **Recompute now** on **Settings > Review Criteria**, which also need Jobs Write.
+- **Libraries Read.** Library settings and **Administration > Libraries** are unavailable. Every signed-in user still gets the name and display settings (cover aspect ratio and whether files are organized) of each library in their [library access](#library-access) list, never its folders. The library picker, breadcrumbs, cover shapes, and the merge and move dialogs use these. A role with Users Write can list libraries without Libraries Read, so it can assign library access when creating or editing a user.
+- **Users Read.** **Administration > Users** is unavailable. [List sharing](./lists.md#sharing) still works.
+- **Jobs Read.** **Administration > Jobs** is unavailable, and so are the library rescan button and **Recompute now** on **Administration > Review Criteria**, which also need Jobs Write.
 - **Config Read.** The server, review criteria, sharing, plugin, cache, and log settings pages are unavailable. With Config Read but not Config Write, the review criteria are shown without a **Save** button.
 
-The **Global Settings** button opens the first settings page the role can view, and is hidden when there is none. When the role has Books Read, the home page opens the user's default library, which each user can choose under **Library** in **User Settings** once they can access two or more libraries. Without a default, or after losing access to it, the home page opens the first library the user can access. With no libraries yet, it opens **Settings > Libraries** for a role with Libraries Read and **Lists** otherwise.
+**Administration** in the user menu opens the first administration page the role can view, and is hidden when there is none. When the role has Books Read, the home page opens the user's default library, which each user can choose under **Library** in **Preferences** once they can access two or more libraries. Without a default, or after losing access to it, the home page opens the first library the user can access. With no libraries yet, it opens **Administration > Libraries** for a role with Libraries Read and **Lists** otherwise.
 
 ## Custom Roles
 
-On **Settings > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role in the **Roles** section to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.
+On **Administration > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role in the **Roles** section to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.
 
 A user has one role. Assign the narrowest permissions needed for that person's work.
 
@@ -119,7 +119,7 @@ The initial setup screen creates the first user with the built-in admin role.
 
 To create an account:
 
-1. Open **Settings > Users**.
+1. Open **Administration > Users**.
 2. Select **Add User**.
 3. Enter the account information.
 4. Optionally select **Require password reset on first login**.
@@ -131,9 +131,9 @@ Select a username on the **Users** list to edit its username, optional email, ro
 
 ## Password Changes and Forced Resets
 
-Any signed-in user can open the user menu, select **Security**, and use **Change Password**. A normal self-service change requires the current password.
+Any signed-in user can open the user menu, select **Preferences**, and use **Change Password** under **Password**. A normal self-service change requires the current password.
 
-A user with Users Write permission can open another account under **Settings > Users**, select **Reset Password**, and optionally select **Require user to reset password on next login**. A user marked for forced reset must choose a new password before continuing in Shisho.
+A user with Users Write permission can open another account under **Administration > Users**, select **Reset Password**, and optionally select **Require user to reset password on next login**. A user marked for forced reset must choose a new password before continuing in Shisho.
 
 ## Devices
 
@@ -180,9 +180,9 @@ A list shared with you can hold books from libraries you cannot access; those bo
 
 Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends. Under **Delivery Rules** on its page, choose one:
 
-- **My default**: your default rules from **User Settings > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
+- **My default**: your default rules from **Preferences > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
 - **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
-- **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **User Settings > Delivery Rules**.
+- **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **Preferences > Delivery Rules**.
 
 Under the rules, the Device's page previews how many books in its scope the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
 
@@ -194,7 +194,7 @@ Deleting a Device under **Devices** cannot be undone. Every connection stops wor
 
 ### Manage Every User's Devices
 
-A user with Users Read can open **Settings > Devices** to see every user's Devices: their names, types, connections, owners, and when each was last used. The list never shows credentials, so an administrator cannot sign in as another user's Device. A user with Users Write can **Revoke** a Device, which deletes it as above, for example to cut off a lost device for someone.
+A user with Users Read can open **Administration > Devices** to see every user's Devices: their names, types, connections, owners, and when each was last used. The list never shows credentials, so an administrator cannot sign in as another user's Device. A user with Users Write can **Revoke** a Device, which deletes it as above, for example to cut off a lost device for someone.
 
 ## Deactivate Users
 

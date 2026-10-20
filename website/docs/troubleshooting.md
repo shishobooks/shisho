@@ -10,7 +10,7 @@ Start with the symptom below, preserve the relevant logs, and make the least des
 
 **Verify:** Read the container's startup output before restarting it again. A setting with an invalid value, including a duration without a unit from YAML or an environment variable, prints `configuration validation failed` followed by each setting, its environment variable, and the allowed range or format. A value of the wrong type, such as text where a number belongs, prints `failed to unmarshal config` with the setting name instead. Confirm that `/config` is persistent, any custom database path is inside a writable mount, and `JWT_SECRET` is set without printing its value into a support request. Check listener errors against `SERVER_HOST` and `SERVER_PORT`. If the container is still running but unhealthy, check whether migrations are still running and whether the health check targets the configured port.
 
-**Fix:** Follow the Compose and secret-configuration steps in [Getting Started](./getting-started.md). Correct each setting the validation error names; see [Configuration](./configuration.md#configuration-sources) for the duration format. Replace a placeholder secret with the output of `openssl rand -hex 32`. Changing the secret signs everyone out once. A secret shorter than 32 characters does not stop startup, but the startup log and **Settings > Server** warn about it; replace it the same way. Match the container's `PUID` and `PGID` to the host files, correct the mounts, and review startup and database settings in [Configuration](./configuration.md). See [Deployment and Maintenance](./deployment-and-maintenance.md) before moving an existing database or changing storage.
+**Fix:** Follow the Compose and secret-configuration steps in [Getting Started](./getting-started.md). Correct each setting the validation error names; see [Configuration](./configuration.md#configuration-sources) for the duration format. Replace a placeholder secret with the output of `openssl rand -hex 32`. Changing the secret signs everyone out once. A secret shorter than 32 characters does not stop startup, but the startup log and **Administration > Server** warn about it; replace it the same way. Match the container's `PUID` and `PGID` to the host files, correct the mounts, and review startup and database settings in [Configuration](./configuration.md). See [Deployment and Maintenance](./deployment-and-maintenance.md) before moving an existing database or changing storage.
 
 :::warning[Changing the JWT secret]
 Changing `JWT_SECRET` invalidates existing signed sessions. Generate and store a strong secret, but do not rotate it merely to troubleshoot an unrelated startup problem.
@@ -22,7 +22,7 @@ Changing `JWT_SECRET` invalidates existing signed sessions. Generate and store a
 
 **Likely cause:** The container user cannot access the media mount, the mount is read-only for an operation that writes files, or **Organize file structure during scans** is enabled for the library.
 
-**Verify:** Check the library's configured container paths, the media mount mode, and the host ownership represented by `PUID` and `PGID`. In **Settings > Libraries**, open the library and check whether file organization is enabled. Review the failed scan's job log for the exact path and operation.
+**Verify:** Check the library's configured container paths, the media mount mode, and the host ownership represented by `PUID` and `PGID`. In **Administration > Libraries**, open the library and check whether file organization is enabled. Review the failed scan's job log for the exact path and operation.
 
 **Fix:** Grant only the access Shisho needs. Read access is required to scan. Write access is required for file organization and other operations that write beside library files. Disable file organization before another scan if Shisho must not rename or move files. See [Getting Started](./getting-started.md), [Libraries](./libraries.md), and [Managing Books and Files](./managing-books-and-files.md).
 
@@ -46,7 +46,7 @@ Before enabling file organization, back up the library and test the setting on a
 
 **Likely cause:** The file is DRM-protected. Shisho never imports DRM-protected files and cannot read them. When an imported file is replaced on disk by a DRM-protected copy, the next scan removes it as if the file had been deleted.
 
-**Verify:** Open the scan job under **Settings > Jobs** and look for a `skipped DRM-protected file` warning naming the file. A `mime type is not expected for extension` warning for the same path means the file is not MOBI or AZW3 at all, for example a KFX book with an `.azw` extension; see [Supported Formats](./supported-formats.md#mobi-and-azw3).
+**Verify:** Open the scan job under **Administration > Jobs** and look for a `skipped DRM-protected file` warning naming the file. A `mime type is not expected for extension` warning for the same path means the file is not MOBI or AZW3 at all, for example a KFX book with an `.azw` extension; see [Supported Formats](./supported-formats.md#mobi-and-azw3).
 
 **Fix:** Replace the file with a DRM-free copy. A plugin [input converter](./plugins/manifest-hooks-reference.md#input-converter-capability) that declares `mobi` or `azw3` still receives DRM-protected files and can write a DRM-free copy beside them, which the scan then imports.
 
@@ -84,7 +84,7 @@ Otherwise replace the file with a good copy. Shisho picks up the change on the n
 
 **Likely cause:** The job log usually identifies a file permission, missing path, parser, plugin, storage, or database error.
 
-**Verify:** Open **Settings > Jobs**, select the failed job, and read its job log. Job logs belong to that persisted job and remain subject to the configured job-retention period. **Settings > Logs** shows the in-memory server log for the current server session. It may contain surrounding startup or request context, but it is cleared when the server restarts. Slow database queries appear there as `slow query` warnings with the operation, table, and duration. To see every SQL statement, enable `database_debug` only briefly: it logs parameter values, including password hashes and share tokens, to that page. See [Configuration](./configuration.md#database).
+**Verify:** Open **Administration > Jobs**, select the failed job, and read its job log. Job logs belong to that persisted job and remain subject to the configured job-retention period. **Administration > Logs** shows the in-memory server log for the current server session. It may contain surrounding startup or request context, but it is cleared when the server restarts. Slow database queries appear there as `slow query` warnings with the operation, table, and duration. To see every SQL statement, enable `database_debug` only briefly: it logs parameter values, including password hashes and share tokens, to that page. See [Configuration](./configuration.md#database).
 
 **Fix:** Correct the first actionable error in the job log, then retry the original task. Use current-session server logs for context, not as a replacement for the job's own history. See [Deployment and Maintenance](./deployment-and-maintenance.md), [Configuration](./configuration.md), and [Users and Permissions](./users-and-permissions.md) for access to administrative pages.
 
@@ -112,9 +112,9 @@ A generated file that fails after its download has started ends that download wi
 
 A download cache that is full or not writable does not stop downloads. Each download is generated straight to the client without being cached, and a warning is logged; the next download of the same file is generated again.
 
-**Verify:** Check **Settings > Jobs** for the generation job, **Settings > Cache** for cache size, the current-session server logs for request errors, and available space and permissions at `cache_dir`. Confirm that the original file remains readable.
+**Verify:** Check **Administration > Jobs** for the generation job, **Administration > Cache** for cache size, the current-session server logs for request errors, and available space and permissions at `cache_dir`. Confirm that the original file remains readable.
 
-**Fix:** Correct storage or permissions first. Clear only the affected cache from **Settings > Cache** when regeneration is appropriate. Clearing cache removes generated copies, which Shisho rebuilds on demand, and may make the next request slower. See [Supported Formats](./supported-formats.md), [Deployment and Maintenance](./deployment-and-maintenance.md), and the cache settings in [Configuration](./configuration.md).
+**Fix:** Correct storage or permissions first. Clear only the affected cache from **Administration > Cache** when regeneration is appropriate. Clearing cache removes generated copies, which Shisho rebuilds on demand, and may make the next request slower. See [Supported Formats](./supported-formats.md), [Deployment and Maintenance](./deployment-and-maintenance.md), and the cache settings in [Configuration](./configuration.md).
 
 ## Login, Links, or Cookies Break Behind a Reverse Proxy
 
@@ -152,6 +152,6 @@ A download cache that is full or not writable does not stop downloads. Each down
 
 **Likely cause:** The plugin requires a newer Shisho version, its manifest or JavaScript failed to load, required configuration is unset, its mode disables automated scans, a per-library override disables it, or the requested access is not declared in its manifest.
 
-**Verify:** Open **Settings > Plugins**, select the plugin, and read its status and full load error. Check required configuration, global mode and order, and the library's plugin overrides. For a failure during a job, inspect that job's log; for load-time context, inspect the current-session server logs.
+**Verify:** Open **Administration > Plugins**, select the plugin, and read its status and full load error. Check required configuration, global mode and order, and the library's plugin overrides. For a failure during a job, inspect that job's log; for load-time context, inspect the current-session server logs.
 
 **Fix:** Update Shisho or the plugin when versions are incompatible, save the required configuration, enable the intended mode, or correct the plugin's manifest and code. Operators should start with [Using Plugins](./plugins/overview.md). Plugin authors should use [Developing Plugins](./plugins/development.md), [Manifest and Hooks Reference](./plugins/manifest-hooks-reference.md), and [Testing Plugins](./plugins/testing.md).

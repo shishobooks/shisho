@@ -32,7 +32,7 @@ const renderRedirect = () => {
           <Route element={<div>lists page</div>} path="/lists" />
           <Route
             element={<div>library settings page</div>}
-            path="/settings/libraries"
+            path="/admin/libraries"
           />
         </Routes>
       </MemoryRouter>

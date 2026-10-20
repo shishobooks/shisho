@@ -4,7 +4,7 @@ A Share Link lets someone open one book and download its files without a Shisho 
 
 ## Turning On Share Links
 
-Share Links are off on a new server. They are controlled from **Settings > Sharing**, not from the [configuration file](./configuration.md). Each switch saves as soon as you flip it and confirms the new state with a short message. Viewing the page requires Config Read, and changing its switches requires Config Write.
+Share Links are off on a new server. They are controlled from **Administration > Sharing**, not from the [configuration file](./configuration.md). Each switch saves as soon as you flip it and confirms the new state with a short message. Viewing the page requires Config Read, and changing its switches requires Config Write.
 
 :::caution[Share Links Expose Books Outside Your Server]
 Anyone who holds a Share Link can open the shared book and download its files, whether or not they have an account. The link only works if the recipient can reach this server, so a server that is only available on your local network or through a VPN cannot be reached by recipients outside it. Decide which roles may create links, and whether links must expire, before you turn sharing on.
@@ -20,7 +20,7 @@ Share Links are managed with the Shares permission, which only the **admin** rol
 - **Shares Read** lets a user see a book's Share Links and read the sharing settings.
 - **Shares Write** lets a user create, revoke, and delete Share Links, and see a book's links and the sharing settings as well.
 
-Both also require access to the book's library. To let other users share books, grant Shares Read and Shares Write to their role under **Settings > Users**. See [Users and Permissions](./users-and-permissions.md).
+Both also require access to the book's library. To let other users share books, grant Shares Read and Shares Write to their role under **Administration > Users**. See [Users and Permissions](./users-and-permissions.md).
 
 ## Creating a Link
 
@@ -52,13 +52,13 @@ Users with Shares Write can act on any link on the book, including links other u
 
 Expired links stay in the list, marked as expired, until someone deletes them. Shisho never removes them on its own.
 
-While sharing is turned off, the dialog says so instead of showing the form (with a link to **Settings > Sharing** for users who can change it), and no link can be copied, but links can still be revoked and deleted. A link revoked or deleted then stays that way when sharing is turned back on.
+While sharing is turned off, the dialog says so instead of showing the form (with a link to **Administration > Sharing** for users who can change it), and no link can be copied, but links can still be revoked and deleted. A link revoked or deleted then stays that way when sharing is turned back on.
 
 ## When a Link Stops Working
 
 A link works only while all of these hold:
 
-- Sharing is turned on in **Settings > Sharing**.
+- Sharing is turned on in **Administration > Sharing**.
 - The link has not expired and has not been revoked or deleted.
 - The user who created it is active and still has access to the book's library.
 - The book still exists.

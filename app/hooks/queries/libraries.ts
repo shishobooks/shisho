@@ -182,7 +182,7 @@ export const useUserLibraries = (
 // The libraries the navigation offers to switch to: the library picker, the
 // mobile drawer, and the redirect from `/`. Every library page needs Books
 // Read, so without it this sends nothing and returns no libraries, even when
-// the Kobo sync scope in Security Settings has cached them.
+// a Device's scope picker has cached them.
 export const useNavLibraries = () => {
   const canOpenLibraries = useRequires("books:read");
   return useQuery<LibrarySummary[], ShishoAPIError>({

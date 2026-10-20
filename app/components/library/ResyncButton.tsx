@@ -32,7 +32,7 @@ export function ResyncButton({ libraryId }: ResyncButtonProps) {
 
   const handleClick = () => {
     if (isActive || isFailed) {
-      navigate(`/settings/jobs/${latestJob?.id}`);
+      navigate(`/admin/jobs/${latestJob?.id}`);
     } else {
       createJob.mutate(
         { payload: { type: "scan", library_id: libraryId, data: {} } },

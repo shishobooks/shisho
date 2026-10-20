@@ -50,7 +50,7 @@ describe("AdminPlugins with Config Read only", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/settings/plugins"]}>
+        <MemoryRouter initialEntries={["/admin/plugins"]}>
           <AdminPlugins />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -104,7 +104,7 @@ describe("AdminPlugins advanced dialog deep link", () => {
   });
 
   it("opens on Repositories when the URL has ?advanced=repositories", async () => {
-    renderAt("/settings/plugins?advanced=repositories");
+    renderAt("/admin/plugins?advanced=repositories");
 
     expect(
       await screen.findByRole("dialog", { name: "Advanced plugin settings" }),
@@ -113,11 +113,11 @@ describe("AdminPlugins advanced dialog deep link", () => {
       "aria-selected",
       "true",
     );
-    expect(currentURL()).toBe("/settings/plugins?advanced=repositories");
+    expect(currentURL()).toBe("/admin/plugins?advanced=repositories");
   });
 
   it("falls back to the Order tab for an invalid section", async () => {
-    renderAt("/settings/plugins?advanced=bogus");
+    renderAt("/admin/plugins?advanced=bogus");
 
     expect(
       await screen.findByRole("dialog", { name: "Advanced plugin settings" }),
@@ -130,7 +130,7 @@ describe("AdminPlugins advanced dialog deep link", () => {
 
   it("updates the URL param when switching tabs, keeping other params", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderAt("/settings/plugins?advanced=repositories&foo=bar");
+    renderAt("/admin/plugins?advanced=repositories&foo=bar");
 
     await user.click(await screen.findByRole("tab", { name: "Order" }));
 
@@ -138,12 +138,12 @@ describe("AdminPlugins advanced dialog deep link", () => {
       "aria-selected",
       "true",
     );
-    expect(currentURL()).toBe("/settings/plugins?advanced=order&foo=bar");
+    expect(currentURL()).toBe("/admin/plugins?advanced=order&foo=bar");
   });
 
   it("sets the param when opened from the gear button", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderAt("/settings/plugins/discover");
+    renderAt("/admin/plugins/discover");
 
     await user.click(
       screen.getByRole("button", { name: "Advanced plugin settings" }),
@@ -152,12 +152,12 @@ describe("AdminPlugins advanced dialog deep link", () => {
     expect(
       await screen.findByRole("dialog", { name: "Advanced plugin settings" }),
     ).toBeInTheDocument();
-    expect(currentURL()).toBe("/settings/plugins/discover?advanced=order");
+    expect(currentURL()).toBe("/admin/plugins/discover?advanced=order");
   });
 
   it("removes the param when the dialog closes, keeping other params", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderAt("/settings/plugins?foo=bar&advanced=order");
+    renderAt("/admin/plugins?foo=bar&advanced=order");
 
     await screen.findByRole("dialog", { name: "Advanced plugin settings" });
     await user.keyboard("{Escape}");
@@ -165,43 +165,43 @@ describe("AdminPlugins advanced dialog deep link", () => {
     expect(
       screen.queryByRole("dialog", { name: "Advanced plugin settings" }),
     ).not.toBeInTheDocument();
-    expect(currentURL()).toBe("/settings/plugins?foo=bar");
+    expect(currentURL()).toBe("/admin/plugins?foo=bar");
   });
 
   it("switching tabs and closing replace the entry, so Back after closing does not reopen the dialog", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderAt("/settings", "/settings/plugins");
+    renderAt("/admin", "/admin/plugins");
 
     await user.click(
       screen.getByRole("button", { name: "Advanced plugin settings" }),
     );
     await user.click(await screen.findByRole("tab", { name: "Repositories" }));
-    expect(currentURL()).toBe("/settings/plugins?advanced=repositories");
+    expect(currentURL()).toBe("/admin/plugins?advanced=repositories");
     await user.keyboard("{Escape}");
-    expect(currentURL()).toBe("/settings/plugins");
+    expect(currentURL()).toBe("/admin/plugins");
 
     await user.click(screen.getByRole("button", { name: "Browser Back" }));
 
-    expect(currentURL()).toBe("/settings/plugins");
+    expect(currentURL()).toBe("/admin/plugins");
     expect(
       screen.queryByRole("dialog", { name: "Advanced plugin settings" }),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Browser Back" }));
 
-    expect(currentURL()).toBe("/settings");
+    expect(currentURL()).toBe("/admin");
   });
 
   it("closing a deep-linked dialog replaces its entry, so Back does not reopen it", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderAt("/settings", "/settings/plugins?advanced=repositories");
+    renderAt("/admin", "/admin/plugins?advanced=repositories");
 
     await screen.findByRole("dialog", { name: "Advanced plugin settings" });
     await user.keyboard("{Escape}");
-    expect(currentURL()).toBe("/settings/plugins");
+    expect(currentURL()).toBe("/admin/plugins");
 
     await user.click(screen.getByRole("button", { name: "Browser Back" }));
 
-    expect(currentURL()).toBe("/settings");
+    expect(currentURL()).toBe("/admin");
   });
 });

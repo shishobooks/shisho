@@ -92,7 +92,7 @@ In the web app, each file's download button has a menu beside it, **Download as*
 
 ## Delivery Rules
 
-Each user's default Delivery Rules decide which file type the web app's download button sends and what the [OPDS catalog](./opds.md) offers when signed in with the account password. Edit them under **User Settings > Delivery Rules**. Each [Device](./users-and-permissions.md#delivery-rules-of-a-device) follows your default, follows its type's preset, or has its own list, which decides what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends.
+Each user's default Delivery Rules decide which file type the web app's download button sends and what the [OPDS catalog](./opds.md) offers when signed in with the account password. Edit them under **Preferences > Delivery Rules**. Each [Device](./users-and-permissions.md#delivery-rules-of-a-device) follows your default, follows its type's preset, or has its own list, which decides what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends.
 
 The rules are an ordered list with at most one rule per file type, each naming the file type to send it as: itself, or one a [conversion](#conversions) reaches, such as CBZ as EPUB. For each book, the first rule matching one of its files wins, and every file of that type goes, so two EPUB editions both appear. Ebooks and audiobooks are decided separately, so a book with an EPUB and an M4B delivers both when both have a rule.
 

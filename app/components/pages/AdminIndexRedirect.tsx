@@ -4,10 +4,10 @@ import { AccessDenied } from "@/components/library/ProtectedRoute";
 
 import { useAdminNavItems } from "./useAdminNavItems";
 
-// /settings has no page of its own. It opens the first settings page the
-// role may see, so the gear never lands a role without Config Read on
+// /admin has no page of its own. It opens the first administration page the
+// role may see, so the menu link never lands a role without Config Read on
 // Access Denied.
-const SettingsIndexRedirect = () => {
+const AdminIndexRedirect = () => {
   const first = useAdminNavItems().find((item) => item.show);
   if (!first) {
     return <AccessDenied />;
@@ -15,4 +15,4 @@ const SettingsIndexRedirect = () => {
   return <Navigate replace to={first.to} />;
 };
 
-export default SettingsIndexRedirect;
+export default AdminIndexRedirect;

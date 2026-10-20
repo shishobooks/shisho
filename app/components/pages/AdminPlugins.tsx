@@ -66,7 +66,7 @@ const AdminPlugins = () => {
 
   const handleTabChange = (value: string) => {
     navigate(
-      value === "discover" ? "/settings/plugins/discover" : "/settings/plugins",
+      value === "discover" ? "/admin/plugins/discover" : "/admin/plugins",
     );
   };
 
