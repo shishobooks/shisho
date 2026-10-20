@@ -436,7 +436,7 @@ func TestNew_RemovedSettingWarns(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, cfg.StartupWarnings(), 1)
 	assert.Contains(t, cfg.StartupWarnings()[0], "download_cache_max_size_gb (env DOWNLOAD_CACHE_MAX_SIZE_GB) is no longer read")
-	assert.Contains(t, cfg.StartupWarnings()[0], "Settings > Cache")
+	assert.Contains(t, cfg.StartupWarnings()[0], "Administration > Cache")
 }
 
 // Only settings are split from comma-separated env values; private and

@@ -13,12 +13,12 @@ const sharingItem = (permissions: Permission[]) => {
   setAuth({ permissions });
   const { result } = renderHook(() => useAdminNavItems(), {
     wrapper: ({ children }) => (
-      <MemoryRouter initialEntries={["/settings/sharing"]}>
+      <MemoryRouter initialEntries={["/admin/sharing"]}>
         {children}
       </MemoryRouter>
     ),
   });
-  return result.current.find((item) => item.to === "/settings/sharing");
+  return result.current.find((item) => item.to === "/admin/sharing");
 };
 
 describe("useAdminNavItems", () => {

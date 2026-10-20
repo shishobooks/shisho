@@ -133,7 +133,7 @@ func (h *handler) requireSharingEnabled(ctx context.Context) (Settings, error) {
 		return settings, err
 	}
 	if !settings.Enabled {
-		return settings, errcodes.Forbidden("Sharing is turned off. An admin can turn it on in Settings > Sharing.")
+		return settings, errcodes.Forbidden("Sharing is turned off. An admin can turn it on in Administration > Sharing.")
 	}
 	return settings, nil
 }

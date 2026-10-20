@@ -38,6 +38,9 @@ vi.mock("@/components/pages/GenresList", () => ({
 vi.mock("@/components/pages/BookDetail", () => ({
   default: () => <div>book detail page</div>,
 }));
+vi.mock("@/components/pages/Preferences", () => ({
+  default: () => <div>preferences page</div>,
+}));
 vi.mock("@/components/pages/LibrarySettings", () => ({
   default: () => <div>library settings page</div>,
 }));
@@ -53,32 +56,87 @@ describe("router permission guards", () => {
     setAuth();
   });
 
-  describe("/settings index", () => {
-    it("opens the first permitted settings page for a role without Config Read", async () => {
+  describe("/admin index", () => {
+    it("opens the first permitted administration page for a role without Config Read", async () => {
+      setAuth({ permissions: ["books:read", "libraries:read"] });
+      const router = renderAt("/admin");
+
+      expect(
+        await screen.findByText("libraries settings page"),
+      ).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/admin/libraries");
+    });
+
+    it("opens server settings for a role with Config Read", async () => {
+      setAuth({ permissions: ["config:read", "libraries:read"] });
+      const router = renderAt("/admin");
+
+      expect(
+        await screen.findByText("server settings page"),
+      ).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/admin/server");
+    });
+
+    it("denies access when no administration page is permitted", async () => {
+      setAuth({ permissions: ["books:read"] });
+      renderAt("/admin");
+
+      expect(await screen.findByText("Access Denied")).toBeInTheDocument();
+    });
+  });
+
+  describe("legacy /settings URLs", () => {
+    it("redirects the index to the first permitted administration page", async () => {
       setAuth({ permissions: ["books:read", "libraries:read"] });
       const router = renderAt("/settings");
 
       expect(
         await screen.findByText("libraries settings page"),
       ).toBeInTheDocument();
-      expect(router.state.location.pathname).toBe("/settings/libraries");
+      expect(router.state.location.pathname).toBe("/admin/libraries");
     });
 
-    it("opens server settings for a role with Config Read", async () => {
-      setAuth({ permissions: ["config:read", "libraries:read"] });
-      const router = renderAt("/settings");
+    it("keeps the rest of the path and the query", async () => {
+      setAuth({ permissions: ["users:read"] });
+      const router = renderAt("/settings/users?page=2#top");
 
       expect(
-        await screen.findByText("server settings page"),
+        await screen.findByText("users settings page"),
       ).toBeInTheDocument();
-      expect(router.state.location.pathname).toBe("/settings/server");
+      expect(router.state.location.pathname).toBe("/admin/users");
+      expect(router.state.location.search).toBe("?page=2");
+      expect(router.state.location.hash).toBe("#top");
+    });
+  });
+
+  describe("Preferences", () => {
+    it("redirects the old User Settings URL, keeping the hash", async () => {
+      const router = renderAt("/user/settings#delivery-rules");
+
+      expect(await screen.findByText("preferences page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/user/preferences");
+      expect(router.state.location.hash).toBe("#delivery-rules");
     });
 
-    it("denies access when no settings page is permitted", async () => {
-      setAuth({ permissions: ["books:read"] });
-      renderAt("/settings");
+    it("redirects the old Security URL to the Password section", async () => {
+      const router = renderAt("/user/security?redirect=%2Flists");
 
-      expect(await screen.findByText("Access Denied")).toBeInTheDocument();
+      expect(await screen.findByText("preferences page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/user/preferences");
+      expect(router.state.location.search).toBe("?redirect=%2Flists");
+      expect(router.state.location.hash).toBe("#password");
+    });
+
+    it("sends a user who must change their password to Preferences", async () => {
+      setAuth({
+        permissions: ["books:read"],
+        user: { must_change_password: true },
+      });
+      const router = renderAt("/libraries/1");
+
+      expect(await screen.findByText("preferences page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/user/preferences");
+      expect(router.state.location.search).toBe("?redirect=%2Flibraries%2F1");
     });
   });
 

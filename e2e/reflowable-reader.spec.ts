@@ -23,7 +23,7 @@ async function login(page: Page) {
   await page.getByLabel("Username").fill(USERNAME);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+  await page.waitForURL(/\/admin\/libraries|\/libraries\//);
 }
 
 async function openReader(page: Page, bookId: number) {

@@ -1,6 +1,6 @@
-import { Menu, Search, Settings, X } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import {
   TOP_NAV_INNER,
@@ -12,27 +12,15 @@ import GlobalSearch from "@/components/library/GlobalSearch";
 import LibraryListPicker from "@/components/library/LibraryListPicker";
 import Logo from "@/components/library/Logo";
 import { ResyncButton } from "@/components/library/ResyncButton";
-import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useMobileNav } from "@/contexts/MobileNav";
-import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { cn } from "@/libraries/utils";
 
 const TopNav = () => {
   const { libraryId } = useParams();
-  const { demoMode } = useAuth();
   const { isOpen: navOpen, toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-
-  // The gear opens the first settings page the role may see.
-  const canAccessAdmin = useAdminNavItems().some((item) => item.show);
 
   // GlobalSearch searches the current library and needs Books Read; without
   // either there is nothing for the mobile toggle to open.
@@ -104,27 +92,6 @@ const TopNav = () => {
               <GlobalSearch />
             </div>
 
-            {canAccessAdmin && !demoMode && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      asChild
-                      className="h-9 w-9"
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <Link aria-label="Global Settings" to="/settings">
-                        <Settings className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Global Settings</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
             <UserMenu />
           </div>
         </div>

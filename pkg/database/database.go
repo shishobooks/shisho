@@ -25,7 +25,7 @@ const maxLoggedQueryBytes = 2048
 // queryLogHook logs queries in two tiers. Queries slower than
 // slowQueryThreshold always log at warn with their operation, table and
 // duration. bun inlines parameter values into the SQL text (password hashes,
-// share tokens, plugin config), and Settings > Logs is readable with
+// share tokens, plugin config), and Administration > Logs is readable with
 // config:read, so that tier never includes the SQL. With database_debug on,
 // every query also logs at debug with its SQL, truncated to
 // maxLoggedQueryBytes.

@@ -7,6 +7,7 @@ import {
 import ProtectedRoute from "@/components/library/ProtectedRoute";
 import AdminCache from "@/components/pages/AdminCache";
 import AdminDevices from "@/components/pages/AdminDevices";
+import AdminIndexRedirect from "@/components/pages/AdminIndexRedirect";
 import AdminJobs from "@/components/pages/AdminJobs";
 import AdminLayout from "@/components/pages/AdminLayout";
 import AdminLibraries from "@/components/pages/AdminLibraries";
@@ -35,19 +36,19 @@ import Login from "@/components/pages/Login";
 import PersonDetail from "@/components/pages/PersonDetail";
 import PersonList from "@/components/pages/PersonList";
 import { PluginDetail } from "@/components/pages/PluginDetail";
+import Preferences from "@/components/pages/Preferences";
+import PreservingRedirect from "@/components/pages/PreservingRedirect";
 import PublisherDetail from "@/components/pages/PublisherDetail";
 import PublishersList from "@/components/pages/PublishersList";
 import Root from "@/components/pages/Root";
-import SecuritySettings from "@/components/pages/SecuritySettings";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
-import SettingsIndexRedirect from "@/components/pages/SettingsIndexRedirect";
 import Setup from "@/components/pages/Setup";
 import { shareRoutes } from "@/components/pages/shareRoutes";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
-import UserSettings from "@/components/pages/UserSettings";
+import { PASSWORD_SECTION_ID } from "@/components/preferences/PasswordSection";
 import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 export const routes: RouteObject[] = [
@@ -66,9 +67,14 @@ export const routes: RouteObject[] = [
     path: "/",
     Component: Root,
     children: [
-      // Settings routes with dedicated layout (formerly admin)
+      // Administration pages lived under /settings before.
       {
-        path: "settings",
+        path: "settings/*",
+        element: <PreservingRedirect to="/admin" />,
+      },
+      // Administration routes with dedicated layout
+      {
+        path: "admin",
         element: (
           <ProtectedRoute>
             <AdminLayout />
@@ -77,13 +83,13 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            element: <SettingsIndexRedirect />,
+            element: <AdminIndexRedirect />,
           },
           {
             path: "server",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminSettings />
               </ProtectedRoute>
@@ -93,7 +99,7 @@ export const routes: RouteObject[] = [
             path: "libraries",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsLibraries}
+                requiredPermission={ROUTE_PERMISSIONS.adminLibraries}
               >
                 <AdminLibraries />
               </ProtectedRoute>
@@ -102,9 +108,7 @@ export const routes: RouteObject[] = [
           {
             path: "users",
             element: (
-              <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsUsers}
-              >
+              <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminUsers}>
                 <AdminUsers />
               </ProtectedRoute>
             ),
@@ -113,7 +117,7 @@ export const routes: RouteObject[] = [
             path: "users/create",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsCreateUser}
+                requiredPermission={ROUTE_PERMISSIONS.adminCreateUser}
               >
                 <CreateUser />
               </ProtectedRoute>
@@ -122,9 +126,7 @@ export const routes: RouteObject[] = [
           {
             path: "users/:id",
             element: (
-              <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsUsers}
-              >
+              <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminUsers}>
                 <UserDetail />
               </ProtectedRoute>
             ),
@@ -133,7 +135,7 @@ export const routes: RouteObject[] = [
             path: "devices",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsDevices}
+                requiredPermission={ROUTE_PERMISSIONS.adminDevices}
               >
                 <AdminDevices />
               </ProtectedRoute>
@@ -142,9 +144,7 @@ export const routes: RouteObject[] = [
           {
             path: "jobs",
             element: (
-              <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsJobs}
-              >
+              <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminJobs}>
                 <AdminJobs />
               </ProtectedRoute>
             ),
@@ -152,9 +152,7 @@ export const routes: RouteObject[] = [
           {
             path: "jobs/:id",
             element: (
-              <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsJobs}
-              >
+              <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminJobs}>
                 <JobDetail />
               </ProtectedRoute>
             ),
@@ -163,7 +161,7 @@ export const routes: RouteObject[] = [
             path: "plugins",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminPlugins />
               </ProtectedRoute>
@@ -173,7 +171,7 @@ export const routes: RouteObject[] = [
             path: "plugins/installed",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminPlugins />
               </ProtectedRoute>
@@ -183,7 +181,7 @@ export const routes: RouteObject[] = [
             path: "plugins/discover",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminPlugins />
               </ProtectedRoute>
@@ -191,23 +189,23 @@ export const routes: RouteObject[] = [
           },
           {
             path: "plugins/browse",
-            element: <Navigate replace to="/settings/plugins/discover" />,
+            element: <Navigate replace to="/admin/plugins/discover" />,
           },
           {
             path: "plugins/order",
-            element: <Navigate replace to="/settings/plugins?advanced=order" />,
+            element: <Navigate replace to="/admin/plugins?advanced=order" />,
           },
           {
             path: "plugins/repositories",
             element: (
-              <Navigate replace to="/settings/plugins?advanced=repositories" />
+              <Navigate replace to="/admin/plugins?advanced=repositories" />
             ),
           },
           {
             path: "plugins/:scope/:id",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <PluginDetail />
               </ProtectedRoute>
@@ -217,7 +215,7 @@ export const routes: RouteObject[] = [
             path: "cache",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminCache />
               </ProtectedRoute>
@@ -227,7 +225,7 @@ export const routes: RouteObject[] = [
             path: "logs",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminLogs />
               </ProtectedRoute>
@@ -237,7 +235,7 @@ export const routes: RouteObject[] = [
             path: "review-criteria",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminReviewCriteria />
               </ProtectedRoute>
@@ -247,7 +245,7 @@ export const routes: RouteObject[] = [
             path: "sharing",
             element: (
               <ProtectedRoute
-                requiredPermission={ROUTE_PERMISSIONS.settingsConfig}
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminSharing />
               </ProtectedRoute>
@@ -280,11 +278,25 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "user/settings",
+        path: "user/preferences",
         element: (
           <ProtectedRoute>
-            <UserSettings />
+            <Preferences />
           </ProtectedRoute>
+        ),
+      },
+      // Preferences replaced User Settings and took in the Security page.
+      {
+        path: "user/settings",
+        element: <PreservingRedirect to="/user/preferences" />,
+      },
+      {
+        path: "user/security",
+        element: (
+          <PreservingRedirect
+            hash={`#${PASSWORD_SECTION_ID}`}
+            to="/user/preferences"
+          />
         ),
       },
       {
@@ -300,14 +312,6 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute>
             <DeviceDetail />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "user/security",
-        element: (
-          <ProtectedRoute unavailableInDemo>
-            <SecuritySettings />
           </ProtectedRoute>
         ),
       },

@@ -61,7 +61,7 @@ export async function loginAsPluginAdmin(page: Page): Promise<void> {
   await page.getByLabel("Username").fill(PLUGIN_TEST_USERNAME);
   await page.getByLabel("Password").fill(PLUGIN_TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL("/settings/libraries");
+  await expect(page).toHaveURL("/admin/libraries");
 }
 
 export async function resetAndLogin(

@@ -122,7 +122,7 @@ export const PluginDetail = () => {
           <li className="shrink-0">
             <Link
               className="hover:text-foreground hover:underline"
-              to="/settings/plugins"
+              to="/admin/plugins"
             >
               Plugins
             </Link>

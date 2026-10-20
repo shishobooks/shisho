@@ -58,7 +58,7 @@ test.describe("Device Delivery Rules", () => {
     await page.getByLabel("Username").fill(USERNAME);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
   }
 
   const bookPage = (page: Page) =>

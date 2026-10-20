@@ -22,9 +22,9 @@ Duration settings use Go's duration format: a number with a unit, such as `500ms
 
 Shisho checks every setting at startup and refuses to start when one is invalid. The error names the setting, its environment variable, and the allowed range.
 
-Share Links are not a configuration option. An admin turns them on under **Settings > Sharing** without a restart. See [Sharing](./sharing.md).
+Share Links are not a configuration option. An admin turns them on under **Administration > Sharing** without a restart. See [Sharing](./sharing.md).
 
-Cache size limits are not configuration options either. They are saved in the database under **Settings > Cache**, and changes apply without a restart. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for limits and eviction behavior.
+Cache size limits are not configuration options either. They are saved in the database under **Administration > Cache**, and changes apply without a restart. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for limits and eviction behavior.
 
 ## Settings
 
@@ -33,7 +33,7 @@ Cache size limits are not configuration options either. They are saved in the da
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
 | `database_file_path` | `DATABASE_FILE_PATH` | `/config/shisho.db` | Path to the SQLite database file. Optional because the default is applied automatically |
-| `database_debug` | `DATABASE_DEBUG` | `false` | Log every SQL statement, with parameter values, at debug level. Very verbose, and exposes stored values such as password hashes and share tokens to **Settings > Logs**. Enable briefly for troubleshooting. Queries slower than 250 ms are always logged as warnings without their values |
+| `database_debug` | `DATABASE_DEBUG` | `false` | Log every SQL statement, with parameter values, at debug level. Very verbose, and exposes stored values such as password hashes and share tokens to **Administration > Logs**. Enable briefly for troubleshooting. Queries slower than 250 ms are always logged as warnings without their values |
 | `database_connect_retry_count` | `DATABASE_CONNECT_RETRY_COUNT` | `5` | Total number of connection attempts on startup, including the first. `0` skips the startup connection check. Minimum `0` |
 | `database_connect_retry_delay` | `DATABASE_CONNECT_RETRY_DELAY` | `2s` | Delay between connection attempts, as a duration. Minimum `1ms` |
 | `database_busy_timeout` | `DATABASE_BUSY_TIMEOUT` | `5s` | How long to wait when the database is locked, as a duration. Minimum `1ms` |
@@ -80,7 +80,7 @@ The hosted Public Demo runs in this mode.
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
 | `library_monitor_enabled` | `LIBRARY_MONITOR_ENABLED` | `true` | Enable real-time filesystem monitoring and targeted rescans. Disable it for filesystems that do not reliably support inotify or FSEvents |
-| `library_monitor_delay_seconds` | `LIBRARY_MONITOR_DELAY_SECONDS` | `60` | Seconds to wait after a filesystem change. Additional changes reset the timer so rapid changes are processed together. Values below `5` are raised to `5`, and **Settings > Server** shows the delay in use |
+| `library_monitor_delay_seconds` | `LIBRARY_MONITOR_DELAY_SECONDS` | `60` | Seconds to wait after a filesystem change. Additional changes reset the timer so rapid changes are processed together. Values below `5` are raised to `5`, and **Administration > Server** shows the delay in use |
 
 :::tip[Linux inotify Watch Limits]
 On Linux, including Linux Docker hosts, filesystem monitoring uses the host's inotify limits. Large libraries with many directories may exceed a low `fs.inotify.max_user_watches` value.
@@ -108,7 +108,7 @@ sudo sysctl --system
 | `pdf_render_dpi` | `PDF_RENDER_DPI` | `200` | PDF viewer render resolution. Range: 72 to 600. Higher values produce sharper and larger images. After a change, pages render again at the new setting |
 | `pdf_render_quality` | `PDF_RENDER_QUALITY` | `85` | JPEG quality for rendered PDF pages. Range: 1 to 100. After a change, pages render again at the new setting |
 
-Rendered PDF pages are stored per render setting, so changing `pdf_render_dpi` or `pdf_render_quality` does not reuse pages rendered at the old values, on the server or in browsers. Pages from the old setting stay in the PDF cache until you clear it in **Settings > Cache**, or, when **PDF Pages** has a size limit, until they are removed as the least recently used.
+Rendered PDF pages are stored per render setting, so changing `pdf_render_dpi` or `pdf_render_quality` does not reuse pages rendered at the old values, on the server or in browsers. Pages from the old setting stay in the PDF cache until you clear it in **Administration > Cache**, or, when **PDF Pages** has a size limit, until they are removed as the least recently used.
 
 For cache limits, inspection, and clearing, see [Deployment and Maintenance](./deployment-and-maintenance.md#maintain-server-caches).
 
@@ -175,7 +175,7 @@ These files are deleted with the directory. Any other file keeps the directory i
 
 | Setting | Env Variable | Default | Description |
 |---------|--------------|---------|-------------|
-| `jwt_secret` | `JWT_SECRET` | None | Required secret for signing authentication tokens. Use at least 32 characters; generate one with `openssl rand -hex 32`. The placeholder from `shisho.example.yaml` is public, so Shisho refuses to start with it. A shorter secret still starts, but logs a warning at startup and shows one on **Settings > Server** |
+| `jwt_secret` | `JWT_SECRET` | None | Required secret for signing authentication tokens. Use at least 32 characters; generate one with `openssl rand -hex 32`. The placeholder from `shisho.example.yaml` is public, so Shisho refuses to start with it. A shorter secret still starts, but logs a warning at startup and shows one on **Administration > Server** |
 | `session_duration_days` | `SESSION_DURATION_DAYS` | `30` | Server-wide number of days a login session remains valid before re-authentication |
 
 Changing `JWT_SECRET` invalidates current sessions, so replacing a short or placeholder secret signs everyone out once. Session duration is global, not configurable per user. See [Users and Permissions](./users-and-permissions.md).

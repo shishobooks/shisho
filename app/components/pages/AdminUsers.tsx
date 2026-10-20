@@ -21,7 +21,7 @@ interface UserRowProps {
 const UserRow = ({ user }: UserRowProps) => (
   <Link
     className="flex items-center justify-between py-3 md:py-4 px-4 md:px-6 hover:bg-muted/50 transition-colors"
-    to={`/settings/users/${user.id}`}
+    to={`/admin/users/${user.id}`}
   >
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2 md:gap-3 flex-wrap">
@@ -115,7 +115,7 @@ const AdminUsers = () => {
           {canWriteUsers && (
             <div className="flex items-center gap-2 shrink-0">
               <Button aria-label="Add User" asChild size="sm">
-                <Link to="/settings/users/create">
+                <Link to="/admin/users/create">
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Add User</span>
                 </Link>

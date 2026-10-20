@@ -217,7 +217,7 @@ const UserDetail = () => {
     try {
       await deactivateUserMutation.mutateAsync(id);
       toast.success("User deactivated successfully");
-      navigate("/settings/users");
+      navigate("/admin/users");
     } catch (error) {
       toastRequestError(error, "Failed to deactivate user");
     }

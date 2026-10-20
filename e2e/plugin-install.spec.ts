@@ -52,7 +52,7 @@ test.describe("Plugin install flow", () => {
     });
     expect(installResp.status()).toBe(201);
 
-    await page.goto("/settings/plugins");
+    await page.goto("/admin/plugins");
     await expect(
       page.getByRole("link", { name: /Fixture Plugin/ }),
     ).toBeVisible();

@@ -42,7 +42,7 @@ test.describe("Plugin config save", () => {
     // The /plugins/* routes require authentication; log the API context in
     // so cookies attach to subsequent requests.
     await loginApi(apiContext);
-    await page.goto("/settings/plugins/test/fixture");
+    await page.goto("/admin/plugins/test/fixture");
 
     // The fixture has a single secret config field "apiKey".
     const input = page.getByLabel("API Key");

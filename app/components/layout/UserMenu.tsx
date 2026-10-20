@@ -1,7 +1,7 @@
 import {
-  KeyRound,
   List,
   LogOut,
+  Settings,
   TabletSmartphone,
   User,
   UserCog,
@@ -10,6 +10,7 @@ import { useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,6 +26,9 @@ import { toastRequestError } from "@/libraries/api";
 const UserMenu = () => {
   const { demoMode, user, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Administration opens the first administration page the role may see.
+  const canAccessAdmin = useAdminNavItems().some((item) => item.show);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -70,20 +74,24 @@ const UserMenu = () => {
             Devices
           </Link>
         </DropdownMenuItem>
-        {!demoMode && (
-          <DropdownMenuItem asChild>
-            <Link to="/user/security">
-              <KeyRound className="h-4 w-4" />
-              Security
-            </Link>
-          </DropdownMenuItem>
-        )}
         <DropdownMenuItem asChild>
-          <Link to="/user/settings">
+          <Link to="/user/preferences">
             <UserCog className="h-4 w-4" />
-            User Settings
+            Preferences
           </Link>
         </DropdownMenuItem>
+        {canAccessAdmin && !demoMode && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/admin">
+                <Settings className="h-4 w-4" />
+                Administration
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOut className="h-4 w-4" />
           Sign out

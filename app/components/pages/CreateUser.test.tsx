@@ -49,10 +49,10 @@ const renderPage = () => {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/settings/users/create"]}>
+      <MemoryRouter initialEntries={["/admin/users/create"]}>
         <Routes>
-          <Route element={<CreateUser />} path="/settings/users/create" />
-          <Route element={<div>User page</div>} path="/settings/users/:id" />
+          <Route element={<CreateUser />} path="/admin/users/create" />
+          <Route element={<div>User page</div>} path="/admin/users/:id" />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

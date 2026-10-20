@@ -2,7 +2,7 @@
 
 Shisho provides library-scoped search, gallery controls, and selection tools for working with many books at once.
 
-To choose which library opens from the home page, open the user menu, select **User Settings**, and pick a **Default library** under **Library**.
+To choose which library opens from the home page, open the user menu, select **Preferences**, and pick a **Default library** under **Library**.
 
 ## Search
 
@@ -57,7 +57,7 @@ Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is av
 
 **Save as my default everywhere** stores one global gallery-size preference for the current user. A size in the page URL temporarily overrides that preference on the current page.
 
-The inline **Size** control is hidden on small screens. On those devices, open the user menu, select **User Settings**, and change the gallery size under **Appearance**.
+The inline **Size** control is hidden on small screens. On those devices, open the user menu, select **Preferences**, and change the gallery size under **Appearance**.
 
 Covers use thumbnails sized for their display size and screen pixel density. A new size is generated when first needed, so its initial load can take longer. Subsequent views reuse cached thumbnails. See [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) for cache limits and clearing.
 

@@ -72,17 +72,17 @@ const ProtectedRoute = ({
     return <Navigate replace to="/" />;
   }
 
-  // Force users with temporary passwords to go to security settings
+  // Force users with temporary passwords to replace them in Preferences
   if (
     !demoMode &&
     user?.must_change_password &&
-    location.pathname !== "/user/security"
+    location.pathname !== "/user/preferences"
   ) {
     const redirectTo = location.pathname + location.search;
     return (
       <Navigate
         replace
-        to={`/user/security?redirect=${encodeURIComponent(redirectTo)}`}
+        to={`/user/preferences?redirect=${encodeURIComponent(redirectTo)}`}
       />
     );
   }

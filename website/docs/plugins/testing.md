@@ -177,7 +177,7 @@ Copy the built artifact to:
 
 `pluginDir` is controlled by `plugin_dir`; see [Configuration](../configuration.md). Then:
 
-1. Go to **Settings > Plugins > Installed**.
+1. Go to **Administration > Plugins > Installed**.
 2. Select **Scan for Local Plugins**.
 3. Open the discovered plugin and turn on **Enabled**. A newly scanned local plugin starts disabled.
 4. Confirm its capabilities, configuration, hook order, and status.

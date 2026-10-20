@@ -183,7 +183,7 @@ describe("DeviceRulesSection", () => {
     // Following the default links to where it's edited.
     expect(
       screen.getByRole("link", { name: "Edit your default" }),
-    ).toHaveAttribute("href", "/user/settings#delivery-rules");
+    ).toHaveAttribute("href", "/user/preferences#delivery-rules");
 
     expect(modeButton("My default")).toHaveAttribute("aria-pressed", "true");
     await user.click(modeButton("Kobo preset"));

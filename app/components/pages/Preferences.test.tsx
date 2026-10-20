@@ -1,19 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { toast } from "sonner";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { setAuth } from "@/testing/auth";
+import { auth, setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 
-import UserSettings from "./UserSettings";
+import Preferences from "./Preferences";
 
 vi.mock("@/hooks/queries/settings", () => ({
   useUserSettings: vi.fn(),
@@ -33,6 +33,11 @@ vi.mock("@/hooks/queries/delivery", () => ({
   useResetDeliveryRules: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+const resetPassword = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/queries/users", () => ({
+  useResetPassword: () => ({ mutateAsync: resetPassword, isPending: false }),
+}));
+
 vi.mock("@/hooks/queries/libraries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/queries/libraries")>()),
   useNavLibraries: vi.fn(),
@@ -42,7 +47,7 @@ beforeEach(() => {
   vi.mocked(useNavLibraries).mockReturnValue({ data: [] } as never);
 });
 
-// TopNav (rendered inside UserSettings) calls useAuth and useMobileNav; mock
+// TopNav (rendered inside Preferences) calls useAuth and useMobileNav; mock
 // both so tests don't require a full AuthProvider / MobileNavProvider.
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
@@ -57,7 +62,7 @@ vi.mock("@/contexts/MobileNav/useMobileNav", () => ({
   }),
 }));
 
-// UserSettings uses useTheme from the Theme context; the default context value
+// Preferences uses useTheme from the Theme context; the default context value
 // (theme: "dark", setTheme: noop) is sufficient for these tests — no provider
 // needed.
 
@@ -66,13 +71,13 @@ const renderPage = () => {
   return render(
     <QueryClientProvider client={client}>
       <RouterProvider
-        router={createMemoryRouter([{ path: "/", element: <UserSettings /> }])}
+        router={createMemoryRouter([{ path: "/", element: <Preferences /> }])}
       />
     </QueryClientProvider>,
   );
 };
 
-describe("UserSettings – gallery size section", () => {
+describe("Preferences – gallery size section", () => {
   it("renders four size buttons (S, M, L, XL)", () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: { gallery_size: "m" },
@@ -132,7 +137,7 @@ describe("UserSettings – gallery size section", () => {
   });
 });
 
-describe("UserSettings – theme section", () => {
+describe("Preferences – theme section", () => {
   it("marks the current theme as pressed within the Theme group", () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: { gallery_size: "m" },
@@ -159,7 +164,7 @@ describe("UserSettings – theme section", () => {
   });
 });
 
-describe("UserSettings – reader settings", () => {
+describe("Preferences – reader settings", () => {
   it("toasts when saving the auto-hide setting fails", async () => {
     const error = vi.spyOn(toast, "error");
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -179,7 +184,7 @@ describe("UserSettings – reader settings", () => {
   });
 });
 
-describe("UserSettings – default library", () => {
+describe("Preferences – default library", () => {
   const twoLibraries = [
     { id: 4, name: "Fiction" },
     { id: 7, name: "Comics" },
@@ -306,7 +311,7 @@ describe("UserSettings – default library", () => {
   });
 });
 
-describe("UserSettings Delivery Rules", () => {
+describe("Preferences Delivery Rules", () => {
   beforeEach(() => {
     vi.mocked(useUserSettings).mockReturnValue({ data: undefined } as never);
     vi.mocked(useUpdateUserSettings).mockReturnValue({
@@ -324,7 +329,7 @@ describe("UserSettings Delivery Rules", () => {
   });
 });
 
-describe("UserSettings – Delivery Rules link target", () => {
+describe("Preferences – Delivery Rules link target", () => {
   it("scrolls to the Delivery Rules section once the page has loaded", async () => {
     const scrolled: Element[] = [];
     vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(
@@ -340,8 +345,8 @@ describe("UserSettings – Delivery Rules link target", () => {
 
     const client = new QueryClient();
     const router = createMemoryRouter(
-      [{ path: "/user/settings", element: <UserSettings /> }],
-      { initialEntries: ["/user/settings#delivery-rules"] },
+      [{ path: "/user/preferences", element: <Preferences /> }],
+      { initialEntries: ["/user/preferences#delivery-rules"] },
     );
     render(
       <QueryClientProvider client={client}>
@@ -354,12 +359,181 @@ describe("UserSettings – Delivery Rules link target", () => {
     settings.data = { gallery_size: "m" };
     settings.isLoading = false;
     await act(() =>
-      router.navigate("/user/settings#delivery-rules", {
+      router.navigate("/user/preferences#delivery-rules", {
         replace: true,
         state: { loaded: true },
       }),
     );
 
     expect(scrolled.map((el) => el.id)).toEqual(["delivery-rules"]);
+  });
+});
+
+describe("Preferences – Password", () => {
+  beforeEach(() => {
+    vi.mocked(useUserSettings).mockReturnValue({ data: undefined } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+    resetPassword.mockReset();
+    resetPassword.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => setAuth({ user: null }));
+
+  const fillAndSubmit = async (current?: string) => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    if (current !== undefined) {
+      await user.type(screen.getByLabelText("Current Password"), current);
+    }
+    await user.type(screen.getByLabelText("New Password"), "new-password");
+    await user.type(
+      screen.getByLabelText("Confirm New Password"),
+      "new-password",
+    );
+    await user.click(screen.getByRole("button", { name: "Change Password" }));
+  };
+
+  it("changes the password from the Password section", async () => {
+    setAuth({ user: { id: 4 } });
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Password" }),
+    ).toBeInTheDocument();
+    await fillAndSubmit("old-password");
+
+    expect(resetPassword).toHaveBeenCalledWith({
+      id: "4",
+      payload: {
+        current_password: "old-password",
+        new_password: "new-password",
+        require_password_reset: false,
+      },
+    });
+  });
+
+  it("hides the Password section in Demo Mode", () => {
+    setAuth({ user: { id: 4 }, demoMode: true });
+    renderPage();
+
+    expect(screen.queryByRole("heading", { name: "Password" })).toBeNull();
+    expect(screen.queryByLabelText("Current Password")).toBeNull();
+  });
+
+  const renderAtPath = (path: string) => {
+    const client = new QueryClient();
+    const router = createMemoryRouter(
+      [
+        { path: "/user/preferences", element: <Preferences /> },
+        { path: "/lists", element: null },
+      ],
+      { initialEntries: [path] },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    return router;
+  };
+
+  it("shows only the reset screen while a password reset is required", async () => {
+    setAuth({ user: { id: 4, must_change_password: true } });
+    // In the app, refetching auth clears the flag and Preferences swaps the
+    // reset screen for the full page before the redirect runs.
+    vi.mocked(auth.refetch).mockImplementation(async () => {
+      auth.user = { ...auth.user!, must_change_password: false };
+    });
+    const router = renderAtPath("/user/preferences?redirect=%2Flists");
+
+    expect(
+      screen.getByRole("heading", { name: "Password Reset Required" }),
+    ).toBeInTheDocument();
+    expect(document.title).toBe("Change Password - Shisho");
+    expect(screen.queryByRole("heading", { name: "Appearance" })).toBeNull();
+    expect(screen.queryByLabelText("Current Password")).toBeNull();
+
+    await fillAndSubmit();
+
+    expect(resetPassword).toHaveBeenCalledWith({
+      id: "4",
+      payload: {
+        current_password: undefined,
+        new_password: "new-password",
+        require_password_reset: false,
+      },
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists"));
+  });
+
+  it("stays on Preferences after a voluntary change, without asking to discard", async () => {
+    setAuth({ user: { id: 4 } });
+    const router = renderAtPath("/user/preferences?redirect=%2Flists");
+
+    await fillAndSubmit("old-password");
+    await act(() => vi.runOnlyPendingTimersAsync());
+
+    expect(resetPassword).toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/user/preferences");
+    expect(screen.queryByText("Unsaved Changes")).toBeNull();
+  });
+
+  it("asks before leaving with a new password typed but not saved", async () => {
+    setAuth({ user: { id: 4 } });
+    const router = renderAtPath("/user/preferences");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.type(screen.getByLabelText("New Password"), "half-typed");
+    await act(() => router.navigate("/lists"));
+
+    expect(await screen.findByText("Unsaved Changes")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/user/preferences");
+  });
+
+  it("does not count an autofilled current password as unsaved", async () => {
+    setAuth({ user: { id: 4 } });
+    const router = renderAtPath("/user/preferences");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.type(screen.getByLabelText("Current Password"), "saved");
+    await act(() => router.navigate("/lists"));
+
+    expect(router.state.location.pathname).toBe("/lists");
+  });
+});
+
+describe("Preferences – Password link target", () => {
+  it("scrolls to the Password section once the page has loaded", async () => {
+    const scrolled: Element[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(
+      function (this: HTMLElement) {
+        scrolled.push(this);
+      },
+    );
+    setAuth({ user: { id: 4 } });
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    const client = new QueryClient();
+    const router = createMemoryRouter(
+      [{ path: "/user/preferences", element: <Preferences /> }],
+      { initialEntries: ["/user/preferences#password"] },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(scrolled.map((el) => el.id)).toEqual(["password"]),
+    );
+    setAuth({ user: null });
   });
 });

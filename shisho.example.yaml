@@ -23,7 +23,7 @@ database_file_path: /config/shisho.db
 
 # Log every SQL statement, with parameter values, at debug level.
 # Very verbose, and exposes stored values such as password hashes and share
-# tokens to Settings > Logs. Enable briefly for troubleshooting.
+# tokens to Administration > Logs. Enable briefly for troubleshooting.
 # Queries slower than 250 ms are always logged as warnings without their values.
 # Env: DATABASE_DEBUG
 # Default: false
@@ -109,7 +109,7 @@ job_retention_days: 30
 #   - {cache_dir}/cbz/        Extracted CBZ page images for the comic viewer
 #   - {cache_dir}/pdf/        Rendered PDF page images for the PDF viewer
 #   - {cache_dir}/cover-thumbnails/  Cover sizes generated on demand
-# Each cache's size limit is editable in Settings > Cache.
+# Each cache's size limit is editable in Administration > Cache.
 # Env: CACHE_DIR
 # Default: /config/cache
 cache_dir: /config/cache
@@ -234,7 +234,7 @@ pdf_supplement_filenames:
 # Use at least 32 characters. Generate one with: openssl rand -hex 32
 # Replace the placeholder below: Shisho refuses to start with it, because it
 # is public and would let anyone forge a login session. A shorter secret
-# still starts but logs a warning and shows one on Settings > Server.
+# still starts but logs a warning and shows one on Administration > Server.
 # Changing the secret signs everyone out once.
 # Env: JWT_SECRET
 jwt_secret: your-secret-key-here-change-me

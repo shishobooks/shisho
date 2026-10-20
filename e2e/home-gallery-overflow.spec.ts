@@ -72,7 +72,7 @@ test.describe("Home gallery vertical overflow", () => {
     await page.getByLabel("Username").fill(USERNAME);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
   }
 
   test("scrolls vertically only when the gallery content exceeds the viewport", async ({

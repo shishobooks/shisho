@@ -58,7 +58,7 @@ test.describe("Detail page headers", () => {
     await page.getByLabel("Username").fill(USERNAME);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
   }
 
   const box = async (locator: Locator) => {

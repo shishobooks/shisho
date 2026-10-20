@@ -82,7 +82,7 @@ test.describe("Share Links", () => {
     await page.getByLabel("Username").fill(USERNAME);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
   }
 
   test("a recipient with no session opens a link and downloads the book", async ({
@@ -99,7 +99,7 @@ test.describe("Share Links", () => {
     await login(page);
 
     // Turn sharing on from Settings > Sharing.
-    await page.goto("/settings/sharing", { waitUntil: "domcontentloaded" });
+    await page.goto("/admin/sharing", { waitUntil: "domcontentloaded" });
     const enable = page.getByRole("switch", { name: "Enable Share Links" });
     await expect(enable).not.toBeChecked();
     await enable.click();

@@ -117,7 +117,7 @@ describe("Sidebar", () => {
   it("supports a Settings icon item type", () => {
     renderSidebar([
       buildItem({
-        to: "/settings",
+        to: "/admin",
         icon: <Settings className="h-4 w-4" data-testid="settings-icon" />,
         label: "Settings",
       }),

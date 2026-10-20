@@ -100,7 +100,7 @@ describe("PluginDangerZone", () => {
     });
   });
 
-  it("navigates to /settings/plugins on a successful uninstall", async () => {
+  it("navigates to /admin/plugins on a successful uninstall", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mockUninstallMutate.mockReset();
     mockNavigate.mockReset();
@@ -120,7 +120,7 @@ describe("PluginDangerZone", () => {
     );
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/settings/plugins");
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/plugins");
     });
     expect(toast.success).toHaveBeenCalledWith("My Plugin uninstalled");
   });

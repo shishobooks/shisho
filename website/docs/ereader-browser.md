@@ -88,9 +88,9 @@ To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the f
 
 **Likely cause:** The bookmark is incomplete, the Device was deleted or revoked, its credential was regenerated, the owner was deactivated, or the owner's role lost Books Read. See [How Long the URL Works](#how-long-the-url-works).
 
-**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that its credential matches the one on the Device's page. Ask an administrator to check the owner's account status and role under **Settings > Users**.
+**Verify:** Confirm that the bookmark contains the complete `/ereader/key/...` path and that its credential matches the one on the Device's page. Ask an administrator to check the owner's account status and role under **Administration > Users**.
 
-**Fix:** If the credential changed, replace the bookmark with the new URL. If the Device was deleted, add it again and replace the bookmark. A deleted Device's credential cannot be restored. If the role lost Books Read, an administrator can add it back under **Settings > Users** by selecting the role in the **Roles** section. See [Custom Roles](./users-and-permissions.md#custom-roles). A deactivated owner cannot be reactivated from the web interface, so add a device under an active account instead, or see [Deactivate Users](./users-and-permissions.md#deactivate-users).
+**Fix:** If the credential changed, replace the bookmark with the new URL. If the Device was deleted, add it again and replace the bookmark. A deleted Device's credential cannot be restored. If the role lost Books Read, an administrator can add it back under **Administration > Users** by selecting the role in the **Roles** section. See [Custom Roles](./users-and-permissions.md#custom-roles). A deactivated owner cannot be reactivated from the web interface, so add a device under an active account instead, or see [Deactivate Users](./users-and-permissions.md#deactivate-users).
 
 ### The Page Does Not Load Through a Proxy
 

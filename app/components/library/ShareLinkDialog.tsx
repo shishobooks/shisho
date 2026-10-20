@@ -267,12 +267,12 @@ export function ShareLinkDialog({
                     <Link
                       className="underline underline-offset-4 hover:text-foreground"
                       onClick={() => onOpenChange(false)}
-                      to="/settings/sharing"
+                      to="/admin/sharing"
                     >
-                      Settings &gt; Sharing
+                      Administration &gt; Sharing
                     </Link>
                   ) : (
-                    "Settings > Sharing"
+                    "Administration > Sharing"
                   )}
                   .
                 </p>

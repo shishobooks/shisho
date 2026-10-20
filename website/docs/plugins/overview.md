@@ -4,7 +4,7 @@ Plugins extend Shisho with file conversion, file parsing, and metadata lookup. T
 
 ## Open the Plugin Manager
 
-Go to **Settings > Plugins**. The page has two tabs:
+Go to **Administration > Plugins**. The page has two tabs:
 
 - **Installed** lists plugins already on this Shisho server, their versions, capabilities, status, source repository, and available updates.
 - **Discover** fetches the current indexes from configured repositories. Use search, capability, and source filters to find a plugin.
@@ -48,7 +48,7 @@ Select **Save** after changing configuration or global metadata field controls. 
 
 ## Set Global Order and Modes
 
-From **Settings > Plugins**, select the gear button labeled **Advanced plugin settings**, then open **Order**.
+From **Administration > Plugins**, select the gear button labeled **Advanced plugin settings**, then open **Order**.
 
 1. Choose a **Hook Type**.
 2. Use the up and down arrow buttons to set execution order.

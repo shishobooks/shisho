@@ -380,9 +380,9 @@ describe("ShareLinkDialog", () => {
     });
 
     const link = within(screen.getByRole("status")).getByRole("link", {
-      name: "Settings > Sharing",
+      name: "Administration > Sharing",
     });
-    expect(link).toHaveAttribute("href", "/settings/sharing");
+    expect(link).toHaveAttribute("href", "/admin/sharing");
     await user.click(link);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
@@ -391,7 +391,7 @@ describe("ShareLinkDialog", () => {
     renderDialog({ sharingEnabled: false });
 
     const notice = screen.getByRole("status");
-    expect(notice).toHaveTextContent("Settings > Sharing");
+    expect(notice).toHaveTextContent("Administration > Sharing");
     expect(within(notice).queryByRole("link")).not.toBeInTheDocument();
   });
 

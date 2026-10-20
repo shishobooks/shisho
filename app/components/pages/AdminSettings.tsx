@@ -112,7 +112,7 @@ const AdminSettings = () => {
               value={config.database_file_path}
             />
             <ConfigRow
-              description="Logs every SQL statement, with its values, at debug level. This exposes stored values such as password hashes and share tokens in Settings > Logs, so enable it only briefly. Queries slower than 250 ms are always logged as warnings without their values"
+              description="Logs every SQL statement, with its values, at debug level. This exposes stored values such as password hashes and share tokens in Administration > Logs, so enable it only briefly. Queries slower than 250 ms are always logged as warnings without their values"
               label="Debug Mode"
               value={config.database_debug}
             />

@@ -52,10 +52,7 @@ const LibraryRedirect = () => {
   // any other role lands on lists.
   if (libraries.length === 0) {
     return (
-      <Navigate
-        replace
-        to={canReadLibraries ? "/settings/libraries" : "/lists"}
-      />
+      <Navigate replace to={canReadLibraries ? "/admin/libraries" : "/lists"} />
     );
   }
 

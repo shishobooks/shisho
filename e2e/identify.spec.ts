@@ -14,7 +14,7 @@ async function login(page: Page) {
   await page.getByLabel("Username").fill(PLUGIN_TEST_USERNAME);
   await page.getByLabel("Password").fill(PLUGIN_TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/settings\/libraries|\/libraries\//);
+  await page.waitForURL(/\/admin\/libraries|\/libraries\//);
 }
 
 // The fixture enricher proposes a title and an explicit unabridged flag.

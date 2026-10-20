@@ -10,8 +10,8 @@ const openCachePage = async (page: Page) => {
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.waitForURL(/\/settings\/libraries|\/libraries\//);
-  await page.goto("/settings/cache", { waitUntil: "domcontentloaded" });
+  await page.waitForURL(/\/admin\/libraries|\/libraries\//);
+  await page.goto("/admin/cache", { waitUntil: "domcontentloaded" });
 };
 
 // The limit controls of one cache, whose names include the cache's name.

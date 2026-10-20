@@ -71,7 +71,7 @@ export const PluginHookOrderSection = ({
         <h2 className="text-lg font-semibold">Hook execution order</h2>
         <Link
           className="inline-flex items-center gap-1 text-xs text-muted-foreground underline hover:text-foreground"
-          to="/settings/plugins?advanced=order"
+          to="/admin/plugins?advanced=order"
         >
           Edit in advanced settings
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
