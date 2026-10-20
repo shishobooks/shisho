@@ -269,10 +269,10 @@ export function ShareLinkDialog({
                       onClick={() => onOpenChange(false)}
                       to="/admin/sharing"
                     >
-                      Settings &gt; Sharing
+                      Administration &gt; Sharing
                     </Link>
                   ) : (
-                    "Settings > Sharing"
+                    "Administration > Sharing"
                   )}
                   .
                 </p>

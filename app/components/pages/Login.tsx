@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
+import { safeRedirectPath } from "@/libraries/redirect";
 
 const Login = () => {
   usePageTitle("Sign In");
@@ -25,7 +26,7 @@ const Login = () => {
     isLoading: authLoading,
     login,
   } = useAuth();
-  const redirectTo = searchParams.get("redirect") || "/";
+  const redirectTo = safeRedirectPath(searchParams.get("redirect")) ?? "/";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

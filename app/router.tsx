@@ -48,6 +48,7 @@ import { shareRoutes } from "@/components/pages/shareRoutes";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
 import UserDetail from "@/components/pages/UserDetail";
+import { PASSWORD_SECTION_ID } from "@/components/preferences/PasswordSection";
 import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 export const routes: RouteObject[] = [
@@ -291,7 +292,12 @@ export const routes: RouteObject[] = [
       },
       {
         path: "user/security",
-        element: <PreservingRedirect hash="#password" to="/user/preferences" />,
+        element: (
+          <PreservingRedirect
+            hash={`#${PASSWORD_SECTION_ID}`}
+            to="/user/preferences"
+          />
+        ),
       },
       {
         path: "user/devices",

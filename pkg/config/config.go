@@ -49,7 +49,7 @@ type Config struct {
 	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
 
 	// Cache settings. Cache size limits are admin policy saved under
-	// Settings > Cache, not config.
+	// Administration > Cache, not config.
 	CacheDir string `koanf:"cache_dir" json:"cache_dir"`
 
 	// PDF viewer rendering settings
@@ -111,7 +111,7 @@ type Config struct {
 // removedSettings maps a setting Shisho no longer reads to where its value
 // moved. A server that still sets one starts normally and logs a warning.
 var removedSettings = map[string]string{
-	"download_cache_max_size_gb": "Set the Downloads cache limit under Settings > Cache instead",
+	"download_cache_max_size_gb": "Set the Downloads cache limit under Administration > Cache instead",
 }
 
 // IsTestMode returns true if the server is running in test mode.

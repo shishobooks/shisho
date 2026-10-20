@@ -27,7 +27,7 @@ const UserMenu = () => {
   const { demoMode, user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Administration opens the first settings page the role may see.
+  // Administration opens the first administration page the role may see.
   const canAccessAdmin = useAdminNavItems().some((item) => item.show);
 
   const handleLogout = useCallback(async () => {

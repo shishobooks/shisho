@@ -134,7 +134,7 @@ const MobileDrawer = () => {
   const isAdminContext = location.pathname.startsWith("/admin");
   const visibleAdminItems = useAdminNavItems().filter((item) => item.show);
 
-  // Administration opens the first settings page the role may see.
+  // Administration opens the first administration page the role may see.
   const canAccessAdmin = visibleAdminItems.length > 0;
 
   return (
@@ -345,7 +345,7 @@ const MobileDrawer = () => {
               <NavItem
                 icon={<Settings className="h-5 w-5" />}
                 // Only highlight when no admin item above matches the page,
-                // so settings pages highlight exactly one item.
+                // so administration pages highlight exactly one item.
                 isActive={
                   isAdminContext &&
                   !visibleAdminItems.some((item) => item.isActive)

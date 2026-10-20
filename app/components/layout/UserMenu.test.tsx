@@ -25,14 +25,14 @@ const administration = () =>
 describe("UserMenu", () => {
   beforeEach(() => setAuth());
 
-  it("links to Administration when a settings page is permitted", async () => {
+  it("links to Administration when an administration page is permitted", async () => {
     setAuth({ permissions: ["books:read", "libraries:read"] });
     await openMenu();
 
     expect(administration()).toHaveAttribute("href", "/admin");
   });
 
-  it("hides Administration when no settings page is permitted", async () => {
+  it("hides Administration when no administration page is permitted", async () => {
     setAuth({ permissions: ["books:read", "series:read", "people:read"] });
     await openMenu();
 

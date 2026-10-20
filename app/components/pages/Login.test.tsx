@@ -1,5 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, waitFor } from "@testing-library/react";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  RouterProvider,
+} from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
@@ -42,5 +46,32 @@ describe("Login Demo Mode", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toHaveValue("");
     expect(screen.getByLabelText("Password")).toHaveValue("");
+  });
+});
+
+describe("Login redirect", () => {
+  const renderSignedInAt = (path: string) => {
+    setAuth({ user: { id: 1 } });
+    const router = createMemoryRouter(
+      [
+        { path: "/login", element: <Login /> },
+        { path: "*", element: null },
+      ],
+      { initialEntries: [path] },
+    );
+    render(<RouterProvider router={router} />);
+    return router;
+  };
+
+  it("sends a signed-in user to the in-app page it names", async () => {
+    const router = renderSignedInAt("/login?redirect=%2Flists");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists"));
+  });
+
+  it("sends a signed-in user home instead of to another site", async () => {
+    const router = renderSignedInAt("/login?redirect=%2F%2Fevil.example");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   });
 });

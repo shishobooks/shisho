@@ -57,7 +57,7 @@ describe("router permission guards", () => {
   });
 
   describe("/admin index", () => {
-    it("opens the first permitted settings page for a role without Config Read", async () => {
+    it("opens the first permitted administration page for a role without Config Read", async () => {
       setAuth({ permissions: ["books:read", "libraries:read"] });
       const router = renderAt("/admin");
 
@@ -77,7 +77,7 @@ describe("router permission guards", () => {
       expect(router.state.location.pathname).toBe("/admin/server");
     });
 
-    it("denies access when no settings page is permitted", async () => {
+    it("denies access when no administration page is permitted", async () => {
       setAuth({ permissions: ["books:read"] });
       renderAt("/admin");
 

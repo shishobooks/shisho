@@ -10,7 +10,7 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
-import { setAuth } from "@/testing/auth";
+import { auth, setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 
 import Preferences from "./Preferences";
@@ -421,25 +421,36 @@ describe("Preferences – Password", () => {
     expect(screen.queryByLabelText("Current Password")).toBeNull();
   });
 
-  it("shows only the reset screen while a password reset is required", async () => {
-    setAuth({ user: { id: 4, must_change_password: true } });
+  const renderAtPath = (path: string) => {
     const client = new QueryClient();
     const router = createMemoryRouter(
       [
         { path: "/user/preferences", element: <Preferences /> },
         { path: "/lists", element: null },
       ],
-      { initialEntries: ["/user/preferences?redirect=%2Flists"] },
+      { initialEntries: [path] },
     );
     render(
       <QueryClientProvider client={client}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
+    return router;
+  };
+
+  it("shows only the reset screen while a password reset is required", async () => {
+    setAuth({ user: { id: 4, must_change_password: true } });
+    // In the app, refetching auth clears the flag and Preferences swaps the
+    // reset screen for the full page before the redirect runs.
+    vi.mocked(auth.refetch).mockImplementation(async () => {
+      auth.user = { ...auth.user!, must_change_password: false };
+    });
+    const router = renderAtPath("/user/preferences?redirect=%2Flists");
 
     expect(
       screen.getByRole("heading", { name: "Password Reset Required" }),
     ).toBeInTheDocument();
+    expect(document.title).toBe("Change Password - Shisho");
     expect(screen.queryByRole("heading", { name: "Appearance" })).toBeNull();
     expect(screen.queryByLabelText("Current Password")).toBeNull();
 
@@ -454,5 +465,75 @@ describe("Preferences – Password", () => {
       },
     });
     await waitFor(() => expect(router.state.location.pathname).toBe("/lists"));
+  });
+
+  it("stays on Preferences after a voluntary change, without asking to discard", async () => {
+    setAuth({ user: { id: 4 } });
+    const router = renderAtPath("/user/preferences?redirect=%2Flists");
+
+    await fillAndSubmit("old-password");
+    await act(() => vi.runOnlyPendingTimersAsync());
+
+    expect(resetPassword).toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/user/preferences");
+    expect(screen.queryByText("Unsaved Changes")).toBeNull();
+  });
+
+  it("asks before leaving with a new password typed but not saved", async () => {
+    setAuth({ user: { id: 4 } });
+    const router = renderAtPath("/user/preferences");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.type(screen.getByLabelText("New Password"), "half-typed");
+    await act(() => router.navigate("/lists"));
+
+    expect(await screen.findByText("Unsaved Changes")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/user/preferences");
+  });
+
+  it("does not count an autofilled current password as unsaved", async () => {
+    setAuth({ user: { id: 4 } });
+    const router = renderAtPath("/user/preferences");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.type(screen.getByLabelText("Current Password"), "saved");
+    await act(() => router.navigate("/lists"));
+
+    expect(router.state.location.pathname).toBe("/lists");
+  });
+});
+
+describe("Preferences – Password link target", () => {
+  it("scrolls to the Password section once the page has loaded", async () => {
+    const scrolled: Element[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(
+      function (this: HTMLElement) {
+        scrolled.push(this);
+      },
+    );
+    setAuth({ user: { id: 4 } });
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    const client = new QueryClient();
+    const router = createMemoryRouter(
+      [{ path: "/user/preferences", element: <Preferences /> }],
+      { initialEntries: ["/user/preferences#password"] },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(scrolled.map((el) => el.id)).toEqual(["password"]),
+    );
+    setAuth({ user: null });
   });
 });

@@ -79,4 +79,14 @@ test.describe("Login Flow", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL("/admin/libraries");
   });
+
+  test("sends an old settings bookmark to its administration page", async ({
+    page,
+  }) => {
+    await page.goto("/login?redirect=%2Fsettings%2Fusers%3Fq%3Dtest");
+    await page.getByLabel("Username").fill("testadmin");
+    await page.getByLabel("Password").fill("password123");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL("/admin/users?q=test");
+  });
 });

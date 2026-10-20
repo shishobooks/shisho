@@ -11,7 +11,7 @@ import {
   ForcedPasswordReset,
   PASSWORD_SECTION_ID,
   PasswordSection,
-} from "@/components/pages/ChangePassword";
+} from "@/components/preferences/PasswordSection";
 import { Button } from "@/components/ui/button";
 import {
   Select,

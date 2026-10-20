@@ -8,18 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useResetPassword } from "@/hooks/queries/users";
 import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
+import { safeRedirectPath } from "@/libraries/redirect";
 
 /** The id of the Preferences section holding the password form. */
 export const PASSWORD_SECTION_ID = "password";
 
 // The form state both password screens share. A forced reset skips the
-// current password, and after a change the user returns to the page that
-// sent them here (`?redirect=`).
+// current password and afterwards returns the user to the page ProtectedRoute
+// sent them away from (`?redirect=`); a voluntary change stays put.
 const useChangePassword = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirect");
+  const redirectTo = safeRedirectPath(searchParams.get("redirect"));
   const { user, refetch } = useAuth();
   const resetPasswordMutation = useResetPassword();
   const isForced = Boolean(user?.must_change_password);
@@ -58,7 +60,7 @@ const useChangePassword = () => {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      if (redirectTo) {
+      if (isForced && redirectTo) {
         navigate(redirectTo, { replace: true });
       }
     } catch (error) {
@@ -78,7 +80,9 @@ const useChangePassword = () => {
     setNewPassword,
     confirmPassword,
     setConfirmPassword,
-    hasChanges: Boolean(currentPassword || newPassword || confirmPassword),
+    // A password manager may fill the current password on load, so only a
+    // new password the user typed counts as unsaved.
+    hasChanges: Boolean(newPassword || confirmPassword),
     isPending: resetPasswordMutation.isPending,
     handleSubmit,
   };
@@ -118,6 +122,7 @@ const NewPasswordFields = ({ form }: { form: ChangePasswordForm }) => (
 
 /** The full-screen form shown instead of any page until a temporary password is replaced. */
 export const ForcedPasswordReset = () => {
+  usePageTitle("Change Password");
   const form = useChangePassword();
 
   return (
