@@ -68,6 +68,9 @@ func (s *Service) BookDevices(ctx context.Context, user *models.User, book *mode
 			for _, move := range changes.Moves {
 				line.EditionMoves = append(line.EditionMoves, EditionMove{FromFileID: move.FromFileID, ToFileID: move.ToFileID})
 			}
+			for _, sw := range changes.TypeSwitches {
+				line.TypeSwitch = &TypeSwitch{FromFileType: sw.From, ToFileType: sw.To}
+			}
 		}
 		result = append(result, line)
 	}
@@ -137,7 +140,7 @@ func (s *Service) Preview(ctx context.Context, user *models.User, device *device
 			movedBooks[move.BookID] = true
 		}
 		preview.MovedBooks = len(movedBooks)
-		preview.RetypedBooks = len(changes.RetypedBookIDs)
+		preview.RetypedBooks = len(changes.TypeSwitches)
 	}
 	return preview, nil
 }

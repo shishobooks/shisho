@@ -186,7 +186,7 @@ Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules),
 
 Under the rules, the Device's page previews how many books in its scope the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
 
-Each book's page has an **On your Devices** panel with a line for each of your Devices: the file type it receives the book as and the file it comes from, such as "as KePub (from EPUB)", or why it receives nothing, such as no rule for the book's file types or the book being outside its scope.
+Each book's page has an **On your Devices** panel with a row for each of your Devices: the file type each of the book's files goes out as, such as EPUB to KePub, or why it receives nothing, such as no rule for the book's file types or the book being outside its scope. For a Kobo, the row also warns when its next sync would move the book to a different edition or switch it between KePub and EPUB.
 
 ### Delete a Device
 

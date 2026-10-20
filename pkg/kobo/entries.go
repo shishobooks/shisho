@@ -317,10 +317,19 @@ type EditionMove struct {
 // reader should hear about before it happens.
 type EntryChanges struct {
 	Moves []EditionMove
-	// RetypedBookIDs are books whose entry would be removed while the book
+	// TypeSwitches are books whose entry would be removed while the book
 	// gets an entry of another delivered File Type, such as KePub to EPUB.
-	// The Kobo loses the book's reading position and hides its highlights.
-	RetypedBookIDs []int
+	// The Kobo adds the book again as a new one, without its reading
+	// position or highlights.
+	TypeSwitches []TypeSwitch
+}
+
+// TypeSwitch is a book on a Kobo that its next sync switches from one
+// delivered File Type to another.
+type TypeSwitch struct {
+	BookID int
+	From   string
+	To     string
 }
 
 // PlanChanges returns what the next sync of deviceID would do to its
@@ -344,7 +353,7 @@ func (svc *Service) PlanChanges(ctx context.Context, deviceID string, delivered 
 	}
 	plan := planEntries(entries, delivered)
 
-	changes := &EntryChanges{Moves: []EditionMove{}, RetypedBookIDs: []int{}}
+	changes := &EntryChanges{Moves: []EditionMove{}, TypeSwitches: []TypeSwitch{}}
 	for _, h := range plan.HandedOver {
 		changes.Moves = append(changes.Moves, EditionMove{BookID: h.To.BookID, FromFileID: h.Entry.FileID, ToFileID: h.To.FileID})
 	}
@@ -360,7 +369,7 @@ func (svc *Service) PlanChanges(ctx context.Context, deviceID string, delivered 
 		for _, t := range addedTypes[*e.BookID] {
 			if t != e.DeliveredFileType {
 				retyped[*e.BookID] = true
-				changes.RetypedBookIDs = append(changes.RetypedBookIDs, *e.BookID)
+				changes.TypeSwitches = append(changes.TypeSwitches, TypeSwitch{BookID: *e.BookID, From: e.DeliveredFileType, To: t})
 				break
 			}
 		}

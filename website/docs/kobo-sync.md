@@ -29,7 +29,7 @@ The **On your Devices** panel on a book's page warns when a newly added file wou
 
 ### Switching Between KePub and EPUB
 
-A Kobo cannot change a book's format in place. When a rule change switches what a Kobo receives for a book between KePub and EPUB, such as editing the rules so EPUB goes out as EPUB, the next sync removes each affected book from the Kobo and adds it again as a new book.
+A Kobo cannot change a book's format in place. When a rule change switches what a Kobo receives for a book between KePub and EPUB, such as editing the rules so EPUB goes out as EPUB, the next sync removes each affected book from the Kobo and adds it again as a new book. A newly added file can do the same when the rules send it as another type, and the book's **On your Devices** panel warns about it.
 
 :::warning
 Each book that switches between KePub and EPUB comes back as a new book on the Kobo, without the old copy's reading position or highlights. Switching back later does the same again. The Device's rules editor asks before saving such a change and says how many books it affects.

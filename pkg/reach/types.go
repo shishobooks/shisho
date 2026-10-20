@@ -24,6 +24,17 @@ type BookDevice struct {
 	// to another of this book's Files. The Kobo may reopen the book at the
 	// start.
 	EditionMoves []EditionMove `json:"edition_moves"`
+	// TypeSwitch is set, on a Kobo, when its next sync switches the book on
+	// it to another File Type, such as KePub to EPUB. The Kobo adds it again
+	// as a new book, without its reading position or highlights.
+	TypeSwitch *TypeSwitch `json:"type_switch,omitempty"`
+}
+
+// TypeSwitch is a book on a Kobo moving from one delivered File Type to
+// another.
+type TypeSwitch struct {
+	FromFileType string `json:"from_file_type" tstype:"DeliveredFileType"`
+	ToFileType   string `json:"to_file_type" tstype:"DeliveredFileType"`
 }
 
 // BookDelivery is one File a Device gets, and the File Type it gets it as.

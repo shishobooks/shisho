@@ -31,12 +31,13 @@ func (f *fixture) addFile(b *models.Book, fileType string) *models.File {
 	return file
 }
 
-// onKobo records that kobo holds fileID as deliveredType, as a sync would.
-func (f *fixture) onKobo(kobo *devices.Device, b *models.Book, fileID int, deliveredType string) {
+// onKobo records that kobo holds fileID as KePub, as a sync under its
+// preset would.
+func (f *fixture) onKobo(kobo *devices.Device, b *models.Book, fileID int) {
 	f.t.Helper()
 	_, err := f.db.ExecContext(context.Background(),
 		`INSERT INTO kobo_sync_entries (device_id, entry_id, book_id, file_id, delivered_file_type, revision_id) VALUES (?, ?, ?, ?, ?, 'rev')`,
-		kobo.ID, fmt.Sprintf("shisho-%d", fileID), b.ID, fileID, deliveredType)
+		kobo.ID, fmt.Sprintf("shisho-%d", fileID), b.ID, fileID, models.FileTypeKePub)
 	require.NoError(f.t, err)
 }
 
@@ -112,7 +113,7 @@ func TestBookDevices_NewFileMovesAKoboToAnotherEdition(t *testing.T) {
 	b := f.book(lib, "Comic", models.FileTypeCBZ, "", "")
 	cbz := f.loadBook(b).Files[0]
 	kobo := f.kobo()
-	f.onKobo(kobo, b, cbz.ID, models.FileTypeKePub)
+	f.onKobo(kobo, b, cbz.ID)
 
 	lines, err := f.svc.BookDevices(context.Background(), f.user, f.loadBook(b))
 	require.NoError(t, err)
@@ -167,8 +168,8 @@ func TestPreview_KoboWarnings(t *testing.T) {
 	comic := f.book(lib, "Comic", models.FileTypeCBZ, "", "")
 	f.addFile(comic, models.FileTypeEPUB)
 	kobo := f.kobo()
-	f.onKobo(kobo, novel, f.loadBook(novel).Files[0].ID, models.FileTypeKePub)
-	f.onKobo(kobo, comic, f.loadBook(comic).Files[0].ID, models.FileTypeKePub)
+	f.onKobo(kobo, novel, f.loadBook(novel).Files[0].ID)
+	f.onKobo(kobo, comic, f.loadBook(comic).Files[0].ID)
 
 	// The comic's EPUB outranks its CBZ under the preset, so the Kobo's
 	// comic moves to it.
@@ -190,4 +191,33 @@ func TestPreview_KoboWarnings(t *testing.T) {
 	preview, err = f.svc.Preview(ctx, f.user, opds, []delivery.Rule{{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeEPUB}})
 	require.NoError(t, err)
 	assert.Zero(t, preview.MovedBooks+preview.RetypedBooks)
+}
+
+// On a Kobo, a newly added File that wins under a rule delivering another
+// File Type switches the book on it, which the book page warns about.
+func TestBookDevices_NewFileSwitchesAKoboBetweenKePubAndEPUB(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := context.Background()
+	lib := f.library("Comics")
+	b := f.book(lib, "Comic", models.FileTypeCBZ, "", "")
+	cbz := f.loadBook(b).Files[0]
+	kobo := f.kobo()
+	kobo, err := f.devices.SetRules(ctx, f.user.ID, kobo.ID, devices.RulesModeCustom, []delivery.Rule{
+		{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeEPUB},
+		{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeKePub},
+	})
+	require.NoError(t, err)
+	f.onKobo(kobo, b, cbz.ID)
+
+	lines, err := f.svc.BookDevices(ctx, f.user, f.loadBook(b))
+	require.NoError(t, err)
+	assert.Nil(t, lineFor(t, lines, kobo.ID).TypeSwitch, "nothing switches until a File is added")
+
+	f.addFile(b, models.FileTypeEPUB)
+	lines, err = f.svc.BookDevices(ctx, f.user, f.loadBook(b))
+	require.NoError(t, err)
+	line := lineFor(t, lines, kobo.ID)
+	assert.Equal(t, &TypeSwitch{FromFileType: models.FileTypeKePub, ToFileType: models.FileTypeEPUB}, line.TypeSwitch)
+	assert.Empty(t, line.EditionMoves, "a switch is a removal and an addition, not a move")
 }
