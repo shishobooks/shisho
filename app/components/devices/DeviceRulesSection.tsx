@@ -49,7 +49,10 @@ const ReadOnlyRules = ({ rules }: { rules: Rule[] }) => (
           <span className="w-4 text-right text-xs tabular-nums text-muted-foreground">
             {index + 1}
           </span>
-          <Badge variant="secondary">{source}</Badge>
+          {/* A fixed width lines the arrows up down the list. */}
+          <Badge className="w-14 justify-center" variant="secondary">
+            {source}
+          </Badge>
           <ArrowRight
             aria-hidden="true"
             className="h-4 w-4 text-muted-foreground"

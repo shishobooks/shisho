@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { toast } from "sonner";
@@ -321,5 +321,45 @@ describe("UserSettings Delivery Rules", () => {
       screen.getByRole("heading", { name: "Delivery Rules" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Following Shisho's defaults")).toBeInTheDocument();
+  });
+});
+
+describe("UserSettings – Delivery Rules link target", () => {
+  it("scrolls to the Delivery Rules section once the page has loaded", async () => {
+    const scrolled: Element[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(
+      function (this: HTMLElement) {
+        scrolled.push(this);
+      },
+    );
+    const settings = { data: undefined as unknown, isLoading: true };
+    vi.mocked(useUserSettings).mockImplementation(() => settings as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    const client = new QueryClient();
+    const router = createMemoryRouter(
+      [{ path: "/user/settings", element: <UserSettings /> }],
+      { initialEntries: ["/user/settings#delivery-rules"] },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    expect(scrolled).toEqual([]);
+
+    // The settings arrive; a navigation re-renders the page with them.
+    settings.data = { gallery_size: "m" };
+    settings.isLoading = false;
+    await act(() =>
+      router.navigate("/user/settings#delivery-rules", {
+        replace: true,
+        state: { loaded: true },
+      }),
+    );
+
+    expect(scrolled.map((el) => el.id)).toEqual(["delivery-rules"]);
   });
 });

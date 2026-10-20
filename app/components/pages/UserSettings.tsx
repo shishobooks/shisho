@@ -18,6 +18,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
+import { useDeliveryRules } from "@/hooks/queries/delivery";
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import {
   useUpdateUserSettings,
@@ -104,15 +105,24 @@ const UserSettings = () => {
   const { showBlockerDialog, proceedNavigation, cancelNavigation } =
     useUnsavedChanges(deliveryRulesHaveChanges);
 
-  // A Device page links straight to the Delivery Rules section.
+  // A Device page links straight to the Delivery Rules section. Scroll once
+  // the page's queries have loaded, since what they render above and in the
+  // section changes where it sits.
   const { hash } = useLocation();
+  const deliveryRulesLoaded = useDeliveryRules().data !== undefined;
+  const settingsLoaded =
+    userSettingsQuery.data !== undefined && librariesQuery.data !== undefined;
   useEffect(() => {
-    if (hash === `#${DELIVERY_RULES_SECTION_ID}`) {
+    if (
+      hash === `#${DELIVERY_RULES_SECTION_ID}` &&
+      deliveryRulesLoaded &&
+      settingsLoaded
+    ) {
       document
         .getElementById(DELIVERY_RULES_SECTION_ID)
         ?.scrollIntoView({ block: "start" });
     }
-  }, [hash]);
+  }, [hash, deliveryRulesLoaded, settingsLoaded]);
 
   const handleGallerySizeChange = (next: GallerySize) => {
     updateUserSettings.mutate(
