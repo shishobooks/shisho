@@ -119,12 +119,12 @@ run = "pnpm lint:types"
 [tasks.test]
 description = "Run Go tests with coverage"
 env = { TZ = "America/Chicago", CI = "true" }
-run = "go test ./pkg/... -coverprofile coverage.out"
+run = "go test ./... -coverprofile coverage.out"
 
 [tasks."test:race"]
 description = "Run Go tests with race detection"
 env = { TZ = "America/Chicago", CI = "true" }
-run = "go test -race ./pkg/... -coverprofile coverage.out"
+run = "go test -race ./... -coverprofile coverage.out"
 
 [tasks."test:js"]
 description = "Run all JS tests"
