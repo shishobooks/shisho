@@ -83,7 +83,7 @@ func newJobsPermissionFixture(t *testing.T) *jobsPermissionFixture {
 
 func (f *jobsPermissionFixture) insertLibrary(ctx context.Context, name string) *models.Library {
 	f.t.Helper()
-	lib := &models.Library{Name: name, CoverAspectRatio: "portrait", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: name, CoverAspectRatio: "portrait"}
 	_, err := f.db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(f.t, err)
 	return lib

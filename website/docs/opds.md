@@ -2,36 +2,19 @@
 
 Shisho provides an OPDS 1.2 catalog for browsing and downloading books from compatible reading apps.
 
-## Catalog URLs
+## Catalog URL
 
 Use this root catalog URL:
 
 ```text
-https://your-server/opds/v1/{types}/catalog
+https://your-server/opds/v1/catalog
 ```
 
-Replace `{types}` with one or more of `epub`, `cbz`, `m4b`, `pdf`, `mobi`, and `azw3`. Join multiple types with `+`:
+Feeds list the books your [Delivery Rules](./supported-formats.md#delivery-rules) deliver something from, and each book offers one download link per file the rules pick, in the file type they send it as. With the rules untouched, every book offers its EPUB, or its earliest other file type in Shisho's default order, as itself, plus its M4B when it has one. To get CBZs as EPUB or EPUBs as KePub in a reading app, change the rules under **User Settings > Delivery Rules**; they also decide the web app's download button.
 
-```text
-https://your-server/opds/v1/epub/catalog
-https://your-server/opds/v1/epub+cbz/catalog
-https://your-server/opds/v1/mobi+azw3/catalog
-https://your-server/opds/v1/epub+cbz+m4b+pdf+mobi+azw3/catalog
-```
+Each download link carries the media type of the file type it sends, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it, and a title naming that file type and the file's name, or the book's title when the file has no name, such as `EPUB · Illustrated Edition`. Reading apps that label downloads by title use it to tell a book's files apart. A KePub is typed as an EPUB, with a link ending in `.kepub.epub`, because KOReader recognizes downloads by their extension or media type. Downloads are generated with the book's current metadata, as that page describes for each format. The first download of some formats shows no progress or size in the reading app; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
 
-Any non-empty combination of those six types is accepted. Order does not change the catalog behavior. `mobi` covers `.mobi`, `.azw`, and `.prc` files. For a reading app that opens only Kindle formats, use `mobi+azw3`.
-
-Each download link carries its format's media type, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it, and a title naming its format and the file's name, or the book's title when the file has no name, such as `EPUB · Illustrated Edition`. Reading apps that label downloads by title use it to tell a book's files apart. Downloads are generated with the book's current metadata, as that page describes for each format. The first download of some formats shows no progress or size in the reading app; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
-
-### KePub Catalog
-
-To request KePub downloads where conversion is supported, insert `/kepub` before the type selection:
-
-```text
-https://your-server/opds/v1/kepub/epub+cbz/catalog
-```
-
-In a KePub catalog, EPUB and CBZ files are converted to KePub, and their download titles start with `KePub`. M4B and PDF files remain in their native formats. KePub catalogs are for Kobo devices, which cannot open MOBI or AZW3, so they skip `mobi` and `azw3` in the type selection and refuse a selection with no other type. See [Supported Formats](./supported-formats.md) for generated-download limitations.
+A download delivered through a [conversion](./supported-formats.md#conversions), such as a KePub made from an EPUB, fails with `500 Internal Server Error` when the conversion fails, for example on a damaged EPUB. It never sends the original file in its place. A file delivered as its own file type still falls back to the original file when Shisho cannot write metadata into it.
 
 ## Authentication and Access
 
@@ -43,7 +26,7 @@ The root catalog lists only libraries the authenticated user can access, followe
 
 ## Catalog Structure
 
-After the root catalog, clients follow these routes under `/opds/v1/{types}`:
+After the root catalog, clients follow these routes under `/opds/v1`:
 
 | Catalog | Route |
 |---------|-------|
@@ -58,7 +41,7 @@ After the root catalog, clients follow these routes under `/opds/v1/{types}`:
 | Books in a list | `/lists/{listID}` |
 | Search within a list | `/lists/{listID}/search?q={query}` |
 
-KePub catalogs use the same routes under `/opds/v1/kepub/{types}`. There are no separate genre, tag, or recently added routes. A list can hold books from several libraries; its feed shows only the books in libraries the user can access, and a list the user neither owns nor has been shared returns `404 Not Found`.
+There are no separate genre, tag, or recently added routes. A list can hold books from several libraries; its feed shows only the books in libraries the user can access, and a list the user neither owns nor has been shared returns `404 Not Found`.
 
 ## Search and Sort
 
@@ -86,8 +69,8 @@ Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clien
 
 **Symptom:** A library or expected book is absent from the catalog.
 
-**Likely cause:** The account lacks library access, the `{types}` selection excludes the book's main formats, or the file is a supplement.
+**Likely cause:** The account lacks library access, the user's [Delivery Rules](./supported-formats.md#delivery-rules) have no rule for the book's main file types, or the file is a supplement. A file can also be absent while its book is listed: only the files on a book's first matching rule are offered.
 
-**Verify:** Check the user's library access and compare the book's main-file types with the type segment in the catalog URL.
+**Verify:** Check the user's library access and compare the book's main-file types with the rules under **User Settings > Delivery Rules**.
 
-**Fix:** Grant the intended [library access](./users-and-permissions.md) or update the catalog URL to include the required type. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).
+**Fix:** Grant the intended [library access](./users-and-permissions.md) or add or reorder a rule for the required file type. The web app's **Download as** menu offers every file type regardless of the rules. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).

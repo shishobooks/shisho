@@ -99,7 +99,7 @@ func newShareLinksFixture(t *testing.T) *shareLinksFixture {
 
 func (f *shareLinksFixture) insertLibrary(ctx context.Context, name string) *models.Library {
 	f.t.Helper()
-	lib := &models.Library{Name: name, CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: name, CoverAspectRatio: "book"}
 	_, err := f.db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(f.t, err)
 	return lib

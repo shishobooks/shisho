@@ -53,7 +53,7 @@ func newResourceDeleteFixture(t *testing.T) *resourceDeleteFixture {
 		searchSvc: search.NewService(db),
 	}
 
-	f.lib = &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	f.lib = &models.Library{Name: "Library", CoverAspectRatio: "book"}
 	f.insert(f.lib)
 	f.admin = insertPermissionTestUser(f.ctx, t, db, "admin", models.RoleAdmin, nil)
 

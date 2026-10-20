@@ -25,6 +25,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/chapters"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/ereader"
@@ -158,6 +159,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 
 	// Device management routes
 	devices.RegisterRoutes(api, db, authMiddleware)
+	delivery.RegisterRoutes(api, db, authMiddleware)
 
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions

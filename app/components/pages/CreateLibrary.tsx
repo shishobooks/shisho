@@ -22,20 +22,14 @@ import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
-import type { CoverAspectRatio, DownloadFormat } from "@/types";
-import {
-  CoverAspectRatioBook,
-  DownloadFormatAsk,
-  DownloadFormatKepub,
-  DownloadFormatOriginal,
-} from "@/types/generated/models";
+import type { CoverAspectRatio } from "@/types";
+import { CoverAspectRatioBook } from "@/types/generated/models";
 
 // Initial values for the create form - stored once to compare against
 const INITIAL_VALUES = {
   name: "",
   organizeFileStructure: true,
   coverAspectRatio: CoverAspectRatioBook as CoverAspectRatio,
-  downloadFormatPreference: DownloadFormatOriginal as DownloadFormat,
   libraryPaths: [""],
 };
 
@@ -51,8 +45,6 @@ const CreateLibrary = () => {
   const [coverAspectRatio, setCoverAspectRatio] = useState<CoverAspectRatio>(
     INITIAL_VALUES.coverAspectRatio,
   );
-  const [downloadFormatPreference, setDownloadFormatPreference] =
-    useState<DownloadFormat>(INITIAL_VALUES.downloadFormatPreference);
   const [libraryPaths, setLibraryPaths] = useState<string[]>([
     ...INITIAL_VALUES.libraryPaths,
   ]);
@@ -69,14 +61,12 @@ const CreateLibrary = () => {
       name.trim() !== INITIAL_VALUES.name ||
       organizeFileStructure !== INITIAL_VALUES.organizeFileStructure ||
       coverAspectRatio !== INITIAL_VALUES.coverAspectRatio ||
-      downloadFormatPreference !== INITIAL_VALUES.downloadFormatPreference ||
       libraryPaths.some((p) => p.trim() !== "")
     );
   }, [
     name,
     organizeFileStructure,
     coverAspectRatio,
-    downloadFormatPreference,
     libraryPaths,
     changesSaved,
   ]);
@@ -145,7 +135,6 @@ const CreateLibrary = () => {
           name: name.trim(),
           organize_file_structure: organizeFileStructure,
           cover_aspect_ratio: coverAspectRatio,
-          download_format_preference: downloadFormatPreference,
           library_paths: validPaths,
         },
       });
@@ -286,41 +275,6 @@ const CreateLibrary = () => {
                 </SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <Separator />
-
-          {/* Download Format Preference Setting */}
-          <div className="space-y-2">
-            <Label htmlFor="download-format">Download Format Preference</Label>
-            <p className="text-sm text-muted-foreground">
-              How EPUB and CBZ files should be downloaded for e-readers
-            </p>
-            <Select
-              onValueChange={(value) =>
-                setDownloadFormatPreference(value as DownloadFormat)
-              }
-              value={downloadFormatPreference}
-            >
-              <SelectTrigger className="w-full" id="download-format">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DownloadFormatOriginal}>
-                  Original format
-                </SelectItem>
-                <SelectItem value={DownloadFormatKepub}>
-                  KePub (Kobo-optimized)
-                </SelectItem>
-                <SelectItem value={DownloadFormatAsk}>
-                  Ask on download
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              KePub format improves reading statistics and page turning on Kobo
-              devices. Only affects EPUB and CBZ files.
-            </p>
           </div>
 
           <Separator />

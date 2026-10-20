@@ -29,9 +29,8 @@ func TestCleanupOrphanedSeries_ReturnsDeletedIDs(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

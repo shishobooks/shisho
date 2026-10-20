@@ -52,9 +52,8 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 
 	libraryService := libraries.NewService(db)
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	require.NoError(t, libraryService.CreateLibrary(ctx, library))
 
@@ -154,9 +153,8 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 
 	libraryService := libraries.NewService(db)
 	library := &models.Library{
-		Name:                     "Test Library 304",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library 304",
+		CoverAspectRatio: "book",
 	}
 	require.NoError(t, libraryService.CreateLibrary(ctx, library))
 

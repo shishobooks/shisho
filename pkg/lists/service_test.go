@@ -29,9 +29,8 @@ func createTestUser(t *testing.T, db *bun.DB, username string) *models.User {
 func createTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
 	t.Helper()
 	library := &models.Library{
-		Name:                     name,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             name,
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(context.Background())
 	require.NoError(t, err)

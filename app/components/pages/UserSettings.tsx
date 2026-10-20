@@ -1,7 +1,9 @@
 import { Check, KeyRound, Moon, Sun } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
+import DeliveryRulesEditor from "@/components/devices/DeliveryRulesEditor";
 import QueryError from "@/components/library/QueryError";
 import { SizeSelector } from "@/components/library/SizeSelector";
 import TopNav from "@/components/library/TopNav";
@@ -14,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import { DEFAULT_GALLERY_SIZE } from "@/constants/gallerySize";
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import {
@@ -22,6 +25,7 @@ import {
 } from "@/hooks/queries/settings";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { GallerySize } from "@/types";
@@ -91,6 +95,13 @@ const UserSettings = () => {
       },
     );
   };
+
+  // Every other setting here saves as it changes; the Delivery Rules editor
+  // has its own Save.
+  const [deliveryRulesHaveChanges, setDeliveryRulesHaveChanges] =
+    useState(false);
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(deliveryRulesHaveChanges);
 
   const handleGallerySizeChange = (next: GallerySize) => {
     updateUserSettings.mutate(
@@ -244,6 +255,21 @@ const UserSettings = () => {
             </div>
           </div>
 
+          {/* Default Delivery Rules */}
+          <div className="border border-border rounded-md p-4 md:p-6">
+            <h2 className="text-lg font-semibold mb-1">Delivery Rules</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Choose which File Type each book&apos;s main download button and
+              OPDS deliver. For each book, the first rule matching one of its
+              files wins, separately for ebooks and audiobooks. OPDS leaves out
+              File Types with no rule; the download menu always offers every
+              File Type.
+            </p>
+            <DeliveryRulesEditor
+              onHasChangesChange={setDeliveryRulesHaveChanges}
+            />
+          </div>
+
           {/* Security Settings Link */}
           {!demoMode && (
             <div className="rounded-md border border-border p-4 md:p-6">
@@ -265,6 +291,11 @@ const UserSettings = () => {
           )}
         </div>
       </div>
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </div>
   );
 };

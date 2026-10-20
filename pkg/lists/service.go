@@ -305,7 +305,7 @@ type ListBooksOptions struct {
 	ListID     int
 	LibraryIDs []int // Filter by user's accessible libraries (nil = all)
 	// MainFileTypes keeps only books with a main file of one of these types.
-	// Empty means no filter.
+	// Nil means no filter; an empty list matches no book.
 	MainFileTypes []string
 	// Search keeps only books matching this full-text query. Empty means no
 	// filter.
@@ -357,7 +357,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 			Where("b.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
 
-	if len(opts.MainFileTypes) > 0 {
+	if opts.MainFileTypes != nil {
 		q = q.Where("lb.book_id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(opts.MainFileTypes), models.FileRoleMain)
 	}
 

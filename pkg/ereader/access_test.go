@@ -42,11 +42,10 @@ func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 
 	for _, lib := range []**models.Library{&f.libA, &f.libB} {
 		*lib = &models.Library{
-			Name:                     "Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
-			CreatedAt:                time.Now(),
-			UpdatedAt:                time.Now(),
+			Name:             "Library",
+			CoverAspectRatio: "book",
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
 		}
 		_, err := db.NewInsert().Model(*lib).Exec(ctx)
 		require.NoError(t, err)

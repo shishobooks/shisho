@@ -117,6 +117,19 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
 		},
 		{
+			name:   "empty Delivery Rules",
+			method: http.MethodPut, path: "/api/user/delivery-rules",
+			body:   `{"rules":[]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+			message: "Delivery Rules need at least one rule.",
+		},
+		{
+			name:   "a Delivery Rule to a File Type no Conversion reaches",
+			method: http.MethodPut, path: "/api/user/delivery-rules",
+			body:   `{"rules":[{"source_file_type":"pdf","delivered_file_type":"epub"}]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "cache settings with a negative limit",
 			method: http.MethodPut, path: "/api/settings/cache",
 			body:   `{"cover_thumbnails":{"max_size_gb":-1,"unlimited":false}}`,
@@ -642,7 +655,7 @@ func TestAPIContract_UserLookupFaultIsServerError(t *testing.T) {
 			return f.sessionRequest("/api/libraries")
 		}},
 		{"OPDS Basic Auth", func(f *resourceDeleteFixture) *http.Request {
-			req := httptest.NewRequest(http.MethodGet, "/opds/v1/epub/catalog", nil)
+			req := httptest.NewRequest(http.MethodGet, "/opds/v1/catalog", nil)
 			req.SetBasicAuth(f.admin.Username, "any password")
 			return req
 		}},

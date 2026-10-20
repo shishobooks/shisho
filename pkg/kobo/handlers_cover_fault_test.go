@@ -49,7 +49,7 @@ func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 			db := newSyncPointTestDB(t)
 			ctx := context.Background()
 
-			library := &models.Library{Name: "Test Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+			library := &models.Library{Name: "Test Library", CoverAspectRatio: "book"}
 			_, err := db.NewInsert().Model(library).Exec(ctx)
 			require.NoError(t, err)
 			bookDir := filepath.Join(t.TempDir(), "Test Book")

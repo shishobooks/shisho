@@ -16,11 +16,10 @@ func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library { 
 	t.Helper()
 	now := time.Now()
 	library := &models.Library{
-		Name:                     name,
-		CreatedAt:                now,
-		UpdatedAt:                now,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             name,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(context.Background())
 	require.NoError(t, err)

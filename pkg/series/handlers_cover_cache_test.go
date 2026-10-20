@@ -46,9 +46,8 @@ func seedSeriesWithCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	t.Helper()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -122,9 +121,8 @@ func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "CoverKeyLib",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "CoverKeyLib",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -211,9 +209,8 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "RetrieveCoverLib",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "RetrieveCoverLib",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

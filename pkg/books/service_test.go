@@ -376,10 +376,9 @@ func TestDeleteBookAndFiles_DeletesBookFilesAndDiskFiles(t *testing.T) {
 
 	// Create library with OrganizeFileStructure=false (files at root level)
 	library := &models.Library{
-		Name:                     "Test Library",
-		OrganizeFileStructure:    false,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:                  "Test Library",
+		OrganizeFileStructure: false,
+		CoverAspectRatio:      "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -467,10 +466,9 @@ func TestDeleteBookAndFiles_RemovesCoverWhenMainFileAlreadyMissing(t *testing.T)
 
 	tmpDir := t.TempDir()
 	library := &models.Library{
-		Name:                     "Test Library",
-		OrganizeFileStructure:    false,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:                  "Test Library",
+		OrganizeFileStructure: false,
+		CoverAspectRatio:      "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -528,10 +526,9 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 
 	// Create library with OrganizeFileStructure=true (files in book directories)
 	library := &models.Library{
-		Name:                     "Test Library",
-		OrganizeFileStructure:    true,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:                  "Test Library",
+		OrganizeFileStructure: true,
+		CoverAspectRatio:      "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -615,9 +612,8 @@ func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -703,9 +699,8 @@ func TestDeleteFileAndCleanup_DeletesBookWhenLastFile(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -767,10 +762,9 @@ func TestDeleteFileAndCleanup_CleansUpDirectoryWithIgnoredFiles(t *testing.T) {
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		OrganizeFileStructure:    true,
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -835,10 +829,9 @@ func TestDeleteFileAndCleanup_CleansUpCoverAndSidecarFiles(t *testing.T) {
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		OrganizeFileStructure:    true,
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -912,9 +905,8 @@ func TestDeleteFileAndCleanup_FileNotFound(t *testing.T) {
 
 	// Create library (needed as parameter)
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -937,9 +929,8 @@ func TestDeleteBooksAndFiles_DeletesMultipleBooks(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1028,9 +1019,8 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1122,9 +1112,8 @@ func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t 
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1214,9 +1203,8 @@ func TestDeleteFileAndCleanup_PromotesPDFSupplementWhenLastMainFileDeleted(t *te
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1308,9 +1296,8 @@ func TestDeleteFileAndCleanup_PromotesOldestSupplementFirst(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

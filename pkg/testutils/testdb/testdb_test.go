@@ -72,7 +72,7 @@ func TestNew_DatabasesAreIsolated(t *testing.T) {
 	first := New(t)
 	second := New(t)
 
-	_, err := first.NewInsert().Model(&models.Library{Name: "Only in first", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}).Exec(ctx)
+	_, err := first.NewInsert().Model(&models.Library{Name: "Only in first", CoverAspectRatio: "book"}).Exec(ctx)
 	require.NoError(t, err)
 
 	count, err := second.NewSelect().Model((*models.Library)(nil)).Count(ctx)
@@ -142,7 +142,7 @@ func TestNewShared_DatabasesAreIsolated(t *testing.T) {
 	first := NewShared(t)
 	second := NewShared(t)
 
-	_, err := first.NewInsert().Model(&models.Library{Name: "Only in first", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}).Exec(ctx)
+	_, err := first.NewInsert().Model(&models.Library{Name: "Only in first", CoverAspectRatio: "book"}).Exec(ctx)
 	require.NoError(t, err)
 
 	count, err := second.NewSelect().Model((*models.Library)(nil)).Count(ctx)

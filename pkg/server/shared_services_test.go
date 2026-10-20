@@ -40,7 +40,7 @@ func TestGetPage_UsesPageCacheFromServerNew(t *testing.T) {
 		downloadcache.NewCache(t.TempDir(), 1<<30), cbzpages.NewCache(injectedDir), pdfpages.NewCache(t.TempDir(), 150, 85), nil)
 	require.NoError(t, err)
 	f := &resourceDeleteFixture{t: t, ctx: t.Context(), db: db, handler: srv.Handler, authSvc: auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration())}
-	f.lib = &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	f.lib = &models.Library{Name: "Library", CoverAspectRatio: "book"}
 	f.insert(f.lib)
 	f.admin = insertPermissionTestUser(f.ctx, t, db, "admin", models.RoleAdmin, nil)
 

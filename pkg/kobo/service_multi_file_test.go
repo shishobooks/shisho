@@ -24,11 +24,10 @@ func setupScopedFilesTest(t *testing.T) (context.Context, *books.Service, *Servi
 	koboSvc := NewService(db)
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		CreatedAt:                time.Now(),
-		UpdatedAt:                time.Now(),
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -261,11 +260,10 @@ func TestGetScopedFiles_ListScopeFiltersByLibraryAccess(t *testing.T) {
 
 	// A second library the user cannot access, holding a book on the same list.
 	other := &models.Library{
-		Name:                     "Other Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		CreatedAt:                time.Now(),
-		UpdatedAt:                time.Now(),
+		Name:             "Other Library",
+		CoverAspectRatio: "book",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 	_, err := koboSvc.db.NewInsert().Model(other).Exec(ctx)
 	require.NoError(t, err)
@@ -294,11 +292,10 @@ func TestGetScopedFiles_ListScopeWithAllLibraryAccess(t *testing.T) {
 	require.NoError(t, err)
 
 	other := &models.Library{
-		Name:                     "Other Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		CreatedAt:                time.Now(),
-		UpdatedAt:                time.Now(),
+		Name:             "Other Library",
+		CoverAspectRatio: "book",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 	_, err = koboSvc.db.NewInsert().Model(other).Exec(ctx)
 	require.NoError(t, err)

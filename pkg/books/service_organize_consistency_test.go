@@ -35,10 +35,9 @@ func newOrganizeFixture(t *testing.T) *organizeFixture {
 	f := &organizeFixture{t: t, ctx: ctx, db: db, svc: NewService(db, appsettings.NewService(db)), libDir: t.TempDir()}
 
 	f.library = &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(f.library).Exec(ctx)
 	require.NoError(t, err)
@@ -359,9 +358,8 @@ func TestOrganizeBookFiles_DirectoryBased_RewritesNestedBooksInOtherLibraries(t 
 	f := newOrganizeFixture(t)
 	l := f.addNestedLayout("[Emily Henry] Old Title")
 	other := &models.Library{
-		Name:                     "Other Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Other Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := f.db.NewInsert().Model(other).Exec(f.ctx)
 	require.NoError(t, err)

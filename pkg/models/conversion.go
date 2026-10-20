@@ -1,5 +1,7 @@
 package models
 
+import "strings"
+
 const (
 	// FileTypeKePub is Kobo's EPUB. Shisho never stores one as a File: it
 	// exists only as a delivery, reached through Conversion.
@@ -11,6 +13,38 @@ const (
 // built-in File Type or KePub.
 func IsDeliveredFileType(fileType string) bool {
 	return fileType == FileTypeKePub || IsBuiltInFileType(fileType)
+}
+
+// DeliveredFileTypeExtension returns the extension (no leading dot) of a
+// File delivered as fileType: "kepub.epub" for a KePub, which Kobo and
+// KOReader recognize by it, and the File Type itself for every built-in
+// File Type.
+func DeliveredFileTypeExtension(fileType string) string {
+	if fileType == FileTypeKePub {
+		return "kepub.epub"
+	}
+	return fileType
+}
+
+// DeliveredFileTypeForExtension is the inverse of
+// DeliveredFileTypeExtension. It returns false for an extension no
+// delivered File Type has.
+func DeliveredFileTypeForExtension(ext string) (string, bool) {
+	for _, fileType := range append([]string{FileTypeKePub}, BuiltInFileTypes...) {
+		if DeliveredFileTypeExtension(fileType) == ext {
+			return fileType, true
+		}
+	}
+	return "", false
+}
+
+// FileTypeLabel is how a File Type is written for a reader: KePub, or the
+// File Type in capitals.
+func FileTypeLabel(fileType string) string {
+	if fileType == FileTypeKePub {
+		return "KePub"
+	}
+	return strings.ToUpper(fileType)
 }
 
 // ConversionStep is one Conversion: delivering a File of type From as type

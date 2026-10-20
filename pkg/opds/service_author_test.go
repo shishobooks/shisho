@@ -30,9 +30,8 @@ func seedAuthorTestData(t *testing.T, db *bun.DB) authorTestSeeds {
 	ctx := context.Background()
 
 	lib := &models.Library{
-		Name:                     "Library A",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library A",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)

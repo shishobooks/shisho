@@ -23,9 +23,8 @@ func seedSeriesWithBooks(t *testing.T, db *bun.DB, bookTitles []string) int {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Books Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

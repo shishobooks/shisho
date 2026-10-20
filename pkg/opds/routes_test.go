@@ -10,6 +10,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 )
@@ -36,8 +37,27 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 		methods[r.Path][r.Method] = true
 	}
 
-	for _, path := range []string{"/opds/download/:id", "/opds/download/:id/kepub"} {
+	for _, path := range []string{"/opds/download/:file"} {
 		assert.True(t, methods[path][http.MethodGet], "GET %s should be registered", path)
 		assert.True(t, methods[path][http.MethodHead], "HEAD %s should be registered (KOReader 'Use server filenames' relies on it)", path)
 	}
+}
+
+// The File Type URL segment and the KePub feed tree are gone, with no
+// redirects: one feed tree serves what the user's Delivery Rules select.
+func TestRegisterRoutes_OldFeedTreesAreGone(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	newOPDSUser(t, db, "reader", models.Permission{Resource: models.ResourceBooks, Operation: models.OperationRead})
+
+	for _, path := range []string{
+		"/opds/v1/epub/catalog",
+		"/opds/v1/epub+cbz/catalog",
+		"/opds/v1/kepub/epub/catalog",
+		"/opds/v1/kepub/epub/libraries/1/all",
+		"/opds/download/1/kepub",
+	} {
+		assert.Equal(t, http.StatusNotFound, serveOPDS(t, db, "reader", http.MethodGet, path).Code, path)
+	}
+	assert.Equal(t, http.StatusOK, serveOPDS(t, db, "reader", http.MethodGet, "/opds/v1/catalog").Code)
 }

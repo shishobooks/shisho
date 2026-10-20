@@ -15,17 +15,21 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import { DownloadFormatAsk, type DeliveredFileType, type File } from "@/types";
+import type { DeliveredFileType, File } from "@/types";
 import { fileTitle, fileTypeLabel } from "@/utils/format";
 
 interface FileDownloadControlProps {
   file: Pick<File, "id" | "file_type" | "name" | "reachable_file_types">;
   /** Titles a file with no name of its own. */
   bookTitle: string;
-  libraryDownloadPreference: string | undefined;
+  /**
+   * The File Type the main button delivers the file as, or undefined while
+   * the rules that decide it load, which disables the button.
+   */
+  deliveredFileType: DeliveredFileType | undefined;
   isSupplement?: boolean;
   isDownloading: boolean;
-  /** The main button: the File Type the library download setting picks. */
+  /** The main button: the file delivered as `deliveredFileType`. */
   onDownload: () => void;
   /** A menu entry: the file delivered as one File Type it can become. */
   onDownloadAs: (fileType: DeliveredFileType) => void;
@@ -39,7 +43,7 @@ interface FileDownloadControlProps {
 const FileDownloadControl = ({
   file,
   bookTitle,
-  libraryDownloadPreference,
+  deliveredFileType,
   isSupplement = false,
   isDownloading,
   onDownload,
@@ -125,20 +129,6 @@ const FileDownloadControl = ({
     </DropdownMenu>
   );
 
-  // The Ask setting has no File Type of its own, so when there is a choice
-  // its one button opens the menu.
-  if (
-    libraryDownloadPreference === DownloadFormatAsk &&
-    file.reachable_file_types.length > 1
-  ) {
-    return menu(
-      <Button aria-label="Download" size="sm" variant="ghost">
-        <Download className="h-3 w-3" />
-      </Button>,
-      "Download",
-    );
-  }
-
   return (
     <div className="flex items-center">
       <Tooltip>
@@ -146,6 +136,7 @@ const FileDownloadControl = ({
           <Button
             aria-label="Download"
             className="rounded-r-none pr-1.5"
+            disabled={deliveredFileType === undefined}
             onClick={onDownload}
             size="sm"
             variant="ghost"
@@ -153,7 +144,11 @@ const FileDownloadControl = ({
             <Download className="h-3 w-3" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Download</TooltipContent>
+        <TooltipContent>
+          {deliveredFileType === undefined
+            ? "Download"
+            : `Download as ${fileTypeLabel(deliveredFileType)}`}
+        </TooltipContent>
       </Tooltip>
       {menu(
         <Button

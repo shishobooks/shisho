@@ -63,7 +63,7 @@ func TestProxyTrustForLoginAndOPDS(t *testing.T) {
 		require.NotEmpty(t, rec.Result().Cookies())
 		assert.Equal(t, test.secure, rec.Result().Cookies()[0].Secure)
 
-		req = httptest.NewRequest(http.MethodGet, "http://books.example/opds/v1/epub/catalog", nil)
+		req = httptest.NewRequest(http.MethodGet, "http://books.example/opds/v1/catalog", nil)
 		req.RemoteAddr = test.peer
 		req.Header.Set("X-Forwarded-Proto", "https")
 		req.Header.Set("X-Forwarded-Prefix", "/prefix")
@@ -71,7 +71,7 @@ func TestProxyTrustForLoginAndOPDS(t *testing.T) {
 		rec = httptest.NewRecorder()
 		srv.Handler.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-		assert.Contains(t, rec.Body.String(), `href="`+test.base+`/epub/catalog"`)
+		assert.Contains(t, rec.Body.String(), `href="`+test.base+`/catalog"`)
 	}
 }
 

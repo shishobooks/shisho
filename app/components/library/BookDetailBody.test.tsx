@@ -17,7 +17,7 @@ import {
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
-import type { Book, File, SharingSettingsResponse } from "@/types";
+import type { Book, File, Rule, SharingSettingsResponse } from "@/types";
 import type { Permission } from "@/utils/permissions";
 
 import BookDetailBody, { type ShareLinkContext } from "./BookDetailBody";
@@ -87,6 +87,8 @@ beforeEach(() => {
   sharing.settings = { enabled: false, require_expiration: false };
   resync.file = undefined;
   resync.book = undefined;
+  delivery.rules = undefined;
+  delivery.pending = false;
 });
 
 const { idle, review, resync } = vi.hoisted(() => ({
@@ -108,6 +110,21 @@ vi.mock("@/hooks/queries/books", () => ({
   useResyncFile: () => ({
     ...idle(),
     ...(resync.file ? { mutateAsync: resync.file } : {}),
+  }),
+}));
+// BookDetailBody.permissions.test.tsx checks the request; this stand-in
+// returns the user's default Delivery Rules.
+const delivery = vi.hoisted(() => ({
+  rules: undefined as Rule[] | undefined,
+  pending: false,
+}));
+vi.mock("@/hooks/queries/delivery", () => ({
+  useDeliveryRules: (options?: { enabled?: boolean }) => ({
+    isPending: options?.enabled === false || delivery.pending,
+    data:
+      options?.enabled === false || !delivery.rules
+        ? undefined
+        : { follows_built_in: false, rules: delivery.rules, options: [] },
   }),
 }));
 vi.mock("@/hooks/queries/plugins", () => ({
@@ -771,6 +788,56 @@ describe("BookDetailBody file rows", () => {
     await user.click(screen.getByRole("button", { name: "Show file details" }));
     const label = screen.getByText("Abridged");
     expect(label.nextElementSibling).toHaveTextContent("No");
+  });
+
+  it.each<[string, Rule[] | undefined, string]>([
+    ["without rules", undefined, "/api/books/files/42/download"],
+    [
+      "under rules that deliver CBZ as itself",
+      [{ source_file_type: "cbz", delivered_file_type: "cbz" }],
+      "/api/books/files/42/download",
+    ],
+    [
+      "under rules that deliver CBZ as EPUB",
+      [
+        { source_file_type: "epub", delivered_file_type: "epub" },
+        { source_file_type: "cbz", delivered_file_type: "epub" },
+      ],
+      "/api/books/files/42/download/epub",
+    ],
+  ])("downloads a CBZ from the main button %s", async (_, rules, endpoint) => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    delivery.rules = rules;
+    const cbz = {
+      ...epub,
+      file_type: "cbz",
+      reachable_file_types: ["cbz", "kepub", "epub"],
+    } as File;
+    renderBody({ book: { ...book, files: [cbz] } });
+
+    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      endpoint,
+      expect.objectContaining({ method: "HEAD" }),
+    );
+    expect(assign).toHaveBeenCalledWith(endpoint);
+  });
+
+  it("disables the main button until the Delivery Rules load", () => {
+    delivery.pending = true;
+    renderBody({ book: { ...book, files: [epub] } });
+
+    expect(
+      screen.getAllByRole("button", { name: "Download" })[0],
+    ).toBeDisabled();
+    expect(
+      screen.getAllByRole("button", { name: "Download as" })[0],
+    ).toBeEnabled();
   });
 
   it("downloads a CBZ as EPUB from the download menu", async () => {

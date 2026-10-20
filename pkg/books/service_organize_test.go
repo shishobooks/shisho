@@ -37,10 +37,9 @@ func TestOrganizeBookFiles_RootLevel_CleansUpStaleBookFolderAfterTitleChange(t *
 	libDir := t.TempDir()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -153,10 +152,9 @@ func TestOrganizeBookFiles_RootLevel_PreservesUserFilesInStaleFolder(t *testing.
 	libDir := t.TempDir()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -245,10 +243,9 @@ func TestOrganizeBookFiles_DirectoryBased_WritesFreshSidecarAfterFolderRename(t 
 	libDir := t.TempDir()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -341,10 +338,9 @@ func TestOrganizeBookFiles_MixedLayout_PromotesRootLevelFileIntoBookFolder(t *te
 	libDir := t.TempDir()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

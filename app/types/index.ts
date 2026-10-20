@@ -80,6 +80,7 @@ export {
   type MergePublishersPayload,
 } from "./generated/publishers";
 export * from "./generated/chapters";
+export * from "./generated/delivery";
 export {
   type Response as AudnexusChaptersResponse,
   type Chapter as AudnexusChapter,

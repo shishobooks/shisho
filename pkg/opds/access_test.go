@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
@@ -71,12 +72,11 @@ func TestOPDS_RoleWithoutBooksRead_Returns403(t *testing.T) {
 	// Every route family, including each download route and method. File 1
 	// does not exist, so a download that skipped the check would be a 404.
 	for _, r := range []struct{ method, path string }{
-		{http.MethodGet, "/opds/v1/epub/catalog"},
-		{http.MethodGet, "/opds/v1/kepub/epub/catalog"},
+		{http.MethodGet, "/opds/v1/catalog"},
 		{http.MethodGet, "/opds/download/1"},
 		{http.MethodHead, "/opds/download/1"},
-		{http.MethodGet, "/opds/download/1/kepub"},
-		{http.MethodHead, "/opds/download/1/kepub"},
+		{http.MethodGet, "/opds/download/1.kepub.epub"},
+		{http.MethodHead, "/opds/download/1.kepub.epub"},
 	} {
 		assert.Equal(t, http.StatusForbidden, serveOPDS(t, db, "nobooks", r.method, r.path).Code, r.method+" "+r.path)
 	}
@@ -87,7 +87,7 @@ func TestOPDS_RoleWithBooksRead_Returns200(t *testing.T) {
 	db := testdb.New(t)
 	newOPDSUser(t, db, "reader", models.Permission{Resource: models.ResourceBooks, Operation: models.OperationRead})
 
-	assert.Equal(t, http.StatusOK, serveOPDS(t, db, "reader", http.MethodGet, "/opds/v1/epub/catalog").Code)
+	assert.Equal(t, http.StatusOK, serveOPDS(t, db, "reader", http.MethodGet, "/opds/v1/catalog").Code)
 }
 
 // An OPDS handler reached with no user in context rejects the request with
@@ -96,7 +96,7 @@ func TestOPDS_RoleWithBooksRead_Returns200(t *testing.T) {
 func TestOPDSHandlers_NoUserInContext_Returns401(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
-	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
 
@@ -106,20 +106,21 @@ func TestOPDSHandlers_NoUserInContext_Returns401(t *testing.T) {
 		bookService:     bookService,
 		libraryService:  libraries.NewService(db),
 		settingsService: settings.NewService(db),
+		deliveryService: delivery.NewService(db),
 	}
 	e := echo.New()
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	e.GET("/opds/v1/:types/catalog", h.catalog)
-	e.GET("/opds/v1/:types/libraries/:libraryID/all", h.libraryAllBooks)
-	e.GET("/opds/v1/:types/lists", h.lists)
-	e.GET("/opds/v1/:types/lists/:listID", h.listBooks)
+	e.GET("/opds/v1/catalog", h.catalog)
+	e.GET("/opds/v1/libraries/:libraryID/all", h.libraryAllBooks)
+	e.GET("/opds/v1/lists", h.lists)
+	e.GET("/opds/v1/lists/:listID", h.listBooks)
 
 	for _, path := range []string{
-		"/opds/v1/epub/catalog",
-		fmt.Sprintf("/opds/v1/epub/libraries/%d/all", lib.ID),
-		"/opds/v1/epub/lists",
-		"/opds/v1/epub/lists/1",
-		"/opds/v1/epub/lists/not-an-id",
+		"/opds/v1/catalog",
+		fmt.Sprintf("/opds/v1/libraries/%d/all", lib.ID),
+		"/opds/v1/lists",
+		"/opds/v1/lists/1",
+		"/opds/v1/lists/not-an-id",
 	} {
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))

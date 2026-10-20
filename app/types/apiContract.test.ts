@@ -60,11 +60,7 @@ describe("generated API contract", () => {
 
   it("keeps the library summary projection", () => {
     expectTypeOf<keyof Libraries.LibrarySummary>().toEqualTypeOf<
-      | "id"
-      | "name"
-      | "cover_aspect_ratio"
-      | "download_format_preference"
-      | "organize_file_structure"
+      "id" | "name" | "cover_aspect_ratio" | "organize_file_structure"
     >();
   });
 });

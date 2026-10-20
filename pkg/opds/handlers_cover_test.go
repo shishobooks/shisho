@@ -39,9 +39,8 @@ func setupCoverTest(t *testing.T) (*handler, int, int, []byte) {
 
 	ctx := context.Background()
 	lib := &models.Library{
-		Name:                     "Lib",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Lib",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
@@ -152,9 +151,8 @@ func TestBookCover_NotFoundWhenBookHasNoCover(t *testing.T) {
 	ctx := context.Background()
 
 	lib := &models.Library{
-		Name:                     "Lib",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Lib",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)

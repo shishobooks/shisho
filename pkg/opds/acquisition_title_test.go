@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestBookToEntry_AcquisitionLinkTitlesTellFilesApart(t *testing.T) {
 		},
 	}
 
-	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
+	entry := (&Service{}).bookToEntry("http://example.com/opds/v1", book, "", delivery.BuiltInRules())
 
 	links := acquisitionLinks(entry)
 	require.Len(t, links, 2)
@@ -49,17 +50,19 @@ func TestBookToEntry_AcquisitionLinkTitleFallsBackToBookTitle(t *testing.T) {
 		Title: "Harry Potter and the Sorcerer's Stone",
 		Files: []*models.File{
 			{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-			{ID: 2, FileType: models.FileTypePDF, FileRole: models.FileRoleMain, Name: &blank},
+			{ID: 2, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, Name: &blank},
 		},
 	}
 
-	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
+	entry := (&Service{}).bookToEntry("http://example.com/opds/v1", book, "", delivery.BuiltInRules())
 
 	links := acquisitionLinks(entry)
 	require.Len(t, links, 2)
 	assert.Equal(t, "EPUB · Harry Potter and the Sorcerer's Stone", links[0].Title)
-	assert.Equal(t, "PDF · Harry Potter and the Sorcerer's Stone", links[1].Title)
+	assert.Equal(t, "EPUB · Harry Potter and the Sorcerer's Stone", links[1].Title)
 }
+
+var epubAsKepub = []delivery.Rule{{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeKePub}}
 
 func TestBookToEntry_KepubAcquisitionLinkTitlesSayKePub(t *testing.T) {
 	t.Parallel()
@@ -70,44 +73,37 @@ func TestBookToEntry_KepubAcquisitionLinkTitlesSayKePub(t *testing.T) {
 		Title: "Saga",
 		Files: []*models.File{
 			{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, Name: &name},
-			{ID: 2, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
-			{ID: 3, FileType: models.FileTypePDF, FileRole: models.FileRoleMain},
+			{ID: 2, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
 		},
 	}
 
-	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1/kepub", book, "", nil, true)
+	entry := (&Service{}).bookToEntry("http://example.com/opds/v1", book, "", epubAsKepub)
 
 	links := acquisitionLinks(entry)
-	require.Len(t, links, 3)
+	require.Len(t, links, 2)
 	assert.Equal(t, "KePub · Deluxe", links[0].Title)
 	assert.Equal(t, "KePub · Saga", links[1].Title)
-	// A PDF is served as itself in a KePub feed, so its label says so.
-	assert.Equal(t, "PDF · Saga", links[2].Title)
 }
 
-// KOReader shows a download button only for a link whose type it knows, and
-// it has no entry for application/kepub+zip. A KePub is an EPUB, and the
-// download is served as one, so the link says so too.
-func TestBookToEntry_KepubAcquisitionLinksAdvertiseEPUBType(t *testing.T) {
+// KOReader shows a download button only for a link whose extension or type
+// it knows, and it has no entry for application/kepub+zip. A KePub is an
+// EPUB, and the download is served as one, so the link says so too, and its
+// URL ends in .kepub.epub.
+func TestBookToEntry_KepubAcquisitionLinksAdvertiseEPUBTypeAndKepubURL(t *testing.T) {
 	t.Parallel()
 
 	book := &models.Book{
 		ID:    1,
 		Title: "Saga",
-		Files: []*models.File{
-			{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-			{ID: 2, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain},
-			{ID: 3, FileType: models.FileTypePDF, FileRole: models.FileRoleMain},
-		},
+		Files: []*models.File{{ID: 7, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain}},
 	}
 
-	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1/kepub", book, "", nil, true)
+	entry := (&Service{}).bookToEntry("http://example.com/opds/v1", book, "", epubAsKepub)
 
 	links := acquisitionLinks(entry)
-	require.Len(t, links, 3)
+	require.Len(t, links, 1)
 	assert.Equal(t, "application/epub+zip", links[0].Type)
-	assert.Equal(t, "application/epub+zip", links[1].Type)
-	assert.Equal(t, "application/pdf", links[2].Type)
+	assert.Equal(t, "http://example.com/opds/download/7.kepub.epub", links[0].Href)
 }
 
 func TestBookToEntry_AcquisitionLinkTitleIsXMLEscaped(t *testing.T) {
@@ -122,7 +118,7 @@ func TestBookToEntry_AcquisitionLinkTitleIsXMLEscaped(t *testing.T) {
 		},
 	}
 
-	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
+	entry := (&Service{}).bookToEntry("http://example.com/opds/v1", book, "", delivery.BuiltInRules())
 
 	out, err := xml.Marshal(entry)
 	require.NoError(t, err)

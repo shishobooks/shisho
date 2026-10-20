@@ -161,11 +161,10 @@ func (h *handler) createLibrary(c echo.Context) error {
 
 	now := time.Now()
 	library := &models.Library{
-		Name:                     req.Name,
-		CreatedAt:                now,
-		UpdatedAt:                now,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             req.Name,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		CoverAspectRatio: "book",
 	}
 
 	_, err := h.db.NewInsert().Model(library).Exec(ctx)

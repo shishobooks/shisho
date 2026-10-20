@@ -54,7 +54,7 @@ func TestNew_RoutingBoundary(t *testing.T) {
 			}
 		}
 	}
-	for _, path := range []string{"/api/books/42/missing", "/opds/v1/epub/missing", "/ereader/key/missing/unknown", "/kobo/missing/unknown", "/kobo/missing/all/unknown"} {
+	for _, path := range []string{"/api/books/42/missing", "/opds/v1/missing", "/ereader/key/missing/unknown", "/kobo/missing/unknown", "/kobo/missing/all/unknown"} {
 		rec := httptest.NewRecorder()
 		srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, rec.Code, path)
@@ -162,7 +162,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			}
 
 			for _, route := range []string{
-				"GET /opds/v1/:types/catalog",
+				"GET /opds/v1/catalog",
 				"GET /ereader/key/:credential/",
 				"GET /e/:shortCode",
 				"GET /kobo/:credential/v1/library/sync",
@@ -197,13 +197,16 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"PATCH /api/user/devices/:id", "DELETE /api/user/devices/:id",
 				"POST /api/user/devices/:id/credential", "POST /api/user/devices/:id/short-url",
 				"DELETE /api/user/devices/:id/kobo-sync", "GET /api/devices", "DELETE /api/devices/:id",
+				// Delivery Rules can be viewed in Demo Mode; the middleware
+				// rejects every change to them.
+				"GET /api/user/delivery-rules", "PUT /api/user/delivery-rules", "DELETE /api/user/delivery-rules",
 			} {
 				assert.True(t, routes[route], route)
 			}
 
 			if demo {
 				for _, path := range []string{
-					"/opds", "/opds/v1/epub/catalog", "/ereader", "/ereader/key/example/", "/e", "/e/example",
+					"/opds", "/opds/v1/catalog", "/ereader", "/ereader/key/example/", "/e", "/e/example",
 					"/kobo", "/kobo/example/v1/library/sync", "/kobo/example/all/v1/library/sync", "/api/plugins/installed",
 					"/api/test/plugins/fixture-info", "/api/share/example", "/api/share/example/files/1/download",
 				} {
@@ -233,6 +236,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/user/devices/abc/short-url"},
 				{http.MethodDelete, "/api/user/devices/abc/kobo-sync"},
 				{http.MethodDelete, "/api/devices/abc"},
+				{http.MethodPut, "/api/user/delivery-rules"},
+				{http.MethodDelete, "/api/user/delivery-rules"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

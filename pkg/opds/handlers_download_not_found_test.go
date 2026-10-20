@@ -20,19 +20,20 @@ import (
 )
 
 // A file whose path is missing from disk returns a 404 whose message says
-// "File not found." on both OPDS download routes, for GET and HEAD alike.
+// "File not found.", delivered as itself or as a KePub, for GET and HEAD
+// alike.
 func TestDownloadHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
 		method string
-		kepub  bool
+		ext    string
 	}{
-		{"download", http.MethodGet, false},
-		{"download HEAD", http.MethodHead, false},
-		{"download kepub", http.MethodGet, true},
-		{"download kepub HEAD", http.MethodHead, true},
+		{"download", http.MethodGet, ""},
+		{"download HEAD", http.MethodHead, ""},
+		{"download kepub", http.MethodGet, ".kepub.epub"},
+		{"download kepub HEAD", http.MethodHead, ".kepub.epub"},
 	}
 
 	for _, tt := range tests {
@@ -42,9 +43,8 @@ func TestDownloadHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			ctx := context.Background()
 
 			lib := &models.Library{
-				Name:                     "Lib",
-				CoverAspectRatio:         "book",
-				DownloadFormatPreference: models.DownloadFormatOriginal,
+				Name:             "Lib",
+				CoverAspectRatio: "book",
 			}
 			_, err := db.NewInsert().Model(lib).Exec(ctx)
 			require.NoError(t, err)
@@ -84,15 +84,11 @@ func TestDownloadHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			e := echo.New()
 			req := httptest.NewRequest(tt.method, "/", nil)
 			c := e.NewContext(req, httptest.NewRecorder())
-			c.SetParamNames("id")
-			c.SetParamValues(strconv.Itoa(file.ID))
+			c.SetParamNames("file")
+			c.SetParamValues(strconv.Itoa(file.ID) + tt.ext)
 			auth.SetUser(c, user)
 
-			if tt.kepub {
-				err = h.downloadKepub(c)
-			} else {
-				err = h.download(c)
-			}
+			err = h.download(c)
 
 			var codeErr *errcodes.Error
 			require.ErrorAs(t, err, &codeErr)

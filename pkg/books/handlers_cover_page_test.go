@@ -84,9 +84,8 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 		// Create test library
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -176,9 +175,8 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 		// Create test library
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -250,9 +248,8 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 		// Create test library
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -323,9 +320,8 @@ func TestUpdateFileCoverPage(t *testing.T) {
 		}
 
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -397,9 +393,8 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 		// Create test library
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -496,9 +491,8 @@ func TestUpdateFileCoverPage(t *testing.T) {
 
 		// Create test library
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -571,9 +565,8 @@ func TestUploadFileCover_RejectsFileWithCoverPage(t *testing.T) {
 
 	// Create test library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -655,9 +648,8 @@ func TestUploadFileCover_RejectsPDFFile(t *testing.T) {
 
 	// Create test library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -728,7 +720,7 @@ func newUploadCoverFixture(t *testing.T) (db *bun.DB, e *echo.Echo, user *models
 	ctx := context.Background()
 
 	libraryDir := t.TempDir()
-	library := &models.Library{Name: "Test Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	library := &models.Library{Name: "Test Library", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
 	book := &models.Book{LibraryID: library.ID, Title: "Book", TitleSource: models.DataSourceFilepath, SortTitle: "Book", SortTitleSource: models.DataSourceFilepath, AuthorSource: models.DataSourceFilepath, Filepath: libraryDir}

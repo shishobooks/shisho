@@ -29,9 +29,8 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -104,9 +103,8 @@ func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	bookService := books.NewService(db, appsettings.NewService(db))
 
 	library := &models.Library{
-		Name:                     "Test Library 304",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library 304",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -188,9 +186,8 @@ func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 	bookService := books.NewService(db, appsettings.NewService(db))
 
 	library := &models.Library{
-		Name:                     "Test Library Skip",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library Skip",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

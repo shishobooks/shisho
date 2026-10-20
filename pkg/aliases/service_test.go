@@ -15,9 +15,8 @@ import (
 func createTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 	t.Helper()
 	lib := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
@@ -236,9 +235,8 @@ func TestAddAlias_DifferentLibrariesAllowed(t *testing.T) {
 
 	lib1 := createTestLibrary(t, db)
 	lib2 := &models.Library{
-		Name:                     "Second Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Second Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib2).Exec(ctx)
 	require.NoError(t, err)

@@ -32,10 +32,9 @@ func setupDirectoryBackedFile(t *testing.T) (*bun.DB, *models.File, *models.User
 	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0644))
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

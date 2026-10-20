@@ -31,9 +31,8 @@ func seedLibraryWithContent(ctx context.Context, t *testing.T, db *bun.DB, name 
 	t.Helper()
 
 	library := &models.Library{
-		Name:                     name,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             name,
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Returning("*").Exec(ctx)
 	require.NoError(t, err)
@@ -236,12 +235,12 @@ func TestDeleteLibrary_CancelsActiveJobs(t *testing.T) {
 	svc := NewService(db)
 
 	// Target library.
-	lib := &models.Library{Name: "Target", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Target", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(lib).Returning("*").Exec(ctx)
 	require.NoError(t, err)
 
 	// Second library whose jobs should not be touched.
-	other := &models.Library{Name: "Other", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	other := &models.Library{Name: "Other", CoverAspectRatio: "book"}
 	_, err = db.NewInsert().Model(other).Returning("*").Exec(ctx)
 	require.NoError(t, err)
 
@@ -343,10 +342,9 @@ func TestCreateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		LibraryPaths:             []*models.LibraryPath{{Filepath: "/tmp/create-path"}},
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+		LibraryPaths:     []*models.LibraryPath{{Filepath: "/tmp/create-path"}},
 	}
 	require.NoError(t, svc.CreateLibrary(ctx, library))
 
@@ -365,10 +363,9 @@ func TestUpdateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		LibraryPaths:             []*models.LibraryPath{{Filepath: "/tmp/original-path"}},
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+		LibraryPaths:     []*models.LibraryPath{{Filepath: "/tmp/original-path"}},
 	}
 	require.NoError(t, svc.CreateLibrary(ctx, library))
 

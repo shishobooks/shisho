@@ -93,7 +93,7 @@ func newDownloadFixture(t *testing.T, addFile func(dir string) (path, fileType s
 	t.Cleanup(cache.Wait)
 	t.Cleanup(ts.Close)
 
-	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
 	_, err = db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
 	dir := t.TempDir()
@@ -126,10 +126,12 @@ type route struct {
 	name   string
 	device bool
 	kepub  bool
-	// menu is a Download as entry, which never falls back to the original.
-	menu bool
-	path func(f *streamingFixture) string
-	auth func(f *streamingFixture, req *http.Request)
+	// strict marks a route that never falls back to the original from a
+	// failed Conversion: a Download as entry, or an OPDS download delivered
+	// through a Conversion.
+	strict bool
+	path   func(f *streamingFixture) string
+	auth   func(f *streamingFixture, req *http.Request)
 }
 
 func opdsRoute() route {
@@ -145,7 +147,8 @@ func opdsKepubRoute() route {
 	r := opdsRoute()
 	r.name = "opds kepub"
 	r.kepub = true
-	r.path = func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d/kepub", f.file.ID) }
+	r.strict = true
+	r.path = func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d.kepub.epub", f.file.ID) }
 	return r
 }
 
@@ -171,7 +174,7 @@ func shareKepubRoute() route {
 	r := shareRoute()
 	r.name = "share link kepub"
 	r.kepub = true
-	r.menu = true
+	r.strict = true
 	r.path = func(f *streamingFixture) string {
 		return fmt.Sprintf("/api/share/%s/files/%d/download/kepub", f.shareLink().Token, f.file.ID)
 	}
@@ -496,9 +499,10 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 
 // A real CBZ with a page that cannot be read midway fails partway through
 // its first download, as a CBZ or a KePub: the client sees a cut download.
-// Then device routes serve the Original File, a Share Link's Download as
-// entry returns an error, since a failed Conversion never serves another
-// File Type, and web UI routes return the error.
+// Then device routes serve the Original File of a CBZ, OPDS KePub downloads
+// and a Share Link's Download as entry return an error, since a failed
+// Conversion never serves another File Type, and web UI routes return the
+// error.
 func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 	t.Parallel()
 	for _, r := range []route{opdsRoute(), webRoute(), opdsKepubRoute(), webKepubRoute(), shareKepubRoute()} {
@@ -535,11 +539,12 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, again.Body.Close())
 			switch {
-			case r.menu:
-				// A menu entry asked for this File Type, and the original
-				// is another.
+			case r.strict:
+				// The route asked for this File Type, and the original is
+				// another.
 				require.Equal(t, http.StatusInternalServerError, again.StatusCode)
 				assert.NotEqual(t, f.original, body)
+				assert.Empty(t, again.Header.Get("Content-Disposition"))
 			case r.device:
 				require.Equal(t, http.StatusOK, again.StatusCode)
 				assert.Equal(t, f.original, body)
@@ -646,15 +651,11 @@ func assertFailedPartwayBody(t *testing.T, body []byte) {
 }
 
 // A real KePub conversion that fails partway, on an EPUB whose chapter data
-// is corrupt, cuts the download. Afterwards the device route serves the
-// Original File and the web route returns the error.
+// is corrupt, cuts the download. Afterwards OPDS returns a 500, never the
+// EPUB in the KePub's place, and the web route returns the error.
 func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
 	t.Parallel()
-	opdsKepub := opdsRoute()
-	opdsKepub.name = "opds kepub"
-	opdsKepub.kepub = true
-	opdsKepub.path = func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d/kepub", f.file.ID) }
-	for _, r := range []route{opdsKepub, webKepubRoute()} {
+	for _, r := range []route{opdsKepubRoute(), webKepubRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
 			gen := &gatedGenerator{StreamGenerator: kepubEPUBGenerator(t), gate: make(chan struct{})}
@@ -681,11 +682,12 @@ func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, again.Body.Close())
 			switch {
-			case r.menu:
-				// A menu entry asked for this File Type, and the original
-				// is another.
+			case r.strict:
+				// The route asked for this File Type, and the original is
+				// another.
 				require.Equal(t, http.StatusInternalServerError, again.StatusCode)
 				assert.NotEqual(t, f.original, body)
+				assert.Empty(t, again.Header.Get("Content-Disposition"))
 			case r.device:
 				require.Equal(t, http.StatusOK, again.StatusCode)
 				assert.Equal(t, f.original, body)

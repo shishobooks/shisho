@@ -29,9 +29,8 @@ func TestHandleDownload_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			ctx := context.Background()
 
 			lib := &models.Library{
-				Name:                     "Lib",
-				CoverAspectRatio:         "book",
-				DownloadFormatPreference: models.DownloadFormatOriginal,
+				Name:             "Lib",
+				CoverAspectRatio: "book",
 			}
 			_, err := db.NewInsert().Model(lib).Exec(ctx)
 			require.NoError(t, err)

@@ -4,13 +4,13 @@ A library connects Shisho to one or more directories that contain your media. Th
 
 ## Creating a Library
 
-Go to **Settings > Libraries**, then select **Add Library**. Choose a name, cover aspect ratio, download preference, and one or more paths.
+Go to **Settings > Libraries**, then select **Add Library**. Choose a name, cover aspect ratio, and one or more paths.
 
 Paths must be visible from inside the Shisho container. A host path such as `/mnt/books` is not usable unless it is mounted into the container, and the library path must use the container side of that mount. Shisho also needs suitable read and write permissions if file organization is enabled.
 
 Saving a library queues a global scan of all libraries, unless a scan is already pending or running. The new library may therefore take a little time to appear populated. If your role has Jobs Read, follow progress under **Settings > Jobs**.
 
-### Cover and Download Preferences
+### Cover Aspect Ratio
 
 **Cover Display Aspect Ratio** controls gallery covers and which cover Shisho prefers for books with both ebook and audiobook editions:
 
@@ -18,13 +18,7 @@ Saving a library queues a global scan of all libraries, unless a scan is already
 - **Audiobook Cover (1:1)** prefers an audiobook cover and always displays it in a square frame. If only an ebook cover is available, it uses that cover in the same square frame.
 - The two fallback modes use the preferred cover type when available, but adopt the available cover's native frame shape when falling back to the other type.
 
-**Download Format Preference** controls what a file's download button sends in the web app for EPUB and CBZ files:
-
-- **Original format** downloads the original type.
-- **KePub (Kobo-optimized)** generates a KePub.
-- **Ask on download** opens the **Download as** menu instead, so the user chooses each time.
-
-Whatever the preference, the **Download as** menu beside each download button offers every file type the file can become; see [Conversions](./supported-formats.md#conversions). These settings do not affect M4B or PDF downloads. See [Reading and Playback](./reading-and-playback.md) for the in-app readers.
+Each user's [Delivery Rules](./supported-formats.md#delivery-rules) decide which file type a download button sends. See [Reading and Playback](./reading-and-playback.md) for the in-app readers.
 
 ## Directory Grouping
 

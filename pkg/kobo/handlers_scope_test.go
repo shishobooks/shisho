@@ -138,11 +138,10 @@ func downloadPaths(prefix string, fileID int) []string {
 func insertScopeLibrary(ctx context.Context, t *testing.T, db *bun.DB, name string) *models.Library {
 	t.Helper()
 	lib := &models.Library{
-		Name:                     name,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		CreatedAt:                time.Now(),
-		UpdatedAt:                time.Now(),
+		Name:             name,
+		CoverAspectRatio: "book",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)

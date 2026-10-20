@@ -17,9 +17,8 @@ import (
 func seedLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
 	t.Helper()
 	l := &models.Library{
-		Name:                     name,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             name,
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(l).Exec(context.Background())
 	require.NoError(t, err)
