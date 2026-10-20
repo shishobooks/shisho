@@ -27,6 +27,9 @@ type reach struct {
 	// listID is the one list a list-scoped Device reaches. Its libraries
 	// aren't browsable, only the list.
 	listID *int
+	// libraryScoped is set for a Device scoped to one library, which browses
+	// that library and no lists.
+	libraryScoped bool
 	// closed is set for a scope whose library or list is gone or no longer
 	// viewable, which reaches nothing, as on Kobo sync.
 	closed bool
@@ -71,6 +74,7 @@ func (h *handler) scopeFor(c echo.Context) (*reach, error) {
 	scope := device.Scope()
 	switch scope.Type {
 	case devices.ScopeLibrary:
+		r.libraryScoped = true
 		if scope.LibraryID == nil || !user.HasLibraryAccess(*scope.LibraryID) {
 			r.closed = true
 		} else {
@@ -123,10 +127,16 @@ func (r *reach) requireLibrary(c echo.Context, libraryID int) error {
 	return nil
 }
 
+// browsesLists reports whether the request can open lists at all. A Device
+// scoped to one library browses only that library.
+func (r *reach) browsesLists() bool {
+	return !r.closed && !r.libraryScoped
+}
+
 // allowsList reports whether listID is a list the request can open. The
 // caller still checks that the user can view it.
 func (r *reach) allowsList(listID int) bool {
-	return !r.closed && (r.listID == nil || *r.listID == listID)
+	return r.browsesLists() && (r.listID == nil || *r.listID == listID)
 }
 
 // requireBook returns resource's 404 for a book outside what the request

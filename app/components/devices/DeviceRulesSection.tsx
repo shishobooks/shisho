@@ -1,13 +1,16 @@
 import equal from "fast-deep-equal";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import RulesListEditor from "@/components/devices/RulesListEditor";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUpdateDevice } from "@/hooks/queries/devices";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
+import type { Rule } from "@/types";
 import {
   RulesModeCustom,
   RulesModeDefault,
@@ -15,7 +18,12 @@ import {
   type DeliveryRulesMode,
   type DeviceResponse,
 } from "@/types/generated/devices";
-import { withKeys, withoutKeys, type DraftRule } from "@/utils/delivery";
+import {
+  DELIVERY_RULES_SECTION_ID,
+  withKeys,
+  withoutKeys,
+  type DraftRule,
+} from "@/utils/delivery";
 import { DEVICE_TYPE_LABELS } from "@/utils/devices";
 import { fileTypeLabel } from "@/utils/format";
 
@@ -24,6 +32,34 @@ interface DeviceRulesSectionProps {
   /** Reports whether the custom list holds unsaved changes. */
   onHasChangesChange?: (hasChanges: boolean) => void;
 }
+
+// ReadOnlyRules shows the rules a Device follows, in order, without editing
+// controls.
+const ReadOnlyRules = ({ rules }: { rules: Rule[] }) => (
+  <ol aria-label="Rules this Device follows" className="space-y-2">
+    {rules.map((rule, index) => {
+      const source = fileTypeLabel(rule.source_file_type);
+      const delivered = fileTypeLabel(rule.delivered_file_type);
+      return (
+        <li
+          aria-label={`${source} as ${delivered}`}
+          className="flex items-center gap-3 rounded-md border border-border px-3 py-2"
+          key={rule.source_file_type}
+        >
+          <span className="w-4 text-right text-xs tabular-nums text-muted-foreground">
+            {index + 1}
+          </span>
+          <Badge variant="secondary">{source}</Badge>
+          <ArrowRight
+            aria-hidden="true"
+            className="h-4 w-4 text-muted-foreground"
+          />
+          <Badge variant="outline">{delivered}</Badge>
+        </li>
+      );
+    })}
+  </ol>
+);
 
 // DeviceRulesBody chooses which Delivery Rules a Device follows: the user's
 // default, its type's preset, or a custom list. Following saves as soon as
@@ -68,16 +104,16 @@ const DeviceRulesBody = ({
   };
 
   const typeLabel = DEVICE_TYPE_LABELS[device.device_type];
+  // Short labels, so three fit side by side on one line.
   const modes: { mode: DeliveryRulesMode; label: string }[] = [
-    { mode: RulesModeDefault, label: "Follow my default" },
+    { mode: RulesModeDefault, label: "My default" },
   ];
   if (device.has_preset) {
-    modes.push({
-      mode: RulesModePreset,
-      label: `Follow the ${typeLabel} preset`,
-    });
+    modes.push({ mode: RulesModePreset, label: `${typeLabel} preset` });
   }
-  modes.push({ mode: RulesModeCustom, label: "Customize" });
+  modes.push({ mode: RulesModeCustom, label: "Custom" });
+  const followsDefault =
+    draft === null && device.delivery_rules_mode === RulesModeDefault;
   const shownMode =
     draft !== null ? RulesModeCustom : device.delivery_rules_mode;
 
@@ -118,25 +154,28 @@ const DeviceRulesBody = ({
       </div>
 
       {draft === null ? (
-        device.delivery_rules.length === 0 ? (
-          <p className="text-sm text-destructive">
-            Your default has no rule for a File Type a {typeLabel} Device can
-            receive, so it receives nothing. Follow the preset or customize its
-            rules.
-          </p>
-        ) : (
-          <ol
-            aria-label="Rules this Device follows"
-            className="list-decimal space-y-1 pl-5 text-sm"
-          >
-            {device.delivery_rules.map((rule) => (
-              <li key={rule.source_file_type}>
-                {fileTypeLabel(rule.source_file_type)} as{" "}
-                {fileTypeLabel(rule.delivered_file_type)}
-              </li>
-            ))}
-          </ol>
-        )
+        <>
+          {device.delivery_rules.length === 0 ? (
+            <p className="text-sm text-destructive">
+              Your default has no rule for a File Type a {typeLabel} Device can
+              receive, so it receives nothing. Follow the preset or customize
+              its rules.
+            </p>
+          ) : (
+            <ReadOnlyRules rules={device.delivery_rules} />
+          )}
+          {followsDefault && (
+            <p className="text-sm text-muted-foreground">
+              Changes to your default reach this Device too.{" "}
+              <Link
+                className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                to={`/user/settings#${DELIVERY_RULES_SECTION_ID}`}
+              >
+                Edit your default
+              </Link>
+            </p>
+          )}
+        </>
       ) : (
         <>
           <RulesListEditor

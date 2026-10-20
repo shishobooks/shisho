@@ -39,7 +39,7 @@ Give each reading app its own Device so it gets its own Delivery Rules and scope
 
 A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The credential is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong credential, or another user's, gets the same `401 Unauthorized` as a wrong password. Only an OPDS app Device's credential signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
 
-A Device scoped to one library shows only that library in the root catalog. A Device scoped to a list shows only that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
+A Device scoped to one library shows only that library in the root catalog, with no **Lists** entry. A Device scoped to a list shows only that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
 
 ## Catalog Structure
 

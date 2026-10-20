@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { API, ShishoAPIError } from "@/libraries/api";
@@ -76,19 +77,23 @@ const renderSection = (initial: DeviceResponse) => {
   const queryClient = new QueryClient();
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <DeviceRulesSection
-        device={initial}
-        onHasChangesChange={onHasChangesChange}
-      />
+      <MemoryRouter>
+        <DeviceRulesSection
+          device={initial}
+          onHasChangesChange={onHasChangesChange}
+        />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   const rerender = (device: DeviceResponse) =>
     view.rerender(
       <QueryClientProvider client={queryClient}>
-        <DeviceRulesSection
-          device={device}
-          onHasChangesChange={onHasChangesChange}
-        />
+        <MemoryRouter>
+          <DeviceRulesSection
+            device={device}
+            onHasChangesChange={onHasChangesChange}
+          />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   return { onHasChangesChange, rerender };
@@ -113,18 +118,18 @@ describe("DeviceRulesSection", () => {
   it("shows the preset a new Kobo follows, read-only", () => {
     renderSection(kobo());
 
-    expect(modeButton("Follow the Kobo preset")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(modeButton("Kobo preset")).toHaveAttribute("aria-pressed", "true");
     const list = screen.getByRole("list", {
       name: "Rules this Device follows",
     });
     expect(
       within(list)
         .getAllByRole("listitem")
-        .map((li) => li.textContent),
+        .map((li) => li.getAttribute("aria-label")),
     ).toEqual(["EPUB as KePub", "CBZ as KePub"]);
+    expect(
+      screen.queryByRole("link", { name: "Edit your default" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
@@ -133,7 +138,7 @@ describe("DeviceRulesSection", () => {
     const request = mockServer();
     renderSection(kobo());
 
-    await user.click(modeButton("Follow my default"));
+    await user.click(modeButton("My default"));
 
     await waitFor(() =>
       expect(patches(request)).toEqual([
@@ -149,11 +154,13 @@ describe("DeviceRulesSection", () => {
       kobo({ delivery_rules_mode: "default", delivery_rules: userDefault }),
     );
 
-    expect(modeButton("Follow my default")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await user.click(modeButton("Follow the Kobo preset"));
+    // Following the default links to where it's edited.
+    expect(
+      screen.getByRole("link", { name: "Edit your default" }),
+    ).toHaveAttribute("href", "/user/settings#delivery-rules");
+
+    expect(modeButton("My default")).toHaveAttribute("aria-pressed", "true");
+    await user.click(modeButton("Kobo preset"));
 
     await waitFor(() =>
       expect(patches(request)).toEqual([
@@ -176,7 +183,7 @@ describe("DeviceRulesSection", () => {
       within(screen.getByRole("group", { name: "Delivery Rules" }))
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Follow my default", "Customize"]);
+    ).toEqual(["My default", "Custom"]);
   });
 
   it("customizes from a copy of what it follows and saves it only on Save", async () => {
@@ -184,7 +191,7 @@ describe("DeviceRulesSection", () => {
     const request = mockServer();
     const { onHasChangesChange, rerender } = renderSection(kobo());
 
-    await user.click(modeButton("Customize"));
+    await user.click(modeButton("Custom"));
     expect(patches(request)).toEqual([]);
     expect(onHasChangesChange).toHaveBeenLastCalledWith(true);
     expect(
@@ -214,7 +221,7 @@ describe("DeviceRulesSection", () => {
         ],
       }),
     );
-    expect(modeButton("Customize")).toHaveAttribute("aria-pressed", "true");
+    expect(modeButton("Custom")).toHaveAttribute("aria-pressed", "true");
     await waitFor(() =>
       expect(onHasChangesChange).toHaveBeenLastCalledWith(false),
     );
@@ -224,7 +231,7 @@ describe("DeviceRulesSection", () => {
     const user = setup();
     renderSection(kobo());
 
-    await user.click(modeButton("Customize"));
+    await user.click(modeButton("Custom"));
     await user.click(screen.getByRole("combobox", { name: "Deliver CBZ as" }));
 
     expect(
@@ -237,7 +244,7 @@ describe("DeviceRulesSection", () => {
     const request = mockServer();
     renderSection(kobo());
 
-    await user.click(modeButton("Customize"));
+    await user.click(modeButton("Custom"));
     await user.click(
       screen.getByRole("button", { name: "Remove the EPUB rule" }),
     );
@@ -257,13 +264,10 @@ describe("DeviceRulesSection", () => {
     const request = mockServer();
     renderSection(kobo());
 
-    await user.click(modeButton("Customize"));
+    await user.click(modeButton("Custom"));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(modeButton("Follow the Kobo preset")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(modeButton("Kobo preset")).toHaveAttribute("aria-pressed", "true");
     expect(patches(request)).toEqual([]);
   });
 
@@ -277,12 +281,12 @@ describe("DeviceRulesSection", () => {
       kobo({ delivery_rules_mode: "custom", delivery_rules: custom }),
     );
 
-    expect(modeButton("Customize")).toHaveAttribute("aria-pressed", "true");
+    expect(modeButton("Custom")).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByRole("button", { name: "Remove the EPUB rule" }),
     ).toBeInTheDocument();
 
-    await user.click(modeButton("Follow the Kobo preset"));
+    await user.click(modeButton("Kobo preset"));
     await waitFor(() =>
       expect(patches(request)).toEqual([
         { delivery_rules: { mode: "preset", rules: undefined } },
@@ -290,10 +294,7 @@ describe("DeviceRulesSection", () => {
     );
     rerender(kobo());
 
-    expect(modeButton("Follow the Kobo preset")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(modeButton("Kobo preset")).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.queryByRole("button", { name: "Remove the EPUB rule" }),
     ).toBeNull();

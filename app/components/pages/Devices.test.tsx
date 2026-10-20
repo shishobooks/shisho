@@ -409,7 +409,7 @@ describe("DeviceDetail", () => {
     renderAt("/user/devices/kobo-1");
 
     const rules = await screen.findByRole("group", { name: "Delivery Rules" });
-    await user.click(within(rules).getByRole("button", { name: "Customize" }));
+    await user.click(within(rules).getByRole("button", { name: "Custom" }));
     await user.click(screen.getByRole("button", { name: "Change Type" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("radio", { name: /Browser/ }));

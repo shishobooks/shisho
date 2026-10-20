@@ -107,7 +107,7 @@ func (h *handler) catalog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, r.rules, r.user.ID, r.browsableLibraryIDs(), r.listID, !r.closed)
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, r.rules, r.user.ID, r.browsableLibraryIDs(), r.listID, r.browsesLists())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -486,6 +486,9 @@ func (h *handler) lists(c echo.Context) error {
 	r, err := h.reachFor(c)
 	if err != nil {
 		return err
+	}
+	if !r.browsesLists() {
+		return errcodes.NotFound("Lists")
 	}
 
 	limit, offset := getPaginationParams(c)

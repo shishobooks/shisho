@@ -175,16 +175,26 @@ func TestOPDS_DeviceCredential_AppliesTheDeviceScope(t *testing.T) {
 	deviceService := devices.NewService(f.db)
 
 	t.Run("library", func(t *testing.T) {
+		// A list holding a book in the scope's library, which a library
+		// scope still doesn't browse.
+		listService := lists.NewService(f.db)
+		libraryList, err := listService.CreateList(ctx, lists.CreateListOptions{UserID: owner, Name: "Library Reading"})
+		require.NoError(t, err)
+		require.NoError(t, listService.AddBooks(ctx, lists.AddBooksOptions{ListID: libraryList.ID, BookIDs: []int{inScopeBook.ID}, AddedByUserID: owner}))
+
 		device := f.addDevice(devices.DeviceTypeOPDS)
-		_, err := deviceService.Update(ctx, owner, device.ID, devices.UpdateDeviceOptions{Scope: &devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.lib.ID}})
+		_, err = deviceService.Update(ctx, owner, device.ID, devices.UpdateDeviceOptions{Scope: &devices.Scope{Type: devices.ScopeLibrary, LibraryID: &f.lib.ID}})
 		require.NoError(t, err)
 
 		code, body := f.getAs(device.Credential, "/opds/v1/catalog")
 		require.Equal(t, http.StatusOK, code, body)
 		assert.Contains(t, body, fmt.Sprintf("/opds/v1/libraries/%d", f.lib.ID))
 		assert.NotContains(t, body, "Other Lib")
+		assert.NotContains(t, body, "/opds/v1/lists", "a library-scoped Device browses no lists")
 
 		for _, path := range []string{
+			"/opds/v1/lists",
+			fmt.Sprintf("/opds/v1/lists/%d", libraryList.ID),
 			fmt.Sprintf("/opds/v1/libraries/%d/all", other.ID),
 			fmt.Sprintf("/opds/download/%d.epub", otherFile.ID),
 			fmt.Sprintf("/opds/v1/books/%d/cover", otherBook.ID),

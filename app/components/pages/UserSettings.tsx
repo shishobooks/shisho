@@ -1,6 +1,6 @@
 import { Check, KeyRound, Moon, Sun } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
 import DeliveryRulesEditor from "@/components/devices/DeliveryRulesEditor";
@@ -29,6 +29,7 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { GallerySize } from "@/types";
+import { DELIVERY_RULES_SECTION_ID } from "@/utils/delivery";
 
 interface ThemeOptionProps {
   theme: Theme;
@@ -102,6 +103,16 @@ const UserSettings = () => {
     useState(false);
   const { showBlockerDialog, proceedNavigation, cancelNavigation } =
     useUnsavedChanges(deliveryRulesHaveChanges);
+
+  // A Device page links straight to the Delivery Rules section.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === `#${DELIVERY_RULES_SECTION_ID}`) {
+      document
+        .getElementById(DELIVERY_RULES_SECTION_ID)
+        ?.scrollIntoView({ block: "start" });
+    }
+  }, [hash]);
 
   const handleGallerySizeChange = (next: GallerySize) => {
     updateUserSettings.mutate(
@@ -256,7 +267,10 @@ const UserSettings = () => {
           </div>
 
           {/* Default Delivery Rules */}
-          <div className="border border-border rounded-md p-4 md:p-6">
+          <div
+            className="scroll-mt-20 border border-border rounded-md p-4 md:p-6"
+            id={DELIVERY_RULES_SECTION_ID}
+          >
             <h2 className="text-lg font-semibold mb-1">Delivery Rules</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Choose which File Type each book&apos;s main download button and

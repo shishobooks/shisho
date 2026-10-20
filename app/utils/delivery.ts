@@ -37,3 +37,9 @@ export const withoutKeys = (rules: DraftRule[]): Rule[] =>
     source_file_type,
     delivered_file_type,
   }));
+
+/**
+ * The id of the User Settings section holding the default Delivery Rules
+ * editor, which links elsewhere point at with a URL hash.
+ */
+export const DELIVERY_RULES_SECTION_ID = "delivery-rules";

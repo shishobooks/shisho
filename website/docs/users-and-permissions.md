@@ -180,9 +180,9 @@ A list shared with you can hold books from libraries you cannot access; those bo
 
 Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer. Under **Delivery Rules** on its page, choose one:
 
-- **Follow my default**: your default rules from **User Settings > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
-- **Follow the Kobo preset** or **Follow the Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
-- **Customize**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **Follow my default** or the preset again discards the list.
+- **My default**: your default rules from **User Settings > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
+- **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
+- **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **User Settings > Delivery Rules**.
 
 Kobo sync keeps sending KePub whatever a Kobo Device's rules say.
 
