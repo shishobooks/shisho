@@ -1,9 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import {
-  createMemoryRouter,
-  MemoryRouter,
-  RouterProvider,
-} from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import Gallery from "./Gallery";
@@ -24,9 +20,14 @@ const renderGallery = (
   render(
     <MemoryRouter>
       <Gallery
+        columns={4}
+        currentPage={1}
         isLoading={false}
         itemLabel="books"
         items={items}
+        itemsPerPage={20}
+        offset={0}
+        onPageChange={vi.fn()}
         query={{ ...query, ...overrides }}
         renderItem={(item) => <div key={item}>{item}</div>}
         total={items.length}
@@ -36,29 +37,37 @@ const renderGallery = (
 
 describe("Gallery", () => {
   it("replaces a page past the end with the last page", async () => {
-    const router = createMemoryRouter(
-      [
-        {
-          path: "/",
-          element: (
-            <Gallery
-              isLoading={false}
-              itemLabel="books"
-              items={[]}
-              query={{ ...query, data: { items: [], total: 45 } }}
-              renderItem={(item: string) => <div key={item}>{item}</div>}
-              total={45}
-            />
-          ),
-        },
-      ],
-      { initialEntries: ["/?page=9"] },
+    const onPageChange = vi.fn();
+    render(
+      <Gallery
+        columns={4}
+        currentPage={9}
+        isLoading={false}
+        itemLabel="books"
+        items={[]}
+        itemsPerPage={20}
+        offset={160}
+        onPageChange={onPageChange}
+        query={{ ...query, data: { items: [], total: 45 } }}
+        renderItem={(item: string) => <div key={item}>{item}</div>}
+        total={45}
+      />,
     );
-    render(<RouterProvider router={router} />);
 
     // 45 items at 20 per page is three pages.
-    await waitFor(() => expect(router.state.location.search).toBe("?page=3"));
-    expect(router.state.historyAction).toBe("REPLACE");
+    await waitFor(() =>
+      expect(onPageChange).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ replace: true }),
+      ),
+    );
+  });
+
+  it("lays the items out in the columns it is given", () => {
+    renderGallery({ data: { items: [], total: 2 } }, ["Dune", "Emma"]);
+
+    const grid = screen.getByText("Dune").parentElement!;
+    expect(grid.style.gridTemplateColumns).toBe("repeat(4, minmax(0, 1fr))");
   });
 
   it("shows a spinner, not an error, while its query waits on its gate", () => {
@@ -93,9 +102,14 @@ describe("Gallery", () => {
     const gallery = (isLoading: boolean, items: string[]) => (
       <MemoryRouter>
         <Gallery
+          columns={4}
+          currentPage={1}
           isLoading={isLoading}
           itemLabel="books"
           items={items}
+          itemsPerPage={20}
+          offset={0}
+          onPageChange={vi.fn()}
           query={{ ...query, data: { items: [], total: items.length } }}
           renderItem={(item) => <div key={item}>{item}</div>}
           total={items.length}

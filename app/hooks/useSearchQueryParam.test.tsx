@@ -43,18 +43,18 @@ const settle = () => act(() => vi.advanceTimersByTime(400));
 describe("useSearchQueryParam with SearchInput", () => {
   it("returns to the page you were on with one back press", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderAt("/?page=5");
+    renderAt("/?start=48");
     const input = screen.getByRole("searchbox", { name: "Search books" });
 
     await user.type(input, "fo");
-    await waitFor(() => expect(location()).toBe("?page=1&search=fo"));
+    await waitFor(() => expect(location()).toBe("?search=fo"));
     await user.type(input, "o");
-    await waitFor(() => expect(location()).toBe("?page=1&search=foo"));
+    await waitFor(() => expect(location()).toBe("?search=foo"));
 
     back();
     settle();
 
-    expect(location()).toBe("?page=5");
+    expect(location()).toBe("?start=48");
     expect(input).toHaveValue("");
   });
 
@@ -64,14 +64,14 @@ describe("useSearchQueryParam with SearchInput", () => {
     const input = screen.getByRole("searchbox", { name: "Search books" });
 
     await user.type(input, "foo");
-    await waitFor(() => expect(location()).toBe("?page=1&search=foo"));
+    await waitFor(() => expect(location()).toBe("?search=foo"));
     await user.clear(input);
-    await waitFor(() => expect(location()).toBe("?page=1"));
+    await waitFor(() => expect(location()).toBe(""));
 
     back();
     settle();
 
-    expect(location()).toBe("?page=1&search=foo");
+    expect(location()).toBe("?search=foo");
     expect(input).toHaveValue("foo");
 
     back();
@@ -87,12 +87,12 @@ describe("useSearchQueryParam with SearchInput", () => {
     const input = screen.getByRole("searchbox", { name: "Search books" });
 
     await user.type(input, "foo");
-    await waitFor(() => expect(location()).toBe("?page=1&search=foo"));
+    await waitFor(() => expect(location()).toBe("?search=foo"));
 
     back();
     await user.type(input, "foo");
     settle();
 
-    expect(location()).toBe("?page=1&search=foo");
+    expect(location()).toBe("?search=foo");
   });
 });

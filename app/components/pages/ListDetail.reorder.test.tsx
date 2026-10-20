@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,6 +25,15 @@ vi.mock("@/components/library/DraggableBookList", () => ({
   ),
 }));
 
+const location = { search: "" };
+const LocationProbe = () => {
+  const { search } = useLocation();
+  useEffect(() => {
+    location.search = search;
+  }, [search]);
+  return null;
+};
+
 afterEach(() => {
   toast.dismiss();
   cleanup();
@@ -42,7 +52,11 @@ const list = {
   updated_at: "2024-01-01T00:00:00Z",
 };
 
-const renderWithReorderFailure = (failure: Response) => {
+const renderWithReorderFailure = (
+  failure: Response,
+  listOverrides: Partial<typeof list> = {},
+  entry = "/lists/5",
+) => {
   vi.stubGlobal("__APP_VERSION__", "test");
   vi.stubGlobal(
     "matchMedia",
@@ -72,7 +86,8 @@ const renderWithReorderFailure = (failure: Response) => {
         permissions: ["books:read"],
         role_name: "viewer",
       });
-    if (path === "/api/lists/5") return Response.json(list);
+    if (path === "/api/lists/5")
+      return Response.json({ ...list, ...listOverrides });
     if (path.endsWith("/shares")) return Response.json([]);
     if (path === "/api/user/libraries") return Response.json([]);
     if (path === "/api/settings/user")
@@ -86,10 +101,11 @@ const renderWithReorderFailure = (failure: Response) => {
     <QueryClientProvider client={client}>
       <AuthProvider>
         <MobileNavProvider>
-          <MemoryRouter initialEntries={["/lists/5"]}>
+          <MemoryRouter initialEntries={[entry]}>
             <Routes>
               <Route element={<ListDetail />} path="/lists/:id" />
             </Routes>
+            <LocationProbe />
             <Toaster />
           </MemoryRouter>
         </MobileNavProvider>
@@ -133,5 +149,28 @@ describe("ListDetail reorder failures", () => {
         screen.getAllByText("This action is unavailable in the demo."),
       ).toHaveLength(1),
     );
+  });
+
+  it("loads a whole ordered list to reorder, whatever the window fits", async () => {
+    // 60 books is more than a window-sized page (24 at the fallback width).
+    renderWithReorderFailure(Response.json({}), { book_count: 60 });
+
+    expect(
+      await screen.findByRole("button", { name: "Reorder" }),
+    ).toBeInTheDocument();
+    const booksRequest = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => String(input))
+      .find((url) => url.startsWith("/api/lists/5/books"));
+    expect(new URL(booksRequest!, "http://x").searchParams.get("limit")).toBe(
+      "100",
+    );
+  });
+
+  it("drops a page position from the URL when it loads the whole list", async () => {
+    renderWithReorderFailure(Response.json({}), {}, "/lists/5?start=48");
+
+    await screen.findByRole("button", { name: "Reorder" });
+    await waitFor(() => expect(location.search).toBe(""));
   });
 });

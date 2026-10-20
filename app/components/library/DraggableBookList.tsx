@@ -22,12 +22,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import BookItem from "@/components/library/BookItem";
-import {
-  COVER_WIDTH_CLASS,
-  DEFAULT_GALLERY_SIZE,
-} from "@/constants/gallerySize";
+import GalleryGrid from "@/components/library/GalleryGrid";
 import { cn } from "@/libraries/utils";
-import type { GallerySize, ListBook } from "@/types";
+import type { ListBook } from "@/types";
 
 type InsertPosition = "before" | "after" | null;
 
@@ -36,7 +33,6 @@ interface DraggableBookItemProps {
   addedByUsername?: string;
   isDragOverlay?: boolean;
   insertPosition?: InsertPosition;
-  gallerySize?: GallerySize;
 }
 
 const DraggableBookItem = ({
@@ -44,7 +40,6 @@ const DraggableBookItem = ({
   addedByUsername,
   isDragOverlay = false,
   insertPosition = null,
-  gallerySize = DEFAULT_GALLERY_SIZE,
 }: DraggableBookItemProps) => {
   const {
     attributes,
@@ -65,12 +60,7 @@ const DraggableBookItem = ({
   // For the drag overlay, render a clean lifted version with explicit width
   if (isDragOverlay) {
     return (
-      <div
-        className={cn(
-          "w-[calc(50vw-1.5rem)] opacity-95 rotate-1 scale-[1.02] drop-shadow-2xl [&>*]:w-full [&>*]:sm:w-full",
-          COVER_WIDTH_CLASS[gallerySize],
-        )}
-      >
+      <div className="w-full opacity-95 rotate-1 scale-[1.02] drop-shadow-2xl">
         <BookItem
           addedByUsername={addedByUsername}
           book={listBook.book}
@@ -83,8 +73,7 @@ const DraggableBookItem = ({
   return (
     <div
       className={cn(
-        "w-[calc(50%-0.5rem)] group/drag relative cursor-grab active:cursor-grabbing touch-pan-y [&>*]:w-full [&>*]:sm:w-full",
-        COVER_WIDTH_CLASS[gallerySize],
+        "w-full group/drag relative cursor-grab active:cursor-grabbing touch-pan-y",
         isDragging && "opacity-30",
         // Show indicator on left when inserting before this item
         insertPosition === "before" &&
@@ -109,17 +98,18 @@ const DraggableBookItem = ({
 
 interface DraggableBookListProps {
   books: ListBook[];
+  /** From `useGallerySizeParam`, matching the gallery the list replaces. */
+  columns: number;
   isOwner: boolean;
   // Rejecting restores the order from before the drag.
   onReorder: (bookIds: number[]) => Promise<unknown>;
-  gallerySize?: GallerySize;
 }
 
 export const DraggableBookList = ({
   books,
+  columns,
   isOwner,
   onReorder,
-  gallerySize = DEFAULT_GALLERY_SIZE,
 }: DraggableBookListProps) => {
   const [items, setItems] = useState(books);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -242,19 +232,18 @@ export const DraggableBookList = ({
         items={items.map((item) => item.book_id)}
         strategy={rectSortingStrategy}
       >
-        <div className="flex flex-wrap gap-4">
+        <GalleryGrid className="mb-0 md:mb-0" columns={columns}>
           {items.map((listBook) => (
             <DraggableBookItem
               addedByUsername={
                 !isOwner ? listBook.added_by_user?.username : undefined
               }
-              gallerySize={gallerySize}
               insertPosition={getInsertPosition(listBook.book_id)}
               key={listBook.id}
               listBook={listBook}
             />
           ))}
-        </div>
+        </GalleryGrid>
       </SortableContext>
       <DragOverlay>
         {activeItem ? (
@@ -262,7 +251,6 @@ export const DraggableBookList = ({
             addedByUsername={
               !isOwner ? activeItem.added_by_user?.username : undefined
             }
-            gallerySize={gallerySize}
             isDragOverlay
             listBook={activeItem}
           />

@@ -59,7 +59,7 @@ const Devices = () => {
   return (
     <div>
       <TopNav />
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6 md:py-8">
+      <div className="w-full px-4 py-4 md:px-6 md:py-8">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between md:mb-8">
           <div>
             <h1 className="mb-1 text-2xl font-semibold md:mb-2">Devices</h1>

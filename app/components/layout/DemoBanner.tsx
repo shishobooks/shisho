@@ -91,7 +91,7 @@ const DemoBanner = () => {
     >
       {/* The tint sits on an inner layer so the sticky bar stays opaque. */}
       <div className="bg-primary/10">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5 md:px-6">
           {/* flex-1 with a zero basis lets the notice wrap beside the links on
               phones instead of pushing them to a second row. */}
           <p className="flex min-w-0 flex-1 basis-0 items-center gap-2 text-xs sm:text-sm">

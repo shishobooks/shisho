@@ -61,7 +61,7 @@ const ShareNotice = ({ shared }: { shared: SharedBookResponse }) => (
     aria-label="Share details"
     className="border-y border-primary/20 bg-primary/10 text-sm"
   >
-    <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 md:px-6">
+    <div className="flex items-center gap-3 px-4 py-2.5 md:px-6">
       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
         <Share2 aria-hidden="true" className="size-3.5" />
       </span>
@@ -132,14 +132,13 @@ const SharedBook = () => {
       {/* The notice strip draws its own top border in the same tint as its
           bottom one, so the header drops its neutral border above it. */}
       <header className={cn(!notice && "border-b border-border")}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 flex items-center">
+        <div className="px-4 md:px-6 h-14 md:h-16 flex items-center">
           <Logo />
         </div>
       </header>
       {notice && <ShareNotice shared={notice} />}
-      <main className="max-w-7xl mx-auto px-4 py-4 md:px-6 md:py-8">
-        {content}
-      </main>
+      {/* Full width like the book page it mirrors; the two change together. */}
+      <main className="px-4 py-4 md:px-6 md:py-8">{content}</main>
       <Toaster richColors />
     </div>
   );

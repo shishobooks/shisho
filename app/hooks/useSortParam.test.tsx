@@ -50,7 +50,7 @@ describe("useSortParam", () => {
   });
 
   it("writes a new sort to the URL and returns to the first page", () => {
-    const { result } = renderAt("/?page=3&search=jo");
+    const { result } = renderAt("/?page=3&start=48&search=jo");
     act(() =>
       result.current.sort.apply([
         { field: "narrated_file_count", direction: "desc" },
@@ -59,6 +59,7 @@ describe("useSortParam", () => {
     const params = new URLSearchParams(result.current.location.search);
     expect(params.get("sort")).toBe("narrated_file_count:desc");
     expect(params.get("page")).toBeNull();
+    expect(params.get("start")).toBeNull();
     expect(params.get("search")).toBe("jo");
   });
 

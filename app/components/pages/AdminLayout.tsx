@@ -52,7 +52,7 @@ const AdminLayout = () => {
         <div className="hidden md:block">
           <AdminSidebar />
         </div>
-        <main className="flex-1 w-full mx-auto max-w-7xl px-4 py-4 md:px-6 md:py-8">
+        <main className="min-w-0 flex-1 px-4 py-4 md:px-6 md:py-8">
           <Outlet />
         </main>
       </div>

@@ -34,11 +34,7 @@ const PersonDetail = () => {
   const [searchParams] = useSearchParams();
   const personId = id ? parseInt(id, 10) : undefined;
 
-  const {
-    itemsPerPage,
-    offset,
-    settingsResolved: userSettingsResolved,
-  } = useGallerySizeParam();
+  const { itemsPerPage, offset, pageSizeResolved } = useGallerySizeParam();
 
   const filePage = parsePageParam(searchParams.get("filePage"));
 
@@ -55,7 +51,7 @@ const PersonDetail = () => {
       sort: sort.param,
     },
     {
-      enabled: userSettingsResolved && Boolean(personId),
+      enabled: pageSizeResolved && Boolean(personId),
     },
   );
 

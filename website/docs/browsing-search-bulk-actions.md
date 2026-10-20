@@ -55,6 +55,8 @@ As on the list pages, the sort lives only in the page URL. Your saved gallery de
 
 Open **Size** to choose **S**, **M**, **L**, or **XL** covers. The control is available on the library home, the series list, list detail pages, and the book sections of series, person, genre, and tag pages. It is not a per-library setting.
 
+Covers fill each row from edge to edge: the size sets the smallest a cover gets, and a gallery fits as many as the window holds. Each page shows three full rows (twelve rows of two on a phone), so a wider window shows more books per page. A page link names the first book on the page rather than a page number, so on any screen it opens on a page that includes that book, and resizing the window or changing the size keeps it in view.
+
 **Save as my default everywhere** stores one global gallery-size preference for the current user. A size in the page URL temporarily overrides that preference on the current page.
 
 The inline **Size** control is hidden on small screens. On those devices, open the user menu, select **Preferences**, and change the gallery size under **Appearance**.

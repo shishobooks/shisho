@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { resetPaging } from "@/libraries/pagination";
+
 /**
  * Reads and writes the `search` URL param that list pages filter by.
  *
@@ -23,7 +25,8 @@ export function useSearchQueryParam() {
           } else {
             newParams.delete("search");
           }
-          newParams.set("page", "1");
+          // Galleries page with `start`, resource lists with `page`.
+          resetPaging(newParams);
           return newParams;
         },
         { replace: Boolean(searchQuery) && Boolean(value) },

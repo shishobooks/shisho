@@ -151,7 +151,7 @@ const CreateLibrary = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-6 py-8">
+      <div className="w-full px-6 py-8">
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl font-semibold mb-2">Create Library</h1>
           <p className="text-muted-foreground">

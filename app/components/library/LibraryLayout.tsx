@@ -2,18 +2,15 @@ import type { ReactNode } from "react";
 
 import LibrarySidebar from "@/components/library/LibrarySidebar";
 import TopNav from "@/components/library/TopNav";
-import { cn } from "@/libraries/utils";
+import { ContentWidth } from "@/contexts/ContentWidth";
 
 interface LibraryLayoutProps {
   children: ReactNode;
-  /** Maximum width class for content area. Defaults to max-w-7xl */
-  maxWidth?: string;
 }
 
-const LibraryLayout = ({
-  children,
-  maxWidth = "max-w-7xl",
-}: LibraryLayoutProps) => {
+// Content runs the full width beside the sidebar; a page that needs a
+// readable measure caps its own parts.
+const LibraryLayout = ({ children }: LibraryLayoutProps) => {
   return (
     <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] flex-col">
       <TopNav />
@@ -22,13 +19,8 @@ const LibraryLayout = ({
         <div className="hidden md:block">
           <LibrarySidebar />
         </div>
-        <main
-          className={cn(
-            "flex-1 w-full mx-auto px-4 py-4 md:px-6 md:py-8",
-            maxWidth,
-          )}
-        >
-          {children}
+        <main className="min-w-0 flex-1 px-4 py-4 md:px-6 md:py-8">
+          <ContentWidth>{children}</ContentWidth>
         </main>
       </div>
     </div>

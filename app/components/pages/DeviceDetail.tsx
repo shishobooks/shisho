@@ -765,7 +765,7 @@ const DeviceDetail = () => {
   return (
     <div>
       <TopNav />
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6 md:py-8">
+      <div className="w-full px-4 py-4 md:px-6 md:py-8">
         <Link
           className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           to="/user/devices"

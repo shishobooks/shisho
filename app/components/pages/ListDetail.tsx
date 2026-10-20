@@ -1,6 +1,6 @@
 import { format, formatDistanceToNow } from "date-fns";
 import { Edit, Save, Share2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -23,6 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GALLERY_MAX_PAGE_SIZE } from "@/constants/gallerySize";
+import { ContentWidth } from "@/contexts/ContentWidth";
 import {
   useDeleteList,
   useList,
@@ -68,10 +70,12 @@ const ListDetail = () => {
     savedSize,
     effectiveSize,
     isSizeDirty,
+    columns,
     itemsPerPage,
     currentPage,
     offset,
-    settingsResolved: userSettingsResolved,
+    goToPage,
+    pageSizeResolved,
     isSaving: isSavingSize,
     applyGallerySize,
     saveSizeAsDefault,
@@ -84,11 +88,37 @@ const ListDetail = () => {
 
   const listQuery = useList(listId);
 
+  // Permission helpers
+  const permission = listQuery.data?.permission ?? "viewer";
+  const isOwner = permission === "owner";
+  const canManage = permission === "owner" || permission === "manager";
+  const canEdit =
+    permission === "owner" ||
+    permission === "manager" ||
+    permission === "editor";
+
+  // Reordering needs every book on screen at once, so an ordered list the
+  // user can edit loads whole, up to the API's page limit, instead of a page
+  // sized to the window. That keeps reordering offered at every width.
+  const canReorder =
+    Boolean(listQuery.data?.is_ordered) &&
+    canEdit &&
+    (listQuery.data?.book_count ?? 0) <= GALLERY_MAX_PAGE_SIZE;
+
+  // The whole list shows no pages, so a page position left in the URL would
+  // only come back into effect if the list outgrew the limit.
+  useEffect(() => {
+    if (canReorder && offset > 0) goToPage(1, { replace: true });
+  }, [canReorder, offset, goToPage]);
+
   usePageTitle(listQuery.data?.name ?? "List");
+  // Waits for the list, which decides between the whole list and one page.
   const listBooksQuery = useListBooks(
     listId,
-    { sort, limit: itemsPerPage, offset },
-    { enabled: userSettingsResolved && Boolean(listId) },
+    canReorder
+      ? { sort, limit: GALLERY_MAX_PAGE_SIZE, offset: 0 }
+      : { sort, limit: itemsPerPage, offset },
+    { enabled: pageSizeResolved && listQuery.isSuccess },
   );
   const updateListMutation = useUpdateList();
   const deleteListMutation = useDeleteList();
@@ -106,15 +136,6 @@ const ListDetail = () => {
       throw error; // DraggableBookList restores the previous order
     }
   };
-
-  // Permission helpers
-  const permission = listQuery.data?.permission ?? "viewer";
-  const isOwner = permission === "owner";
-  const canManage = permission === "owner" || permission === "manager";
-  const canEdit =
-    permission === "owner" ||
-    permission === "manager" ||
-    permission === "editor";
 
   const handleUpdate = async (payload: UpdateListPayload) => {
     if (!listId) return;
@@ -144,7 +165,7 @@ const ListDetail = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+        <div className="w-full px-4 md:px-6 py-4 md:py-8">
           <LoadingSpinner />
         </div>
       </div>
@@ -155,7 +176,7 @@ const ListDetail = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+        <div className="w-full px-4 md:px-6 py-4 md:py-8">
           <QueryError fallback="Failed to load list" query={listQuery} />
         </div>
       </div>
@@ -166,7 +187,7 @@ const ListDetail = () => {
     return (
       <div>
         <TopNav />
-        <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+        <div className="w-full px-4 md:px-6 py-4 md:py-8">
           <div className="text-center">
             <h1 className="text-2xl font-semibold mb-4">List Not Found</h1>
             <p className="text-muted-foreground">
@@ -186,7 +207,7 @@ const ListDetail = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-8">
+      <ContentWidth className="px-4 py-4 md:px-6 md:py-8">
         {/* List Header */}
         <div className="mb-6 md:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
@@ -304,14 +325,11 @@ const ListDetail = () => {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">
                 Books
-                {list.is_ordered &&
-                  canEdit &&
-                  currentPage === 1 &&
-                  bookCount <= itemsPerPage && (
-                    <span className="text-sm font-normal text-muted-foreground ml-2">
-                      (drag to reorder)
-                    </span>
-                  )}
+                {canReorder && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    (drag to reorder)
+                  </span>
+                )}
               </h2>
               <div className="hidden sm:flex">
                 <SizePopover
@@ -324,11 +342,7 @@ const ListDetail = () => {
                 />
               </div>
             </div>
-            {/* Use DraggableBookList for ordered lists when on page 1 and all books fit */}
-            {list.is_ordered &&
-            canEdit &&
-            currentPage === 1 &&
-            bookCount <= itemsPerPage ? (
+            {canReorder ? (
               listBooksQuery.error && !listBooksQuery.data ? (
                 <QueryError
                   fallback="Failed to load books"
@@ -337,7 +351,7 @@ const ListDetail = () => {
               ) : listBooksQuery.data ? (
                 <DraggableBookList
                   books={books}
-                  gallerySize={effectiveSize}
+                  columns={columns}
                   isOwner={isOwner}
                   onReorder={handleReorder}
                 />
@@ -347,10 +361,14 @@ const ListDetail = () => {
               )
             ) : (
               <Gallery
+                columns={columns}
+                currentPage={currentPage}
                 isLoading={listBooksQuery.isLoading}
                 itemLabel="books"
                 items={books}
                 itemsPerPage={itemsPerPage}
+                offset={offset}
+                onPageChange={goToPage}
                 query={listBooksQuery}
                 renderItem={(listBook: ListBook) =>
                   listBook.book ? (
@@ -359,7 +377,6 @@ const ListDetail = () => {
                         !isOwner ? listBook.added_by_user?.username : undefined
                       }
                       book={listBook.book}
-                      gallerySize={effectiveSize}
                       key={listBook.id}
                       libraryId={listBook.book.library_id.toString()}
                     />
@@ -377,7 +394,7 @@ const ListDetail = () => {
             This list has no books yet.
           </div>
         )}
-      </div>
+      </ContentWidth>
 
       <CreateListDialog
         isPending={updateListMutation.isPending}

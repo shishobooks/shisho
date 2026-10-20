@@ -4,21 +4,24 @@ import DemoBanner from "@/components/layout/DemoBanner";
 import { BulkDownloadToast } from "@/components/library/BulkDownloadToast";
 import MobileDrawer from "@/components/library/MobileDrawer";
 import { Toaster } from "@/components/ui/sonner";
+import { ContentWidthProvider } from "@/contexts/ContentWidth";
 import { MobileNavProvider } from "@/contexts/MobileNav";
 
 const Root = () => {
   return (
     <MobileNavProvider>
-      <ScrollRestoration />
-      <div className="flex bg-background font-sans min-h-screen">
-        <div className="w-full">
-          <DemoBanner />
-          <Outlet />
+      <ContentWidthProvider>
+        <ScrollRestoration />
+        <div className="flex bg-background font-sans min-h-screen">
+          <div className="w-full">
+            <DemoBanner />
+            <Outlet />
+          </div>
+          <MobileDrawer />
+          <Toaster richColors />
+          <BulkDownloadToast />
         </div>
-        <MobileDrawer />
-        <Toaster richColors />
-        <BulkDownloadToast />
-      </div>
+      </ContentWidthProvider>
     </MobileNavProvider>
   );
 };

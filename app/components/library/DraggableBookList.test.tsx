@@ -51,7 +51,14 @@ const dragFirstOntoSecond = () => drag(1, 2);
 describe("DraggableBookList", () => {
   it("keeps the new order when the reorder succeeds", async () => {
     const onReorder = vi.fn().mockResolvedValue(undefined);
-    render(<DraggableBookList books={books} isOwner onReorder={onReorder} />);
+    render(
+      <DraggableBookList
+        books={books}
+        columns={4}
+        isOwner
+        onReorder={onReorder}
+      />,
+    );
 
     await dragFirstOntoSecond();
 
@@ -61,7 +68,14 @@ describe("DraggableBookList", () => {
 
   it("restores the previous order when the reorder is rejected", async () => {
     const onReorder = vi.fn().mockRejectedValue(new Error("rejected"));
-    render(<DraggableBookList books={books} isOwner onReorder={onReorder} />);
+    render(
+      <DraggableBookList
+        books={books}
+        columns={4}
+        isOwner
+        onReorder={onReorder}
+      />,
+    );
 
     await dragFirstOntoSecond();
 
@@ -80,7 +94,12 @@ describe("DraggableBookList", () => {
       )
       .mockResolvedValueOnce(undefined);
     render(
-      <DraggableBookList books={threeBooks} isOwner onReorder={onReorder} />,
+      <DraggableBookList
+        books={threeBooks}
+        columns={4}
+        isOwner
+        onReorder={onReorder}
+      />,
     );
 
     await drag(1, 2); // Second, First, Third (still saving)

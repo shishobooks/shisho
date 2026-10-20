@@ -41,7 +41,6 @@ interface ResourceListProps<T extends { id: number }, F extends string> {
   itemConfig: (item: T) => ItemConfig;
   linkTo: (item: T, libraryId: string) => string;
   itemLabel: string;
-  maxWidth?: string;
 }
 
 const ResourceList = <T extends { id: number }, F extends string>({
@@ -54,7 +53,6 @@ const ResourceList = <T extends { id: number }, F extends string>({
   itemConfig,
   linkTo,
   itemLabel,
-  maxWidth = "max-w-4xl",
 }: ResourceListProps<T, F>) => {
   usePageTitle(title);
 
@@ -131,79 +129,83 @@ const ResourceList = <T extends { id: number }, F extends string>({
   };
 
   return (
-    <LibraryLayout maxWidth={maxWidth}>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-2">{title}</h1>
-        <p className="text-muted-foreground">{subtitle}</p>
-      </div>
+    <LibraryLayout>
+      {/* Rows keep a scannable width: a name and its counts sit at the two
+          ends of a row, and across a wide window they drift apart. */}
+      <div className="max-w-4xl">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold mb-2">{title}</h1>
+          <p className="text-muted-foreground">{subtitle}</p>
+        </div>
 
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <SearchInput
-            initialValue={searchQuery}
-            label={searchLabel}
-            onDebouncedChange={setSearchQuery}
-            placeholder={searchPlaceholder ?? `${searchLabel}...`}
-          />
-          <SortSheet
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput
+              initialValue={searchQuery}
+              label={searchLabel}
+              onDebouncedChange={setSearchQuery}
+              placeholder={searchPlaceholder ?? `${searchLabel}...`}
+            />
+            <SortSheet
+              fieldLabels={sort.config.labels}
+              fields={sort.config.fields}
+              isDirty={sort.isDirty}
+              levels={sort.levels}
+              onChange={sort.apply}
+              trigger={<SortButton isDirty={sort.isDirty} />}
+            />
+          </div>
+          <SortedByChips
             fieldLabels={sort.config.labels}
-            fields={sort.config.fields}
-            isDirty={sort.isDirty}
-            levels={sort.levels}
-            onChange={sort.apply}
-            trigger={<SortButton isDirty={sort.isDirty} />}
+            levels={sort.isDirty ? sort.levels : []}
+            onRemoveLevel={(index) =>
+              sort.apply(sort.levels.filter((_, i) => i !== index))
+            }
+            onReset={sort.reset}
           />
         </div>
-        <SortedByChips
-          fieldLabels={sort.config.labels}
-          levels={sort.isDirty ? sort.levels : []}
-          onRemoveLevel={(index) =>
-            sort.apply(sort.levels.filter((_, i) => i !== index))
-          }
-          onReset={sort.reset}
-        />
-      </div>
 
-      {/* One live region that stays mounted while the results load and
+        {/* One live region that stays mounted while the results load and
           change, so a new count or the empty state is announced. A region
           mounted with its text is often not. */}
-      <div role="status">
-        {showsResults && query.data && showing && (
-          <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
-        )}
-        {showsResults && query.data?.total === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            {confirmedSearch
-              ? `No ${itemLabel} found matching your search.`
-              : `No ${itemLabel} in this library yet.`}
-          </div>
-        )}
-      </div>
-
-      {(query.isLoading || query.isFetching || isStaleData) && (
-        <LoadingSpinner />
-      )}
-
-      {query.error && !query.data && !query.isFetching && !isStaleData && (
-        <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
-      )}
-
-      {showsResults && query.data && (
-        <>
-          {query.data.items.length > 0 && (
-            <div className="space-y-1 mb-6">
-              {query.data.items.map(renderItem)}
+        <div role="status">
+          {showsResults && query.data && showing && (
+            <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
+          )}
+          {showsResults && query.data?.total === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              {confirmedSearch
+                ? `No ${itemLabel} found matching your search.`
+                : `No ${itemLabel} in this library yet.`}
             </div>
           )}
+        </div>
 
-          <PaginationFooter
-            currentPage={currentPage}
-            onPageChange={handlePageChange}
-            totalIsCurrent={!query.isPlaceholderData}
-            totalPages={totalPages}
-          />
-        </>
-      )}
+        {(query.isLoading || query.isFetching || isStaleData) && (
+          <LoadingSpinner />
+        )}
+
+        {query.error && !query.data && !query.isFetching && !isStaleData && (
+          <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
+        )}
+
+        {showsResults && query.data && (
+          <>
+            {query.data.items.length > 0 && (
+              <div className="space-y-1 mb-6">
+                {query.data.items.map(renderItem)}
+              </div>
+            )}
+
+            <PaginationFooter
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+              totalIsCurrent={!query.isPlaceholderData}
+              totalPages={totalPages}
+            />
+          </>
+        )}
+      </div>
     </LibraryLayout>
   );
 };

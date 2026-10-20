@@ -15,10 +15,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  COVER_WIDTH_CLASS,
-  DEFAULT_GALLERY_SIZE,
-} from "@/constants/gallerySize";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
@@ -28,7 +24,7 @@ import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { useSortParam } from "@/hooks/useSortParam";
 import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 import { cn } from "@/libraries/utils";
-import type { GallerySize, SeriesResponse } from "@/types";
+import type { SeriesResponse } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { seriesCoverUrl } from "@/utils/coverUrl";
 import { formatCount } from "@/utils/format";
@@ -53,7 +49,6 @@ interface SeriesCardProps {
   libraryId: string;
   aspectClass: string;
   isAudiobook: boolean;
-  gallerySize?: GallerySize;
 }
 
 export const SeriesCard = ({
@@ -61,7 +56,6 @@ export const SeriesCard = ({
   libraryId,
   aspectClass,
   isAudiobook,
-  gallerySize = DEFAULT_GALLERY_SIZE,
 }: SeriesCardProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
   const coverUrl = seriesCoverUrl(seriesItem);
@@ -78,7 +72,7 @@ export const SeriesCard = ({
 
   return (
     <div
-      className={cn("w-[calc(50%-0.5rem)]", COVER_WIDTH_CLASS[gallerySize])}
+      className="w-full"
       title={`${seriesItem.name}${showSortName ? `\nSort: ${seriesItem.sort_name}` : ""}\n${formatCount(bookCount, "book")}`}
     >
       <Link
@@ -142,9 +136,12 @@ const SeriesList = () => {
     savedSize,
     effectiveSize,
     isSizeDirty,
+    columns,
     itemsPerPage,
     offset,
-    settingsResolved: userSettingsResolved,
+    currentPage,
+    goToPage,
+    pageSizeResolved,
     isSaving: isSavingSize,
     applyGallerySize,
     saveSizeAsDefault,
@@ -161,7 +158,7 @@ const SeriesList = () => {
       search: searchQuery || undefined,
       sort: sort.param,
     },
-    { enabled: userSettingsResolved },
+    { enabled: pageSizeResolved },
   );
 
   // Track the search value that produced the currently displayed data
@@ -187,7 +184,6 @@ const SeriesList = () => {
     return (
       <SeriesCard
         aspectClass={aspectClass}
-        gallerySize={effectiveSize}
         isAudiobook={isAudiobook}
         key={seriesItem.id}
         libraryId={libraryId ?? ""}
@@ -243,6 +239,8 @@ const SeriesList = () => {
       </div>
 
       <Gallery
+        columns={columns}
+        currentPage={currentPage}
         emptyMessage={
           confirmedSearch
             ? "No series found matching your search."
@@ -254,6 +252,8 @@ const SeriesList = () => {
         itemLabel="series"
         items={seriesQuery.data?.items ?? []}
         itemsPerPage={itemsPerPage}
+        offset={offset}
+        onPageChange={goToPage}
         query={seriesQuery}
         renderItem={renderSeriesItem}
         total={seriesQuery.data?.total ?? 0}

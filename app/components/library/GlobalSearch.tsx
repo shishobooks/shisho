@@ -293,7 +293,7 @@ const GlobalSearch = ({ fullWidth = false, onClose }: GlobalSearchProps) => {
   const getFirstResultUrl = useCallback((): string | null => {
     if (!searchQuery.data || !libraryId) return null;
 
-    const searchParam = `?search=${encodeURIComponent(debouncedQuery)}&page=1`;
+    const searchParam = `?search=${encodeURIComponent(debouncedQuery)}`;
 
     // Check books first
     if (searchQuery.data.books && searchQuery.data.books.length > 0) {

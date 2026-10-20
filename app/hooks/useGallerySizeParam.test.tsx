@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ContentWidth, ContentWidthProvider } from "@/contexts/ContentWidth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 
 import { useGallerySizeParam } from "./useGallerySizeParam";
@@ -31,9 +32,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const renderAt = (entry: string, onChange?: () => void) => {
+const renderAt = (entry: string, onChange?: () => void, width?: number) => {
+  if (width !== undefined) {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(
+      width,
+    );
+  }
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <MemoryRouter initialEntries={[entry]}>{children}</MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
+      {width === undefined ? (
+        children
+      ) : (
+        <ContentWidthProvider>
+          <ContentWidth>{children}</ContentWidth>
+        </ContentWidthProvider>
+      )}
+    </MemoryRouter>
   );
   return renderHook(
     () => ({
@@ -50,48 +64,115 @@ describe("useGallerySizeParam", () => {
 
     expect(result.current.gallery.effectiveSize).toBe("m");
     expect(result.current.gallery.isSizeDirty).toBe(false);
-    expect(result.current.gallery.settingsResolved).toBe(true);
+    expect(result.current.gallery.pageSizeResolved).toBe(true);
     expect(result.current.gallery.currentPage).toBe(1);
     expect(result.current.gallery.offset).toBe(0);
   });
 
   it("prefers the URL size and reports it as dirty", () => {
-    const { result } = renderAt("/?size=l&page=3");
+    const { result } = renderAt("/?size=l");
 
     expect(result.current.gallery.effectiveSize).toBe("l");
     expect(result.current.gallery.isSizeDirty).toBe(true);
-    expect(result.current.gallery.currentPage).toBe(3);
-    expect(result.current.gallery.offset).toBe(
-      2 * result.current.gallery.itemsPerPage,
-    );
   });
 
-  it("reports unresolved settings until the settings query settles", () => {
+  it("fills three rows of the columns the content width fits", () => {
+    const { result } = renderAt("/", undefined, 1660);
+
+    expect(result.current.gallery.columns).toBe(11);
+    expect(result.current.gallery.itemsPerPage).toBe(33);
+  });
+
+  it("waits until the page's content has been measured", () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <MemoryRouter>
+        <ContentWidthProvider>{children}</ContentWidthProvider>
+      </MemoryRouter>
+    );
+    const { result } = renderHook(() => useGallerySizeParam(), { wrapper });
+
+    expect(result.current.pageSizeResolved).toBe(false);
+  });
+
+  it("shows twelve rows of two on a phone", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query === "(max-width: 639px)",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    const { result } = renderAt("/");
+
+    expect(result.current.gallery.columns).toBe(2);
+    expect(result.current.gallery.itemsPerPage).toBe(24);
+    vi.unstubAllGlobals();
+  });
+
+  it("opens the page holding the start item", () => {
+    const { result } = renderAt("/?start=50");
+
+    expect(result.current.gallery.itemsPerPage).toBe(24);
+    expect(result.current.gallery.offset).toBe(48);
+    expect(result.current.gallery.currentPage).toBe(3);
+  });
+
+  it("opens an old page-number link on the same page", () => {
+    const { result } = renderAt("/?page=3");
+
+    expect(result.current.gallery.offset).toBe(48);
+    expect(result.current.gallery.currentPage).toBe(3);
+  });
+
+  it("replaces an old page number when moving to another page", () => {
+    const { result } = renderAt("/?page=3");
+
+    act(() => result.current.gallery.goToPage(1));
+    expect(result.current.search).toBe("");
+
+    act(() => result.current.gallery.goToPage(2));
+    expect(result.current.search).toBe("?start=24");
+  });
+
+  it("keeps the start item on the page when the page size changes", () => {
+    const { result } = renderAt("/?start=50&size=l");
+
+    expect(result.current.gallery.itemsPerPage).toBe(18);
+    expect(result.current.gallery.offset).toBe(36);
+    expect(result.current.gallery.currentPage).toBe(3);
+  });
+
+  it("reports an unresolved page size until the settings query settles", () => {
     settings.saved = undefined;
     const { result } = renderAt("/");
 
-    expect(result.current.gallery.settingsResolved).toBe(false);
+    expect(result.current.gallery.pageSizeResolved).toBe(false);
   });
 
-  it("keeps the first visible item in view when the size changes", () => {
+  it("names a page by the index of its first item", () => {
+    const { result } = renderAt("/?size=l");
+
+    act(() => result.current.gallery.goToPage(3));
+    expect(new URLSearchParams(result.current.search).get("start")).toBe("36");
+
+    act(() => result.current.gallery.goToPage(1));
+    expect(result.current.search).toBe("?size=l");
+  });
+
+  it("keeps the start item when the size changes", () => {
     const onChange = vi.fn();
-    const { result } = renderAt("/?page=3", onChange);
-    const { offset } = result.current.gallery;
+    const { result } = renderAt("/?start=50", onChange);
 
     act(() => result.current.gallery.applyGallerySize("s"));
 
     const params = new URLSearchParams(result.current.search);
     expect(params.get("size")).toBe("s");
-    const page = Number(params.get("page") ?? "1");
-    expect(page).toBeGreaterThan(1);
-    expect(onChange).toHaveBeenCalledWith("s", page);
-    // The first item that was in view is on the new page.
-    expect(offset).toBeGreaterThanOrEqual(
-      (page - 1) * result.current.gallery.itemsPerPage,
-    );
+    expect(params.get("start")).toBe("50");
+    expect(onChange).toHaveBeenCalledWith("s");
   });
 
-  it("drops the size and page params when they match the defaults", () => {
+  it("drops the size param when it matches the saved size", () => {
     const { result } = renderAt("/?size=l");
 
     act(() => result.current.gallery.applyGallerySize("m"));
