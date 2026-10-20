@@ -82,8 +82,11 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *rea
 
 	if listID := r.ListID(); listID != nil {
 		has, err := svc.reachService.HasBooks(ctx, r, books.ListBooksOptions{})
-		if err != nil || !has {
-			return feed, err
+		if err != nil {
+			return nil, err
+		}
+		if !has {
+			return feed, nil
 		}
 		list, err := svc.listsService.RetrieveList(ctx, lists.RetrieveListOptions{ID: listID})
 		if err != nil {
@@ -115,23 +118,16 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *rea
 	return feed, nil
 }
 
-// deliverableBooks matches the books the rules deliver something from in
-// libraryIDs (nil means every library).
-func deliverableBooks(rules []delivery.Rule, libraryIDs []int) *lists.DeliverableBooks {
-	return &lists.DeliverableBooks{LibraryIDs: libraryIDs, MainFileTypes: delivery.SourceFileTypes(rules)}
-}
-
-// BuildListsFeed builds a navigation feed of the lists userID owns or has
-// been shared that hold something the rules deliver from libraryIDs (nil
-// means every library), so no list opens to an empty page. A non-nil listID
-// keeps only that list.
-func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int, listID *int, limit, offset int) (*Feed, error) {
+// BuildListsFeed builds a navigation feed of the lists the user owns or has
+// been shared that hold something in r to deliver, so no list opens to an
+// empty page. A list-scoped Device gets only its list.
+func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, r *reach.Reach, limit, offset int) (*Feed, error) {
 	userLists, total, err := svc.listsService.ListListsWithTotal(ctx, lists.ListListsOptions{
-		UserID:      userID,
-		ListID:      listID,
+		UserID:      r.User.ID,
+		ListID:      r.ListID(),
 		Limit:       &limit,
 		Offset:      &offset,
-		Deliverable: deliverableBooks(rules, libraryIDs),
+		Deliverable: r.Deliverable(),
 	})
 	if err != nil {
 		return nil, err
@@ -165,10 +161,11 @@ func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, rules []
 
 // BuildListBooksFeed builds an acquisition feed of a list's books in the
 // list's default sort, or of the books matching query when it is non-empty.
-// Only books in libraryIDs are included (nil means every library). The
-// caller checks that the user can view the list.
-func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, listID int, libraryIDs []int, query string, limit, offset int) (*Feed, error) {
-	types := delivery.SourceFileTypes(rules)
+// Only books in r with something to deliver are included. The caller checks
+// that the user can view the list.
+func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, r *reach.Reach, listID int, query string, limit, offset int) (*Feed, error) {
+	types := r.SourceFileTypes()
+	libraryIDs := r.LibraryIDs()
 
 	list, err := svc.listsService.RetrieveList(ctx, lists.RetrieveListOptions{ID: &listID})
 	if err != nil {
@@ -219,7 +216,7 @@ func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, rule
 		if lb.Book.Library != nil {
 			aspectRatio = lb.Book.Library.CoverAspectRatio
 		}
-		feed.AddEntry(svc.bookToEntry(baseURL, lb.Book, aspectRatio, rules))
+		feed.AddEntry(svc.bookToEntry(baseURL, lb.Book, aspectRatio, r.Rules))
 	}
 
 	return feed, nil

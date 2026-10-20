@@ -9,14 +9,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all OPDS routes.
 func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache, bookService *books.Service) {
-	reachService := reach.NewService(db, bookService)
 	opdsService := NewService(db, bookService)
 	deviceService := devices.NewService(db)
 
@@ -27,7 +25,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 		listsService:    lists.NewService(db),
 		downloadCache:   cache,
 		settingsService: settings.NewService(db),
-		reachService:    reachService,
+		reachService:    opdsService.reachService,
 	}
 
 	// Every OPDS route requires Basic Auth and books:read, the permission

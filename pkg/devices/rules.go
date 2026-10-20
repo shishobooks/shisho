@@ -181,7 +181,9 @@ func (s *Service) RulesFor(ctx context.Context, devices []*Device) (map[string][
 	for _, device := range devices {
 		switch device.DeliveryRulesMode {
 		case RulesModePreset:
-			rules[device.ID] = PresetRules(device.DeviceType)
+			// Never nil, which would read as "no rules loaded": a type
+			// without a preset delivers nothing.
+			rules[device.ID] = append([]delivery.Rule{}, PresetRules(device.DeviceType)...)
 		case RulesModeCustom:
 			customIDs = append(customIDs, device.ID)
 			rules[device.ID] = []delivery.Rule{}

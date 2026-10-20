@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -148,14 +147,14 @@ func searchForm(actionURL, query string) string {
 }
 
 // filterBar generates the file type and cover filter UI with
-// button-style links. The type filter offers the source File Types the
-// Device's Delivery Rules deliver, in rule order, and is left out when there
-// is only one. extraParams preserves additional query params (e.g., "q" on
-// the search page) so changing a filter doesn't drop the user's in-progress
-// state.
-func filterBar(baseURL string, rules []delivery.Rule, currentTypes, currentCovers string, extraParams ...[2]string) string {
+// button-style links. The type filter offers fileTypes, the source File
+// Types of the books the page could show (reach.FileTypesWithBooks), so no
+// filter opens an empty page, and is left out when there is only one.
+// extraParams preserves additional query params (e.g., "q" on the search
+// page) so changing a filter doesn't drop the user's in-progress state.
+func filterBar(baseURL string, fileTypes []string, currentTypes, currentCovers string, extraParams ...[2]string) string {
 	var typesRow string
-	if sources := delivery.SourceFileTypes(rules); len(sources) > 1 {
+	if sources := fileTypes; len(sources) > 1 {
 		typeLinks := []string{filterLink(baseURL, "types", "all", currentTypes, currentCovers, "All", extraParams...)}
 		for _, fileType := range sources {
 			typeLinks = append(typeLinks, filterLink(baseURL, "types", fileType, currentTypes, currentCovers, models.FileTypeLabel(fileType), extraParams...))

@@ -426,6 +426,24 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	if opts.Offset != nil {
 		q = q.Offset(int64(*opts.Offset))
 	}
+	q = applyBookFilters(q, opts)
+
+	if opts.includeTotal {
+		total, err = q.ScanAndCount(ctx)
+	} else {
+		err = q.Scan(ctx)
+	}
+	if err != nil {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	models.ResolveBookFileDisplayNames(books...)
+	return books, int(total), nil
+}
+
+// applyBookFilters adds every filter in opts except SeriesID, which
+// listBooksWithTotal joins for its ordering, to a query over books aliased b.
+func applyBookFilters(q *bun.SelectQuery, opts ListBooksOptions) *bun.SelectQuery {
 	if opts.LibraryID != nil {
 		q = q.Where("b.library_id = ?", *opts.LibraryID)
 	}
@@ -506,17 +524,49 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		}
 	}
 
-	if opts.includeTotal {
-		total, err = q.ScanAndCount(ctx)
-	} else {
-		err = q.Scan(ctx)
-	}
-	if err != nil {
-		return nil, 0, errors.WithStack(err)
-	}
+	return q
+}
 
-	models.ResolveBookFileDisplayNames(books...)
-	return books, int(total), nil
+// matchingBooks returns a query over the books opts matches, aliased b,
+// with every filter applied and nothing selected.
+func (svc *Service) matchingBooks(opts ListBooksOptions) *bun.SelectQuery {
+	q := svc.db.NewSelect().TableExpr("books AS b")
+	if opts.SeriesID != nil {
+		q = q.Where("b.id IN (SELECT book_id FROM book_series WHERE series_id = ?)", *opts.SeriesID)
+	}
+	return applyBookFilters(q, opts)
+}
+
+// HasBooks reports whether any book matches opts' filters, without loading
+// or counting them. Limit, Offset, and Sort are ignored.
+func (svc *Service) HasBooks(ctx context.Context, opts ListBooksOptions) (bool, error) {
+	exists, err := svc.matchingBooks(opts).ColumnExpr("1").Exists(ctx)
+	return exists, errors.WithStack(err)
+}
+
+// LibraryIDsWithBooks returns the ids of the libraries with a book matching
+// opts' filters, in one query.
+func (svc *Service) LibraryIDsWithBooks(ctx context.Context, opts ListBooksOptions) ([]int, error) {
+	ids := []int{}
+	err := svc.matchingBooks(opts).ColumnExpr("DISTINCT b.library_id").Scan(ctx, &ids)
+	return ids, errors.WithStack(err)
+}
+
+// MainFileTypesWithBooks returns the types of the main files of the books
+// matching opts' filters, restricted to opts.MainFileTypes when set, in one
+// query.
+func (svc *Service) MainFileTypesWithBooks(ctx context.Context, opts ListBooksOptions) ([]string, error) {
+	types := []string{}
+	q := svc.db.NewSelect().
+		TableExpr("files AS mf").
+		ColumnExpr("DISTINCT mf.file_type").
+		Where("mf.file_role = ?", models.FileRoleMain).
+		Where("mf.book_id IN (?)", svc.matchingBooks(opts).Column("b.id"))
+	if opts.MainFileTypes != nil {
+		q = q.Where("mf.file_type IN (?)", bun.List(opts.MainFileTypes))
+	}
+	err := q.Scan(ctx, &types)
+	return types, errors.WithStack(err)
 }
 
 func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts UpdateBookOptions) error {

@@ -193,17 +193,21 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 		return err
 	}
 
-	scope, err := h.requireLibrary(c, libraryIDInt)
+	r, err := h.requireLibrary(c, libraryIDInt)
 	if err != nil {
 		return err
 	}
 
 	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
-	booksResult, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
+	booksResult, total, err := h.listBooksPaginated(ctx, r, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		Sort:      sort,
 	}, page, typesFilter)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -213,10 +217,10 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	content.WriteString("<h1>All Books</h1>")
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/all", baseURL, libraryID)
-	content.WriteString(filterBar(currentURL, scope.Rules, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, fileTypes, typesFilter, coversParam))
 
 	for _, book := range booksResult {
-		meta := formatBookMeta(book, scope.Rules)
+		meta := formatBookMeta(book, r.Rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -239,7 +243,7 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 		return err
 	}
 
-	scope, err := h.requireLibrary(c, libraryIDInt)
+	r, err := h.requireLibrary(c, libraryIDInt)
 	if err != nil {
 		return err
 	}
@@ -247,8 +251,8 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 	// Get series for this library
 	seriesList, _, err := h.seriesService.ListSeriesWithTotal(ctx, series.ListSeriesOptions{
 		LibraryID:     &libraryIDInt,
-		ListID:        scope.ListID(),
-		MainFileTypes: scope.SourceFileTypes(),
+		ListID:        r.ListID(),
+		MainFileTypes: r.SourceFileTypes(),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -293,7 +297,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 		return err
 	}
 
-	scope, err := h.requireLibrary(c, libraryIDInt)
+	r, err := h.requireLibrary(c, libraryIDInt)
 	if err != nil {
 		return err
 	}
@@ -310,16 +314,20 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	if s == nil || s.LibraryID != libraryIDInt {
 		return errcodes.NotFound("Series")
 	}
-	if err := h.requireListedBooks(ctx, scope, books.ListBooksOptions{LibraryID: &libraryIDInt, SeriesID: &seriesIDInt}, "Series"); err != nil {
+	if err := h.requireListedBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, SeriesID: &seriesIDInt}, "Series"); err != nil {
 		return err
 	}
 
 	// Get books in series (paginated)
-	booksResult, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
+	booksResult, total, err := h.listBooksPaginated(ctx, r, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		SeriesID:  &seriesIDInt,
 		Sort:      sort,
 	}, page, typesFilter)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, SeriesID: &seriesIDInt})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -329,10 +337,10 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(s.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/series/%s", baseURL, libraryID, seriesID)
-	content.WriteString(filterBar(currentURL, scope.Rules, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, fileTypes, typesFilter, coversParam))
 
 	for _, book := range booksResult {
-		meta := formatBookMeta(book, scope.Rules)
+		meta := formatBookMeta(book, r.Rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -355,7 +363,7 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 		return err
 	}
 
-	scope, err := h.requireLibrary(c, libraryIDInt)
+	r, err := h.requireLibrary(c, libraryIDInt)
 	if err != nil {
 		return err
 	}
@@ -363,8 +371,8 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 	// Get authors for this library (people with books in this library)
 	authorsList, _, err := h.peopleService.ListPeopleWithTotal(ctx, people.ListPeopleOptions{
 		LibraryID:     &libraryIDInt,
-		ListID:        scope.ListID(),
-		MainFileTypes: scope.SourceFileTypes(),
+		ListID:        r.ListID(),
+		MainFileTypes: r.SourceFileTypes(),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -409,7 +417,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 		return err
 	}
 
-	scope, err := h.requireLibrary(c, libraryIDInt)
+	r, err := h.requireLibrary(c, libraryIDInt)
 	if err != nil {
 		return err
 	}
@@ -430,14 +438,18 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	// Fetch books for this author and library through the books service,
 	// which applies the user's stored sort preference.
 	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
-	if err := h.requireListedBooks(ctx, scope, books.ListBooksOptions{LibraryID: &libraryIDInt, PersonID: &authorIDInt}, "Author"); err != nil {
+	if err := h.requireListedBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, PersonID: &authorIDInt}, "Author"); err != nil {
 		return err
 	}
-	booksInLibrary, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
+	booksInLibrary, total, err := h.listBooksPaginated(ctx, r, books.ListBooksOptions{
 		LibraryID: &libraryIDInt,
 		PersonID:  &authorIDInt,
 		Sort:      sort,
 	}, page, typesFilter)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, PersonID: &authorIDInt})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -447,10 +459,10 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(author.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/authors/%s", baseURL, libraryID, authorID)
-	content.WriteString(filterBar(currentURL, scope.Rules, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, fileTypes, typesFilter, coversParam))
 
 	for _, book := range booksInLibrary {
-		meta := formatBookMeta(book, scope.Rules)
+		meta := formatBookMeta(book, r.Rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -484,7 +496,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		return err
 	}
 
-	scope, err := h.requireLibrary(c, libraryIDInt)
+	r, err := h.requireLibrary(c, libraryIDInt)
 	if err != nil {
 		return err
 	}
@@ -496,12 +508,20 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	content.WriteString("<h1>Search</h1>")
 
 	searchURL := fmt.Sprintf("%s/libraries/%s/search", baseURL, libraryID)
+	filterOpts := books.ListBooksOptions{LibraryID: &libraryIDInt}
+	if query != "" {
+		filterOpts.Search = &query
+	}
+	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, filterOpts)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	content.WriteString(searchForm(searchURL, query))
-	content.WriteString(filterBar(searchURL, scope.Rules, typesFilter, coversParam, [2]string{"q", query}))
+	content.WriteString(filterBar(searchURL, fileTypes, typesFilter, coversParam, [2]string{"q", query}))
 
 	if query != "" {
 		// Search for books (paginated)
-		booksResult, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{
+		booksResult, total, err := h.listBooksPaginated(ctx, r, books.ListBooksOptions{
 			LibraryID: &libraryIDInt,
 			Search:    &query,
 			Sort:      sort,
@@ -513,7 +533,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		content.WriteString(fmt.Sprintf("<p>Found %d results</p>", total))
 
 		for _, book := range booksResult {
-			meta := formatBookMeta(book, scope.Rules)
+			meta := formatBookMeta(book, r.Rules)
 			bookURL := buildBookURL(baseURL, book.ID, coversParam)
 			coverURL := getBookCoverURL(baseURL, book)
 			content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))

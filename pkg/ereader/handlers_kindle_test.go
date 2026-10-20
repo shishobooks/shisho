@@ -294,16 +294,22 @@ func TestBookLists_FileTypesSkipSupplements(t *testing.T) {
 	assert.NotContains(t, meta, "MOBI")
 }
 
-// The type filter offers the File Types the Device's rules deliver from,
-// and narrows within them.
+// The type filter offers the File Types the Device's rules deliver from
+// that the page's books have, and narrows within them, so no filter opens
+// an empty page.
 func TestFilterBar_FollowsTheDeviceRules(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
 	lib := strconv.Itoa(f.libA.ID)
 
 	body := f.page(t, "/libraries/"+lib+"/all", "")
-	for _, fileType := range []string{"epub", "azw3", "mobi", "cbz", "pdf", "m4b"} {
+	for _, fileType := range []string{"epub", "azw3", "mobi", "pdf"} {
 		assert.Contains(t, body, "types="+fileType)
+	}
+	// The rules deliver CBZ and M4B, but no book here has one, and a MOBI
+	// supplement doesn't count.
+	for _, fileType := range []string{"cbz", "m4b"} {
+		assert.NotContains(t, body, "types="+fileType)
 	}
 
 	body = f.page(t, "/libraries/"+lib+"/all?types=azw3", "")

@@ -171,7 +171,7 @@ const DeviceRulesBody = ({
             <p className="text-sm text-muted-foreground">
               Changes to your default reach this Device too.{" "}
               <Link
-                className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                className="underline underline-offset-4 hover:text-foreground"
                 to={`/user/settings#${DELIVERY_RULES_SECTION_ID}`}
               >
                 Edit your default

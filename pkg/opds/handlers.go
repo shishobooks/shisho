@@ -490,7 +490,7 @@ func (h *handler) lists(c echo.Context) error {
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), r.Rules, r.User.ID, r.LibraryIDs(), r.ListID(), limit, offset)
+	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), r, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -560,7 +560,7 @@ func (h *handler) serveListBooks(c echo.Context, query string) error {
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), getBaseURL(c), r.Rules, listID, r.LibraryIDs(), query, limit, offset)
+	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), getBaseURL(c), r, listID, query, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}

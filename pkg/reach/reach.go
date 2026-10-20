@@ -79,8 +79,13 @@ func (r *Reach) HoldsLibrary(libraryID int) bool {
 
 // SourceFileTypes returns the source File Types the rules deliver, the
 // filter listings apply in SQL before paging so books with nothing to
-// deliver are left out.
+// deliver are left out. A Reach from Scope, with no Rules loaded, returns
+// nil, which filters nothing; rules that deliver nothing return an empty
+// list, which matches no book.
 func (r *Reach) SourceFileTypes() []string {
+	if r.Rules == nil {
+		return nil
+	}
 	return delivery.SourceFileTypes(r.Rules)
 }
 
@@ -179,54 +184,73 @@ func (s *Service) HoldsBook(ctx context.Context, r *Reach, libraryID, bookID int
 	return onList, errors.WithStack(err)
 }
 
-// HasBooks reports whether opts, narrowed to what r reaches, matches a book
-// with something to deliver. A Reach without Rules counts every book.
-func (s *Service) HasBooks(ctx context.Context, r *Reach, opts books.ListBooksOptions) (bool, error) {
+// narrow returns opts narrowed to what r reaches: its rules' source File
+// Types, its list, and its libraries. It returns false when r reaches
+// nothing opts could match, since the books filters read an empty library
+// list as no filter.
+func (r *Reach) narrow(opts books.ListBooksOptions) (books.ListBooksOptions, bool) {
 	if r.closed {
-		return false, nil
+		return opts, false
 	}
-	if r.Rules != nil {
-		opts.MainFileTypes = r.SourceFileTypes()
-	}
+	opts.MainFileTypes = r.SourceFileTypes()
 	opts.ListID = r.listID
-	if opts.LibraryID == nil {
-		// The books filter reads an empty list as no filter, so a user who
-		// can access no library has nothing to check.
-		ids := r.LibraryIDs()
-		if ids != nil && len(ids) == 0 {
-			return false, nil
-		}
-		opts.LibraryIDs = ids
-	} else if !r.HoldsLibrary(*opts.LibraryID) {
+	if opts.LibraryID != nil {
+		return opts, r.HoldsLibrary(*opts.LibraryID)
+	}
+	ids := r.LibraryIDs()
+	if ids != nil && len(ids) == 0 {
+		return opts, false
+	}
+	opts.LibraryIDs = ids
+	return opts, true
+}
+
+// HasBooks reports whether opts, narrowed to what r reaches, matches a book
+// with something to deliver.
+func (s *Service) HasBooks(ctx context.Context, r *Reach, opts books.ListBooksOptions) (bool, error) {
+	opts, ok := r.narrow(opts)
+	if !ok {
 		return false, nil
 	}
-	limit := 1
-	opts.Limit = &limit
-	_, total, err := s.bookService.ListBooksWithTotal(ctx, opts)
-	if err != nil {
-		return false, errors.WithStack(err)
-	}
-	return total > 0, nil
+	has, err := s.bookService.HasBooks(ctx, opts)
+	return has, errors.WithStack(err)
 }
 
 // Libraries returns the libraries in reach that have a book with something
-// to deliver, so a channel never lists one that opens empty.
+// to deliver, so a channel never lists one that opens empty. One query
+// finds them, however many libraries there are.
 func (s *Service) Libraries(ctx context.Context, r *Reach) ([]*models.Library, error) {
-	all, err := s.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{LibraryIDs: r.LibraryIDs()})
+	opts, ok := r.narrow(books.ListBooksOptions{})
+	if !ok {
+		return []*models.Library{}, nil
+	}
+	ids, err := s.bookService.LibraryIDsWithBooks(ctx, opts)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	var libs []*models.Library
-	for _, lib := range all {
-		has, err := s.HasBooks(ctx, r, books.ListBooksOptions{LibraryID: &lib.ID})
-		if err != nil {
-			return nil, err
-		}
-		if has {
-			libs = append(libs, lib)
+	libs, err := s.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{LibraryIDs: ids})
+	return libs, errors.WithStack(err)
+}
+
+// FileTypesWithBooks returns the source File Types, in rule order, of the
+// books opts matches in reach, so a type filter offers only types that
+// match something.
+func (s *Service) FileTypesWithBooks(ctx context.Context, r *Reach, opts books.ListBooksOptions) ([]string, error) {
+	opts, ok := r.narrow(opts)
+	if !ok {
+		return []string{}, nil
+	}
+	found, err := s.bookService.MainFileTypesWithBooks(ctx, opts)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	types := []string{}
+	for _, fileType := range r.SourceFileTypes() {
+		if slices.Contains(found, fileType) {
+			types = append(types, fileType)
 		}
 	}
-	return libs, nil
+	return types, nil
 }
 
 // LibrarySections says which of a library's browsing sections have

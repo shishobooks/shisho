@@ -329,3 +329,17 @@ func TestOPDS_MigratedCredentialSignsIn(t *testing.T) {
 	code, body := f.getAs(legacy, "/opds/v1/catalog")
 	assert.Equal(t, http.StatusOK, code, body)
 }
+
+// An account password that happens to start like a migrated API key still
+// signs in as the password when no Device has it.
+func TestOPDS_PasswordShapedLikeAMigratedCredential(t *testing.T) {
+	t.Parallel()
+	f := newDeliveryFixture(t)
+	hash, err := auth.HashPassword("ak_not-a-device")
+	require.NoError(t, err)
+	_, err = f.db.NewUpdate().Model((*models.User)(nil)).Set("password_hash = ?", hash).Where("username = ?", "reader").Exec(context.Background())
+	require.NoError(t, err)
+
+	code, body := f.getAs("ak_not-a-device", "/opds/v1/catalog")
+	assert.Equal(t, http.StatusOK, code, body)
+}

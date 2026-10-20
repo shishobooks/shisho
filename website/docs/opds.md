@@ -58,7 +58,7 @@ After the root catalog, clients follow these routes under `/opds/v1`:
 | Books in a list | `/lists/{listID}` |
 | Search within a list | `/lists/{listID}/search?q={query}` |
 
-There are no separate genre, tag, or recently added routes. A list can hold books from several libraries; its feed shows only the books in libraries the user can access. The lists feed leaves out a list with nothing the user's Delivery Rules deliver from those libraries, and a list the user neither owns nor has been shared returns `404 Not Found`.
+There are no separate genre, tag, or recently added routes. A list can hold books from several libraries; its feed shows only the books in libraries the user can access. The lists feed leaves out a list with nothing the sign-in's Delivery Rules deliver from those libraries, and a list the user neither owns nor has been shared returns `404 Not Found`.
 
 ## Search and Sort
 
