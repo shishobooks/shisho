@@ -3,14 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
-import {
-  DownloadFormatAsk,
-  DownloadFormatOriginal,
-  FileTypeCBZ,
-  FileTypeEPUB,
-  FileTypeKePub,
-  FileTypeM4B,
-} from "@/types";
+import { FileTypeCBZ, FileTypeEPUB, FileTypeKePub, FileTypeM4B } from "@/types";
 
 import FileDownloadControl from "./FileDownloadControl";
 
@@ -26,7 +19,7 @@ const renderControl = (overrides: Partial<Props> = {}) => {
       reachable_file_types: [FileTypeEPUB, FileTypeKePub],
     },
     bookTitle: "The Book",
-    libraryDownloadPreference: DownloadFormatOriginal,
+    deliveredFileType: FileTypeEPUB,
     isSupplement: false,
     isDownloading: false,
     onDownload: vi.fn(),
@@ -70,10 +63,9 @@ describe("FileDownloadControl", () => {
 
   it("downloads the original file for a supplement", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    // The Ask preference and an in-flight download must not affect supplements.
+    // An in-flight download must not affect supplements.
     const { props } = renderControl({
       isSupplement: true,
-      libraryDownloadPreference: DownloadFormatAsk,
       isDownloading: true,
     });
 
@@ -169,39 +161,16 @@ describe("FileDownloadControl", () => {
     },
   );
 
-  it("downloads with the library preference from the main button", async () => {
+  it("downloads from the main button and names its File Type", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { props } = renderControl();
+    const { props } = renderControl({ deliveredFileType: FileTypeKePub });
 
-    await user.click(screen.getByRole("button", { name: "Download" }));
-
-    expectOnlyCalled(props, "onDownload");
-  });
-
-  it("opens the menu from the main button for the Ask preference", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { props } = renderControl({
-      libraryDownloadPreference: DownloadFormatAsk,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Download" }));
-
-    expect(screen.getByRole("menu")).toBeInTheDocument();
-    expect(props.onDownload).not.toHaveBeenCalled();
-  });
-
-  it("downloads from the main button for the Ask preference when the file has one File Type", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { props } = renderControl({
-      file: {
-        id: 7,
-        file_type: FileTypeM4B,
-        reachable_file_types: [FileTypeM4B],
-      },
-      libraryDownloadPreference: DownloadFormatAsk,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Download" }));
+    const button = screen.getByRole("button", { name: "Download" });
+    await user.hover(button);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Download as KePub",
+    );
+    await user.click(button);
 
     expectOnlyCalled(props, "onDownload");
   });
@@ -218,7 +187,6 @@ describe("FileDownloadControl", () => {
 
   it.each<[string, Partial<Props>]>([
     ["supplement", { isSupplement: true }],
-    ["Ask preference", { libraryDownloadPreference: DownloadFormatAsk }],
     ["in-flight download", { isDownloading: true }],
     ["default download", {}],
   ])("renders nothing in Demo Mode (%s)", (_, overrides) => {

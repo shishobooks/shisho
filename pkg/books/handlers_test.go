@@ -116,9 +116,8 @@ func setupTestLibraryAndBook(t *testing.T, db *bun.DB) (*models.Library, *models
 
 	// Create a library with required fields
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -257,9 +256,8 @@ func seedBookAndFile(
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -515,9 +513,8 @@ func TestDeleteBook_DeletesBookAndFiles(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -599,9 +596,8 @@ func TestDeleteFile_DeletesFileAndKeepsBook(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -690,10 +686,9 @@ func TestDeleteFile_LastFileKeepsFilesMatchingUserExcludePatterns(t *testing.T) 
 	bookDir := t.TempDir()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -742,10 +737,9 @@ func TestMoveFiles_KeepsFilesMatchingUserExcludePatterns(t *testing.T) {
 	libraryDir := t.TempDir()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -801,9 +795,8 @@ func TestListBooks_FiltersByIDs(t *testing.T) {
 
 	// Create library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -875,9 +868,8 @@ func TestDeleteBooks_BulkDeletesBooks(t *testing.T) {
 	// Create library and temp directory for files
 	tmpDir := t.TempDir()
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1016,9 +1008,8 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 		ctx := context.Background()
 
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -1166,9 +1157,8 @@ func TestServeCover_RootLevelFile_SyntheticBookPath_ServesCoverFromFileDir(t *te
 		ctx := context.Background()
 
 		library := &models.Library{
-			Name:                     "Test Library",
-			CoverAspectRatio:         "book",
-			DownloadFormatPreference: models.DownloadFormatOriginal,
+			Name:             "Test Library",
+			CoverAspectRatio: "book",
 		}
 		_, err := db.NewInsert().Model(library).Exec(ctx)
 		require.NoError(t, err)
@@ -1254,10 +1244,9 @@ func TestUpdateFile_Narrators_RootLevelM4B_OrganizesFileAndSyncsBookPath(t *test
 
 	libraryDir := t.TempDir()
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "audiobook",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "audiobook",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1341,10 +1330,9 @@ func TestUpdateFile_NarratorsAndName_DirectoryBacked_UsesNewNarratorsInFilename(
 	require.NoError(t, os.WriteFile(m4bPath, []byte("m4b"), 0644))
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "audiobook",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "audiobook",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1411,10 +1399,9 @@ func TestUpdateFile_Name_RootLevelFile_OrganizesWithNewName(t *testing.T) {
 
 	libraryDir := t.TempDir()
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1481,10 +1468,9 @@ func TestUpdateFile_Name_RootLevelFile_OrganizeFailure_RevertsDBState(t *testing
 
 	libraryDir := t.TempDir()
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1567,10 +1553,9 @@ func TestUpdateFile_Name_DirectoryBacked_RenameFailure_RevertsDBState(t *testing
 	require.NoError(t, os.WriteFile(epubPath, []byte("epub"), 0644))
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1638,9 +1623,8 @@ func TestUploadFileCover_RootLevelFile_SyntheticBookPath_WritesNextToFile(t *tes
 
 	libraryDir := t.TempDir()
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -1869,9 +1853,8 @@ func TestUpdateBook_Title_MultipleMainFiles_IndependentlyChecked(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -2477,10 +2460,9 @@ func TestUpdateBook_SeriesNumberEndOnly_ReorganizesCBZ(t *testing.T) {
 	require.NoError(t, os.MkdirAll(oldBookDir, 0o755))
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         models.CoverAspectRatioBook,
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      models.CoverAspectRatioBook,
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

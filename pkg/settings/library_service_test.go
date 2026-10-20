@@ -27,9 +27,8 @@ func createTestUser(t *testing.T, db *bun.DB, username string) *models.User { //
 func createTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library { //nolint:unparam // name is parameterized for flexibility
 	t.Helper()
 	l := &models.Library{
-		Name:                     name,
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             name,
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(l).Exec(context.Background())
 	require.NoError(t, err)

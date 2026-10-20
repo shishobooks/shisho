@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
@@ -23,65 +24,46 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 		listsService:    lists.NewService(db),
 		downloadCache:   cache,
 		settingsService: settings.NewService(db),
+		deliveryService: delivery.NewService(db),
 	}
 
 	// Every OPDS route requires Basic Auth and books:read, the permission
 	// Kobo and eReader keys require of their owners too.
 	requireBooksRead := authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead)
 
-	// OPDS 1.2 routes with file type parameter
-	// File types can be: epub, cbz, m4b, or combinations like epub+cbz
+	// One feed tree. What each feed lists and links follows the signed-in
+	// user's default Delivery Rules.
 	v1 := e.Group("/opds/v1", authMiddleware.BasicAuth, requireBooksRead)
 
 	// Root catalog - lists libraries
-	v1.GET("/:types/catalog", h.catalog)
+	v1.GET("/catalog", h.catalog)
 
 	// Library catalog and browsing
-	v1.GET("/:types/libraries/:libraryID", h.libraryCatalog)
-	v1.GET("/:types/libraries/:libraryID/all", h.libraryAllBooks)
-	v1.GET("/:types/libraries/:libraryID/series", h.librarySeriesList)
-	v1.GET("/:types/libraries/:libraryID/series/:seriesID", h.librarySeriesBooks)
-	v1.GET("/:types/libraries/:libraryID/authors", h.libraryAuthorsList)
-	v1.GET("/:types/libraries/:libraryID/authors/:authorName", h.libraryAuthorBooks)
+	v1.GET("/libraries/:libraryID", h.libraryCatalog)
+	v1.GET("/libraries/:libraryID/all", h.libraryAllBooks)
+	v1.GET("/libraries/:libraryID/series", h.librarySeriesList)
+	v1.GET("/libraries/:libraryID/series/:seriesID", h.librarySeriesBooks)
+	v1.GET("/libraries/:libraryID/authors", h.libraryAuthorsList)
+	v1.GET("/libraries/:libraryID/authors/:authorName", h.libraryAuthorBooks)
 
 	// Search within library
-	v1.GET("/:types/libraries/:libraryID/search", h.librarySearch)
-	v1.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
+	v1.GET("/libraries/:libraryID/search", h.librarySearch)
+	v1.GET("/libraries/:libraryID/opensearch.xml", h.libraryOpenSearch)
 
 	// The user's own and shared lists, across every library they can access
-	v1.GET("/:types/lists", h.lists)
-	v1.GET("/:types/lists/:listID", h.listBooks)
-	v1.GET("/:types/lists/:listID/search", h.listSearch)
-	v1.GET("/:types/lists/:listID/opensearch.xml", h.listOpenSearch)
+	v1.GET("/lists", h.lists)
+	v1.GET("/lists/:listID", h.listBooks)
+	v1.GET("/lists/:listID/search", h.listSearch)
+	v1.GET("/lists/:listID/opensearch.xml", h.listOpenSearch)
 
 	// Book covers stay under /opds for Basic Auth. The /api/books routes
 	// require session authentication, while bare /books paths serve the SPA.
 	v1.GET("/books/:id/cover", h.bookCover)
 
-	// KePub routes - same structure but downloads as KePub format
-	// These routes generate feeds with KePub download links for EPUB and CBZ files
-	v1Kepub := e.Group("/opds/v1/kepub", authMiddleware.BasicAuth, requireBooksRead)
-
-	v1Kepub.GET("/:types/catalog", h.catalogKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID", h.libraryCatalogKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/all", h.libraryAllBooksKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/series", h.librarySeriesListKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/series/:seriesID", h.librarySeriesBooksKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/authors", h.libraryAuthorsListKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/authors/:authorName", h.libraryAuthorBooksKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/search", h.librarySearchKepub)
-	v1Kepub.GET("/:types/libraries/:libraryID/opensearch.xml", h.libraryOpenSearchKepub)
-	v1Kepub.GET("/:types/lists", h.listsKepub)
-	v1Kepub.GET("/:types/lists/:listID", h.listBooksKepub)
-	v1Kepub.GET("/:types/lists/:listID/search", h.listSearchKepub)
-	v1Kepub.GET("/:types/lists/:listID/opensearch.xml", h.listOpenSearchKepub)
-
-	// File downloads (version-agnostic, shared across OPDS versions).
-	// Also requires Basic Auth and books:read. HEAD is registered alongside GET so OPDS
+	// File downloads, at "{id}.{extension}" (DownloadURL). Also requires
+	// Basic Auth and books:read. HEAD is registered alongside GET so OPDS
 	// clients (e.g., KOReader's "Use server filenames" mode) can read the
 	// Content-Disposition filename without fetching the body.
-	e.GET("/opds/download/:id", h.download, authMiddleware.BasicAuth, requireBooksRead)
-	e.HEAD("/opds/download/:id", h.download, authMiddleware.BasicAuth, requireBooksRead)
-	e.GET("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth, requireBooksRead)
-	e.HEAD("/opds/download/:id/kepub", h.downloadKepub, authMiddleware.BasicAuth, requireBooksRead)
+	e.GET("/opds/download/:file", h.download, authMiddleware.BasicAuth, requireBooksRead)
+	e.HEAD("/opds/download/:file", h.download, authMiddleware.BasicAuth, requireBooksRead)
 }

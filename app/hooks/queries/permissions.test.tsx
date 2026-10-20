@@ -42,6 +42,7 @@ const AUTHENTICATED_ONLY: RegExp[] = [
   /^\/lists\/\d+\/shares$/,
   /^\/user\/devices$/,
   /^\/user\/devices\/[^/]+$/,
+  /^\/user\/delivery-rules$/,
   /^\/user\/libraries$/,
   /^\/users\/directory$/,
   /^\/settings\/libraries\/\d+$/,
@@ -95,6 +96,8 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useDevices: authenticated([]),
   useDevice: authenticated(["abc"]),
   useAllDevices: requires("users:read", []),
+  // delivery
+  useDeliveryRules: authenticated([]),
   // entity-search
   usePeopleSearch: requires("people:read", [1, true, "a"]),
   useAuthorSearch: requires("people:read", [1, true, "a"]),

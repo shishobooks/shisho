@@ -40,9 +40,8 @@ func seedChapterFile(t *testing.T, db *bun.DB, fileType string, chapterSource *s
 	t.Helper()
 	ctx := context.Background()
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -234,7 +233,7 @@ func TestList_NoUserInContext_Returns401(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 
-	library := &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	library := &models.Library{Name: "Library", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
 	book := &models.Book{

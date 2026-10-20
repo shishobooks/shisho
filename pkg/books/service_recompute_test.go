@@ -58,7 +58,7 @@ func TestRecomputeReviewedForBooks_RecomputesOnlyListedBooks(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
-	lib := &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Library", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
 

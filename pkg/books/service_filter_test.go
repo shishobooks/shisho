@@ -221,4 +221,16 @@ func TestListBooks_MainFileTypesFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 2, total)
+
+	// An empty list matches no book, unlike nil, which applies no filter:
+	// Delivery Rules that deliver nothing must not list everything.
+	_, total, err = svc.ListBooksWithTotal(context.Background(), ListBooksOptions{
+		LibraryID:     &lib.ID,
+		MainFileTypes: []string{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	_, total, err = svc.ListBooksWithTotal(context.Background(), ListBooksOptions{LibraryID: &lib.ID})
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
 }

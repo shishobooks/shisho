@@ -57,9 +57,8 @@ func TestDeleteSeries_RemovesBookSeriesAndFlipsReviewed(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -149,9 +148,8 @@ func TestDeleteSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -234,9 +232,8 @@ func TestMergeSeriesHandler_ReindexesAffectedBooks(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -329,9 +326,8 @@ func TestDeleteSeries_HardDeletesRowAndFTS(t *testing.T) {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -409,9 +405,8 @@ func TestFindOrCreateSeries_PrimaryNameMatch(t *testing.T) {
 	svc := NewService(db)
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -437,9 +432,8 @@ func TestFindOrCreateSeries_AliasMatch(t *testing.T) {
 	svc := NewService(db)
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -472,9 +466,8 @@ func TestFindOrCreateSeries_NoMatch_CreatesNew(t *testing.T) {
 	svc := NewService(db)
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

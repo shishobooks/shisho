@@ -20,9 +20,8 @@ func TestGetAuthoredBooks_DeduplicatesMultipleRoles(t *testing.T) {
 
 	// Create a library
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -82,17 +81,15 @@ func TestRetrievePerson_LibraryScoping(t *testing.T) {
 	ctx := context.Background()
 
 	libA := &models.Library{
-		Name:                     "Library A",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library A",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(libA).Exec(ctx)
 	require.NoError(t, err)
 
 	libB := &models.Library{
-		Name:                     "Library B",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library B",
+		CoverAspectRatio: "book",
 	}
 	_, err = db.NewInsert().Model(libB).Exec(ctx)
 	require.NoError(t, err)
@@ -133,9 +130,8 @@ func TestFindOrCreatePerson_PrimaryNameMatch(t *testing.T) {
 	svc := NewService(db)
 
 	lib := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
@@ -161,9 +157,8 @@ func TestFindOrCreatePerson_AliasMatch(t *testing.T) {
 	svc := NewService(db)
 
 	lib := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
@@ -196,9 +191,8 @@ func TestFindOrCreatePerson_NoMatch_CreatesNew(t *testing.T) {
 	svc := NewService(db)
 
 	lib := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)

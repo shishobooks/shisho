@@ -20,7 +20,6 @@ func TestGetBaseURL_DirectRequestWithoutPortInHost_UsesConnectionPort(t *testing
 	c := echo.New().NewContext(req, httptest.NewRecorder())
 
 	assert.Equal(t, "http://192.168.1.10:5173/opds/v1", getBaseURL(c))
-	assert.Equal(t, "http://192.168.1.10:5173/opds/v1/kepub", getBaseURLKepub(c))
 }
 
 func TestGetBaseURL_ProxiedRequestKeepsForwardedOriginAndPrefix(t *testing.T) {

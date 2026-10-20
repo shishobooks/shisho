@@ -18,6 +18,7 @@ beforeAll(() => {
 
 const SHARING_SETTINGS = "/settings/sharing";
 const IDENTIFIER_TYPES = "/plugins/identifier-types";
+const DELIVERY_RULES = "/user/delivery-rules";
 
 const book = {
   id: 7,
@@ -72,6 +73,13 @@ describe("BookDetailBody requests", () => {
 
     expect(paths).not.toContain(SHARING_SETTINGS);
     expect(paths).not.toContain(IDENTIFIER_TYPES);
+    expect(paths).not.toContain(DELIVERY_RULES);
+  });
+
+  it("loads the user's default Delivery Rules with no permission", async () => {
+    setAuth({ permissions: ["books:read"] });
+
+    expect(await requestedPaths()).toContain(DELIVERY_RULES);
   });
 
   it("skips the sharing settings without a shares permission or Config Read", async () => {

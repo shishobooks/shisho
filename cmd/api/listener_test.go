@@ -6,6 +6,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/server"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ func TestListenServer_UsesConfiguredHost(t *testing.T) {
 	cfg.TestMode = false
 	cfg.ServerHost = "127.0.0.1"
 	cfg.ServerPort = 0
-	srv, err := server.New(cfg, nil, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
+	srv, err := server.New(cfg, testdb.New(t), &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	listener, err := listenServer(t.Context(), srv)

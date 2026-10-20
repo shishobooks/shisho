@@ -27,9 +27,8 @@ func seedBookWithFileCover(ctx context.Context, t *testing.T, db *bun.DB) int {
 	t.Helper()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

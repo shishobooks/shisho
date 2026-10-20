@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,19 @@ import UserSettings from "./UserSettings";
 vi.mock("@/hooks/queries/settings", () => ({
   useUserSettings: vi.fn(),
   useUpdateUserSettings: vi.fn(),
+}));
+
+// DeliveryRulesEditor.test.tsx covers the editor; here it only needs data.
+vi.mock("@/hooks/queries/delivery", () => ({
+  useDeliveryRules: () => ({
+    data: {
+      follows_built_in: true,
+      rules: [{ source_file_type: "epub", delivered_file_type: "epub" }],
+      options: [{ source_file_type: "epub", delivered_file_types: ["epub"] }],
+    },
+  }),
+  useUpdateDeliveryRules: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useResetDeliveryRules: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/hooks/queries/libraries", async (importOriginal) => ({
@@ -52,9 +65,9 @@ const renderPage = () => {
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <UserSettings />
-      </MemoryRouter>
+      <RouterProvider
+        router={createMemoryRouter([{ path: "/", element: <UserSettings /> }])}
+      />
     </QueryClientProvider>,
   );
 };
@@ -290,5 +303,23 @@ describe("UserSettings – default library", () => {
       { default_library_id: null },
       expect.objectContaining({ onError: expect.any(Function) }),
     );
+  });
+});
+
+describe("UserSettings Delivery Rules", () => {
+  beforeEach(() => {
+    vi.mocked(useUserSettings).mockReturnValue({ data: undefined } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+  });
+
+  it("shows the default Delivery Rules editor", () => {
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Delivery Rules" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Following Shisho's defaults")).toBeInTheDocument();
   });
 });

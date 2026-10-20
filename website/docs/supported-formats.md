@@ -17,7 +17,7 @@ Generated downloads are format-specific. Each format can represent a different s
 
 Downloads are sent with the format's media type, whatever the server's operating system knows about file extensions: `application/epub+zip` for EPUB and KePub, `application/vnd.comicbook+zip` for CBZ, `audio/mp4` for M4B, `application/pdf` for PDF, `application/x-mobipocket-ebook` for MOBI, and `application/vnd.amazon.mobi8-ebook` for AZW3. [Kobo Sync](./kobo-sync.md) downloads are sent as `application/octet-stream`. Other files, such as supplements, are typed by their extension.
 
-The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file when a generated one cannot be made: for a supplement, a format only a plugin can read, a KePub request for M4B or PDF, or a file whose contents Shisho cannot rewrite, such as a damaged EPUB. The failure is written to the server log. A source file Shisho cannot read, for example because of its permissions, fails the download with an error instead. So does a conversion picked from a Share Link's **Download as** menu, such as a KePub made from a damaged EPUB, because the original is a different file type than the one the recipient picked. In the web app, a failed download reports an error, and **Download Original** sends the file as it is. See [Troubleshooting](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high).
+The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file when a generated one cannot be made: for a supplement, a format only a plugin can read, or a file whose contents Shisho cannot rewrite, such as a damaged EPUB downloaded as EPUB. The failure is written to the server log. A source file Shisho cannot read, for example because of its permissions, fails the download with an error instead. So does a failed [conversion](#conversions) through OPDS or a Share Link's **Download as** menu, such as a KePub made from a damaged EPUB, because the original is a different file type than the one the [Delivery Rules](#delivery-rules) or the recipient picked; the server log names the file. The eReader Browser and Kobo Sync still send the original file when a conversion fails. In the web app, a failed download reports an error, and **Download Original** sends the file as it is. See [Troubleshooting](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high).
 
 CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parsers or converters for CBR and other formats.
 
@@ -88,7 +88,17 @@ M4B, PDF, MOBI, and AZW3 files download only as themselves. A comic converted fr
 
 Each file type a file is downloaded as is generated and cached on its own, so downloading a CBZ as EPUB does not replace its cached CBZ or KePub. Editing the book's metadata regenerates each of them on its next download.
 
-In the web app, each file's download button has a menu beside it, **Download as**, headed by the file's title, that lists every file type the file can become, its own first. The download button itself follows the library's [download format preference](./libraries.md#cover-and-download-preferences). [Share Links](./sharing.md#what-recipients-see) offer the same menu. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for the file types each device receives.
+In the web app, each file's download button has a menu beside it, **Download as**, headed by the file's title, that lists every file type the file can become, its own first. The download button itself follows your [Delivery Rules](#delivery-rules). [Share Links](./sharing.md#what-recipients-see) offer the same menu. See [Kobo Sync](./kobo-sync.md), [eReader Browser](./ereader-browser.md), and [OPDS Catalog](./opds.md) for the file types each device receives.
+
+## Delivery Rules
+
+Each user's Delivery Rules decide which file type the web app's download button sends and what the [OPDS catalog](./opds.md) offers when signed in with the account password. Edit them under **User Settings > Delivery Rules**.
+
+The rules are an ordered list with at most one rule per file type, each naming the file type to send it as: itself, or one a [conversion](#conversions) reaches, such as CBZ as EPUB. For each book, the first rule matching one of its files wins, and every file of that type goes, so two EPUB editions both appear. Ebooks and audiobooks are decided separately, so a book with an EPUB and an M4B delivers both when both have a rule.
+
+Until you edit them, your rules follow Shisho's defaults, which send every file type as itself in this order: EPUB, AZW3, MOBI, CBZ, PDF, M4B. Under the defaults, a book with an EPUB and a PDF offers only the EPUB over OPDS. Saving any change makes the list your own; a later Shisho release that changes the defaults then no longer changes your list. **Reset to Shisho's defaults** makes it follow them again. A list needs at least one rule.
+
+A file type with no rule is left out of OPDS, along with books, series, and authors that have nothing left to offer. The web app still downloads such a file as itself, and its **Download as** menu always offers every file type.
 
 ## Audiobook Browser Compatibility
 

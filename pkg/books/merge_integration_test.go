@@ -33,10 +33,9 @@ func TestMoveFilesToBook_WithOrganizeFileStructure(t *testing.T) {
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -137,10 +136,9 @@ func TestMoveFilesToBook_TargetBookHasSyntheticPath_CreatesDirAndMoves(t *testin
 	require.NoError(t, os.WriteFile(sourceFile, []byte("test content"), 0644))
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -233,10 +231,9 @@ func TestMoveFilesToBook_MoveFailure_CleansUpCreatedDestDirs(t *testing.T) {
 	require.NoError(t, os.WriteFile(sourceFile, []byte("content"), 0644))
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -326,10 +323,9 @@ func TestMoveFilesToBook_WithoutOrganizeFileStructure_NoPhysicalMove(t *testing.
 
 	// Create library with OrganizeFileStructure DISABLED
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    false,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: false,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -423,10 +419,9 @@ func TestMoveFilesToBook_WithOrganizeFileStructure_HandlesDuplicateFilename(t *t
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -552,10 +547,9 @@ func TestMoveFilesToBook_MovesAssociatedFilesAndCleansUpDirectory(t *testing.T) 
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -704,12 +698,11 @@ func TestMoveFilesToBook_MovesSupplementFiles(t *testing.T) {
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
-		CreatedAt:                now,
-		UpdatedAt:                now,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 	_, err = db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -846,10 +839,9 @@ func TestMoveFilesToBook_CreateNewBook_WithOrganizeFileStructure_GeneratesUnique
 
 	// Create library with OrganizeFileStructure enabled
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    true,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: true,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -973,10 +965,9 @@ func TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_ReturnsError
 
 	// Create library with OrganizeFileStructure DISABLED
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    false,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: false,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

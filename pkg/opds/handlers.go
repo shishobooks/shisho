@@ -13,6 +13,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -35,6 +36,7 @@ type handler struct {
 	listsService    *lists.Service
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
+	deliveryService *delivery.Service
 }
 
 // resolveSort resolves user's stored sort preference for libraryID,
@@ -61,11 +63,6 @@ func getBaseURL(c echo.Context) string {
 	// X-Forwarded-Prefix is set by reverse proxies that strip path prefixes.
 	prefix := c.Request().Header.Get("X-Forwarded-Prefix")
 	return httputil.PublicOrigin(c.Request()) + prefix + "/opds/v1"
-}
-
-// getBaseURLKepub returns the base URL for KePub OPDS feeds.
-func getBaseURLKepub(c echo.Context) string {
-	return getBaseURL(c) + "/kepub"
 }
 
 // requireSearchQuery returns the q query param both search feeds need, or a
@@ -101,49 +98,33 @@ func getPaginationParams(c echo.Context) (int, int) {
 	return limit, offset
 }
 
-// validateFileTypes validates the file types parameter.
-func validateFileTypes(types string) error {
-	if types == "" {
-		return errcodes.ValidationError("File types parameter is required")
+// rulesFor returns the Delivery Rules a request's feeds and downloads
+// follow: the signed-in user's default.
+func (h *handler) rulesFor(c echo.Context) ([]delivery.Rule, error) {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return nil, err
 	}
-
-	for _, t := range parseFileTypes(types) {
-		if !models.IsBuiltInFileType(t) {
-			return errcodes.ValidationError("Invalid file type: " + t)
-		}
+	rules, err := h.deliveryService.UserDefault(c.Request().Context(), user.ID)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
-
-	return nil
-}
-
-// validateKepubFileTypes validates the file types parameter of a KePub feed.
-// The feed skips MOBI and AZW3 (see kepubFileTypes), so it needs at least one
-// other type; with none, its book queries would apply no type filter at all.
-func validateKepubFileTypes(types string) error {
-	if err := validateFileTypes(types); err != nil {
-		return err
-	}
-	if len(kepubFileTypes(types)) == 0 {
-		return errcodes.ValidationError("KePub feeds need a file type other than mobi or azw3")
-	}
-	return nil
+	return rules.Rules, nil
 }
 
 // catalog handles the root catalog feed (lists libraries).
 func (h *handler) catalog(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	baseURL := getBaseURL(c)
 	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, user.ID, user.GetAccessibleLibraryIDs())
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, rules, user.ID, user.GetAccessibleLibraryIDs())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -154,12 +135,6 @@ func (h *handler) catalog(c echo.Context) error {
 // libraryCatalog handles the library catalog feed.
 func (h *handler) libraryCatalog(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -170,7 +145,7 @@ func (h *handler) libraryCatalog(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, fileTypes, libraryID)
+	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, libraryID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -181,12 +156,6 @@ func (h *handler) libraryCatalog(c echo.Context) error {
 // libraryAllBooks handles the all books feed for a library.
 func (h *handler) libraryAllBooks(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -204,7 +173,11 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 	}
 	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, fileTypes, libraryID, limit, offset, sort)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, rules, libraryID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -215,12 +188,6 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 // librarySeriesList handles the series list feed for a library.
 func (h *handler) librarySeriesList(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -233,7 +200,11 @@ func (h *handler) librarySeriesList(c echo.Context) error {
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
 
-	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, rules, libraryID, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -244,12 +215,6 @@ func (h *handler) librarySeriesList(c echo.Context) error {
 // librarySeriesBooks handles the books in a series feed for a library.
 func (h *handler) librarySeriesBooks(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -272,7 +237,11 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 	}
 	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset, sort)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, rules, libraryID, seriesID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -283,12 +252,6 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 // libraryAuthorsList handles the authors list feed for a library.
 func (h *handler) libraryAuthorsList(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -301,7 +264,11 @@ func (h *handler) libraryAuthorsList(c echo.Context) error {
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
 
-	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, rules, libraryID, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -312,12 +279,6 @@ func (h *handler) libraryAuthorsList(c echo.Context) error {
 // libraryAuthorBooks handles the books by author feed for a library.
 func (h *handler) libraryAuthorBooks(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -340,7 +301,11 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 	}
 	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset, sort)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, rules, libraryID, authorName, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -351,12 +316,6 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 // librarySearch handles the search feed for a library.
 func (h *handler) librarySearch(c echo.Context) error {
 	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -379,7 +338,11 @@ func (h *handler) librarySearch(c echo.Context) error {
 	}
 	sort := h.resolveSort(c.Request().Context(), user, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, fileTypes, libraryID, query, limit, offset, sort)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, rules, libraryID, query, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -389,12 +352,6 @@ func (h *handler) librarySearch(c echo.Context) error {
 
 // libraryOpenSearch handles the OpenSearch description for a library.
 func (h *handler) libraryOpenSearch(c echo.Context) error {
-	fileTypes := c.Param("types")
-
-	if err := validateFileTypes(fileTypes); err != nil {
-		return err
-	}
-
 	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
 	if err != nil {
 		return err
@@ -405,315 +362,21 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 	}
 
 	baseURL := getBaseURL(c)
-	desc := h.opdsService.BuildLibraryOpenSearchDescription(baseURL, fileTypes, libraryID)
+	desc := h.opdsService.BuildLibraryOpenSearchDescription(baseURL, libraryID)
 
 	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
 	return c.XML(http.StatusOK, desc)
 }
 
-// KePub handlers - same as regular handlers but generate feeds with KePub download links.
-
-// catalogKepub handles the root catalog feed (lists libraries) with KePub links.
-func (h *handler) catalogKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	baseURL := getBaseURLKepub(c)
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return err
-	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, fileTypes, user.ID, user.GetAccessibleLibraryIDs())
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// libraryCatalogKepub handles the library catalog feed with KePub links.
-func (h *handler) libraryCatalogKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	baseURL := getBaseURLKepub(c)
-	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, fileTypes, libraryID)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// libraryAllBooksKepub handles the all books feed with KePub links.
-func (h *handler) libraryAllBooksKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	limit, offset := getPaginationParams(c)
-	baseURL := getBaseURLKepub(c)
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return err
-	}
-	sort := h.resolveSort(c.Request().Context(), user, libraryID)
-
-	feed, err := h.opdsService.BuildLibraryAllBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, limit, offset, sort)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// librarySeriesListKepub handles the series list feed with KePub links.
-func (h *handler) librarySeriesListKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	limit, offset := getPaginationParams(c)
-	baseURL := getBaseURLKepub(c)
-
-	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// librarySeriesBooksKepub handles the books in a series feed with KePub links.
-func (h *handler) librarySeriesBooksKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	seriesID, err := httputil.ParamID(c, "seriesID", "Series")
-	if err != nil {
-		return err
-	}
-
-	limit, offset := getPaginationParams(c)
-	baseURL := getBaseURLKepub(c)
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return err
-	}
-	sort := h.resolveSort(c.Request().Context(), user, libraryID)
-
-	feed, err := h.opdsService.BuildLibrarySeriesBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, seriesID, limit, offset, sort)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// libraryAuthorsListKepub handles the authors list feed with KePub links.
-func (h *handler) libraryAuthorsListKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	limit, offset := getPaginationParams(c)
-	baseURL := getBaseURLKepub(c)
-
-	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, fileTypes, libraryID, limit, offset)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// libraryAuthorBooksKepub handles the books by author feed with KePub links.
-func (h *handler) libraryAuthorBooksKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	authorName, err := url.PathUnescape(c.Param("authorName"))
-	if err != nil {
-		return errcodes.NotFound("Author")
-	}
-
-	limit, offset := getPaginationParams(c)
-	baseURL := getBaseURLKepub(c)
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return err
-	}
-	sort := h.resolveSort(c.Request().Context(), user, libraryID)
-
-	feed, err := h.opdsService.BuildLibraryAuthorBooksFeedKepub(ctx, baseURL, fileTypes, libraryID, authorName, limit, offset, sort)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// librarySearchKepub handles the search feed with KePub links.
-func (h *handler) librarySearchKepub(c echo.Context) error {
-	ctx := c.Request().Context()
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	query, err := requireSearchQuery(c)
-	if err != nil {
-		return err
-	}
-
-	limit, offset := getPaginationParams(c)
-	baseURL := getBaseURLKepub(c)
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return err
-	}
-	sort := h.resolveSort(c.Request().Context(), user, libraryID)
-
-	feed, err := h.opdsService.BuildLibrarySearchFeedKepub(ctx, baseURL, fileTypes, libraryID, query, limit, offset, sort)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return respondXML(c, feed)
-}
-
-// libraryOpenSearchKepub handles the OpenSearch description for KePub feeds.
-func (h *handler) libraryOpenSearchKepub(c echo.Context) error {
-	fileTypes := c.Param("types")
-
-	if err := validateKepubFileTypes(fileTypes); err != nil {
-		return err
-	}
-
-	libraryID, err := httputil.ParamID(c, "libraryID", "Library")
-	if err != nil {
-		return err
-	}
-
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return err
-	}
-
-	baseURL := getBaseURLKepub(c)
-	desc := h.opdsService.BuildLibraryOpenSearchDescription(baseURL, fileTypes, libraryID)
-
-	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
-	return c.XML(http.StatusOK, desc)
-}
-
-// download handles file downloads with generated metadata. When there is
-// nothing to generate (a supplement or a type with no generator), OPDS
-// clients get the original file.
+// download serves the File named by the file param, "{id}.{extension}",
+// delivered as the File Type the extension names, or as its own File Type
+// for a bare id. Delivered as its own type, a failed generation sends the
+// Original File; delivered through a Conversion, it is an error, per
+// books.ResolveDeliveryDownload.
 func (h *handler) download(c echo.Context) error {
-	return h.serveDownload(c, false)
-}
-
-// downloadKepub handles KePub file downloads. KePub conversion is only
-// supported for EPUB and CBZ files; other types get the original file.
-func (h *handler) downloadKepub(c echo.Context) error {
-	return h.serveDownload(c, true)
-}
-
-// serveDownload serves the file named by the id param, generated or as the
-// original, per books.ResolveFallbackDownload.
-func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 	ctx := c.Request().Context()
 
-	fileID, err := httputil.ParamID(c, "id", "File")
+	fileID, deliveredType, err := parseDownloadParam(c.Param("file"))
 	if err != nil {
 		return err
 	}
@@ -728,6 +391,17 @@ func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 	// Check library access
 	if err := auth.RequireLibraryAccessFor(c, file.LibraryID); err != nil {
 		return err
+	}
+
+	if deliveredType == "" {
+		deliveredType = file.FileType
+	}
+	// A supplement goes only as itself, and no link names a File Type its
+	// File can't become.
+	if deliveredType != file.FileType {
+		if _, ok := models.ConversionChain(file.FileType, deliveredType); !ok || file.FileRole == models.FileRoleSupplement {
+			return errcodes.InvalidState(books.NoConversionMessage(file.FileType, deliveredType))
+		}
 	}
 
 	// Check if source file exists
@@ -752,15 +426,31 @@ func (h *handler) serveDownload(c echo.Context, kepub bool) error {
 		}
 	}
 
-	deliveredType := fileWithRelations.FileType
-	if kepub {
-		deliveredType = models.FileTypeKePub
-	}
-	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, deliveredType)
+	download, err := books.ResolveDeliveryDownload(c, h.downloadCache, book, fileWithRelations, deliveredType)
 	if err != nil {
 		return err
 	}
 	return download.Serve(c)
+}
+
+// parseDownloadParam splits a download route's file param, "{id}" or
+// "{id}.{extension}" (DownloadURL), into the File's id and the delivered
+// File Type its extension names ("" for none). An id that does not parse
+// or an extension no File Type has is a 404.
+func parseDownloadParam(param string) (int, string, error) {
+	idPart, ext, hasExt := strings.Cut(param, ".")
+	id, err := strconv.Atoi(idPart)
+	if err != nil || id <= 0 {
+		return 0, "", errcodes.NotFound("File")
+	}
+	if !hasExt {
+		return id, "", nil
+	}
+	deliveredType, ok := models.DeliveredFileTypeForExtension(ext)
+	if !ok {
+		return 0, "", errcodes.NotFound("File")
+	}
+	return id, deliveredType, nil
 }
 
 // bookCover serves a book's cover image. Mirrors `pkg/books/handlers.go`
@@ -811,28 +501,17 @@ func truncateFeedAuthors(feed *Feed) {
 
 // lists handles the feed of the user's own and shared lists.
 func (h *handler) lists(c echo.Context) error {
-	if err := validateFileTypes(c.Param("types")); err != nil {
-		return err
-	}
-	return h.serveLists(c, getBaseURL(c))
-}
-
-// listsKepub handles the lists feed in a KePub catalog.
-func (h *handler) listsKepub(c echo.Context) error {
-	if err := validateKepubFileTypes(c.Param("types")); err != nil {
-		return err
-	}
-	return h.serveLists(c, getBaseURLKepub(c))
-}
-
-func (h *handler) serveLists(c echo.Context, baseURL string) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), baseURL, c.Param("types"), user.ID, limit, offset)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), rules, user.ID, user.GetAccessibleLibraryIDs(), limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -842,59 +521,29 @@ func (h *handler) serveLists(c echo.Context, baseURL string) error {
 
 // listBooks handles the books feed of a list the user can view.
 func (h *handler) listBooks(c echo.Context) error {
-	if err := validateFileTypes(c.Param("types")); err != nil {
-		return err
-	}
-	return h.serveListBooks(c, getBaseURL(c), "", false)
-}
-
-// listBooksKepub handles a list's books feed with KePub links.
-func (h *handler) listBooksKepub(c echo.Context) error {
-	if err := validateKepubFileTypes(c.Param("types")); err != nil {
-		return err
-	}
-	return h.serveListBooks(c, getBaseURLKepub(c), "", true)
+	return h.serveListBooks(c, "")
 }
 
 // listSearch handles search within a list.
 func (h *handler) listSearch(c echo.Context) error {
-	if err := validateFileTypes(c.Param("types")); err != nil {
-		return err
-	}
 	query, err := requireSearchQuery(c)
 	if err != nil {
 		return err
 	}
-	return h.serveListBooks(c, getBaseURL(c), query, false)
-}
-
-// listSearchKepub handles search within a list with KePub links.
-func (h *handler) listSearchKepub(c echo.Context) error {
-	if err := validateKepubFileTypes(c.Param("types")); err != nil {
-		return err
-	}
-	query, err := requireSearchQuery(c)
-	if err != nil {
-		return err
-	}
-	return h.serveListBooks(c, getBaseURLKepub(c), query, true)
+	return h.serveListBooks(c, query)
 }
 
 // listOpenSearch handles the OpenSearch description for a list.
 func (h *handler) listOpenSearch(c echo.Context) error {
-	if err := validateFileTypes(c.Param("types")); err != nil {
+	listID, _, err := h.requireViewableList(c)
+	if err != nil {
 		return err
 	}
-	return h.serveListOpenSearch(c, getBaseURL(c))
-}
 
-// listOpenSearchKepub handles the OpenSearch description for a list in a
-// KePub catalog.
-func (h *handler) listOpenSearchKepub(c echo.Context) error {
-	if err := validateKepubFileTypes(c.Param("types")); err != nil {
-		return err
-	}
-	return h.serveListOpenSearch(c, getBaseURLKepub(c))
+	desc := h.opdsService.BuildListOpenSearchDescription(getBaseURL(c), listID)
+
+	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
+	return c.XML(http.StatusOK, desc)
 }
 
 // requireViewableList returns the listID param and the user, or a 404 when
@@ -921,31 +570,23 @@ func (h *handler) requireViewableList(c echo.Context) (int, *models.User, error)
 	return listID, user, nil
 }
 
-func (h *handler) serveListBooks(c echo.Context, baseURL, query string, kepubMode bool) error {
+func (h *handler) serveListBooks(c echo.Context, query string) error {
 	listID, user, err := h.requireViewableList(c)
+	if err != nil {
+		return err
+	}
+	rules, err := h.rulesFor(c)
 	if err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), baseURL, c.Param("types"), listID, user.GetAccessibleLibraryIDs(), query, limit, offset, kepubMode)
+	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), getBaseURL(c), rules, listID, user.GetAccessibleLibraryIDs(), query, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	return respondXML(c, feed)
-}
-
-func (h *handler) serveListOpenSearch(c echo.Context, baseURL string) error {
-	listID, _, err := h.requireViewableList(c)
-	if err != nil {
-		return err
-	}
-
-	desc := h.opdsService.BuildListOpenSearchDescription(baseURL, c.Param("types"), listID)
-
-	c.Response().Header().Set(echo.HeaderContentType, MimeTypeOpenSearch)
-	return c.XML(http.StatusOK, desc)
 }
 
 // respondXML sends an XML response with the correct content type.

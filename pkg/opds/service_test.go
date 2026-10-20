@@ -3,6 +3,7 @@ package opds
 import (
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
@@ -119,7 +120,7 @@ func TestBookToEntry_LanguageAndPublisher(t *testing.T) {
 				Title: "Test Book",
 				Files: tt.files,
 			}
-			entry := svc.bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
+			entry := svc.bookToEntry("http://example.com/opds/v1", book, "", delivery.BuiltInRules())
 			assert.Equal(t, tt.expectedLanguage, entry.Language)
 			assert.Equal(t, tt.expectedPublisher, entry.Publisher)
 		})
@@ -140,7 +141,7 @@ func TestBookToEntry_SeriesRangeInSummary(t *testing.T) {
 		}},
 	}
 
-	entry := (&Service{}).bookToEntryWithKepub("http://example.com/opds/v1", book, "", nil, false)
+	entry := (&Service{}).bookToEntry("http://example.com/opds/v1", book, "", delivery.BuiltInRules())
 	assert.Equal(t, "Saga #1-3", entry.Summary)
 }
 
@@ -167,7 +168,7 @@ func TestBookToEntry_CoverLinkUsesOPDSPath(t *testing.T) {
 
 	svc := &Service{}
 	baseURL := "http://example.com/opds/v1"
-	entry := svc.bookToEntryWithKepub(baseURL, book, "book", nil, false)
+	entry := svc.bookToEntry(baseURL, book, "book", delivery.BuiltInRules())
 
 	wantHref := "http://example.com/opds/v1/books/42/cover"
 	var imageHref, thumbHref string
@@ -206,7 +207,7 @@ func TestBookToEntry_CoverLinkRespectsForwardedPrefix(t *testing.T) {
 
 	svc := &Service{}
 	baseURL := "https://example.com/api/opds/v1"
-	entry := svc.bookToEntryWithKepub(baseURL, book, "book", nil, false)
+	entry := svc.bookToEntry(baseURL, book, "book", delivery.BuiltInRules())
 
 	wantHref := "https://example.com/api/opds/v1/books/42/cover"
 	for _, link := range entry.Links {

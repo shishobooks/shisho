@@ -38,8 +38,8 @@ func newListsFixture(t *testing.T) *listsFixture {
 	newOPDSUser(t, db, "stranger", booksRead)
 	noAccess := newOPDSUser(t, db, "noaccess", booksRead)
 
-	libA := &models.Library{Name: "Lib A", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
-	libB := &models.Library{Name: "Lib B", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	libA := &models.Library{Name: "Lib A", CoverAspectRatio: "book"}
+	libB := &models.Library{Name: "Lib B", CoverAspectRatio: "book"}
 	for _, lib := range []*models.Library{libA, libB} {
 		_, err := db.NewInsert().Model(lib).Exec(ctx)
 		require.NoError(t, err)
@@ -146,33 +146,29 @@ func TestOPDS_RootCatalogLinksListsOnlyWhenUserHasLists(t *testing.T) {
 	f := newListsFixture(t)
 
 	for _, username := range []string{"owner", "viewer"} {
-		code, body := f.get(t, username, "/opds/v1/epub/catalog")
+		code, body := f.get(t, username, "/opds/v1/catalog")
 		require.Equal(t, http.StatusOK, code, body)
-		assert.Contains(t, body, `href="http://example.com/opds/v1/epub/lists"`, username)
+		assert.Contains(t, body, `href="http://example.com/opds/v1/lists"`, username)
 	}
 
-	code, body := f.get(t, "stranger", "/opds/v1/epub/catalog")
+	code, body := f.get(t, "stranger", "/opds/v1/catalog")
 	require.Equal(t, http.StatusOK, code, body)
 	assert.NotContains(t, body, "/lists", "stranger")
-
-	code, body = f.get(t, "owner", "/opds/v1/kepub/epub/catalog")
-	require.Equal(t, http.StatusOK, code, body)
-	assert.Contains(t, body, `href="http://example.com/opds/v1/kepub/epub/lists"`)
 }
 
 func TestOPDS_ListsFeedShowsOwnedAndSharedLists(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
-	listURL := fmt.Sprintf(`href="http://example.com/opds/v1/epub/lists/%d"`, f.list.ID)
+	listURL := fmt.Sprintf(`href="http://example.com/opds/v1/lists/%d"`, f.list.ID)
 
 	for _, username := range []string{"owner", "viewer"} {
-		code, body := f.get(t, username, "/opds/v1/epub/lists")
+		code, body := f.get(t, username, "/opds/v1/lists")
 		require.Equal(t, http.StatusOK, code, body)
 		assert.Equal(t, []string{"Favorites"}, entryTitles(body), username)
 		assert.Contains(t, body, listURL, username)
 	}
 
-	code, body := f.get(t, "stranger", "/opds/v1/epub/lists")
+	code, body := f.get(t, "stranger", "/opds/v1/lists")
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Empty(t, entryTitles(body))
 }
@@ -180,13 +176,17 @@ func TestOPDS_ListsFeedShowsOwnedAndSharedLists(t *testing.T) {
 func TestOPDS_ListBooksFeed(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
-	path := fmt.Sprintf("/opds/v1/epub/lists/%d", f.list.ID)
+	path := fmt.Sprintf("/opds/v1/lists/%d", f.list.ID)
 
-	// The list's title_asc sort applies, and the CBZ-only book is filtered out.
+	// The list's title_asc sort applies, and the CBZ-only book, which the
+	// rules don't deliver, is filtered out.
+	for _, username := range []string{"owner", "viewer", "noaccess"} {
+		setRules(t, f.db, username, epubOnly)
+	}
 	code, body := f.get(t, "owner", path)
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Equal(t, []string{"Apple", "Cherry"}, entryTitles(body))
-	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/download/%d"`, f.files["Apple"].ID))
+	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/download/%d.epub"`, f.files["Apple"].ID))
 	assert.Contains(t, body, "<dc:publisher>Orchard Press</dc:publisher>")
 
 	// The viewer cannot access library B, so its book is hidden.
@@ -199,7 +199,9 @@ func TestOPDS_ListBooksFeed(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Empty(t, entryTitles(body))
 
-	code, body = f.get(t, "owner", fmt.Sprintf("/opds/v1/epub+cbz/lists/%d", f.list.ID))
+	// The built-in rules deliver the CBZ too.
+	resetRules(t, f.db, "owner")
+	code, body = f.get(t, "owner", path)
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Equal(t, []string{"Apple", "Banana", "Cherry"}, entryTitles(body))
 }
@@ -208,20 +210,21 @@ func TestOPDS_ListBooksFeed_Pagination(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
 
-	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/epub+cbz/lists/%d?limit=2&offset=0", f.list.ID))
+	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/lists/%d?limit=2&offset=0", f.list.ID))
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Equal(t, []string{"Apple", "Banana"}, entryTitles(body))
-	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/v1/epub+cbz/lists/%d?limit=2&amp;offset=2"`, f.list.ID))
+	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/v1/lists/%d?limit=2&amp;offset=2"`, f.list.ID))
 }
 
 func TestOPDS_ListBooksFeed_Kepub(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
 
-	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/kepub/epub/lists/%d", f.list.ID))
+	setRules(t, f.db, "owner", epubAsKepub)
+	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/lists/%d", f.list.ID))
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Equal(t, []string{"Apple", "Cherry"}, entryTitles(body))
-	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/download/%d/kepub"`, f.files["Apple"].ID))
+	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/download/%d.kepub.epub"`, f.files["Apple"].ID))
 }
 
 // A list the user neither owns nor has been shared is a 404, so its id does
@@ -231,9 +234,8 @@ func TestOPDS_ListBooksFeed_UnsharedListReturns404(t *testing.T) {
 	f := newListsFixture(t)
 
 	for _, path := range []string{
-		fmt.Sprintf("/opds/v1/epub/lists/%d", f.list.ID),
-		fmt.Sprintf("/opds/v1/kepub/epub/lists/%d", f.list.ID),
-		"/opds/v1/epub/lists/999999",
+		fmt.Sprintf("/opds/v1/lists/%d", f.list.ID),
+		"/opds/v1/lists/999999",
 	} {
 		code, body := f.get(t, "stranger", path)
 		assert.Equal(t, http.StatusNotFound, code, path+": "+body)
@@ -243,26 +245,22 @@ func TestOPDS_ListBooksFeed_UnsharedListReturns404(t *testing.T) {
 func TestOPDS_ListBooksFeed_LinksListSearch(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
-	listURL := fmt.Sprintf("http://example.com/opds/v1/epub/lists/%d", f.list.ID)
+	listURL := fmt.Sprintf("http://example.com/opds/v1/lists/%d", f.list.ID)
 
-	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/epub/lists/%d", f.list.ID))
+	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/lists/%d", f.list.ID))
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Contains(t, body, `rel="search" href="`+listURL+`/opensearch.xml"`)
 
-	code, body = f.get(t, "owner", fmt.Sprintf("/opds/v1/epub/lists/%d/opensearch.xml", f.list.ID))
+	code, body = f.get(t, "owner", fmt.Sprintf("/opds/v1/lists/%d/opensearch.xml", f.list.ID))
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Contains(t, body, listURL+"/search?q={searchTerms}")
-
-	code, body = f.get(t, "owner", fmt.Sprintf("/opds/v1/kepub/epub/lists/%d/opensearch.xml", f.list.ID))
-	require.Equal(t, http.StatusOK, code, body)
-	assert.Contains(t, body, fmt.Sprintf("http://example.com/opds/v1/kepub/epub/lists/%d/search?q={searchTerms}", f.list.ID))
 }
 
 // Search matches only the list's books, never other books in its libraries.
 func TestOPDS_ListSearchFeed(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
-	path := fmt.Sprintf("/opds/v1/epub/lists/%d/search?q=ap", f.list.ID)
+	path := fmt.Sprintf("/opds/v1/lists/%d/search?q=ap", f.list.ID)
 
 	code, body := f.get(t, "owner", path)
 	require.Equal(t, http.StatusOK, code, body)
@@ -278,12 +276,13 @@ func TestOPDS_ListSearchFeed(t *testing.T) {
 	// The search feed's up link points at the list, an acquisition feed.
 	code, body = f.get(t, "owner", path)
 	require.Equal(t, http.StatusOK, code, body)
-	assert.Contains(t, body, fmt.Sprintf(`<link rel="up" href="http://example.com/opds/v1/epub/lists/%d" type="%s">`, f.list.ID, MimeTypeAcquisition))
+	assert.Contains(t, body, fmt.Sprintf(`<link rel="up" href="http://example.com/opds/v1/lists/%d" type="%s">`, f.list.ID, MimeTypeAcquisition))
 
-	code, body = f.get(t, "owner", fmt.Sprintf("/opds/v1/kepub/epub/lists/%d/search?q=ap", f.list.ID))
+	setRules(t, f.db, "owner", epubAsKepub)
+	code, body = f.get(t, "owner", path)
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Equal(t, []string{"Apple"}, entryTitles(body))
-	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/download/%d/kepub"`, f.files["Apple"].ID))
+	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/download/%d.kepub.epub"`, f.files["Apple"].ID))
 }
 
 func TestOPDS_ListSearchFeed_Pagination(t *testing.T) {
@@ -291,23 +290,22 @@ func TestOPDS_ListSearchFeed_Pagination(t *testing.T) {
 	f := newListsFixture(t)
 
 	// Every fixture book's path starts with /books, so "books" matches them all.
-	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/epub+cbz/lists/%d/search?q=books&limit=2&offset=0", f.list.ID))
+	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/lists/%d/search?q=books&limit=2&offset=0", f.list.ID))
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Equal(t, []string{"Apple", "Banana"}, entryTitles(body))
-	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/v1/epub+cbz/lists/%d/search?q=books&amp;limit=2&amp;offset=2"`, f.list.ID))
+	assert.Contains(t, body, fmt.Sprintf(`href="http://example.com/opds/v1/lists/%d/search?q=books&amp;limit=2&amp;offset=2"`, f.list.ID))
 }
 
 func TestOPDS_ListSearchFeed_Errors(t *testing.T) {
 	t.Parallel()
 	f := newListsFixture(t)
 
-	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/epub/lists/%d/search", f.list.ID))
+	code, body := f.get(t, "owner", fmt.Sprintf("/opds/v1/lists/%d/search", f.list.ID))
 	assert.Equal(t, http.StatusUnprocessableEntity, code, body)
 
 	for _, path := range []string{
-		fmt.Sprintf("/opds/v1/epub/lists/%d/search?q=ap", f.list.ID),
-		fmt.Sprintf("/opds/v1/kepub/epub/lists/%d/search?q=ap", f.list.ID),
-		fmt.Sprintf("/opds/v1/epub/lists/%d/opensearch.xml", f.list.ID),
+		fmt.Sprintf("/opds/v1/lists/%d/search?q=ap", f.list.ID),
+		fmt.Sprintf("/opds/v1/lists/%d/opensearch.xml", f.list.ID),
 	} {
 		code, body := f.get(t, "stranger", path)
 		assert.Equal(t, http.StatusNotFound, code, path+": "+body)
@@ -322,6 +320,47 @@ func TestOPDS_ListBooksFeed_AccessCheckFaultReturns500(t *testing.T) {
 	_, err := f.db.ExecContext(context.Background(), "DROP TABLE list_shares")
 	require.NoError(t, err)
 
-	code, body := f.get(t, "viewer", fmt.Sprintf("/opds/v1/epub/lists/%d", f.list.ID))
+	code, body := f.get(t, "viewer", fmt.Sprintf("/opds/v1/lists/%d", f.list.ID))
 	assert.Equal(t, http.StatusInternalServerError, code, body)
+}
+
+// The lists feed and the root catalog's Lists entry leave out lists with
+// nothing the user's Delivery Rules deliver from a library they can access,
+// so a list never opens to an empty page.
+func TestOPDS_ListsWithNothingToDeliverAreHidden(t *testing.T) {
+	t.Parallel()
+	f := newListsFixture(t)
+	ctx := context.Background()
+	now := time.Now()
+	comics := &models.List{CreatedAt: now, UpdatedAt: now, UserID: userID(t, f.db, "stranger"), Name: "Comics", DefaultSort: models.ListSortTitleAsc}
+	_, err := f.db.NewInsert().Model(comics).Exec(ctx)
+	require.NoError(t, err)
+	_, err = f.db.NewInsert().Model(&models.ListBook{ListID: comics.ID, BookID: f.books["Banana"].ID, AddedAt: now}).Exec(ctx)
+	require.NoError(t, err)
+
+	code, body := f.get(t, "stranger", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, []string{"Comics"}, entryTitles(body))
+
+	// The stranger's only list holds only a CBZ, which these rules don't
+	// deliver.
+	setRules(t, f.db, "stranger", epubOnly)
+	code, body = f.get(t, "stranger", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Empty(t, entryTitles(body))
+	code, body = f.get(t, "stranger", "/opds/v1/catalog")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.NotContains(t, body, "/lists")
+
+	// Favorites still has Cherry, an EPUB in the one library the viewer can
+	// access.
+	setRules(t, f.db, "viewer", epubOnly)
+	code, body = f.get(t, "viewer", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, []string{"Favorites"}, entryTitles(body))
+
+	// noaccess can access no library, so nothing on Favorites reaches them.
+	code, body = f.get(t, "noaccess", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Empty(t, entryTitles(body))
 }

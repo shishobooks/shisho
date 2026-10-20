@@ -15,9 +15,8 @@ import (
 func createSeriesDeleteLibrary(t *testing.T, db *bun.DB) *models.Library {
 	t.Helper()
 	lib := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)

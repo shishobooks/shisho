@@ -31,17 +31,11 @@ func (h *handler) create(c echo.Context) error {
 		organizeFileStructure = *params.OrganizeFileStructure
 	}
 
-	downloadFormatPreference := models.DownloadFormatOriginal
-	if params.DownloadFormatPreference != nil {
-		downloadFormatPreference = *params.DownloadFormatPreference
-	}
-
 	library := &models.Library{
-		Name:                     params.Name,
-		OrganizeFileStructure:    organizeFileStructure,
-		CoverAspectRatio:         params.CoverAspectRatio,
-		DownloadFormatPreference: downloadFormatPreference,
-		LibraryPaths:             make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
+		Name:                  params.Name,
+		OrganizeFileStructure: organizeFileStructure,
+		CoverAspectRatio:      params.CoverAspectRatio,
+		LibraryPaths:          make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
 	}
 	for _, path := range params.LibraryPaths {
 		library.LibraryPaths = append(library.LibraryPaths, &models.LibraryPath{
@@ -156,11 +150,10 @@ func (h *handler) listForUser(c echo.Context) error {
 	summaries := make([]LibrarySummary, 0, len(libraries))
 	for _, library := range libraries {
 		summaries = append(summaries, LibrarySummary{
-			ID:                       library.ID,
-			Name:                     library.Name,
-			CoverAspectRatio:         library.CoverAspectRatio,
-			DownloadFormatPreference: library.DownloadFormatPreference,
-			OrganizeFileStructure:    library.OrganizeFileStructure,
+			ID:                    library.ID,
+			Name:                  library.Name,
+			CoverAspectRatio:      library.CoverAspectRatio,
+			OrganizeFileStructure: library.OrganizeFileStructure,
 		})
 	}
 
@@ -202,10 +195,6 @@ func (h *handler) update(c echo.Context) error {
 	if params.CoverAspectRatio != nil && *params.CoverAspectRatio != library.CoverAspectRatio {
 		library.CoverAspectRatio = *params.CoverAspectRatio
 		opts.Columns = append(opts.Columns, "cover_aspect_ratio")
-	}
-	if params.DownloadFormatPreference != nil && *params.DownloadFormatPreference != library.DownloadFormatPreference {
-		library.DownloadFormatPreference = *params.DownloadFormatPreference
-		opts.Columns = append(opts.Columns, "download_format_preference")
 	}
 	if params.LibraryPaths != nil {
 		library.LibraryPaths = make([]*models.LibraryPath, 0, len(params.LibraryPaths))

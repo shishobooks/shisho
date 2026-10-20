@@ -7,12 +7,14 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 func mustParseSortSpec(t *testing.T, s string) []sortspec.SortLevel {
@@ -28,15 +30,26 @@ func mustParseSortSpec(t *testing.T, s string) []sortspec.SortLevel {
 // default (date_added DESC) would return Cheese, Apple. The stored
 // title:asc inverts that, returning Apple, Cheese — which only holds if
 // the sort parameter was actually threaded through.
+// addEPUBs gives each book a main EPUB, so the built-in rules deliver it.
+func addEPUBs(t *testing.T, db *bun.DB, books ...*models.Book) {
+	t.Helper()
+	for _, book := range books {
+		_, err := db.NewInsert().Model(&models.File{
+			LibraryID: book.LibraryID, BookID: book.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain,
+			Filepath: book.Filepath + "/book.epub", FilesizeBytes: 1,
+		}).Exec(context.Background())
+		require.NoError(t, err)
+	}
+}
+
 func TestLibraryAllBooksFeed_HonorsStoredSort(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
 
 	lib := &models.Library{
-		Name:                     "Library A",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library A",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
@@ -88,13 +101,13 @@ func TestLibraryAllBooksFeed_HonorsStoredSort(t *testing.T) {
 	require.NotNil(t, resolved)
 	require.NotNil(t, resolved.SortSpec)
 
-	// Pass empty fileTypes so the books-with-files filter doesn't drop
-	// our test books (which have no file rows). The actual content of
-	// the feed entries doesn't matter for this test — only their order.
+	// The actual content of the feed entries doesn't matter for this
+	// test, only their order.
+	addEPUBs(t, db, apple, cheese)
 	feed, err := opdsSvc.BuildLibraryAllBooksFeed(
 		context.Background(),
 		"http://x",
-		"",
+		delivery.BuiltInRules(),
 		lib.ID,
 		10,
 		0,
@@ -120,9 +133,8 @@ func TestLibraryAllBooksFeed_NilSortUsesBuiltinDefault(t *testing.T) {
 	db := testdb.New(t)
 
 	lib := &models.Library{
-		Name:                     "Library B",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library B",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
@@ -155,12 +167,11 @@ func TestLibraryAllBooksFeed_NilSortUsesBuiltinDefault(t *testing.T) {
 
 	opdsSvc := NewService(db, books.NewService(db, appsettings.NewService(db)))
 
-	// Pass empty fileTypes so the books-with-files filter doesn't drop
-	// our test books (which have no file rows).
+	addEPUBs(t, db, apple, cheese)
 	feed, err := opdsSvc.BuildLibraryAllBooksFeed(
 		context.Background(),
 		"http://x",
-		"",
+		delivery.BuiltInRules(),
 		lib.ID,
 		10,
 		0,

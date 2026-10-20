@@ -39,7 +39,7 @@ func newDownloadFixture(t *testing.T, title string) *downloadFixture {
 	t.Helper()
 	db := testdb.New(t)
 	ctx := context.Background()
-	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
 	dir := t.TempDir()
@@ -76,21 +76,21 @@ func (f *downloadFixture) addEPUB() *models.File {
 	return f.addFile(models.FileTypeEPUB, models.FileRoleMain, testgen.GenerateEPUB(f.t, f.dir, "book.epub", testgen.EPUBOptions{Title: "Book"}))
 }
 
-// serve runs a download handler and renders its error the way the server
-// does, so the recorder holds what a client would receive.
-func (f *downloadFixture) serve(file *models.File, kepub bool) *httptest.ResponseRecorder {
+// serve runs the download handler for the file with the extension ext
+// ("" for a bare id), and renders its error the way the server does, so the
+// recorder holds what a client would receive.
+func (f *downloadFixture) serve(file *models.File, ext string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-	c.SetParamNames("id")
-	c.SetParamValues(strconv.Itoa(file.ID))
-	auth.SetUser(c, &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: &f.lib.ID}}})
-	var err error
-	if kepub {
-		err = f.h.downloadKepub(c)
-	} else {
-		err = f.h.download(c)
+	param := strconv.Itoa(file.ID)
+	if ext != "" {
+		param += "." + ext
 	}
+	c.SetParamNames("file")
+	c.SetParamValues(param)
+	auth.SetUser(c, &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{LibraryID: &f.lib.ID}}})
+	err := f.h.download(c)
 	if err != nil {
 		errcodes.NewHandler().Handle(err, c)
 	}
@@ -110,8 +110,8 @@ func assertServerFault(t *testing.T, rec *httptest.ResponseRecorder) {
 	assert.Empty(t, rec.Header().Get("Content-Disposition"))
 }
 
-// A file that exists but cannot be opened is a 500 on both OPDS download
-// routes. An unreadable source makes generation fail, and that is a server
+// A file that exists but cannot be opened is a 500, delivered as itself or
+// as a KePub. An unreadable source makes generation fail, and that is a server
 // fault, not a reason to fall back to serving the original.
 func TestDownloadHandlers_UnreadableFileIsServerError(t *testing.T) {
 	t.Parallel()
@@ -119,36 +119,31 @@ func TestDownloadHandlers_UnreadableFileIsServerError(t *testing.T) {
 		t.Skip("permission bits do not restrict root")
 	}
 
-	for _, kepub := range []bool{false, true} {
-		name := "download"
-		if kepub {
-			name = "kepub"
-		}
-		t.Run(name+" from the cache", func(t *testing.T) {
+	for _, tt := range []struct{ ext, cacheSuffix string }{
+		{"epub", "-epub"},
+		{"kepub.epub", "-kepub"},
+	} {
+		t.Run(tt.ext+" from the cache", func(t *testing.T) {
 			t.Parallel()
 			f := newDownloadFixture(t, "Cached")
 			file := f.addEPUB()
-			require.Equal(t, http.StatusOK, f.serve(file, kepub).Code)
-			ext := "-epub"
-			if kepub {
-				ext = "-kepub"
-			}
-			lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+ext))
-			assertServerFault(t, f.serve(file, kepub))
+			require.Equal(t, http.StatusOK, f.serve(file, tt.ext).Code)
+			lockFile(t, filepath.Join(f.cacheDir, strconv.Itoa(file.ID)+tt.cacheSuffix))
+			assertServerFault(t, f.serve(file, tt.ext))
 		})
-		t.Run(name+" with an unreadable source", func(t *testing.T) {
+		t.Run(tt.ext+" with an unreadable source", func(t *testing.T) {
 			t.Parallel()
 			f := newDownloadFixture(t, "Locked")
 			file := f.addEPUB()
 			lockFile(t, file.Filepath)
-			assertServerFault(t, f.serve(file, kepub))
+			assertServerFault(t, f.serve(file, tt.ext))
 		})
 	}
 }
 
-// The original is served when there is nothing to generate: a supplement, a
-// main file whose type has no generator, and a KePub request for a type
-// KePub cannot convert. Downloads are typed from the file type.
+// The original is served when there is nothing to generate: a supplement or
+// a main file whose type has no generator. Downloads are typed from the file
+// type.
 func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 	t.Parallel()
 
@@ -156,14 +151,10 @@ func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 		name        string
 		fileType    string
 		role        string
-		kepub       bool
 		contentType string
 	}{
-		{"supplement", "txt", models.FileRoleSupplement, false, "text/plain; charset=utf-8"},
-		{"plugin format", "fb2", models.FileRoleMain, false, ""},
-		{"m4b as kepub", models.FileTypeM4B, models.FileRoleMain, true, "audio/mp4"},
-		{"mobi as kepub", models.FileTypeMOBI, models.FileRoleMain, true, "application/x-mobipocket-ebook"},
-		{"azw3 as kepub", models.FileTypeAZW3, models.FileRoleMain, true, "application/vnd.amazon.mobi8-ebook"},
+		{"supplement", "txt", models.FileRoleSupplement, "text/plain; charset=utf-8"},
+		{"plugin format", "fb2", models.FileRoleMain, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -173,7 +164,7 @@ func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 			require.NoError(t, os.WriteFile(path, []byte("original bytes"), 0o644))
 			file := f.addFile(tt.fileType, tt.role, path)
 
-			rec := f.serve(file, tt.kepub)
+			rec := f.serve(file, "")
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 			assert.Equal(t, "original bytes", rec.Body.String())
 			assert.Equal(t, `attachment; filename="original.`+tt.fileType+`"`, rec.Header().Get("Content-Disposition"))
@@ -193,7 +184,7 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 	t.Run("epub", func(t *testing.T) {
 		t.Parallel()
 		f := newDownloadFixture(t, `Title "Quoted" Ünïcode`)
-		rec := f.serve(f.addEPUB(), false)
+		rec := f.serve(f.addEPUB(), "epub")
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), "; filename*=UTF-8''")
@@ -213,7 +204,7 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 			t.Parallel()
 			f := newDownloadFixture(t, "Kindle Book")
 			file := f.addFile(tt.fileType, models.FileRoleMain, testgen.GenerateMOBI(t, f.dir, "book."+tt.fileType, testgen.MOBIOptions{Kind: tt.kind, Title: "Kindle Book"}))
-			rec := f.serve(file, false)
+			rec := f.serve(file, tt.fileType)
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 			assert.Equal(t, tt.contentType, rec.Header().Get("Content-Type"))
 			assert.Contains(t, rec.Header().Get("Content-Disposition"), "."+tt.fileType+`"`)
@@ -223,7 +214,7 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 		t.Parallel()
 		f := newDownloadFixture(t, "Comic")
 		file := f.addFile(models.FileTypeCBZ, models.FileRoleMain, testgen.GenerateCBZ(t, f.dir, "comic.cbz", testgen.CBZOptions{Title: "Comic"}))
-		rec := f.serve(file, false)
+		rec := f.serve(file, "cbz")
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, "application/vnd.comicbook+zip", rec.Header().Get("Content-Type"))
 	})
@@ -243,33 +234,74 @@ func TestDownloadHandlers_NoGeneratorSkipsTheCache(t *testing.T) {
 	require.NoError(t, os.Chmod(f.cacheDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(f.cacheDir, 0o755) })
 
-	rec := f.serve(file, false)
+	rec := f.serve(file, "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "original bytes", rec.Body.String())
 }
 
-// A generation failure the file's content causes (here an EPUB that is not a
-// zip) serves the original, since an OPDS client has no other way to get the
-// book. An unreadable source is still a 500 (see
+// A damaged EPUB (here one that is not a zip) delivered as an EPUB serves
+// the original, since a failed generation of the File's own File Type only
+// loses Shisho's metadata. Delivered as a KePub, it is a 500 with no
+// attachment: a failed Conversion never sends another File Type. An
+// unreadable source is a 500 either way (see
 // TestDownloadHandlers_UnreadableFileIsServerError).
-func TestDownloadHandlers_ContentFailureServesOriginal(t *testing.T) {
+func TestDownloadHandlers_DamagedEPUB(t *testing.T) {
 	t.Parallel()
-	for _, kepub := range []bool{false, true} {
-		t.Run(strconv.FormatBool(kepub), func(t *testing.T) {
+	addDamaged := func(f *downloadFixture) *models.File {
+		// An extension no mime table knows, so the Content-Type below can
+		// only come from the file type.
+		path := filepath.Join(f.dir, "broken.bin")
+		require.NoError(t, os.WriteFile(path, []byte("not a zip"), 0o644))
+		return f.addFile(models.FileTypeEPUB, models.FileRoleMain, path)
+	}
+
+	for _, ext := range []string{"", "epub"} {
+		t.Run("as EPUB "+ext, func(t *testing.T) {
 			t.Parallel()
 			f := newDownloadFixture(t, "Broken")
-			// An extension no mime table knows, so the Content-Type below
-			// can only come from the file type.
-			path := filepath.Join(f.dir, "broken.bin")
-			require.NoError(t, os.WriteFile(path, []byte("not a zip"), 0o644))
-			file := f.addFile(models.FileTypeEPUB, models.FileRoleMain, path)
-
-			rec := f.serve(file, kepub)
+			rec := f.serve(addDamaged(f), ext)
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 			assert.Equal(t, "not a zip", rec.Body.String())
 			assert.Equal(t, `attachment; filename="broken.bin"`, rec.Header().Get("Content-Disposition"))
 			assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 		})
+	}
+
+	t.Run("as KePub", func(t *testing.T) {
+		t.Parallel()
+		f := newDownloadFixture(t, "Broken")
+		rec := f.serve(addDamaged(f), "kepub.epub")
+		assertServerFault(t, rec)
+		assert.NotContains(t, rec.Body.String(), "not a zip")
+	})
+}
+
+// A download link names only a File Type the File can become, so any other
+// is an invalid_state 422, and a supplement goes only as itself. An
+// extension no File Type has names nothing, so it is a 404.
+func TestDownloadHandlers_UnreachableFileType(t *testing.T) {
+	t.Parallel()
+	f := newDownloadFixture(t, "Unreachable")
+	path := filepath.Join(f.dir, "audio.m4b")
+	require.NoError(t, os.WriteFile(path, []byte("original bytes"), 0o644))
+	audio := f.addFile(models.FileTypeM4B, models.FileRoleMain, path)
+	supplementPath := filepath.Join(f.dir, "extras.cbz")
+	require.NoError(t, os.WriteFile(supplementPath, []byte("original bytes"), 0o644))
+	supplement := f.addFile(models.FileTypeCBZ, models.FileRoleSupplement, supplementPath)
+
+	for _, tt := range []struct {
+		file   *models.File
+		ext    string
+		status int
+	}{
+		{audio, "kepub.epub", http.StatusUnprocessableEntity},
+		{audio, "epub", http.StatusUnprocessableEntity},
+		{supplement, "epub", http.StatusUnprocessableEntity},
+		{audio, "fb2", http.StatusNotFound},
+	} {
+		rec := f.serve(tt.file, tt.ext)
+		assert.Equal(t, tt.status, rec.Code, tt.ext)
+		assert.Empty(t, rec.Header().Get("Content-Disposition"), tt.ext)
 	}
 }
 
@@ -292,5 +324,5 @@ func TestDownloadHandlers_GenerationPermissionErrorIsServerError(t *testing.T) {
 	require.NoError(t, err)
 	lockFile(t, coverPath)
 
-	assertServerFault(t, f.serve(file, false))
+	assertServerFault(t, f.serve(file, ""))
 }

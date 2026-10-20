@@ -15,14 +15,12 @@ describe("LibrarySettings hasChanges logic", () => {
       name: string;
       organizeFileStructure: boolean;
       coverAspectRatio: string;
-      downloadFormatPreference: string;
       libraryPaths: string[];
     },
     initialValues: {
       name: string;
       organizeFileStructure: boolean;
       coverAspectRatio: string;
-      downloadFormatPreference: string;
       libraryPaths: string[];
     } | null,
     isInitialized: boolean,
@@ -32,8 +30,6 @@ describe("LibrarySettings hasChanges logic", () => {
       formState.name !== initialValues.name ||
       formState.organizeFileStructure !== initialValues.organizeFileStructure ||
       formState.coverAspectRatio !== initialValues.coverAspectRatio ||
-      formState.downloadFormatPreference !==
-        initialValues.downloadFormatPreference ||
       !equal(formState.libraryPaths, initialValues.libraryPaths)
     );
   };
@@ -43,7 +39,6 @@ describe("LibrarySettings hasChanges logic", () => {
     name: string;
     organizeFileStructure: boolean;
     coverAspectRatio: string;
-    downloadFormatPreference: string;
     libraryPaths: string[];
   }) => {
     // The fix: update form state to match what was saved (trimmed/filtered)
@@ -61,7 +56,6 @@ describe("LibrarySettings hasChanges logic", () => {
       name: trimmedName,
       organizeFileStructure: formState.organizeFileStructure,
       coverAspectRatio: formState.coverAspectRatio,
-      downloadFormatPreference: formState.downloadFormatPreference,
       libraryPaths: validPaths,
     };
 
@@ -74,7 +68,6 @@ describe("LibrarySettings hasChanges logic", () => {
       name: "  Test Library  ",
       organizeFileStructure: true,
       coverAspectRatio: "book",
-      downloadFormatPreference: "original",
       libraryPaths: ["/path"],
     };
 
@@ -83,7 +76,6 @@ describe("LibrarySettings hasChanges logic", () => {
       name: "Original Library",
       organizeFileStructure: true,
       coverAspectRatio: "book",
-      downloadFormatPreference: "original",
       libraryPaths: ["/path"],
     };
 
@@ -111,7 +103,6 @@ describe("LibrarySettings hasChanges logic", () => {
       name: "Library",
       organizeFileStructure: true,
       coverAspectRatio: "book",
-      downloadFormatPreference: "original",
       libraryPaths: ["/path1", "", "  ", "/path2"],
     };
 
@@ -133,7 +124,6 @@ describe("LibrarySettings hasChanges logic", () => {
       name: "Library",
       organizeFileStructure: true,
       coverAspectRatio: "book",
-      downloadFormatPreference: "original",
       libraryPaths: ["/path"],
     };
 

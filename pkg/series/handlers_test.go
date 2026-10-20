@@ -41,9 +41,8 @@ func seedSeriesWithAliases(ctx context.Context, t *testing.T, db *bun.DB) int {
 	t.Helper()
 
 	library := &models.Library{
-		Name:                     "Alias Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Alias Library",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)

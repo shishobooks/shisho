@@ -16,9 +16,8 @@ import (
 func insertTestLibrary(t *testing.T, db *bun.DB, name string) *models.Library {
 	t.Helper()
 	lib := &models.Library{
-		Name:                     name,
-		CoverAspectRatio:         "portrait",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             name,
+		CoverAspectRatio: "portrait",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)

@@ -31,6 +31,10 @@ type ListSeriesOptions struct {
 	ListID     *int                 // Filter to series with a book on this list
 	Search     *string              // FTS5 search query
 	Sort       []sortspec.SortLevel // Defaults to name ascending
+	// MainFileTypes keeps only series with a book that has a main file of
+	// one of these types, and counts only those books. Nil means no filter;
+	// an empty list matches no series.
+	MainFileTypes []string
 
 	includeTotal bool
 }
@@ -195,8 +199,14 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		NewSelect().
 		Model(&series).
 		Relation("Library").
-		ColumnExpr("s.*").
-		ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count")
+		ColumnExpr("s.*")
+	if opts.MainFileTypes != nil {
+		deliverable := "book_series.book_id IN (SELECT book_id FROM files WHERE file_type IN (?) AND file_role = ?)"
+		q = q.ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id AND "+deliverable+") AS book_count", bun.List(opts.MainFileTypes), models.FileRoleMain).
+			Where("EXISTS (SELECT 1 FROM book_series WHERE book_series.series_id = s.id AND "+deliverable+")", bun.List(opts.MainFileTypes), models.FileRoleMain)
+	} else {
+		q = q.ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count")
+	}
 
 	if opts.LibraryID != nil {
 		q = q.Where("s.library_id = ?", *opts.LibraryID)

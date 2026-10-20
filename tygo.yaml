@@ -69,7 +69,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/libraries"
     output_path: "app/types/generated/libraries.ts"
     frontmatter: |
-      import { CoverAspectRatio, DownloadFormat, Library } from "@/types";
+      import { CoverAspectRatio, Library } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/filesystem"
@@ -132,6 +132,12 @@ packages:
       import { UserRef } from "@/types";
     include_files:
       - model.go
+      - types.go
+  - path: "github.com/shishobooks/shisho/pkg/delivery"
+    output_path: "app/types/generated/delivery.ts"
+    frontmatter: |
+      import { DeliveredFileType, FileType } from "@/types";
+    include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/chapters"
     output_path: "app/types/generated/chapters.ts"

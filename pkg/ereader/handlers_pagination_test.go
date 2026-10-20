@@ -53,9 +53,8 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 	ctx := context.Background()
 
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
@@ -107,9 +106,8 @@ func TestListBooksPaginated_TypeFilter(t *testing.T) {
 	ctx := context.Background()
 
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
@@ -170,9 +168,8 @@ func TestListBooksPaginated_TypeFilterPagesAndMatching(t *testing.T) {
 	ctx := context.Background()
 
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)

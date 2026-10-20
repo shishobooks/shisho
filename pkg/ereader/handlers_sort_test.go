@@ -37,9 +37,8 @@ func TestStoredSortFlowsThroughBooksService(t *testing.T) {
 
 	// Seed a library with two books distinguishable by created_at.
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
@@ -117,9 +116,8 @@ func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 
 	db := testdb.New(t)
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
@@ -148,9 +146,8 @@ func TestNoStoredSortResolvesToNil(t *testing.T) {
 
 	db := testdb.New(t)
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(context.Background())
 	require.NoError(t, err)
@@ -181,9 +178,8 @@ func TestAuthorBooks_PersonIDAndSortFlow(t *testing.T) {
 	ctx := context.Background()
 
 	lib := &models.Library{
-		Name:                     "Books",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Books",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)

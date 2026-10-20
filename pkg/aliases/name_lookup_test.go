@@ -75,8 +75,8 @@ func TestNameLookups_CaseInsensitiveUsingNameIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	lib := &models.Library{Name: "Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
-	otherLib := &models.Library{Name: "Other Library", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Library", CoverAspectRatio: "book"}
+	otherLib := &models.Library{Name: "Other Library", CoverAspectRatio: "book"}
 	insert(lib)
 	insert(otherLib)
 

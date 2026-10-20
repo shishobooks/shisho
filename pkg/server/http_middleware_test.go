@@ -103,7 +103,7 @@ func TestCompression(t *testing.T) {
 		{"/api/books/files/:id/page/:pageNum", 2048, ""},
 		{"/api/books/files/:id/download/original", 2048, ""},
 		{"/api/books/files/:id/stream", 2048, ""}, {"/api/jobs/:id/download", 2048, ""},
-		{"/opds/download/:id/kepub", 2048, ""}, {"/opds/v1/books/:id/cover", 2048, ""},
+		{"/opds/download/:file", 2048, ""}, {"/opds/v1/books/:id/cover", 2048, ""},
 		{"/ereader/key/:credential/file/:fileId", 2048, ""},
 		{"/kobo/:credential/v1/books/:bookId/file/epub", 2048, ""},
 		{"/kobo/:credential/v1/books/:imageId/thumbnail/:w/:h/*", 2048, ""},

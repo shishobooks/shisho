@@ -34,7 +34,7 @@ func newKoboDownloadFixture(t *testing.T, title string) *koboDownloadFixture {
 	t.Helper()
 	db := newSyncPointTestDB(t)
 	ctx := context.Background()
-	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book", DownloadFormatPreference: models.DownloadFormatOriginal}
+	lib := &models.Library{Name: "Lib", CoverAspectRatio: "book"}
 	_, err := db.NewInsert().Model(lib).Exec(ctx)
 	require.NoError(t, err)
 	dir := t.TempDir()

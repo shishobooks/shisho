@@ -1670,7 +1670,7 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 	// Supplements download as-is, no processing, and only as themselves
 	if file.FileRole == models.FileRoleSupplement {
 		if deliveredType != file.FileType {
-			return errcodes.InvalidState(noConversionMessage(file.FileType, deliveredType))
+			return errcodes.InvalidState(NoConversionMessage(file.FileType, deliveredType))
 		}
 		return h.downloadOriginalFile(c)
 	}
@@ -1717,7 +1717,7 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 			return errcodes.InvalidState("Generated downloads are not supported for " + file.FileType + " files")
 		}
 		if errors.Is(err, filegen.ErrNoConversion) {
-			return errcodes.InvalidState(noConversionMessage(file.FileType, deliveredType))
+			return errcodes.InvalidState(NoConversionMessage(file.FileType, deliveredType))
 		}
 		if errors.Is(err, filegen.ErrCannotDecrypt) {
 			return errcodes.InvalidState(CannotDecryptMessage)
@@ -1730,18 +1730,10 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 	return download.Serve(c)
 }
 
-// noConversionMessage is the answer to a download as a File Type no
-// Conversion reaches, which the UI never offers.
-func noConversionMessage(fileType, deliveredType string) string {
-	return fmt.Sprintf("%s files can't be downloaded as %s", fileTypeLabel(fileType), fileTypeLabel(deliveredType))
-}
-
-// fileTypeLabel is how a File Type is written in a message.
-func fileTypeLabel(fileType string) string {
-	if fileType == models.FileTypeKePub {
-		return "KePub"
-	}
-	return strings.ToUpper(fileType)
+// NoConversionMessage is the answer to a download as a File Type no
+// Conversion reaches, which neither the UI nor a feed ever offers.
+func NoConversionMessage(fileType, deliveredType string) string {
+	return fmt.Sprintf("%s files can't be downloaded as %s", models.FileTypeLabel(fileType), models.FileTypeLabel(deliveredType))
 }
 
 // downloadOriginalFile handles downloading the original file without any modifications.

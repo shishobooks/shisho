@@ -51,9 +51,8 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 
 	libraryService := libraries.NewService(db)
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	require.NoError(t, libraryService.CreateLibrary(ctx, library))
 
@@ -169,9 +168,8 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 
 	libraryService := libraries.NewService(db)
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	require.NoError(t, libraryService.CreateLibrary(ctx, library))
 
@@ -255,9 +253,8 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 
 	libraryService := libraries.NewService(db)
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	require.NoError(t, libraryService.CreateLibrary(ctx, library))
 
@@ -353,9 +350,8 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 
 	libraryService := libraries.NewService(db)
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
 	}
 	require.NoError(t, libraryService.CreateLibrary(ctx, library))
 

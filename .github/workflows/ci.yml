@@ -78,7 +78,7 @@ jobs:
           echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
       - name: Restore Go build cache
-        # gotestsplit compiles all of pkg/ with -race on every shard to list
+        # gotestsplit compiles every package with -race on every shard to list
         # the tests, so one cache serves every shard. Shard 1 saves it on
         # master only.
         uses: actions/cache/restore@v6
@@ -109,7 +109,8 @@ jobs:
             gotest-timings-refs/heads/master-
       - name: Run tests
         # -count=1 keeps the restored build cache from replaying master's test
-        # results, so every test still runs under -race on every run.
+        # results, so every test still runs under -race on every run. ./...
+        # covers cmd/, internal/, and tools/ too, not just pkg/.
         env:
           SHARD: ${{ matrix.shard }}
         run: |
@@ -117,7 +118,7 @@ jobs:
             -junit-dir=.gotest-timings \
             -junit-out=.gotest-timings-fresh \
             -total=$SHARD_TOTAL -index=$((SHARD - 1)) \
-            ./pkg/... -- -race -count=1
+            ./... -- -race -count=1
       - name: Upload shard JUnit
         if: always()
         uses: actions/upload-artifact@v7

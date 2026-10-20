@@ -72,6 +72,7 @@ import {
   useResyncBook,
   useResyncFile,
 } from "@/hooks/queries/books";
+import { useDeliveryRules } from "@/hooks/queries/delivery";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSetBookReview } from "@/hooks/queries/review";
 import { useSharingSettings } from "@/hooks/queries/sharing";
@@ -84,9 +85,7 @@ import {
 } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
-  DownloadFormatKepub,
   FileTypeCBZ,
-  FileTypeKePub,
   type Book,
   type CoverAspectRatio,
   type DeliveredFileType,
@@ -99,6 +98,7 @@ import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
+import { defaultDeliveredFileType } from "@/utils/delivery";
 import {
   fileDownloadAsUrl,
   fileDownloadUrl,
@@ -202,7 +202,7 @@ interface FileRowProps {
   pluginIdentifierTypes: PluginIdentifierType[] | undefined;
   getCoverUrl?: (file: File) => string | null;
   bookTitle: string;
-  libraryDownloadPreference: string | undefined;
+  deliveredFileType: DeliveredFileType | undefined;
   isExpanded: boolean;
   hasExpandableMetadata: boolean;
   onToggleExpand: () => void;
@@ -231,7 +231,7 @@ const FileRow = ({
   pluginIdentifierTypes,
   getCoverUrl,
   bookTitle,
-  libraryDownloadPreference,
+  deliveredFileType,
   isExpanded,
   hasExpandableMetadata,
   onToggleExpand,
@@ -390,10 +390,10 @@ const FileRow = ({
             {/* Download button/popover */}
             <FileDownloadControl
               bookTitle={bookTitle}
+              deliveredFileType={deliveredFileType}
               file={file}
               isDownloading={isDownloading}
               isSupplement={isSupplement}
-              libraryDownloadPreference={libraryDownloadPreference}
               onCancelDownload={onCancelDownload}
               onDownload={onDownload}
               onDownloadAs={onDownloadAs}
@@ -495,10 +495,10 @@ const FileRow = ({
           {/* Download button/popover */}
           <FileDownloadControl
             bookTitle={bookTitle}
+            deliveredFileType={deliveredFileType}
             file={file}
             isDownloading={isDownloading}
             isSupplement={isSupplement}
-            libraryDownloadPreference={libraryDownloadPreference}
             onCancelDownload={onCancelDownload}
             onDownload={onDownload}
             onDownloadAs={onDownloadAs}
@@ -713,8 +713,8 @@ const FileRow = ({
 interface BookDetailBodyProps {
   book: Book;
   /**
-   * The book's library, for the download format preference, the cover aspect
-   * ratio, and the merge and move dialogs. Absent in Share Link context.
+   * The book's library, for the cover aspect ratio and the merge and move
+   * dialogs. Absent in Share Link context.
    */
   library?: LibrarySummary;
   shareLink?: ShareLinkContext;
@@ -757,6 +757,12 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   // waits for the settings rather than guessing the policy.
   const canShare = canListShares && sharingSettings !== undefined;
   const sharingEnabled = sharingSettings?.enabled === true;
+  // The main download button follows the user's default Delivery Rules. A
+  // Share Link offers each File in its own File Type: the user's rules are
+  // not a recipient's.
+  const deliveryRulesQuery = useDeliveryRules({ enabled: !isShareLink });
+  const deliveryRulesLoading = !isShareLink && deliveryRulesQuery.isPending;
+  const deliveryRules = deliveryRulesQuery.data?.rules;
   const { data: pluginIdentifierTypes } = usePluginIdentifierTypes({
     enabled: !isShareLink,
   });
@@ -920,27 +926,21 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     }
   };
 
-  const handleDownload = async (file: File) => {
+  const handleDownload = async (
+    file: File,
+    deliveredFileType: DeliveredFileType,
+  ) => {
     if (shareLink) {
       await handleDownloadWithEndpoint(file.id, shareLink.downloadUrl(file));
       return;
     }
 
-    const preference = library?.download_format_preference;
-
-    // The KePub preference applies to files that can become KePub; others
-    // download as their own File Type.
-    if (
-      preference === DownloadFormatKepub &&
-      file.reachable_file_types.includes(FileTypeKePub)
-    ) {
-      await handleDownloadWithEndpoint(
-        file.id,
-        fileDownloadAsUrl(file.id, FileTypeKePub),
-      );
-    } else {
-      await handleDownloadWithEndpoint(file.id, fileDownloadUrl(file.id));
-    }
+    await handleDownloadWithEndpoint(
+      file.id,
+      deliveredFileType === file.file_type
+        ? fileDownloadUrl(file.id)
+        : fileDownloadAsUrl(file.id, deliveredFileType),
+    );
   };
 
   const handleDownloadAs = async (file: File, fileType: DeliveredFileType) => {
@@ -956,7 +956,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     // A Share Link exposes only the generated download.
     if (shareLink) {
       const file = book.files?.find((f) => f.id === fileId);
-      if (file) handleDownload(file);
+      if (file) handleDownload(file, file.file_type);
       return;
     }
     // Direct download of original file - this won't show any error since it's a simple file serve
@@ -1133,42 +1133,49 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     .filter((group) => group.length > 0);
   const showBookMenu = visibleBookMenuGroups.length > 0;
 
-  const renderFileRow = (file: File, isSupplement: boolean) => (
-    <FileRow
-      bookTitle={book.title}
-      canWriteBooks={canWriteBooks}
-      file={file}
-      getCoverUrl={shareLink?.fileCoverUrl}
-      hasExpandableMetadata={hasExpandableMetadata(file)}
-      isDeletingFile={deletingFileId === file.id}
-      isDownloading={downloadingFileId === file.id}
-      isExpanded={expandedFileIds.has(file.id)}
-      isFileSelected={selectedFileIds.has(file.id)}
-      isResyncing={resyncingFileId === file.id}
-      isSelectMode={!isSupplement && canWriteBooks && isFileSelectMode}
-      isShareLink={isShareLink}
-      isSupplement={isSupplement}
-      key={file.id}
-      // The library download setting is the library's, not a recipient's.
-      libraryDownloadPreference={
-        isShareLink ? undefined : library?.download_format_preference
-      }
-      libraryId={libraryId}
-      onCancelDownload={handleCancelDownload}
-      onDeleteFile={() => setFileToDelete(file)}
-      onDownload={() => handleDownload(file)}
-      onDownloadAs={(fileType) => handleDownloadAs(file, fileType)}
-      onDownloadOriginal={() => handleDownloadOriginal(file.id)}
-      onEdit={() => setEditingFile(file)}
-      onMoveFile={isSupplement ? undefined : () => setSingleFileMoveId(file.id)}
-      onRescan={() => setRescanFileId(file.id)}
-      onToggleExpand={() => toggleFileExpanded(file.id)}
-      onToggleSelect={
-        isSupplement ? undefined : () => toggleFileSelection(file.id)
-      }
-      pluginIdentifierTypes={pluginIdentifierTypes}
-    />
-  );
+  const renderFileRow = (file: File, isSupplement: boolean) => {
+    // The main button waits for the rules that decide its File Type.
+    const deliveredFileType = deliveryRulesLoading
+      ? undefined
+      : defaultDeliveredFileType(file, deliveryRules);
+    return (
+      <FileRow
+        bookTitle={book.title}
+        canWriteBooks={canWriteBooks}
+        deliveredFileType={deliveredFileType}
+        file={file}
+        getCoverUrl={shareLink?.fileCoverUrl}
+        hasExpandableMetadata={hasExpandableMetadata(file)}
+        isDeletingFile={deletingFileId === file.id}
+        isDownloading={downloadingFileId === file.id}
+        isExpanded={expandedFileIds.has(file.id)}
+        isFileSelected={selectedFileIds.has(file.id)}
+        isResyncing={resyncingFileId === file.id}
+        isSelectMode={!isSupplement && canWriteBooks && isFileSelectMode}
+        isShareLink={isShareLink}
+        isSupplement={isSupplement}
+        key={file.id}
+        libraryId={libraryId}
+        onCancelDownload={handleCancelDownload}
+        onDeleteFile={() => setFileToDelete(file)}
+        onDownload={() =>
+          deliveredFileType && handleDownload(file, deliveredFileType)
+        }
+        onDownloadAs={(fileType) => handleDownloadAs(file, fileType)}
+        onDownloadOriginal={() => handleDownloadOriginal(file.id)}
+        onEdit={() => setEditingFile(file)}
+        onMoveFile={
+          isSupplement ? undefined : () => setSingleFileMoveId(file.id)
+        }
+        onRescan={() => setRescanFileId(file.id)}
+        onToggleExpand={() => toggleFileExpanded(file.id)}
+        onToggleSelect={
+          isSupplement ? undefined : () => toggleFileSelection(file.id)
+        }
+        pluginIdentifierTypes={pluginIdentifierTypes}
+      />
+    );
+  };
 
   return (
     <>

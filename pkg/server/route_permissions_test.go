@@ -59,9 +59,9 @@ func newRoutePermissionsFixture(t *testing.T) *routePermissionsFixture {
 		authSvc:   auth.NewService(db, cfg.JWTSecret, cfg.SessionDuration()),
 		searchSvc: search.NewService(db),
 	}
-	f.libA = &models.Library{Name: "Alpha Library", CoverAspectRatio: models.CoverAspectRatioBook, DownloadFormatPreference: models.DownloadFormatKepub, OrganizeFileStructure: true}
+	f.libA = &models.Library{Name: "Alpha Library", CoverAspectRatio: models.CoverAspectRatioBook, OrganizeFileStructure: true}
 	f.insert(f.libA)
-	f.libB = &models.Library{Name: "Beta Library", CoverAspectRatio: models.CoverAspectRatioAudiobook, DownloadFormatPreference: models.DownloadFormatOriginal}
+	f.libB = &models.Library{Name: "Beta Library", CoverAspectRatio: models.CoverAspectRatioAudiobook}
 	f.insert(f.libB)
 	f.insert(&models.LibraryPath{LibraryID: f.libA.ID, Filepath: "/secret/alpha"})
 	f.admin = insertPermissionTestUser(f.ctx, t, db, "admin", models.RoleAdmin, nil)
@@ -155,7 +155,7 @@ func TestUserLibraries_ListsAccessibleLibrariesWithoutLibrariesRead(t *testing.T
 	limited := f.user("limited", reader, f.libA.ID)
 	body := f.expect(limited, http.MethodGet, "/api/user/libraries", "", http.StatusOK)
 	assert.JSONEq(t, fmt.Sprintf(
-		`[{"id":%d,"name":"Alpha Library","cover_aspect_ratio":"book","download_format_preference":"kepub","organize_file_structure":true}]`,
+		`[{"id":%d,"name":"Alpha Library","cover_aspect_ratio":"book","organize_file_structure":true}]`,
 		f.libA.ID), body, "only the accessible library, without paths or timestamps")
 
 	everywhere := f.user("everywhere", reader)

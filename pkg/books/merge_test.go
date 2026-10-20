@@ -23,10 +23,9 @@ func setupTestLibrary(t *testing.T, db *bun.DB) *models.Library {
 	ctx := context.Background()
 
 	library := &models.Library{
-		Name:                     "Test Library",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
-		OrganizeFileStructure:    false,
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: false,
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
@@ -466,17 +465,15 @@ func TestMoveFilesToBook_DifferentLibraries(t *testing.T) {
 
 	// Create two libraries
 	lib1 := &models.Library{
-		Name:                     "Library 1",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library 1",
+		CoverAspectRatio: "book",
 	}
 	_, err := db.NewInsert().Model(lib1).Exec(ctx)
 	require.NoError(t, err)
 
 	lib2 := &models.Library{
-		Name:                     "Library 2",
-		CoverAspectRatio:         "book",
-		DownloadFormatPreference: models.DownloadFormatOriginal,
+		Name:             "Library 2",
+		CoverAspectRatio: "book",
 	}
 	_, err = db.NewInsert().Model(lib2).Exec(ctx)
 	require.NoError(t, err)
