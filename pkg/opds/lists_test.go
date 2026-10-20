@@ -323,3 +323,44 @@ func TestOPDS_ListBooksFeed_AccessCheckFaultReturns500(t *testing.T) {
 	code, body := f.get(t, "viewer", fmt.Sprintf("/opds/v1/lists/%d", f.list.ID))
 	assert.Equal(t, http.StatusInternalServerError, code, body)
 }
+
+// The lists feed and the root catalog's Lists entry leave out lists with
+// nothing the user's Delivery Rules deliver from a library they can access,
+// so a list never opens to an empty page.
+func TestOPDS_ListsWithNothingToDeliverAreHidden(t *testing.T) {
+	t.Parallel()
+	f := newListsFixture(t)
+	ctx := context.Background()
+	now := time.Now()
+	comics := &models.List{CreatedAt: now, UpdatedAt: now, UserID: userID(t, f.db, "stranger"), Name: "Comics", DefaultSort: models.ListSortTitleAsc}
+	_, err := f.db.NewInsert().Model(comics).Exec(ctx)
+	require.NoError(t, err)
+	_, err = f.db.NewInsert().Model(&models.ListBook{ListID: comics.ID, BookID: f.books["Banana"].ID, AddedAt: now}).Exec(ctx)
+	require.NoError(t, err)
+
+	code, body := f.get(t, "stranger", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, []string{"Comics"}, entryTitles(body))
+
+	// The stranger's only list holds only a CBZ, which these rules don't
+	// deliver.
+	setRules(t, f.db, "stranger", epubOnly)
+	code, body = f.get(t, "stranger", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Empty(t, entryTitles(body))
+	code, body = f.get(t, "stranger", "/opds/v1/catalog")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.NotContains(t, body, "/lists")
+
+	// Favorites still has Cherry, an EPUB in the one library the viewer can
+	// access.
+	setRules(t, f.db, "viewer", epubOnly)
+	code, body = f.get(t, "viewer", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, []string{"Favorites"}, entryTitles(body))
+
+	// noaccess can access no library, so nothing on Favorites reaches them.
+	code, body = f.get(t, "noaccess", "/opds/v1/lists")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Empty(t, entryTitles(body))
+}

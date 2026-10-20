@@ -45,9 +45,10 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 }
 
 // BuildCatalogFeed builds the root navigation feed listing all libraries,
-// followed by a Lists entry when userID owns or has been shared any list.
-// If libraryIDs is non-nil, only libraries with those IDs are included.
-func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, userID int, libraryIDs []int) (*Feed, error) {
+// followed by a Lists entry when userID owns or has been shared a list with
+// something the rules deliver. If libraryIDs is non-nil, only libraries with
+// those IDs are included.
+func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int) (*Feed, error) {
 	opts := libraries.ListLibrariesOptions{}
 	if libraryIDs != nil {
 		opts.LibraryIDs = libraryIDs
@@ -79,7 +80,7 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, userID
 		feed.AddEntry(entry)
 	}
 
-	hasLists, err := svc.listsService.HasLists(ctx, userID)
+	hasLists, err := svc.listsService.HasLists(ctx, userID, deliverableBooks(rules, libraryIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -94,13 +95,21 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, userID
 	return feed, nil
 }
 
+// deliverableBooks matches the books the rules deliver something from in
+// libraryIDs (nil means every library).
+func deliverableBooks(rules []delivery.Rule, libraryIDs []int) *lists.DeliverableBooks {
+	return &lists.DeliverableBooks{LibraryIDs: libraryIDs, MainFileTypes: delivery.SourceFileTypes(rules)}
+}
+
 // BuildListsFeed builds a navigation feed of the lists userID owns or has
-// been shared.
-func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, userID, limit, offset int) (*Feed, error) {
+// been shared that hold something the rules deliver from libraryIDs (nil
+// means every library), so no list opens to an empty page.
+func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int, limit, offset int) (*Feed, error) {
 	userLists, total, err := svc.listsService.ListListsWithTotal(ctx, lists.ListListsOptions{
-		UserID: userID,
-		Limit:  &limit,
-		Offset: &offset,
+		UserID:      userID,
+		Limit:       &limit,
+		Offset:      &offset,
+		Deliverable: deliverableBooks(rules, libraryIDs),
 	})
 	if err != nil {
 		return nil, err

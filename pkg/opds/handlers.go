@@ -120,7 +120,11 @@ func (h *handler) catalog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, user.ID, user.GetAccessibleLibraryIDs())
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, rules, user.ID, user.GetAccessibleLibraryIDs())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -503,7 +507,11 @@ func (h *handler) lists(c echo.Context) error {
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), user.ID, limit, offset)
+	rules, err := h.rulesFor(c)
+	if err != nil {
+		return err
+	}
+	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), rules, user.ID, user.GetAccessibleLibraryIDs(), limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}

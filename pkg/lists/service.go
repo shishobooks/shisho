@@ -90,10 +90,20 @@ func (svc *Service) RetrieveList(ctx context.Context, opts RetrieveListOptions) 
 }
 
 type ListListsOptions struct {
-	UserID       int // Required - shows owned + shared lists
-	Limit        *int
-	Offset       *int
+	UserID int // Required - shows owned + shared lists
+	Limit  *int
+	Offset *int
+	// Deliverable, when set, keeps only lists with a book it matches.
+	Deliverable  *DeliverableBooks
 	includeTotal bool
+}
+
+// DeliverableBooks matches the books a reader can receive: books in
+// LibraryIDs (nil means every library) with a main file of one of
+// MainFileTypes (an empty list matches no book).
+type DeliverableBooks struct {
+	LibraryIDs    []int
+	MainFileTypes []string
 }
 
 func (svc *Service) ListListsWithTotal(ctx context.Context, opts ListListsOptions) ([]*models.List, int, error) {
@@ -101,13 +111,33 @@ func (svc *Service) ListListsWithTotal(ctx context.Context, opts ListListsOption
 	return svc.listListsWithTotal(ctx, opts)
 }
 
-// HasLists reports whether userID owns or has been shared any list.
-func (svc *Service) HasLists(ctx context.Context, userID int) (bool, error) {
-	exists, err := svc.db.NewSelect().
+// HasLists reports whether userID owns or has been shared a list, with a
+// book deliverable matches when it is non-nil.
+func (svc *Service) HasLists(ctx context.Context, userID int, deliverable *DeliverableBooks) (bool, error) {
+	q := svc.db.NewSelect().
 		Model((*models.List)(nil)).
-		Where("l.user_id = ? OR l.id IN (SELECT list_id FROM list_shares WHERE user_id = ?)", userID, userID).
-		Exists(ctx)
+		Where("l.user_id = ? OR l.id IN (SELECT list_id FROM list_shares WHERE user_id = ?)", userID, userID)
+	exists, err := svc.whereDeliverable(q, deliverable).Exists(ctx)
 	return exists, errors.WithStack(err)
+}
+
+// whereDeliverable keeps only lists with a book d matches, when d is
+// non-nil.
+func (svc *Service) whereDeliverable(q *bun.SelectQuery, d *DeliverableBooks) *bun.SelectQuery {
+	if d == nil {
+		return q
+	}
+	// Matches books the way ListBooks does: by the book's library, and by
+	// any of its main files.
+	books := svc.db.NewSelect().
+		TableExpr("list_books AS dlb").
+		Column("dlb.list_id").
+		Where("dlb.book_id IN (SELECT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(d.MainFileTypes), models.FileRoleMain)
+	if d.LibraryIDs != nil {
+		books = books.Join("JOIN books AS db ON db.id = dlb.book_id").
+			Where("db.library_id IN (?)", bun.List(d.LibraryIDs))
+	}
+	return q.Where("l.id IN (?)", books)
 }
 
 func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOptions) ([]*models.List, int, error) {
@@ -122,6 +152,7 @@ func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOption
 		Relation("User").
 		Where("l.user_id = ? OR l.id IN (SELECT list_id FROM list_shares WHERE user_id = ?)", opts.UserID, opts.UserID).
 		Order("l.name ASC")
+	q = svc.whereDeliverable(q, opts.Deliverable)
 
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))
