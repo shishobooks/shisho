@@ -74,8 +74,9 @@ func planEntries(entries []*SyncEntry, delivered []DeliveredFile) entryPlan {
 		}
 		return freed[i].EntryID < freed[j].EntryID
 	})
+	candidates := handoverCandidates(delivered)
 	for _, e := range freed {
-		to, ok := handoverTarget(e, delivered, taken)
+		to, ok := handoverTarget(e, candidates, taken)
 		if !ok {
 			plan.Removed = append(plan.Removed, e)
 			continue
@@ -92,23 +93,39 @@ func planEntries(entries []*SyncEntry, delivered []DeliveredFile) entryPlan {
 	return plan
 }
 
+// candidateKey is the book and delivered File Type an entry belongs to.
+type candidateKey struct {
+	bookID        int
+	deliveredType string
+}
+
+// handoverCandidates groups delivered by book and delivered File Type,
+// each group lowest File id first, so finding a freed entry's target does
+// not scan every delivered File.
+func handoverCandidates(delivered []DeliveredFile) map[candidateKey][]DeliveredFile {
+	candidates := map[candidateKey][]DeliveredFile{}
+	for _, d := range delivered {
+		key := candidateKey{d.BookID, d.DeliveredFileType}
+		candidates[key] = append(candidates[key], d)
+	}
+	for _, group := range candidates {
+		sort.Slice(group, func(i, j int) bool { return group[i].FileID < group[j].FileID })
+	}
+	return candidates
+}
+
 // handoverTarget returns the File, lowest id first, that a freed entry goes
 // to: one of its book, delivered as its type, with no entry.
-func handoverTarget(e *SyncEntry, delivered []DeliveredFile, taken map[int]bool) (DeliveredFile, bool) {
-	var best DeliveredFile
-	found := false
+func handoverTarget(e *SyncEntry, candidates map[candidateKey][]DeliveredFile, taken map[int]bool) (DeliveredFile, bool) {
 	if e.BookID == nil {
-		return best, false
+		return DeliveredFile{}, false
 	}
-	for _, d := range delivered {
-		if taken[d.FileID] || d.BookID != *e.BookID || d.DeliveredFileType != e.DeliveredFileType {
-			continue
-		}
-		if !found || d.FileID < best.FileID {
-			best, found = d, true
+	for _, d := range candidates[candidateKey{*e.BookID, e.DeliveredFileType}] {
+		if !taken[d.FileID] {
+			return d, true
 		}
 	}
-	return best, found
+	return DeliveredFile{}, false
 }
 
 // entryIDPrefix starts every entry id. Entries recorded before entries had
