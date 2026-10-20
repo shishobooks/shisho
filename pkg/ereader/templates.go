@@ -15,6 +15,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/shishobooks/shisho/pkg/delivery"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // paragraphBreakPattern matches a blank line, with any whitespace-only lines
@@ -145,19 +148,20 @@ func searchForm(actionURL, query string) string {
 }
 
 // filterBar generates the file type and cover filter UI with
-// button-style links. extraParams preserves additional query params
-// (e.g., "q" on the search page) so changing a filter doesn't drop the
-// user's in-progress state.
-func filterBar(baseURL, currentTypes, currentCovers string, extraParams ...[2]string) string {
-	// Build type filter links
-	typeLinks := []string{
-		filterLink(baseURL, "types", "all", currentTypes, currentCovers, "All", extraParams...),
-		filterLink(baseURL, "types", "epub", currentTypes, currentCovers, "EPUB", extraParams...),
-		filterLink(baseURL, "types", "cbz", currentTypes, currentCovers, "CBZ", extraParams...),
-		filterLink(baseURL, "types", "m4b", currentTypes, currentCovers, "M4B", extraParams...),
-		filterLink(baseURL, "types", "pdf", currentTypes, currentCovers, "PDF", extraParams...),
-		filterLink(baseURL, "types", "mobi", currentTypes, currentCovers, "MOBI", extraParams...),
-		filterLink(baseURL, "types", "azw3", currentTypes, currentCovers, "AZW3", extraParams...),
+// button-style links. The type filter offers the source File Types the
+// Device's Delivery Rules deliver, in rule order, and is left out when there
+// is only one. extraParams preserves additional query params (e.g., "q" on
+// the search page) so changing a filter doesn't drop the user's in-progress
+// state.
+func filterBar(baseURL string, rules []delivery.Rule, currentTypes, currentCovers string, extraParams ...[2]string) string {
+	var typesRow string
+	if sources := delivery.SourceFileTypes(rules); len(sources) > 1 {
+		typeLinks := []string{filterLink(baseURL, "types", "all", currentTypes, currentCovers, "All", extraParams...)}
+		for _, fileType := range sources {
+			typeLinks = append(typeLinks, filterLink(baseURL, "types", fileType, currentTypes, currentCovers, models.FileTypeLabel(fileType), extraParams...))
+		}
+		typesRow = fmt.Sprintf(`
+  <div style="margin-bottom: 8px;"><b>Show:</b> %s</div>`, strings.Join(typeLinks, " "))
 	}
 
 	// Build cover toggle links
@@ -166,10 +170,9 @@ func filterBar(baseURL, currentTypes, currentCovers string, extraParams ...[2]st
 		filterLink(baseURL, "covers", "on", currentTypes, currentCovers, "On", extraParams...),
 	}
 
-	return fmt.Sprintf(`<div class="filter">
-  <div style="margin-bottom: 8px;"><b>Show:</b> %s</div>
+	return fmt.Sprintf(`<div class="filter">%s
   <div><b>Covers:</b> %s</div>
-</div>`, strings.Join(typeLinks, " "), strings.Join(coverLinks, " "))
+</div>`, typesRow, strings.Join(coverLinks, " "))
 }
 
 // filterLink generates a single filter link with button styling for easier tapping.

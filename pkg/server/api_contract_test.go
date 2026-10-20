@@ -88,6 +88,10 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	cbzPath := testgen.GenerateCBZ(t, fileBook.Filepath, "comic.cbz", testgen.CBZOptions{Title: "Comic"})
 	cbzFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain, Filepath: cbzPath, FilesizeBytes: 1}
 	f.insert(cbzFile)
+	var kindle struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/user/devices", `{"name":"Kindle","device_type":"kindle"}`, http.StatusCreated)), &kindle))
 
 	tests := []struct {
 		name   string
@@ -110,6 +114,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			method: http.MethodPatch, path: "/api/user/devices/missing",
 			body:   `{"name":"Renamed"}`,
 			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
+			name:   "device rules delivering a File Type its type can't receive",
+			method: http.MethodPatch, path: "/api/user/devices/" + kindle.ID,
+			body:   `{"delivery_rules":{"mode":"custom","rules":[{"source_file_type":"epub","delivered_file_type":"epub"}]}}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A Kindle Device can't receive EPUB.",
 		},
 		{
 			name:   "device revoke for a device that does not exist",

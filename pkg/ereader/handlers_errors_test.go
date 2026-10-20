@@ -98,7 +98,7 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
-	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
+	h := &handler{bookService: books.NewService(db, appsettings.NewService(db)), deviceService: devices.NewService(db)}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := echo.New().NewContext(req, httptest.NewRecorder())
 	withDevice(c, t, db, device)

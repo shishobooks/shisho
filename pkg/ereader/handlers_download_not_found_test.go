@@ -82,17 +82,17 @@ func TestDownloadFileHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T
 			_, err = db.NewInsert().Model(file).Exec(ctx)
 			require.NoError(t, err)
 
-			h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
+			h := &handler{bookService: books.NewService(db, appsettings.NewService(db)), deviceService: devices.NewService(db)}
 
 			e := echo.New()
 			req := httptest.NewRequest(tt.method, "/", nil)
 			c := e.NewContext(req, httptest.NewRecorder())
 			withDevice(c, t, db, device)
-			c.SetParamNames("credential", "fileId")
-			c.SetParamValues(device.Credential, strconv.Itoa(file.ID))
+			c.SetParamNames("credential", "fileId", "deliveredType")
+			c.SetParamValues(device.Credential, strconv.Itoa(file.ID), models.FileTypeKePub)
 
 			if tt.kepub {
-				err = h.DownloadFileKepub(c)
+				err = h.DownloadFileAs(c)
 			} else {
 				err = h.DownloadFile(c)
 			}

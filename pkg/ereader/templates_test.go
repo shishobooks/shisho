@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,7 +55,7 @@ func TestPaginationWithParams_ThreadsExtraParams(t *testing.T) {
 func TestFilterBar_PreservesExtraParams(t *testing.T) {
 	t.Parallel()
 
-	got := filterBar("/s", "", "", [2]string{"q", "sanderson"})
+	got := filterBar("/s", delivery.BuiltInRules(), "", "", [2]string{"q", "sanderson"})
 
 	// Every non-current filter link must carry ?q=sanderson...
 	for _, label := range []string{"EPUB", "CBZ", "M4B", "PDF"} {

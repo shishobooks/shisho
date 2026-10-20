@@ -26,10 +26,13 @@ type Device struct {
 	// still comes from the scope segment of its old sync URL. Its first
 	// request sets the Device's scope and clears it, as do saving a scope
 	// and regenerating the credential, which retires the old URL.
-	URLScopePending bool       `bun:"url_scope_pending,notnull" json:"url_scope_pending"`
-	CreatedAt       time.Time  `bun:"created_at,notnull" json:"created_at"`
-	UpdatedAt       time.Time  `bun:"updated_at,notnull" json:"updated_at"`
-	LastAccessedAt  *time.Time `bun:"last_accessed_at" json:"last_accessed_at"`
+	URLScopePending bool `bun:"url_scope_pending,notnull" json:"url_scope_pending"`
+	// DeliveryRulesMode says which Delivery Rules the Device follows: its
+	// owner's default, its type's preset, or its own list (Service.Rules).
+	DeliveryRulesMode string     `bun:"delivery_rules_mode,notnull" json:"delivery_rules_mode" tstype:"DeliveryRulesMode"`
+	CreatedAt         time.Time  `bun:"created_at,notnull" json:"created_at"`
+	UpdatedAt         time.Time  `bun:"updated_at,notnull" json:"updated_at"`
+	LastAccessedAt    *time.Time `bun:"last_accessed_at" json:"last_accessed_at"`
 
 	Owner        *models.UserRef `bun:"rel:belongs-to,join:user_id=id" json:"-"`
 	ScopeLibrary *models.Library `bun:"rel:belongs-to,join:scope_library_id=id" json:"-"`
@@ -50,17 +53,40 @@ type DeviceShortURL struct {
 	Device *Device `bun:"rel:belongs-to,join:device_id=id" json:"-"`
 }
 
+// DeviceDeliveryRule is one rule of a Device's own Delivery Rules. Only a
+// Device whose DeliveryRulesMode is custom has rows.
+type DeviceDeliveryRule struct {
+	bun.BaseModel `bun:"table:device_delivery_rules,alias:ddr"`
+
+	DeviceID          string `bun:"device_id,pk"`
+	SourceFileType    string `bun:"source_file_type,pk"`
+	DeliveredFileType string `bun:"delivered_file_type,notnull"`
+	Position          int    `bun:"position,notnull"`
+}
+
 const (
-	//tygo:emit export type DeviceType = typeof DeviceTypeKobo | typeof DeviceTypeKindle | typeof DeviceTypeBrowser;
+	//tygo:emit export type DeviceType = typeof DeviceTypeKobo | typeof DeviceTypeKindle | typeof DeviceTypeOPDS | typeof DeviceTypeBrowser;
 	DeviceTypeKobo    = "kobo"
 	DeviceTypeKindle  = "kindle"
+	DeviceTypeOPDS    = "opds"
 	DeviceTypeBrowser = "browser"
 )
 
 const (
-	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser;
+	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS;
 	ConnectionKoboSync       = "kobo_sync"
 	ConnectionEReaderBrowser = "ereader_browser"
+	ConnectionOPDS           = "opds"
+)
+
+const (
+	//tygo:emit export type DeliveryRulesMode = typeof RulesModeDefault | typeof RulesModePreset | typeof RulesModeCustom;
+	// RulesModeDefault follows the owner's default Delivery Rules.
+	RulesModeDefault = "default"
+	// RulesModePreset follows the Device type's preset.
+	RulesModePreset = "preset"
+	// RulesModeCustom is the Device's own list, in device_delivery_rules.
+	RulesModeCustom = "custom"
 )
 
 const (

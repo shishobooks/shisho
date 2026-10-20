@@ -10,7 +10,7 @@ Use this root catalog URL:
 https://your-server/opds/v1/catalog
 ```
 
-Feeds list the books your [Delivery Rules](./supported-formats.md#delivery-rules) deliver something from, and each book offers one download link per file the rules pick, in the file type they send it as. With the rules untouched, every book offers its EPUB, or its earliest other file type in Shisho's default order, as itself, plus its M4B when it has one. To get CBZs as EPUB or EPUBs as KePub in a reading app, change the rules under **User Settings > Delivery Rules**; they also decide the web app's download button.
+Feeds list the books the [Delivery Rules](./supported-formats.md#delivery-rules) deliver something from, and each book offers one download link per file the rules pick, in the file type they send it as. Signed in with your account password, the catalog follows your own default rules; signed in as a [Device](#sign-in-as-a-device), it follows that Device's rules. With the rules untouched, every book offers its EPUB, or its earliest other file type in Shisho's default order, as itself, plus its M4B when it has one. To get CBZs as EPUB or EPUBs as KePub in a reading app, change your default under **User Settings > Delivery Rules**, which also decides the web app's download button, or give the reading app its own Device.
 
 Each download link carries the media type of the file type it sends, the one listed in [Supported Formats](./supported-formats.md), so the reading app knows how to open it, and a title naming that file type and the file's name, or the book's title when the file has no name, such as `EPUB · Illustrated Edition`. Reading apps that label downloads by title use it to tell a book's files apart. A KePub is typed as an EPUB, with a link ending in `.kepub.epub`, because KOReader recognizes downloads by their extension or media type. Downloads are generated with the book's current metadata, as that page describes for each format. The first download of some formats shows no progress or size in the reading app; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
 
@@ -18,11 +18,28 @@ A download delivered through a [conversion](./supported-formats.md#conversions),
 
 ## Authentication and Access
 
-OPDS uses HTTP Basic Authentication. Add the catalog with the same Shisho username and password used for the web interface. Use HTTPS whenever the catalog is reachable outside a trusted local network.
+OPDS uses HTTP Basic Authentication with your Shisho username and one of two passwords:
+
+- **Your account password**, the one used for the web interface. The catalog follows your default Delivery Rules and shows every library you can access.
+- **A Device credential**, from an **OPDS app** Device. The catalog follows that Device's Delivery Rules and [scope](./users-and-permissions.md#scope). See [Sign In as a Device](#sign-in-as-a-device).
+
+Use HTTPS whenever the catalog is reachable outside a trusted local network.
 
 The user's role needs Books Read. Without it, every catalog feed, cover, and download returns `403 Forbidden`, the same rule [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs follow.
 
-The root catalog lists only libraries the authenticated user can access, followed by a **Lists** entry when the user owns or has been shared a [list](./lists.md) with something to download. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client.
+The root catalog lists only libraries the authenticated user can access, followed by a **Lists** entry when the user owns or has been shared a [list](./lists.md) with something to download. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in with the account password for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client. A Device sign-in is checked on every request.
+
+### Sign In as a Device
+
+Give each reading app its own Device so it gets its own Delivery Rules and scope, for example comics only in Panels and every EPUB in KOReader:
+
+1. Open the user menu, select **Devices**, and click **Add Device**. Name it, choose **OPDS app**, and click **Add Device**.
+2. Under **OPDS** on the Device's page, copy the **OPDS URL**, **Username**, and **Password**.
+3. In the reading app, add an OPDS catalog with that URL, your username, and the Device's credential as the password.
+
+A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The credential is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong credential, or another user's, gets the same `401 Unauthorized` as a wrong password. Only an OPDS app Device's credential signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
+
+A Device scoped to one library shows only that library in the root catalog. A Device scoped to a list shows only that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
 
 ## Catalog Structure
 
@@ -53,6 +70,12 @@ The **All Books**, author, and search book feeds use the authenticated user's [s
 
 Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clients may work, but client support for authentication, search, multiple acquisition links, and file types varies. Consult the client's documentation when adding the catalog.
 
+### KOReader
+
+Add an **OPDS app** Device for KOReader, as in [Sign In as a Device](#sign-in-as-a-device), even when KOReader runs on a Kobo: Kobo's own reader and KOReader are separate Devices. In KOReader, open **OPDS catalog** from the top menu's search tab, add a catalog with the plus button, and enter the catalog URL, your username, and the Device's credential.
+
+Deliver EPUBs as EPUB to KOReader. It renders a KePub the same as an EPUB, so converting gains nothing and costs a wait on each first download.
+
 ## Troubleshooting
 
 ### Repeated Login Prompts or 401 Responses
@@ -69,8 +92,8 @@ Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clien
 
 **Symptom:** A library or expected book is absent from the catalog.
 
-**Likely cause:** The account lacks library access, the user's [Delivery Rules](./supported-formats.md#delivery-rules) have no rule for the book's main file types, or the file is a supplement. A file can also be absent while its book is listed: only the files on a book's first matching rule are offered.
+**Likely cause:** The account lacks library access, the [Delivery Rules](./supported-formats.md#delivery-rules) the catalog follows have no rule for the book's main file types, a Device's scope leaves the book out, or the file is a supplement. A file can also be absent while its book is listed: only the files on a book's first matching rule are offered.
 
-**Verify:** Check the user's library access and compare the book's main-file types with the rules under **User Settings > Delivery Rules**.
+**Verify:** Check the user's library access. Signed in with the account password, compare the book's main-file types with the rules under **User Settings > Delivery Rules**; signed in as a Device, check **Delivery Rules** and **Scope** on the Device's page.
 
-**Fix:** Grant the intended [library access](./users-and-permissions.md) or add or reorder a rule for the required file type. The web app's **Download as** menu offers every file type regardless of the rules. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).
+**Fix:** Grant the intended [library access](./users-and-permissions.md), add or reorder a rule for the required file type, or change the Device's scope. The web app's **Download as** menu offers every file type regardless of the rules. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).

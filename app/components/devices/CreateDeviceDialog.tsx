@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 
+import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
 import { Button } from "@/components/ui/button";
 import {
   DialogBody,
@@ -12,7 +13,6 @@ import {
 import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useCreateDevice } from "@/hooks/queries/devices";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { toastRequestError } from "@/libraries/api";
@@ -21,7 +21,6 @@ import {
   type DeviceResponse,
   type DeviceType,
 } from "@/types/generated/devices";
-import { DEVICE_TYPE_LABELS, DEVICE_TYPE_OPTIONS } from "@/utils/devices";
 
 interface CreateDeviceDialogProps {
   open: boolean;
@@ -84,37 +83,11 @@ const CreateDeviceDialog = ({
                 value={name}
               />
             </div>
-            <div className="space-y-2">
-              <Label id="device-type-label">Type</Label>
-              <RadioGroup
-                aria-labelledby="device-type-label"
-                className="space-y-2"
-                name="device-type"
-                onValueChange={(value) => setDeviceType(value as DeviceType)}
-                value={deviceType}
-              >
-                {DEVICE_TYPE_OPTIONS.map((option) => (
-                  <div className="flex items-start gap-3" key={option.type}>
-                    <RadioGroupItem
-                      className="mt-0.5"
-                      id={`device-type-${option.type}`}
-                      value={option.type}
-                    />
-                    <Label
-                      className="cursor-pointer font-normal leading-snug"
-                      htmlFor={`device-type-${option.type}`}
-                    >
-                      <span className="block font-medium">
-                        {DEVICE_TYPE_LABELS[option.type]}
-                      </span>
-                      <span className="block text-sm text-muted-foreground">
-                        {option.description}
-                      </span>
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </div>
+            <DeviceTypeRadioGroup
+              id="device-type"
+              onChange={setDeviceType}
+              value={deviceType}
+            />
           </DialogBody>
           <DialogFooter>
             <Button

@@ -72,8 +72,8 @@ func (c *basicAuthCache) put(key string, user *models.User) {
 
 // basicAuthCacheKey derives a cache key without retaining the plaintext
 // password in memory. Distinct (username, password) pairs map to distinct
-// keys: the username arrives here from strings.SplitN(decoded, ":", 2) in
-// BasicAuth, so by construction it cannot contain a ":" — making
+// keys: the username arrives here from BasicCredentials, which splits at the
+// first ":", so by construction it cannot contain a ":". That makes
 // `username + ":" + sha256(password)` an unambiguous concatenation.
 func basicAuthCacheKey(username, password string) string {
 	sum := sha256.Sum256([]byte(password))

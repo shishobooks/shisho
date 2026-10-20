@@ -20,3 +20,20 @@ export const defaultDeliveredFileType = (
   }
   return file.file_type;
 };
+
+/**
+ * A Delivery Rule being edited, with a client-side key that survives
+ * reordering so dnd-kit can track the row.
+ */
+export interface DraftRule extends Rule {
+  key: string;
+}
+
+let draftKeyCounter = 0;
+export const withKeys = (rules: Rule[]): DraftRule[] =>
+  rules.map((rule) => ({ ...rule, key: `rule-${++draftKeyCounter}` }));
+export const withoutKeys = (rules: DraftRule[]): Rule[] =>
+  rules.map(({ source_file_type, delivered_file_type }) => ({
+    source_file_type,
+    delivered_file_type,
+  }));

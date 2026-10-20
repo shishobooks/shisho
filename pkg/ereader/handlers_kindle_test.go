@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/internal/testgen"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -50,69 +51,6 @@ func TestIsKindle(t *testing.T) {
 	}
 }
 
-func TestKindleFiles(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		files   []*models.File
-		wantIDs []int
-	}{
-		{
-			name: "mobi before azw3",
-			files: []*models.File{
-				{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-				{ID: 2, FileType: models.FileTypeAZW3, FileRole: models.FileRoleMain},
-				{ID: 3, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain},
-			},
-			wantIDs: []int{3},
-		},
-		{
-			name: "every mobi",
-			files: []*models.File{
-				{ID: 1, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain},
-				{ID: 2, FileType: models.FileTypeAZW3, FileRole: models.FileRoleMain},
-				{ID: 3, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain},
-			},
-			wantIDs: []int{1, 3},
-		},
-		{
-			name: "azw3 when no mobi",
-			files: []*models.File{
-				{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-				{ID: 2, FileType: models.FileTypeAZW3, FileRole: models.FileRoleMain},
-			},
-			wantIDs: []int{2},
-		},
-		{
-			name: "skips supplements",
-			files: []*models.File{
-				{ID: 1, FileType: models.FileTypeMOBI, FileRole: models.FileRoleSupplement},
-				{ID: 2, FileType: models.FileTypeAZW3, FileRole: models.FileRoleMain},
-			},
-			wantIDs: []int{2},
-		},
-		{
-			name: "none, pdf included",
-			files: []*models.File{
-				{ID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
-				{ID: 2, FileType: models.FileTypePDF, FileRole: models.FileRoleMain},
-			},
-			wantIDs: nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			var got []int
-			for _, f := range kindleFiles(tt.files) {
-				got = append(got, f.ID)
-			}
-			assert.Equal(t, tt.wantIDs, got)
-		})
-	}
-}
-
 func TestKindleFilename(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +60,7 @@ func TestKindleFilename(t *testing.T) {
 		want string
 	}{
 		{"book title", &models.File{FileType: models.FileTypeMOBI}, "The_Book_s_Title.mobi"},
+		{"delivered as another type", &models.File{FileType: models.FileTypeEPUB}, "The_Book_s_Title.azw3"},
 		{"file name with accents", &models.File{FileType: models.FileTypeAZW3, Name: strPtr("Édition Spéciale (2nd)")}, "Edition_Speciale_2nd.azw3"},
 		{"name ending in its extension", &models.File{FileType: models.FileTypeMOBI, Name: strPtr("Some Book.MOBI")}, "Some_Book.mobi"},
 		{"nothing ascii", &models.File{FileType: models.FileTypeMOBI, Name: strPtr("日本語")}, "book.mobi"},
@@ -129,21 +68,26 @@ func TestKindleFilename(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, kindleFilename("The Book's Title", tt.file))
+			deliveredType := tt.file.FileType
+			if deliveredType == models.FileTypeEPUB {
+				deliveredType = models.FileTypeAZW3
+			}
+			assert.Equal(t, tt.want, kindleFilename("The Book's Title", tt.file, deliveredType))
 		})
 	}
 }
 
 func strPtr(s string) *string { return &s }
 
-// kindleFixture is the access fixture with five books in libA: one with an
+// kindleFixture is the access fixture with six books in libA: one with an
 // EPUB, a MOBI, an AZW3, and a PDF, one with an EPUB and an AZW3, one with an
-// EPUB and a PDF, one with only an EPUB, and one with an EPUB main file and a
-// MOBI supplement.
+// EPUB and a MOBI, one with an EPUB and a PDF, one with only an EPUB, and one
+// with an EPUB main file and a MOBI supplement.
 type kindleFixture struct {
 	*eReaderAccessFixture
 	allFormats *models.Book
 	azw3Only   *models.Book
+	mobiOnly   *models.Book
 	epubPDF    *models.Book
 	epubOnly   *models.Book
 	supplement *models.Book
@@ -192,10 +136,20 @@ func newKindleFixture(t *testing.T) *kindleFixture {
 
 	f.allFormats = addBook("All Formats", models.FileTypeEPUB, models.FileTypeMOBI, models.FileTypeAZW3, models.FileTypePDF)
 	f.azw3Only = addBook("Has AZW3", models.FileTypeEPUB, models.FileTypeAZW3)
+	f.mobiOnly = addBook("Has MOBI", models.FileTypeEPUB, models.FileTypeMOBI)
 	f.epubPDF = addBook("Has PDF", models.FileTypeEPUB, models.FileTypePDF)
 	f.epubOnly = addBook("EPUB Only", models.FileTypeEPUB)
 	f.supplement = addBook("Has Supplement", models.FileTypeEPUB, "supplement:"+models.FileTypeMOBI)
 	return f
+}
+
+// setType changes the fixture's Device to deviceType, which puts it on the
+// rules that type starts with.
+func (f *kindleFixture) setType(t *testing.T, deviceType string) {
+	t.Helper()
+	device, err := devices.NewService(f.db).Update(context.Background(), f.user.ID, f.device.ID, devices.UpdateDeviceOptions{DeviceType: &deviceType})
+	require.NoError(t, err)
+	f.device = device
 }
 
 func (f *kindleFixture) page(t *testing.T, path, userAgent string) string {
@@ -223,81 +177,110 @@ func (f *kindleFixture) fileLinkPrefix(title, fileType string) string {
 	return `/file/` + strconv.Itoa(f.files[title+"/"+fileType].ID)
 }
 
-func TestDownload_KindleGetsMOBI(t *testing.T) {
+// A Kindle Device follows its preset: AZW3 first, with a Kindle download
+// URL, and MOBI for a book without one.
+func TestDownload_KindleDeviceGetsAZW3First(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
+	f.setType(t, devices.DeviceTypeKindle)
 
 	body := f.page(t, "/download/"+strconv.Itoa(f.allFormats.ID), kindleUserAgent)
-
-	assert.Contains(t, body, f.kindleLink("All Formats", models.FileTypeMOBI, "All_Formats.mobi"))
-	assert.Contains(t, body, "Download MOBI")
-	for _, fileType := range []string{models.FileTypeAZW3, models.FileTypePDF, models.FileTypeEPUB} {
+	assert.Contains(t, body, f.kindleLink("All Formats", models.FileTypeAZW3, "All_Formats.azw3"))
+	assert.Contains(t, body, "Download AZW3")
+	assert.Contains(t, body, "Some Kindles refuse AZW3 downloads. If yours does, put MOBI first in this Device's Delivery Rules.")
+	for _, fileType := range []string{models.FileTypeMOBI, models.FileTypePDF, models.FileTypeEPUB} {
 		assert.NotContains(t, body, f.fileLinkPrefix("All Formats", fileType), fileType)
 	}
-	assert.NotContains(t, body, "Unavailable on Kindle")
+
+	body = f.page(t, "/download/"+strconv.Itoa(f.mobiOnly.ID), kindleUserAgent)
+	assert.Contains(t, body, f.kindleLink("Has MOBI", models.FileTypeMOBI, "Has_MOBI.mobi"))
+	assert.Contains(t, body, "Download MOBI")
 	assert.NotContains(t, body, "refuse AZW3")
+	assert.NotContains(t, body, f.fileLinkPrefix("Has MOBI", models.FileTypeEPUB))
 }
 
-func TestDownload_KindleGetsAZW3WithoutMOBI(t *testing.T) {
+func TestDownload_KindleDeviceBookWithoutKindleFileIsNotDelivered(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
-
-	body := f.page(t, "/download/"+strconv.Itoa(f.azw3Only.ID), kindleUserAgent)
-
-	assert.Contains(t, body, f.kindleLink("Has AZW3", models.FileTypeAZW3, "Has_AZW3.azw3"))
-	assert.Contains(t, body, "Download AZW3")
-	assert.Contains(t, body, "Some Kindles refuse AZW3 downloads. If yours does, add a MOBI file to this book.")
-	assert.NotContains(t, body, f.fileLinkPrefix("Has AZW3", models.FileTypeEPUB))
-}
-
-func TestDownload_KindleBookWithoutKindleFileIsUnavailable(t *testing.T) {
-	t.Parallel()
-	f := newKindleFixture(t)
+	f.setType(t, devices.DeviceTypeKindle)
 
 	for _, book := range []*models.Book{f.epubOnly, f.epubPDF, f.supplement} {
 		body := f.page(t, "/download/"+strconv.Itoa(book.ID), kindleUserAgent)
 
-		assert.Contains(t, body, "Unavailable on Kindle", book.Title)
+		assert.Contains(t, body, "Not delivered to this Device.", book.Title)
 		assert.NotContains(t, body, "/file/", book.Title)
 		assert.NotContains(t, body, "Download ", book.Title)
 	}
 }
 
-func TestDownload_NonKindleSeesEveryFile(t *testing.T) {
+// What a Device is served depends on its type and rules alone. A Browser
+// Device on a Kindle or a Kobo gets the same downloads as anywhere else:
+// the built-in rules' EPUB, with a plain link.
+func TestDownload_UserAgentDoesNotChangeWhatIsServed(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
 
-	for _, ua := range []string{"", koboUserAgent} {
+	for _, ua := range []string{"", kindleUserAgent, koboUserAgent} {
 		body := f.page(t, "/download/"+strconv.Itoa(f.allFormats.ID), ua)
 
+		assert.Contains(t, body, f.fileLink("All Formats", models.FileTypeEPUB), ua)
+		assert.Contains(t, body, "Download EPUB", ua)
 		for _, fileType := range []string{models.FileTypeAZW3, models.FileTypeMOBI, models.FileTypePDF} {
-			assert.Contains(t, body, f.fileLink("All Formats", fileType), ua)
+			assert.NotContains(t, body, f.fileLinkPrefix("All Formats", fileType), ua)
 		}
-		assert.Contains(t, body, "Download AZW3", ua)
-		assert.Contains(t, body, "Download MOBI", ua)
 		assert.NotContains(t, body, "/kindle/", ua)
-		assert.NotContains(t, body, "Unavailable on Kindle", ua)
+		assert.NotContains(t, body, "/kepub", ua)
 	}
-
-	// A Kobo keeps getting KePub for the EPUB.
-	body := f.page(t, "/download/"+strconv.Itoa(f.allFormats.ID), koboUserAgent)
-	assert.Contains(t, body, "/file/"+strconv.Itoa(f.files["All Formats/epub"].ID)+"/kepub")
 }
 
-func TestBookLists_KindleMarksBooksWithoutKindleFile(t *testing.T) {
+// The User-Agent only shows a banner, on every page, when it suggests a
+// Kindle or a Kobo and the Device's type is another.
+func TestTypeMismatchBanner(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
-	lib := strconv.Itoa(f.libA.ID)
+	lib := "/libraries/" + strconv.Itoa(f.libA.ID) + "/all"
 
-	body := f.page(t, "/libraries/"+lib+"/all", kindleUserAgent)
-	// EPUB Only, Has PDF, and Has Supplement.
-	assert.Equal(t, 3, strings.Count(body, "Unavailable on Kindle"), body)
+	for _, path := range []string{"/", lib, "/download/" + strconv.Itoa(f.allFormats.ID)} {
+		assert.Contains(t, f.page(t, path, kindleUserAgent), "This looks like a Kindle, but this Device is set up as a Browser Device.", path)
+		assert.Contains(t, f.page(t, path, koboUserAgent), "This looks like a Kobo, but this Device is set up as a Browser Device.", path)
+		assert.NotContains(t, f.page(t, path, ""), "This looks like", path)
+	}
 
-	body = f.page(t, "/libraries/"+lib+"/all", "")
-	assert.NotContains(t, body, "Unavailable on Kindle")
+	f.setType(t, devices.DeviceTypeKindle)
+	assert.NotContains(t, f.page(t, "/", kindleUserAgent), "This looks like")
+	assert.Contains(t, f.page(t, "/", koboUserAgent), "This looks like a Kobo, but this Device is set up as a Kindle Device.")
 }
 
-// A list row names the types of a book's main files, not its supplements.
+func TestTypeMismatchBanner_EscapesNothingFromTheUserAgent(t *testing.T) {
+	t.Parallel()
+	assert.NotContains(t, typeMismatchBanner(devices.DeviceTypeBrowser, `Kindle/3.0 <script>`), "<script>")
+}
+
+// Book lists hide books the Device's rules deliver nothing from, and each
+// row names the File Types a book is delivered as.
+func TestBookLists_FollowTheDeviceRules(t *testing.T) {
+	t.Parallel()
+	f := newKindleFixture(t)
+	lib := "/libraries/" + strconv.Itoa(f.libA.ID) + "/all"
+
+	f.setType(t, devices.DeviceTypeKindle)
+	body := f.page(t, lib, kindleUserAgent)
+	for _, title := range []string{"All Formats", "Has AZW3", "Has MOBI"} {
+		assert.Contains(t, body, ">"+title+"<")
+	}
+	for _, title := range []string{"EPUB Only", "Has PDF", "Has Supplement"} {
+		assert.NotContains(t, body, ">"+title+"<")
+	}
+
+	f.setType(t, devices.DeviceTypeKobo)
+	body = f.page(t, lib, koboUserAgent)
+	_, row, found := strings.Cut(body, ">EPUB Only<")
+	require.True(t, found, body)
+	meta, _, _ := strings.Cut(row, "</a>")
+	assert.Contains(t, meta, ">KePub<")
+}
+
+// A list row names the types a book is delivered as, not its supplements.
 func TestBookLists_FileTypesSkipSupplements(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
@@ -311,14 +294,17 @@ func TestBookLists_FileTypesSkipSupplements(t *testing.T) {
 	assert.NotContains(t, meta, "MOBI")
 }
 
-func TestFilterBar_IncludesMOBIAndAZW3(t *testing.T) {
+// The type filter offers the File Types the Device's rules deliver from,
+// and narrows within them.
+func TestFilterBar_FollowsTheDeviceRules(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
 	lib := strconv.Itoa(f.libA.ID)
 
 	body := f.page(t, "/libraries/"+lib+"/all", "")
-	assert.Contains(t, body, "types=mobi")
-	assert.Contains(t, body, "types=azw3")
+	for _, fileType := range []string{"epub", "azw3", "mobi", "cbz", "pdf", "m4b"} {
+		assert.Contains(t, body, "types="+fileType)
+	}
 
 	body = f.page(t, "/libraries/"+lib+"/all?types=azw3", "")
 	assert.Contains(t, body, "All Formats")
@@ -329,13 +315,17 @@ func TestFilterBar_IncludesMOBIAndAZW3(t *testing.T) {
 	// next to an EPUB is not hidden behind it, and a supplement never counts.
 	body = f.page(t, "/libraries/"+lib+"/all?types=mobi", "")
 	assert.Contains(t, body, "All Formats")
+	assert.Contains(t, body, "Has MOBI")
 	assert.NotContains(t, body, "Has AZW3")
 	assert.NotContains(t, body, "Has Supplement")
 
-	body = f.page(t, "/libraries/"+lib+"/all?types=epub", "")
-	for _, title := range []string{"All Formats", "Has AZW3", "Has PDF", "EPUB Only", "Has Supplement"} {
-		assert.Contains(t, body, title)
-	}
+	f.setType(t, devices.DeviceTypeKindle)
+	body = f.page(t, "/libraries/"+lib+"/all", kindleUserAgent)
+	assert.Contains(t, body, "types=azw3")
+	assert.Contains(t, body, "types=mobi")
+	assert.NotContains(t, body, "types=epub")
+	body = f.page(t, "/libraries/"+lib+"/all?types=epub", kindleUserAgent)
+	assert.NotContains(t, body, "All Formats", "a type the rules don't deliver matches nothing")
 }
 
 // The Kindle download route serves the file with no Content-Disposition, so
@@ -390,4 +380,24 @@ func (f *downloadFixture) serveKindle(file *models.File) *httptest.ResponseRecor
 		errcodes.NewHandler().Handle(err, c)
 	}
 	return rec
+}
+
+// The Kindle download route reads the delivered File Type from the URL's
+// extension, so one no File Type has names nothing.
+func TestDownloadFileKindle_UnknownExtensionIsNotFound(t *testing.T) {
+	t.Parallel()
+	f := newDownloadFixture(t, "Book")
+	file := f.addFile(models.FileTypeMOBI, models.FileRoleMain, testgen.GenerateMOBI(t, f.dir, "book.mobi", testgen.MOBIOptions{Kind: testgen.MOBIKindMOBI6, Title: "Book"}))
+
+	for _, filename := range []string{"book.fb2", "book"} {
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+		withDevice(c, t, f.db, f.device)
+		c.SetParamNames("credential", "fileId", "filename")
+		c.SetParamValues(f.device.Credential, strconv.Itoa(file.ID), filename)
+		err := f.h.DownloadFileKindle(c)
+		var codeErr *errcodes.Error
+		require.ErrorAs(t, err, &codeErr, filename)
+		assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode, filename)
+	}
 }

@@ -109,6 +109,7 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
+		deviceService:  devices.NewService(db),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -203,6 +204,7 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
+		deviceService:  devices.NewService(db),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -225,7 +227,9 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 // TestDownload_KoboGetsKepubLinksForEpubAndCbz confirms that Kobo
 // devices see KePub download links for EPUB and CBZ files, but regular
 // links for other file types.
-func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
+// A Kobo Device follows its preset, which delivers the EPUB as KePub and
+// has no rule for M4B, whatever the browser's User-Agent says.
+func TestDownload_KoboDeviceGetsKepubFromItsPreset(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
@@ -248,7 +252,7 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	require.NoError(t, err)
 
 	deviceService := devices.NewService(db)
-	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeBrowser)
+	device, err := deviceService.Create(ctx, userID, "Test Key", devices.DeviceTypeKobo)
 	require.NoError(t, err)
 
 	libraryService := libraries.NewService(db)
@@ -299,10 +303,10 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
+		deviceService:  devices.NewService(db),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; U; Android 2.0; Kobo Touch)")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	withDevice(c, t, db, device)
@@ -313,11 +317,9 @@ func TestDownload_KoboGetsKepubLinksForEpubAndCbz(t *testing.T) {
 
 	body := rec.Body.String()
 
-	// EPUB should get /kepub link on Kobo
-	assert.Contains(t, body, "/file/"+strconv.Itoa(epubFile.ID)+"/kepub", "EPUB gets KePub link on Kobo")
-	// M4B should NOT get /kepub link (not a supported kepub format)
-	assert.NotContains(t, body, "/file/"+strconv.Itoa(m4bFile.ID)+"/kepub", "M4B does not get KePub link")
-	assert.Contains(t, body, "/file/"+strconv.Itoa(m4bFile.ID), "M4B still gets a regular download link")
+	assert.Contains(t, body, `/file/`+strconv.Itoa(epubFile.ID)+`/kepub"`, "EPUB gets a KePub link on a Kobo Device")
+	assert.Contains(t, body, "Download KePub")
+	assert.NotContains(t, body, "/file/"+strconv.Itoa(m4bFile.ID), "a Kobo can't receive M4B")
 }
 
 // TestDownload_ShowsFileNames confirms the Download handler shows file
@@ -400,6 +402,7 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
+		deviceService:  devices.NewService(db),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

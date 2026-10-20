@@ -33,7 +33,7 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 
 	for _, path := range []string{
 		"/ereader/key/:credential/file/:fileId",
-		"/ereader/key/:credential/file/:fileId/kepub",
+		"/ereader/key/:credential/file/:fileId/:deliveredType",
 		"/ereader/key/:credential/file/:fileId/kindle/:filename",
 	} {
 		assert.True(t, methods[path][http.MethodGet], "GET %s should be registered", path)

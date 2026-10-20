@@ -129,7 +129,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/devices"
     output_path: "app/types/generated/devices.ts"
     frontmatter: |
-      import { UserRef } from "@/types";
+      import { Rule, RuleOption, UserRef } from "@/types";
     include_files:
       - model.go
       - types.go

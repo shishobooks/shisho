@@ -21,7 +21,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	peopleService := people.NewService(db)
 
 	mw := devices.NewMiddleware(deviceService)
-	h := newHandler(libraryService, bookService, seriesService, peopleService, downloadCache, settings.NewService(db), lists.NewService(db))
+	h := newHandler(libraryService, bookService, seriesService, peopleService, downloadCache, settings.NewService(db), lists.NewService(db), deviceService)
 
 	// Short URL resolution (no auth required - the short code IS the auth)
 	e.GET("/e/:shortCode", func(c echo.Context) error {
@@ -43,8 +43,8 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	ereader.GET("/cover/:bookId", h.Cover)
 	ereader.GET("/file/:fileId", h.DownloadFile)
 	ereader.HEAD("/file/:fileId", h.DownloadFile)
-	ereader.GET("/file/:fileId/kepub", h.DownloadFileKepub)
-	ereader.HEAD("/file/:fileId/kepub", h.DownloadFileKepub)
+	ereader.GET("/file/:fileId/:deliveredType", h.DownloadFileAs)
+	ereader.HEAD("/file/:fileId/:deliveredType", h.DownloadFileAs)
 	ereader.GET("/file/:fileId/kindle/:filename", h.DownloadFileKindle)
 	ereader.HEAD("/file/:fileId/kindle/:filename", h.DownloadFileKindle)
 }

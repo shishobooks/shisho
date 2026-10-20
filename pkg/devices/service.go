@@ -3,12 +3,14 @@ package devices
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
@@ -53,8 +55,11 @@ func (s *Service) Create(ctx context.Context, userID int, name, deviceType strin
 		Name:       name,
 		DeviceType: deviceType,
 		ScopeType:  ScopeAll,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		// Kobo and Kindle Devices work as soon as they're added, from
+		// their presets; the others follow the owner's default.
+		DeliveryRulesMode: startingRulesMode(deviceType),
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -139,25 +144,77 @@ func (s *Service) GetByCredential(ctx context.Context, credential string) (*Devi
 	return device, nil
 }
 
-// UpdateDeviceOptions holds the changes Update applies. A nil field is left
-// unchanged. Callers check that a scope's library or list is one the owner
-// can see.
-type UpdateDeviceOptions struct {
-	Name  *string
-	Scope *Scope
+// GetByOwnerCredential returns the Device of the user named username (in
+// any case, as password sign-in matches it) whose credential is exactly
+// credential, or nil. It compares against each of that user's Devices in
+// constant time, so a guess reveals nothing about how close it came, and
+// costs one query, not a bcrypt comparison.
+func (s *Service) GetByOwnerCredential(ctx context.Context, username, credential string) (*Device, error) {
+	if username == "" || credential == "" {
+		return nil, nil
+	}
+	devices := []*Device{}
+	err := s.selectDevices(&devices).
+		Where("d.user_id IN (SELECT id FROM users WHERE username = ? COLLATE NOCASE)", username).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var match *Device
+	for _, device := range devices {
+		if subtle.ConstantTimeCompare([]byte(device.Credential), []byte(credential)) == 1 {
+			match = device
+		}
+	}
+	return match, nil
 }
 
-// Update applies opts to userID's Device id and returns it.
+// UpdateDeviceOptions holds the changes Update applies. A nil field is left
+// unchanged. Callers check that a scope's library or list is one the owner
+// can see. A new DeviceType puts the Device back on the rules that type
+// starts with, since its own list may name File Types the new type can't
+// receive, unless Rules says what to follow instead.
+type UpdateDeviceOptions struct {
+	Name       *string
+	DeviceType *string
+	Scope      *Scope
+	Rules      *RulesChange
+}
+
+// RulesChange makes a Device follow its owner's default, follow its type's
+// preset, or use Rules as its own list (Mode is a RulesMode constant).
+type RulesChange struct {
+	Mode  string
+	Rules []delivery.Rule
+}
+
+// Update applies opts to userID's Device id, in one transaction, and returns
+// it. It returns a *delivery.RulesError, before saving anything, for rules
+// the Device's resulting type can't follow.
 func (s *Service) Update(ctx context.Context, userID int, id string, opts UpdateDeviceOptions) (*Device, error) {
 	device, err := s.Retrieve(ctx, userID, id)
 	if err != nil {
 		return nil, err
+	}
+	resultingType := device.DeviceType
+	if opts.DeviceType != nil {
+		resultingType = *opts.DeviceType
+	}
+	if opts.Rules != nil {
+		if err := CheckRules(resultingType, opts.Rules.Mode, opts.Rules.Rules); err != nil {
+			return nil, err
+		}
 	}
 
 	columns := []string{"updated_at"}
 	if opts.Name != nil {
 		device.Name = *opts.Name
 		columns = append(columns, "name")
+	}
+	typeChanged := opts.DeviceType != nil && *opts.DeviceType != device.DeviceType
+	if typeChanged {
+		device.DeviceType = *opts.DeviceType
+		columns = append(columns, "device_type")
 	}
 	if opts.Scope != nil {
 		device.ScopeType = opts.Scope.Type
@@ -170,8 +227,20 @@ func (s *Service) Update(ctx context.Context, userID int, id string, opts Update
 	}
 	device.UpdatedAt = time.Now()
 
-	if _, err := s.db.NewUpdate().Model(device).Column(columns...).WherePK().Exec(ctx); err != nil {
-		return nil, errors.WithStack(err)
+	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewUpdate().Model(device).Column(columns...).WherePK().Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		switch {
+		case opts.Rules != nil:
+			return saveRules(ctx, tx, device, opts.Rules.Mode, opts.Rules.Rules)
+		case typeChanged:
+			return saveRules(ctx, tx, device, startingRulesMode(device.DeviceType), nil)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return s.Retrieve(ctx, userID, id)
 }

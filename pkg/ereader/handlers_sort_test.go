@@ -128,7 +128,7 @@ func TestHandlerResolveSort_FallsBackToBuiltinDefault(t *testing.T) {
 
 	settingsSvc := settings.NewService(db)
 	// Other deps are unused by resolveSort; nil keeps the test focused.
-	h := newHandler(nil, nil, nil, nil, nil, settingsSvc, nil)
+	h := newHandler(nil, nil, nil, nil, nil, settingsSvc, nil, nil)
 
 	got := h.resolveSort(context.Background(), user.ID, lib.ID)
 

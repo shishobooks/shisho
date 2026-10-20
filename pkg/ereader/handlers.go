@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -14,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -38,6 +40,7 @@ type handler struct {
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
 	listService     *lists.Service
+	deviceService   *devices.Service
 }
 
 func newHandler(
@@ -48,6 +51,7 @@ func newHandler(
 	downloadCache *downloadcache.Cache,
 	settingsService *settings.Service,
 	listService *lists.Service,
+	deviceService *devices.Service,
 ) *handler {
 	return &handler{
 		libraryService:  libraryService,
@@ -57,11 +61,22 @@ func newHandler(
 		downloadCache:   downloadCache,
 		settingsService: settingsService,
 		listService:     listService,
+		deviceService:   deviceService,
 	}
 }
 
 func (h *handler) baseURL(c echo.Context) string {
 	return "/ereader/key/" + c.Param("credential")
+}
+
+// render sends a page, with a banner when the browser looks like a Kindle
+// or a Kobo but the Device's type says otherwise.
+func (h *handler) render(c echo.Context, content string) error {
+	device, err := devices.RequireDevice(c)
+	if err != nil {
+		return err
+	}
+	return c.HTML(http.StatusOK, RenderPage(typeMismatchBanner(device.DeviceType, c.Request().UserAgent())+content))
 }
 
 // requireEntityAccess returns resource's 404 when the Device's owner cannot
@@ -139,7 +154,7 @@ func (h *handler) Libraries(c echo.Context) error {
 		content.WriteString(itemHTML(lib.Name, libraryURL, ""))
 	}
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // LibraryNav shows navigation options for a library.
@@ -165,7 +180,7 @@ func (h *handler) LibraryNav(c echo.Context) error {
 	content.WriteString(itemHTML("Authors", fmt.Sprintf("%s/libraries/%s/authors", baseURL, libraryID), "Browse by author"))
 	content.WriteString(itemHTML("Search", fmt.Sprintf("%s/libraries/%s/search", baseURL, libraryID), "Search for books"))
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // LibraryAllBooks shows paginated list of all books in a library.
@@ -183,7 +198,6 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -210,10 +224,10 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	content.WriteString("<h1>All Books</h1>")
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/all", baseURL, libraryID)
-	content.WriteString(filterBar(currentURL, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, scope.rules, typesFilter, coversParam))
 
 	for _, book := range booksResult {
-		meta := formatBookMeta(book, kindle)
+		meta := formatBookMeta(book, scope.rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -223,7 +237,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	totalPages := (total + defaultPageSize - 1) / defaultPageSize
 	content.WriteString(paginationWithParams(page, totalPages, currentURL, typesFilter, coversParam))
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // LibrarySeries shows list of series in a library.
@@ -243,8 +257,9 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 
 	// Get series for this library
 	seriesList, _, err := h.seriesService.ListSeriesWithTotal(ctx, series.ListSeriesOptions{
-		LibraryID: &libraryIDInt,
-		ListID:    scope.listID,
+		LibraryID:     &libraryIDInt,
+		ListID:        scope.listID,
+		MainFileTypes: delivery.SourceFileTypes(scope.rules),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -259,7 +274,7 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 		content.WriteString(itemHTML(s.Name, seriesURL, fmt.Sprintf("%d books", s.BookCount)))
 	}
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // SeriesBooks shows books in a series.
@@ -278,7 +293,6 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -326,10 +340,10 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(s.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/series/%s", baseURL, libraryID, seriesID)
-	content.WriteString(filterBar(currentURL, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, scope.rules, typesFilter, coversParam))
 
 	for _, book := range booksResult {
-		meta := formatBookMeta(book, kindle)
+		meta := formatBookMeta(book, scope.rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -339,7 +353,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	totalPages := (total + defaultPageSize - 1) / defaultPageSize
 	content.WriteString(paginationWithParams(page, totalPages, currentURL, typesFilter, coversParam))
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // LibraryAuthors shows list of authors in a library.
@@ -359,8 +373,9 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 
 	// Get authors for this library (people with books in this library)
 	authorsList, _, err := h.peopleService.ListPeopleWithTotal(ctx, people.ListPeopleOptions{
-		LibraryID: &libraryIDInt,
-		ListID:    scope.listID,
+		LibraryID:     &libraryIDInt,
+		ListID:        scope.listID,
+		MainFileTypes: delivery.SourceFileTypes(scope.rules),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -375,7 +390,7 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 		content.WriteString(itemHTML(author.Name, authorURL, ""))
 	}
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // AuthorBooks shows books by an author.
@@ -394,7 +409,6 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -444,10 +458,10 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(author.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/authors/%s", baseURL, libraryID, authorID)
-	content.WriteString(filterBar(currentURL, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, scope.rules, typesFilter, coversParam))
 
 	for _, book := range booksInLibrary {
-		meta := formatBookMeta(book, kindle)
+		meta := formatBookMeta(book, scope.rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -457,7 +471,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	totalPages := (total + defaultPageSize - 1) / defaultPageSize
 	content.WriteString(paginationWithParams(page, totalPages, currentURL, typesFilter, coversParam))
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // LibrarySearch shows search form and results.
@@ -475,7 +489,6 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	typesFilter := c.QueryParam("types")
 	coversParam := c.QueryParam("covers")
 	showCovers := coversParam == "on"
-	kindle := detectDevice(c.Request().UserAgent()) == deviceKindle
 
 	libraryIDInt, err := httputil.ParamID(c, "libraryId", "Library")
 	if err != nil {
@@ -495,7 +508,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 
 	searchURL := fmt.Sprintf("%s/libraries/%s/search", baseURL, libraryID)
 	content.WriteString(searchForm(searchURL, query))
-	content.WriteString(filterBar(searchURL, typesFilter, coversParam, [2]string{"q", query}))
+	content.WriteString(filterBar(searchURL, scope.rules, typesFilter, coversParam, [2]string{"q", query}))
 
 	if query != "" {
 		// Search for books (paginated)
@@ -511,7 +524,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		content.WriteString(fmt.Sprintf("<p>Found %d results</p>", total))
 
 		for _, book := range booksResult {
-			meta := formatBookMeta(book, kindle)
+			meta := formatBookMeta(book, scope.rules)
 			bookURL := buildBookURL(baseURL, book.ID, coversParam)
 			coverURL := getBookCoverURL(baseURL, book)
 			content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -522,10 +535,11 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		content.WriteString(paginationWithParams(page, totalPages, searchURL, typesFilter, coversParam, [2]string{"q", query}))
 	}
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
-// Download handles book downloads with Kobo detection for KePub conversion.
+// Download shows a book's page, with a download for each File the Device's
+// Delivery Rules deliver, as the File Type they deliver it as.
 func (h *handler) Download(c echo.Context) error {
 	ctx := c.Request().Context()
 	baseURL := h.baseURL(c)
@@ -553,18 +567,18 @@ func (h *handler) Download(c echo.Context) error {
 		return err
 	}
 
-	// Collect main files (exclude supplements)
-	var mainFiles []*models.File
-	for _, f := range book.Files {
-		if f.FileRole == models.FileRoleMain {
-			mainFiles = append(mainFiles, f)
-		}
-	}
-	if len(mainFiles) == 0 {
+	if !slices.ContainsFunc(book.Files, func(f *models.File) bool { return f.FileRole == models.FileRoleMain }) {
 		return errcodes.NotFound("File")
 	}
 
-	dev := detectDevice(c.Request().UserAgent())
+	device, err := devices.RequireDevice(c)
+	if err != nil {
+		return err
+	}
+	rules, err := h.deviceService.Rules(ctx, device)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 
 	var content strings.Builder
 	content.WriteString(navBar(baseURL + "/"))
@@ -599,27 +613,21 @@ func (h *handler) Download(c echo.Context) error {
 		content.WriteString(descriptionHTML(*book.Description))
 	}
 
-	// A Kindle's browser downloads only a few formats, so it gets only the
-	// book's Kindle files. Everything else gets a download entry for each
-	// main file.
-	if dev == deviceKindle {
-		files := kindleFiles(mainFiles)
-		switch {
-		case len(files) == 0:
-			content.WriteString(`<p><b>Unavailable on Kindle.</b> This book has no MOBI or AZW3 file.</p>`)
-		case files[0].FileType == models.FileTypeAZW3:
-			content.WriteString(`<p><i>Some Kindles refuse AZW3 downloads. If yours does, add a MOBI file to this book.</i></p>`)
-		}
-		for _, f := range files {
-			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, dev))
-		}
-	} else {
-		for _, f := range mainFiles {
-			content.WriteString(fileDownloadEntry(baseURL, book.Title, f, dev))
-		}
+	// Listings hide a book with nothing to deliver, but its page is still
+	// reachable by URL.
+	deliveries := delivery.Resolve(rules, book).All()
+	kindle := device.DeviceType == devices.DeviceTypeKindle
+	switch {
+	case len(deliveries) == 0:
+		content.WriteString(`<p><b>Not delivered to this Device.</b> Its Delivery Rules have no rule for this book's file types.</p>`)
+	case kindle && deliveries[0].DeliveredFileType == models.FileTypeAZW3:
+		content.WriteString(`<p><i>Some Kindles refuse AZW3 downloads. If yours does, put MOBI first in this Device's Delivery Rules.</i></p>`)
+	}
+	for _, d := range deliveries {
+		content.WriteString(fileDownloadEntry(baseURL, book.Title, d, kindle))
 	}
 
-	return c.HTML(http.StatusOK, RenderPage(content.String()))
+	return h.render(c, content.String())
 }
 
 // Cover serves a book cover image.
@@ -656,31 +664,47 @@ func (h *handler) Cover(c echo.Context) error {
 	return covers.ServeBookCover(c, book.Files, library.CoverAspectRatio, covers.CacheControlNoCache, "Cover")
 }
 
-// DownloadFile handles file downloads for a Device. When
-// there is nothing to generate (a supplement or a type with no generator),
-// the reader gets the original file.
+// DownloadFile serves a File delivered as its own File Type. A failed
+// generation sends the Original File, per books.ResolveDeliveryDownload.
 func (h *handler) DownloadFile(c echo.Context) error {
-	return h.serveDownload(c, false)
+	return h.serveDownload(c, "")
 }
 
-// DownloadFileKepub handles KePub file downloads for a Device. Types KePub cannot convert get the original file.
-func (h *handler) DownloadFileKepub(c echo.Context) error {
-	return h.serveDownload(c, true)
+// DownloadFileAs serves a File delivered as the File Type in the
+// deliveredType param, such as "kepub". Delivered through a Conversion, a
+// failed Conversion is an error, never the Original File in its place.
+func (h *handler) DownloadFileAs(c echo.Context) error {
+	deliveredType := c.Param("deliveredType")
+	if !models.IsDeliveredFileType(deliveredType) {
+		return errcodes.NotFound("File")
+	}
+	return h.serveDownload(c, deliveredType)
 }
 
 // DownloadFileKindle handles downloads for a Kindle's browser, whose URL ends
-// in the filename (see kindleFilename). A Kindle accepts a download only when
-// its filename has an extension it knows, and Kindles have been reported
+// in the filename (see kindleFilename), and whose extension names the File
+// Type it is delivered as. A Kindle accepts a download only when its
+// filename has an extension it knows, and Kindles have been reported
 // rejecting some Content-Disposition filenames, so this route sends none and
 // the Kindle names the file from the URL.
 func (h *handler) DownloadFileKindle(c echo.Context) error {
-	return h.serveDownload(c, false, httputil.WithAttachment(""))
+	_, ext, found := strings.Cut(c.Param("filename"), ".")
+	if !found {
+		return errcodes.NotFound("File")
+	}
+	deliveredType, ok := models.DeliveredFileTypeForExtension(strings.ToLower(ext))
+	if !ok {
+		return errcodes.NotFound("File")
+	}
+	return h.serveDownload(c, deliveredType, httputil.WithAttachment(""))
 }
 
-// serveDownload serves the file named by the fileId param, generated or as
-// the original, per books.ResolveFallbackDownload. opts apply after the
-// download's defaults.
-func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.ServeOption) error {
+// serveDownload serves the File named by the fileId param delivered as
+// deliveredType ("" for its own File Type), per
+// books.ResolveDeliveryDownload: a failed generation of its own File Type
+// sends the Original File, and a failed Conversion is an error. opts apply
+// after the download's defaults.
+func (h *handler) serveDownload(c echo.Context, deliveredType string, opts ...httputil.ServeOption) error {
 	ctx := c.Request().Context()
 	fileID, err := httputil.ParamID(c, "fileId", "File")
 	if err != nil {
@@ -696,6 +720,17 @@ func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.Ser
 
 	if err := h.requireBookInScope(c, file.LibraryID, file.BookID, "File"); err != nil {
 		return err
+	}
+
+	if deliveredType == "" {
+		deliveredType = file.FileType
+	}
+	// A supplement goes only as itself, and no link names a File Type its
+	// File can't become.
+	if deliveredType != file.FileType {
+		if _, ok := models.ConversionChain(file.FileType, deliveredType); !ok || file.FileRole == models.FileRoleSupplement {
+			return errcodes.InvalidState(books.NoConversionMessage(file.FileType, deliveredType))
+		}
 	}
 
 	// Check if source file exists
@@ -720,11 +755,7 @@ func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.Ser
 		}
 	}
 
-	deliveredType := fileWithRelations.FileType
-	if kepub {
-		deliveredType = models.FileTypeKePub
-	}
-	download, err := books.ResolveFallbackDownload(c, h.downloadCache, book, fileWithRelations, deliveredType)
+	download, err := books.ResolveDeliveryDownload(c, h.downloadCache, book, fileWithRelations, deliveredType)
 	if err != nil {
 		return err
 	}
@@ -734,8 +765,8 @@ func (h *handler) serveDownload(c echo.Context, kepub bool, opts ...httputil.Ser
 // Helper functions
 
 // formatBookMeta returns a book's list-row metadata: its first author and
-// its file types, plus a note on a Kindle when it has no Kindle file.
-func formatBookMeta(book *models.Book, kindle bool) string {
+// the File Types the Device's Delivery Rules deliver it as.
+func formatBookMeta(book *models.Book, rules []delivery.Rule) string {
 	var parts []string
 	for _, a := range book.Authors {
 		if a.Person != nil {
@@ -744,38 +775,35 @@ func formatBookMeta(book *models.Book, kindle bool) string {
 		}
 	}
 
-	// Add file types
-	fileTypes := getBookFileTypes(book)
-	if len(fileTypes) > 0 {
-		parts = append(parts, strings.Join(fileTypes, ", "))
+	var types []string
+	for _, d := range delivery.Resolve(rules, book).All() {
+		if label := models.FileTypeLabel(d.DeliveredFileType); !slices.Contains(types, label) {
+			types = append(types, label)
+		}
 	}
-
-	if kindle && len(kindleFiles(book.Files)) == 0 {
-		parts = append(parts, "Unavailable on Kindle")
+	if len(types) > 0 {
+		parts = append(parts, strings.Join(types, ", "))
 	}
 
 	return strings.Join(parts, " • ")
 }
 
-// device is the kind of e-reader a request comes from, which decides the
-// downloads a book page offers.
-type device int
-
-const (
-	deviceOther device = iota
-	deviceKobo
-	deviceKindle
-)
-
-// detectDevice reads the device from a User-Agent.
-func detectDevice(userAgent string) device {
+// typeMismatchBanner warns, on the device itself, when its browser looks
+// like a Kindle or a Kobo but the Device's type is another. The User-Agent
+// never changes what is served; the Device's type and rules decide that.
+func typeMismatchBanner(deviceType, userAgent string) string {
+	var looksLike string
 	switch {
-	case isKindle(userAgent):
-		return deviceKindle
-	case strings.Contains(strings.ToLower(userAgent), "kobo"):
-		return deviceKobo
+	case isKindle(userAgent) && deviceType != devices.DeviceTypeKindle:
+		looksLike = devices.DeviceTypeKindle
+	case isKobo(userAgent) && deviceType != devices.DeviceTypeKobo:
+		looksLike = devices.DeviceTypeKobo
+	default:
+		return ""
 	}
-	return deviceOther
+	label := html.EscapeString(devices.TypeLabel(looksLike))
+	return fmt.Sprintf(`<div style="padding: 12px; margin: 8px 0; border: 2px solid #000;"><b>This looks like a %s, but this Device is set up as %s.</b> Downloads may not open here. Change its type to %s on its Device page in Shisho.</div>`,
+		label, html.EscapeString(devices.TypeLabelWithArticle(deviceType)), label)
 }
 
 // isKindle reports whether a User-Agent is an e-ink Kindle's browser, which
@@ -786,30 +814,17 @@ func isKindle(userAgent string) bool {
 	return strings.Contains(strings.ToLower(userAgent), "kindle/")
 }
 
-// kindleFiles returns the main files a Kindle should download: the MOBI
-// files, or else the AZW3 files, or nil when there are neither. A Kindle's
-// browser refuses every other format, PDF included. MOBI comes first because
-// every Kindle downloads it, while some Kindles refuse AZW3.
-func kindleFiles(files []*models.File) []*models.File {
-	for _, fileType := range []string{models.FileTypeMOBI, models.FileTypeAZW3} {
-		var matches []*models.File
-		for _, f := range files {
-			if f.FileRole == models.FileRoleMain && f.FileType == fileType {
-				matches = append(matches, f)
-			}
-		}
-		if len(matches) > 0 {
-			return matches
-		}
-	}
-	return nil
+// isKobo reports whether a User-Agent is a Kobo's browser.
+func isKobo(userAgent string) bool {
+	return strings.Contains(strings.ToLower(userAgent), "kobo")
 }
 
 // kindleFilename returns the filename that ends a file's Kindle download
 // URL: its display name with accents removed, reduced to ASCII letters and
-// digits joined by underscores, plus its type as the extension. A Kindle
-// checks the extension and has failed on non-ASCII filenames.
-func kindleFilename(bookTitle string, f *models.File) string {
+// digits joined by underscores, plus the extension of the File Type it is
+// delivered as. A Kindle checks the extension and has failed on non-ASCII
+// filenames, and DownloadFileKindle reads the delivered File Type from it.
+func kindleFilename(bookTitle string, f *models.File, deliveredType string) string {
 	name := f.ResolveTitle(bookTitle)
 	// Decompose accented letters so "É" keeps its "E".
 	name = norm.NFD.String(name)
@@ -841,21 +856,7 @@ func kindleFilename(bookTitle string, f *models.File) string {
 	if slug == "" {
 		slug = "book"
 	}
-	return slug + "." + f.FileType
-}
-
-// getBookFileTypes returns the unique types of a book's main files (e.g.,
-// ["EPUB", "M4B"]). Supplements are not offered, so they are not listed.
-func getBookFileTypes(book *models.Book) []string {
-	seen := make(map[string]bool)
-	var types []string
-	for _, f := range book.Files {
-		if f.FileRole == models.FileRoleMain && f.FileType != "" && !seen[f.FileType] {
-			seen[f.FileType] = true
-			types = append(types, strings.ToUpper(f.FileType))
-		}
-	}
-	return types
+	return slug + "." + models.DeliveredFileTypeExtension(deliveredType)
 }
 
 // buildBookURL builds a book detail URL with optional covers param.
@@ -886,35 +887,28 @@ func formatFileSize(bytes int64) string {
 	}
 }
 
-// fileDownloadEntry renders a single file's download block with file name,
-// type badge, file size, and download link. Uses block-level elements with
-// large tap targets for eReader compatibility (no flexbox).
-func fileDownloadEntry(baseURL, bookTitle string, f *models.File, dev device) string {
+// fileDownloadEntry renders one delivered File's download block with its
+// name, its File Type and size, and a link that downloads it as the File
+// Type the rules deliver it as. A Kindle gets the URL ending in the filename
+// it needs. Uses block-level elements with large tap targets for eReader
+// compatibility (no flexbox).
+func fileDownloadEntry(baseURL, bookTitle string, d delivery.Delivery, kindle bool) string {
+	f := d.File
 	displayName := f.ResolveTitle(bookTitle)
 
-	// Build download URL (KePub for Kobo when applicable, and a URL ending
-	// in the filename for a Kindle)
-	_, supportsKepub := models.ConversionChain(f.FileType, models.FileTypeKePub)
-	isKobo := dev == deviceKobo
 	var downloadURL string
 	switch {
-	case isKobo && supportsKepub:
-		downloadURL = fmt.Sprintf("%s/file/%d/kepub", baseURL, f.ID)
-	case dev == deviceKindle:
-		downloadURL = fmt.Sprintf("%s/file/%d/kindle/%s", baseURL, f.ID, kindleFilename(bookTitle, f))
-	default:
+	case kindle:
+		downloadURL = fmt.Sprintf("%s/file/%d/kindle/%s", baseURL, f.ID, kindleFilename(bookTitle, f, d.DeliveredFileType))
+	case d.DeliveredFileType == f.FileType:
 		downloadURL = fmt.Sprintf("%s/file/%d", baseURL, f.ID)
-	}
-
-	// Format label
-	downloadFormat := strings.ToUpper(f.FileType)
-	if isKobo && supportsKepub {
-		downloadFormat = "KePub"
+	default:
+		downloadURL = fmt.Sprintf("%s/file/%d/%s", baseURL, f.ID, d.DeliveredFileType)
 	}
 
 	// Build metadata line: type badge + file size
 	var metaParts []string
-	metaParts = append(metaParts, strings.ToUpper(f.FileType))
+	metaParts = append(metaParts, models.FileTypeLabel(f.FileType))
 	if f.FilesizeBytes > 0 {
 		metaParts = append(metaParts, formatFileSize(f.FilesizeBytes))
 	}
@@ -923,8 +917,8 @@ func fileDownloadEntry(baseURL, bookTitle string, f *models.File, dev device) st
 	sb.WriteString(`<div style="padding: 12px 0; border-bottom: 1px solid #ccc;">`)
 	sb.WriteString(fmt.Sprintf(`<div style="font-weight: bold;">%s</div>`, html.EscapeString(displayName)))
 	sb.WriteString(fmt.Sprintf(`<div style="font-size: 0.9em; color: #666; margin: 4px 0;">%s</div>`, html.EscapeString(strings.Join(metaParts, " • "))))
-	sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-btn" style="display: inline-block; margin-top: 8px;">Download %s</a>`, html.EscapeString(downloadURL), html.EscapeString(downloadFormat)))
-	if f.FileType == models.FileTypeCBZ {
+	sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-btn" style="display: inline-block; margin-top: 8px;">Download %s</a>`, html.EscapeString(downloadURL), html.EscapeString(models.FileTypeLabel(d.DeliveredFileType))))
+	if f.FileType == models.FileTypeCBZ || len(d.Chain) > 0 {
 		sb.WriteString(`<div style="font-size: 0.9em; color: #666; margin-top: 4px;"><i>Note: The download may take a moment while the file is being prepared.</i></div>`)
 	}
 	sb.WriteString(`</div>`)
@@ -967,14 +961,21 @@ func parsePageParam(raw string) int {
 	return 1
 }
 
-// listBooksPaginated fetches a single page of books in scope, filtered to
-// books with a main file of typesFilter's type unless it is empty or "all".
-// Returns the books for the requested page and the total count used to
-// drive the pagination UI.
+// listBooksPaginated fetches a single page of books in scope that the
+// Device's Delivery Rules deliver something from, narrowed to books with a
+// main file of typesFilter's type unless it is empty or "all". Returns the
+// books for the requested page and the total count used to drive the
+// pagination UI.
 func (h *handler) listBooksPaginated(ctx context.Context, scope deviceScope, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
 	opts.ListID = scope.listID
+	opts.MainFileTypes = delivery.SourceFileTypes(scope.rules)
 	if typesFilter != "" && typesFilter != "all" {
-		opts.MainFileTypes = []string{strings.ToLower(typesFilter)}
+		filter := strings.ToLower(typesFilter)
+		if slices.Contains(opts.MainFileTypes, filter) {
+			opts.MainFileTypes = []string{filter}
+		} else {
+			opts.MainFileTypes = []string{}
+		}
 	}
 
 	offset := (page - 1) * defaultPageSize

@@ -100,6 +100,7 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
+		deviceService:  devices.NewService(db),
 	}
 
 	// Inject API key into context (as middleware would do).
@@ -201,6 +202,7 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
+		deviceService:  devices.NewService(db),
 	}
 
 	// First GET to capture the ETag.

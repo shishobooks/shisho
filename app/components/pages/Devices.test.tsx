@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +30,16 @@ const kobo = (overrides: Partial<DeviceResponse> = {}): DeviceResponse => ({
   device_type: "kobo",
   scope_type: "all",
   url_scope_pending: false,
+  delivery_rules_mode: "preset",
+  delivery_rules: [
+    { source_file_type: "epub", delivered_file_type: "kepub" },
+    { source_file_type: "cbz", delivered_file_type: "kepub" },
+  ],
+  delivery_rule_options: [
+    { source_file_type: "epub", delivered_file_types: ["epub", "kepub"] },
+    { source_file_type: "cbz", delivered_file_types: ["kepub", "epub"] },
+  ],
+  has_preset: true,
   credential: "abcdefghjkmnpqrs",
   connections: ["kobo_sync", "ereader_browser"],
   created_at: "2026-01-01T00:00:00Z",
@@ -64,6 +74,18 @@ const stubAPI = (initial: DeviceResponse) => {
         device = {
           ...device,
           ...(payload.name ? { name: payload.name } : {}),
+          ...(payload.device_type
+            ? {
+                device_type: payload.device_type,
+                connections:
+                  payload.device_type === "opds"
+                    ? ["opds" as const]
+                    : ["ereader_browser" as const],
+                delivery_rules_mode:
+                  payload.device_type === "kindle" ? "preset" : "default",
+                has_preset: payload.device_type === "kindle",
+              }
+            : {}),
           ...(payload.scope
             ? {
                 scope_type: payload.scope.type,
@@ -106,14 +128,16 @@ const renderAt = (path: string) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const router = createMemoryRouter(
+    [
+      { path: "/user/devices", element: <Devices /> },
+      { path: "/user/devices/:id", element: <DeviceDetail /> },
+    ],
+    { initialEntries: [path] },
+  );
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<Devices />} path="/user/devices" />
-          <Route element={<DeviceDetail />} path="/user/devices/:id" />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
 };
@@ -316,6 +340,86 @@ describe("DeviceDetail", () => {
       `${window.location.origin}/ereader/key/abcdefghjkmnpqrs/`,
     );
     expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("shows OPDS setup with the URL, username, and credential for an OPDS app Device", async () => {
+    stubAPI(
+      kobo({
+        id: "opds-1",
+        device_type: "opds",
+        connections: ["opds"],
+        delivery_rules_mode: "default",
+        has_preset: false,
+      }),
+    );
+    renderAt("/user/devices/opds-1");
+
+    expect(
+      await screen.findByRole("heading", { name: "OPDS" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("OPDS URL")).toHaveTextContent(
+      `${window.location.origin}/opds/v1/catalog`,
+    );
+    expect(screen.getByLabelText("Username")).toHaveTextContent("reader");
+    expect(screen.getByLabelText("Password")).toHaveTextContent(
+      "abcdefghjkmnpqrs",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "eReader browser" }),
+    ).toBeNull();
+  });
+
+  it("changes the Device's type", async () => {
+    const request = stubAPI(
+      kobo({
+        device_type: "browser",
+        connections: ["ereader_browser"],
+        delivery_rules_mode: "default",
+        has_preset: false,
+      }),
+    );
+    const user = setupUser();
+    renderAt("/user/devices/kobo-1");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Change Type" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("radio", { name: /Kindle/ }));
+    expect(
+      within(dialog).getByText(/Its Delivery Rules go back to what a Kindle/),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Change Type" }),
+    );
+
+    await waitFor(() =>
+      expect(calls(request, "PATCH")).toContainEqual([
+        "PATCH",
+        "/user/devices/kobo-1",
+        { device_type: "kindle" },
+      ]),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("won't change the type while Delivery Rules edits are unsaved", async () => {
+    stubAPI(kobo());
+    const user = setupUser();
+    renderAt("/user/devices/kobo-1");
+
+    const rules = await screen.findByRole("group", { name: "Delivery Rules" });
+    await user.click(within(rules).getByRole("button", { name: "Customize" }));
+    await user.click(screen.getByRole("button", { name: "Change Type" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("radio", { name: /Browser/ }));
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Save or discard your Delivery Rules changes",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Change Type" }),
+    ).toBeDisabled();
   });
 
   it("gets a new setup URL in place of the shown one", async () => {

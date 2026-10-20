@@ -7,36 +7,61 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
-// deviceScope is the part of the owner's libraries a Device's scope lets
-// the eReader browser show: one library, the books on one list, or
-// everything. A scope whose library or list is gone, or a list the owner can
-// no longer see, shows nothing, as Kobo sync does.
+// deviceScope is what the eReader browser shows a Device: the part of the
+// owner's libraries its scope reaches (one library, the books on one list,
+// or everything) and the Delivery Rules that pick what each book delivers.
+// A scope whose library or list is gone, or a list the owner can no longer
+// see, shows nothing, as Kobo sync does.
 type deviceScope struct {
 	libraryID *int
 	listID    *int
 	closed    bool
+	rules     []delivery.Rule
 }
 
-// scope returns the scope of the Device DeviceAuth stored.
+// scope returns the scope and Delivery Rules of the Device DeviceAuth
+// stored.
 func (h *handler) scope(c echo.Context) (deviceScope, error) {
+	s, err := h.scopeWithoutRules(c)
+	if err != nil {
+		return deviceScope{}, err
+	}
 	device, err := devices.RequireDevice(c)
 	if err != nil {
 		return deviceScope{}, err
 	}
+	s.rules, err = h.deviceService.Rules(c.Request().Context(), device)
+	if err != nil {
+		return deviceScope{}, errors.WithStack(err)
+	}
+	return s, nil
+}
+
+// scopeWithoutRules returns the Device's scope without loading its Delivery
+// Rules, for the routes that serve one book's cover or file.
+func (h *handler) scopeWithoutRules(c echo.Context) (deviceScope, error) {
+	device, err := devices.RequireDevice(c)
+	if err != nil {
+		return deviceScope{}, err
+	}
+	var s deviceScope
 	scope := device.Scope()
 	switch scope.Type {
 	case devices.ScopeLibrary:
 		if scope.LibraryID == nil {
-			return deviceScope{closed: true}, nil
+			s.closed = true
+		} else {
+			s.libraryID = scope.LibraryID
 		}
-		return deviceScope{libraryID: scope.LibraryID}, nil
 	case devices.ScopeList:
 		if scope.ListID == nil {
-			return deviceScope{closed: true}, nil
+			s.closed = true
+			break
 		}
 		user, err := auth.RequireUser(c)
 		if err != nil {
@@ -46,12 +71,13 @@ func (h *handler) scope(c echo.Context) (deviceScope, error) {
 		if err != nil {
 			return deviceScope{}, errors.WithStack(err)
 		}
-		if !canView {
-			return deviceScope{closed: true}, nil
+		if canView {
+			s.listID = scope.ListID
+		} else {
+			s.closed = true
 		}
-		return deviceScope{listID: scope.ListID}, nil
 	}
-	return deviceScope{}, nil
+	return s, nil
 }
 
 // allowsLibrary reports whether the scope can include books from libraryID.
@@ -83,7 +109,7 @@ func (h *handler) requireBookInScope(c echo.Context, libraryID, bookID int, reso
 	if err := requireEntityAccess(c, libraryID, resource); err != nil {
 		return err
 	}
-	scope, err := h.scope(c)
+	scope, err := h.scopeWithoutRules(c)
 	if err != nil {
 		return err
 	}

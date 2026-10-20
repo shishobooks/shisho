@@ -47,8 +47,9 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 // BuildCatalogFeed builds the root navigation feed listing all libraries,
 // followed by a Lists entry when userID owns or has been shared a list with
 // something the rules deliver. If libraryIDs is non-nil, only libraries with
-// those IDs are included.
-func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int) (*Feed, error) {
+// those IDs are included. A list-scoped Device (listID set) gets an entry
+// for its list instead, and withLists false leaves lists out entirely.
+func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int, listID *int, withLists bool) (*Feed, error) {
 	opts := libraries.ListLibrariesOptions{}
 	if libraryIDs != nil {
 		opts.LibraryIDs = libraryIDs
@@ -80,6 +81,22 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules 
 		feed.AddEntry(entry)
 	}
 
+	if listID != nil {
+		list, err := svc.listsService.RetrieveList(ctx, lists.RetrieveListOptions{ID: listID})
+		if err != nil {
+			return nil, err
+		}
+		listURL := fmt.Sprintf("%s/lists/%d", baseURL, list.ID)
+		entry := NewEntry(listURL, list.Name)
+		entry.Updated = list.UpdatedAt
+		entry.AddLink(RelSubsection, listURL, MimeTypeAcquisition)
+		feed.AddEntry(entry)
+		return feed, nil
+	}
+	if !withLists {
+		return feed, nil
+	}
+
 	hasLists, err := svc.listsService.HasLists(ctx, userID, deliverableBooks(rules, libraryIDs))
 	if err != nil {
 		return nil, err
@@ -103,10 +120,12 @@ func deliverableBooks(rules []delivery.Rule, libraryIDs []int) *lists.Deliverabl
 
 // BuildListsFeed builds a navigation feed of the lists userID owns or has
 // been shared that hold something the rules deliver from libraryIDs (nil
-// means every library), so no list opens to an empty page.
-func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int, limit, offset int) (*Feed, error) {
+// means every library), so no list opens to an empty page. A non-nil listID
+// keeps only that list.
+func (svc *Service) BuildListsFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int, listID *int, limit, offset int) (*Feed, error) {
 	userLists, total, err := svc.listsService.ListListsWithTotal(ctx, lists.ListListsOptions{
 		UserID:      userID,
+		ListID:      listID,
 		Limit:       &limit,
 		Offset:      &offset,
 		Deliverable: deliverableBooks(rules, libraryIDs),

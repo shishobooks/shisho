@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/delivery"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
@@ -16,6 +17,7 @@ import (
 // RegisterRoutes registers all OPDS routes.
 func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache, bookService *books.Service) {
 	opdsService := NewService(db, bookService)
+	deviceService := devices.NewService(db)
 
 	h := &handler{
 		opdsService:     opdsService,
@@ -25,15 +27,19 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 		downloadCache:   cache,
 		settingsService: settings.NewService(db),
 		deliveryService: delivery.NewService(db),
+		deviceService:   deviceService,
 	}
 
 	// Every OPDS route requires Basic Auth and books:read, the permission
-	// Kobo and eReader keys require of their owners too.
+	// Kobo and eReader Devices require of their owners too. Basic Auth takes
+	// the account password or an OPDS app Device's credential.
+	basicAuth := devices.NewMiddleware(deviceService).OPDSAuth(authMiddleware.BasicAuth)
 	requireBooksRead := authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead)
 
 	// One feed tree. What each feed lists and links follows the signed-in
-	// user's default Delivery Rules.
-	v1 := e.Group("/opds/v1", authMiddleware.BasicAuth, requireBooksRead)
+	// Device's Delivery Rules and scope, or the user's default Delivery
+	// Rules when signed in with the account password.
+	v1 := e.Group("/opds/v1", basicAuth, requireBooksRead)
 
 	// Root catalog - lists libraries
 	v1.GET("/catalog", h.catalog)
@@ -64,6 +70,6 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 	// Basic Auth and books:read. HEAD is registered alongside GET so OPDS
 	// clients (e.g., KOReader's "Use server filenames" mode) can read the
 	// Content-Disposition filename without fetching the body.
-	e.GET("/opds/download/:file", h.download, authMiddleware.BasicAuth, requireBooksRead)
-	e.HEAD("/opds/download/:file", h.download, authMiddleware.BasicAuth, requireBooksRead)
+	e.GET("/opds/download/:file", h.download, basicAuth, requireBooksRead)
+	e.HEAD("/opds/download/:file", h.download, basicAuth, requireBooksRead)
 }

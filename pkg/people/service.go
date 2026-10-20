@@ -29,8 +29,11 @@ type ListPeopleOptions struct {
 	LibraryID  *int
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	ListID     *int  // Filter to authors of a book on this list
-	Search     *string
-	Sort       []sortspec.SortLevel // Defaults to name ascending
+	// MainFileTypes keeps only people who author a book with a main file of
+	// one of these types. Nil means no filter; an empty list matches no one.
+	MainFileTypes []string
+	Search        *string
+	Sort          []sortspec.SortLevel // Defaults to name ascending
 
 	includeTotal bool
 }
@@ -178,8 +181,18 @@ func (svc *Service) listPeopleWithTotal(ctx context.Context, opts ListPeopleOpti
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("p.library_id IN (?)", bun.List(opts.LibraryIDs))
 	}
-	if opts.ListID != nil {
-		q = q.Where("p.id IN (SELECT a.person_id FROM authors a JOIN list_books lb ON lb.book_id = a.book_id WHERE lb.list_id = ?)", *opts.ListID)
+	// Both filters apply to the same book, so an author shown for a list
+	// has a deliverable book on it, not one book on the list and another
+	// deliverable elsewhere.
+	if opts.ListID != nil || opts.MainFileTypes != nil {
+		authored := svc.db.NewSelect().TableExpr("authors AS a").Column("a.person_id")
+		if opts.ListID != nil {
+			authored = authored.Where("a.book_id IN (SELECT book_id FROM list_books WHERE list_id = ?)", *opts.ListID)
+		}
+		if opts.MainFileTypes != nil {
+			authored = authored.Where("a.book_id IN (SELECT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(opts.MainFileTypes), models.FileRoleMain)
+		}
+		q = q.Where("p.id IN (?)", authored)
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

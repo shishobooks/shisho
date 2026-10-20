@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -21,11 +22,18 @@ func newHandler(service *Service, listService *lists.Service) *handler {
 	return &handler{service: service, listService: listService}
 }
 
-func buildDeviceResponse(device *Device) DeviceResponse {
+func (h *handler) buildDeviceResponse(ctx context.Context, device *Device) (DeviceResponse, error) {
+	rules, err := h.service.Rules(ctx, device)
+	if err != nil {
+		return DeviceResponse{}, err
+	}
 	resp := DeviceResponse{
-		Device:      *device,
-		Credential:  device.Credential,
-		Connections: device.ConnectionNames(),
+		Device:              *device,
+		Credential:          device.Credential,
+		Connections:         device.ConnectionNames(),
+		DeliveryRules:       rules,
+		DeliveryRuleOptions: RuleOptions(device.DeviceType),
+		HasPreset:           PresetRules(device.DeviceType) != nil,
 	}
 	switch {
 	case device.ScopeType == ScopeLibrary && device.ScopeLibrary != nil:
@@ -33,7 +41,16 @@ func buildDeviceResponse(device *Device) DeviceResponse {
 	case device.ScopeType == ScopeList && device.ScopeList != nil:
 		resp.ScopeName = device.ScopeList.Name
 	}
-	return resp
+	return resp, nil
+}
+
+// respondDevice sends device as its owner sees it.
+func (h *handler) respondDevice(c echo.Context, status int, device *Device) error {
+	resp, err := h.buildDeviceResponse(c.Request().Context(), device)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return c.JSON(status, resp)
 }
 
 func buildAdminDeviceResponse(device *Device) AdminDeviceResponse {
@@ -68,7 +85,10 @@ func (h *handler) List(c echo.Context) error {
 
 	resp := make([]DeviceResponse, len(devices))
 	for i, device := range devices {
-		resp[i] = buildDeviceResponse(device)
+		resp[i], err = h.buildDeviceResponse(c.Request().Context(), device)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 	return c.JSON(http.StatusOK, resp)
 }
@@ -90,7 +110,7 @@ func (h *handler) Create(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	return c.JSON(http.StatusCreated, buildDeviceResponse(device))
+	return h.respondDevice(c, http.StatusCreated, device)
 }
 
 // Retrieve returns one of the current user's Devices.
@@ -105,10 +125,11 @@ func (h *handler) Retrieve(c echo.Context) error {
 		return deviceNotFound(err)
 	}
 
-	return c.JSON(http.StatusOK, buildDeviceResponse(device))
+	return h.respondDevice(c, http.StatusOK, device)
 }
 
-// Update renames a Device or sets its scope.
+// Update renames a Device, changes its type, or sets its scope or Delivery
+// Rules.
 func (h *handler) Update(c echo.Context) error {
 	ctx := c.Request().Context()
 	user, err := auth.RequireUser(c)
@@ -126,7 +147,10 @@ func (h *handler) Update(c echo.Context) error {
 		return deviceNotFound(err)
 	}
 
-	opts := UpdateDeviceOptions{Name: payload.Name}
+	opts := UpdateDeviceOptions{Name: payload.Name, DeviceType: payload.DeviceType}
+	if payload.DeliveryRules != nil {
+		opts.Rules = &RulesChange{Mode: payload.DeliveryRules.Mode, Rules: payload.DeliveryRules.Rules}
+	}
 
 	if payload.Scope != nil {
 		scope, err := h.validateScope(ctx, user, *payload.Scope)
@@ -137,11 +161,15 @@ func (h *handler) Update(c echo.Context) error {
 	}
 
 	device, err = h.service.Update(ctx, user.ID, device.ID, opts)
+	var rulesErr *delivery.RulesError
+	if errors.As(err, &rulesErr) {
+		return errcodes.ValidationError(rulesErr.Reason)
+	}
 	if err != nil {
 		return deviceNotFound(err)
 	}
 
-	return c.JSON(http.StatusOK, buildDeviceResponse(device))
+	return h.respondDevice(c, http.StatusOK, device)
 }
 
 // validateScope turns a scope payload into a Scope whose library or list
@@ -192,7 +220,7 @@ func (h *handler) RegenerateCredential(c echo.Context) error {
 		return deviceNotFound(err)
 	}
 
-	return c.JSON(http.StatusOK, buildDeviceResponse(device))
+	return h.respondDevice(c, http.StatusOK, device)
 }
 
 // Delete deletes one of the current user's Devices.

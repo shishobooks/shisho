@@ -21,6 +21,7 @@ Load every user through `auth.LoadUser`. On an authenticating path a missing or 
 
 - **An entity loaded by URL id is re-checked against the route's listing scope**, because the id is attacker-chosen, and is a 404 outside it (never 403, which confirms it exists). An entity nested under a library path must belong to that library.
 - **A new family authenticated by a Device credential mounts `devices.Middleware.DeviceAuth`** for its connection, and its handlers read the owner with `auth.RequireUser` and the Device with `devices.RequireDevice`. Listings and by-id lookups apply the Device's scope as well as the owner's library access.
+- **OPDS signs in with the account password or a Device credential** (`devices.Middleware.OPDSAuth`), so a new OPDS route gets its Device, if any, from `devices.SignedInDevice` through `reachFor` or `scopeFor` in `pkg/opds/reach.go`, which apply the Device's rules and scope. A route that reads the user alone serves a Device everything its owner can access.
 
 ## Adding a permission resource
 

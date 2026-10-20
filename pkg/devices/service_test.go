@@ -30,6 +30,7 @@ func TestService_Create_GetsEveryConnectionOfItsType(t *testing.T) {
 	for deviceType, connections := range map[string][]string{
 		DeviceTypeKobo:    {ConnectionKoboSync, ConnectionEReaderBrowser},
 		DeviceTypeKindle:  {ConnectionEReaderBrowser},
+		DeviceTypeOPDS:    {ConnectionOPDS},
 		DeviceTypeBrowser: {ConnectionEReaderBrowser},
 	} {
 		created, err := service.Create(ctx, 1, "Device", deviceType)

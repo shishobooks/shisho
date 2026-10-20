@@ -18,6 +18,7 @@ const readersKobo: AdminDeviceResponse = {
   device_type: "kobo",
   scope_type: "all",
   url_scope_pending: false,
+  delivery_rules_mode: "preset",
   connections: ["kobo_sync"],
   owner: { id: 2, username: "reader" },
   created_at: "2026-01-01T00:00:00Z",

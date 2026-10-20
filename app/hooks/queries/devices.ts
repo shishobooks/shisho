@@ -63,6 +63,7 @@ export const useCreateDevice = () => {
 };
 
 export const useUpdateDevice = () => {
+  const queryClient = useQueryClient();
   const invalidate = useInvalidateDevices();
   return useMutation<
     DeviceResponse,
@@ -71,7 +72,12 @@ export const useUpdateDevice = () => {
   >({
     mutationFn: ({ id, payload }) =>
       API.request("PATCH", `/user/devices/${id}`, payload),
-    onSuccess: invalidate,
+    // The saved Device shows at once, so an editor reset to it never reads
+    // the stale one while the refetch runs.
+    onSuccess: (device) => {
+      queryClient.setQueryData([QueryKey.RetrieveDevice, device.id], device);
+      invalidate();
+    },
   });
 };
 
