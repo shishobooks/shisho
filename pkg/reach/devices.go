@@ -68,7 +68,9 @@ func (s *Service) BookDevices(ctx context.Context, user *models.User, book *mode
 			for _, move := range changes.Moves {
 				line.EditionMoves = append(line.EditionMoves, EditionMove{FromFileID: move.FromFileID, ToFileID: move.ToFileID})
 			}
-			for _, sw := range changes.TypeSwitches {
+			// PlanChanges records at most one switch per book.
+			if len(changes.TypeSwitches) > 0 {
+				sw := changes.TypeSwitches[0]
 				line.TypeSwitch = &TypeSwitch{FromFileType: sw.From, ToFileType: sw.To}
 			}
 		}

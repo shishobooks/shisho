@@ -74,7 +74,10 @@ func planEntries(entries []*SyncEntry, delivered []DeliveredFile) entryPlan {
 		}
 		return freed[i].EntryID < freed[j].EntryID
 	})
-	candidates := handoverCandidates(delivered)
+	var candidates map[candidateKey][]DeliveredFile
+	if len(freed) > 0 {
+		candidates = handoverCandidates(delivered)
+	}
 	for _, e := range freed {
 		to, ok := handoverTarget(e, candidates, taken)
 		if !ok {

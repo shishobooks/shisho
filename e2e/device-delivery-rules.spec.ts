@@ -112,9 +112,9 @@ test.describe("Device Delivery Rules", () => {
       page.getByRole("status", { name: "What this Device receives" }),
     ).toContainText("Receives 1 book.");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "Save", exact: true }),
-    ).toBeDisabled();
+    // The toast comes only once the save has finished, so leaving the page
+    // can't cut it off.
+    await expect(page.getByText("Delivery Rules saved")).toBeVisible();
 
     await bookPage(page);
     await expect(

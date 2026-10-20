@@ -1,10 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import equal from "fast-deep-equal";
-import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import KoboWarning from "@/components/devices/KoboWarning";
 import RulesListEditor from "@/components/devices/RulesListEditor";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
@@ -138,18 +139,7 @@ const DeliveryPreview = ({
           moved_books > 0 && movedWarning(moved_books),
         ]
           .filter((warning): warning is string => Boolean(warning))
-          .map((warning) => (
-            <p
-              className="flex gap-2 text-amber-700 dark:text-amber-400"
-              key={warning}
-            >
-              <AlertTriangle
-                aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0"
-              />
-              {warning}
-            </p>
-          ))}
+          .map((warning) => <KoboWarning key={warning}>{warning}</KoboWarning>)}
     </div>
   );
 };

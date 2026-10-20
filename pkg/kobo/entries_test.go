@@ -90,6 +90,21 @@ func TestPlanEntries(t *testing.T) {
 		assert.Equal(t, []string{"shisho-e1"}, entryIDs(plan.Removed))
 	})
 
+	t.Run("a freed entry goes to the lowest unheld File id", func(t *testing.T) {
+		t.Parallel()
+		plan := planEntries(
+			[]*SyncEntry{entryOn("held", 1, intPtr(11), kepub), entryOn("freed", 1, nil, kepub)},
+			[]DeliveredFile{
+				{FileID: 14, BookID: 1, DeliveredFileType: kepub},
+				{FileID: 12, BookID: 1, DeliveredFileType: kepub},
+				{FileID: 11, BookID: 1, DeliveredFileType: kepub},
+			},
+		)
+		require.Len(t, plan.HandedOver, 1)
+		assert.Equal(t, 12, plan.HandedOver[0].To.FileID, "11 holds its own entry")
+		assert.Equal(t, []DeliveredFile{{FileID: 14, BookID: 1, DeliveredFileType: kepub}}, plan.Added)
+	})
+
 	t.Run("a File moved to another book keeps its entry", func(t *testing.T) {
 		t.Parallel()
 		plan := planEntries(

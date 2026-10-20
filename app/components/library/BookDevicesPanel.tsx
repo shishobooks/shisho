@@ -1,7 +1,7 @@
-import { AlertTriangle, ArrowRight, Tablet } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowRight, Tablet } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import KoboWarning from "@/components/devices/KoboWarning";
 import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
   type File,
 } from "@/types";
 import { DEVICE_TYPE_LABELS } from "@/utils/devices";
-import { fileLabel, fileTypeLabel } from "@/utils/format";
+import { fileLabel, fileTypeLabel, getFilename } from "@/utils/format";
 
 interface BookDevicesPanelProps {
   book: Book;
@@ -29,15 +29,14 @@ const listOf = (words: string[]): string => {
   return `${words.slice(0, -1).join(", ")}, or ${words[words.length - 1]}`;
 };
 
-const basename = (path: string) => path.split("/").pop() ?? path;
-
 // editionLabel names one of the book's Files so it can be told apart from
-// the others: its label, and its file name too when another File shares
-// the label, as two editions named after the book do.
+// the others: its label, and, when another File shares the label (as two
+// editions named after the book do), the file name the Files list shows
+// beneath it.
 const editionLabel = (file: File, files: File[]): string => {
   const label = fileLabel(file);
   const shared = files.some((f) => f.id !== file.id && fileLabel(f) === label);
-  return shared ? `${label} (${basename(file.filepath)})` : label;
+  return shared ? `${label} (${getFilename(file.filepath)})` : label;
 };
 
 // whyNot says why a Device gets nothing of the book.
@@ -48,7 +47,7 @@ const whyNot = (line: BookDevice, mainFiles: File[]): string => {
   const types = [...new Set(mainFiles.map((f) => fileTypeLabel(f.file_type)))];
   return types.length > 0
     ? `No rule for ${listOf(types)}`
-    : "The book has no files";
+    : "The book has no main files";
 };
 
 // Delivered shows one File a Device gets as its source and delivered File
@@ -65,7 +64,10 @@ const Delivered = ({
   return (
     <div className="flex min-w-0 items-center gap-2 sm:justify-end">
       {edition && (
-        <span className="truncate text-xs text-muted-foreground">
+        <span
+          className="truncate text-xs text-muted-foreground"
+          title={edition}
+        >
           {edition}
         </span>
       )}
@@ -89,13 +91,6 @@ const Delivered = ({
     </div>
   );
 };
-
-const Warning = ({ children }: { children: ReactNode }) => (
-  <p className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-    <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
-    <span>{children}</span>
-  </p>
-);
 
 // BookDevicesPanel lists each of the reader's Devices with what it gets of
 // the book, or why it gets nothing, and warns when a Kobo's next sync would
@@ -148,7 +143,7 @@ const BookDevicesPanel = ({ book }: BookDevicesPanelProps) => {
             return (
               <li
                 aria-label={line.device_name}
-                className="rounded-md px-2 py-2 hover:bg-muted/40"
+                className="rounded-md px-2 py-2"
                 key={line.device_id}
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -166,6 +161,7 @@ const BookDevicesPanel = ({ book }: BookDevicesPanelProps) => {
                           "block truncate text-sm font-medium hover:underline",
                           !delivered && "text-muted-foreground",
                         )}
+                        title={line.device_name}
                         to={`/user/devices/${line.device_id}`}
                       >
                         {line.device_name}
@@ -201,22 +197,22 @@ const BookDevicesPanel = ({ book }: BookDevicesPanelProps) => {
                 {(line.type_switch || line.edition_moves.length > 0) && (
                   <div className="mt-2 space-y-1.5 pl-7">
                     {line.type_switch && (
-                      <Warning>
+                      <KoboWarning>
                         Its next sync switches this book from{" "}
                         {fileTypeLabel(line.type_switch.from_file_type)} to{" "}
                         {fileTypeLabel(line.type_switch.to_file_type)}. The Kobo
                         adds it again as a new book, without its reading
                         position or highlights.
-                      </Warning>
+                      </KoboWarning>
                     )}
                     {line.edition_moves.map((move) => {
                       const to = fileByID(move.to_file_id);
                       return (
-                        <Warning
+                        <KoboWarning
                           key={`${move.from_file_id}-${move.to_file_id}`}
                         >
                           {`Its next sync moves this book to a different edition${to ? `, ${editionLabel(to, mainFiles)}` : ""}, which may reopen at the start.`}
-                        </Warning>
+                        </KoboWarning>
                       );
                     })}
                   </div>
