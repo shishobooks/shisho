@@ -1,9 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
+  BookDevice,
+  DeliveryPreviewQuery,
+  DeliveryPreviewResponse,
+  Rule,
+} from "@/types";
+import type {
   AdminDeviceResponse,
   CreateDevicePayload,
+  DeliveryRulesMode,
   DeviceResponse,
   DeviceShortURL,
   UpdateDevicePayload,
@@ -15,6 +28,8 @@ export enum QueryKey {
   ListDevices = "ListDevices",
   RetrieveDevice = "RetrieveDevice",
   ListAllDevices = "ListAllDevices",
+  DeliveryPreview = "DeliveryPreview",
+  BookDevices = "BookDevices",
 }
 
 // The caller's own Devices. Any signed-in user manages their own, so the
@@ -26,6 +41,15 @@ export const useDevices = () => {
       API.request("GET", "/user/devices", null, null, signal),
   });
 };
+
+// Fetches the caller's Devices outside a component, such as when a save
+// needs them, from the cache when they are loaded.
+export const fetchDevices = (queryClient: QueryClient) =>
+  queryClient.fetchQuery<DeviceResponse[], ShishoAPIError>({
+    queryKey: [QueryKey.ListDevices],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/user/devices", null, null, signal),
+  });
 
 export const useDevice = (id?: string) => {
   return useQuery<DeviceResponse, ShishoAPIError>({
@@ -51,6 +75,8 @@ const useInvalidateDevices = () => {
     queryClient.invalidateQueries({ queryKey: [QueryKey.ListDevices] });
     queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveDevice] });
     queryClient.invalidateQueries({ queryKey: [QueryKey.ListAllDevices] });
+    queryClient.invalidateQueries({ queryKey: [QueryKey.DeliveryPreview] });
+    queryClient.invalidateQueries({ queryKey: [QueryKey.BookDevices] });
   };
 };
 
@@ -114,5 +140,82 @@ export const useGenerateDeviceShortUrl = () => {
 export const useClearKoboSync = () => {
   return useMutation<void, ShishoAPIError, string>({
     mutationFn: (id) => API.request("DELETE", `/user/devices/${id}/kobo-sync`),
+  });
+};
+
+/**
+ * A change to a Device's Delivery Rules to preview before saving it: a mode
+ * to follow, with the custom list when the mode is custom.
+ */
+export interface RulesProposal {
+  mode: DeliveryRulesMode;
+  rules?: Rule[];
+}
+
+const previewQuery = (
+  proposal: RulesProposal | undefined,
+): DeliveryPreviewQuery => {
+  if (!proposal) return {};
+  return {
+    mode: proposal.mode,
+    rules: proposal.rules
+      ?.map((r) => `${r.source_file_type}:${r.delivered_file_type}`)
+      .join(","),
+  };
+};
+
+const deliveryPreviewOptions = (
+  id: string,
+  proposal: RulesProposal | undefined,
+) => {
+  const query = previewQuery(proposal);
+  return {
+    queryKey: [QueryKey.DeliveryPreview, id, query],
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      API.request<DeliveryPreviewResponse>(
+        "GET",
+        `/user/devices/${id}/delivery-preview`,
+        null,
+        query,
+        signal,
+      ),
+  };
+};
+
+// What a Device receives under the rules it follows, or under a proposed
+// change. It depends on the library and on what a Kobo last synced, which
+// change without any mutation here, so it is always refetched when shown.
+export const useDeliveryPreview = (id: string, proposal?: RulesProposal) => {
+  return useQuery<DeliveryPreviewResponse, ShishoAPIError>({
+    ...deliveryPreviewOptions(id, proposal),
+    staleTime: 0,
+    // Editing a custom list changes the key on every move; keep showing the
+    // last counts until the new ones arrive.
+    placeholderData: keepPreviousData,
+  });
+};
+
+// Fetches the preview of a proposed change, for a warning before saving it.
+export const fetchDeliveryPreview = (
+  queryClient: QueryClient,
+  id: string,
+  proposal: RulesProposal,
+) =>
+  queryClient.fetchQuery<DeliveryPreviewResponse, ShishoAPIError>({
+    ...deliveryPreviewOptions(id, proposal),
+    staleTime: 0,
+  });
+
+// What each of the caller's Devices gets of a book. Like the preview, it
+// depends on what a Kobo last synced, so it is refetched when shown.
+// filesKey describes the book's Files, so a change to them, from this page
+// or a scan, refetches it along with the book.
+export const useBookDevices = (bookId: number, filesKey: string) => {
+  return useQuery<BookDevice[], ShishoAPIError>({
+    enabled: useRequires("books:read"),
+    staleTime: 0,
+    queryKey: [QueryKey.BookDevices, bookId, filesKey],
+    queryFn: ({ signal }) =>
+      API.request("GET", `/books/${bookId}/devices`, null, null, signal),
   });
 };

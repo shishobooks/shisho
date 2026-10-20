@@ -251,3 +251,19 @@ func saveRules(ctx context.Context, tx bun.IDB, device *Device, mode string, rul
 	_, err := tx.NewUpdate().Model(device).Column("delivery_rules_mode", "updated_at").WherePK().Exec(ctx)
 	return errors.WithStack(err)
 }
+
+// RulesInMode returns the Delivery Rules device would follow in mode, with
+// rules as its own list when mode is custom, without saving anything, so a
+// change can be previewed before it is saved. It returns a
+// *delivery.RulesError for a mode or list the Device can't have.
+func (s *Service) RulesInMode(ctx context.Context, device *Device, mode string, rules []delivery.Rule) ([]delivery.Rule, error) {
+	if err := CheckRules(device.DeviceType, mode, rules); err != nil {
+		return nil, err
+	}
+	if mode == RulesModeCustom {
+		return slices.Clone(rules), nil
+	}
+	following := *device
+	following.DeliveryRulesMode = mode
+	return s.Rules(ctx, &following)
+}

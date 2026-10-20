@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func TestHandleSync_DirectNonDefaultPort_DownloadURLsCarryPort(t *testing.T) {
 
 	var items []syncItem
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
-	item := itemFor(t, items, f.fileA.ID)
+	item := f.itemFor(t, items, f.fileA.ID)
 	require.NotNil(t, item.NewEntitlement)
 	assertDownloadURLsUnder(t, item.NewEntitlement.BookMetadata["DownloadUrls"], f.directBase())
 }
@@ -63,7 +64,7 @@ func TestHandleMetadata_DirectNonDefaultPort_DownloadURLsCarryPort(t *testing.T)
 	t.Parallel()
 	f := newKoboScopeFixture(t)
 
-	rec := f.serveDirect(t, f.prefix()+"/v1/library/"+ShishoID(f.fileA.ID)+"/metadata")
+	rec := f.serveDirect(t, f.prefix()+"/v1/library/"+f.addEntry(t, f.fileA.ID, models.FileTypeKePub)+"/metadata")
 
 	var metadata []map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))

@@ -2,7 +2,6 @@ package kobo
 
 import (
 	"context"
-	"fmt"
 	"image"
 	"image/jpeg"
 	"net/http"
@@ -87,7 +86,7 @@ func TestHandleCover_UnreadableCoverIsServerError(t *testing.T) {
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 			withDeviceOwner(c)
 			c.SetParamNames("imageId", "w", "h")
-			c.SetParamValues(fmt.Sprintf("shisho-%d", file.ID), tt.w, tt.h)
+			c.SetParamValues(insertEntry(t, db, testDeviceID, file.ID, models.FileTypeKePub), tt.w, tt.h)
 
 			err = h.handleCover(c)
 			require.Error(t, err)

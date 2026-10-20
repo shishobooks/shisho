@@ -2,7 +2,6 @@ package kobo
 
 import (
 	"context"
-	"fmt"
 	"image"
 	"image/jpeg"
 	"net/http"
@@ -78,7 +77,7 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	h := &handler{service: NewService(db), bookService: bookService}
 
 	// Use a resized request (w=100 h=150)
-	imageID := fmt.Sprintf("shisho-%d", file.ID)
+	imageID := insertEntry(t, db, testDeviceID, file.ID, models.FileTypeKePub)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -149,7 +148,7 @@ func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{service: NewService(db), bookService: bookService}
-	imageID := fmt.Sprintf("shisho-%d", file.ID)
+	imageID := insertEntry(t, db, testDeviceID, file.ID, models.FileTypeKePub)
 
 	// First GET.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -232,7 +231,7 @@ func TestHandleCover_304SkipsResizeWork(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{service: NewService(db), bookService: bookService}
-	imageID := fmt.Sprintf("shisho-%d", file.ID)
+	imageID := insertEntry(t, db, testDeviceID, file.ID, models.FileTypeKePub)
 
 	// First GET to get Last-Modified from the valid cover.
 	req1 := httptest.NewRequest(http.MethodGet, "/", nil)

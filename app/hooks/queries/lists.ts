@@ -24,6 +24,7 @@ import type {
   UpdateSharePayload,
 } from "@/types";
 
+import { QueryKey as DevicesQueryKey } from "./devices";
 import { useRequires } from "./permissions";
 
 export enum QueryKey {
@@ -212,6 +213,13 @@ export const useAddBooksToList = () => {
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.BookLists] });
+      // A list-scoped Device gets what is on its list.
+      queryClient.invalidateQueries({
+        queryKey: [DevicesQueryKey.DeliveryPreview],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [DevicesQueryKey.BookDevices],
+      });
     },
   });
 };
@@ -236,6 +244,13 @@ export const useRemoveBooksFromList = () => {
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.BookLists] });
+      // A list-scoped Device gets what is on its list.
+      queryClient.invalidateQueries({
+        queryKey: [DevicesQueryKey.DeliveryPreview],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [DevicesQueryKey.BookDevices],
+      });
     },
   });
 };

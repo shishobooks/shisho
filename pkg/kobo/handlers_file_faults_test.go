@@ -71,13 +71,25 @@ func (f *koboDownloadFixture) addEPUB() *models.File {
 	return f.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(f.t, f.dir, "book.epub", testgen.EPUBOptions{Title: "Book"}))
 }
 
+// entryFor returns the KePub entry that holds file, recording it the first
+// time.
+func (f *koboDownloadFixture) entryFor(file *models.File) string {
+	f.t.Helper()
+	exists, err := f.db.NewSelect().Model((*SyncEntry)(nil)).Where("file_id = ?", file.ID).Exists(context.Background())
+	require.NoError(f.t, err)
+	if exists {
+		return entryIDOf(f.t, f.db, testDeviceID, file.ID)
+	}
+	return insertEntry(f.t, f.db, testDeviceID, file.ID, models.FileTypeKePub)
+}
+
 func (f *koboDownloadFixture) serve(file *models.File) *httptest.ResponseRecorder {
 	f.t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 	withDeviceOwner(c)
 	c.SetParamNames("bookId")
-	c.SetParamValues(ShishoID(file.ID))
+	c.SetParamValues(f.entryFor(file))
 	if err := f.h.handleDownload(c); err != nil {
 		errcodes.NewHandler().Handle(err, c)
 	}

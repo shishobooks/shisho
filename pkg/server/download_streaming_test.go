@@ -169,6 +169,41 @@ func ereaderKepubRoute() route {
 	}
 }
 
+// koboSyncRoute is a Kobo sync download, delivered as KePub as the Kobo
+// preset says.
+func koboSyncRoute() route {
+	return route{
+		name:   "kobo sync kepub",
+		device: true,
+		kepub:  true,
+		strict: true,
+		path: func(f *streamingFixture) string {
+			return fmt.Sprintf("/kobo/%s/v1/books/%s/file/epub", f.koboCredential(), f.koboEntryID())
+		},
+		auth: func(*streamingFixture, *http.Request) {},
+	}
+}
+
+// koboEntryID syncs the admin's Kobo Device, once, and returns the id of the
+// entry that holds the fixture's file.
+func (f *streamingFixture) koboEntryID() string {
+	f.t.Helper()
+	ctx := context.Background()
+	var id string
+	err := f.db.NewRaw(`SELECT entry_id FROM kobo_sync_entries WHERE file_id = ?`, f.file.ID).Scan(ctx, &id)
+	if err == nil {
+		return id
+	}
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodGet, f.ts.URL+"/kobo/"+f.koboCredential()+"/v1/library/sync", nil)
+	require.NoError(f.t, err)
+	res, err := f.ts.Client().Do(req)
+	require.NoError(f.t, err)
+	require.NoError(f.t, res.Body.Close())
+	require.Equal(f.t, http.StatusOK, res.StatusCode)
+	require.NoError(f.t, f.db.NewRaw(`SELECT entry_id FROM kobo_sync_entries WHERE file_id = ?`, f.file.ID).Scan(ctx, &id))
+	return id
+}
+
 // koboCredential adds a Kobo Device for the admin, once, and returns its
 // credential.
 func (f *streamingFixture) koboCredential() string {
@@ -528,13 +563,13 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 
 // A real CBZ with a page that cannot be read midway fails partway through
 // its first download, as a CBZ or a KePub: the client sees a cut download.
-// Then device routes serve the Original File of a CBZ, OPDS and eReader
-// KePub downloads and a Share Link's Download as entry return an error, since a failed
-// Conversion never serves another File Type, and web UI routes return the
-// error.
+// Then device routes serve the Original File of a CBZ, OPDS, eReader, and
+// Kobo sync KePub downloads and a Share Link's Download as entry return an
+// error, since a failed Conversion never serves another File Type, and web
+// UI routes return the error.
 func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsRoute(), webRoute(), opdsKepubRoute(), webKepubRoute(), shareKepubRoute(), ereaderKepubRoute()} {
+	for _, r := range []route{opdsRoute(), webRoute(), opdsKepubRoute(), webKepubRoute(), shareKepubRoute(), ereaderKepubRoute(), koboSyncRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
 			builtIn, err := filegen.GetGenerator(models.FileTypeCBZ)
@@ -680,12 +715,12 @@ func assertFailedPartwayBody(t *testing.T, body []byte) {
 }
 
 // A real KePub conversion that fails partway, on an EPUB whose chapter data
-// is corrupt, cuts the download. Afterwards OPDS and a Kobo Device's eReader
-// browser return a 500, never the EPUB in the KePub's place, and the web
-// route returns the error.
+// is corrupt, cuts the download. Afterwards OPDS, Kobo sync, and a Kobo
+// Device's eReader browser return a 500, never the EPUB in the KePub's
+// place, and the web route returns the error.
 func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsKepubRoute(), webKepubRoute(), ereaderKepubRoute()} {
+	for _, r := range []route{opdsKepubRoute(), webKepubRoute(), ereaderKepubRoute(), koboSyncRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
 			gen := &gatedGenerator{StreamGenerator: kepubEPUBGenerator(t), gate: make(chan struct{})}

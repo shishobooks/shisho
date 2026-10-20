@@ -122,6 +122,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A Kindle Device can't receive EPUB.",
 		},
 		{
+			name:   "delivery preview of rules delivering a File Type its type can't receive",
+			method: http.MethodGet, path: "/api/user/devices/" + kindle.ID + "/delivery-preview?mode=custom&rules=epub:epub",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A Kindle Device can't receive EPUB.",
+		},
+		{
+			name:   "delivery preview of a device that does not exist",
+			method: http.MethodGet, path: "/api/user/devices/missing/delivery-preview",
+			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
 			name:   "device revoke for a device that does not exist",
 			method: http.MethodDelete, path: "/api/devices/missing",
 			status: http.StatusNotFound, code: "not_found", message: "Device not found.",

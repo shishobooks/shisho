@@ -225,8 +225,7 @@ func (h *publicHandler) serveDownload(c echo.Context, deliveredType string) erro
 		deliveredType = file.FileType
 	}
 	// Only the File Types the page offers, and like every refusal in this
-	// family a 404: ResolveFallbackDownload would answer any other with the
-	// original.
+	// family a 404.
 	if _, ok := models.ConversionChain(file.FileType, deliveredType); !ok ||
 		(file.FileRole == models.FileRoleSupplement && deliveredType != file.FileType) {
 		return errcodes.NotFound("File")
@@ -237,7 +236,7 @@ func (h *publicHandler) serveDownload(c echo.Context, deliveredType string) erro
 
 	var download *books.Download
 	if deliveredType == file.FileType {
-		download, err = books.ResolveFallbackDownload(c, h.downloadCache, book, file, deliveredType)
+		download, err = books.ResolveFallbackDownload(c, h.downloadCache, book, file)
 	} else {
 		download, err = books.GeneratedDownload(c, h.downloadCache, book, file, deliveredType)
 	}

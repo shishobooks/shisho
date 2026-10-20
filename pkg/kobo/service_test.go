@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -59,8 +58,8 @@ func TestCreateSyncPoint(t *testing.T) {
 	svc := NewService(db)
 
 	files := []ScopedFile{
-		{FileID: 1, FileHash: "abc123", FileSize: 1024, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "def456", FileSize: 2048, MetadataHash: "meta2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "abc123", FileSize: 1024, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "def456", FileSize: 2048, MetadataHash: "meta2"},
 	}
 
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
@@ -108,7 +107,7 @@ func TestGetSyncPointByID_RejectsOtherTenant(t *testing.T) {
 
 	// Sync point owned by api-key-1.
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", []ScopedFile{
-		{FileID: 1, FileHash: "h", FileSize: 1, MetadataHash: "m"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "h", FileSize: 1, MetadataHash: "m"},
 	})
 	require.NoError(t, err)
 
@@ -134,7 +133,7 @@ func TestMarkSyncPointCompleted(t *testing.T) {
 	svc := NewService(db)
 
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", []ScopedFile{
-		{FileID: 1, FileHash: "h", FileSize: 1, MetadataHash: "m"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "h", FileSize: 1, MetadataHash: "m"},
 	})
 	require.NoError(t, err)
 	require.Nil(t, sp.CompletedAt)
@@ -158,9 +157,9 @@ func TestDetectChanges_FirstSync(t *testing.T) {
 	svc := NewService(db)
 
 	currentFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
-		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 3, EntryID: "shisho-3", FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 
 	changes, err := svc.DetectChanges(ctx, "api-key-1", "", currentFiles)
@@ -188,17 +187,17 @@ func TestDetectChanges_AddedBooks(t *testing.T) {
 
 	// Create initial sync point with 2 files.
 	prevFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
 	}
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", prevFiles)
 	require.NoError(t, err)
 
 	// Current files include a new file (ID=3).
 	currentFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
-		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 3, EntryID: "shisho-3", FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 
 	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
@@ -219,17 +218,17 @@ func TestDetectChanges_RemovedBooks(t *testing.T) {
 
 	// Create initial sync point with 3 files.
 	prevFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
-		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 3, EntryID: "shisho-3", FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", prevFiles)
 	require.NoError(t, err)
 
 	// Current files are missing file ID=2.
 	currentFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 3, FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 3, EntryID: "shisho-3", FileHash: "hash3", FileSize: 300, MetadataHash: "meta3"},
 	}
 
 	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
@@ -250,16 +249,16 @@ func TestDetectChanges_ChangedBooks(t *testing.T) {
 
 	// Create initial sync point.
 	prevFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
 	}
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", prevFiles)
 	require.NoError(t, err)
 
 	// File ID=2 has a different FileHash (file content changed).
 	currentFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2-updated", FileSize: 250, MetadataHash: "meta2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2-updated", FileSize: 250, MetadataHash: "meta2"},
 	}
 
 	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
@@ -280,16 +279,16 @@ func TestDetectChanges_MetadataChange(t *testing.T) {
 
 	// Create initial sync point.
 	prevFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
 	}
 	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", prevFiles)
 	require.NoError(t, err)
 
 	// File ID=1 has same FileHash but different MetadataHash.
 	currentFiles := []ScopedFile{
-		{FileID: 1, FileHash: "hash1", FileSize: 100, MetadataHash: "meta1-updated"},
-		{FileID: 2, FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "hash1", FileSize: 100, MetadataHash: "meta1-updated"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "hash2", FileSize: 200, MetadataHash: "meta2"},
 	}
 
 	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, currentFiles)
@@ -303,42 +302,11 @@ func TestDetectChanges_MetadataChange(t *testing.T) {
 	assert.Equal(t, "hash1", changes.Changed[0].FileHash, "FileHash should remain the same")
 }
 
-func TestShishoID(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "shisho-42", ShishoID(42))
-	assert.Equal(t, "shisho-1", ShishoID(1))
-	assert.Equal(t, "shisho-0", ShishoID(0))
-}
-
-func TestParseShishoID(t *testing.T) {
-	t.Parallel()
-	id, ok := ParseShishoID("shisho-42")
-	assert.True(t, ok)
-	assert.Equal(t, 42, id)
-
-	id, ok = ParseShishoID("shisho-1")
-	assert.True(t, ok)
-	assert.Equal(t, 1, id)
-
-	// Invalid cases.
-	_, ok = ParseShishoID("invalid-42")
-	assert.False(t, ok)
-
-	_, ok = ParseShishoID("shisho-")
-	assert.False(t, ok)
-
-	_, ok = ParseShishoID("shisho-abc")
-	assert.False(t, ok)
-
-	_, ok = ParseShishoID("")
-	assert.False(t, ok)
-}
-
 func TestScopedFilesFromSnapshot_RoundTrip(t *testing.T) {
 	t.Parallel()
 	books := []*SyncPointBook{
-		{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"},
-		{FileID: 2, FileHash: "h2", FileSize: 200, MetadataHash: "m2"},
+		{FileID: 1, EntryID: "shisho-1", FileHash: "h1", FileSize: 100, MetadataHash: "m1"},
+		{FileID: 2, EntryID: "shisho-2", FileHash: "h2", FileSize: 200, MetadataHash: "m2"},
 	}
 	out := ScopedFilesFromSnapshot(books)
 	require.Len(t, out, 2)
@@ -355,7 +323,7 @@ func TestCleanupOldSyncPoints_SkipsInProgress(t *testing.T) {
 	svc := NewService(db)
 	ctx := context.Background()
 
-	files := []ScopedFile{{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
+	files := []ScopedFile{{FileID: 1, EntryID: "shisho-1", FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
 
 	// One completed, one in-progress (e.g. an in-flight pagination).
 	completed, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
@@ -382,7 +350,7 @@ func TestCleanupOldSyncPoints(t *testing.T) {
 	ctx := context.Background()
 
 	// Create 3 sync points and mark all completed (cleanup only touches completed points).
-	files := []ScopedFile{{FileID: 1, FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
+	files := []ScopedFile{{FileID: 1, EntryID: "shisho-1", FileHash: "h1", FileSize: 100, MetadataHash: "m1"}}
 	sp1, err := svc.CreateSyncPoint(ctx, "api-key-1", files)
 	require.NoError(t, err)
 	require.NoError(t, svc.MarkSyncPointCompleted(ctx, "api-key-1", sp1.ID))
@@ -413,76 +381,6 @@ func TestCleanupOldSyncPoints(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, got3)
 	assert.Equal(t, sp3.ID, got3.ID)
-}
-
-// insertSyncEntryFile creates a library, book, and EPUB file for the
-// sync entry tests, returning the file id.
-func insertSyncEntryFile(t *testing.T, db *bun.DB) int {
-	t.Helper()
-	ctx := context.Background()
-	lib := insertScopeLibrary(ctx, t, db, "Library")
-	_, file := insertScopeBookWithFile(ctx, t, db, lib.ID, "Book", models.FileTypeEPUB, models.FileRoleMain)
-	return file.ID
-}
-
-// The first time a file is synced for a key it gets a RevisionId of its own,
-// and every later lookup returns that same RevisionId.
-func TestEnsureRevisionIDs_AssignsOnceAndKeeps(t *testing.T) {
-	t.Parallel()
-	db := newSyncPointTestDB(t)
-	insertTestDevice(t, db, "api-key-2")
-	ctx := context.Background()
-	svc := NewService(db)
-	fileID := insertSyncEntryFile(t, db)
-
-	first, err := svc.EnsureRevisionIDs(ctx, "api-key-1", []int{fileID})
-	require.NoError(t, err)
-	rev := first[fileID]
-	require.NotEmpty(t, rev)
-	assert.NotContains(t, rev, ShishoID(fileID), "a new RevisionId must not come from the file")
-
-	again, err := svc.EnsureRevisionIDs(ctx, "api-key-1", []int{fileID})
-	require.NoError(t, err)
-	assert.Equal(t, rev, again[fileID])
-
-	other, err := svc.EnsureRevisionIDs(ctx, "api-key-2", []int{fileID})
-	require.NoError(t, err)
-	assert.NotEqual(t, rev, other[fileID], "each key records its own entries")
-}
-
-// An entry recorded before the upgrade keeps its hash-form RevisionId.
-func TestEnsureRevisionIDs_KeepsRecordedRevisionID(t *testing.T) {
-	t.Parallel()
-	db := newSyncPointTestDB(t)
-	ctx := context.Background()
-	svc := NewService(db)
-	fileID := insertSyncEntryFile(t, db)
-	hashForm := ShishoID(fileID) + "-abcdef12"
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO kobo_sync_entries (device_id, file_id, revision_id) VALUES (?, ?, ?)`,
-		"api-key-1", fileID, hashForm)
-	require.NoError(t, err)
-
-	revs, err := svc.EnsureRevisionIDs(ctx, "api-key-1", []int{fileID})
-	require.NoError(t, err)
-	assert.Equal(t, map[int]string{fileID: hashForm}, revs)
-}
-
-// Clearing a key's sync history forces a fresh sync but keeps its recorded
-// entries, so books already on the Kobo come back under their RevisionIds.
-func TestEnsureRevisionIDs_SurvivesSyncHistoryReset(t *testing.T) {
-	t.Parallel()
-	f := newKoboScopeFixture(t)
-	ctx := context.Background()
-	svc := NewService(f.db)
-
-	first, err := svc.EnsureRevisionIDs(ctx, f.device.ID, []int{f.fileA.ID})
-	require.NoError(t, err)
-	require.NoError(t, devices.NewService(f.db).ClearKoboSyncHistory(ctx, f.user.ID, f.device.ID))
-
-	again, err := svc.EnsureRevisionIDs(ctx, f.device.ID, []int{f.fileA.ID})
-	require.NoError(t, err)
-	assert.Equal(t, first, again)
 }
 
 // A book without a cover keeps the CoverImageId suffix it had before cover
@@ -529,4 +427,41 @@ func TestComputeMetadataHash_NamedFileWithoutBookKeepsName(t *testing.T) {
 	assert.NotEqual(t,
 		computeMetadataHash(nil, &models.File{Name: &a}),
 		computeMetadataHash(nil, &models.File{Name: &b}))
+}
+
+// The delivered File Type is part of what decides whether an entry changed.
+func TestDetectChanges_DeliveredTypeChange(t *testing.T) {
+	t.Parallel()
+	db := newSyncPointTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	prev := []ScopedFile{{FileID: 1, EntryID: "shisho-1", FileHash: "h", MetadataHash: "m", DeliveredFileType: models.FileTypeKePub}}
+	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", prev)
+	require.NoError(t, err)
+
+	curr := []ScopedFile{{FileID: 1, EntryID: "shisho-1", FileHash: "h", MetadataHash: "m", DeliveredFileType: models.FileTypeEPUB}}
+	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, curr)
+	require.NoError(t, err)
+	assert.Len(t, changes.Changed, 1)
+}
+
+// An entry handed to another File is a change under the same entry id,
+// whatever the hashes say.
+func TestDetectChanges_HandedOverEntry(t *testing.T) {
+	t.Parallel()
+	db := newSyncPointTestDB(t)
+	ctx := context.Background()
+	svc := NewService(db)
+
+	prev := []ScopedFile{{FileID: 1, EntryID: "shisho-1", FileHash: "h", MetadataHash: "m", DeliveredFileType: models.FileTypeKePub}}
+	sp, err := svc.CreateSyncPoint(ctx, "api-key-1", prev)
+	require.NoError(t, err)
+
+	curr := []ScopedFile{{FileID: 2, EntryID: "shisho-1", FileHash: "h", MetadataHash: "m", DeliveredFileType: models.FileTypeKePub}}
+	changes, err := svc.DetectChanges(ctx, "api-key-1", sp.ID, curr)
+	require.NoError(t, err)
+	require.Len(t, changes.Changed, 1)
+	assert.Empty(t, changes.Added)
+	assert.Empty(t, changes.Removed)
 }

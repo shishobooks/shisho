@@ -47,61 +47,59 @@ const FailedPartwayMessage = "This file's generated download failed partway thro
 // that needs a password.
 const CannotDecryptMessage = "This file is password-protected or encrypted in a way Shisho can't open, so its metadata can't be added. Download the original instead."
 
-// ResolveFallbackDownload returns what the Kobo and Share Link download
-// routes send for the file delivered as deliveredType: the
-// Generated File, or the Original File when generation is not possible. A
-// device or a Share recipient has no Download Original to turn to, so a
-// supplement, a type with no generator (filegen.ErrNotImplemented), a File
-// Type no Conversion reaches (filegen.ErrNoConversion), and any other
+// ResolveFallbackDownload returns what a device or a Share recipient gets
+// for the file as its own File Type: the Generated File, or the Original
+// File when generation is not possible, since a failed generation of a
+// File's own File Type only loses Shisho's metadata. A device or a Share
+// recipient has no Download Original to turn to, so a supplement, a type
+// with no generator (filegen.ErrNotImplemented), and any other
 // filegen.GenerationError get the original. The exceptions are a permission
 // error and a canceled or timed-out request, which are faults the original
 // cannot fix; they and any error outside generation are a 500. The original
 // is still served through httputil.ServeFile, so a source that cannot be
 // opened ends as a 500 too.
 //
-// The Kobo route falls back from a failed Conversion too; a channel on
-// Delivery Rules uses ResolveDeliveryDownload instead. A download
-// menu entry asks for one File Type, so it uses GeneratedDownload, which
-// never falls back. The web app's download routes do not fall back either:
+// Nothing falls back from a Conversion: a channel delivering another File
+// Type uses ResolveDeliveryDownload, and a download menu entry
+// GeneratedDownload. The web app's download routes do not fall back either:
 // a browser user sees the error and has Download Original.
-func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, deliveredType string) (*Download, error) {
+func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {
 		return OriginalDownload(file), nil
 	}
 	// Check for a generator before the cache is touched, so a full or
 	// read-only cache cannot fail a file there is nothing to generate for.
-	if _, err := filegen.GeneratorFor(file.FileType, deliveredType); errors.Is(err, filegen.ErrNotImplemented) || errors.Is(err, filegen.ErrNoConversion) {
+	if _, err := filegen.GeneratorFor(file.FileType, file.FileType); errors.Is(err, filegen.ErrNotImplemented) {
 		return OriginalDownload(file), nil
 	}
 
-	download, err := GeneratedDownload(c, cache, book, file, deliveredType)
+	download, err := GeneratedDownload(c, cache, book, file, file.FileType)
 	switch {
 	case err == nil:
 		return download, nil
 	case isGenerationFallback(err):
 		logger.FromContext(ctx).Warn("file generation failed, serving the original", logger.Data{
-			"file_id":             file.ID,
-			"file_type":           file.FileType,
-			"delivered_file_type": deliveredType,
-			"error":               err.Error(),
+			"file_id":   file.ID,
+			"file_type": file.FileType,
+			"error":     err.Error(),
 		})
 		return OriginalDownload(file), nil
 	}
 	return nil, errors.WithStack(err)
 }
 
-// ResolveDeliveryDownload returns what a channel on Delivery Rules (OPDS and
-// the eReader browser) sends for the file delivered as deliveredType. Delivered as its own File
-// Type, it falls back to the Original File as ResolveFallbackDownload does,
-// since a failed generation only loses Shisho's metadata. Delivered as
-// another File Type, any failure of the Conversion is returned, whether it
-// fails now or failed partway through an earlier attempt
+// ResolveDeliveryDownload returns what a channel on Delivery Rules (OPDS,
+// the eReader browser, and Kobo sync) sends for the file delivered as
+// deliveredType. Delivered as its own File Type, it falls back to the
+// Original File as ResolveFallbackDownload does. Delivered as another File
+// Type, any failure of the Conversion is returned, whether it fails now or
+// failed partway through an earlier attempt
 // (downloadcache.ErrFailedPartway): a reader never receives a File Type its
 // rules did not choose (ADR 0011).
 func ResolveDeliveryDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File, deliveredType string) (*Download, error) {
 	if deliveredType == file.FileType {
-		return ResolveFallbackDownload(c, cache, book, file, deliveredType)
+		return ResolveFallbackDownload(c, cache, book, file)
 	}
 	download, err := GeneratedDownload(c, cache, book, file, deliveredType)
 	if err != nil {

@@ -19,14 +19,20 @@ export const useDeliveryRules = (options: { enabled?: boolean } = {}) => {
   });
 };
 
-// Devices that follow the default show it as their rules, so a change to it
-// refetches them.
+// Devices that follow the default show it as their rules, and their
+// previews and book page lines follow it, so a change to it refetches them.
 const useInvalidateFollowingDevices = () => {
   const queryClient = useQueryClient();
   return () => {
     queryClient.invalidateQueries({ queryKey: [DevicesQueryKey.ListDevices] });
     queryClient.invalidateQueries({
       queryKey: [DevicesQueryKey.RetrieveDevice],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [DevicesQueryKey.DeliveryPreview],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [DevicesQueryKey.BookDevices],
     });
   };
 };

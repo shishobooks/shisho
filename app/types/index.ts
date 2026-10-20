@@ -81,6 +81,7 @@ export {
 } from "./generated/publishers";
 export * from "./generated/chapters";
 export * from "./generated/delivery";
+export * from "./generated/reach";
 export {
   type Response as AudnexusChaptersResponse,
   type Chapter as AudnexusChapter,

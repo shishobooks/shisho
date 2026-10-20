@@ -200,6 +200,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				// Delivery Rules can be viewed in Demo Mode; the middleware
 				// rejects every change to them.
 				"GET /api/user/delivery-rules", "PUT /api/user/delivery-rules", "DELETE /api/user/delivery-rules",
+				// What each Device gets is read-only, so both are GETs.
+				"GET /api/books/:id/devices", "GET /api/user/devices/:id/delivery-preview",
 			} {
 				assert.True(t, routes[route], route)
 			}

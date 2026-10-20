@@ -3,10 +3,10 @@ package kobo
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,19 +14,26 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/covers"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
-// ScopedFile represents a file in the current sync scope with its hashes.
+// ScopedFile is a File the Device's Delivery Rules deliver, with the entry
+// it goes out under and its hashes.
 type ScopedFile struct {
 	FileID          int
 	FileHash        string
 	FileSize        int64
 	MetadataHash    string
 	CoverModifiedAt *time.Time
+	// EntryID, DeliveredFileType, and RevisionID are the entry (SyncEntry)
+	// the File goes out under.
+	EntryID           string
+	DeliveredFileType string
+	RevisionID        string
 }
 
 // SyncChanges contains the detected changes between two sync points.
@@ -38,13 +45,14 @@ type SyncChanges struct {
 
 // Service provides sync operations for Kobo devices.
 type Service struct {
-	db          *bun.DB
-	listService *lists.Service
+	db            *bun.DB
+	listService   *lists.Service
+	deviceService *devices.Service
 }
 
 // NewService creates a new Kobo sync service.
 func NewService(db *bun.DB) *Service {
-	return &Service{db: db, listService: lists.NewService(db)}
+	return &Service{db: db, listService: lists.NewService(db), deviceService: devices.NewService(db)}
 }
 
 // CreateSyncPoint creates a new in-progress sync point with the given files.
@@ -70,13 +78,16 @@ func (svc *Service) CreateSyncPoint(ctx context.Context, deviceID string, files 
 			books := make([]*SyncPointBook, len(files))
 			for i, f := range files {
 				books[i] = &SyncPointBook{
-					ID:              uuid.New().String(),
-					SyncPointID:     sp.ID,
-					FileID:          f.FileID,
-					FileHash:        f.FileHash,
-					FileSize:        f.FileSize,
-					MetadataHash:    f.MetadataHash,
-					CoverModifiedAt: f.CoverModifiedAt,
+					ID:                uuid.New().String(),
+					SyncPointID:       sp.ID,
+					FileID:            f.FileID,
+					FileHash:          f.FileHash,
+					FileSize:          f.FileSize,
+					MetadataHash:      f.MetadataHash,
+					CoverModifiedAt:   f.CoverModifiedAt,
+					EntryID:           f.EntryID,
+					DeliveredFileType: f.DeliveredFileType,
+					RevisionID:        f.RevisionID,
 				}
 			}
 			_, err = tx.NewInsert().Model(&books).Exec(ctx)
@@ -120,15 +131,22 @@ func (svc *Service) MarkSyncPointCompleted(ctx context.Context, deviceID, syncPo
 func ScopedFilesFromSnapshot(books []*SyncPointBook) []ScopedFile {
 	out := make([]ScopedFile, len(books))
 	for i, b := range books {
-		out[i] = ScopedFile{
-			FileID:          b.FileID,
-			FileHash:        b.FileHash,
-			FileSize:        b.FileSize,
-			MetadataHash:    b.MetadataHash,
-			CoverModifiedAt: b.CoverModifiedAt,
-		}
+		out[i] = scopedFileFromRow(b)
 	}
 	return out
+}
+
+func scopedFileFromRow(b *SyncPointBook) ScopedFile {
+	return ScopedFile{
+		FileID:            b.FileID,
+		FileHash:          b.FileHash,
+		FileSize:          b.FileSize,
+		MetadataHash:      b.MetadataHash,
+		CoverModifiedAt:   b.CoverModifiedAt,
+		EntryID:           b.EntryID,
+		DeliveredFileType: b.DeliveredFileType,
+		RevisionID:        b.RevisionID,
+	}
 }
 
 // GetSyncPointByID retrieves a sync point by ID with its Books relation loaded.
@@ -199,42 +217,45 @@ func (svc *Service) DetectChanges(ctx context.Context, deviceID, lastSyncPointID
 		return changes, nil
 	}
 
-	// Build map of previous files by FileID.
-	prevMap := make(map[int]*SyncPointBook, len(sp.Books))
+	// Entries are matched by id: one that holds another File now was handed
+	// over, which goes out as a change under the same ids.
+	prevMap := make(map[string]*SyncPointBook, len(sp.Books))
 	for _, b := range sp.Books {
-		prevMap[b.FileID] = b
+		prevMap[b.EntryID] = b
 	}
-
-	// Build map of current files by FileID.
-	currMap := make(map[int]ScopedFile, len(currentFiles))
+	currMap := make(map[string]bool, len(currentFiles))
 	for _, f := range currentFiles {
-		currMap[f.FileID] = f
+		currMap[f.EntryID] = true
 	}
 
-	// Detect added and changed.
 	for _, curr := range currentFiles {
-		prev, exists := prevMap[curr.FileID]
+		prev, exists := prevMap[curr.EntryID]
 		if !exists {
 			changes.Added = append(changes.Added, curr)
-		} else if prev.FileHash != curr.FileHash || prev.MetadataHash != curr.MetadataHash || coverChanged(prev.CoverModifiedAt, curr.CoverModifiedAt) {
+		} else if entryChanged(prev, curr) {
 			changes.Changed = append(changes.Changed, curr)
 		}
 	}
 
-	// Detect removed.
 	for _, prev := range sp.Books {
-		if _, exists := currMap[prev.FileID]; !exists {
-			changes.Removed = append(changes.Removed, ScopedFile{
-				FileID:          prev.FileID,
-				FileHash:        prev.FileHash,
-				FileSize:        prev.FileSize,
-				MetadataHash:    prev.MetadataHash,
-				CoverModifiedAt: prev.CoverModifiedAt,
-			})
+		if !currMap[prev.EntryID] {
+			changes.Removed = append(changes.Removed, scopedFileFromRow(prev))
 		}
 	}
 
 	return changes, nil
+}
+
+// entryChanged reports whether an entry has to go out again: it holds
+// another File, its File or the File's metadata or cover changed, or it is
+// delivered as another File Type. A snapshot row stored before entries had
+// ids records KePub, which is all Kobo sync sent then.
+func entryChanged(prev *SyncPointBook, curr ScopedFile) bool {
+	return prev.FileID != curr.FileID ||
+		prev.DeliveredFileType != curr.DeliveredFileType ||
+		prev.FileHash != curr.FileHash ||
+		prev.MetadataHash != curr.MetadataHash ||
+		coverChanged(prev.CoverModifiedAt, curr.CoverModifiedAt)
 }
 
 // coverChanged reports whether a file's cover was replaced since the
@@ -253,152 +274,165 @@ func coverChanged(prev, curr *time.Time) bool {
 	return !prev.Equal(*curr)
 }
 
-// EnsureRevisionIDs returns the RevisionId recorded for each file under
-// deviceID, first recording a new one for any file that has none. A recorded
-// RevisionId is reused for every later sync, and a new one is a random UUID
-// so nothing about the file (path, size, metadata) feeds into it.
-func (svc *Service) EnsureRevisionIDs(ctx context.Context, deviceID string, fileIDs []int) (map[int]string, error) {
-	revs := make(map[int]string, len(fileIDs))
-	if len(fileIDs) == 0 {
-		return revs, nil
-	}
-
-	now := time.Now()
-	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		// A paginated sync pages out a frozen snapshot, so a file may have been
-		// deleted since. It gets no entry, and the caller drops it from the page.
-		var existing []int
-		err := tx.NewSelect().
-			Model((*models.File)(nil)).
-			Column("f.id").
-			Where("f.id IN (?)", bun.List(fileIDs)).
-			Scan(ctx, &existing)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		if len(existing) == 0 {
-			return nil
-		}
-
-		entries := make([]*SyncEntry, len(existing))
-		for i, fileID := range existing {
-			entries[i] = &SyncEntry{
-				DeviceID:   deviceID,
-				FileID:     fileID,
-				RevisionID: uuid.New().String(),
-				CreatedAt:  now,
-			}
-		}
-		_, err = tx.NewInsert().
-			Model(&entries).
-			On("CONFLICT (device_id, file_id) DO NOTHING").
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		var recorded []*SyncEntry
-		err = tx.NewSelect().
-			Model(&recorded).
-			Where("kse.device_id = ?", deviceID).
-			Where("kse.file_id IN (?)", bun.List(fileIDs)).
-			Scan(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		for _, e := range recorded {
-			revs[e.FileID] = e.RevisionID
-		}
-		return nil
-	})
+// GetScopedFiles returns every File the Device's Delivery Rules deliver
+// within its scope, with the entry each goes out under, first assigning
+// entries (planEntries). A library or list scope the user cannot see
+// delivers nothing. The user must be loaded with LibraryAccess, as the
+// Device middleware does.
+func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, device *devices.Device) ([]ScopedFile, error) {
+	rules, err := svc.deviceService.Rules(ctx, device)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
-	return revs, nil
-}
-
-// GetScopedFiles queries all Kobo-compatible main files (EPUB, CBZ) in scope,
-// filtered by library access. A library or list scope the user cannot see
-// returns an empty slice rather than an error. Supplement files and non-Kobo
-// formats (M4B, PDF) are excluded. A book with multiple compatible files (e.g.
-// two EPUBs) will have all of them returned. Each gets its own content ID on
-// the device. The user must be loaded with LibraryAccess, as the Device
-// middleware does.
-func (svc *Service) GetScopedFiles(ctx context.Context, user *models.User, scope devices.Scope) ([]ScopedFile, error) {
-	var files []models.File
-	q, closed, err := svc.scopedFilesQuery(ctx, user, scope, &files)
+	var files []*models.File
+	q, closed, err := svc.scopedFilesQuery(ctx, user, device.Scope(), rules, &files)
 	if err != nil {
 		return nil, err
 	}
 	if closed {
-		return []ScopedFile{}, nil
-	}
-
-	err = q.
-		Relation("Book").
-		Relation("Book.Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
-			return sq.Order("a.sort_order ASC")
-		}).
-		Relation("Book.Authors.Person").
-		Relation("Book.BookSeries.Series").
-		Relation("Publisher").
-		Scan(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to query scoped files")
-	}
-
-	// Convert to ScopedFile with computed hashes.
-	result := make([]ScopedFile, len(files))
-	for i, f := range files {
-		result[i] = ScopedFile{
-			FileID:          f.ID,
-			FileHash:        computeFileHash(&f),
-			FileSize:        f.FilesizeBytes,
-			MetadataHash:    computeMetadataHash(f.Book, &f),
-			CoverModifiedAt: coverModifiedAt(ctx, &f),
+		files = nil
+	} else {
+		err = q.
+			Relation("Book").
+			Relation("Book.Authors", func(sq *bun.SelectQuery) *bun.SelectQuery {
+				return sq.Order("a.sort_order ASC")
+			}).
+			Relation("Book.Authors.Person").
+			Relation("Publisher").
+			Order("f.id ASC").
+			Scan(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to query scoped files")
 		}
 	}
 
+	delivered := DeliveredFiles(rules, files)
+	held, err := svc.assignEntries(ctx, device.ID, delivered)
+	if err != nil {
+		return nil, err
+	}
+
+	byID := make(map[int]*models.File, len(files))
+	for _, f := range files {
+		byID[f.ID] = f
+	}
+	result := make([]ScopedFile, 0, len(delivered))
+	for _, d := range delivered {
+		f := byID[d.FileID]
+		entry, ok := held[d.FileID]
+		if !ok {
+			// Deleted since the scope query.
+			continue
+		}
+		result = append(result, ScopedFile{
+			FileID:            f.ID,
+			FileHash:          computeFileHash(f),
+			FileSize:          f.FilesizeBytes,
+			MetadataHash:      computeMetadataHash(f.Book, f),
+			CoverModifiedAt:   coverModifiedAt(ctx, f),
+			EntryID:           entry.EntryID,
+			DeliveredFileType: entry.DeliveredFileType,
+			RevisionID:        entry.RevisionID,
+		})
+	}
 	return result, nil
 }
 
-// FileInScope reports whether fileID is one of the files GetScopedFiles
-// would sync for this user and scope. The by-id Kobo routes (download, cover,
-// metadata) call it before loading the file, so a Device can only fetch what it
-// syncs. The user must be loaded with LibraryAccess.
-func (svc *Service) FileInScope(ctx context.Context, user *models.User, scope devices.Scope, fileID int) (bool, error) {
-	q, closed, err := svc.scopedFilesQuery(ctx, user, scope, (*models.File)(nil))
-	if err != nil {
-		return false, err
+// DeliveredFiles returns the Files rules deliver from files, each with the
+// File Type it goes as. files must hold every main File of the source types
+// rules name for each of their books, as the scope query selects them, since
+// a book's earliest matching rule decides which of its Files go
+// (delivery.Resolve).
+func DeliveredFiles(rules []delivery.Rule, files []*models.File) []DeliveredFile {
+	var order []int
+	byBook := map[int]*models.Book{}
+	for _, f := range files {
+		book, ok := byBook[f.BookID]
+		if !ok {
+			book = &models.Book{ID: f.BookID}
+			byBook[f.BookID] = book
+			order = append(order, f.BookID)
+		}
+		book.Files = append(book.Files, f)
 	}
-	if closed {
-		return false, nil
+	var delivered []DeliveredFile
+	for _, bookID := range order {
+		for _, d := range delivery.Resolve(rules, byBook[bookID]).All() {
+			delivered = append(delivered, DeliveredFile{FileID: d.File.ID, BookID: bookID, DeliveredFileType: d.DeliveredFileType})
+		}
 	}
-	exists, err := q.Where("f.id = ?", fileID).Exists(ctx)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to check file scope")
-	}
-	return exists, nil
+	return delivered
 }
 
-// scopedFilesQuery builds the query for the Kobo-compatible main files (EPUB,
-// CBZ) in scope, selecting into model. Supplements are excluded so only real
-// editions sync to the device. closed is true when the scope can hold no
-// files for this user (a missing scope id, an inaccessible library, or a list
-// the user cannot view); callers then skip the query. Callers must pass a
-// non-nil user (the handlers reject a request without one). The nil guard
-// exists so a future caller that forgets fails closed with an error instead
-// of failing open or panicking on a nil dereference.
-func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, scope devices.Scope, model any) (q *bun.SelectQuery, closed bool, err error) {
+// EntryInScope returns the Device's entry with entryID while the Device
+// still delivers the entry's File as its type within its scope, and nil
+// otherwise. The by-id Kobo routes (download, cover, metadata) call it, so a
+// Device can only fetch what it syncs. The user must be loaded with
+// LibraryAccess.
+func (svc *Service) EntryInScope(ctx context.Context, user *models.User, device *devices.Device, entryID string) (*SyncEntry, error) {
+	entry := new(SyncEntry)
+	err := svc.db.NewSelect().
+		Model(entry).
+		Where("kse.device_id = ?", device.ID).
+		Where("kse.entry_id = ?", entryID).
+		Where("kse.file_id IS NOT NULL").
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	rules, err := svc.deviceService.Rules(ctx, device)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var files []*models.File
+	q, closed, err := svc.scopedFilesQuery(ctx, user, device.Scope(), rules, &files)
+	if err != nil {
+		return nil, err
+	}
+	if closed {
+		return nil, nil
+	}
+	err = q.
+		Where("f.book_id = (?)", svc.db.NewSelect().Model((*models.File)(nil)).Column("book_id").Where("id = ?", *entry.FileID)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check entry scope")
+	}
+	for _, d := range DeliveredFiles(rules, files) {
+		if d.FileID == *entry.FileID && d.DeliveredFileType == entry.DeliveredFileType {
+			return entry, nil
+		}
+	}
+	return nil, nil
+}
+
+// scopedFilesQuery builds the query for the main Files in scope whose File
+// Type a rule in rules delivers, selecting into model. Its scope matches
+// reach.Service.mainFiles, which previews what a Kobo receives; change both
+// together. Supplements are excluded so only real editions sync to the
+// device. closed is true when the scope can hold no files for this user (a missing scope id, an
+// inaccessible library, or a list the user cannot view); callers then skip
+// the query. Callers must pass a non-nil user (the handlers reject a request
+// without one). The nil guard exists so a future caller that forgets fails
+// closed with an error instead of failing open or panicking on a nil
+// dereference.
+func (svc *Service) scopedFilesQuery(ctx context.Context, user *models.User, scope devices.Scope, rules []delivery.Rule, model any) (q *bun.SelectQuery, closed bool, err error) {
 	if user == nil {
 		return nil, true, errors.New("scoped files query requires a user")
+	}
+	sourceTypes := delivery.SourceFileTypes(rules)
+	if len(sourceTypes) == 0 {
+		return nil, true, nil
 	}
 
 	q = svc.db.NewSelect().
 		Model(model).
-		Where("f.file_type IN (?)", bun.List([]string{models.FileTypeEPUB, models.FileTypeCBZ})).
+		Where("f.file_type IN (?)", bun.List(sourceTypes)).
 		Where("f.file_role = ?", models.FileRoleMain)
-
 	switch scope.Type {
 	case devices.ScopeLibrary:
 		// A library scope without an id fails closed rather than syncing
@@ -536,33 +570,4 @@ func computeMetadataHash(book *models.Book, file *models.File) string {
 	data := strings.Join(parts, "\x00")
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])[:16]
-}
-
-// ShishoID returns a Shisho-prefixed ID for a file.
-func ShishoID(fileID int) string {
-	return fmt.Sprintf("shisho-%d", fileID)
-}
-
-// ParseShishoID parses a "shisho-{id}" or "shisho-{id}-{suffix}" string and
-// returns the file ID. The suffixed form is used for cover IDs (suffix = a
-// short hash of the book metadata) so device-side thumbnail caches refresh
-// when the underlying book changes; the cover handler still needs the bare
-// file ID. Returns (0, false) if the format is invalid.
-func ParseShishoID(id string) (int, bool) {
-	if !strings.HasPrefix(id, "shisho-") {
-		return 0, false
-	}
-	rest := strings.TrimPrefix(id, "shisho-")
-	end := 0
-	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
-		end++
-	}
-	if end == 0 {
-		return 0, false
-	}
-	n, err := strconv.Atoi(rest[:end])
-	if err != nil {
-		return 0, false
-	}
-	return n, true
 }
