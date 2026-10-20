@@ -6,7 +6,7 @@ The eReader Browser is a lightweight, server-rendered interface for downloading 
 
 ### 1. Add a Device
 
-Open the user menu and select **Devices**. Click **Add Device**, enter a name, select the type that matches the e-reader (**Kobo**, **Kindle**, or **Browser** for any other e-reader), and click **Add Device**. Shisho opens the new Device's page. A Kobo that already syncs with [Kobo Sync](./kobo-sync.md) can use its existing Kobo Device. See [Devices](./users-and-permissions.md#devices) for types, credentials, and scope.
+Open the user menu and select **Devices**. Click **Add Device**, enter a name, select the type that matches the e-reader (**Kobo**, **Kindle**, or **Browser** for any other e-reader), and click **Add Device**. Shisho opens the new Device's page. A Kobo that already syncs with [Kobo Sync](./kobo-sync.md) can use its existing Kobo Device. The type decides what the browser delivers, so pick the one that matches the hardware. See [Devices](./users-and-permissions.md#devices) for types, credentials, scope, and Delivery Rules.
 
 ### 2. Generate the Setup URL
 
@@ -24,7 +24,7 @@ The short URL is reusable for 30 minutes, until you get another one for the same
 The redirected full URL contains the Device's credential. Treat it like a password. Do not share it, publish it, include it in screenshots, or bookmark it on a device you do not control. Deleting the Device revokes the URL and cannot be undone. If access may be needed later, keep the Device and protect its URL instead.
 :::
 
-Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. Bookmarks saved before Devices existed keep working.
+Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. Bookmarks saved before Devices existed keep working. A key that had only eReader browser access became a **Browser** Device, so on a Kindle, change its type to **Kindle** with **Change Type** on its page.
 
 ### How Long the URL Works
 
@@ -40,10 +40,11 @@ The short setup URL refuses to redirect in the same cases.
 
 The current browser provides:
 
-- A list of the libraries the Device's [scope](./users-and-permissions.md#scope) reaches. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
-- Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
-- EPUB, CBZ, M4B, PDF, MOBI, and AZW3 type filters. A filter shows the books with a main file of that type.
-- Book details and a separate download for every main-file edition, except on a Kindle (see [On a Kindle](#on-a-kindle)).
+- A list of the libraries the Device's [scope](./users-and-permissions.md#scope) reaches that have something the Device's rules deliver. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
+- Per-library **All Books**, **Series**, **Authors**, and **Search** pages. **Series** or **Authors** is left out when none of them has anything to deliver.
+- Books the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) deliver something from. Books, series, and authors with nothing to deliver are left out of the lists.
+- A type filter for each file type the Device's rules deliver from, when there is more than one. A filter shows the books with a main file of that type.
+- Book details and a download for each file the rules deliver, in the file type they deliver it as.
 - The user's saved per-library [sort](./browsing-search-bulk-actions.md#gallery-sort) on **All Books**, author, and search results. Series books follow series-number order.
 - An optional cover toggle.
 
@@ -51,22 +52,23 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 
 ## Downloads
 
-Shisho normally prepares each native-format download with the metadata that format supports. When the request's User-Agent contains `Kobo`, EPUB and CBZ download links use generated KePubs instead. M4B, PDF, MOBI, and AZW3 remain generated downloads in their native formats. The first download of some formats shows no progress or size on the device; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
+What a book's page offers comes from the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), never from the browser. A new Kobo Device follows its preset and gets EPUB and CBZ files as KePub; a Browser Device follows your default rules. Each download is generated with the metadata its file type supports. The first download of some formats shows no progress or size on the device; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
+
+A download delivered through a [conversion](./supported-formats.md#conversions), such as a KePub made from an EPUB, fails with an error when the conversion fails, for example on a damaged EPUB, and never sends the original file in its place. A file delivered as its own file type still falls back to the original file when Shisho cannot write metadata into it.
+
+When the browser looks like a Kindle or a Kobo but the Device has another type, every page shows a banner saying so. Change the Device's type on its page to match; the banner never changes what is offered.
 
 Covers are off by default. Leave them off on slow devices or networks to reduce page size and image requests.
 
 ### On a Kindle
 
-A Kindle's browser downloads only MOBI and AZW3, and refuses EPUB, PDF, and everything else. Some Kindles refuse AZW3 downloads; if yours does, add a MOBI file to the book. When the request's User-Agent contains `Kindle/`, which every e-ink Kindle sends, the browser offers only what a Kindle can download:
+A Kindle's browser downloads only MOBI and AZW3, and refuses EPUB, PDF, and everything else, so use a **Kindle** Device. Its preset offers each book's AZW3 files, or its MOBI files when it has no AZW3, with download links whose URL ends in a filename the Kindle accepts. Books with neither are left out of the lists, and a book's page reached directly says it is not delivered to this Device. Some Kindles refuse AZW3 downloads; if yours does, customize the Device's rules to put MOBI first.
 
-- A book's page offers its MOBI files. A book with no MOBI offers its AZW3 files instead, with a note that some Kindles refuse AZW3 downloads.
-- A book with neither is marked **Unavailable on Kindle**, both in book lists and on the book's page, and offers no download.
-
-Fire tablets browse with Silk, which does not send `Kindle/`, so they see every download like any other browser.
+Fire tablets browse with Silk and have apps for other formats, so give one a **Browser** Device.
 
 A MOBI or AZW3 download carries the book's current metadata and cover; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for what is written.
 
-To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book onto a Kindle when it has only an EPUB, or only an AZW3 and the Kindle refuses it, add a MOBI file to the book in Shisho.
+To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book onto a Kindle when it has only an EPUB, add a MOBI or AZW3 file to the book in Shisho.
 
 ## Troubleshooting
 
@@ -104,8 +106,8 @@ To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the f
 
 **Symptom:** The browser opens, but an expected library or book is absent, or a saved book, cover, or download link returns **not found**.
 
-**Likely cause:** The Device's scope leaves it out, the owning user lacks library access, a file-type filter is active, or the expected file is a supplement. A book or file outside the scope or in a library the user cannot access returns **not found**, the same as one that does not exist, so the URL does not reveal whether it exists.
+**Likely cause:** The Device's scope leaves it out, its Delivery Rules have no rule for the book's file types, the owning user lacks library access, a file-type filter is active, or the expected file is a supplement. A book or file outside the scope or in a library the user cannot access returns **not found**, the same as one that does not exist, so the URL does not reveal whether it exists.
 
-**Verify:** Check **Scope** on the Device's page and the user's library access, clear the filter, and confirm the book has a main file.
+**Verify:** Check **Scope**, **Delivery Rules**, and the type on the Device's page and the user's library access, clear the filter, and confirm the book has a main file.
 
-**Fix:** Change the Device's [scope](./users-and-permissions.md#scope), grant the intended [library access](./users-and-permissions.md#library-access), or select a matching main-file type. Supplements are not offered.
+**Fix:** Change the Device's [scope](./users-and-permissions.md#scope) or [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), grant the intended [library access](./users-and-permissions.md#library-access), or select a matching main-file type. Supplements are not offered.

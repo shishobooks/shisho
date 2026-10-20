@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -253,4 +255,131 @@ func TestHandler_Update_ScopeCheckFailureReturns500(t *testing.T) {
 			assert.NotErrorAs(t, err, &ec, "%v", err)
 		})
 	}
+}
+
+// The Device page edits a Device's rules through PATCH: follow the default,
+// follow the preset, or a custom list, which is refused when empty or when
+// it delivers a File Type the type can't receive.
+func TestHandler_Update_SetsDeliveryRules(t *testing.T) {
+	t.Parallel()
+	f := newHandlerFixture(t)
+	insertTestUser(t, f.db, 1, "reader")
+	device, err := f.h.service.Create(context.Background(), 1, "Kindle", DeviceTypeKindle)
+	require.NoError(t, err)
+	user := libraryUser(1)
+
+	decode := func(rec *httptest.ResponseRecorder) DeviceResponse {
+		var resp DeviceResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		return resp
+	}
+
+	rec, err := f.call(f.h.Retrieve, user, "", device.ID)
+	require.NoError(t, err)
+	resp := decode(rec)
+	assert.Equal(t, RulesModePreset, resp.DeliveryRulesMode)
+	assert.True(t, resp.HasPreset)
+	assert.Equal(t, PresetRules(DeviceTypeKindle), resp.DeliveryRules)
+	// The editor only offers what a Kindle can receive.
+	for _, option := range resp.DeliveryRuleOptions {
+		for _, delivered := range option.DeliveredFileTypes {
+			assert.True(t, AllowsFileType(DeviceTypeKindle, delivered), "%s offered as %s", option.SourceFileType, delivered)
+		}
+	}
+	sources := []string{}
+	for _, option := range resp.DeliveryRuleOptions {
+		sources = append(sources, option.SourceFileType)
+	}
+	assert.Equal(t, []string{models.FileTypeAZW3, models.FileTypeMOBI}, sources)
+
+	rec, err = f.call(f.h.Update, user, `{"delivery_rules":{"mode":"custom","rules":[{"source_file_type":"mobi","delivered_file_type":"mobi"}]}}`, device.ID)
+	require.NoError(t, err)
+	resp = decode(rec)
+	assert.Equal(t, RulesModeCustom, resp.DeliveryRulesMode)
+	assert.Equal(t, []delivery.Rule{rule(models.FileTypeMOBI, models.FileTypeMOBI)}, resp.DeliveryRules)
+
+	for name, body := range map[string]string{
+		"empty list":       `{"delivery_rules":{"mode":"custom","rules":[]}}`,
+		"EPUB on a Kindle": `{"delivery_rules":{"mode":"custom","rules":[{"source_file_type":"epub","delivered_file_type":"epub"}]}}`,
+		"unknown mode":     `{"delivery_rules":{"mode":"sometimes"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.call(f.h.Update, user, body, device.ID)
+			requireStatus(t, err, http.StatusUnprocessableEntity)
+		})
+	}
+
+	rec, err = f.call(f.h.Update, user, `{"delivery_rules":{"mode":"default"}}`, device.ID)
+	require.NoError(t, err)
+	resp = decode(rec)
+	assert.Equal(t, RulesModeDefault, resp.DeliveryRulesMode)
+	// The built-in default's AZW3 and MOBI rules, without the ones a Kindle
+	// can't receive.
+	assert.Equal(t, []delivery.Rule{rule(models.FileTypeAZW3, models.FileTypeAZW3), rule(models.FileTypeMOBI, models.FileTypeMOBI)}, resp.DeliveryRules)
+}
+
+func TestHandler_Update_ChangesType(t *testing.T) {
+	t.Parallel()
+	f := newHandlerFixture(t)
+	insertTestUser(t, f.db, 1, "reader")
+	device, err := f.h.service.Create(context.Background(), 1, "Reader", DeviceTypeBrowser)
+	require.NoError(t, err)
+
+	rec, err := f.call(f.h.Update, libraryUser(1), `{"device_type":"kindle"}`, device.ID)
+	require.NoError(t, err)
+	var resp DeviceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, DeviceTypeKindle, resp.DeviceType)
+	assert.Equal(t, RulesModePreset, resp.DeliveryRulesMode)
+
+	_, err = f.call(f.h.Update, libraryUser(1), `{"device_type":"tablet"}`, device.ID)
+	requireStatus(t, err, http.StatusUnprocessableEntity)
+
+	// Rules the new type can't follow refuse the whole change, so the type
+	// stays as it was.
+	_, err = f.call(f.h.Update, libraryUser(1), `{"device_type":"kobo","delivery_rules":{"mode":"custom","rules":[{"source_file_type":"cbz","delivered_file_type":"cbz"}]}}`, device.ID)
+	requireStatus(t, err, http.StatusUnprocessableEntity)
+	unchanged, err := f.h.service.Retrieve(context.Background(), 1, device.ID)
+	require.NoError(t, err)
+	assert.Equal(t, DeviceTypeKindle, unchanged.DeviceType)
+}
+
+// queryCounter counts the queries a database runs.
+type queryCounter struct{ n atomic.Int64 }
+
+func (q *queryCounter) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
+	return ctx
+}
+
+func (q *queryCounter) AfterQuery(context.Context, *bun.QueryEvent) { q.n.Add(1) }
+
+// Listing Devices loads every Device's rules in a fixed number of queries,
+// however many Devices there are and whichever rules they follow.
+func TestHandler_List_RulesQueriesDontGrowWithDevices(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	listQueries := func(customDevices, followingDevices int) int64 {
+		f := newHandlerFixture(t)
+		insertTestUser(t, f.db, 1, "reader")
+		for range customDevices {
+			d, err := f.h.service.Create(ctx, 1, "Custom", DeviceTypeOPDS)
+			require.NoError(t, err)
+			_, err = f.h.service.SetRules(ctx, 1, d.ID, RulesModeCustom, []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeEPUB)})
+			require.NoError(t, err)
+		}
+		for range followingDevices {
+			_, err := f.h.service.Create(ctx, 1, "Following", DeviceTypeBrowser)
+			require.NoError(t, err)
+		}
+		counter := &queryCounter{}
+		testdb.AddQueryHook(t, f.db, counter)
+		rec, err := f.call(f.h.List, libraryUser(1), "", "")
+		require.NoError(t, err)
+		var resp []DeviceResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Len(t, resp, customDevices+followingDevices)
+		return counter.n.Load()
+	}
+
+	assert.Equal(t, listQueries(1, 1), listQueries(4, 4))
 }

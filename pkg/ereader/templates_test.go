@@ -54,7 +54,7 @@ func TestPaginationWithParams_ThreadsExtraParams(t *testing.T) {
 func TestFilterBar_PreservesExtraParams(t *testing.T) {
 	t.Parallel()
 
-	got := filterBar("/s", "", "", [2]string{"q", "sanderson"})
+	got := filterBar("/s", []string{"epub", "cbz", "m4b", "pdf"}, "", "", [2]string{"q", "sanderson"})
 
 	// Every non-current filter link must carry ?q=sanderson...
 	for _, label := range []string{"EPUB", "CBZ", "M4B", "PDF"} {

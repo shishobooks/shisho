@@ -7,7 +7,9 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,17 +75,22 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 		}
 		_, err := db.NewInsert().Model(b).Exec(ctx)
 		require.NoError(t, err)
+		_, err = db.NewInsert().Model(&models.File{
+			LibraryID: lib.ID, BookID: b.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain,
+			Filepath: fmt.Sprintf("/b/%d/book.epub", i), FilesizeBytes: 1,
+		}).Exec(ctx)
+		require.NoError(t, err)
 	}
 
 	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	opts := books.ListBooksOptions{LibraryID: &lib.ID}
 
-	got, gotTotal, err := h.listBooksPaginated(ctx, deviceScope{}, opts, 1, "")
+	got, gotTotal, err := h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "")
 	require.NoError(t, err)
 	assert.Equal(t, total, gotTotal)
 	assert.Len(t, got, defaultPageSize, "page 1 returns a full page")
 
-	got, gotTotal, err = h.listBooksPaginated(ctx, deviceScope{}, opts, 2, "")
+	got, gotTotal, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 2, "")
 	require.NoError(t, err)
 	assert.Equal(t, total, gotTotal)
 	assert.Len(t, got, 5, "page 2 returns the remainder")
@@ -91,7 +98,7 @@ func TestListBooksPaginated_NoFilter(t *testing.T) {
 	// Out-of-range pages return an empty slice but still report the
 	// real total so the UI can render "Page N of M" instead of
 	// double-fetching to discover the bounds.
-	got, gotTotal, err = h.listBooksPaginated(ctx, deviceScope{}, opts, 99, "")
+	got, gotTotal, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 99, "")
 	require.NoError(t, err)
 	assert.Equal(t, total, gotTotal)
 	assert.Empty(t, got)
@@ -147,15 +154,27 @@ func TestListBooksPaginated_TypeFilter(t *testing.T) {
 	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	opts := books.ListBooksOptions{LibraryID: &lib.ID}
 
-	got, total, err := h.listBooksPaginated(ctx, deviceScope{}, opts, 1, "epub")
+	got, total, err := h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "epub")
 	require.NoError(t, err)
 	assert.Equal(t, 3, total, "total reflects filtered count, not SQL count")
 	assert.Len(t, got, 3)
 
 	// "all" short-circuits the filter path (treated as no filter).
-	_, total, err = h.listBooksPaginated(ctx, deviceScope{}, opts, 1, "all")
+	_, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "all")
 	require.NoError(t, err)
 	assert.Equal(t, 5, total, `"all" is equivalent to no filter`)
+
+	// The Device's rules hide books they deliver nothing from, before
+	// paging, and a filter can only narrow within them.
+	comicsOnly := &reach.Reach{Rules: []delivery.Rule{{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeCBZ}}}
+	got, total, err = h.listBooksPaginated(ctx, comicsOnly, opts, 1, "")
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	assert.Len(t, got, 2)
+	got, total, err = h.listBooksPaginated(ctx, comicsOnly, opts, 1, "epub")
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	assert.Empty(t, got)
 }
 
 // TestListBooksPaginated_TypeFilterPagesAndMatching confirms a type filter
@@ -216,23 +235,23 @@ func TestListBooksPaginated_TypeFilterPagesAndMatching(t *testing.T) {
 	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	opts := books.ListBooksOptions{LibraryID: &lib.ID}
 
-	got, total, err := h.listBooksPaginated(ctx, deviceScope{}, opts, 1, "mobi")
+	got, total, err := h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "mobi")
 	require.NoError(t, err)
 	assert.Equal(t, n, total)
 	assert.Len(t, got, defaultPageSize)
 
-	got, total, err = h.listBooksPaginated(ctx, deviceScope{}, opts, 2, "mobi")
+	got, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 2, "mobi")
 	require.NoError(t, err)
 	assert.Equal(t, n, total)
 	assert.Len(t, got, 3)
 
 	// The second type of a book's main files matches, in any case.
-	_, total, err = h.listBooksPaginated(ctx, deviceScope{}, opts, 1, "EPUB")
+	_, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "EPUB")
 	require.NoError(t, err)
 	assert.Equal(t, n+1, total)
 
 	// A supplement's type matches nothing.
-	got, total, err = h.listBooksPaginated(ctx, deviceScope{}, opts, 1, "pdf")
+	got, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "pdf")
 	require.NoError(t, err)
 	assert.Equal(t, 0, total)
 	assert.Empty(t, got)

@@ -1,8 +1,17 @@
-import { ArrowLeft, Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Copy,
+  Pencil,
+  RefreshCw,
+  Tablet,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import DeviceRulesSection from "@/components/devices/DeviceRulesSection";
+import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
@@ -26,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
   useClearKoboSync,
   useDeleteDevice,
@@ -36,8 +46,10 @@ import {
 } from "@/hooks/queries/devices";
 import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
+import { useAuth } from "@/hooks/useAuth";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import {
   isDemoModeError,
   isLoadFailure,
@@ -47,12 +59,14 @@ import { cn } from "@/libraries/utils";
 import {
   ConnectionEReaderBrowser,
   ConnectionKoboSync,
+  ConnectionOPDS,
   ScopeAll,
   ScopeLibrary,
   ScopeList,
   type Connection,
   type DeviceResponse,
   type DeviceShortURL,
+  type DeviceType,
   type ScopeType,
 } from "@/types/generated/devices";
 import { copyText } from "@/utils/clipboard";
@@ -61,6 +75,7 @@ import {
   DEVICE_TYPE_LABELS,
   eReaderBrowserURL,
   koboSyncURL,
+  opdsCatalogURL,
   shortURL,
 } from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
@@ -409,12 +424,29 @@ const EReaderBrowserSetup = ({ device }: { device: DeviceResponse }) => {
   );
 };
 
+const OPDSSetup = ({ device }: { device: DeviceResponse }) => {
+  const { user } = useAuth();
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Add an OPDS catalog in the reading app with this URL, your username, and
+        this Device's credential as the password. Signing in with your account
+        password instead follows your default Delivery Rules.
+      </p>
+      <CopyField label="OPDS URL" value={opdsCatalogURL()} />
+      {user && <CopyField label="Username" value={user.username} />}
+      <CopyField label="Password" value={device.credential} />
+    </div>
+  );
+};
+
 const CONNECTION_SETUP: Record<
   Connection,
   (props: { device: DeviceResponse }) => React.ReactNode
 > = {
   [ConnectionKoboSync]: KoboSyncSetup,
   [ConnectionEReaderBrowser]: EReaderBrowserSetup,
+  [ConnectionOPDS]: OPDSSetup,
 };
 
 // ConnectionsSection shows setup instructions for each connection the
@@ -510,6 +542,90 @@ const RenameDeviceDialog = ({
   );
 };
 
+const ChangeTypeDialog = ({
+  device,
+  open,
+  onOpenChange,
+  rulesHaveChanges,
+}: {
+  device: DeviceResponse;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Unsaved Delivery Rules edits, which a type change would discard. */
+  rulesHaveChanges: boolean;
+}) => {
+  const [deviceType, setDeviceType] = useState<DeviceType>(device.device_type);
+  const updateDevice = useUpdateDevice();
+
+  useEffect(() => {
+    if (open) {
+      setDeviceType(device.device_type);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const hasChanges = deviceType !== device.device_type;
+  const { requestClose } = useFormDialogClose(open, onOpenChange, hasChanges);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateDevice.mutateAsync({
+        id: device.id,
+        payload: { device_type: deviceType },
+      });
+      toast.success("Device type changed");
+      requestClose();
+    } catch (error) {
+      toastRequestError(error, "Failed to change device type");
+    }
+  };
+
+  return (
+    <FormDialog hasChanges={hasChanges} onOpenChange={onOpenChange} open={open}>
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Change Type</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            <DeviceTypeRadioGroup
+              id="change-device-type"
+              onChange={setDeviceType}
+              value={deviceType}
+            />
+            {rulesHaveChanges && (
+              <p className="text-sm text-destructive" role="alert">
+                Save or discard your Delivery Rules changes before changing the
+                type.
+              </p>
+            )}
+            {hasChanges && (
+              <p className="text-sm text-muted-foreground">
+                Its Delivery Rules go back to what a{" "}
+                {DEVICE_TYPE_LABELS[deviceType]} Device starts with, and its
+                connections change to the ones that type uses. The credential
+                stays the same.
+              </p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              disabled={
+                updateDevice.isPending || !hasChanges || rulesHaveChanges
+              }
+              size="sm"
+              type="submit"
+            >
+              {updateDevice.isPending ? "Saving..." : "Change Type"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </FormDialog>
+  );
+};
+
 const DeviceDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -518,7 +634,11 @@ const DeviceDetail = () => {
   usePageTitle(device?.name);
   const deleteDevice = useDeleteDevice();
   const [renameOpen, setRenameOpen] = useState(false);
+  const [changeTypeOpen, setChangeTypeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [rulesHaveChanges, setRulesHaveChanges] = useState(false);
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(rulesHaveChanges);
 
   const handleDelete = async () => {
     if (!device) return;
@@ -577,6 +697,15 @@ const DeviceDetail = () => {
               <span className="hidden sm:inline">Rename</span>
             </Button>
             <Button
+              aria-label="Change Type"
+              onClick={() => setChangeTypeOpen(true)}
+              size="sm"
+              variant="outline"
+            >
+              <Tablet className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Change Type</span>
+            </Button>
+            <Button
               aria-label="Delete"
               onClick={() => setDeleteOpen(true)}
               size="sm"
@@ -592,6 +721,16 @@ const DeviceDetail = () => {
           <div className="min-w-0 space-y-6">
             <CredentialSection device={device} />
             <ScopeSection device={device} />
+            <Section
+              description="Which File Types this Device receives, and as what. For each book, the earliest rule matching one of its files decides what goes."
+              id="delivery-rules-heading"
+              title="Delivery Rules"
+            >
+              <DeviceRulesSection
+                device={device}
+                onHasChangesChange={setRulesHaveChanges}
+              />
+            </Section>
           </div>
           <div className="min-w-0">
             <ConnectionsSection device={device} />
@@ -602,6 +741,12 @@ const DeviceDetail = () => {
           device={device}
           onOpenChange={setRenameOpen}
           open={renameOpen}
+        />
+        <ChangeTypeDialog
+          device={device}
+          onOpenChange={setChangeTypeOpen}
+          open={changeTypeOpen}
+          rulesHaveChanges={rulesHaveChanges}
         />
         <ConfirmDialog
           confirmLabel="Delete"
@@ -630,6 +775,11 @@ const DeviceDetail = () => {
         </Link>
         {body}
       </div>
+      <UnsavedChangesDialog
+        onDiscard={proceedNavigation}
+        onStay={cancelNavigation}
+        open={showBlockerDialog}
+      />
     </div>
   );
 };

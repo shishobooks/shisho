@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,9 +58,10 @@ func newDownloadFixture(t *testing.T, title string) *downloadFixture {
 	cacheDir := t.TempDir()
 	cache := downloadcache.NewCache(cacheDir, 1<<30)
 	t.Cleanup(cache.Wait)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	return &downloadFixture{
 		t: t, db: db, lib: lib, book: book, dir: dir, cacheDir: cacheDir,
-		h: &handler{bookService: books.NewService(db, appsettings.NewService(db)), downloadCache: cache},
+		h: &handler{bookService: bookService, downloadCache: cache, reachService: reach.NewService(db, bookService)},
 	}
 }
 

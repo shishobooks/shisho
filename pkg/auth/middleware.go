@@ -131,27 +131,10 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ctx := c.Request().Context()
 
-		auth := c.Request().Header.Get("Authorization")
-		if auth == "" {
-			return respondBasicAuthRequired(c)
+		username, password, ok := BasicCredentials(c.Request())
+		if !ok {
+			return RespondBasicAuthRequired(c)
 		}
-
-		if !strings.HasPrefix(auth, "Basic ") {
-			return respondBasicAuthRequired(c)
-		}
-
-		decoded, err := base64.StdEncoding.DecodeString(auth[6:])
-		if err != nil {
-			return respondBasicAuthRequired(c)
-		}
-
-		parts := strings.SplitN(string(decoded), ":", 2)
-		if len(parts) != 2 {
-			return respondBasicAuthRequired(c)
-		}
-
-		username := parts[0]
-		password := parts[1]
 
 		cacheKey := basicAuthCacheKey(username, password)
 		user, ok := m.basicAuthCache.get(cacheKey)
@@ -162,7 +145,7 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 				// loading the user is a server error.
 				var codeErr *errcodes.Error
 				if errors.As(authErr, &codeErr) && codeErr.HTTPCode == http.StatusUnauthorized {
-					return respondBasicAuthRequired(c)
+					return RespondBasicAuthRequired(c)
 				}
 				return authErr
 			}
@@ -175,13 +158,29 @@ func (m *Middleware) BasicAuth(next echo.HandlerFunc) echo.HandlerFunc {
 			}
 		}
 		if user.MustChangePassword {
-			return respondBasicAuthRequired(c)
+			return RespondBasicAuthRequired(c)
 		}
 
 		SetUser(c, user)
 
 		return next(c)
 	}
+}
+
+// BasicCredentials returns the username and password of a request's Basic
+// Auth header, and false when it has none or it doesn't parse. The username
+// never contains a ":", since the header splits at the first one.
+func BasicCredentials(r *http.Request) (string, string, bool) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Basic ") {
+		return "", "", false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(header[len("Basic "):])
+	if err != nil {
+		return "", "", false
+	}
+	username, password, ok := strings.Cut(string(decoded), ":")
+	return username, password, ok
 }
 
 func isSelfPasswordResetRequest(c echo.Context, userID int) bool {
@@ -205,10 +204,10 @@ func isSelfPasswordResetRequest(c echo.Context, userID int) bool {
 	return id == userID
 }
 
-// respondBasicAuthRequired sets the Basic challenge that prompts an OPDS
+// RespondBasicAuthRequired sets the Basic challenge that prompts an OPDS
 // reader for credentials and returns the 401 in the errcodes shape every
 // other API error uses.
-func respondBasicAuthRequired(c echo.Context) error {
+func RespondBasicAuthRequired(c echo.Context) error {
 	c.Response().Header().Set("WWW-Authenticate", `Basic realm="Shisho OPDS"`)
 	return errcodes.AuthenticationRequired()
 }

@@ -2,6 +2,8 @@ package devices
 
 import (
 	"context"
+	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -78,10 +80,89 @@ func (m *Middleware) DeviceAuth(connection string) echo.MiddlewareFunc {
 	}
 }
 
-// SetDevice stores device for RequireDevice. Only DeviceAuth, middleware
-// that updates the Device, and tests standing in for it call it.
+// OPDSAuth signs an OPDS request in with Basic Auth. A username with the
+// credential of one of that user's OPDS app Devices signs in as the Device,
+// so feeds and downloads follow its Delivery Rules and scope. Anything else
+// goes to passwordAuth, so the account password still signs in without a
+// Device. A Device is looked up before the password is checked, so signing
+// in with a credential costs no bcrypt comparison, and only for a password
+// shaped like a credential, so a password sign-in answered from
+// passwordAuth's cache costs no query. A Device whose owner is deactivated
+// gets the Basic challenge, as a wrong password does; an owner without
+// books:read gets the 403 password sign-in gets from RequirePermission.
+// Like DeviceAuth, a Device sign-in does not wait on a forced password
+// reset, which only the account password is subject to.
+func (m *Middleware) OPDSAuth(passwordAuth echo.MiddlewareFunc) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		withPassword := passwordAuth(next)
+		return func(c echo.Context) error {
+			username, credential, ok := auth.BasicCredentials(c.Request())
+			if !ok || !isCredentialShaped(credential) {
+				return withPassword(c)
+			}
+			device, err := m.service.GetByOwnerCredential(c.Request().Context(), username, credential)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if device == nil || !device.HasConnection(ConnectionOPDS) {
+				return withPassword(c)
+			}
+
+			user, err := m.service.AuthenticateOwner(c.Request().Context(), device)
+			var codeErr *errcodes.Error
+			if errors.As(err, &codeErr) && codeErr.HTTPCode == http.StatusUnauthorized {
+				return auth.RespondBasicAuthRequired(c)
+			}
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			go func() {
+				_ = m.service.TouchLastAccessed(context.Background(), device.ID)
+			}()
+
+			SetDevice(c, device)
+			auth.SetUser(c, user)
+
+			return next(c)
+		}
+	}
+}
+
+// legacyCredentialPrefix starts the API keys that Devices migrated from API
+// keys keep as their credentials until they're regenerated.
+const legacyCredentialPrefix = "ak_"
+
+// isCredentialShaped reports whether s could be a Device credential: the
+// right length, in the credential alphabet, or a migrated API key.
+func isCredentialShaped(s string) bool {
+	if strings.HasPrefix(s, legacyCredentialPrefix) {
+		return true
+	}
+	if len(s) != credentialLength {
+		return false
+	}
+	for _, r := range s {
+		if !strings.ContainsRune(credentialAlphabet, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// SetDevice stores device for RequireDevice. Only DeviceAuth, OPDSAuth,
+// middleware that updates the Device, and tests standing in for them call
+// it.
 func SetDevice(c echo.Context, device *Device) {
 	c.Set(deviceContextKey, device)
+}
+
+// SignedInDevice returns the Device a request signed in as, or nil for one
+// signed in without a Device, as OPDS allows with the account password.
+// Routes that always need a Device use RequireDevice.
+func SignedInDevice(c echo.Context) *Device {
+	device, _ := c.Get(deviceContextKey).(*Device)
+	return device
 }
 
 // RequireDevice returns the Device DeviceAuth stored, or a 401 when there is

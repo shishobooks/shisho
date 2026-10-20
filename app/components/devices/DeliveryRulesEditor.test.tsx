@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { QueryKey as DevicesQueryKey } from "@/hooks/queries/devices";
 import { API } from "@/libraries/api";
 import type { DefaultRulesResponse, Rule } from "@/types";
 
@@ -46,9 +47,12 @@ const mockServer = (initial: DefaultRulesResponse) => {
     });
 };
 
-const renderEditor = (onHasChangesChange = vi.fn()) => {
+const renderEditor = (
+  onHasChangesChange = vi.fn(),
+  queryClient = new QueryClient(),
+) => {
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <DeliveryRulesEditor onHasChangesChange={onHasChangesChange} />
     </QueryClientProvider>,
   );
@@ -94,6 +98,37 @@ describe("DeliveryRulesEditor", () => {
     });
     expect(await screen.findByText("Customized")).toBeInTheDocument();
     expect(onHasChangesChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("refetches Devices, which show the default they follow, after saving or resetting", async () => {
+    const user = setup();
+    mockServer(response(builtIn, true));
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    renderEditor(vi.fn(), queryClient);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Move the CBZ rule up" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: [DevicesQueryKey.RetrieveDevice],
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: [DevicesQueryKey.ListDevices],
+    });
+
+    invalidate.mockClear();
+    await user.click(
+      await screen.findByRole("button", { name: "Reset to Shisho's defaults" }),
+    );
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: [DevicesQueryKey.RetrieveDevice],
+      }),
+    );
   });
 
   it("offers each source only the File Types it can become", async () => {

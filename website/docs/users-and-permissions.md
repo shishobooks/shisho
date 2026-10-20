@@ -137,19 +137,22 @@ A user with Users Write permission can open another account under **Settings > U
 
 ## Devices
 
-A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md) and the [eReader Browser](./ereader-browser.md) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
+A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra, KOReader on that same Kobo, or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and the [OPDS Catalog](./opds.md#sign-in-as-a-device) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
 
 ### Device Types
 
-Choose the type when adding a Device. It decides which connections the Device can use:
+Choose the type when adding a Device. It decides which connections the Device can use, which file types it can receive, and the [Delivery Rules](#delivery-rules-of-a-device) it starts with:
 
-| Type | Connections |
-|------|-------------|
-| **Kobo** | Kobo sync and the eReader browser |
-| **Kindle** | eReader browser |
-| **Browser** | eReader browser, for any other e-reader's web browser |
+| Type | Connections | Can receive | Starts with |
+|------|-------------|-------------|-------------|
+| **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: EPUB as KePub, then CBZ as KePub |
+| **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI |
+| **OPDS app** | OPDS, for reading apps such as KOReader, Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
+| **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
-The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response. To change a Device's type, add a new Device.
+The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS gets `401 Unauthorized`.
+
+**Change Type** on a Device's page switches its type and keeps its credential and scope. Its connections change to the new type's, and its Delivery Rules go back to what the new type starts with, so a custom list is discarded.
 
 ### Credential
 
@@ -172,6 +175,16 @@ A Device's scope decides which books it reaches, through every connection:
 | **List** | Books on one list the owner owns or that is shared with them, in libraries the owner can access |
 
 A list shared with you can hold books from libraries you cannot access; those books stay out of the scope. If the scope's library or list is deleted, or the list stops being shared with you, the Device reaches no books until you choose another scope. A scope change applies on the Device's next request, without changing anything on the device itself.
+
+### Delivery Rules of a Device
+
+Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer. Under **Delivery Rules** on its page, choose one:
+
+- **My default**: your default rules from **User Settings > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
+- **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
+- **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **User Settings > Delivery Rules**.
+
+Kobo sync keeps sending KePub whatever a Kobo Device's rules say.
 
 ### Delete a Device
 

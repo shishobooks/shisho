@@ -22,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/filegen"
@@ -51,6 +52,7 @@ type streamingFixture struct {
 	book     *models.Book
 	file     *models.File
 	original []byte
+	kobo     *devices.Device
 }
 
 const streamingPassword = "test-password-123"
@@ -150,6 +152,33 @@ func opdsKepubRoute() route {
 	r.strict = true
 	r.path = func(f *streamingFixture) string { return fmt.Sprintf("/opds/download/%d.kepub.epub", f.file.ID) }
 	return r
+}
+
+// ereaderKepubRoute is a Kobo Device's eReader browser download, delivered
+// as KePub as its preset says.
+func ereaderKepubRoute() route {
+	return route{
+		name:   "ereader kepub",
+		device: true,
+		kepub:  true,
+		strict: true,
+		path: func(f *streamingFixture) string {
+			return fmt.Sprintf("/ereader/key/%s/file/%d/kepub", f.koboCredential(), f.file.ID)
+		},
+		auth: func(*streamingFixture, *http.Request) {},
+	}
+}
+
+// koboCredential adds a Kobo Device for the admin, once, and returns its
+// credential.
+func (f *streamingFixture) koboCredential() string {
+	f.t.Helper()
+	if f.kobo == nil {
+		device, err := devices.NewService(f.db).Create(context.Background(), f.admin.ID, "Kobo", devices.DeviceTypeKobo)
+		require.NoError(f.t, err)
+		f.kobo = device
+	}
+	return f.kobo.Credential
 }
 
 func webRoute() route {
@@ -499,13 +528,13 @@ func TestGeneratedDownload_MidStreamFailure(t *testing.T) {
 
 // A real CBZ with a page that cannot be read midway fails partway through
 // its first download, as a CBZ or a KePub: the client sees a cut download.
-// Then device routes serve the Original File of a CBZ, OPDS KePub downloads
-// and a Share Link's Download as entry return an error, since a failed
+// Then device routes serve the Original File of a CBZ, OPDS and eReader
+// KePub downloads and a Share Link's Download as entry return an error, since a failed
 // Conversion never serves another File Type, and web UI routes return the
 // error.
 func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsRoute(), webRoute(), opdsKepubRoute(), webKepubRoute(), shareKepubRoute()} {
+	for _, r := range []route{opdsRoute(), webRoute(), opdsKepubRoute(), webKepubRoute(), shareKepubRoute(), ereaderKepubRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
 			builtIn, err := filegen.GetGenerator(models.FileTypeCBZ)
@@ -651,11 +680,12 @@ func assertFailedPartwayBody(t *testing.T, body []byte) {
 }
 
 // A real KePub conversion that fails partway, on an EPUB whose chapter data
-// is corrupt, cuts the download. Afterwards OPDS returns a 500, never the
-// EPUB in the KePub's place, and the web route returns the error.
+// is corrupt, cuts the download. Afterwards OPDS and a Kobo Device's eReader
+// browser return a 500, never the EPUB in the KePub's place, and the web
+// route returns the error.
 func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsKepubRoute(), webKepubRoute()} {
+	for _, r := range []route{opdsKepubRoute(), webKepubRoute(), ereaderKepubRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
 			gen := &gatedGenerator{StreamGenerator: kepubEPUBGenerator(t), gate: make(chan struct{})}

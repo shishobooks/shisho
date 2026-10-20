@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,9 +69,11 @@ func setupCoverTest(t *testing.T) (*handler, int, int, []byte) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
+	bookService := books.NewService(db, appsettings.NewService(db))
 	h := &handler{
-		bookService:    books.NewService(db, appsettings.NewService(db)),
+		bookService:    bookService,
 		libraryService: libraries.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 	return h, lib.ID, book.ID, coverBytes
 }
@@ -179,9 +182,11 @@ func TestBookCover_NotFoundWhenBookHasNoCover(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
+	bookService := books.NewService(db, appsettings.NewService(db))
 	h := &handler{
-		bookService:    books.NewService(db, appsettings.NewService(db)),
+		bookService:    bookService,
 		libraryService: libraries.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	user := &models.User{

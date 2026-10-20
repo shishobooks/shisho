@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,17 +83,18 @@ func TestDownloadFileHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T
 			_, err = db.NewInsert().Model(file).Exec(ctx)
 			require.NoError(t, err)
 
-			h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
+			bookService := books.NewService(db, appsettings.NewService(db))
+			h := &handler{bookService: bookService, reachService: reach.NewService(db, bookService)}
 
 			e := echo.New()
 			req := httptest.NewRequest(tt.method, "/", nil)
 			c := e.NewContext(req, httptest.NewRecorder())
 			withDevice(c, t, db, device)
-			c.SetParamNames("credential", "fileId")
-			c.SetParamValues(device.Credential, strconv.Itoa(file.ID))
+			c.SetParamNames("credential", "fileId", "deliveredType")
+			c.SetParamValues(device.Credential, strconv.Itoa(file.ID), models.FileTypeKePub)
 
 			if tt.kepub {
-				err = h.DownloadFileKepub(c)
+				err = h.DownloadFileAs(c)
 			} else {
 				err = h.DownloadFile(c)
 			}

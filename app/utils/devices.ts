@@ -1,9 +1,11 @@
 import {
   ConnectionEReaderBrowser,
   ConnectionKoboSync,
+  ConnectionOPDS,
   DeviceTypeBrowser,
   DeviceTypeKindle,
   DeviceTypeKobo,
+  DeviceTypeOPDS,
   ScopeLibrary,
   ScopeList,
   type Connection,
@@ -14,6 +16,7 @@ import {
 export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   [DeviceTypeKobo]: "Kobo",
   [DeviceTypeKindle]: "Kindle",
+  [DeviceTypeOPDS]: "OPDS app",
   [DeviceTypeBrowser]: "Browser",
 };
 
@@ -30,6 +33,11 @@ export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
       description: "A Kindle's web browser.",
     },
     {
+      type: DeviceTypeOPDS,
+      description:
+        "A reading app that browses an OPDS catalog, such as KOReader, Thorium, Panels, etc.",
+    },
+    {
       type: DeviceTypeBrowser,
       description:
         "Any other e-reader's web browser, such as a Boox or PocketBook.",
@@ -39,6 +47,7 @@ export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
 export const CONNECTION_LABELS: Record<Connection, string> = {
   [ConnectionKoboSync]: "Kobo sync",
   [ConnectionEReaderBrowser]: "eReader browser",
+  [ConnectionOPDS]: "OPDS",
 };
 
 // The URL a Kobo's api_endpoint points at. It has no scope segment: the
@@ -48,6 +57,10 @@ export const koboSyncURL = (credential: string) =>
 
 export const eReaderBrowserURL = (credential: string) =>
   `${window.location.origin}/ereader/key/${credential}/`;
+
+// The catalog URL an OPDS app signs in to with the user's username and the
+// Device's credential.
+export const opdsCatalogURL = () => `${window.location.origin}/opds/v1/catalog`;
 
 export const shortURL = (shortCode: string) =>
   `${window.location.origin}/e/${shortCode}`;

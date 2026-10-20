@@ -47,8 +47,8 @@ const FailedPartwayMessage = "This file's generated download failed partway thro
 // that needs a password.
 const CannotDecryptMessage = "This file is password-protected or encrypted in a way Shisho can't open, so its metadata can't be added. Download the original instead."
 
-// ResolveFallbackDownload returns what the eReader, Kobo, and Share Link
-// download routes send for the file delivered as deliveredType: the
+// ResolveFallbackDownload returns what the Kobo and Share Link download
+// routes send for the file delivered as deliveredType: the
 // Generated File, or the Original File when generation is not possible. A
 // device or a Share recipient has no Download Original to turn to, so a
 // supplement, a type with no generator (filegen.ErrNotImplemented), a File
@@ -59,8 +59,8 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 // is still served through httputil.ServeFile, so a source that cannot be
 // opened ends as a 500 too.
 //
-// The eReader and Kobo routes fall back from a failed Conversion too; a
-// channel on Delivery Rules uses ResolveDeliveryDownload instead. A download
+// The Kobo route falls back from a failed Conversion too; a channel on
+// Delivery Rules uses ResolveDeliveryDownload instead. A download
 // menu entry asks for one File Type, so it uses GeneratedDownload, which
 // never falls back. The web app's download routes do not fall back either:
 // a browser user sees the error and has Download Original.
@@ -91,8 +91,8 @@ func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *m
 	return nil, errors.WithStack(err)
 }
 
-// ResolveDeliveryDownload returns what a channel on Delivery Rules (OPDS)
-// sends for the file delivered as deliveredType. Delivered as its own File
+// ResolveDeliveryDownload returns what a channel on Delivery Rules (OPDS and
+// the eReader browser) sends for the file delivered as deliveredType. Delivered as its own File
 // Type, it falls back to the Original File as ResolveFallbackDownload does,
 // since a failed generation only loses Shisho's metadata. Delivered as
 // another File Type, any failure of the Conversion is returned, whether it

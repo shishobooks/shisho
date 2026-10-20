@@ -200,10 +200,22 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 		Model(&series).
 		Relation("Library").
 		ColumnExpr("s.*")
-	if opts.MainFileTypes != nil {
-		deliverable := "book_series.book_id IN (SELECT book_id FROM files WHERE file_type IN (?) AND file_role = ?)"
-		q = q.ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id AND "+deliverable+") AS book_count", bun.List(opts.MainFileTypes), models.FileRoleMain).
-			Where("EXISTS (SELECT 1 FROM book_series WHERE book_series.series_id = s.id AND "+deliverable+")", bun.List(opts.MainFileTypes), models.FileRoleMain)
+	// The list and file type filters apply to the same book, and the count
+	// counts only the books they match, so a series shown for a list counts
+	// its books on the list with something to deliver.
+	if opts.MainFileTypes != nil || opts.ListID != nil {
+		matching := svc.db.NewSelect().
+			TableExpr("book_series AS mbs").
+			Column("mbs.book_id").
+			Where("mbs.series_id = s.id")
+		if opts.MainFileTypes != nil {
+			matching = matching.Where("mbs.book_id IN (SELECT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(opts.MainFileTypes), models.FileRoleMain)
+		}
+		if opts.ListID != nil {
+			matching = matching.Where("mbs.book_id IN (SELECT book_id FROM list_books WHERE list_id = ?)", *opts.ListID)
+		}
+		q = q.ColumnExpr("(SELECT COUNT(*) FROM (?)) AS book_count", matching).
+			Where("EXISTS (?)", matching)
 	} else {
 		q = q.ColumnExpr("(SELECT COUNT(*) FROM book_series WHERE book_series.series_id = s.id) AS book_count")
 	}
@@ -213,9 +225,6 @@ func (svc *Service) listSeriesWithTotal(ctx context.Context, opts ListSeriesOpti
 	}
 	if len(opts.LibraryIDs) > 0 {
 		q = q.Where("s.library_id IN (?)", bun.List(opts.LibraryIDs))
-	}
-	if opts.ListID != nil {
-		q = q.Where("s.id IN (SELECT bs.series_id FROM book_series bs JOIN list_books lb ON lb.book_id = bs.book_id WHERE lb.list_id = ?)", *opts.ListID)
 	}
 	// Search using FTS5
 	if opts.Search != nil && *opts.Search != "" {

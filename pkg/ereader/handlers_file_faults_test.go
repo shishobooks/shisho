@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,9 +68,10 @@ func newDownloadFixture(t *testing.T, title string) *downloadFixture {
 	cacheDir := t.TempDir()
 	cache := downloadcache.NewCache(cacheDir, 1<<30)
 	t.Cleanup(cache.Wait)
+	bookService := books.NewService(db, appsettings.NewService(db))
 	return &downloadFixture{
 		t: t, db: db, lib: lib, book: book, dir: dir, cacheDir: cacheDir, device: device,
-		h: &handler{bookService: books.NewService(db, appsettings.NewService(db)), downloadCache: cache},
+		h: &handler{bookService: bookService, downloadCache: cache, reachService: reach.NewService(db, bookService)},
 	}
 }
 
@@ -86,18 +88,30 @@ func (f *downloadFixture) addEPUB() *models.File {
 	return f.addFile(models.FileTypeEPUB, models.FileRoleMain, testgen.GenerateEPUB(f.t, f.dir, "book.epub", testgen.EPUBOptions{Title: "Book"}))
 }
 
-// serve runs a download handler and renders its error the way the server
-// does, so the recorder holds what a client would receive.
+// serve runs a download handler, the KePub one when kepub is set, and
+// renders its error the way the server does, so the recorder holds what a
+// client would receive.
 func (f *downloadFixture) serve(file *models.File, kepub bool) *httptest.ResponseRecorder {
+	f.t.Helper()
+	deliveredType := ""
+	if kepub {
+		deliveredType = models.FileTypeKePub
+	}
+	return f.serveAs(file, deliveredType)
+}
+
+// serveAs runs the download handler for file delivered as deliveredType
+// ("" for its own File Type) the way serve does.
+func (f *downloadFixture) serveAs(file *models.File, deliveredType string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 	withDevice(c, f.t, f.db, f.device)
-	c.SetParamNames("credential", "fileId")
-	c.SetParamValues(f.device.Credential, strconv.Itoa(file.ID))
+	c.SetParamNames("credential", "fileId", "deliveredType")
+	c.SetParamValues(f.device.Credential, strconv.Itoa(file.ID), deliveredType)
 	var err error
-	if kepub {
-		err = f.h.DownloadFileKepub(c)
+	if deliveredType != "" {
+		err = f.h.DownloadFileAs(c)
 	} else {
 		err = f.h.DownloadFile(c)
 	}
@@ -156,9 +170,9 @@ func TestDownloadHandlers_UnreadableFileIsServerError(t *testing.T) {
 	}
 }
 
-// The original is served when there is nothing to generate: a supplement, a
-// main file whose type has no generator, and a KePub request for a type
-// KePub cannot convert. Downloads are typed from the file type.
+// The original is served when there is nothing to generate: a supplement or
+// a main file whose type has no generator. Downloads are typed from the file
+// type.
 func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 	t.Parallel()
 
@@ -171,9 +185,6 @@ func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 	}{
 		{"supplement", "txt", models.FileRoleSupplement, false, "text/plain; charset=utf-8"},
 		{"plugin format", "fb2", models.FileRoleMain, false, ""},
-		{"m4b as kepub", models.FileTypeM4B, models.FileRoleMain, true, "audio/mp4"},
-		{"mobi as kepub", models.FileTypeMOBI, models.FileRoleMain, true, "application/x-mobipocket-ebook"},
-		{"azw3 as kepub", models.FileTypeAZW3, models.FileRoleMain, true, "application/vnd.amazon.mobi8-ebook"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -236,5 +247,79 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 		rec := f.serve(file, false)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, "application/vnd.comicbook+zip", rec.Header().Get("Content-Type"))
+	})
+}
+
+// A download link names only a File Type the File can become, so any other
+// is an invalid_state 422, and a supplement goes only as itself. A name no
+// File Type has is a 404.
+func TestDownloadHandlers_UnreachableFileType(t *testing.T) {
+	t.Parallel()
+	f := newDownloadFixture(t, "Unreachable")
+	path := filepath.Join(f.dir, "audio.m4b")
+	require.NoError(t, os.WriteFile(path, []byte("original bytes"), 0o644))
+	audio := f.addFile(models.FileTypeM4B, models.FileRoleMain, path)
+	mobiPath := filepath.Join(f.dir, "book.mobi")
+	require.NoError(t, os.WriteFile(mobiPath, []byte("original bytes"), 0o644))
+	mobi := f.addFile(models.FileTypeMOBI, models.FileRoleMain, mobiPath)
+	supplementPath := filepath.Join(f.dir, "extras.cbz")
+	require.NoError(t, os.WriteFile(supplementPath, []byte("original bytes"), 0o644))
+	supplement := f.addFile(models.FileTypeCBZ, models.FileRoleSupplement, supplementPath)
+
+	for _, tt := range []struct {
+		file          *models.File
+		deliveredType string
+		status        int
+	}{
+		{audio, models.FileTypeKePub, http.StatusUnprocessableEntity},
+		{mobi, models.FileTypeKePub, http.StatusUnprocessableEntity},
+		{supplement, models.FileTypeEPUB, http.StatusUnprocessableEntity},
+		{audio, "fb2", http.StatusNotFound},
+	} {
+		rec := f.serveAs(tt.file, tt.deliveredType)
+		assert.Equal(t, tt.status, rec.Code, tt.deliveredType)
+		assert.Empty(t, rec.Header().Get("Content-Disposition"), tt.deliveredType)
+	}
+}
+
+// A damaged EPUB (here one that is not a zip) on a Kobo Device delivered as
+// KePub is a 500 with no attachment: a failed Conversion never sends the
+// Original File in its place. Delivered as EPUB, it still gets the Original
+// File, since a failed generation of its own File Type only loses Shisho's
+// metadata. A failure partway through a Conversion is covered with the other
+// channels in pkg/server's streaming tests.
+func TestDownloadHandlers_DamagedEPUB(t *testing.T) {
+	t.Parallel()
+	addDamaged := func(f *downloadFixture) *models.File {
+		// An extension no mime table knows, so the Content-Type below can
+		// only come from the file type.
+		path := filepath.Join(f.dir, "broken.bin")
+		require.NoError(t, os.WriteFile(path, []byte("not a zip"), 0o644))
+		return f.addFile(models.FileTypeEPUB, models.FileRoleMain, path)
+	}
+	onKobo := func(t *testing.T) *downloadFixture {
+		f := newDownloadFixture(t, "Broken")
+		kobo, err := devices.NewService(f.db).Create(context.Background(), f.device.UserID, "Kobo", devices.DeviceTypeKobo)
+		require.NoError(t, err)
+		f.device = kobo
+		return f
+	}
+
+	t.Run("as KePub", func(t *testing.T) {
+		t.Parallel()
+		f := onKobo(t)
+		rec := f.serveAs(addDamaged(f), models.FileTypeKePub)
+		assertServerFault(t, rec)
+		assert.NotContains(t, rec.Body.String(), "not a zip")
+	})
+
+	t.Run("as EPUB", func(t *testing.T) {
+		t.Parallel()
+		f := onKobo(t)
+		rec := f.serveAs(addDamaged(f), "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Equal(t, "not a zip", rec.Body.String())
+		assert.Equal(t, `attachment; filename="broken.bin"`, rec.Header().Get("Content-Disposition"))
+		assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 	})
 }

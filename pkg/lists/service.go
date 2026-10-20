@@ -91,6 +91,8 @@ func (svc *Service) RetrieveList(ctx context.Context, opts RetrieveListOptions) 
 
 type ListListsOptions struct {
 	UserID int // Required - shows owned + shared lists
+	// ListID, when set, keeps only that list.
+	ListID *int
 	Limit  *int
 	Offset *int
 	// Deliverable, when set, keeps only lists with a book it matches.
@@ -153,6 +155,9 @@ func (svc *Service) listListsWithTotal(ctx context.Context, opts ListListsOption
 		Where("l.user_id = ? OR l.id IN (SELECT list_id FROM list_shares WHERE user_id = ?)", opts.UserID, opts.UserID).
 		Order("l.name ASC")
 	q = svc.whereDeliverable(q, opts.Deliverable)
+	if opts.ListID != nil {
+		q = q.Where("l.id = ?", *opts.ListID)
+	}
 
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))
