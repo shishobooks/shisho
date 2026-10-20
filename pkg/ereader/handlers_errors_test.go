@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,7 +99,8 @@ func TestDownload_BookWithoutMainFilesReturnsFileNotFound(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
-	h := &handler{bookService: books.NewService(db, appsettings.NewService(db)), deviceService: devices.NewService(db)}
+	bookService := books.NewService(db, appsettings.NewService(db))
+	h := &handler{bookService: bookService, reachService: reach.NewService(db, bookService)}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := echo.New().NewContext(req, httptest.NewRecorder())
 	withDevice(c, t, db, device)

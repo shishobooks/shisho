@@ -27,7 +27,7 @@ Use HTTPS whenever the catalog is reachable outside a trusted local network.
 
 The user's role needs Books Read. Without it, every catalog feed, cover, and download returns `403 Forbidden`, the same rule [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs follow.
 
-The root catalog lists only libraries the authenticated user can access, followed by a **Lists** entry when the user owns or has been shared a [list](./lists.md) with something to download. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in with the account password for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client. A Device sign-in is checked on every request.
+The root catalog lists only libraries the authenticated user can access that have something to download, followed by a **Lists** entry when the user owns or has been shared a [list](./lists.md) with something to download. A library's feed leaves out **Series** or **Authors** when none of them has anything to download, so no entry opens to an empty feed. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in with the account password for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client. A Device sign-in is checked on every request.
 
 ### Sign In as a Device
 

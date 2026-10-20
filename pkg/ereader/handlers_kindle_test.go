@@ -401,3 +401,38 @@ func TestDownloadFileKindle_UnknownExtensionIsNotFound(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode, filename)
 	}
 }
+
+// No page lists an entry that opens empty: the libraries page leaves out a
+// library with nothing the Device's rules deliver, and a library's page
+// leaves out Series and Authors when it has none to deliver.
+func TestEmptyEntriesAreLeftOut(t *testing.T) {
+	t.Parallel()
+	f := newKindleFixture(t)
+	libA := "/libraries/" + strconv.Itoa(f.libA.ID)
+	libB := "/libraries/" + strconv.Itoa(f.libB.ID)
+
+	// libB has no books at all.
+	body := f.page(t, "/", "")
+	assert.Contains(t, body, libA+`"`)
+	assert.NotContains(t, body, libB+`"`)
+
+	// The fixture's books have no series or authors.
+	body = f.page(t, libA, "")
+	assert.Contains(t, body, libA+"/all")
+	assert.Contains(t, body, libA+"/search")
+	assert.NotContains(t, body, libA+"/series")
+	assert.NotContains(t, body, libA+"/authors")
+
+	// Once a deliverable book has an author, Authors is listed.
+	ctx := context.Background()
+	person := &models.Person{LibraryID: f.libA.ID, Name: "Writer", SortName: "Writer", SortNameSource: models.DataSourceFilepath}
+	_, err := f.db.NewInsert().Model(person).Exec(ctx)
+	require.NoError(t, err)
+	_, err = f.db.NewInsert().Model(&models.Author{BookID: f.epubOnly.ID, PersonID: person.ID, SortOrder: 1}).Exec(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, f.page(t, libA, ""), libA+"/authors")
+
+	// A Kindle receives nothing from that EPUB-only book, so not for it.
+	f.setType(t, devices.DeviceTypeKindle)
+	assert.NotContains(t, f.page(t, libA, kindleUserAgent), libA+"/authors")
+}

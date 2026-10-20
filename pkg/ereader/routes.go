@@ -6,8 +6,8 @@ import (
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
-	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
@@ -21,7 +21,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	peopleService := people.NewService(db)
 
 	mw := devices.NewMiddleware(deviceService)
-	h := newHandler(libraryService, bookService, seriesService, peopleService, downloadCache, settings.NewService(db), lists.NewService(db), deviceService)
+	h := newHandler(libraryService, bookService, seriesService, peopleService, downloadCache, settings.NewService(db), reach.NewService(db, bookService))
 
 	// Short URL resolution (no auth required - the short code IS the auth)
 	e.GET("/e/:shortCode", func(c echo.Context) error {

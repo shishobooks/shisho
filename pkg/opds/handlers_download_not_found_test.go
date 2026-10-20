@@ -14,6 +14,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +74,8 @@ func TestDownloadHandlers_MissingFileOnDisk_ReturnsFileNotFound(t *testing.T) {
 			_, err = db.NewInsert().Model(file).Exec(ctx)
 			require.NoError(t, err)
 
-			h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
+			bookService := books.NewService(db, appsettings.NewService(db))
+			h := &handler{bookService: bookService, reachService: reach.NewService(db, bookService)}
 			user := &models.User{
 				ID:            1,
 				Username:      "alice",

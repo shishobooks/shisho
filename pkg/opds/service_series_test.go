@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -98,7 +99,7 @@ func TestOPDSLibrarySeriesBooksHandlers_SeriesFromOtherLibrary_Returns404(t *tes
 		opdsService:     NewService(db, bookService),
 		bookService:     bookService,
 		settingsService: settings.NewService(db),
-		deliveryService: delivery.NewService(db),
+		reachService:    reach.NewService(db, bookService),
 	}
 	user := &models.User{ID: 1, IsActive: true, LibraryAccess: []*models.UserLibraryAccess{{}}}
 

@@ -13,11 +13,11 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
-	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -106,7 +106,7 @@ func TestOPDSHandlers_NoUserInContext_Returns401(t *testing.T) {
 		bookService:     bookService,
 		libraryService:  libraries.NewService(db),
 		settingsService: settings.NewService(db),
-		deliveryService: delivery.NewService(db),
+		reachService:    reach.NewService(db, bookService),
 	}
 	e := echo.New()
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle

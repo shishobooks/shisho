@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,7 +101,7 @@ func TestCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
-		deviceService:  devices.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	// Inject API key into context (as middleware would do).
@@ -202,7 +203,7 @@ func TestCover_Returns304WhenIfNoneMatchMatches(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
-		deviceService:  devices.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	// First GET to capture the ETag.

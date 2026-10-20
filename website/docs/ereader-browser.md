@@ -40,8 +40,8 @@ The short setup URL refuses to redirect in the same cases.
 
 The current browser provides:
 
-- A list of the libraries the Device's [scope](./users-and-permissions.md#scope) reaches. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
-- Per-library **All Books**, **Series**, **Authors**, and **Search** pages.
+- A list of the libraries the Device's [scope](./users-and-permissions.md#scope) reaches that have something the Device's rules deliver. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
+- Per-library **All Books**, **Series**, **Authors**, and **Search** pages. **Series** or **Authors** is left out when none of them has anything to deliver.
 - Books the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) deliver something from. Books, series, and authors with nothing to deliver are left out of the lists.
 - A type filter for each file type the Device's rules deliver from, when there is more than one. A filter shows the books with a main file of that type.
 - Book details and a download for each file the rules deliver, in the file type they deliver it as.

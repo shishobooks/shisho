@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/seriesnum"
 	"github.com/shishobooks/shisho/pkg/sortspec"
@@ -30,6 +31,7 @@ type Service struct {
 	listsService   *lists.Service
 	seriesService  *series.Service
 	peopleService  *people.Service
+	reachService   *reach.Service
 }
 
 // NewService creates a new OPDS service around the shared books service.
@@ -41,24 +43,16 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 		listsService:   lists.NewService(db),
 		seriesService:  series.NewService(db),
 		peopleService:  people.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 }
 
-// BuildCatalogFeed builds the root navigation feed listing all libraries,
-// followed by a Lists entry when userID owns or has been shared a list with
-// something the rules deliver. If libraryIDs is non-nil, only libraries with
-// those IDs are included. A list-scoped Device (listID set) gets an entry
-// for its list instead, and withLists false leaves lists out entirely.
-func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules []delivery.Rule, userID int, libraryIDs []int, listID *int, withLists bool) (*Feed, error) {
-	opts := libraries.ListLibrariesOptions{}
-	if libraryIDs != nil {
-		opts.LibraryIDs = libraryIDs
-	}
-	libs, err := svc.libraryService.ListLibraries(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-
+// BuildCatalogFeed builds the root navigation feed for what r reaches: the
+// libraries with something to deliver when withLibraries, then a Lists
+// entry when withLists and the user owns or has been shared a list with
+// something to deliver. A list-scoped Device gets an entry for its list
+// instead, when the list has something to deliver. No entry opens empty.
+func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *reach.Reach, withLibraries, withLists bool) (*Feed, error) {
 	feed := NewFeed(
 		baseURL+"/catalog",
 		"Shisho Libraries",
@@ -69,19 +63,28 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules 
 	feed.AddLink(RelSelf, baseURL+"/catalog", MimeTypeNavigation)
 	feed.AddLink(RelStart, baseURL+"/catalog", MimeTypeNavigation)
 
-	// Add library entries
-	for _, lib := range libs {
-		entry := NewEntry(
-			fmt.Sprintf("%s/libraries/%d", baseURL, lib.ID),
-			lib.Name,
-		)
-		entry.Updated = lib.UpdatedAt
-		entry.Content = &Content{Type: "text", Value: "Browse " + lib.Name}
-		entry.AddLink(RelSubsection, fmt.Sprintf("%s/libraries/%d", baseURL, lib.ID), MimeTypeNavigation)
-		feed.AddEntry(entry)
+	if withLibraries {
+		libs, err := svc.reachService.Libraries(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		for _, lib := range libs {
+			entry := NewEntry(
+				fmt.Sprintf("%s/libraries/%d", baseURL, lib.ID),
+				lib.Name,
+			)
+			entry.Updated = lib.UpdatedAt
+			entry.Content = &Content{Type: "text", Value: "Browse " + lib.Name}
+			entry.AddLink(RelSubsection, fmt.Sprintf("%s/libraries/%d", baseURL, lib.ID), MimeTypeNavigation)
+			feed.AddEntry(entry)
+		}
 	}
 
-	if listID != nil {
+	if listID := r.ListID(); listID != nil {
+		has, err := svc.reachService.HasBooks(ctx, r, books.ListBooksOptions{})
+		if err != nil || !has {
+			return feed, err
+		}
 		list, err := svc.listsService.RetrieveList(ctx, lists.RetrieveListOptions{ID: listID})
 		if err != nil {
 			return nil, err
@@ -97,7 +100,7 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, rules 
 		return feed, nil
 	}
 
-	hasLists, err := svc.listsService.HasLists(ctx, userID, deliverableBooks(rules, libraryIDs))
+	hasLists, err := svc.listsService.HasLists(ctx, r.User.ID, r.Deliverable())
 	if err != nil {
 		return nil, err
 	}
@@ -223,10 +226,16 @@ func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, rule
 }
 
 // BuildLibraryCatalogFeed builds a navigation feed for a specific library.
-func (svc *Service) BuildLibraryCatalogFeed(ctx context.Context, baseURL string, libraryID int) (*Feed, error) {
+// The Series and Authors entries are left out when nothing in r has one
+// with something to deliver.
+func (svc *Service) BuildLibraryCatalogFeed(ctx context.Context, baseURL string, r *reach.Reach, libraryID int) (*Feed, error) {
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &libraryID,
 	})
+	if err != nil {
+		return nil, err
+	}
+	sections, err := svc.reachService.Sections(ctx, r, libraryID)
 	if err != nil {
 		return nil, err
 	}
@@ -248,17 +257,19 @@ func (svc *Service) BuildLibraryCatalogFeed(ctx context.Context, baseURL string,
 	allBooksEntry.AddLink(RelSubsection, libBase+"/all", MimeTypeAcquisition)
 	feed.AddEntry(allBooksEntry)
 
-	// Series entry
-	seriesEntry := NewEntry(libBase+"/series", "Series")
-	seriesEntry.Content = &Content{Type: "text", Value: "Browse books by series"}
-	seriesEntry.AddLink(RelSubsection, libBase+"/series", MimeTypeNavigation)
-	feed.AddEntry(seriesEntry)
+	if sections.Series {
+		seriesEntry := NewEntry(libBase+"/series", "Series")
+		seriesEntry.Content = &Content{Type: "text", Value: "Browse books by series"}
+		seriesEntry.AddLink(RelSubsection, libBase+"/series", MimeTypeNavigation)
+		feed.AddEntry(seriesEntry)
+	}
 
-	// Authors entry
-	authorsEntry := NewEntry(libBase+"/authors", "Authors")
-	authorsEntry.Content = &Content{Type: "text", Value: "Browse books by author"}
-	authorsEntry.AddLink(RelSubsection, libBase+"/authors", MimeTypeNavigation)
-	feed.AddEntry(authorsEntry)
+	if sections.Authors {
+		authorsEntry := NewEntry(libBase+"/authors", "Authors")
+		authorsEntry.Content = &Content{Type: "text", Value: "Browse books by author"}
+		authorsEntry.AddLink(RelSubsection, libBase+"/authors", MimeTypeNavigation)
+		feed.AddEntry(authorsEntry)
+	}
 
 	return feed, nil
 }

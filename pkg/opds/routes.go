@@ -4,18 +4,19 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
-	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all OPDS routes.
 func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache, bookService *books.Service) {
+	reachService := reach.NewService(db, bookService)
 	opdsService := NewService(db, bookService)
 	deviceService := devices.NewService(db)
 
@@ -26,8 +27,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 		listsService:    lists.NewService(db),
 		downloadCache:   cache,
 		settingsService: settings.NewService(db),
-		deliveryService: delivery.NewService(db),
-		deviceService:   deviceService,
+		reachService:    reachService,
 	}
 
 	// Every OPDS route requires Basic Auth and books:read, the permission

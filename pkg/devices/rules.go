@@ -163,30 +163,57 @@ func CheckRules(deviceType, mode string, rules []delivery.Rule) error {
 // without the rules its type can't receive, its type's preset, or its own
 // list. Every channel a Device connects through delivers by these.
 func (s *Service) Rules(ctx context.Context, device *Device) ([]delivery.Rule, error) {
-	switch device.DeliveryRulesMode {
-	case RulesModePreset:
-		return PresetRules(device.DeviceType), nil
-	case RulesModeCustom:
-		var rows []*DeviceDeliveryRule
-		err := s.db.NewSelect().
-			Model(&rows).
-			Where("ddr.device_id = ?", device.ID).
-			Order("ddr.position ASC").
-			Scan(ctx)
-		if err != nil {
-			return nil, errors.WithStack(err)
+	rules, err := s.RulesFor(ctx, []*Device{device})
+	if err != nil {
+		return nil, err
+	}
+	return rules[device.ID], nil
+}
+
+// RulesFor returns the Delivery Rules each of devices follows, by Device
+// id, as Rules does. It loads every custom list in one query and each
+// owner's default once, so listing Devices costs the same few queries
+// however many there are.
+func (s *Service) RulesFor(ctx context.Context, devices []*Device) (map[string][]delivery.Rule, error) {
+	rules := map[string][]delivery.Rule{}
+	var customIDs []string
+	defaults := map[int][]delivery.Rule{}
+	for _, device := range devices {
+		switch device.DeliveryRulesMode {
+		case RulesModePreset:
+			rules[device.ID] = PresetRules(device.DeviceType)
+		case RulesModeCustom:
+			customIDs = append(customIDs, device.ID)
+			rules[device.ID] = []delivery.Rule{}
+		default:
+			userDefault, ok := defaults[device.UserID]
+			if !ok {
+				loaded, err := delivery.NewService(s.db).UserDefault(ctx, device.UserID)
+				if err != nil {
+					return nil, errors.WithStack(err)
+				}
+				userDefault = loaded.Rules
+				defaults[device.UserID] = userDefault
+			}
+			rules[device.ID] = allowedRules(device.DeviceType, userDefault)
 		}
-		rules := make([]delivery.Rule, len(rows))
-		for i, row := range rows {
-			rules[i] = delivery.Rule{SourceFileType: row.SourceFileType, DeliveredFileType: row.DeliveredFileType}
-		}
+	}
+	if len(customIDs) == 0 {
 		return rules, nil
 	}
-	userDefault, err := delivery.NewService(s.db).UserDefault(ctx, device.UserID)
+	var rows []*DeviceDeliveryRule
+	err := s.db.NewSelect().
+		Model(&rows).
+		Where("ddr.device_id IN (?)", bun.List(customIDs)).
+		Order("ddr.device_id ASC", "ddr.position ASC").
+		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return allowedRules(device.DeviceType, userDefault.Rules), nil
+	for _, row := range rows {
+		rules[row.DeviceID] = append(rules[row.DeviceID], delivery.Rule{SourceFileType: row.SourceFileType, DeliveredFileType: row.DeliveredFileType})
+	}
+	return rules, nil
 }
 
 // SetRules makes userID's Device id follow the owner's default, follow its

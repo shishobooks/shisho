@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -341,4 +342,44 @@ func TestHandler_Update_ChangesType(t *testing.T) {
 	unchanged, err := f.h.service.Retrieve(context.Background(), 1, device.ID)
 	require.NoError(t, err)
 	assert.Equal(t, DeviceTypeKindle, unchanged.DeviceType)
+}
+
+// queryCounter counts the queries a database runs.
+type queryCounter struct{ n atomic.Int64 }
+
+func (q *queryCounter) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
+	return ctx
+}
+
+func (q *queryCounter) AfterQuery(context.Context, *bun.QueryEvent) { q.n.Add(1) }
+
+// Listing Devices loads every Device's rules in a fixed number of queries,
+// however many Devices there are and whichever rules they follow.
+func TestHandler_List_RulesQueriesDontGrowWithDevices(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	listQueries := func(customDevices, followingDevices int) int64 {
+		f := newHandlerFixture(t)
+		insertTestUser(t, f.db, 1, "reader")
+		for range customDevices {
+			d, err := f.h.service.Create(ctx, 1, "Custom", DeviceTypeOPDS)
+			require.NoError(t, err)
+			_, err = f.h.service.SetRules(ctx, 1, d.ID, RulesModeCustom, []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeEPUB)})
+			require.NoError(t, err)
+		}
+		for range followingDevices {
+			_, err := f.h.service.Create(ctx, 1, "Following", DeviceTypeBrowser)
+			require.NoError(t, err)
+		}
+		counter := &queryCounter{}
+		testdb.AddQueryHook(t, f.db, counter)
+		rec, err := f.call(f.h.List, libraryUser(1), "", "")
+		require.NoError(t, err)
+		var resp []DeviceResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Len(t, resp, customDevices+followingDevices)
+		return counter.n.Load()
+	}
+
+	assert.Equal(t, listQueries(1, 1), listQueries(4, 4))
 }

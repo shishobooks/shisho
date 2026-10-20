@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,7 +110,7 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
-		deviceService:  devices.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -204,7 +205,7 @@ func TestDownload_SingleFileStillWorks(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
-		deviceService:  devices.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -303,7 +304,7 @@ func TestDownload_KoboDeviceGetsKepubFromItsPreset(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
-		deviceService:  devices.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -402,7 +403,7 @@ func TestDownload_ShowsFileNames(t *testing.T) {
 	h := &handler{
 		bookService:    bookService,
 		libraryService: libraryService,
-		deviceService:  devices.NewService(db),
+		reachService:   reach.NewService(db, bookService),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

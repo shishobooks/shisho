@@ -246,3 +246,86 @@ func TestOPDS_DeviceCredential_AppliesTheDeviceScope(t *testing.T) {
 		assert.NotContains(t, body, "Elsewhere")
 	})
 }
+
+// No catalog entry opens empty: a library with nothing the rules deliver is
+// left out of the root catalog, and a library's Series and Authors entries
+// are left out when it has none to deliver.
+func TestOPDS_EmptyEntriesAreLeftOut(t *testing.T) {
+	t.Parallel()
+	f := newDeliveryFixture(t)
+	ctx := context.Background()
+	f.addBook("Novel", "Writer", models.FileTypeEPUB)
+	comics := &models.Library{Name: "Comics Lib", CoverAspectRatio: "book"}
+	_, err := f.db.NewInsert().Model(comics).Exec(ctx)
+	require.NoError(t, err)
+	comic := &models.Book{LibraryID: comics.ID, Title: "Comic", TitleSource: models.DataSourceFilepath, SortTitle: "Comic", SortTitleSource: models.DataSourceFilepath, AuthorSource: models.DataSourceFilepath, Filepath: "/comic"}
+	_, err = f.db.NewInsert().Model(comic).Exec(ctx)
+	require.NoError(t, err)
+	_, err = f.db.NewInsert().Model(&models.File{LibraryID: comics.ID, BookID: comic.ID, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain, Filepath: "/comic/c.cbz", FilesizeBytes: 1}).Exec(ctx)
+	require.NoError(t, err)
+
+	device := f.addDevice(devices.DeviceTypeOPDS)
+	_, err = devices.NewService(f.db).SetRules(ctx, userID(t, f.db, "reader"), device.ID, devices.RulesModeCustom,
+		[]delivery.Rule{{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeCBZ}})
+	require.NoError(t, err)
+
+	code, body := f.getAs(device.Credential, "/opds/v1/catalog")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, fmt.Sprintf("/opds/v1/libraries/%d", comics.ID))
+	assert.NotContains(t, body, fmt.Sprintf("/opds/v1/libraries/%d\"", f.lib.ID), "the novels library has nothing to deliver")
+
+	// The comic has no series or author.
+	code, body = f.getAs(device.Credential, fmt.Sprintf("/opds/v1/libraries/%d", comics.ID))
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, "/all")
+	assert.NotContains(t, body, "/series")
+	assert.NotContains(t, body, "/authors")
+
+	// With the password, the novels library is listed with its author.
+	code, body = f.getAs("secret", fmt.Sprintf("/opds/v1/libraries/%d", f.lib.ID))
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, "/authors")
+	assert.NotContains(t, body, "/series", "no book in it has a series")
+}
+
+// A list-scoped Device's catalog leaves out its list when nothing on it is
+// delivered.
+func TestOPDS_ListScopeWithNothingToDeliverIsEmpty(t *testing.T) {
+	t.Parallel()
+	f := newDeliveryFixture(t)
+	ctx := context.Background()
+	f.addBook("Novel", "", models.FileTypeEPUB)
+	owner := userID(t, f.db, "reader")
+	listService := lists.NewService(f.db)
+	list, err := listService.CreateList(ctx, lists.CreateListOptions{UserID: owner, Name: "Shelf"})
+	require.NoError(t, err)
+	require.NoError(t, listService.AddBooks(ctx, lists.AddBooksOptions{ListID: list.ID, BookIDs: []int{f.lastBook.ID}, AddedByUserID: owner}))
+
+	device := f.addDevice(devices.DeviceTypeOPDS)
+	deviceService := devices.NewService(f.db)
+	_, err = deviceService.Update(ctx, owner, device.ID, devices.UpdateDeviceOptions{
+		Scope: &devices.Scope{Type: devices.ScopeList, ListID: &list.ID},
+		Rules: &devices.RulesChange{Mode: devices.RulesModeCustom, Rules: []delivery.Rule{{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeCBZ}}},
+	})
+	require.NoError(t, err)
+
+	code, body := f.getAs(device.Credential, "/opds/v1/catalog")
+	require.Equal(t, http.StatusOK, code, body)
+	assert.NotContains(t, body, fmt.Sprintf("/opds/v1/lists/%d", list.ID))
+}
+
+// A Device migrated from an API key keeps the key as its credential, which
+// is longer than a new credential. Changed to an OPDS app, it still signs
+// in with it.
+func TestOPDS_MigratedCredentialSignsIn(t *testing.T) {
+	t.Parallel()
+	f := newDeliveryFixture(t)
+	f.addBook("Novel", "", models.FileTypeEPUB)
+	device := f.addDevice(devices.DeviceTypeOPDS)
+	const legacy = "ak_c2hpc2hvLWxlZ2FjeS1hcGkta2V5LWZvcm1hdA=="
+	_, err := f.db.NewUpdate().Model((*devices.Device)(nil)).Set("credential = ?", legacy).Where("id = ?", device.ID).Exec(context.Background())
+	require.NoError(t, err)
+
+	code, body := f.getAs(legacy, "/opds/v1/catalog")
+	assert.Equal(t, http.StatusOK, code, body)
+}

@@ -12,14 +12,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/covers"
-	"github.com/shishobooks/shisho/pkg/delivery"
-	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
@@ -36,8 +35,7 @@ type handler struct {
 	listsService    *lists.Service
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
-	deliveryService *delivery.Service
-	deviceService   *devices.Service
+	reachService    *reach.Service
 }
 
 // resolveSort resolves user's stored sort preference for libraryID,
@@ -107,7 +105,7 @@ func (h *handler) catalog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, r.rules, r.user.ID, r.browsableLibraryIDs(), r.listID, r.browsesLists())
+	feed, err := h.opdsService.BuildCatalogFeed(ctx, baseURL, r, browsesLibraries(r), browsesLists(r))
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -123,16 +121,16 @@ func (h *handler) libraryCatalog(c echo.Context) error {
 		return err
 	}
 
-	r, err := h.scopeFor(c)
+	r, err := h.reachFor(c)
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
 	baseURL := getBaseURL(c)
-	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, libraryID)
+	feed, err := h.opdsService.BuildLibraryCatalogFeed(ctx, baseURL, r, libraryID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -152,15 +150,15 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c.Request().Context(), r.user, libraryID)
+	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, r.rules, libraryID, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, r.Rules, libraryID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -180,14 +178,14 @@ func (h *handler) librarySeriesList(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
 
-	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, r.rules, libraryID, limit, offset)
+	feed, err := h.opdsService.BuildLibrarySeriesListFeed(ctx, baseURL, r.Rules, libraryID, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -207,7 +205,7 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
@@ -218,9 +216,9 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c.Request().Context(), r.user, libraryID)
+	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, r.rules, libraryID, seriesID, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, r.Rules, libraryID, seriesID, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -240,14 +238,14 @@ func (h *handler) libraryAuthorsList(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
 
-	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, r.rules, libraryID, limit, offset)
+	feed, err := h.opdsService.BuildLibraryAuthorsListFeed(ctx, baseURL, r.Rules, libraryID, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -267,7 +265,7 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
@@ -278,9 +276,9 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c.Request().Context(), r.user, libraryID)
+	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, r.rules, libraryID, authorName, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, r.Rules, libraryID, authorName, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -300,7 +298,7 @@ func (h *handler) librarySearch(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
@@ -311,9 +309,9 @@ func (h *handler) librarySearch(c echo.Context) error {
 
 	limit, offset := getPaginationParams(c)
 	baseURL := getBaseURL(c)
-	sort := h.resolveSort(c.Request().Context(), r.user, libraryID)
+	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, r.rules, libraryID, query, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, r.Rules, libraryID, query, limit, offset, sort)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -332,7 +330,7 @@ func (h *handler) libraryOpenSearch(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.requireLibrary(c, libraryID); err != nil {
+	if err := requireLibrary(c, r, libraryID); err != nil {
 		return err
 	}
 
@@ -487,12 +485,12 @@ func (h *handler) lists(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if !r.browsesLists() {
+	if !browsesLists(r) {
 		return errcodes.NotFound("Lists")
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), r.rules, r.user.ID, r.libraryIDs, r.listID, limit, offset)
+	feed, err := h.opdsService.BuildListsFeed(c.Request().Context(), getBaseURL(c), r.Rules, r.User.ID, r.LibraryIDs(), r.ListID(), limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -530,7 +528,7 @@ func (h *handler) listOpenSearch(c echo.Context) error {
 // requireViewableList returns the listID param and what the request
 // reaches, or a 404 when the user cannot view the list or a Device's scope
 // leaves it out, so the id does not confirm the list exists.
-func (h *handler) requireViewableList(c echo.Context) (int, *reach, error) {
+func (h *handler) requireViewableList(c echo.Context) (int, *reach.Reach, error) {
 	r, err := h.reachFor(c)
 	if err != nil {
 		return 0, nil, err
@@ -540,11 +538,11 @@ func (h *handler) requireViewableList(c echo.Context) (int, *reach, error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	if !r.allowsList(listID) {
+	if !allowsList(r, listID) {
 		return 0, nil, errcodes.NotFound("List")
 	}
 
-	canView, err := h.listsService.CanView(c.Request().Context(), listID, r.user.ID)
+	canView, err := h.listsService.CanView(c.Request().Context(), listID, r.User.ID)
 	if err != nil {
 		return 0, nil, errors.WithStack(err)
 	}
@@ -562,7 +560,7 @@ func (h *handler) serveListBooks(c echo.Context, query string) error {
 	}
 
 	limit, offset := getPaginationParams(c)
-	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), getBaseURL(c), r.rules, listID, r.libraryIDs, query, limit, offset)
+	feed, err := h.opdsService.BuildListBooksFeed(c.Request().Context(), getBaseURL(c), r.Rules, listID, r.LibraryIDs(), query, limit, offset)
 	if err != nil {
 		return errors.WithStack(err)
 	}

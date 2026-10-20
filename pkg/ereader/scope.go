@@ -7,153 +7,93 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
-	"github.com/shishobooks/shisho/pkg/delivery"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reach"
 )
 
-// deviceScope is what the eReader browser shows a Device: the part of the
-// owner's libraries its scope reaches (one library, the books on one list,
-// or everything) and the Delivery Rules that pick what each book delivers.
-// A scope whose library or list is gone, or a list the owner can no longer
-// see, shows nothing, as Kobo sync does.
-type deviceScope struct {
-	libraryID *int
-	listID    *int
-	closed    bool
-	rules     []delivery.Rule
+// The eReader browser shows what the Device DeviceAuth stored reaches
+// (pkg/reach). Unlike OPDS, a list-scoped Device browses the libraries
+// holding books on its list, showing only those books.
+
+// reach returns what the Device reaches, with its Delivery Rules.
+func (h *handler) reach(c echo.Context) (*reach.Reach, error) {
+	user, device, err := deviceAndOwner(c)
+	if err != nil {
+		return nil, err
+	}
+	return h.reachService.Resolve(c.Request().Context(), user, device)
 }
 
-// scope returns the scope and Delivery Rules of the Device DeviceAuth
-// stored.
-func (h *handler) scope(c echo.Context) (deviceScope, error) {
-	s, err := h.scopeWithoutRules(c)
-	if err != nil {
-		return deviceScope{}, err
-	}
-	device, err := devices.RequireDevice(c)
-	if err != nil {
-		return deviceScope{}, err
-	}
-	s.rules, err = h.deviceService.Rules(c.Request().Context(), device)
-	if err != nil {
-		return deviceScope{}, errors.WithStack(err)
-	}
-	return s, nil
-}
-
-// scopeWithoutRules returns the Device's scope without loading its Delivery
+// scopeOnly returns what the Device reaches without loading its Delivery
 // Rules, for the routes that serve one book's cover or file.
-func (h *handler) scopeWithoutRules(c echo.Context) (deviceScope, error) {
+func (h *handler) scopeOnly(c echo.Context) (*reach.Reach, error) {
+	user, device, err := deviceAndOwner(c)
+	if err != nil {
+		return nil, err
+	}
+	return h.reachService.Scope(c.Request().Context(), user, device)
+}
+
+func deviceAndOwner(c echo.Context) (*models.User, *devices.Device, error) {
 	device, err := devices.RequireDevice(c)
 	if err != nil {
-		return deviceScope{}, err
+		return nil, nil, err
 	}
-	var s deviceScope
-	scope := device.Scope()
-	switch scope.Type {
-	case devices.ScopeLibrary:
-		if scope.LibraryID == nil {
-			s.closed = true
-		} else {
-			s.libraryID = scope.LibraryID
-		}
-	case devices.ScopeList:
-		if scope.ListID == nil {
-			s.closed = true
-			break
-		}
-		user, err := auth.RequireUser(c)
-		if err != nil {
-			return deviceScope{}, err
-		}
-		canView, err := h.listService.CanView(c.Request().Context(), *scope.ListID, user.ID)
-		if err != nil {
-			return deviceScope{}, errors.WithStack(err)
-		}
-		if canView {
-			s.listID = scope.ListID
-		} else {
-			s.closed = true
-		}
-	}
-	return s, nil
-}
-
-// allowsLibrary reports whether the scope can include books from libraryID.
-func (s deviceScope) allowsLibrary(libraryID int) bool {
-	return !s.closed && (s.libraryID == nil || *s.libraryID == libraryID)
-}
-
-// requireLibrary returns the scope for a library path, or a 404 for a
-// library outside it. The owner's access is checked first, so a library
-// they cannot access gets the usual library access error.
-func (h *handler) requireLibrary(c echo.Context, libraryID int) (deviceScope, error) {
-	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-		return deviceScope{}, err
-	}
-	scope, err := h.scope(c)
+	user, err := auth.RequireUser(c)
 	if err != nil {
-		return deviceScope{}, err
+		return nil, nil, err
 	}
-	if !scope.allowsLibrary(libraryID) {
-		return deviceScope{}, errcodes.NotFound("Library")
+	return user, device, nil
+}
+
+// requireLibrary returns what the Device reaches for a library path, or a
+// 404 for a library outside it. The owner's access is checked first, so a
+// library they cannot access gets the usual library access error.
+func (h *handler) requireLibrary(c echo.Context, libraryID int) (*reach.Reach, error) {
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
+		return nil, err
 	}
-	return scope, nil
+	r, err := h.reach(c)
+	if err != nil {
+		return nil, err
+	}
+	if !r.HoldsLibrary(libraryID) {
+		return nil, errcodes.NotFound("Library")
+	}
+	return r, nil
 }
 
 // requireBookInScope returns resource's 404 for a book the owner cannot
-// access or that is outside the Device's scope, the same response as an id
-// with no row, so a Device cannot probe for books it does not show.
-func (h *handler) requireBookInScope(c echo.Context, libraryID, bookID int, resource string) error {
+// access or that is outside r, the same response as an id with no row, so a
+// Device cannot probe for books it does not show.
+func (h *handler) requireBookInScope(c echo.Context, r *reach.Reach, libraryID, bookID int, resource string) error {
 	if err := requireEntityAccess(c, libraryID, resource); err != nil {
 		return err
 	}
-	scope, err := h.scopeWithoutRules(c)
+	holds, err := h.reachService.HoldsBook(c.Request().Context(), r, libraryID, bookID)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
-	if !scope.allowsLibrary(libraryID) {
+	if !holds {
 		return errcodes.NotFound(resource)
 	}
-	if scope.listID != nil {
-		onList, err := h.listService.ContainsBook(c.Request().Context(), *scope.listID, bookID)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		if !onList {
-			return errcodes.NotFound(resource)
-		}
-	}
 	return nil
-}
-
-// libraryHasBooks reports whether libraryID has a book in the scope, so the
-// libraries page of a list-scoped Device only shows libraries with books on
-// the list.
-func (h *handler) libraryHasBooks(ctx context.Context, scope deviceScope, libraryID int) (bool, error) {
-	if scope.listID == nil {
-		return scope.allowsLibrary(libraryID), nil
-	}
-	_, total, err := h.listBooksPaginated(ctx, scope, books.ListBooksOptions{LibraryID: &libraryID}, 1, "")
-	if err != nil {
-		return false, err
-	}
-	return total > 0, nil
 }
 
 // requireListedBooks returns resource's 404 when a list-scoped Device has no
 // book matching opts on its list, so a series or author page cannot reveal
 // the name of one the list leaves out.
-func (h *handler) requireListedBooks(ctx context.Context, scope deviceScope, opts books.ListBooksOptions, resource string) error {
-	if scope.listID == nil {
+func (h *handler) requireListedBooks(ctx context.Context, r *reach.Reach, opts books.ListBooksOptions, resource string) error {
+	if r.ListID() == nil {
 		return nil
 	}
-	_, total, err := h.listBooksPaginated(ctx, scope, opts, 1, "")
+	has, err := h.reachService.HasBooks(ctx, r, opts)
 	if err != nil {
 		return err
 	}
-	if total == 0 {
+	if !has {
 		return errcodes.NotFound(resource)
 	}
 	return nil

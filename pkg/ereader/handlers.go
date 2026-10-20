@@ -21,9 +21,9 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/libraries"
-	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/people"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
@@ -39,8 +39,7 @@ type handler struct {
 	peopleService   *people.Service
 	downloadCache   *downloadcache.Cache
 	settingsService *settings.Service
-	listService     *lists.Service
-	deviceService   *devices.Service
+	reachService    *reach.Service
 }
 
 func newHandler(
@@ -50,8 +49,7 @@ func newHandler(
 	peopleService *people.Service,
 	downloadCache *downloadcache.Cache,
 	settingsService *settings.Service,
-	listService *lists.Service,
-	deviceService *devices.Service,
+	reachService *reach.Service,
 ) *handler {
 	return &handler{
 		libraryService:  libraryService,
@@ -60,8 +58,7 @@ func newHandler(
 		peopleService:   peopleService,
 		downloadCache:   downloadCache,
 		settingsService: settingsService,
-		listService:     listService,
-		deviceService:   deviceService,
+		reachService:    reachService,
 	}
 }
 
@@ -114,34 +111,16 @@ func (h *handler) resolveSort(ctx context.Context, userID int, libraryID int) []
 	return resolved
 }
 
-// Libraries lists all libraries the user has access to.
+// Libraries lists the libraries the Device reaches that have a book with
+// something to deliver.
 func (h *handler) Libraries(c echo.Context) error {
-	ctx := c.Request().Context()
-	user, err := auth.RequireUser(c)
+	r, err := h.reach(c)
 	if err != nil {
 		return err
 	}
-	scope, err := h.scope(c)
-	if err != nil {
-		return err
-	}
-
-	// List the libraries the Device's owner can access, within its scope
-	allLibs, err := h.libraryService.ListLibraries(ctx, libraries.ListLibrariesOptions{
-		LibraryIDs: user.GetAccessibleLibraryIDs(),
-	})
+	libs, err := h.reachService.Libraries(c.Request().Context(), r)
 	if err != nil {
 		return errors.WithStack(err)
-	}
-	var libs []*models.Library
-	for _, lib := range allLibs {
-		hasBooks, err := h.libraryHasBooks(ctx, scope, lib.ID)
-		if err != nil {
-			return err
-		}
-		if hasBooks {
-			libs = append(libs, lib)
-		}
 	}
 
 	var content strings.Builder
@@ -157,7 +136,8 @@ func (h *handler) Libraries(c echo.Context) error {
 	return h.render(c, content.String())
 }
 
-// LibraryNav shows navigation options for a library.
+// LibraryNav shows navigation options for a library, leaving out Series and
+// Authors when the library has none with something to deliver.
 func (h *handler) LibraryNav(c echo.Context) error {
 	libraryID := c.Param("libraryId")
 	baseURL := h.baseURL(c)
@@ -166,8 +146,13 @@ func (h *handler) LibraryNav(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := h.requireLibrary(c, libraryIDInt); err != nil {
+	r, err := h.requireLibrary(c, libraryIDInt)
+	if err != nil {
 		return err
+	}
+	sections, err := h.reachService.Sections(c.Request().Context(), r, libraryIDInt)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
 	var content strings.Builder
@@ -176,8 +161,12 @@ func (h *handler) LibraryNav(c echo.Context) error {
 
 	// Navigation options
 	content.WriteString(itemHTML("All Books", fmt.Sprintf("%s/libraries/%s/all", baseURL, libraryID), "Browse all books"))
-	content.WriteString(itemHTML("Series", fmt.Sprintf("%s/libraries/%s/series", baseURL, libraryID), "Browse by series"))
-	content.WriteString(itemHTML("Authors", fmt.Sprintf("%s/libraries/%s/authors", baseURL, libraryID), "Browse by author"))
+	if sections.Series {
+		content.WriteString(itemHTML("Series", fmt.Sprintf("%s/libraries/%s/series", baseURL, libraryID), "Browse by series"))
+	}
+	if sections.Authors {
+		content.WriteString(itemHTML("Authors", fmt.Sprintf("%s/libraries/%s/authors", baseURL, libraryID), "Browse by author"))
+	}
 	content.WriteString(itemHTML("Search", fmt.Sprintf("%s/libraries/%s/search", baseURL, libraryID), "Search for books"))
 
 	return h.render(c, content.String())
@@ -224,10 +213,10 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	content.WriteString("<h1>All Books</h1>")
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/all", baseURL, libraryID)
-	content.WriteString(filterBar(currentURL, scope.rules, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, scope.Rules, typesFilter, coversParam))
 
 	for _, book := range booksResult {
-		meta := formatBookMeta(book, scope.rules)
+		meta := formatBookMeta(book, scope.Rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -258,8 +247,8 @@ func (h *handler) LibrarySeries(c echo.Context) error {
 	// Get series for this library
 	seriesList, _, err := h.seriesService.ListSeriesWithTotal(ctx, series.ListSeriesOptions{
 		LibraryID:     &libraryIDInt,
-		ListID:        scope.listID,
-		MainFileTypes: delivery.SourceFileTypes(scope.rules),
+		ListID:        scope.ListID(),
+		MainFileTypes: scope.SourceFileTypes(),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -340,10 +329,10 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(s.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/series/%s", baseURL, libraryID, seriesID)
-	content.WriteString(filterBar(currentURL, scope.rules, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, scope.Rules, typesFilter, coversParam))
 
 	for _, book := range booksResult {
-		meta := formatBookMeta(book, scope.rules)
+		meta := formatBookMeta(book, scope.Rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -374,8 +363,8 @@ func (h *handler) LibraryAuthors(c echo.Context) error {
 	// Get authors for this library (people with books in this library)
 	authorsList, _, err := h.peopleService.ListPeopleWithTotal(ctx, people.ListPeopleOptions{
 		LibraryID:     &libraryIDInt,
-		ListID:        scope.listID,
-		MainFileTypes: delivery.SourceFileTypes(scope.rules),
+		ListID:        scope.ListID(),
+		MainFileTypes: scope.SourceFileTypes(),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -458,10 +447,10 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	content.WriteString(fmt.Sprintf("<h1>%s</h1>", html.EscapeString(author.Name)))
 
 	currentURL := fmt.Sprintf("%s/libraries/%s/authors/%s", baseURL, libraryID, authorID)
-	content.WriteString(filterBar(currentURL, scope.rules, typesFilter, coversParam))
+	content.WriteString(filterBar(currentURL, scope.Rules, typesFilter, coversParam))
 
 	for _, book := range booksInLibrary {
-		meta := formatBookMeta(book, scope.rules)
+		meta := formatBookMeta(book, scope.Rules)
 		bookURL := buildBookURL(baseURL, book.ID, coversParam)
 		coverURL := getBookCoverURL(baseURL, book)
 		content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -508,7 +497,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 
 	searchURL := fmt.Sprintf("%s/libraries/%s/search", baseURL, libraryID)
 	content.WriteString(searchForm(searchURL, query))
-	content.WriteString(filterBar(searchURL, scope.rules, typesFilter, coversParam, [2]string{"q", query}))
+	content.WriteString(filterBar(searchURL, scope.Rules, typesFilter, coversParam, [2]string{"q", query}))
 
 	if query != "" {
 		// Search for books (paginated)
@@ -524,7 +513,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 		content.WriteString(fmt.Sprintf("<p>Found %d results</p>", total))
 
 		for _, book := range booksResult {
-			meta := formatBookMeta(book, scope.rules)
+			meta := formatBookMeta(book, scope.Rules)
 			bookURL := buildBookURL(baseURL, book.ID, coversParam)
 			coverURL := getBookCoverURL(baseURL, book)
 			content.WriteString(itemHTMLWithCover(book.Title, bookURL, meta, coverURL, showCovers))
@@ -563,21 +552,16 @@ func (h *handler) Download(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	if err := h.requireBookInScope(c, book.LibraryID, book.ID, "Book"); err != nil {
+	r, err := h.reach(c)
+	if err != nil {
+		return err
+	}
+	if err := h.requireBookInScope(c, r, book.LibraryID, book.ID, "Book"); err != nil {
 		return err
 	}
 
 	if !slices.ContainsFunc(book.Files, func(f *models.File) bool { return f.FileRole == models.FileRoleMain }) {
 		return errcodes.NotFound("File")
-	}
-
-	device, err := devices.RequireDevice(c)
-	if err != nil {
-		return err
-	}
-	rules, err := h.deviceService.Rules(ctx, device)
-	if err != nil {
-		return errors.WithStack(err)
 	}
 
 	var content strings.Builder
@@ -615,8 +599,8 @@ func (h *handler) Download(c echo.Context) error {
 
 	// Listings hide a book with nothing to deliver, but its page is still
 	// reachable by URL.
-	deliveries := delivery.Resolve(rules, book).All()
-	kindle := device.DeviceType == devices.DeviceTypeKindle
+	deliveries := delivery.Resolve(r.Rules, book).All()
+	kindle := r.Device.DeviceType == devices.DeviceTypeKindle
 	switch {
 	case len(deliveries) == 0:
 		content.WriteString(`<p><b>Not delivered to this Device.</b> Its Delivery Rules have no rule for this book's file types.</p>`)
@@ -649,7 +633,11 @@ func (h *handler) Cover(c echo.Context) error {
 		return errcodes.NotFound("Book")
 	}
 
-	if err := h.requireBookInScope(c, book.LibraryID, book.ID, "Book"); err != nil {
+	r, err := h.scopeOnly(c)
+	if err != nil {
+		return err
+	}
+	if err := h.requireBookInScope(c, r, book.LibraryID, book.ID, "Book"); err != nil {
 		return err
 	}
 
@@ -718,7 +706,11 @@ func (h *handler) serveDownload(c echo.Context, deliveredType string, opts ...ht
 		return errors.WithStack(err)
 	}
 
-	if err := h.requireBookInScope(c, file.LibraryID, file.BookID, "File"); err != nil {
+	r, err := h.scopeOnly(c)
+	if err != nil {
+		return err
+	}
+	if err := h.requireBookInScope(c, r, file.LibraryID, file.BookID, "File"); err != nil {
 		return err
 	}
 
@@ -966,9 +958,9 @@ func parsePageParam(raw string) int {
 // main file of typesFilter's type unless it is empty or "all". Returns the
 // books for the requested page and the total count used to drive the
 // pagination UI.
-func (h *handler) listBooksPaginated(ctx context.Context, scope deviceScope, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
-	opts.ListID = scope.listID
-	opts.MainFileTypes = delivery.SourceFileTypes(scope.rules)
+func (h *handler) listBooksPaginated(ctx context.Context, r *reach.Reach, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
+	opts.ListID = r.ListID()
+	opts.MainFileTypes = r.SourceFileTypes()
 	if typesFilter != "" && typesFilter != "all" {
 		filter := strings.ToLower(typesFilter)
 		if slices.Contains(opts.MainFileTypes, filter) {

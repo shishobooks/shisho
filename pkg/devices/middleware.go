@@ -129,9 +129,16 @@ func (m *Middleware) OPDSAuth(passwordAuth echo.MiddlewareFunc) echo.MiddlewareF
 	}
 }
 
+// legacyCredentialPrefix starts the API keys that Devices migrated from API
+// keys keep as their credentials until they're regenerated.
+const legacyCredentialPrefix = "ak_"
+
 // isCredentialShaped reports whether s could be a Device credential: the
-// right length, in the credential alphabet.
+// right length, in the credential alphabet, or a migrated API key.
 func isCredentialShaped(s string) bool {
+	if strings.HasPrefix(s, legacyCredentialPrefix) {
+		return true
+	}
 	if len(s) != credentialLength {
 		return false
 	}

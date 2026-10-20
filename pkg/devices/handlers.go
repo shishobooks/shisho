@@ -22,11 +22,9 @@ func newHandler(service *Service, listService *lists.Service) *handler {
 	return &handler{service: service, listService: listService}
 }
 
-func (h *handler) buildDeviceResponse(ctx context.Context, device *Device) (DeviceResponse, error) {
-	rules, err := h.service.Rules(ctx, device)
-	if err != nil {
-		return DeviceResponse{}, err
-	}
+// buildDeviceResponse returns device as its owner sees it, with rules, the
+// Delivery Rules it follows.
+func buildDeviceResponse(device *Device, rules []delivery.Rule) DeviceResponse {
 	resp := DeviceResponse{
 		Device:              *device,
 		Credential:          device.Credential,
@@ -41,16 +39,16 @@ func (h *handler) buildDeviceResponse(ctx context.Context, device *Device) (Devi
 	case device.ScopeType == ScopeList && device.ScopeList != nil:
 		resp.ScopeName = device.ScopeList.Name
 	}
-	return resp, nil
+	return resp
 }
 
 // respondDevice sends device as its owner sees it.
 func (h *handler) respondDevice(c echo.Context, status int, device *Device) error {
-	resp, err := h.buildDeviceResponse(c.Request().Context(), device)
+	rules, err := h.service.Rules(c.Request().Context(), device)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	return c.JSON(status, resp)
+	return c.JSON(status, buildDeviceResponse(device, rules))
 }
 
 func buildAdminDeviceResponse(device *Device) AdminDeviceResponse {
@@ -83,12 +81,13 @@ func (h *handler) List(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	rules, err := h.service.RulesFor(c.Request().Context(), devices)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	resp := make([]DeviceResponse, len(devices))
 	for i, device := range devices {
-		resp[i], err = h.buildDeviceResponse(c.Request().Context(), device)
-		if err != nil {
-			return errors.WithStack(err)
-		}
+		resp[i] = buildDeviceResponse(device, rules[device.ID])
 	}
 	return c.JSON(http.StatusOK, resp)
 }
