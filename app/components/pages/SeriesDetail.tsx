@@ -35,11 +35,7 @@ const SeriesDetail = () => {
   const navigate = useNavigate();
   const seriesId = id ? parseInt(id, 10) : undefined;
 
-  const {
-    itemsPerPage,
-    offset,
-    settingsResolved: userSettingsResolved,
-  } = useGallerySizeParam();
+  const { itemsPerPage, offset, pageSizeResolved } = useGallerySizeParam();
 
   const libraryQuery = useUserLibrary(libraryId);
   const seriesQuery = useSeries(seriesId);
@@ -56,7 +52,7 @@ const SeriesDetail = () => {
       sort: sort.param,
     },
     {
-      enabled: userSettingsResolved && Boolean(seriesId),
+      enabled: pageSizeResolved && Boolean(seriesId),
     },
   );
 

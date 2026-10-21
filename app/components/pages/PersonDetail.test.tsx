@@ -76,7 +76,7 @@ vi.mock("@/hooks/useGallerySizeParam", () => ({
   useGallerySizeParam: () => ({
     itemsPerPage: 24,
     offset: 0,
-    settingsResolved: true,
+    pageSizeResolved: true,
   }),
 }));
 vi.mock("@/components/library/LibraryLayout", () => ({

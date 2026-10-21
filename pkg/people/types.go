@@ -27,7 +27,7 @@ type ListNarratedFilesResponse struct {
 }
 
 type ListPeopleQuery struct {
-	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
+	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=100"`
 	Offset    int     `query:"offset" json:"offset,omitempty" validate:"min=0"`
 	LibraryID *int    `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
@@ -35,7 +35,7 @@ type ListPeopleQuery struct {
 }
 
 type SubResourceQuery struct {
-	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
+	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=100"`
 	Offset int `query:"offset" json:"offset,omitempty" validate:"min=0"`
 }
 

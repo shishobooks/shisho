@@ -747,3 +747,28 @@ func (f *resourceDeleteFixture) sessionRequest(path string) *http.Request {
 	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
 	return req
 }
+
+// A gallery asks for whole rows of covers, up to 100 per page on a wide
+// screen, so every list a gallery or resource list pages through accepts a
+// limit of 100 and rejects more.
+func TestAPIContract_ListLimitBound(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	for _, path := range []string{
+		"/api/books",
+		"/api/series",
+		"/api/people",
+		"/api/genres",
+		"/api/tags",
+		"/api/publishers",
+	} {
+		t.Run(path, func(t *testing.T) {
+			url := fmt.Sprintf("%s?library_id=%d&limit=", path, f.lib.ID)
+			status, _, _ := f.requestError(t, http.MethodGet, url+"100", "")
+			assert.Equal(t, http.StatusOK, status)
+			status, code, _ := f.requestError(t, http.MethodGet, url+"101", "")
+			assert.Equal(t, http.StatusUnprocessableEntity, status)
+			assert.Equal(t, "validation_error", code)
+		})
+	}
+}

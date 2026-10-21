@@ -2,31 +2,36 @@ import { useSearchParams } from "react-router-dom";
 
 import {
   DEFAULT_GALLERY_SIZE,
-  ITEMS_PER_PAGE_BY_SIZE,
+  LEGACY_ITEMS_PER_PAGE_BY_SIZE,
 } from "@/constants/gallerySize";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { useStartPaging } from "@/hooks/useStartPaging";
 import { toastRequestError } from "@/libraries/api";
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
-import { parsePageParam } from "@/libraries/pagination";
+import {
+  galleryColumns,
+  galleryPageSize,
+  parseGallerySize,
+} from "@/libraries/gallerySize";
 import type { GallerySize } from "@/types";
 
 interface Options {
-  /** Called with the new size and page after the size changes. */
-  onChange?: (size: GallerySize, page: number) => void;
+  /** Called with the new size after the size changes. */
+  onChange?: (size: GallerySize) => void;
 }
 
 /**
- * The gallery size of a paginated cover gallery, read from the `size` URL
- * param with the user's saved size as the default, plus the page math that
- * depends on it. `applyGallerySize` keeps the first item in view on screen
- * when the page size changes, and `saveSizeAsDefault` saves the current size
- * to the user's settings (toasting a failure) and drops the URL param.
+ * The layout and paging of a cover gallery. The size comes from the `size`
+ * URL param with the user's saved size as the default. A page is whole rows
+ * of the columns the content width fits (see `ContentWidth`), so the page
+ * size changes with the window. The URL names a page by the index of an item
+ * on it (`start`), not a page number, so a link opens on the same books on
+ * any screen and the item stays in view when the page size changes.
  *
- * The `size` param is omitted when it equals the saved size, and the `page`
- * param when it is 1, so a default gallery keeps a clean URL.
+ * `size` is omitted when it equals the saved size, and `start` on the first
+ * page, so a default gallery keeps a clean URL.
  */
 export const useGallerySizeParam = ({ onChange }: Options = {}) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,16 +43,21 @@ export const useGallerySizeParam = ({ onChange }: Options = {}) => {
     userSettingsQuery.data?.gallery_size ?? DEFAULT_GALLERY_SIZE;
   const effectiveSize: GallerySize = urlSize ?? savedSize;
   const isSizeDirty = urlSize !== null && urlSize !== savedSize;
-  const itemsPerPage = ITEMS_PER_PAGE_BY_SIZE[effectiveSize];
-  const currentPage = parsePageParam(searchParams.get("page"));
-  const offset = (currentPage - 1) * itemsPerPage;
-  // The saved size decides the page size, so a gallery waits for the settings
-  // query to settle before it fetches, or it would fetch twice.
-  const settingsResolved =
-    userSettingsQuery.isSuccess || userSettingsQuery.isError;
+
+  const { columns, pageSize, offset, currentPage, measured, goToPage } =
+    useStartPaging({
+      columnsFor: (width, phone) =>
+        galleryColumns(effectiveSize, width, { phone }),
+      pageSizeFor: (columns, phone) => galleryPageSize(columns, { phone }),
+      legacyPageSize: LEGACY_ITEMS_PER_PAGE_BY_SIZE[effectiveSize],
+    });
+  const itemsPerPage = pageSize;
+  // The saved size and the content width decide the page size, so a gallery
+  // waits for both before it fetches, or it would fetch twice.
+  const pageSizeResolved =
+    measured && (userSettingsQuery.isSuccess || userSettingsQuery.isError);
 
   const applyGallerySize = (next: GallerySize) => {
-    const newPage = pageForSizeChange(offset, ITEMS_PER_PAGE_BY_SIZE[next]);
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
       if (next === savedSize) {
@@ -55,14 +65,9 @@ export const useGallerySizeParam = ({ onChange }: Options = {}) => {
       } else {
         params.set("size", next);
       }
-      if (newPage === 1) {
-        params.delete("page");
-      } else {
-        params.set("page", String(newPage));
-      }
       return params;
     });
-    onChange?.(next, newPage);
+    onChange?.(next);
   };
 
   const saveSizeAsDefault = () => {
@@ -86,11 +91,13 @@ export const useGallerySizeParam = ({ onChange }: Options = {}) => {
     savedSize,
     effectiveSize,
     isSizeDirty,
+    columns,
     itemsPerPage,
     currentPage,
     offset,
-    settingsResolved,
+    pageSizeResolved,
     isSaving: updateUserSettings.isPending,
+    goToPage,
     applyGallerySize,
     saveSizeAsDefault,
   };

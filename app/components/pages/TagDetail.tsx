@@ -25,11 +25,7 @@ const TagDetail = () => {
   const navigate = useNavigate();
   const tagId = id ? parseInt(id, 10) : undefined;
 
-  const {
-    itemsPerPage,
-    offset,
-    settingsResolved: userSettingsResolved,
-  } = useGallerySizeParam();
+  const { itemsPerPage, offset, pageSizeResolved } = useGallerySizeParam();
 
   const tagQuery = useTag(tagId);
   usePageTitle(tagQuery.data?.name ?? "Tag");
@@ -44,7 +40,7 @@ const TagDetail = () => {
       sort: sort.param,
     },
     {
-      enabled: userSettingsResolved && Boolean(tagId),
+      enabled: pageSizeResolved && Boolean(tagId),
     },
   );
 

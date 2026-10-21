@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { pageForSizeChange, parseGallerySize } from "@/libraries/gallerySize";
+import {
+  galleryColumns,
+  galleryPageSize,
+  parseGallerySize,
+} from "@/libraries/gallerySize";
 
 describe("parseGallerySize", () => {
   it("accepts the four valid sizes", () => {
@@ -26,23 +30,38 @@ describe("parseGallerySize", () => {
   });
 });
 
-describe("pageForSizeChange", () => {
-  it("preserves the first-visible item across size changes", () => {
-    expect(pageForSizeChange(96, 48)).toBe(3);
-    expect(pageForSizeChange(96, 16)).toBe(7);
-    expect(pageForSizeChange(96, 12)).toBe(9);
+describe("galleryColumns", () => {
+  it("fits as many covers of the size as the width holds", () => {
+    // The content width of the old 1280px column, which held 11/8/6/5.
+    expect(galleryColumns("s", 1232)).toBe(11);
+    expect(galleryColumns("m", 1232)).toBe(8);
+    expect(galleryColumns("l", 1232)).toBe(6);
+    expect(galleryColumns("xl", 1232)).toBe(5);
+    expect(galleryColumns("m", 1660)).toBe(11);
   });
 
-  it("errs backward when boundaries don't align", () => {
-    expect(pageForSizeChange(99, 12)).toBe(9);
+  it("shows at least one column", () => {
+    expect(galleryColumns("xl", 100)).toBe(1);
   });
 
-  it("returns page 1 at offset 0", () => {
-    expect(pageForSizeChange(0, 48)).toBe(1);
-    expect(pageForSizeChange(0, 12)).toBe(1);
+  it("shows two columns on a phone, whatever the size", () => {
+    expect(galleryColumns("s", 390, { phone: true })).toBe(2);
+    expect(galleryColumns("xl", 390, { phone: true })).toBe(2);
+  });
+});
+
+describe("galleryPageSize", () => {
+  it("fills three rows", () => {
+    expect(galleryPageSize(8)).toBe(24);
+    expect(galleryPageSize(11)).toBe(33);
   });
 
-  it("returns page 1 when offset < new_limit", () => {
-    expect(pageForSizeChange(11, 12)).toBe(1);
+  it("drops rows rather than exceed the API limit, keeping them full", () => {
+    expect(galleryPageSize(40)).toBe(80);
+    expect(galleryPageSize(150)).toBe(100);
+  });
+
+  it("shows twelve rows of two on a phone", () => {
+    expect(galleryPageSize(2, { phone: true })).toBe(24);
   });
 });

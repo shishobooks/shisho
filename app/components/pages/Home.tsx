@@ -32,6 +32,7 @@ import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { toastRequestError } from "@/libraries/api";
+import { resetPaging } from "@/libraries/pagination";
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -102,9 +103,12 @@ const HomeContent = () => {
     savedSize,
     effectiveSize,
     isSizeDirty,
+    columns,
     itemsPerPage,
     offset,
-    settingsResolved: userSettingsResolved,
+    currentPage,
+    goToPage,
+    pageSizeResolved,
     isSaving: isSavingSize,
     applyGallerySize,
     saveSizeAsDefault,
@@ -128,7 +132,7 @@ const HomeContent = () => {
     libraryIdNum === undefined ||
     librarySettingsQuery.isSuccess ||
     librarySettingsQuery.isError;
-  const settingsResolved = librarySettingsResolved && userSettingsResolved;
+  const settingsResolved = librarySettingsResolved && pageSizeResolved;
 
   // Group languages by base subtag for the filter dropdown.
   // If a library has both "en" and "en-US", show only "English" (the bare "en" subsumes variants).
@@ -239,7 +243,7 @@ const HomeContent = () => {
       } else {
         newParams.delete("file_types");
       }
-      newParams.set("page", "1");
+      resetPaging(newParams);
       return newParams;
     });
   };
@@ -256,7 +260,7 @@ const HomeContent = () => {
     } else {
       newParams.delete("genre_ids");
     }
-    newParams.set("page", "1");
+    resetPaging(newParams);
     setSearchParams(newParams);
   };
 
@@ -272,7 +276,7 @@ const HomeContent = () => {
     } else {
       newParams.delete("tag_ids");
     }
-    newParams.set("page", "1");
+    resetPaging(newParams);
     setSearchParams(newParams);
   };
 
@@ -285,7 +289,7 @@ const HomeContent = () => {
       } else {
         newParams.delete("language");
       }
-      newParams.set("page", "1");
+      resetPaging(newParams);
       return newParams;
     });
   };
@@ -299,7 +303,7 @@ const HomeContent = () => {
       } else {
         newParams.delete("reviewed_filter");
       }
-      newParams.set("page", "1");
+      resetPaging(newParams);
       return newParams;
     });
   };
@@ -312,7 +316,7 @@ const HomeContent = () => {
       newParams.delete("tag_ids");
       newParams.delete("language");
       newParams.delete("reviewed_filter");
-      newParams.set("page", "1");
+      resetPaging(newParams);
       return newParams;
     });
   };
@@ -345,7 +349,7 @@ const HomeContent = () => {
       } else {
         params.delete("sort");
       }
-      params.set("page", "1");
+      resetPaging(params);
       return params;
     });
   };
@@ -471,7 +475,6 @@ const HomeContent = () => {
     <SelectableBookItem
       book={book}
       coverAspectRatio={coverAspectRatio}
-      gallerySize={effectiveSize}
       key={book.id}
       libraryId={libraryId!}
       pageBookIds={pageBookIds}
@@ -600,6 +603,8 @@ const HomeContent = () => {
         </div>
       ) : (
         <Gallery
+          columns={columns}
+          currentPage={currentPage}
           emptyMessage={
             confirmedHasFilters
               ? "No books found matching your search or filters."
@@ -611,6 +616,8 @@ const HomeContent = () => {
           itemLabel="books"
           items={booksQuery.data?.items ?? []}
           itemsPerPage={itemsPerPage}
+          offset={offset}
+          onPageChange={goToPage}
           query={booksQuery}
           renderItem={renderBookItem}
           total={booksQuery.data?.total ?? 0}

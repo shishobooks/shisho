@@ -14,7 +14,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 - **Page headers with actions stack on mobile and sit side by side from a breakpoint**, with the title allowed to wrap and the action group not shrinking; copy `AdminUsers`.
 - Header buttons with text hide the label on phones and keep the icon. An `aria-label` says what the control does ("Remove path"), or repeats the visible text when phones hide it.
 - **List pages** have the header, a search input, a "Showing X-Y of Z" line only when `total > 0`, `LoadingSpinner` while loading, `QueryError` where results go, and `PaginationFooter`; book and series grids use `Gallery`. Empty states distinguish "no results matching your search" from "nothing here yet".
-- Searchable lists search server-side. List endpoints cap at 50 items, so client-side filtering hides everything past the first page.
+- Searchable lists search server-side. List endpoints cap their page size, so client-side filtering hides everything past the first page.
 - **Detail pages** put the mutating buttons in the header for roles that can write.
 
 ## Every page

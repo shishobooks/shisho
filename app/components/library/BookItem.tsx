@@ -31,10 +31,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  COVER_WIDTH_CLASS,
-  DEFAULT_GALLERY_SIZE,
-} from "@/constants/gallerySize";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { useCan } from "@/hooks/useCan";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
@@ -46,7 +42,6 @@ import {
   FileTypeCBZ,
   type Book,
   type File,
-  type GallerySize,
   type ResyncMode,
 } from "@/types";
 import { isBookNeedsReview } from "@/utils/book";
@@ -66,7 +61,6 @@ interface BookItemProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onShiftSelect?: () => void;
-  gallerySize?: GallerySize;
 }
 
 const getAspectRatioClass = (
@@ -99,7 +93,6 @@ const BookItem = ({
   isSelected = false,
   onSelect,
   onShiftSelect,
-  gallerySize = DEFAULT_GALLERY_SIZE,
 }: BookItemProps) => {
   const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
   // Author pages need People Read; without it the names are plain text.
@@ -171,8 +164,7 @@ const BookItem = ({
   return (
     <div
       className={cn(
-        "w-[calc(50%-0.5rem)] group/card relative",
-        COVER_WIDTH_CLASS[gallerySize],
+        "w-full group/card relative",
         isSelectionMode && "cursor-pointer",
       )}
       key={book.id}

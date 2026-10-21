@@ -34,7 +34,7 @@ type ListSeriesBooksResponse struct {
 }
 
 type ListSeriesQuery struct {
-	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
+	Limit     int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=100"`
 	Offset    int     `query:"offset" json:"offset,omitempty" validate:"min=0"`
 	LibraryID *int    `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
@@ -43,7 +43,7 @@ type ListSeriesQuery struct {
 
 // ListSeriesBooksQuery is the query for the series books sub-resource.
 type ListSeriesBooksQuery struct {
-	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=50"`
+	Limit  int `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=100"`
 	Offset int `query:"offset" json:"offset,omitempty" validate:"min=0"`
 	// Sort is a book sort spec, as on GET /books. Omitted, books keep series order.
 	Sort string `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`

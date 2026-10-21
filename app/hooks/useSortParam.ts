@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { resetPaging } from "@/libraries/pagination";
 import {
   parseSortSpecFor,
   serializeSortSpec,
@@ -37,7 +38,8 @@ export function useSortParam<F extends string>(config: SortConfig<F>) {
         } else {
           params.delete("sort");
         }
-        params.delete("page");
+        // Galleries page with `start`, resource lists with `page`.
+        resetPaging(params);
         return params;
       });
     },

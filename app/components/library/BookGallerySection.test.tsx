@@ -206,7 +206,7 @@ describe("BookGallerySection", () => {
           ),
         },
       ],
-      { initialEntries: ["/?page=9"] },
+      { initialEntries: ["/?start=999"] },
     );
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -214,8 +214,8 @@ describe("BookGallerySection", () => {
       </QueryClientProvider>,
     );
 
-    // 100 books at size M (24 per page) is five pages.
-    await waitFor(() => expect(router.state.location.search).toBe("?page=5"));
+    // 100 books at size M (24 per page) is five pages; the last starts at 96.
+    await waitFor(() => expect(router.state.location.search).toBe("?start=96"));
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
@@ -233,7 +233,7 @@ describe("BookGallerySection", () => {
           ),
         },
       ],
-      { initialEntries: ["/?page=4"] },
+      { initialEntries: ["/?start=72"] },
     );
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -242,56 +242,44 @@ describe("BookGallerySection", () => {
     );
 
     await screen.findByText("Books");
-    expect(router.state.location.search).toBe("?page=4");
+    expect(router.state.location.search).toBe("?start=72");
   });
 
-  it("calls onPageChange with page 1 when size changes from the first page", async () => {
+  it("keeps the first book of the page in the URL when the size changes", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onPageChange = vi.fn();
     // The page math only reads `total`, so one card is enough. Rendering a
     // full page of cards made these clicks slow enough to time out when the
     // whole check suite runs in parallel.
     const books = [makeBook(1)];
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <BookGallerySection
+              libraryId="1"
+              query={makeQueryResult(books, 100)}
+              title="Books"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/?start=48"] },
+    );
     render(
-      wrap(
-        <BookGallerySection
-          libraryId="1"
-          onPageChange={onPageChange}
-          onSizeChange={vi.fn()}
-          query={makeQueryResult(books, 50)}
-          title="Books"
-        />,
-      ),
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
     );
 
-    // Open the SizePopover first, then click a different size
-    await user.click(screen.getByRole("button", { name: /Size/ }));
-    await user.click(screen.getByRole("button", { name: "L" }));
-    expect(onPageChange).toHaveBeenCalledWith(1);
-  });
-
-  it("keeps the first visible item in view when size changes on a later page", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onPageChange = vi.fn();
-    const books = [makeBook(1)];
-    render(
-      wrap(
-        <BookGallerySection
-          libraryId="1"
-          onPageChange={onPageChange}
-          onSizeChange={vi.fn()}
-          query={makeQueryResult(books, 100)}
-          title="Books"
-        />,
-        ["/?page=3"],
-      ),
-    );
-
-    // Page 3 at size M (24/page) starts at offset 48; at size S (33/page)
-    // that item lives on page 2, not page 1.
     await user.click(screen.getByRole("button", { name: /Size/ }));
     await user.click(screen.getByRole("button", { name: "S" }));
-    expect(onPageChange).toHaveBeenCalledWith(2);
+
+    // The URL keeps naming book 49; at S (33 per page) it is on the page
+    // starting at 33, which useGallerySizeParam.test.tsx covers.
+    const params = new URLSearchParams(router.state.location.search);
+    expect(params.get("size")).toBe("s");
+    expect(params.get("start")).toBe("48");
   });
 
   it("renders loading spinner when loading", () => {

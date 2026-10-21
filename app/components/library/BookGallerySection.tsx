@@ -1,10 +1,7 @@
-import { useSearchParams } from "react-router-dom";
-
 import BookItem from "@/components/library/BookItem";
+import GalleryGrid from "@/components/library/GalleryGrid";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import PaginationFooter, {
-  type PageChangeHandler,
-} from "@/components/library/PaginationFooter";
+import PaginationFooter from "@/components/library/PaginationFooter";
 import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
@@ -14,7 +11,7 @@ import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import type { SortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
-import type { Book, GallerySize, ResourceListResponse } from "@/types";
+import type { Book, ResourceListResponse } from "@/types";
 import { formatShowingRange } from "@/utils/format";
 
 interface BookGalleryQuery extends RetryableQuery {
@@ -31,10 +28,6 @@ interface BookGallerySectionProps<F extends string> {
   emptyMessage?: string;
   /** Series context forwarded to BookItem so it shows the series number */
   seriesId?: number;
-  /** Called when pagination page changes */
-  onPageChange?: (page: number) => void;
-  /** Called when gallery size changes */
-  onSizeChange?: (size: GallerySize) => void;
   /** Adds the Sort control; the page passes its param to the query. */
   sort?: SortParam<F>;
 }
@@ -45,41 +38,22 @@ export function BookGallerySection<F extends string>({
   title,
   emptyMessage,
   seriesId,
-  onPageChange,
-  onSizeChange,
   sort,
 }: BookGallerySectionProps<F>) {
-  const [, setSearchParams] = useSearchParams();
   const {
     savedSize,
     effectiveSize,
     isSizeDirty,
+    columns,
     itemsPerPage,
     currentPage,
     offset,
     isSaving,
+    goToPage,
     applyGallerySize,
     saveSizeAsDefault,
-  } = useGallerySizeParam({
-    onChange: (size, page) => {
-      onSizeChange?.(size);
-      onPageChange?.(page);
-    },
-  });
+  } = useGallerySizeParam();
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
-
-  const handlePageChange: PageChangeHandler = (page, options) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (page === 1) {
-        params.delete("page");
-      } else {
-        params.set("page", page.toString());
-      }
-      return params;
-    }, options);
-    onPageChange?.(page);
-  };
 
   // Treat any unresolved query as loading, including a disabled query
   // waiting on its `enabled` gate (isLoading is false there, since TanStack
@@ -161,22 +135,21 @@ export function BookGallerySection<F extends string>({
         <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
       )}
 
-      <div className="flex flex-wrap gap-4 mb-6 md:mb-8">
+      <GalleryGrid columns={columns}>
         {query.data?.items.map((book) => (
           <BookItem
             book={book}
-            gallerySize={effectiveSize}
             key={book.id}
             libraryId={libraryId}
             seriesId={seriesId}
           />
         ))}
-      </div>
+      </GalleryGrid>
 
       <PaginationFooter
         className="mb-8"
         currentPage={currentPage}
-        onPageChange={handlePageChange}
+        onPageChange={goToPage}
         totalIsCurrent={!query.isPlaceholderData}
         totalPages={totalPages}
       />

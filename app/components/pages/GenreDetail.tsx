@@ -25,11 +25,7 @@ const GenreDetail = () => {
   const navigate = useNavigate();
   const genreId = id ? parseInt(id, 10) : undefined;
 
-  const {
-    itemsPerPage,
-    offset,
-    settingsResolved: userSettingsResolved,
-  } = useGallerySizeParam();
+  const { itemsPerPage, offset, pageSizeResolved } = useGallerySizeParam();
 
   const genreQuery = useGenre(genreId);
   usePageTitle(genreQuery.data?.name ?? "Genre");
@@ -44,7 +40,7 @@ const GenreDetail = () => {
       sort: sort.param,
     },
     {
-      enabled: userSettingsResolved && Boolean(genreId),
+      enabled: pageSizeResolved && Boolean(genreId),
     },
   );
 
