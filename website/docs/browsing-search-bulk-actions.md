@@ -67,6 +67,8 @@ Covers use thumbnails sized for their display size and screen pixel density. A n
 
 Long lists are split into pages, with controls below the last item. The double arrows go to the first and last page. To reach a page in between, open **Page _N_ of _M_** and type its number: the list narrows to pages that start with what you typed, and **Enter** opens the first match.
 
+The **People**, **Genres**, **Tags**, and **Publishers** pages lay their entries out in columns that fill the window, and like galleries each page holds whole rows, so a wider window shows more per page and the page count changes with the window. A page link names the first entry on the page, so it opens on a page that includes that entry on any screen.
+
 ## Selecting Books
 
 Click the explicit **Select** button on the library gallery to enter selection mode. Click books to add or remove them from the selection. Selections remain active as you move between gallery pages.

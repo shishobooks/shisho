@@ -38,7 +38,7 @@ export function useSortParam<F extends string>(config: SortConfig<F>) {
         } else {
           params.delete("sort");
         }
-        // Galleries page with `start`, resource lists with `page`.
+        // Clears `start`, and an old link's `page`.
         resetPaging(params);
         return params;
       });

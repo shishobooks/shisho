@@ -1,13 +1,14 @@
-import { useCallback } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
-import type { PageChangeHandler } from "@/components/library/PaginationFooter";
+import { RESOURCE_PAGE_TARGET } from "@/constants/resourceList";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { useSortParam } from "@/hooks/useSortParam";
-import { parsePageParam } from "@/libraries/pagination";
+import { useStartPaging } from "@/hooks/useStartPaging";
+import {
+  resourceListColumns,
+  resourceListPageSize,
+} from "@/libraries/resourceListLayout";
 import type { SortConfig } from "@/libraries/sortSpec";
-
-const ITEMS_PER_PAGE = 50;
 
 export interface ResourceListQuery {
   limit: number;
@@ -17,35 +18,32 @@ export interface ResourceListQuery {
   sort?: string;
 }
 
-/** Hook that manages URL-driven search, sort, and pagination state for resource lists. */
+/**
+ * Hook that manages URL-driven search, sort, and pagination state for
+ * resource lists. Entries sit side by side in the columns the content width
+ * fits, and a page is whole rows of them (see `useStartPaging`).
+ */
 export function useResourceListState<F extends string>(
   sortConfig: SortConfig<F>,
 ) {
   const { libraryId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = parsePageParam(searchParams.get("page"));
   const { searchQuery, setSearchQuery } = useSearchQueryParam();
   const sort = useSortParam(sortConfig);
-
-  const limit = ITEMS_PER_PAGE;
-  const offset = (currentPage - 1) * limit;
+  const { columns, pageSize, offset, currentPage, measured, goToPage } =
+    useStartPaging({
+      columnsFor: resourceListColumns,
+      pageSizeFor: resourceListPageSize,
+      // Pages held a fixed fifty entries before they filled the window.
+      legacyPageSize: RESOURCE_PAGE_TARGET,
+    });
 
   const queryParams: ResourceListQuery = {
-    limit,
+    limit: pageSize,
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     search: searchQuery || undefined,
     sort: sort.param,
   };
-
-  const handlePageChange = useCallback<PageChangeHandler>(
-    (page, options) => {
-      const newParams = new URLSearchParams(searchParams);
-      newParams.set("page", page.toString());
-      setSearchParams(newParams, options);
-    },
-    [searchParams, setSearchParams],
-  );
 
   return {
     libraryId: libraryId ?? "",
@@ -53,10 +51,12 @@ export function useResourceListState<F extends string>(
     searchQuery,
     setSearchQuery,
     sort,
+    columns,
+    pageSizeResolved: measured,
     queryParams,
-    limit,
+    limit: pageSize,
     offset,
-    handlePageChange,
+    handlePageChange: goToPage,
   };
 }
 

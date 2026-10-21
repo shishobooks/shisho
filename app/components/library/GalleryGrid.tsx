@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import { cn } from "@/libraries/utils";
 
 interface GalleryGridProps {
-  /** From `useGallerySizeParam`, so the grid and the page size agree. */
+  /** From the paging hook (`useStartPaging`), so grid and page size agree. */
   columns: number;
   children: ReactNode;
   className?: string;
 }
 
-// Cover cards in equal columns that span the content width edge to edge.
+// Gallery covers or list entries in equal columns that span the content
+// width edge to edge.
 // The column count comes from the hook rather than CSS auto-fill, because the
 // page size is whole rows of it.
 const GalleryGrid = ({ columns, children, className }: GalleryGridProps) => (

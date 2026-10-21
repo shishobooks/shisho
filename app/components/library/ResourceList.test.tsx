@@ -43,6 +43,8 @@ const state = {
   searchQuery: "",
   setSearchQuery: vi.fn(),
   sort: defaultSort,
+  columns: 1,
+  pageSizeResolved: true,
   queryParams: { limit: 50, offset: 0 },
   limit: 50,
   offset: 0,
