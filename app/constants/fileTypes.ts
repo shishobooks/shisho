@@ -1,5 +1,6 @@
 export const FILE_TYPE_OPTIONS = [
   { value: "epub", label: "EPUB" },
+  { value: "kepub", label: "KePub" },
   { value: "azw3", label: "AZW3" },
   { value: "mobi", label: "MOBI" },
   { value: "m4b", label: "M4B" },

@@ -413,6 +413,17 @@ func TestFormatDownloadFilename(t *testing.T) {
 			file:     &models.File{FileType: "epub", Name: nil},
 			expected: "[Author] Book Title.epub",
 		},
+		{
+			name: "a KePub keeps its .kepub.epub extension",
+			book: &models.Book{
+				Title: "Book Title",
+				Authors: []*models.Author{
+					{SortOrder: 0, Person: &models.Person{Name: "Author"}},
+				},
+			},
+			file:     &models.File{FileType: models.FileTypeKePub},
+			expected: "Author - Book Title.kepub.epub",
+		},
 	}
 
 	for _, tt := range tests {

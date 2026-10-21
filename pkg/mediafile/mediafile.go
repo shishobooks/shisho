@@ -1,10 +1,16 @@
 package mediafile
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+// ErrDRMProtected is returned by a parser for a file whose content is
+// encrypted. Such a file is never imported; a plugin input converter can
+// still produce a DRM-free copy beside it.
+var ErrDRMProtected = errors.New("file is DRM-protected")
 
 // ParsedAuthor represents an author with optional role information.
 // Role is used for CBZ ComicInfo.xml creator types (writer, penciller, etc.).

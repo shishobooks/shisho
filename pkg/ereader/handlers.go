@@ -683,7 +683,7 @@ func (h *handler) DownloadFile(c echo.Context) error {
 // failed Conversion is an error, never the Original File in its place.
 func (h *handler) DownloadFileAs(c echo.Context) error {
 	deliveredType := c.Param("deliveredType")
-	if !models.IsDeliveredFileType(deliveredType) {
+	if !models.IsBuiltInFileType(deliveredType) {
 		return errcodes.NotFound("File")
 	}
 	return h.serveDownload(c, deliveredType)

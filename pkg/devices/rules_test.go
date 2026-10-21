@@ -24,6 +24,11 @@ func TestService_Rules(t *testing.T) {
 	t.Parallel()
 
 	builtIn := delivery.BuiltInRules()
+	koboPreset := []delivery.Rule{
+		rule(models.FileTypeKePub, models.FileTypeKePub),
+		rule(models.FileTypeEPUB, models.FileTypeKePub),
+		rule(models.FileTypeCBZ, models.FileTypeKePub),
+	}
 	cases := []struct {
 		name        string
 		deviceType  string
@@ -37,7 +42,7 @@ func TestService_Rules(t *testing.T) {
 			name:       "a new Kobo follows its preset",
 			deviceType: DeviceTypeKobo,
 			wantMode:   RulesModePreset,
-			want:       []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeKePub), rule(models.FileTypeCBZ, models.FileTypeKePub)},
+			want:       koboPreset,
 		},
 		{
 			name:       "a new Kindle follows its preset",
@@ -96,7 +101,7 @@ func TestService_Rules(t *testing.T) {
 			deviceType: DeviceTypeKobo,
 			mode:       RulesModePreset,
 			wantMode:   RulesModePreset,
-			want:       []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeKePub), rule(models.FileTypeCBZ, models.FileTypeKePub)},
+			want:       koboPreset,
 		},
 	}
 
@@ -127,6 +132,29 @@ func TestService_Rules(t *testing.T) {
 			assert.Equal(t, tc.want, rules)
 		})
 	}
+}
+
+// Under the Kobo preset, a book with a KePub and an EPUB sends the KePub as
+// itself, and a book with only an EPUB still gets it as a KePub.
+func TestKoboPreset_PrefersKePub(t *testing.T) {
+	t.Parallel()
+	preset := PresetRules(DeviceTypeKobo)
+	book := &models.Book{ID: 1, Files: []*models.File{
+		{ID: 1, BookID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain},
+		{ID: 2, BookID: 1, FileType: models.FileTypeKePub, FileRole: models.FileRoleMain},
+	}}
+
+	result := delivery.Resolve(preset, book)
+	require.Len(t, result.Ebook, 1)
+	assert.Equal(t, 2, result.Ebook[0].File.ID)
+	assert.Equal(t, models.FileTypeKePub, result.Ebook[0].DeliveredFileType)
+	assert.Empty(t, result.Ebook[0].Chain, "a KePub goes as itself, with no Conversion")
+
+	book.Files = book.Files[:1]
+	result = delivery.Resolve(preset, book)
+	require.Len(t, result.Ebook, 1)
+	assert.Equal(t, 1, result.Ebook[0].File.ID)
+	assert.Equal(t, models.FileTypeKePub, result.Ebook[0].DeliveredFileType)
 }
 
 // A Device following the default follows later edits to it, and stops once

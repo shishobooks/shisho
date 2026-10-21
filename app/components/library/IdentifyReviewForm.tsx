@@ -72,6 +72,7 @@ import {
 import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import {
+  fileTypeLabel,
   formatCount,
   formatDuration,
   formatMetadataFieldLabel,
@@ -1121,7 +1122,7 @@ export function IdentifyReviewForm({
   const fileSectionHint = useMemo(() => {
     if (!file) return null;
     const parts: string[] = [];
-    parts.push(file.file_type.toUpperCase());
+    parts.push(fileTypeLabel(file.file_type));
     const trimmedName = file.name?.trim();
     if (trimmedName) parts.push(trimmedName);
     if (file.audiobook_duration_seconds != null) {

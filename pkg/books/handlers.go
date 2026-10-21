@@ -1663,7 +1663,7 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 	if deliveredType == "" {
 		deliveredType = file.FileType
 	}
-	if deliveredType != file.FileType && !models.IsDeliveredFileType(deliveredType) {
+	if deliveredType != file.FileType && !models.IsBuiltInFileType(deliveredType) {
 		return errcodes.ValidationError(fmt.Sprintf("Unknown file type %q.", deliveredType))
 	}
 

@@ -1,12 +1,13 @@
 # Supported Formats
 
-Shisho has native support for six main-file formats. See [Reading and Playback](./reading-and-playback.md) for the in-app readers, [Metadata](./metadata.md) for the fields Shisho manages, and [Getting Started](./getting-started.md) for library setup.
+Shisho has native support for seven main-file formats. See [Reading and Playback](./reading-and-playback.md) for the in-app readers, [Metadata](./metadata.md) for the fields Shisho manages, and [Getting Started](./getting-started.md) for library setup.
 
 ## Capability Matrix
 
 | Format | Import | Metadata Extraction | In-App Reader or Player | Generated Download |
 |--------|--------|---------------------|-------------------------|--------------------|
 | **EPUB** | Yes | Package metadata, navigation, and embedded cover data | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | EPUB with supported current metadata and [edited chapters](./metadata.md#chapters) applied |
+| **KePub** (`.kepub.epub`) | Yes | The same as EPUB; see [KePub](#kepub) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | KePub with supported current metadata and [edited chapters](./metadata.md#chapters) applied, Kobo markup kept |
 | **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied and chapters written as [folders](#cbz-downloads) |
 | **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
@@ -23,7 +24,17 @@ CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parse
 
 ## First Downloads
 
-A generated download starts as soon as it is requested and is built while it is sent. EPUB, M4B, MOBI, AZW3, and PDF downloads know their size before they start, so the device or browser shows progress even the first time. A CBZ, a KePub, and an EPUB made from a CBZ do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+A generated download starts as soon as it is requested and is built while it is sent. EPUB, KePub, M4B, MOBI, AZW3, and PDF downloads of a file as its own type know their size before they start, so the device or browser shows progress even the first time. A CBZ, a KePub converted from an EPUB or CBZ, and an EPUB made from a CBZ do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+
+## KePub
+
+A KePub is the EPUB variant Kobo's own reader is built for. Shisho imports any file named `.kepub.epub` as a **KePub**, and every other `.epub` as an EPUB. A scan reads a KePub's metadata, chapters, and cover the same way it reads an EPUB's. Organizing a library keeps the whole `.kepub.epub` extension.
+
+A KePub downloaded as KePub gets Shisho's current metadata, cover, and chapter edits, the same as an EPUB download, and keeps the Kobo markup inside it, so it still opens in Kobo's own reader. A KePub converted from an EPUB or CBZ is a different download; see [Conversions](#conversions).
+
+Files named `.kepub.epub` that an earlier Shisho version imported as EPUB become KePub on upgrade, with no rescan.
+
+DRM-protected KePubs, such as books bought from the Kobo store and copied off a Kobo, are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-file-never-appears).
 
 ## MOBI and AZW3
 
@@ -47,7 +58,7 @@ Downloads write the same fields back into the file, with Shisho's current values
 
 A generated download is named with its file type, so an `.azw` or `.prc` file downloads as `.mobi`. **Download Original** keeps the file's own name.
 
-DRM-protected files are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-mobi-or-azw3-file-never-appears). KFX, Topaz, and other Kindle formats that are not MOBI or AZW3 are skipped, even when they use the `.azw` extension.
+DRM-protected files are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-file-never-appears). KFX, Topaz, and other Kindle formats that are not MOBI or AZW3 are skipped, even when they use the `.azw` extension.
 
 ## CBZ Page Images
 
@@ -84,7 +95,7 @@ A file can be downloaded as its own file type or as another one Shisho converts 
 | **CBZ** | **KePub** | A fixed-layout KePub with one page per image, named `.kepub.epub` |
 | **CBZ** | **EPUB** | A fixed-layout EPUB 3 with one page per image, for readers that open EPUB but not CBZ |
 
-M4B, PDF, MOBI, and AZW3 files download only as themselves. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
+KePub, M4B, PDF, MOBI, and AZW3 files download only as themselves. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
 
 Each file type a file is downloaded as is generated and cached on its own, so downloading a CBZ as EPUB does not replace its cached CBZ or KePub. Editing the book's metadata regenerates each of them on its next download.
 
@@ -96,7 +107,7 @@ Each user's default Delivery Rules decide which file type the web app's download
 
 The rules are an ordered list with at most one rule per file type, each naming the file type to send it as: itself, or one a [conversion](#conversions) reaches, such as CBZ as EPUB. For each book, the first rule matching one of its files wins, and every file of that type goes, so two EPUB editions both appear. Ebooks and audiobooks are decided separately, so a book with an EPUB and an M4B delivers both when both have a rule.
 
-Until you edit them, your rules follow Shisho's defaults, which send every file type as itself in this order: EPUB, AZW3, MOBI, CBZ, PDF, M4B. Under the defaults, a book with an EPUB and a PDF offers only the EPUB over OPDS. Saving any change makes the list your own; a later Shisho release that changes the defaults then no longer changes your list. **Reset to Shisho's defaults** makes it follow them again. A list needs at least one rule.
+Until you edit them, your rules follow Shisho's defaults, which send every file type as itself in this order: EPUB, KePub, AZW3, MOBI, CBZ, PDF, M4B. Under the defaults, a book with an EPUB and a PDF offers only the EPUB over OPDS. Saving any change makes the list your own; a later Shisho release that changes the defaults then no longer changes your list. **Reset to Shisho's defaults** makes it follow them again. A list needs at least one rule.
 
 A file type with no rule is left out of OPDS and the eReader browser, along with books, series, and authors that have nothing left to offer. The web app still downloads such a file as itself, and its **Download as** menu always offers every file type.
 

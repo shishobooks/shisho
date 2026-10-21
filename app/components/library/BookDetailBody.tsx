@@ -107,6 +107,7 @@ import {
 } from "@/utils/downloadUrl";
 import {
   fileLabel,
+  fileTypeLabel,
   formatCount,
   formatDate,
   formatDateTime,
@@ -329,10 +330,10 @@ const FileRow = ({
         <div className="flex items-center gap-2">
           {/* File type badge */}
           <Badge
-            className="uppercase text-xs shrink-0"
+            className="text-xs shrink-0"
             variant={isSupplement ? "outline" : "secondary"}
           >
-            {file.file_type}
+            {fileTypeLabel(file.file_type)}
           </Badge>
 
           {/* Unreadable file warning */}

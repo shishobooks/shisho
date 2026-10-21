@@ -27,7 +27,7 @@ export const formatFileSize = (bytes: number): string => {
 export const fileLabel = (file: {
   display_name: string;
   file_type: string;
-}): string => file.display_name || file.file_type.toUpperCase();
+}): string => file.display_name || fileTypeLabel(file.file_type);
 
 /**
  * The title a reader sees for one file: its name when set, otherwise the

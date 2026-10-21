@@ -41,7 +41,10 @@ import (
 //   - 8: Each File Type a File is delivered as has its own cache entry
 //     (pkg/downloadcache/metadata.go), so entries cached under the old
 //     names are abandoned.
-const GeneratorVersion = 8
+//   - 9: Fingerprints carry the File's own File Type (SourceFileType), so a
+//     File reclassified as KePub misses what was cached while it was an
+//     EPUB.
+const GeneratorVersion = 9
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
@@ -63,6 +66,7 @@ type Fingerprint struct {
 	CoverPage        *int                    `json:"cover_page,omitempty"` // For page-based files (CBZ, PDF): page index of cover
 	Chapters         []FingerprintChapter    `json:"chapters,omitempty"`
 	Format           string                  `json:"format,omitempty"` // Delivered File Type
+	SourceFileType   string                  `json:"source_file_type"` // The File's own File Type
 	Name             *string                 `json:"name,omitempty"`   // File name (edition name)
 	Language         *string                 `json:"language,omitempty"`
 	Abridged         *bool                   `json:"abridged,omitempty"`
@@ -212,6 +216,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 
 	// Add file-level metadata
 	if file != nil {
+		fp.SourceFileType = file.FileType
 		fp.URL = file.URL
 		fp.ReleaseDate = file.ReleaseDate
 		fp.Name = file.Name

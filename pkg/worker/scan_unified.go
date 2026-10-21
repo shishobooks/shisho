@@ -498,7 +498,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	} else {
 		var err error
 		metadata, err = w.parseFileMetadata(ctx, file.Filepath, file.FileType)
-		if errors.Is(err, mobi.ErrDRMProtected) {
+		if errors.Is(err, mediafile.ErrDRMProtected) {
 			// A DRM-protected file is never in the library, however it got
 			// here, so the record goes as if the file had disappeared. Its
 			// cover and sidecar go too: a DRM-free copy put in its place
@@ -2479,7 +2479,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 
 	// Parse metadata from file
 	metadata, err := w.parseFileMetadata(ctx, path, fileType)
-	if errors.Is(err, mobi.ErrDRMProtected) {
+	if errors.Is(err, mediafile.ErrDRMProtected) {
 		logDRMSkip(path, logWarn)
 		return nil, nil
 	}
@@ -2867,7 +2867,7 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 	var filename string
 	if isRootLevelFile {
 		// Use the file's base name without extension
-		filename = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		filename = strings.TrimSuffix(filepath.Base(path), models.FileExtensionForPath(path))
 	} else {
 		// Use the directory name
 		filename = filepath.Base(filepath.Dir(path))
@@ -2885,7 +2885,7 @@ func deriveInitialTitle(path string, isRootLevelFile bool, metadata *mediafile.P
 
 	// If title is empty after stripping, fall back to raw filename
 	if title == "" {
-		title = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		title = strings.TrimSuffix(filepath.Base(path), models.FileExtensionForPath(path))
 	}
 
 	// Normalize series number indicators in filepath-based title
@@ -3333,6 +3333,8 @@ func (w *Worker) parseFileMetadata(ctx context.Context, path, fileType string) (
 	switch fileType {
 	case models.FileTypeEPUB:
 		metadata, err = epub.Parse(path)
+	case models.FileTypeKePub:
+		metadata, err = epub.ParseKePub(path)
 	case models.FileTypeCBZ:
 		metadata, err = cbz.Parse(path)
 	case models.FileTypeM4B:
@@ -3486,14 +3488,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 		if enricherCap == nil {
 			continue
 		}
-		handles := false
-		for _, ft := range enricherCap.FileTypes {
-			if ft == file.FileType {
-				handles = true
-				break
-			}
-		}
-		if !handles {
+		if !enricherCap.HandlesFileType(file.FileType) {
 			continue
 		}
 

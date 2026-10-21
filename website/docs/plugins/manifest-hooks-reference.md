@@ -76,7 +76,7 @@ A plugin can declare and implement any combination of the three hook capabilitie
 - `targetType` is required and names the produced extension.
 - `mimeTypes` and `description` are optional.
 
-Input converters also receive files of built-in types. Shisho does not import DRM-protected MOBI and AZW3 files, but a converter that declares `mobi` or `azw3` still receives them, and a DRM-free copy it writes beside the source is imported like any other file. MOBI files can also have the `azw` or `prc` extension, so list those too to receive them.
+Input converters also receive files of built-in types. Shisho does not import DRM-protected MOBI, AZW3, and KePub files, but a converter that declares `mobi`, `azw3`, or, for a `.kepub.epub`, `epub` still receives them, and a DRM-free copy it writes beside the source is imported like any other file. MOBI files can also have the `azw` or `prc` extension, so list those too to receive them.
 
 ### File Parser Capability
 
@@ -114,6 +114,7 @@ When MIME types are present, Shisho compares compatible MIME values rather than 
 
 - `fields` is required. Missing or empty fields disable only the enricher hook and produce a load warning.
 - `fileTypes` is optional. Omit it to allow every file type.
+- A `.kepub.epub` file has the file type `kepub`. An enricher that declares `epub` also runs on KePub files; declare `kepub` alone to run only on them.
 - Invalid field names cause plugin loading to fail.
 
 Valid declarations are:

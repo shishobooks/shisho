@@ -74,7 +74,7 @@ func GenerateOrganizedFolderName(opts OrganizedNameOptions) string {
 // For M4B files, includes narrator in braces: Title {Narrator}.m4b.
 // Author names are NOT included since files are already inside author-prefixed folders.
 func GenerateOrganizedFileName(opts OrganizedNameOptions, originalFilepath string) string {
-	ext := filepath.Ext(originalFilepath)
+	ext := models.FileExtensionForPath(originalFilepath)
 
 	// For organized files in folders, we don't include series numbers or author names
 	// in the filename since the folder already contains this information.

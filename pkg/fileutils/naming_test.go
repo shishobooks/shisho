@@ -359,3 +359,18 @@ func TestGenerateOrganizedFolderName_TitleAlreadyHasChapter(t *testing.T) {
 	// Title already encodes the number — don't double-stamp.
 	assert.Equal(t, "[Eiichiro Oda] One Piece c042", got)
 }
+
+// A KePub keeps its whole .kepub.epub extension through a rename, or the
+// next scan would type it as an EPUB.
+func TestGenerateOrganizedFileName_KePubKeepsItsExtension(t *testing.T) {
+	t.Parallel()
+	opts := OrganizedNameOptions{Title: "New Title", FileType: "kepub"}
+	assert.Equal(t, "New Title.kepub.epub", GenerateOrganizedFileName(opts, "/lib/Old/old.kepub.epub"))
+	assert.Equal(t, "New Title.epub", GenerateOrganizedFileName(opts, "/lib/Old/old.epub"))
+}
+
+func TestGenerateUniqueFilepath_KePubKeepsItsExtension(t *testing.T) {
+	t.Parallel()
+	taken := func(path string) bool { return path == "/lib/Book/Title.kepub.epub" }
+	assert.Equal(t, "/lib/Book/Title (1).kepub.epub", generateUniqueFilepath("/lib/Book/Title.kepub.epub", "", taken))
+}

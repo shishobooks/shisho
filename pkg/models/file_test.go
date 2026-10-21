@@ -168,6 +168,10 @@ func TestFileTypeForPath(t *testing.T) {
 		want string
 	}{
 		{"/lib/Book/book.epub", FileTypeEPUB},
+		{"/lib/Book/book.kepub.epub", FileTypeKePub},
+		{"/lib/Book/Book.KEPUB.EPUB", FileTypeKePub},
+		{"/lib/Book/book.kepub", "kepub"},
+		{"/lib/Book.kepub/book.epub", FileTypeEPUB},
 		{"/lib/Book/book.mobi", FileTypeMOBI},
 		{"/lib/Book/book.azw", FileTypeMOBI},
 		{"/lib/Book/book.PRC", FileTypeMOBI},
@@ -186,7 +190,7 @@ func TestFileTypeForPath(t *testing.T) {
 func TestIsBuiltInFileType(t *testing.T) {
 	t.Parallel()
 
-	for _, ft := range []string{FileTypeEPUB, FileTypeCBZ, FileTypeM4B, FileTypePDF, FileTypeMOBI, FileTypeAZW3} {
+	for _, ft := range []string{FileTypeEPUB, FileTypeKePub, FileTypeCBZ, FileTypeM4B, FileTypePDF, FileTypeMOBI, FileTypeAZW3} {
 		assert.True(t, IsBuiltInFileType(ft), ft)
 	}
 	for _, ft := range []string{"azw", "prc", "txt", "fb2", ""} {
@@ -197,7 +201,7 @@ func TestIsBuiltInFileType(t *testing.T) {
 func TestIsEbookFileType(t *testing.T) {
 	t.Parallel()
 
-	for _, ft := range []string{FileTypeEPUB, FileTypeAZW3, FileTypeMOBI, FileTypeCBZ, FileTypePDF} {
+	for _, ft := range []string{FileTypeEPUB, FileTypeKePub, FileTypeAZW3, FileTypeMOBI, FileTypeCBZ, FileTypePDF} {
 		assert.True(t, IsEbookFileType(ft), ft)
 	}
 	for _, ft := range []string{FileTypeM4B, "txt", ""} {
@@ -208,7 +212,8 @@ func TestIsEbookFileType(t *testing.T) {
 func TestEbookCoverRank(t *testing.T) {
 	t.Parallel()
 
-	assert.Less(t, EbookCoverRank(FileTypeEPUB), EbookCoverRank(FileTypeAZW3))
+	assert.Less(t, EbookCoverRank(FileTypeEPUB), EbookCoverRank(FileTypeKePub))
+	assert.Less(t, EbookCoverRank(FileTypeKePub), EbookCoverRank(FileTypeAZW3))
 	assert.Less(t, EbookCoverRank(FileTypeAZW3), EbookCoverRank(FileTypeMOBI))
 	assert.Less(t, EbookCoverRank(FileTypeMOBI), EbookCoverRank(FileTypeCBZ))
 	assert.Equal(t, EbookCoverRank(FileTypeCBZ), EbookCoverRank(FileTypePDF), "the other ebook formats keep their existing order")
@@ -219,4 +224,14 @@ func TestFileTypeMimeType_MOBI(t *testing.T) {
 
 	assert.Equal(t, "application/x-mobipocket-ebook", FileTypeMimeType(FileTypeMOBI))
 	assert.Equal(t, "application/vnd.amazon.mobi8-ebook", FileTypeMimeType(FileTypeAZW3))
+}
+
+func TestFileExtensionForPath(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, ".epub", FileExtensionForPath("/lib/Book/book.epub"))
+	assert.Equal(t, ".kepub.epub", FileExtensionForPath("/lib/Book/book.kepub.epub"))
+	assert.Equal(t, ".KePub.EPUB", FileExtensionForPath("/lib/Book/book.KePub.EPUB"), "keeps the path's case")
+	assert.Equal(t, ".m4b", FileExtensionForPath("/lib/Book/book.m4b"))
+	assert.Empty(t, FileExtensionForPath("/lib/Book/README"))
 }

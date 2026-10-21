@@ -77,6 +77,16 @@ func TestResolve_UserDefault(t *testing.T) {
 			ebook: []delivered{{2, models.FileTypeEPUB}},
 		},
 		{
+			name:  "following the built-in rules, a KePub goes as itself",
+			files: []testFile{{fileType: models.FileTypeKePub}, {fileType: models.FileTypeAZW3}},
+			ebook: []delivered{{0, models.FileTypeKePub}},
+		},
+		{
+			name:  "following the built-in rules, EPUB outranks KePub",
+			files: []testFile{{fileType: models.FileTypeKePub}, {fileType: models.FileTypeEPUB}},
+			ebook: []delivered{{1, models.FileTypeEPUB}},
+		},
+		{
 			name:  "a custom rule converts its source File Type",
 			rules: []Rule{{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeEPUB}},
 			files: []testFile{{fileType: models.FileTypeCBZ}},
@@ -199,7 +209,6 @@ func TestService_SaveUserDefault_RefusesInvalidLists(t *testing.T) {
 		}},
 		{name: "a File Type no Conversion reaches", rules: []Rule{{SourceFileType: models.FileTypePDF, DeliveredFileType: models.FileTypeEPUB}}},
 		{name: "an unknown source File Type", rules: []Rule{{SourceFileType: "cbr", DeliveredFileType: "cbr"}}},
-		{name: "KePub as a source File Type", rules: []Rule{{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeKePub}}},
 	}
 
 	for _, tt := range tests {

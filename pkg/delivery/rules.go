@@ -15,6 +15,7 @@ import (
 // the others.
 var builtInOrder = []string{
 	models.FileTypeEPUB,
+	models.FileTypeKePub,
 	models.FileTypeAZW3,
 	models.FileTypeMOBI,
 	models.FileTypeCBZ,

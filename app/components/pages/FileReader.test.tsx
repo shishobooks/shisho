@@ -61,7 +61,7 @@ describe("FileReader dispatch", () => {
     expect(screen.getByText("cbz-reader")).toBeInTheDocument();
   });
 
-  it.each(["epub", "azw3", "mobi"])(
+  it.each(["epub", "kepub", "azw3", "mobi"])(
     "renders the Reflowable reader for %s files",
     (fileType) => {
       renderAt(fileType);

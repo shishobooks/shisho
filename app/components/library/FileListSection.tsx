@@ -14,6 +14,7 @@ import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
 import {
   fileLabel,
+  fileTypeLabel,
   formatDuration,
   formatPageCount,
   formatShowingRange,
@@ -165,7 +166,7 @@ export function FileListSection({
             <div className="flex items-center gap-2 shrink-0">
               <FileMetaInfo file={file} />
               <FileScanErrorBadge file={file} interactive={false} />
-              <Badge variant="outline">{file.file_type?.toUpperCase()}</Badge>
+              <Badge variant="outline">{fileTypeLabel(file.file_type)}</Badge>
             </div>
           </Link>
         ))}

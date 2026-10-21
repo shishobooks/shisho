@@ -58,6 +58,13 @@ func TestDeduplicateFilenames(t *testing.T) {
 		require.Contains(t, values, "Book (2).epub")
 		require.Contains(t, values, "Book (3).epub")
 	})
+
+	t.Run("a KePub keeps its whole extension", func(t *testing.T) {
+		t.Parallel()
+		result := DeduplicateFilenames(map[int]string{1: "Book.kepub.epub", 2: "Book.kepub.epub"})
+		assert.Equal(t, "Book.kepub.epub", result[1])
+		assert.Equal(t, "Book (2).kepub.epub", result[2])
+	})
 }
 
 func TestProcessBulkDownloadJob_EmptyFileIDs(t *testing.T) {

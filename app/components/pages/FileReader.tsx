@@ -12,6 +12,7 @@ import {
   FileTypeAZW3,
   FileTypeCBZ,
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeM4B,
   FileTypeMOBI,
   FileTypePDF,
@@ -78,6 +79,7 @@ export default function FileReader() {
         <PDFReader bookTitle={book?.title} file={file} libraryId={libraryId!} />
       );
     case FileTypeEPUB:
+    case FileTypeKePub:
     case FileTypeAZW3:
     case FileTypeMOBI:
       return <ReflowableReader bookTitle={book?.title} file={file} />;
