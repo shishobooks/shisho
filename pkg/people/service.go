@@ -41,7 +41,7 @@ type ListPeopleOptions struct {
 // personSortFields are the sort fields the person list accepts.
 var personSortFields = sortspec.ResourceFields{
 	sortspec.FieldName:              "p.sort_name",
-	sortspec.FieldAuthoredBookCount: "(SELECT COUNT(*) FROM authors a WHERE a.person_id = p.id)",
+	sortspec.FieldAuthoredBookCount: "(SELECT COUNT(DISTINCT a.book_id) FROM authors a WHERE a.person_id = p.id)",
 	sortspec.FieldNarratedFileCount: "(SELECT COUNT(*) FROM narrators n WHERE n.person_id = p.id)",
 	sortspec.FieldDateAdded:         "p.created_at",
 }
@@ -389,12 +389,15 @@ func (svc *Service) GetNarratedFilesPaginated(ctx context.Context, personID, lim
 }
 
 // GetAuthoredBookCount returns the count of books authored by this person.
+// A person has an author row per role on a book, so it counts distinct books.
 func (svc *Service) GetAuthoredBookCount(ctx context.Context, personID int) (int, error) {
-	count, err := svc.db.NewSelect().
+	var count int
+	err := svc.db.NewSelect().
 		Model((*models.Author)(nil)).
-		Where("person_id = ?", personID).
-		Count(ctx)
-	return int(count), errors.WithStack(err)
+		ColumnExpr("COUNT(DISTINCT a.book_id)").
+		Where("a.person_id = ?", personID).
+		Scan(ctx, &count)
+	return count, errors.WithStack(err)
 }
 
 // GetNarratedFileCount returns the count of files narrated by this person.

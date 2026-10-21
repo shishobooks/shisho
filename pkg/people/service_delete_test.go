@@ -58,6 +58,16 @@ func createAuthoredBook(t *testing.T, db *bun.DB, lib *models.Library, source st
 	return book.ID
 }
 
+// addAuthorRoles credits personID on bookID once per role, as a CBZ does for
+// a creator who both writes and draws it.
+func addAuthorRoles(t *testing.T, db *bun.DB, bookID, personID int, roles ...string) {
+	t.Helper()
+	for i, role := range roles {
+		_, err := db.NewInsert().Model(&models.Author{BookID: bookID, PersonID: personID, SortOrder: i + 1, Role: &role}).Exec(context.Background())
+		require.NoError(t, err)
+	}
+}
+
 // createNarratedFile inserts a File with the given narrator_source whose
 // Narrators are the listed People, in order, and returns its ID. Its Book
 // has no Authors and a plugin author_source, so tests can check that a

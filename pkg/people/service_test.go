@@ -202,3 +202,21 @@ func TestFindOrCreatePerson_NoMatch_CreatesNew(t *testing.T) {
 	assert.Equal(t, "Terry Pratchett", found.Name)
 	assert.Equal(t, lib.ID, found.LibraryID)
 }
+
+// A person credited in several roles on one book authored one book, not one
+// per role.
+func TestGetAuthoredBookCount_CountsBooksNotRoles(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := NewService(db)
+	lib := createPersonDeleteLibrary(t, db)
+	artist := createNamedPerson(t, svc, lib, "Artist")
+	addAuthorRoles(t, db, createAuthoredBook(t, db, lib, models.DataSourceManual), artist.ID,
+		models.AuthorRoleWriter, models.AuthorRolePenciller, models.AuthorRoleInker)
+	createAuthoredBook(t, db, lib, models.DataSourceManual, artist.ID)
+
+	count, err := svc.GetAuthoredBookCount(ctx, artist.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+}
