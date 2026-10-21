@@ -48,9 +48,9 @@ var builtInFileTypesByExtension = map[string]string{
 }
 
 // FileTypeForPath returns the file type for a path: KePub for a .kepub.epub,
-// the built-in type its extension maps to (KePub for a bare .kepub too), or else the lowercase extension
-// without the dot, which is how plugin-parsed files and supplements are
-// typed.
+// the built-in type its extension maps to (KePub for a bare .kepub too), or
+// else the lowercase extension without the dot, which is how plugin-parsed
+// files and supplements are typed.
 func FileTypeForPath(path string) string {
 	if isKePubPath(path) {
 		return FileTypeKePub

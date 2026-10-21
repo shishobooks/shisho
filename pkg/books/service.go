@@ -1793,10 +1793,13 @@ func (svc *Service) DeleteFilesByIDs(ctx context.Context, fileIDs []int) error {
 
 // PromoteSupplementToMain promotes a supplement file to a main file.
 // Used during scan cleanup when the last main file is deleted but a promotable supplement exists.
+// A scan read only the supplement's name, so its stored mtime is cleared and
+// the next scan reads the File in full instead of skipping it as unchanged.
 func (svc *Service) PromoteSupplementToMain(ctx context.Context, fileID int) error {
 	_, err := svc.db.NewUpdate().
 		Model((*models.File)(nil)).
 		Set("file_role = ?", models.FileRoleMain).
+		Set("file_modified_at = NULL").
 		Where("id = ?", fileID).
 		Exec(ctx)
 	return errors.WithStack(err)
@@ -2083,10 +2086,12 @@ func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, librar
 		}
 
 		if toPromote != nil {
-			// Promote this supplement to main
+			// Promote this supplement to main. Clearing its stored mtime
+			// makes the scan that follows read it in full.
 			_, err = svc.db.NewUpdate().
 				Model(toPromote).
 				Set("file_role = ?", models.FileRoleMain).
+				Set("file_modified_at = NULL").
 				WherePK().
 				Exec(ctx)
 			if err != nil {

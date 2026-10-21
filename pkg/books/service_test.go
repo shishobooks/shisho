@@ -1059,13 +1059,15 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 	err = os.WriteFile(supplementFilePath, []byte("supplement content"), 0644)
 	require.NoError(t, err)
 
+	supplementModTime := time.Now()
 	supplementFile := &models.File{
-		LibraryID:     library.ID,
-		BookID:        book.ID,
-		FileType:      models.FileTypeCBZ,
-		FileRole:      models.FileRoleSupplement,
-		Filepath:      supplementFilePath,
-		FilesizeBytes: 18,
+		LibraryID:      library.ID,
+		BookID:         book.ID,
+		FileType:       models.FileTypeCBZ,
+		FileRole:       models.FileRoleSupplement,
+		Filepath:       supplementFilePath,
+		FilesizeBytes:  18,
+		FileModifiedAt: &supplementModTime,
 	}
 	_, err = db.NewInsert().Model(supplementFile).Exec(ctx)
 	require.NoError(t, err)
@@ -1101,6 +1103,7 @@ func TestDeleteFileAndCleanup_PromotesSupplementWhenLastMainDeleted(t *testing.T
 	err = db.NewSelect().Model(&updatedSupplement).Where("id = ?", supplementFile.ID).Scan(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, models.FileRoleMain, updatedSupplement.FileRole)
+	assert.Nil(t, updatedSupplement.FileModifiedAt, "the next scan reads the promoted File in full")
 }
 
 func TestDeleteFileAndCleanup_DeletesBookWhenOnlyUnsupportedSupplementsRemain(t *testing.T) {

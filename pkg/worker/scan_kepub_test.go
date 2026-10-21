@@ -98,3 +98,47 @@ func TestCheckExpectedMimeType_KePubExtensions(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
+
+// Before bare .kepub files were KePubs, a scan attached one as a supplement,
+// reading only its name. Promoted to a main File, it is read in full by the
+// next scan: cover, chapters, and metadata.
+func TestScan_PromotedKePubSupplementIsReadInFull(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	dir := testgen.CreateSubDir(t, libraryPath, "Calibre Book")
+	testgen.GenerateEPUB(t, dir, "Calibre Book - Jane Doe.epub", testgen.EPUBOptions{Title: "Calibre Book", Authors: []string{"Jane Doe"}})
+	kepubPath := testgen.GenerateEPUB(t, dir, "Calibre Book - Jane Doe.kepub", testgen.EPUBOptions{
+		Title: "Calibre Book", Authors: []string{"Jane Doe"}, HasCover: true, KoboMarkup: true,
+	})
+	require.NoError(t, tc.runScan())
+
+	books := tc.listBooks()
+	require.Len(t, books, 1, "a Calibre folder's EPUB and KePub are one book")
+	var kepub *models.File
+	for _, f := range tc.listFiles() {
+		assert.Equal(t, models.FileRoleMain, f.FileRole, "%s is a main File", f.Filepath)
+		if f.Filepath == kepubPath {
+			kepub = f
+		}
+	}
+	require.NotNil(t, kepub)
+	// Make it what an earlier version left: a supplement with no cover, its
+	// size and mtime recorded by a later scan.
+	kepub.FileRole = models.FileRoleSupplement
+	kepub.CoverImageFilename = nil
+	_, err := tc.db.NewUpdate().Model(kepub).Column("file_role", "cover_image_filename").WherePK().Exec(tc.ctx)
+	require.NoError(t, err)
+	require.NoError(t, tc.runScan())
+	require.NoError(t, tc.db.NewSelect().Model(kepub).WherePK().Scan(tc.ctx))
+	require.NotNil(t, kepub.FileModifiedAt, "precondition: the scan recorded the supplement's mtime")
+
+	require.NoError(t, tc.worker.bookService.PromoteSupplementToMain(tc.ctx, kepub.ID))
+	require.NoError(t, tc.runScan())
+
+	require.NoError(t, tc.db.NewSelect().Model(kepub).WherePK().Scan(tc.ctx))
+	assert.Equal(t, models.FileRoleMain, kepub.FileRole)
+	assert.NotNil(t, kepub.CoverImageFilename, "the promoted KePub's cover is extracted")
+}

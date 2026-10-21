@@ -793,6 +793,7 @@ func (h *handler) updateFile(c echo.Context) error {
 	defer h.searchService.ReindexAffected(ctx, affected)
 
 	narratorsChanged := false
+	promoted := false
 	opts := UpdateFileOptions{Columns: []string{}}
 
 	// Handle file role change
@@ -805,6 +806,12 @@ func (h *handler) updateFile(c echo.Context) error {
 			if !models.IsBuiltInFileType(file.FileType) {
 				return errcodes.InvalidState(fmt.Sprintf("Cannot upgrade to main file: file type '%s' is not supported as a main file.", file.FileType))
 			}
+			// A scan read only the supplement's name, so the File is scanned
+			// once saved. Its stored mtime is cleared, or that scan would
+			// skip it as unchanged.
+			promoted = true
+			file.FileModifiedAt = nil
+			opts.Columns = append(opts.Columns, "file_modified_at")
 		}
 
 		// When downgrading from main to supplement, clear all main-file-only metadata
@@ -1185,6 +1192,12 @@ func (h *handler) updateFile(c echo.Context) error {
 	// Update the file
 	if err := h.bookService.UpdateFile(ctx, file, opts); err != nil {
 		return errors.WithStack(err)
+	}
+
+	if promoted {
+		if _, err := h.scanner.Scan(ctx, ScanOptions{FileID: file.ID}); err != nil {
+			log.Warn("failed to scan promoted file", logger.Data{"file_id": file.ID, "error": err.Error()})
+		}
 	}
 
 	// Reload the file with narrators
