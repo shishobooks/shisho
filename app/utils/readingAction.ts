@@ -2,6 +2,7 @@ import {
   FileTypeAZW3,
   FileTypeCBZ,
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeM4B,
   FileTypeMOBI,
   FileTypePDF,
@@ -23,6 +24,7 @@ export function getReadingAction(fileType: string): ReadingAction | null {
     case FileTypeAZW3:
     case FileTypeCBZ:
     case FileTypeEPUB:
+    case FileTypeKePub:
     case FileTypeMOBI:
     case FileTypePDF:
       return "read";

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -38,6 +39,19 @@ func OriginalDownload(file *models.File) *Download {
 	}
 }
 
+// fallbackOriginal is the Original File a device or Share recipient gets in
+// place of a Generated File. A KePub is named .kepub.epub, as a Generated one
+// is, since Kobo's reader and KOReader take only that name as a KePub; a
+// bare .kepub from a Calibre library would otherwise keep its own.
+func fallbackOriginal(file *models.File) *Download {
+	download := OriginalDownload(file)
+	if file.FileType == models.FileTypeKePub {
+		base := strings.TrimSuffix(download.Filename, models.FileExtensionForPath(download.Filename))
+		download.Filename = base + "." + models.DeliveredFileTypeExtension(models.FileTypeKePub)
+	}
+	return download
+}
+
 // FailedPartwayMessage is the web UI routes' answer to a Generated File
 // whose earlier build failed partway (downloadcache.ErrFailedPartway).
 const FailedPartwayMessage = "This file's generated download failed partway through an earlier attempt. Download the original, or edit the book's metadata to try again."
@@ -66,12 +80,12 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {
-		return OriginalDownload(file), nil
+		return fallbackOriginal(file), nil
 	}
 	// Check for a generator before the cache is touched, so a full or
 	// read-only cache cannot fail a file there is nothing to generate for.
 	if _, err := filegen.GeneratorFor(file.FileType, file.FileType); errors.Is(err, filegen.ErrNotImplemented) {
-		return OriginalDownload(file), nil
+		return fallbackOriginal(file), nil
 	}
 
 	download, err := GeneratedDownload(c, cache, book, file, file.FileType)
@@ -84,7 +98,7 @@ func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *m
 			"file_type": file.FileType,
 			"error":     err.Error(),
 		})
-		return OriginalDownload(file), nil
+		return fallbackOriginal(file), nil
 	}
 	return nil, errors.WithStack(err)
 }

@@ -692,6 +692,26 @@ func TestComputeFingerprint_IncludesFileName(t *testing.T) {
 	assert.Equal(t, "Custom Edition Name", *fp.Name)
 }
 
+// A File reclassified from EPUB to KePub misses the entries cached while it
+// was an EPUB, which a KePub delivered as itself no longer matches.
+func TestComputeFingerprint_SourceFileTypeChangesHash(t *testing.T) {
+	t.Parallel()
+	book := &models.Book{Title: "Test Book"}
+
+	asEPUB, err := ComputeFingerprint(book, &models.File{FileType: models.FileTypeEPUB})
+	require.NoError(t, err)
+	asKePub, err := ComputeFingerprint(book, &models.File{FileType: models.FileTypeKePub})
+	require.NoError(t, err)
+	asEPUB.Format = models.FileTypeKePub
+	asKePub.Format = models.FileTypeKePub
+
+	epubHash, err := asEPUB.Hash()
+	require.NoError(t, err)
+	kepubHash, err := asKePub.Hash()
+	require.NoError(t, err)
+	assert.NotEqual(t, epubHash, kepubHash)
+}
+
 func TestComputeFingerprint_DifferentNamesProduceDifferentHashes(t *testing.T) {
 	t.Parallel()
 	book := &models.Book{Title: "Test Book"}

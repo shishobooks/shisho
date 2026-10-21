@@ -173,11 +173,13 @@ func insertScopeBookWithFile(ctx context.Context, t *testing.T, db *bun.DB, libr
 
 func insertScopeFile(ctx context.Context, t *testing.T, db *bun.DB, book *models.Book, dir, name, fileType, fileRole string) *models.File {
 	t.Helper()
-	// EPUBs and CBZs are real, since the Kobo preset converts them.
+	// EPUBs, KePubs, and CBZs are real, since the Kobo preset delivers them.
 	var filePath string
 	switch fileType {
 	case models.FileTypeEPUB:
 		filePath = testgen.GenerateEPUB(t, dir, name+".epub", testgen.EPUBOptions{Title: name})
+	case models.FileTypeKePub:
+		filePath = testgen.GenerateEPUB(t, dir, name+".kepub.epub", testgen.EPUBOptions{Title: name, KoboMarkup: true})
 	case models.FileTypeCBZ:
 		filePath = testgen.GenerateCBZ(t, dir, name+".cbz", testgen.CBZOptions{Title: name})
 	default:

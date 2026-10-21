@@ -60,7 +60,7 @@ import {
 } from "@/types";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { isEbookFileType, isMainEligibleFileType } from "@/utils/fileTypes";
-import { formatCount } from "@/utils/format";
+import { fileTypeLabel, formatCount } from "@/utils/format";
 
 interface FileEditDialogProps {
   file: File;
@@ -596,8 +596,8 @@ export function FileEditDialog({
           <div className="space-y-2">
             <Label>File</Label>
             <div className="flex items-center gap-2 min-w-0">
-              <Badge className="uppercase text-xs shrink-0" variant="secondary">
-                {file.file_type}
+              <Badge className="text-xs shrink-0" variant="secondary">
+                {fileTypeLabel(file.file_type)}
               </Badge>
               <span
                 className="text-sm text-muted-foreground truncate"
@@ -646,8 +646,8 @@ export function FileEditDialog({
             )}
             {isSupplement && !canBeMainFile && (
               <p className="text-sm text-muted-foreground">
-                This file type ({file.file_type}) cannot be upgraded to a main
-                file.
+                This file type ({fileTypeLabel(file.file_type)}) cannot be
+                upgraded to a main file.
               </p>
             )}
           </div>

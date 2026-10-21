@@ -95,6 +95,26 @@ func TestHandleSync_NewlyPreferredFileTakesOverTheEntry(t *testing.T) {
 	assert.Equal(t, entryID, f.entryID(t, epub.ID))
 }
 
+// Under the Kobo preset, a book on the Kobo as a KePub converted from its
+// EPUB that gains a KePub File moves to the KePub in place: same book,
+// category, and delivered File Type, so the entry is handed over.
+func TestHandleSync_AddedKePubTakesOverTheEPUBsEntry(t *testing.T) {
+	t.Parallel()
+	f := newKoboScopeFixture(t)
+	require.Equal(t, devices.RulesModePreset, f.device.DeliveryRulesMode)
+
+	items, token := f.sync(t, "")
+	entryID := f.entryID(t, f.fileA.ID)
+	rev := entitlementRevisionID(t, f.itemFor(t, items, f.fileA.ID).NewEntitlement)
+
+	kepub := f.addFile(t, f.bookA, "Alpha", models.FileTypeKePub)
+
+	items, _ = f.sync(t, token)
+	require.Len(t, items, 1)
+	assertChangedUnder(t, items[0], entryID, rev)
+	assert.Equal(t, entryID, f.entryID(t, kepub.ID))
+}
+
 // A File that stops being delivered with no File to take its entry is
 // removed under its entry id.
 func TestHandleSync_FileWithNoReplacementIsRemoved(t *testing.T) {

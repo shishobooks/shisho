@@ -18,9 +18,8 @@ import (
 )
 
 // ErrDRMProtected is returned by Parse for a file whose text is encrypted.
-// Such a file is never imported; a plugin input converter can still produce
-// a DRM-free copy beside it.
-var ErrDRMProtected = errors.New("file is DRM-protected")
+// It is mediafile.ErrDRMProtected, which the scan checks for every format.
+var ErrDRMProtected = mediafile.ErrDRMProtected
 
 // Parse reads the metadata and cover of a MOBI or AZW3 file. A combo file is
 // read from its KF8 half, which carries the richer metadata. Series, tags,

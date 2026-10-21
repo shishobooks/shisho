@@ -15,6 +15,7 @@ import {
   type File,
 } from "@/types";
 import {
+  fileTypeLabel,
   formatDate,
   formatDuration,
   formatFileSize,
@@ -70,9 +71,7 @@ const FileDetailsTab = ({ file }: FileDetailsTabProps) => {
         <div>
           <p className="font-semibold">File Type</p>
           <div className="mt-1">
-            <Badge className="uppercase" variant="secondary">
-              {file.file_type}
-            </Badge>
+            <Badge variant="secondary">{fileTypeLabel(file.file_type)}</Badge>
           </div>
         </div>
 

@@ -31,6 +31,7 @@ import { PluginHookMetadataEnricher, type Book } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import {
   fileLabel,
+  fileTypeLabel,
   formatDate,
   formatDuration,
   formatFileSize,
@@ -291,7 +292,7 @@ export function IdentifyBookDialog({
                     >
                       <div className="flex items-center gap-2">
                         <Badge className="shrink-0 text-xs" variant="outline">
-                          {file.file_type.toUpperCase()}
+                          {fileTypeLabel(file.file_type)}
                         </Badge>
                         <span className="text-sm truncate min-w-0">
                           {fileLabel(file)}

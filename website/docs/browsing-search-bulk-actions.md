@@ -91,7 +91,7 @@ Merge, delete, and the review actions require Books Write. Users without it stil
 
 ## Bulk Downloads
 
-Select books, click **Download**, and choose from the available **EPUB**, **AZW3**, **MOBI**, **M4B**, **CBZ**, and **PDF** types. Shisho includes every matching main file, so a book with multiple editions of the same type contributes each edition. Supplements and sidecar files are not included.
+Select books, click **Download**, and choose from the available **EPUB**, **KePub**, **AZW3**, **MOBI**, **M4B**, **CBZ**, and **PDF** types. Shisho includes every matching main file, so a book with multiple editions of the same type contributes each edition. Supplements and sidecar files are not included.
 
 Shisho generates download copies with format-specific metadata:
 

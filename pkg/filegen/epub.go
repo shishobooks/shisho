@@ -23,28 +23,38 @@ import (
 	"github.com/shishobooks/shisho/pkg/ziputil"
 )
 
-// EPUBGenerator generates EPUB files with modified metadata.
-type EPUBGenerator struct{}
+// EPUBGenerator generates EPUB files with modified metadata. It generates
+// KePubs delivered as themselves too: it rewrites only the OPF, nav, NCX,
+// and cover, and copies the content documents with their Kobo markup as
+// they are.
+type EPUBGenerator struct {
+	// fileType is the File Type generated, EPUB when empty.
+	fileType string
+}
 
 // SupportedType returns the file type this generator handles.
 func (g *EPUBGenerator) SupportedType() string {
-	return models.FileTypeEPUB
+	if g.fileType == "" {
+		return models.FileTypeEPUB
+	}
+	return g.fileType
 }
 
 // Generate creates a modified EPUB at destPath with updated metadata.
 func (g *EPUBGenerator) Generate(ctx context.Context, srcPath, destPath string, book *models.Book, file *models.File) error {
-	return generateFile(ctx, g, models.FileTypeEPUB, srcPath, destPath, book, file)
+	return generateFile(ctx, g, g.SupportedType(), srcPath, destPath, book, file)
 }
 
 // Prepare parses the source's OPF, nav, and NCX, reads the cover, and
 // builds the rewritten entries. Every other entry is copied raw when
 // writing, so the exact size of the output is known here.
 func (g *EPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Book, file *models.File) (Prepared, error) {
+	fileType := g.SupportedType()
 	plan, err := planEPUB(ctx, src, book, file)
 	if err != nil {
-		return nil, err
+		return nil, relabelError(err, fileType)
 	}
-	p := &preparedEPUB{plan: plan, rewritten: make(map[int]*ziputil.Entry)}
+	p := &preparedEPUB{fileType: fileType, plan: plan, rewritten: make(map[int]*ziputil.Entry)}
 	for i, e := range plan.entries {
 		if e.source != nil {
 			continue
@@ -57,13 +67,13 @@ func (g *EPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Bo
 		}
 		entry, err := ziputil.Compress(e.name, method, e.content)
 		if err != nil {
-			return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to compress rewritten entry")
+			return nil, NewGenerationError(fileType, err, "failed to compress rewritten entry")
 		}
 		p.rewritten[i] = entry
 	}
 	size := &countingWriter{}
 	if err := p.write(ctx, size, skipBody); err != nil {
-		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to measure destination EPUB")
+		return nil, NewGenerationError(fileType, err, "failed to measure destination EPUB")
 	}
 	p.size = size.n
 	return p, nil
@@ -71,7 +81,9 @@ func (g *EPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Bo
 
 // preparedEPUB is a Generated EPUB ready to be written.
 type preparedEPUB struct {
-	plan *epubPlan
+	// fileType is the File Type written, EPUB or KePub.
+	fileType string
+	plan     *epubPlan
 	// rewritten holds the compressed rewritten entries by index in
 	// plan.entries.
 	rewritten map[int]*ziputil.Entry
@@ -85,7 +97,7 @@ func (p *preparedEPUB) Size() (int64, bool) {
 func (p *preparedEPUB) Write(ctx context.Context, w io.Writer) error {
 	copyBody := func(w io.Writer, f *zip.File) error { return ziputil.CopyData(ctx, w, f) }
 	if err := p.write(ctx, w, copyBody); err != nil {
-		return NewGenerationError(models.FileTypeEPUB, err, "failed to write destination EPUB")
+		return NewGenerationError(p.fileType, err, "failed to write destination EPUB")
 	}
 	return nil
 }

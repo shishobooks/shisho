@@ -2,26 +2,13 @@ package models
 
 import "strings"
 
-const (
-	// FileTypeKePub is Kobo's EPUB. Shisho never stores one as a File: it
-	// exists only as a delivery, reached through Conversion.
-	//tygo:emit export type DeliveredFileType = FileType | typeof FileTypeKePub;
-	FileTypeKePub = "kepub"
-)
-
-// IsDeliveredFileType reports whether a File can be delivered as fileType: a
-// built-in File Type or KePub.
-func IsDeliveredFileType(fileType string) bool {
-	return fileType == FileTypeKePub || IsBuiltInFileType(fileType)
-}
-
 // DeliveredFileTypeExtension returns the extension (no leading dot) of a
 // File delivered as fileType: "kepub.epub" for a KePub, which Kobo and
 // KOReader recognize by it, and the File Type itself for every built-in
 // File Type.
 func DeliveredFileTypeExtension(fileType string) string {
 	if fileType == FileTypeKePub {
-		return "kepub.epub"
+		return strings.TrimPrefix(kepubExtension, ".")
 	}
 	return fileType
 }
@@ -30,7 +17,7 @@ func DeliveredFileTypeExtension(fileType string) string {
 // DeliveredFileTypeExtension. It returns false for an extension no
 // delivered File Type has.
 func DeliveredFileTypeForExtension(ext string) (string, bool) {
-	for _, fileType := range append([]string{FileTypeKePub}, BuiltInFileTypes...) {
+	for _, fileType := range BuiltInFileTypes {
 		if DeliveredFileTypeExtension(fileType) == ext {
 			return fileType, true
 		}

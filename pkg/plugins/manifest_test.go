@@ -299,3 +299,18 @@ func TestIsValidMetadataField(t *testing.T) {
 	assert.False(t, IsValidMetadataField(""))
 	assert.False(t, IsValidMetadataField("Language")) // case-sensitive
 }
+
+// A KePub is an EPUB, and was typed as one before KePub was a File Type, so
+// an enricher declaring "epub" keeps running on KePub Files.
+func TestMetadataEnricherCap_HandlesFileType(t *testing.T) {
+	t.Parallel()
+
+	epubOnly := &MetadataEnricherCap{FileTypes: []string{"epub"}}
+	assert.True(t, epubOnly.HandlesFileType("epub"))
+	assert.True(t, epubOnly.HandlesFileType("kepub"))
+	assert.False(t, epubOnly.HandlesFileType("cbz"))
+
+	kepubOnly := &MetadataEnricherCap{FileTypes: []string{"kepub"}}
+	assert.True(t, kepubOnly.HandlesFileType("kepub"))
+	assert.False(t, kepubOnly.HandlesFileType("epub"))
+}

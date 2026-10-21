@@ -10,6 +10,7 @@ describe("getReadingAction", () => {
   it("returns a Read action for every ebook type", () => {
     expect(getReadingAction("cbz")).toBe("read");
     expect(getReadingAction("epub")).toBe("read");
+    expect(getReadingAction("kepub")).toBe("read");
     expect(getReadingAction("azw3")).toBe("read");
     expect(getReadingAction("mobi")).toBe("read");
     expect(getReadingAction("pdf")).toBe("read");

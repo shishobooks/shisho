@@ -43,6 +43,7 @@ import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
+import { fileTypeLabel } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
@@ -370,8 +371,8 @@ const BookItem = ({
       {book.files && (
         <div className="mt-2 flex flex-wrap gap-2 text-xs">
           {uniqBy(book.files, "file_type").map((f) => (
-            <Badge className="text-xs uppercase" key={f.id} variant="secondary">
-              {f.file_type}
+            <Badge className="text-xs" key={f.id} variant="secondary">
+              {fileTypeLabel(f.file_type)}
             </Badge>
           ))}
         </div>

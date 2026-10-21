@@ -12,38 +12,68 @@ import (
 )
 
 const (
-	//tygo:emit export type FileType = typeof FileTypeAZW3 | typeof FileTypeCBZ | typeof FileTypeEPUB | typeof FileTypeM4B | typeof FileTypeMOBI | typeof FileTypePDF;
+	//tygo:emit export type FileType = typeof FileTypeAZW3 | typeof FileTypeCBZ | typeof FileTypeEPUB | typeof FileTypeKePub | typeof FileTypeM4B | typeof FileTypeMOBI | typeof FileTypePDF;
+	//tygo:emit export type DeliveredFileType = FileType;
 	FileTypeAZW3 = "azw3"
 	FileTypeCBZ  = "cbz"
 	FileTypeEPUB = "epub"
-	FileTypeM4B  = "m4b"
-	FileTypeMOBI = "mobi"
-	FileTypePDF  = "pdf"
+	// FileTypeKePub is Kobo's EPUB: an EPUB with Kobo markup, named
+	// .kepub.epub. Kobo readers and KOReader tell it from an EPUB by that
+	// name alone, and so does Shisho. A Calibre library stores one as a
+	// bare .kepub, which is a KePub too.
+	FileTypeKePub = "kepub"
+	FileTypeM4B   = "m4b"
+	FileTypeMOBI  = "mobi"
+	FileTypePDF   = "pdf"
 )
+
+// kepubExtension is a KePub's extension. filepath.Ext sees only its last
+// part, which is an EPUB's.
+const kepubExtension = ".kepub.epub"
 
 // builtInFileTypesByExtension maps every extension Shisho parses itself
 // (lowercase, no dot) to its file type. A file type is not always its
-// extension: .azw and .prc files are MOBI.
+// extension: .azw and .prc files are MOBI. A .kepub.epub, whose last
+// extension is an EPUB's, is matched by isKePubPath instead.
 var builtInFileTypesByExtension = map[string]string{
-	"azw3": FileTypeAZW3,
-	"cbz":  FileTypeCBZ,
-	"epub": FileTypeEPUB,
-	"m4b":  FileTypeM4B,
-	"mobi": FileTypeMOBI,
-	"azw":  FileTypeMOBI,
-	"prc":  FileTypeMOBI,
-	"pdf":  FileTypePDF,
+	"azw3":  FileTypeAZW3,
+	"cbz":   FileTypeCBZ,
+	"epub":  FileTypeEPUB,
+	"kepub": FileTypeKePub,
+	"m4b":   FileTypeM4B,
+	"mobi":  FileTypeMOBI,
+	"azw":   FileTypeMOBI,
+	"prc":   FileTypeMOBI,
+	"pdf":   FileTypePDF,
 }
 
-// FileTypeForPath returns the file type for a path: the built-in type its
-// extension maps to, or else the lowercase extension without the dot, which
-// is how plugin-parsed files and supplements are typed.
+// FileTypeForPath returns the file type for a path: KePub for a .kepub.epub,
+// the built-in type its extension maps to (KePub for a bare .kepub too), or
+// else the lowercase extension without the dot, which is how plugin-parsed
+// files and supplements are typed.
 func FileTypeForPath(path string) string {
+	if isKePubPath(path) {
+		return FileTypeKePub
+	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 	if fileType, ok := builtInFileTypesByExtension[ext]; ok {
 		return fileType
 	}
 	return ext
+}
+
+// FileExtensionForPath returns a path's extension with its leading dot, as
+// filepath.Ext does, except that a KePub's is the whole .kepub.epub. Code
+// that renames a file keeps this, so a KePub stays one.
+func FileExtensionForPath(path string) string {
+	if isKePubPath(path) {
+		return path[len(path)-len(kepubExtension):]
+	}
+	return filepath.Ext(path)
+}
+
+func isKePubPath(path string) bool {
+	return strings.HasSuffix(strings.ToLower(filepath.Base(path)), kepubExtension)
 }
 
 // IsBuiltInFileExtension reports whether an extension (lowercase, no dot)
@@ -61,16 +91,18 @@ func BuiltInFileExtensions() []string {
 
 // BuiltInFileTypes are the file types Shisho parses itself. Each is eligible
 // to be a main file.
-var BuiltInFileTypes = []string{FileTypeAZW3, FileTypeCBZ, FileTypeEPUB, FileTypeM4B, FileTypeMOBI, FileTypePDF}
+var BuiltInFileTypes = []string{FileTypeAZW3, FileTypeCBZ, FileTypeEPUB, FileTypeKePub, FileTypeM4B, FileTypeMOBI, FileTypePDF}
 
 // IsBuiltInFileType reports whether Shisho parses this file type itself.
+// These are also the File Types a File can be delivered as, which is why
+// the generated DeliveredFileType is FileType.
 func IsBuiltInFileType(fileType string) bool {
 	return slices.Contains(BuiltInFileTypes, fileType)
 }
 
 // EbookFileTypes are the file types in the ebook cover category, as opposed
 // to M4B audiobooks. Preferred Cover is exclusive within a category.
-var EbookFileTypes = []string{FileTypeEPUB, FileTypeAZW3, FileTypeMOBI, FileTypeCBZ, FileTypePDF}
+var EbookFileTypes = []string{FileTypeEPUB, FileTypeKePub, FileTypeAZW3, FileTypeMOBI, FileTypeCBZ, FileTypePDF}
 
 // IsEbookFileType reports whether a file type is in the ebook cover category.
 func IsEbookFileType(fileType string) bool {
@@ -84,18 +116,21 @@ func IsAudiobookFileType(fileType string) bool {
 }
 
 // EbookCoverRank orders ebook files when no file is the Preferred Cover:
-// EPUB, then AZW3, then MOBI, then the other ebook formats, which share a rank
-// so a stable sort keeps their order. app/utils/coverSelection.ts mirrors it.
+// EPUB, then KePub, then AZW3, then MOBI, then the other ebook formats, which
+// share a rank so a stable sort keeps their order. app/utils/fileTypes.ts
+// mirrors it.
 func EbookCoverRank(fileType string) int {
 	switch fileType {
 	case FileTypeEPUB:
 		return 0
-	case FileTypeAZW3:
+	case FileTypeKePub:
 		return 1
-	case FileTypeMOBI:
+	case FileTypeAZW3:
 		return 2
+	case FileTypeMOBI:
+		return 3
 	}
-	return 3
+	return 4
 }
 
 const (

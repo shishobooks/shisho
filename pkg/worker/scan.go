@@ -32,16 +32,18 @@ import (
 // older tools put it elsewhere or leave it out and detect as application/zip,
 // so the parser, which needs an OPF, decides. MOBI6, KF8, and combo files all
 // detect as application/x-mobipocket-ebook, DRM-protected ones included; the
-// parser declines those.
+// parser declines those. A .kepub.epub is seen by its last extension, .epub;
+// a bare .kepub is how a Calibre library stores a KePub.
 var extensionsToScan = map[string]map[string]struct{}{
-	".epub": {"application/epub+zip": {}, "application/zip": {}},
-	".m4b":  {"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}},
-	".cbz":  {"application/zip": {}},
-	".pdf":  {"application/pdf": {}},
-	".mobi": {mobiMimeType: {}},
-	".azw":  {mobiMimeType: {}},
-	".prc":  {mobiMimeType: {}},
-	".azw3": {mobiMimeType: {}},
+	".epub":  {"application/epub+zip": {}, "application/zip": {}},
+	".kepub": {"application/epub+zip": {}, "application/zip": {}},
+	".m4b":   {"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}},
+	".cbz":   {"application/zip": {}},
+	".pdf":   {"application/pdf": {}},
+	".mobi":  {mobiMimeType: {}},
+	".azw":   {mobiMimeType: {}},
+	".prc":   {mobiMimeType: {}},
+	".azw3":  {mobiMimeType: {}},
 }
 
 const mobiMimeType = "application/x-mobipocket-ebook"
@@ -324,7 +326,7 @@ func discoverRootLevelSupplements(mainFilePath string, libraryPath string, exclu
 
 	// Get basename without extension
 	mainFilename := filepath.Base(mainFilePath)
-	mainBasename := strings.TrimSuffix(mainFilename, filepath.Ext(mainFilename))
+	mainBasename := strings.TrimSuffix(mainFilename, models.FileExtensionForPath(mainFilename))
 
 	// List files in the same directory
 	entries, err := os.ReadDir(libraryPath)

@@ -40,7 +40,7 @@ var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|
 // If no series: [Author] Title.ext.
 // If no author: Title.ext.
 func FormatDownloadFilename(book *models.Book, file *models.File) string {
-	return formatDownloadFilename(book, file, file.FileType)
+	return DownloadFilename(book, file, file.FileType)
 }
 
 // DownloadFilename returns the filename for downloading the file delivered

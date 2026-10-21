@@ -70,6 +70,8 @@ func GetGenerator(fileType string) (Generator, error) {
 	switch fileType {
 	case models.FileTypeEPUB:
 		return &EPUBGenerator{}, nil
+	case models.FileTypeKePub:
+		return &EPUBGenerator{fileType: models.FileTypeKePub}, nil
 	case models.FileTypeM4B:
 		return &M4BGenerator{}, nil
 	case models.FileTypeCBZ:

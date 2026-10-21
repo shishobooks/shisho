@@ -247,6 +247,61 @@ func TestKepubEPUBGenerator_Conformance(t *testing.T) {
 	filegentest.Run(t, streamConformanceCase(t, conversionGenerator(t, models.FileTypeEPUB, models.FileTypeKePub), true))
 }
 
+// A KePub delivered as itself goes through the EPUB generator, which
+// rewrites only the OPF, nav, NCX, and cover, so the Kobo markup the KePub
+// writer added survives and the book's metadata reaches the device.
+func TestKePubGenerator_Conformance(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain.epub")
+	writeStreamEPUB(t, plain, streamEPUBEntries())
+	kepubBytes, _, _ := prepareAndWrite(t, conversionGenerator(t, models.FileTypeEPUB, models.FileTypeKePub), plain,
+		&models.Book{Title: "Original Title"}, &models.File{FileType: models.FileTypeEPUB, Filepath: plain})
+	src := filepath.Join(dir, "source.kepub.epub")
+	require.NoError(t, os.WriteFile(src, kepubBytes, 0o600))
+	srcZip, err := zip.NewReader(bytes.NewReader(kepubBytes), int64(len(kepubBytes)))
+	require.NoError(t, err)
+
+	book, file := streamEPUBBook(t, src)
+	file.FileType = models.FileTypeKePub
+	broken := filepath.Join(dir, "broken.kepub.epub")
+	writeStreamEPUB(t, broken, []streamEPUBEntry{
+		{name: "mimetype", content: []byte("application/epub+zip"), method: zip.Store},
+		{name: "chapter1.xhtml", content: []byte("<html/>"), method: zip.Deflate},
+	})
+
+	gen := streamGenerator(t, models.FileTypeKePub)
+	assert.Equal(t, models.FileTypeKePub, gen.(filegen.Generator).SupportedType())
+	filegentest.Run(t, filegentest.Case{
+		Generator: gen,
+		Source:    src,
+		Book:      book,
+		File:      file,
+		Broken:    broken,
+		Check: func(t *testing.T, output []byte) {
+			path := filepath.Join(t.TempDir(), "out.kepub.epub")
+			require.NoError(t, os.WriteFile(path, output, 0o600))
+			parsed, err := epub.Parse(path)
+			require.NoError(t, err)
+			assert.Equal(t, "Streamed Title", parsed.Title)
+			require.Len(t, parsed.Authors, 1)
+			assert.Equal(t, "New Author", parsed.Authors[0].Name)
+			assert.Equal(t, []byte("new cover bytes"), parsed.CoverData)
+
+			zr, err := zip.NewReader(bytes.NewReader(output), int64(len(output)))
+			require.NoError(t, err)
+			for _, name := range []string{"OEBPS/chapter1.xhtml", "OEBPS/chapter2.xhtml", "kobo.js"} {
+				data := readZipEntry(t, findZipEntry(t, zr, name))
+				assert.Equal(t, readZipEntry(t, findZipEntry(t, srcZip, name)), data, "%s is copied as it was", name)
+			}
+			assert.Contains(t, string(readZipEntry(t, findZipEntry(t, zr, "OEBPS/chapter1.xhtml"))), `class="koboSpan"`)
+			opf := string(readZipEntry(t, findZipEntry(t, zr, "OEBPS/content.opf")))
+			assert.Regexp(t, `<item[^>]+href="[^"]*kobo\.js"`, opf, "the kobo.js manifest item is kept")
+			assert.Regexp(t, `<item[^>]+properties="[^"]*scripted`, opf, "content documents stay scripted")
+		},
+	})
+}
+
 // prepareAndWrite runs gen over the EPUB at path.
 func prepareAndWrite(t *testing.T, gen filegen.StreamGenerator, path string, book *models.Book, file *models.File) (out []byte, size int64, known bool) {
 	t.Helper()

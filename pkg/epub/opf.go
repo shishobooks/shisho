@@ -132,7 +132,13 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	metadata, _, err := parseArchive(zipReader)
+	return metadata, err
+}
 
+// parseArchive reads an open EPUB's metadata, and returns its parsed OPF
+// along with it.
+func parseArchive(zipReader *zip.Reader) (*mediafile.ParsedMetadata, *ParseOPFResult, error) {
 	// Go through all files in the existing archive save the page information.
 	var result *ParseOPFResult
 	for _, file := range zipReader.File {
@@ -140,18 +146,18 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		if ext == ".opf" {
 			r, err := file.Open()
 			if err != nil {
-				return nil, errors.WithStack(err)
+				return nil, nil, errors.WithStack(err)
 			}
 			result, err = ParseOPF(file.Name, r)
 			if err != nil {
-				return nil, errors.WithStack(err)
+				return nil, nil, errors.WithStack(err)
 			}
 			break
 		}
 	}
 
 	if result == nil {
-		return nil, errors.New("no opf file found")
+		return nil, nil, errors.New("no opf file found")
 	}
 
 	opf := result.OPF
@@ -161,11 +167,11 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 			if file.Name == opf.CoverFilepath {
 				r, err := file.Open()
 				if err != nil {
-					return nil, errors.WithStack(err)
+					return nil, nil, errors.WithStack(err)
 				}
 				b, err := io.ReadAll(r)
 				if err != nil {
-					return nil, errors.WithStack(err)
+					return nil, nil, errors.WithStack(err)
 				}
 				opf.CoverData = b
 			}
@@ -216,7 +222,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Identifiers:   opf.Identifiers,
 		Chapters:      opf.Chapters,
 		Language:      opf.Language,
-	}, nil
+	}, result, nil
 }
 
 // ParseOPFResult contains the parsed OPF data along with the raw package and base path

@@ -16,7 +16,7 @@ The sign-in page pre-fills both fields; select **Sign in**. The demo runs on a s
 ## What Works
 
 - Browse the library by series, author, genre, tag, and publisher, and search books, series, and people from the header.
-- Read EPUB, MOBI, AZW3, CBZ, and PDF files in the in-app readers and listen to M4B audiobooks with the player. See [Reading and Playback](./reading-and-playback.md).
+- Read EPUB, KePub, MOBI, AZW3, CBZ, and PDF files in the in-app readers and listen to M4B audiobooks with the player. See [Reading and Playback](./reading-and-playback.md).
 - Change the gallery size, default sort, and reader preferences. The demo keeps them in your browser, so they do not affect other visitors.
 
 ## What Is Disabled

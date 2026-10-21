@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // SupportedManifestVersions lists manifest versions this Shisho release supports.
@@ -71,6 +72,19 @@ type MetadataEnricherCap struct {
 	Description string   `json:"description"`
 	FileTypes   []string `json:"fileTypes"`
 	Fields      []string `json:"fields"`
+}
+
+// HandlesFileType reports whether the enricher runs on a File of fileType.
+// Declaring "epub" covers KePub Files too: a KePub is an EPUB, and was typed
+// as one before KePub was a File Type, so existing plugins keep running on
+// them.
+func (c *MetadataEnricherCap) HandlesFileType(fileType string) bool {
+	for _, ft := range c.FileTypes {
+		if ft == fileType || (ft == models.FileTypeEPUB && fileType == models.FileTypeKePub) {
+			return true
+		}
+	}
+	return false
 }
 
 type IdentifierTypeCap struct {

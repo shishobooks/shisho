@@ -180,14 +180,7 @@ func aggregateEnricherSearches[T enricherRuntime](
 			if enricherCap == nil {
 				continue
 			}
-			handles := false
-			for _, ft := range enricherCap.FileTypes {
-				if ft == fileType {
-					handles = true
-					break
-				}
-			}
-			if !handles {
+			if !enricherCap.HandlesFileType(fileType) {
 				skippedPlugins = append(skippedPlugins, PluginSearchSkipped{
 					PluginScope: rt.Scope(),
 					PluginID:    rt.PluginID(),

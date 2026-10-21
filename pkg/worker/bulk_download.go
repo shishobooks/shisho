@@ -63,7 +63,7 @@ func DeduplicateFilenames(names map[int]string) map[int]string {
 			if i == 0 {
 				result[id] = name
 			} else {
-				ext := filepath.Ext(name)
+				ext := models.FileExtensionForPath(name)
 				base := strings.TrimSuffix(name, ext)
 				result[id] = fmt.Sprintf("%s (%d)%s", base, i+1, ext)
 			}

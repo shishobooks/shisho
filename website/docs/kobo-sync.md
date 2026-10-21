@@ -6,8 +6,8 @@ Kobo Sync sends books from Shisho to a Kobo eReader over Wi-Fi. Shisho handles p
 
 A Kobo receives what its Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) select, from the books in the Device's [scope](./users-and-permissions.md#scope). Change them under **Delivery Rules** on the Device's page. A new Kobo Device follows the [Kobo preset](./users-and-permissions.md#device-types).
 
-- For each book, the earliest rule that matches one of its main files decides what goes, and every file of that rule's type is delivered. A book with an EPUB and a CBZ sends only the EPUB under the preset. Two EPUB editions of one book each appear on the Kobo as their own book.
-- A Kobo can receive KePub or EPUB, so only EPUB and CBZ files can sync. A rule can send EPUB as KePub or as EPUB, and CBZ as KePub or as EPUB. A CBZ sent as EPUB is a fixed-layout EPUB that opens with its pages in order. See [Conversions](./supported-formats.md#conversions).
+- For each book, the earliest rule that matches one of its main files decides what goes, and every file of that rule's type is delivered. Under the preset, a book with a KePub and an EPUB sends only the KePub, as it is, and a book with an EPUB and a CBZ sends only the EPUB, as a KePub. Two EPUB editions of one book each appear on the Kobo as their own book.
+- A Kobo can receive KePub or EPUB, so only KePub, EPUB, and CBZ files can sync. A rule can send KePub as KePub, EPUB as KePub or as EPUB, and CBZ as KePub or as EPUB. A CBZ sent as EPUB is a fixed-layout EPUB that opens with its pages in order. See [Conversions](./supported-formats.md#conversions).
 - M4B, PDF, MOBI, AZW3, and [supplement files](./supplement-files.md) do not sync. A Kobo cannot read them, and they cannot be converted to KePub or EPUB.
 - A KePub's filename uses the author, the series, and the file's name (or the book's title when the file has no name). It keeps only unaccented letters A to Z, digits, spaces, and `-_.,()'`, because other characters can stop a Kobo from reading the file, so accented and non-Latin characters are dropped from the filename. The book's metadata keeps them.
 - On the Kobo, each entry's title is the file's **Name**, or the book's title when the file has no name. The subtitle and authors come from the book. Changing a synced file's name updates the title on the Kobo at the next sync.
@@ -21,7 +21,7 @@ To check what a Kobo gets before syncing, use the preview on the Device's page a
 Shisho keeps each delivered file on the Kobo as one entry. The next sync moves that entry to a different file of the same book, instead of adding a duplicate, when:
 
 - the file it holds is deleted or stops being delivered, and another file of the book is delivered as the same type, or
-- a newly added file is preferred by the rules, such as an EPUB added to a book that synced as a CBZ under the preset.
+- a newly added file is preferred by the rules, such as an EPUB added to a book that synced as a CBZ under the preset, or a KePub added to a book whose EPUB synced as a KePub.
 
 The Kobo downloads the other edition in place. It keeps the reading position when the two editions' chapter files line up, and may reopen the book at the start when they do not. Highlights can stay hidden for a while after the download, then reappear. When no other file of the book is delivered as the same type, the book is removed from the Kobo instead.
 

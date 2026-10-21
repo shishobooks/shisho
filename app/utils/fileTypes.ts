@@ -2,6 +2,7 @@ import {
   FileTypeAZW3,
   FileTypeCBZ,
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeM4B,
   FileTypeMOBI,
   FileTypePDF,
@@ -11,6 +12,7 @@ import {
  *  models.EbookFileTypes. Preferred Cover is exclusive within a category. */
 const EBOOK_FILE_TYPES: readonly string[] = [
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeAZW3,
   FileTypeMOBI,
   FileTypeCBZ,
@@ -33,6 +35,7 @@ export const isEbookFileType = (fileType: string): boolean =>
  *  reorder. */
 const REFLOWABLE_FILE_TYPES: readonly string[] = [
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeAZW3,
   FileTypeMOBI,
 ];
@@ -43,18 +46,20 @@ export const isReflowableFileType = (fileType: string): boolean =>
 export const isMainEligibleFileType = (fileType: string): boolean =>
   MAIN_ELIGIBLE_FILE_TYPES.includes(fileType);
 
-/** Orders ebook files when none is the Preferred Cover: EPUB, then AZW3, then
- *  MOBI, then the other ebook formats, which share a rank so a stable sort
- *  keeps their order. Mirrors models.EbookCoverRank. */
+/** Orders ebook files when none is the Preferred Cover: EPUB, then KePub,
+ *  then AZW3, then MOBI, then the other ebook formats, which share a rank so a
+ *  stable sort keeps their order. Mirrors models.EbookCoverRank. */
 export const ebookCoverRank = (fileType: string): number => {
   switch (fileType) {
     case FileTypeEPUB:
       return 0;
-    case FileTypeAZW3:
+    case FileTypeKePub:
       return 1;
-    case FileTypeMOBI:
+    case FileTypeAZW3:
       return 2;
-    default:
+    case FileTypeMOBI:
       return 3;
+    default:
+      return 4;
   }
 };

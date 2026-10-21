@@ -12,7 +12,7 @@ import { cn } from "@/libraries/utils";
 import type { File } from "@/types";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { fileCoverUrl } from "@/utils/coverUrl";
-import { fileLabel } from "@/utils/format";
+import { fileLabel, fileTypeLabel } from "@/utils/format";
 
 interface CoverGalleryTabsProps {
   files: File[];
@@ -52,15 +52,15 @@ function getFilesWithLabels(files: File[]): FileWithLabel[] {
 
   return files.map((file) => {
     const count = typeCounts[file.file_type];
-    const typeUpper = file.file_type.toUpperCase();
+    const typeLabel = fileTypeLabel(file.file_type);
 
     if (count === 1) {
-      return { ...file, label: typeUpper };
+      return { ...file, label: typeLabel };
     }
 
     // Multiple files of this type - add number
     typeIndexes[file.file_type] = (typeIndexes[file.file_type] || 0) + 1;
-    return { ...file, label: `${typeUpper} ${typeIndexes[file.file_type]}` };
+    return { ...file, label: `${typeLabel} ${typeIndexes[file.file_type]}` };
   });
 }
 

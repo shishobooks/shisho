@@ -8,8 +8,10 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -91,12 +93,48 @@ func GenerateEPUB(t *testing.T, dir, filename string, opts EPUBOptions) string {
   <p>This is a test chapter.</p>
 </body>
 </html>`
-	if err := writeZipFile(zw, "OEBPS/chapter1.xhtml", []byte(chapterContent)); err != nil {
+	if opts.KoboMarkup {
+		chapterContent = KoboChapter
+		if err := writeZipFile(zw, "OEBPS/kobo.js", []byte("// kobo\n")); err != nil {
+			t.Fatalf("failed to write kobo.js: %v", err)
+		}
+	}
+	chapterBytes := []byte(chapterContent)
+	if opts.Chapter != nil {
+		chapterBytes = opts.Chapter
+	}
+	if opts.KoboDRM {
+		// Bytes no XHTML starts with, standing in for AES output.
+		chapterBytes = bytes.Repeat([]byte{0x9c, 0x07, 0xe1, 0x3f}, 64)
+	}
+	if err := writeZipFile(zw, "OEBPS/chapter1.xhtml", chapterBytes); err != nil {
 		t.Fatalf("failed to write chapter1.xhtml: %v", err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(opts.ExtraEntries)) {
+		if err := writeZipFile(zw, name, []byte(opts.ExtraEntries[name])); err != nil {
+			t.Fatalf("failed to write %s: %v", name, err)
+		}
 	}
 
 	return path
 }
+
+// KoboChapter is the chapter GenerateEPUB writes with KoboMarkup.
+const KoboChapter = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Chapter 1</title>
+  <script type="text/javascript" src="kobo.js"></script>
+  <style type="text/css" id="kobostylehacks">div#book-inner p, div#book-inner div { font-size: 1.0em; }</style>
+</head>
+<body>
+  <div id="book-columns"><div id="book-inner">
+  <h1><span class="koboSpan" id="kobo.1.1">Chapter 1</span></h1>
+  <p><span class="koboSpan" id="kobo.2.1">This is a test chapter.</span></p>
+  </div></div>
+</body>
+</html>`
 
 func generateOPF(opts EPUBOptions, coverFilename, coverMimeType string) string {
 	var buf bytes.Buffer
@@ -157,7 +195,12 @@ func generateOPF(opts EPUBOptions, coverFilename, coverMimeType string) string {
 
 	// Manifest
 	buf.WriteString("  <manifest>\n")
-	buf.WriteString("    <item id=\"chapter1\" href=\"chapter1.xhtml\" media-type=\"application/xhtml+xml\"/>\n")
+	if opts.KoboMarkup {
+		buf.WriteString("    <item id=\"chapter1\" href=\"chapter1.xhtml\" media-type=\"application/xhtml+xml\" properties=\"scripted\"/>\n")
+		buf.WriteString("    <item id=\"kobo.js\" href=\"kobo.js\" media-type=\"application/javascript\"/>\n")
+	} else {
+		buf.WriteString("    <item id=\"chapter1\" href=\"chapter1.xhtml\" media-type=\"application/xhtml+xml\"/>\n")
+	}
 	if coverFilename != "" {
 		buf.WriteString(fmt.Sprintf("    <item id=\"cover-image\" href=\"%s\" media-type=\"%s\"/>\n", coverFilename, coverMimeType))
 	}

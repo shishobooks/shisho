@@ -40,7 +40,10 @@ export type MetadataField =
 /** Metadata enricher capability declaration. */
 export interface MetadataEnricherCap {
   description?: string;
-  /** File types this enricher applies to (e.g., ["epub", "cbz"]). */
+  /**
+   * File types this enricher applies to (e.g., ["epub", "cbz"]). "epub" also
+   * covers KePub files, whose file type is "kepub".
+   */
   fileTypes?: string[];
   /**
    * Metadata fields this enricher may set.

@@ -21,7 +21,7 @@ import {
   type File,
   type ReviewOverride,
 } from "@/types";
-import { formatDate } from "@/utils/format";
+import { fileTypeLabel, formatDate } from "@/utils/format";
 
 interface ReviewPanelProps {
   book: Book;
@@ -173,7 +173,7 @@ function buildMissingHint(
     } else {
       // Missing on some files — qualify with file type (uppercase)
       for (const file of filesWithField) {
-        parts.push(`${field} (${file.file_type.toUpperCase()})`);
+        parts.push(`${field} (${fileTypeLabel(file.file_type)})`);
       }
     }
   }

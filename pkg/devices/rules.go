@@ -29,6 +29,7 @@ var typeRules = map[string]deviceTypeRules{
 	DeviceTypeKobo: {
 		allowed: []string{models.FileTypeKePub, models.FileTypeEPUB},
 		preset: []delivery.Rule{
+			{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeKePub},
 			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeKePub},
 			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeKePub},
 		},

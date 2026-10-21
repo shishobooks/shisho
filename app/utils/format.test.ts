@@ -102,6 +102,7 @@ describe("fileLabel", () => {
 
   it("falls back to the file type when there is no display name", () => {
     expect(fileLabel({ display_name: "", file_type: "epub" })).toBe("EPUB");
+    expect(fileLabel({ display_name: "", file_type: "kepub" })).toBe("KePub");
   });
 });
 

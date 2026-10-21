@@ -34,7 +34,10 @@ export interface SearchContext {
   identifiers?: Array<{ type: string; value: string }>;
   /** Read-only file metadata for matching hints. Not user-editable. */
   file?: {
-    /** File type extension (e.g., "epub", "cbz", "m4b", "pdf"). */
+    /**
+     * File type (e.g., "epub", "cbz", "m4b", "pdf"): the extension, except
+     * "kepub" for a .kepub.epub and "mobi" for .azw and .prc files.
+     */
     fileType?: string;
     /**
      * Absolute path to the enrichment target file. The runtime grants the

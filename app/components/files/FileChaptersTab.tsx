@@ -30,6 +30,7 @@ import { cn } from "@/libraries/utils";
 import {
   FileTypeCBZ,
   FileTypeEPUB,
+  FileTypeKePub,
   FileTypeM4B,
   FileTypePDF,
   IdentifierTypeASIN,
@@ -199,7 +200,7 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
       (hasError) => hasError,
     );
 
-    // Edit keys of EPUB headings (chapters without an href) whose chapters
+    // Edit keys of EPUB and KePub headings (chapters without an href) whose chapters
     // were all deleted in this edit. A nav heading cannot stand with nothing
     // under it, so downloads would drop it; saving waits until the user
     // deletes it instead of the heading disappearing on its own. A heading
@@ -208,7 +209,11 @@ const FileChaptersTab = forwardRef<FileChaptersTabHandle, FileChaptersTabProps>(
     // too, which only asks for an extra delete.
     const emptiedHeadings = useMemo(() => {
       const emptied = new Set<string>();
-      if (!isEditing || file.file_type !== FileTypeEPUB) return emptied;
+      if (
+        !isEditing ||
+        (file.file_type !== FileTypeEPUB && file.file_type !== FileTypeKePub)
+      )
+        return emptied;
       const hadChildren = new Set<string>();
       const index = (chapters: EditedChapter[]) => {
         for (const c of chapters) {

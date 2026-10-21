@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/models"
 
 	_ "image/gif" // Register GIF decoder for image normalization.
 
@@ -348,7 +349,7 @@ func generateUniqueFilepath(path, self string, claimed func(string) bool) string
 	}
 
 	dir := filepath.Dir(path)
-	ext := filepath.Ext(path)
+	ext := models.FileExtensionForPath(path)
 	base := filepath.Base(path)
 	nameWithoutExt := base[:len(base)-len(ext)]
 

@@ -25,6 +25,18 @@ type EPUBOptions struct {
 	// Identifiers are extra dc:identifier elements written after the default
 	// urn:uuid:test-book-id, which the parser skips as an unknown type.
 	Identifiers []EPUBIdentifier
+	// KoboMarkup writes the chapter as Kobo's KePub writer does: text in
+	// koboSpan spans inside the book-columns and book-inner divs, and a
+	// kobo.js script the chapter is marked scripted for.
+	KoboMarkup bool
+	// KoboDRM writes the chapter's bytes encrypted, as a KePub bought from
+	// the Kobo store is: no encryption.xml, and content that is not markup.
+	KoboDRM bool
+	// Chapter, when set, is written as chapter1.xhtml's bytes in place of
+	// the generated chapter.
+	Chapter []byte
+	// ExtraEntries are written into the archive as given, by name.
+	ExtraEntries map[string]string
 }
 
 // EPUBIdentifier is one dc:identifier element. Scheme becomes opf:scheme

@@ -18,8 +18,8 @@ const pickFirst = (bucket: File[]): File =>
  * preferred cover_aspect_ratio setting. Mirrors the backend's
  * pkg/covers.SelectFile logic. Supplements are excluded — they don't
  * represent the book. Within each bucket (ebook / audiobook), a file with
- * is_preferred_cover takes priority; otherwise ebooks go EPUB, AZW3, MOBI,
- * then the rest in their given order.
+ * is_preferred_cover takes priority; otherwise ebooks go EPUB, KePub, AZW3,
+ * MOBI, then the rest in their given order.
  */
 export const selectCoverFile = (
   files: File[] | undefined,

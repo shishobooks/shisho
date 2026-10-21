@@ -6,11 +6,11 @@ Shisho combines metadata from file paths, embedded file data, plugins, sidecars,
 
 A **book** groups one or more main files. Its shared fields include title, sort title, subtitle, description, authors, series, genres, and tags.
 
-A **file** represents a particular EPUB, AZW3, MOBI, CBZ, M4B, or PDF edition. File fields include display name, narrators, publisher, release date, language, URL, identifiers, chapters, and abridged status. [Supplements](./supplement-files.md) belong to a book but are excluded from metadata review and most main-file behavior.
+A **file** represents a particular EPUB, KePub, AZW3, MOBI, CBZ, M4B, or PDF edition. File fields include display name, narrators, publisher, release date, language, URL, identifiers, chapters, and abridged status. [Supplements](./supplement-files.md) belong to a book but are excluded from metadata review and most main-file behavior.
 
 ### Preferred Covers
 
-When a book has multiple main files in the same cover category, edit a file and select **Preferred ebook cover** or **Preferred audiobook cover**. Ebook preference covers EPUB, AZW3, MOBI, CBZ, and PDF files; audiobook preference covers M4B files. The chosen file must have a cover. Choosing one clears the same preference from other files in that category. Without a preferred ebook file, the book's ebook cover comes from an EPUB first, then an AZW3, then a MOBI, then the other ebook files.
+When a book has multiple main files in the same cover category, edit a file and select **Preferred ebook cover** or **Preferred audiobook cover**. Ebook preference covers EPUB, KePub, AZW3, MOBI, CBZ, and PDF files; audiobook preference covers M4B files. The chosen file must have a cover. Choosing one clears the same preference from other files in that category. Without a preferred ebook file, the book's ebook cover comes from an EPUB first, then a KePub, then an AZW3, then a MOBI, then the other ebook files.
 
 ## People and Roles
 
@@ -128,9 +128,9 @@ Use the gallery's **Review state** filter to work through the queue. Bulk select
 
 ## Chapters
 
-A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB, MOBI, and AZW3 chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. In an EPUB, a heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
+A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB, KePub, MOBI, and AZW3 chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. In an EPUB or KePub, a heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
 
-Renamed and deleted EPUB, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, KePub included for EPUB. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
+Renamed and deleted EPUB, KePub, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, KePub included for EPUB. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
 
 CBZ chapters are written into generated CBZ downloads as folders of pages; see [CBZ Downloads](./supported-formats.md#cbz-downloads).
 
