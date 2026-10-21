@@ -7,22 +7,23 @@ import {
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
-import type {
-  Book,
-  DeleteBookResponse,
-  DeleteBooksPayload,
-  DeleteBooksResponse,
-  DeleteFileResponse,
-  File,
-  ListBooksQuery,
-  ListBooksResponse,
-  MergeBooksPayload,
-  MergeBooksResponse,
-  MoveFilesPayload,
-  MoveFilesResponse,
-  UpdateBookPayload,
-  UpdateFileCoverPagePayload,
-  UpdateFilePayload,
+import {
+  FileRoleMain,
+  type Book,
+  type DeleteBookResponse,
+  type DeleteBooksPayload,
+  type DeleteBooksResponse,
+  type DeleteFileResponse,
+  type File,
+  type ListBooksQuery,
+  type ListBooksResponse,
+  type MergeBooksPayload,
+  type MergeBooksResponse,
+  type MoveFilesPayload,
+  type MoveFilesResponse,
+  type UpdateBookPayload,
+  type UpdateFileCoverPagePayload,
+  type UpdateFilePayload,
 } from "@/types";
 import { fileCoverUploadUrl } from "@/utils/coverUrl";
 
@@ -133,10 +134,21 @@ export const useUpdateFile = () => {
     mutationFn: ({ id, payload }) => {
       return API.request("POST", `/books/files/${id}`, payload, null);
     },
-    onSuccess: () => {
+    onSuccess: (_file, { payload }) => {
       // Invalidate book queries to refresh file data
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // Making a file a main file scans it, which can add series, genres,
+      // and tags from its metadata.
+      if (payload.file_role === FileRoleMain) {
+        queryClient.invalidateQueries({
+          queryKey: [SeriesQueryKey.ListSeries],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [GenresQueryKey.ListGenres],
+        });
+        queryClient.invalidateQueries({ queryKey: [TagsQueryKey.ListTags] });
+      }
       // Invalidate library languages in case a new language was set
       queryClient.invalidateQueries({
         queryKey: [LibrariesQueryKey.LibraryLanguages],

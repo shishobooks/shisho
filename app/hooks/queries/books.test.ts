@@ -3,9 +3,12 @@ import { renderHook } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 
-import { useUploadFileCover } from "./books";
+import { useUpdateFile, useUploadFileCover } from "./books";
+import { QueryKey as GenresQueryKey } from "./genres";
+import { QueryKey as SeriesQueryKey } from "./series";
+import { QueryKey as TagsQueryKey } from "./tags";
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
   const client = new QueryClient({
@@ -89,5 +92,49 @@ describe("useUploadFileCover", () => {
       code: "invalid_cover",
       status: 422,
     });
+  });
+});
+
+describe("useUpdateFile", () => {
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    requestSpy = vi.spyOn(API, "request").mockResolvedValue({ id: 7 });
+  });
+
+  afterEach(() => {
+    requestSpy.mockRestore();
+  });
+
+  const invalidatedKeys = async (payload: object) => {
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useUpdateFile(), {
+      wrapper: ({ children }) =>
+        React.createElement(QueryClientProvider, { client }, children),
+    });
+    await result.current.mutateAsync({ id: 7, payload });
+    return invalidate.mock.calls.map(([filters]) => filters?.queryKey?.[0]);
+  };
+
+  // Promotion scans the File, which can add series, genres, and tags.
+  it("refreshes series, genres, and tags when a file becomes a main file", async () => {
+    const keys = await invalidatedKeys({ file_role: "main" });
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        SeriesQueryKey.ListSeries,
+        GenresQueryKey.ListGenres,
+        TagsQueryKey.ListTags,
+      ]),
+    );
+  });
+
+  it("leaves series, genres, and tags alone for other edits", async () => {
+    const keys = await invalidatedKeys({ name: "Edition" });
+    expect(keys).not.toContain(SeriesQueryKey.ListSeries);
+    expect(keys).not.toContain(GenresQueryKey.ListGenres);
+    expect(keys).not.toContain(TagsQueryKey.ListTags);
   });
 });
