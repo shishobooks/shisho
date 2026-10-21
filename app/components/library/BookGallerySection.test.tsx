@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { useSortParam } from "@/hooks/useSortParam";
 import { ShishoAPIError } from "@/libraries/api";
 import {
@@ -415,5 +416,29 @@ describe("BookGallerySection", () => {
         screen.queryByRole("button", { name: /Series$/ }),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("shapes covers by the library's cover aspect ratio, like its gallery", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      [LibrariesQueryKey.UserLibraries],
+      [{ id: 1, name: "Audio", cover_aspect_ratio: "audiobook" }],
+    );
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <BookGallerySection
+            libraryId="1"
+            query={makeQueryResult([makeBook(1)], 1)}
+            title="Books"
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(container.querySelector(".aspect-square")).not.toBeNull();
+    expect(container.querySelector(".aspect-\\[2\\/3\\]")).toBeNull();
   });
 });

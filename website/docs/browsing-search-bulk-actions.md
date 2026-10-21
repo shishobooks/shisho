@@ -42,6 +42,8 @@ The **Series**, **People**, **Genres**, **Tags**, and **Publishers** pages have 
 
 These pages sort by **Name** until you choose another sort. Their sort lives only in the page URL and cannot be saved as a default.
 
+On the **People**, **Genres**, **Tags**, and **Publishers** pages, each entry shows the covers of up to three of its books, in the shapes the library's gallery uses for its cover aspect ratio. The most recently released books come first, then the most recently added among books with no release date. A person shows the books they wrote, then the books of files they narrated. A publisher includes its sub-publishers' books. Covers need the Books Read permission, so on **People** a role without it sees the entries without covers.
+
 ## Books on Series, Person, Genre, and Tag Pages
 
 The book section of a series, person, genre, or tag page has a **Sort** control with the [gallery sort](#gallery-sort) fields. A series page leaves out **Series**.

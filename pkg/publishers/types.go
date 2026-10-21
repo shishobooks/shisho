@@ -1,6 +1,7 @@
 package publishers
 
 import (
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -49,6 +50,9 @@ type PublisherListItem struct {
 	DescendantPublisherCount int      `json:"descendant_publisher_count"`
 	ParentName               *string  `json:"parent_name"`
 	Aliases                  []string `json:"aliases"`
+	// The covers the list shows for this publisher, including its
+	// sub-publishers' books.
+	PreviewBooks []bookpreviews.PreviewBook `json:"preview_books" tstype:"PreviewBook[]"`
 }
 
 // ListPublishersResponse is the list-endpoint envelope.

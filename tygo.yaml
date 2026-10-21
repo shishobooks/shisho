@@ -102,28 +102,34 @@ packages:
       import { Book, Series } from "@/types";
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/bookpreviews"
+    output_path: "app/types/generated/bookpreviews.ts"
+    frontmatter: |
+      import { ThumbnailAspect } from "@/types";
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/people"
     output_path: "app/types/generated/people.ts"
     frontmatter: |
-      import { File, Person } from "@/types";
+      import { File, Person, PreviewBook } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/genres"
     output_path: "app/types/generated/genres.ts"
     frontmatter: |
-      import { Genre } from "@/types";
+      import { Genre, PreviewBook } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/tags"
     output_path: "app/types/generated/tags.ts"
     frontmatter: |
-      import { Tag } from "@/types";
+      import { Tag, PreviewBook } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/publishers"
     output_path: "app/types/generated/publishers.ts"
     frontmatter: |
-      import { File, Publisher } from "@/types";
+      import { File, Publisher, PreviewBook } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/devices"

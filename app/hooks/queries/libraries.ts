@@ -16,6 +16,7 @@ import type {
 } from "@/types";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { invalidateCoverPreviewLists } from "./coverPreviews";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 import { anyOf, useRequires } from "./permissions";
 
@@ -82,6 +83,8 @@ export const useCreateLibrary = () => {
         [QueryKey.RetrieveLibrary, String(data.id)],
         data,
       );
+      // The cover aspect ratio decides which file's cover a book shows.
+      invalidateCoverPreviewLists(queryClient);
     },
   });
 };
@@ -105,6 +108,8 @@ export const useUpdateLibrary = () => {
         [QueryKey.RetrieveLibrary, String(data.id)],
         data,
       );
+      // The cover aspect ratio decides which file's cover a book shows.
+      invalidateCoverPreviewLists(queryClient);
     },
   });
 };

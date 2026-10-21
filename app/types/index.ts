@@ -37,6 +37,7 @@ export * from "./generated/auth";
 export * from "./generated/users";
 export * from "./generated/roles";
 export * from "./generated/search";
+export * from "./generated/bookpreviews";
 export {
   type SeriesResponse,
   type ListSeriesResponse,
@@ -48,6 +49,7 @@ export {
 } from "./generated/series";
 export {
   type PersonResponse,
+  type PersonListItem,
   type ListPeopleResponse,
   type ListNarratedFilesResponse,
   type ListPeopleQuery,
@@ -56,6 +58,7 @@ export {
 } from "./generated/people";
 export {
   type GenreResponse,
+  type GenreListItem,
   type ListGenresResponse,
   type ListGenresQuery,
   type UpdateGenrePayload,
@@ -63,6 +66,7 @@ export {
 } from "./generated/genres";
 export {
   type TagResponse,
+  type TagListItem,
   type ListTagsResponse,
   type ListTagsQuery,
   type UpdateTagPayload,

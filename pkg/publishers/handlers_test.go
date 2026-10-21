@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -42,6 +43,7 @@ func (noopReviewRecomputer) RecomputeReviewedForBooks(context.Context, []int) {}
 func newTestHandler(db *bun.DB) *handler {
 	return &handler{
 		publisherService: NewService(db),
+		bookPreviews:     bookpreviews.NewService(db),
 		aliasService:     aliases.NewService(db),
 		searchService:    search.NewService(db),
 		reviewRecomputer: noopReviewRecomputer{},

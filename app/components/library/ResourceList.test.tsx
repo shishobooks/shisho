@@ -3,14 +3,23 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
 import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 import type { SortLevel } from "@/libraries/sortSpec";
-import type { ResourceListResponse } from "@/types";
+import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
+import type { PreviewBook, ResourceListResponse } from "@/types";
 
 import ResourceList from "./ResourceList";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+const library = vi.hoisted(() => ({ cover_aspect_ratio: "book" }));
+vi.mock("@/hooks/queries/libraries", () => ({
+  useUserLibrary: () => ({ data: library }),
+}));
+mockCoverDimensions(38, 56);
 
 vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -25,7 +34,11 @@ beforeAll(() => {
   })) as unknown as typeof window.matchMedia;
 });
 
-type Item = { id: number; name: string };
+type Item = {
+  id: number;
+  name: string;
+  preview_books?: PreviewBook[];
+};
 type Field = (typeof BOOK_COUNT_RESOURCE_SORT.fields)[number];
 
 const defaultSort = {
@@ -58,7 +71,12 @@ const list = (
 ) => (
   <MemoryRouter>
     <ResourceList<Item, Field>
-      itemConfig={(item) => ({ name: item.name, aliases: [], badges: [] })}
+      itemConfig={(item) => ({
+        name: item.name,
+        aliases: [],
+        badges: [],
+        previewBooks: item.preview_books,
+      })}
       itemLabel="genres"
       linkTo={(item) => `/libraries/1/genres/${item.id}`}
       query={query as UseQueryResult<ResourceListResponse<Item>>}
@@ -163,7 +181,12 @@ describe("ResourceList", () => {
     render(
       <MemoryRouter>
         <ResourceList<Item, Field>
-          itemConfig={(item) => ({ name: item.name, aliases: [], badges: [] })}
+          itemConfig={(item) => ({
+            name: item.name,
+            aliases: [],
+            badges: [],
+            previewBooks: item.preview_books,
+          })}
           itemLabel="genres"
           linkTo={(item) => `/libraries/1/genres/${item.id}`}
           query={pastTheEnd as UseQueryResult<ResourceListResponse<Item>>}
@@ -272,5 +295,64 @@ describe("ResourceList", () => {
   it("shows no sort chips for the default sort", () => {
     render(list({ ...settled, data: { items: [], total: 0 } }));
     expect(screen.queryByText("Sorted by:")).not.toBeInTheDocument();
+  });
+
+  describe("covers", () => {
+    afterEach(() => {
+      library.cover_aspect_ratio = "book";
+    });
+
+    const withPreviews = {
+      ...settled,
+      isSuccess: true,
+      data: {
+        items: [
+          {
+            id: 1,
+            name: "Fantasy",
+            preview_books: [
+              {
+                id: 7,
+                title: "Dune",
+                cover_cache_key: "7-1",
+                cover_aspect: "book" as const,
+              },
+              {
+                id: 8,
+                title: "Emma",
+                cover_cache_key: "8-1",
+                cover_aspect: "square" as const,
+              },
+            ],
+          },
+        ],
+        total: 1,
+      },
+    };
+
+    it("shows an entry's book covers to a role that can read books", () => {
+      setAuth({ permissions: ["books:read"] });
+      const { container } = renderList(withPreviews);
+
+      expect(container.querySelectorAll("img")).toHaveLength(2);
+    });
+
+    it("sizes the cover slot for the library's cover preference", () => {
+      setAuth({ permissions: ["books:read"] });
+      library.cover_aspect_ratio = "audiobook_fallback_book";
+      const { container } = renderList(withPreviews);
+
+      const slot = container.querySelector("img")!.parentElement!;
+      expect(slot.style.width).toBe("80px");
+    });
+
+    it("leaves the cover slot out for a role that cannot read books", () => {
+      setAuth({ permissions: ["people:read"] });
+      const { container } = renderList(withPreviews);
+
+      expect(screen.getByText("Fantasy")).toBeInTheDocument();
+      expect(container.querySelectorAll("img")).toHaveLength(0);
+      expect(screen.queryByTestId("cover-fan-placeholder")).toBeNull();
+    });
   });
 });

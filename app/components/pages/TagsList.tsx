@@ -16,6 +16,7 @@ const TagsList = () => {
         return {
           name: tag.name,
           aliases: tag.aliases,
+          previewBooks: tag.preview_books,
           badges: [
             {
               count: bookCount,

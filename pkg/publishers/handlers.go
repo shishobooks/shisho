@@ -10,6 +10,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -21,6 +22,7 @@ import (
 
 type handler struct {
 	publisherService *Service
+	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
@@ -215,12 +217,24 @@ func (h *handler) list(c echo.Context) error {
 		publisherNameMap[p.ID] = p.Name
 	}
 
+	// Previews are picked for the whole page in one query, so they are
+	// attached here rather than in the per-row build.
+	ids := make([]int, len(publishers))
+	for i, p := range publishers {
+		ids[i] = p.ID
+	}
+	previews, err := h.bookPreviews.Load(ctx, bookpreviews.Publishers, ids)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	result := make([]PublisherListItem, len(publishers))
 	for i, p := range publishers {
 		result[i], err = h.buildPublisherListItem(ctx, p, publisherNameMap)
 		if err != nil {
 			return err
 		}
+		result[i].PreviewBooks = previews.For(p.ID)
 	}
 
 	response := ListPublishersResponse{Items: result, Total: total}

@@ -57,6 +57,7 @@ const respond = async (_method: string, path: string) => {
   if (path === "/users/directory") return [{ id: 2, username: "friend" }];
   if (path === "/users") return { items: [], total: 0 };
   if (path === "/settings/user") return { gallery_size: "m" };
+  if (path === "/user/libraries") return [];
   return { items: [], total: 0 };
 };
 

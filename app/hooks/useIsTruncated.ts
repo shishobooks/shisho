@@ -12,7 +12,11 @@ export function useIsTruncated<T extends HTMLElement>(): [
     if (!el) return;
 
     const check = () => {
-      setIsTruncated(el.scrollHeight > el.clientHeight);
+      // Clamped to fewer lines (line-clamp), or one line cut off with an
+      // ellipsis (truncate).
+      setIsTruncated(
+        el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth,
+      );
     };
 
     check();

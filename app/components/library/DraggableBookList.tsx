@@ -30,6 +30,7 @@ type InsertPosition = "before" | "after" | null;
 
 interface DraggableBookItemProps {
   listBook: ListBook;
+  coverAspectRatioFor: (libraryId: number) => string;
   addedByUsername?: string;
   isDragOverlay?: boolean;
   insertPosition?: InsertPosition;
@@ -37,6 +38,7 @@ interface DraggableBookItemProps {
 
 const DraggableBookItem = ({
   listBook,
+  coverAspectRatioFor,
   addedByUsername,
   isDragOverlay = false,
   insertPosition = null,
@@ -56,6 +58,7 @@ const DraggableBookItem = ({
   };
 
   if (!listBook.book) return null;
+  const coverAspectRatio = coverAspectRatioFor(listBook.book.library_id);
 
   // For the drag overlay, render a clean lifted version with explicit width
   if (isDragOverlay) {
@@ -64,6 +67,7 @@ const DraggableBookItem = ({
         <BookItem
           addedByUsername={addedByUsername}
           book={listBook.book}
+          coverAspectRatio={coverAspectRatio}
           libraryId={listBook.book.library_id.toString()}
         />
       </div>
@@ -90,6 +94,7 @@ const DraggableBookItem = ({
       <BookItem
         addedByUsername={addedByUsername}
         book={listBook.book}
+        coverAspectRatio={coverAspectRatio}
         libraryId={listBook.book.library_id.toString()}
       />
     </div>
@@ -98,6 +103,8 @@ const DraggableBookItem = ({
 
 interface DraggableBookListProps {
   books: ListBook[];
+  /** The cover aspect ratio of a book's library, which shapes its cover. */
+  coverAspectRatioFor: (libraryId: number) => string;
   /** From `useGallerySizeParam`, matching the gallery the list replaces. */
   columns: number;
   isOwner: boolean;
@@ -107,6 +114,7 @@ interface DraggableBookListProps {
 
 export const DraggableBookList = ({
   books,
+  coverAspectRatioFor,
   columns,
   isOwner,
   onReorder,
@@ -238,6 +246,7 @@ export const DraggableBookList = ({
               addedByUsername={
                 !isOwner ? listBook.added_by_user?.username : undefined
               }
+              coverAspectRatioFor={coverAspectRatioFor}
               insertPosition={getInsertPosition(listBook.book_id)}
               key={listBook.id}
               listBook={listBook}
@@ -251,6 +260,7 @@ export const DraggableBookList = ({
             addedByUsername={
               !isOwner ? activeItem.added_by_user?.username : undefined
             }
+            coverAspectRatioFor={coverAspectRatioFor}
             isDragOverlay
             listBook={activeItem}
           />

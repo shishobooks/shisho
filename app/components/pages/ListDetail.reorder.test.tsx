@@ -56,6 +56,10 @@ const renderWithReorderFailure = (
   failure: Response,
   listOverrides: Partial<typeof list> = {},
   entry = "/lists/5",
+  {
+    libraries = [],
+    listBooks = [],
+  }: { libraries?: unknown[]; listBooks?: unknown[] } = {},
 ) => {
   vi.stubGlobal("__APP_VERSION__", "test");
   vi.stubGlobal(
@@ -89,7 +93,9 @@ const renderWithReorderFailure = (
     if (path === "/api/lists/5")
       return Response.json({ ...list, ...listOverrides });
     if (path.endsWith("/shares")) return Response.json([]);
-    if (path === "/api/user/libraries") return Response.json([]);
+    if (path === "/api/user/libraries") return Response.json(libraries);
+    if (path === "/api/lists/5/books")
+      return Response.json({ items: listBooks, total: listBooks.length });
     if (path === "/api/settings/user")
       return Response.json({ gallery_size: "m" });
     return Response.json({ items: [], total: 0 });
@@ -172,5 +178,33 @@ describe("ListDetail reorder failures", () => {
 
     await screen.findByRole("button", { name: "Reorder" });
     await waitFor(() => expect(location.search).toBe(""));
+  });
+});
+
+describe("ListDetail covers", () => {
+  it("shapes each book's cover by its own library's cover aspect ratio", async () => {
+    // No reorder happens here, so the failure response never gets served.
+    renderWithReorderFailure(
+      Response.json({}),
+      { is_ordered: false, permission: "viewer", book_count: 1 },
+      "/lists/5",
+      {
+        libraries: [{ id: 2, name: "Audio", cover_aspect_ratio: "audiobook" }],
+        listBooks: [
+          {
+            id: 1,
+            list_id: 5,
+            book_id: 9,
+            sort_order: 1,
+            book: { id: 9, title: "Dune", library_id: 2, files: [] },
+          },
+        ],
+      },
+    );
+
+    await screen.findByText("Dune");
+    await waitFor(() =>
+      expect(document.querySelector(".aspect-square")).not.toBeNull(),
+    );
   });
 });

@@ -8,6 +8,7 @@ import QueryError, {
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import SortedByChips from "@/components/library/SortedByChips";
 import SortSheet, { SortButton } from "@/components/library/SortSheet";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import type { SortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
@@ -53,6 +54,9 @@ export function BookGallerySection<F extends string>({
     applyGallerySize,
     saveSizeAsDefault,
   } = useGallerySizeParam();
+  // Covers take the shape the library's gallery gives them.
+  const library = useUserLibrary(libraryId);
+  const coverAspectRatio = library.data?.cover_aspect_ratio ?? "book";
   const totalPages = Math.ceil((query.data?.total ?? 0) / itemsPerPage);
 
   // Treat any unresolved query as loading, including a disabled query
@@ -139,6 +143,7 @@ export function BookGallerySection<F extends string>({
         {query.data?.items.map((book) => (
           <BookItem
             book={book}
+            coverAspectRatio={coverAspectRatio}
             key={book.id}
             libraryId={libraryId}
             seriesId={seriesId}

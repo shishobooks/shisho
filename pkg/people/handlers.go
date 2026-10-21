@@ -9,6 +9,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -37,6 +38,7 @@ type FileOrganizer interface {
 
 type handler struct {
 	personService    *Service
+	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
@@ -134,12 +136,28 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	result := make([]PersonResponse, len(people))
+	// Covers come from Books Read routes, so a role without it gets none.
+	// They are picked for the whole page in one query, so they are attached
+	// here rather than in the per-row build.
+	previews := bookpreviews.Previews{}
+	if user.HasPermission(models.ResourceBooks, models.OperationRead) {
+		ids := make([]int, len(people))
+		for i, p := range people {
+			ids[i] = p.ID
+		}
+		previews, err = h.bookPreviews.Load(ctx, bookpreviews.People, ids)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	result := make([]PersonListItem, len(people))
 	for i, p := range people {
-		result[i], err = h.buildPersonResponse(ctx, p)
+		response, err := h.buildPersonResponse(ctx, p)
 		if err != nil {
 			return err
 		}
+		result[i] = PersonListItem{PersonResponse: response, PreviewBooks: previews.For(p.ID)}
 	}
 
 	response := ListPeopleResponse{Items: result, Total: total}
