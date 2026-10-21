@@ -5,6 +5,7 @@ import {
   type File,
   type SourceIntent,
 } from "@/types";
+import { fileTypeLabel } from "@/utils/format";
 
 export type FieldStatus = "unchanged" | "changed" | "new";
 
@@ -55,7 +56,9 @@ export interface IdentifyEmptyStateMessage {
 export function computeIdentifyEmptyState(
   input: IdentifyEmptyStateInput,
 ): IdentifyEmptyStateMessage {
-  const fileTypeLabel = input.fileType?.toUpperCase() ?? "this file type";
+  const typeLabel = input.fileType
+    ? fileTypeLabel(input.fileType)
+    : "this file type";
   const skippedNames = input.skippedPlugins
     .map((p) => p.plugin_name || p.plugin_id)
     .join(", ");
@@ -78,7 +81,7 @@ export function computeIdentifyEmptyState(
   if (allSkipped) {
     const plural = input.skippedPlugins.length !== 1;
     return {
-      primary: `No installed enricher${plural ? "s" : ""} support${plural ? "" : "s"} ${fileTypeLabel} files (${skippedNames}).`,
+      primary: `No installed enricher${plural ? "s" : ""} support${plural ? "" : "s"} ${typeLabel} files (${skippedNames}).`,
     };
   }
 
@@ -87,8 +90,8 @@ export function computeIdentifyEmptyState(
     return {
       primary: "Try a different search query.",
       secondary: plural
-        ? `${skippedNames} were skipped because they don't support ${fileTypeLabel} files.`
-        : `${skippedNames} was skipped because it doesn't support ${fileTypeLabel} files.`,
+        ? `${skippedNames} were skipped because they don't support ${typeLabel} files.`
+        : `${skippedNames} was skipped because it doesn't support ${typeLabel} files.`,
     };
   }
 

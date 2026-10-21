@@ -114,7 +114,7 @@ When MIME types are present, Shisho compares compatible MIME values rather than 
 
 - `fields` is required. Missing or empty fields disable only the enricher hook and produce a load warning.
 - `fileTypes` is optional. Omit it to allow every file type.
-- A `.kepub.epub` file has the file type `kepub`. An enricher that declares `epub` also runs on KePub files; declare `kepub` alone to run only on them.
+- A `.kepub.epub` file has the file type `kepub`, which is also the `fileType` its search context reports. An enricher that declares `epub` also runs on KePub files; declare `kepub` alone to run only on them.
 - Invalid field names cause plugin loading to fail.
 
 Valid declarations are:

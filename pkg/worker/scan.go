@@ -324,7 +324,7 @@ func discoverRootLevelSupplements(mainFilePath string, libraryPath string, exclu
 
 	// Get basename without extension
 	mainFilename := filepath.Base(mainFilePath)
-	mainBasename := strings.TrimSuffix(mainFilename, filepath.Ext(mainFilename))
+	mainBasename := strings.TrimSuffix(mainFilename, models.FileExtensionForPath(mainFilename))
 
 	// List files in the same directory
 	entries, err := os.ReadDir(libraryPath)

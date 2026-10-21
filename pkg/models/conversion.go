@@ -8,7 +8,7 @@ import "strings"
 // File Type.
 func DeliveredFileTypeExtension(fileType string) string {
 	if fileType == FileTypeKePub {
-		return "kepub.epub"
+		return strings.TrimPrefix(kepubExtension, ".")
 	}
 	return fileType
 }

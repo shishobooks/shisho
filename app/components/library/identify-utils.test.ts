@@ -82,6 +82,20 @@ describe("computeIdentifyEmptyState", () => {
     expect(result.secondary).toBeUndefined();
   });
 
+  it("writes KePub in Kobo's casing", () => {
+    const result = computeIdentifyEmptyState({
+      ...baseInput,
+      fileType: "kepub",
+      totalPlugins: 1,
+      skippedPlugins: [
+        { plugin_id: "audible", plugin_name: "Audible Enricher" },
+      ],
+    });
+    expect(result.primary).toBe(
+      "No installed enricher supports KePub files (Audible Enricher).",
+    );
+  });
+
   it("reports all-skipped with plural wording for multiple plugins", () => {
     const result = computeIdentifyEmptyState({
       ...baseInput,

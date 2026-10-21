@@ -479,7 +479,7 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 		}
 	} else {
 		filename := filepath.Base(file.Filepath)
-		title = strings.TrimSuffix(filename, filepath.Ext(filename))
+		title = strings.TrimSuffix(filename, models.FileExtensionForPath(filename))
 		titleSource = models.DataSourceFilepath
 	}
 

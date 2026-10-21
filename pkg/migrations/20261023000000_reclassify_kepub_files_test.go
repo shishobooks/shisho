@@ -12,7 +12,8 @@ const reclassifyKePubMigrationName = "20261023000000"
 
 // Before KePub was a File Type, a .kepub.epub was typed by its last
 // extension, as an EPUB. That the reclassified Files miss their EPUB-era
-// cache entries is TestComputeFingerprint_SourceFileTypeChangesHash.
+// cache entries is TestComputeFingerprint_SourceFileTypeChangesHash. A bare
+// .kepub supplement was typed by its raw extension and keeps it both ways.
 func TestReclassifyKePubFiles(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -28,7 +29,8 @@ func TestReclassifyKePubFiles(t *testing.T) {
 			       (2, 1, 1, '/one/book/b.KePub.EPUB', 'epub', 'supplement'),
 			       (3, 1, 1, '/one/book/c.epub', 'epub', 'main'),
 			       (4, 1, 1, '/one/book.kepub/d.epub', 'epub', 'main'),
-			       (5, 1, 1, '/one/book/e.cbz', 'cbz', 'main')`,
+			       (5, 1, 1, '/one/book/e.cbz', 'cbz', 'main'),
+			       (6, 1, 1, '/one/book/f.kepub', 'kepub', 'supplement')`,
 	} {
 		_, err := db.ExecContext(ctx, query)
 		require.NoError(t, err, query)
@@ -49,11 +51,11 @@ func TestReclassifyKePubFiles(t *testing.T) {
 
 	_, err := migrator.Migrate(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, map[int]string{1: "kepub", 2: "kepub", 3: "epub", 4: "epub", 5: "cbz"}, types())
+	assert.Equal(t, map[int]string{1: "kepub", 2: "kepub", 3: "epub", 4: "epub", 5: "cbz", 6: "kepub"}, types())
 
 	_, err = migrator.Rollback(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, map[int]string{1: "epub", 2: "epub", 3: "epub", 4: "epub", 5: "cbz"}, types())
+	assert.Equal(t, map[int]string{1: "epub", 2: "epub", 3: "epub", 4: "epub", 5: "cbz", 6: "kepub"}, types())
 
 	_, err = migrator.Migrate(ctx)
 	require.NoError(t, err)

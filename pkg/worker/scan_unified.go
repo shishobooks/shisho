@@ -489,8 +489,7 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	if file.FileRole == models.FileRoleSupplement {
 		// Supplements get their name from the filename (without extension)
 		filename := filepath.Base(file.Filepath)
-		ext := filepath.Ext(filename)
-		nameWithoutExt := strings.TrimSuffix(filename, ext)
+		nameWithoutExt := strings.TrimSuffix(filename, models.FileExtensionForPath(filename))
 		metadata = &mediafile.ParsedMetadata{
 			Title:      nameWithoutExt,
 			DataSource: models.DataSourceFilepath,

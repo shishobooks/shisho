@@ -11,15 +11,15 @@ A logical work in the library, composed of one or more files.
 _Avoid_: title, item
 
 **File**:
-A single media file (EPUB, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to a book. MOBI is the older Kindle File Type and AZW3 the newer KF8 one.
+A single media file (EPUB, KePub, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to a book. MOBI is the older Kindle File Type and AZW3 the newer KF8 one.
 _Avoid_: asset, media
 
 **File Type**:
-The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. KePub is a File Type even when it exists only as a delivery.
+The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. A KePub is a File named `.kepub.epub`; one converted from an EPUB or CBZ exists only as a delivery.
 _Avoid_: format, file format
 
 **Reflowable**:
-An ebook **File** whose text re-wraps to fit the screen (EPUB, MOBI, AZW3). Classified by **File Type**, so a fixed-layout EPUB is still reflowable. Positions within it are locations in the text, not page numbers.
+An ebook **File** whose text re-wraps to fit the screen (EPUB, KePub, MOBI, AZW3). Classified by **File Type**, so a fixed-layout EPUB is still reflowable. Positions within it are locations in the text, not page numbers.
 _Avoid_: text book, ebook (ebook also includes page-based files)
 
 **Page-based**:

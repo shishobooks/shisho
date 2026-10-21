@@ -32,8 +32,6 @@ A KePub is the EPUB variant Kobo's own reader is built for. Shisho imports any f
 
 A KePub downloaded as KePub gets Shisho's current metadata, cover, and chapter edits, the same as an EPUB download, and keeps the Kobo markup inside it, so it still opens in Kobo's own reader. A KePub converted from an EPUB or CBZ is a different download; see [Conversions](#conversions).
 
-Files named `.kepub.epub` that an earlier Shisho version imported as EPUB become KePub on upgrade, with no rescan.
-
 DRM-protected KePubs, such as books bought from the Kobo store and copied off a Kobo, are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-file-never-appears).
 
 ## MOBI and AZW3

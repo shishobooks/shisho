@@ -100,6 +100,9 @@ func GenerateEPUB(t *testing.T, dir, filename string, opts EPUBOptions) string {
 		}
 	}
 	chapterBytes := []byte(chapterContent)
+	if opts.Chapter != nil {
+		chapterBytes = opts.Chapter
+	}
 	if opts.KoboDRM {
 		// Bytes no XHTML starts with, standing in for AES output.
 		chapterBytes = bytes.Repeat([]byte{0x9c, 0x07, 0xe1, 0x3f}, 64)

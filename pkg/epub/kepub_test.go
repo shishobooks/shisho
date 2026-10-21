@@ -55,6 +55,10 @@ func TestParseKePub_EncryptionXML(t *testing.T) {
 		{"Adobe rights.xml", map[string]string{"META-INF/rights.xml": "<rights/>"}, true},
 		{"content encrypted with AES", map[string]string{"META-INF/encryption.xml": encryption("http://www.w3.org/2001/04/xmlenc#aes128-cbc")}, true},
 		{"IDPF font obfuscation only", map[string]string{"META-INF/encryption.xml": encryption("http://www.idpf.org/2008/embedding")}, false},
+		{"font obfuscation listed before an Adobe rights.xml", map[string]string{
+			"META-INF/encryption.xml": encryption("http://ns.adobe.com/pdf/enc#RC"),
+			"META-INF/rights.xml":     "<rights/>",
+		}, true},
 		{"Adobe font obfuscation only", map[string]string{"META-INF/encryption.xml": encryption("http://ns.adobe.com/pdf/enc#RC")}, false},
 	}
 	for _, tt := range tests {
@@ -69,6 +73,34 @@ func TestParseKePub_EncryptionXML(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// Only the spine's content documents count, and one that is not markup is
+// not enough: entries macOS adds, UTF-16 documents, and stray files are
+// readable books.
+func TestParseKePub_ReadableContentIsNotDRM(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		chapter []byte
+		entries map[string]string
+	}{
+		{name: "macOS AppleDouble entry", entries: map[string]string{"__MACOSX/OEBPS/._chapter1.xhtml": "\x00\x05\x16\x07binary"}},
+		{name: "stray HTML outside the spine", entries: map[string]string{"OEBPS/notes.html": "plain text, not markup"}},
+		{name: "UTF-16 content document", chapter: []byte("\xff\xfe<\x00h\x00t\x00m\x00l\x00/\x00>\x00")},
+		{name: "UTF-16 content document without a byte order mark", chapter: []byte("<\x00h\x00t\x00m\x00l\x00/\x00>\x00")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := testgen.GenerateEPUB(t, t.TempDir(), "book.kepub.epub", testgen.EPUBOptions{
+				Title: "Book", KoboMarkup: true, Chapter: tt.chapter, ExtraEntries: tt.entries,
+			})
+			_, err := ParseKePub(path)
+			assert.NoError(t, err)
 		})
 	}
 }

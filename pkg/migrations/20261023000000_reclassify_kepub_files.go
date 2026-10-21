@@ -17,7 +17,7 @@ func init() {
 		return errors.Wrap(err, "failed to reclassify KePub files")
 	}
 	down := func(ctx context.Context, db *bun.DB) error {
-		_, err := db.ExecContext(ctx, `UPDATE files SET file_type = 'epub' WHERE file_type = 'kepub'`)
+		_, err := db.ExecContext(ctx, `UPDATE files SET file_type = 'epub' WHERE file_type = 'kepub' AND lower(filepath) LIKE '%.kepub.epub'`)
 		return errors.Wrap(err, "failed to restore KePub files to EPUB")
 	}
 	Migrations.MustRegister(up, down)

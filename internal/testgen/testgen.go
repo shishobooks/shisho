@@ -32,6 +32,9 @@ type EPUBOptions struct {
 	// KoboDRM writes the chapter's bytes encrypted, as a KePub bought from
 	// the Kobo store is: no encryption.xml, and content that is not markup.
 	KoboDRM bool
+	// Chapter, when set, is written as chapter1.xhtml's bytes in place of
+	// the generated chapter.
+	Chapter []byte
 	// ExtraEntries are written into the archive as given, by name.
 	ExtraEntries map[string]string
 }
