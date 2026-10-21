@@ -19,7 +19,8 @@ const (
 	FileTypeEPUB = "epub"
 	// FileTypeKePub is Kobo's EPUB: an EPUB with Kobo markup, named
 	// .kepub.epub. Kobo readers and KOReader tell it from an EPUB by that
-	// name alone, and so does Shisho.
+	// name alone, and so does Shisho. A Calibre library stores one as a
+	// bare .kepub, which is a KePub too.
 	FileTypeKePub = "kepub"
 	FileTypeM4B   = "m4b"
 	FileTypeMOBI  = "mobi"
@@ -32,20 +33,22 @@ const kepubExtension = ".kepub.epub"
 
 // builtInFileTypesByExtension maps every extension Shisho parses itself
 // (lowercase, no dot) to its file type. A file type is not always its
-// extension: .azw and .prc files are MOBI.
+// extension: .azw and .prc files are MOBI. A .kepub.epub, whose last
+// extension is an EPUB's, is matched by isKePubPath instead.
 var builtInFileTypesByExtension = map[string]string{
-	"azw3": FileTypeAZW3,
-	"cbz":  FileTypeCBZ,
-	"epub": FileTypeEPUB,
-	"m4b":  FileTypeM4B,
-	"mobi": FileTypeMOBI,
-	"azw":  FileTypeMOBI,
-	"prc":  FileTypeMOBI,
-	"pdf":  FileTypePDF,
+	"azw3":  FileTypeAZW3,
+	"cbz":   FileTypeCBZ,
+	"epub":  FileTypeEPUB,
+	"kepub": FileTypeKePub,
+	"m4b":   FileTypeM4B,
+	"mobi":  FileTypeMOBI,
+	"azw":   FileTypeMOBI,
+	"prc":   FileTypeMOBI,
+	"pdf":   FileTypePDF,
 }
 
 // FileTypeForPath returns the file type for a path: KePub for a .kepub.epub,
-// the built-in type its extension maps to, or else the lowercase extension
+// the built-in type its extension maps to (KePub for a bare .kepub too), or else the lowercase extension
 // without the dot, which is how plugin-parsed files and supplements are
 // typed.
 func FileTypeForPath(path string) string {

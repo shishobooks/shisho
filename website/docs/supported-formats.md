@@ -7,7 +7,7 @@ Shisho has native support for seven main-file formats. See [Reading and Playback
 | Format | Import | Metadata Extraction | In-App Reader or Player | Generated Download |
 |--------|--------|---------------------|-------------------------|--------------------|
 | **EPUB** | Yes | Package metadata, navigation, and embedded cover data | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | EPUB with supported current metadata and [edited chapters](./metadata.md#chapters) applied |
-| **KePub** (`.kepub.epub`) | Yes | The same as EPUB; see [KePub](#kepub) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | KePub with supported current metadata and [edited chapters](./metadata.md#chapters) applied, Kobo markup kept |
+| **KePub** (`.kepub.epub`, `.kepub`) | Yes | The same as EPUB; see [KePub](#kepub) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | KePub with supported current metadata and [edited chapters](./metadata.md#chapters) applied, Kobo markup kept |
 | **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied and chapters written as [folders](#cbz-downloads) |
 | **M4B** | Yes | Audiobook metadata, chapters, audio details, and embedded cover data | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
@@ -28,7 +28,7 @@ A generated download starts as soon as it is requested and is built while it is 
 
 ## KePub
 
-A KePub is the EPUB variant Kobo's own reader is built for. Shisho imports any file named `.kepub.epub` as a **KePub**, and every other `.epub` as an EPUB. A scan reads a KePub's metadata, chapters, and cover the same way it reads an EPUB's. Organizing a library keeps the whole `.kepub.epub` extension.
+A KePub is the EPUB variant Kobo's own reader is built for. Shisho imports any file named `.kepub.epub` as a **KePub**, and every other `.epub` as an EPUB. A file named just `.kepub`, as Calibre stores a KePub in its library, is a KePub too. A scan reads a KePub's metadata, chapters, and cover the same way it reads an EPUB's. Organizing a library keeps the file's own extension, `.kepub.epub` or `.kepub`, and so does **Download Original**. A generated KePub download is always named `.kepub.epub`, the name Kobo's reader and KOReader recognize.
 
 A KePub downloaded as KePub gets Shisho's current metadata, cover, and chapter edits, the same as an EPUB download, and keeps the Kobo markup inside it, so it still opens in Kobo's own reader. A KePub converted from an EPUB or CBZ is a different download; see [Conversions](#conversions).
 

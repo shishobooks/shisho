@@ -42,13 +42,13 @@ Before enabling file organization, back up the library and test the setting on a
 
 ## A DRM-Protected File Never Appears
 
-**Symptom:** A `.mobi`, `.azw`, `.prc`, `.azw3`, or `.kepub.epub` file is in a library folder, but no book appears for it after a scan. If the file had been imported before, its book or file disappears after the file is replaced.
+**Symptom:** A `.mobi`, `.azw`, `.prc`, `.azw3`, `.kepub.epub`, or `.kepub` file is in a library folder, but no book appears for it after a scan. If the file had been imported before, its book or file disappears after the file is replaced.
 
 **Likely cause:** The file is DRM-protected. Shisho never imports DRM-protected files and cannot read them. When an imported file is replaced on disk by a DRM-protected copy, the next scan removes it as if the file had been deleted.
 
 **Verify:** Open the scan job under **Administration > Jobs** and look for a `skipped DRM-protected file` warning naming the file. A `mime type is not expected for extension` warning for the same path means the file is not MOBI or AZW3 at all, for example a KFX book with an `.azw` extension; see [Supported Formats](./supported-formats.md#mobi-and-azw3).
 
-**Fix:** Replace the file with a DRM-free copy. A plugin [input converter](./plugins/manifest-hooks-reference.md#input-converter-capability) that declares `mobi`, `azw3`, or, for a KePub, `epub` still receives DRM-protected files and can write a DRM-free copy beside them, which the scan then imports.
+**Fix:** Replace the file with a DRM-free copy. A plugin [input converter](./plugins/manifest-hooks-reference.md#input-converter-capability) that declares `mobi`, `azw3`, `epub` (for a `.kepub.epub`), or `kepub` (for a `.kepub`) still receives DRM-protected files and can write a DRM-free copy beside them, which the scan then imports.
 
 ## A File Is Marked Unreadable
 

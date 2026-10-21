@@ -170,7 +170,7 @@ func TestFileTypeForPath(t *testing.T) {
 		{"/lib/Book/book.epub", FileTypeEPUB},
 		{"/lib/Book/book.kepub.epub", FileTypeKePub},
 		{"/lib/Book/Book.KEPUB.EPUB", FileTypeKePub},
-		{"/lib/Book/book.kepub", "kepub"},
+		{"/lib/Book/book.kepub", FileTypeKePub},
 		{"/lib/Book.kepub/book.epub", FileTypeEPUB},
 		{"/lib/Book/book.mobi", FileTypeMOBI},
 		{"/lib/Book/book.azw", FileTypeMOBI},
@@ -232,6 +232,15 @@ func TestFileExtensionForPath(t *testing.T) {
 	assert.Equal(t, ".epub", FileExtensionForPath("/lib/Book/book.epub"))
 	assert.Equal(t, ".kepub.epub", FileExtensionForPath("/lib/Book/book.kepub.epub"))
 	assert.Equal(t, ".KePub.EPUB", FileExtensionForPath("/lib/Book/book.KePub.EPUB"), "keeps the path's case")
+	assert.Equal(t, ".kepub", FileExtensionForPath("/lib/Book/book.kepub"))
 	assert.Equal(t, ".m4b", FileExtensionForPath("/lib/Book/book.m4b"))
 	assert.Empty(t, FileExtensionForPath("/lib/Book/README"))
+}
+
+// A Calibre library keeps a KePub as a bare .kepub, so that extension is
+// built in too, and no plugin parser can claim it.
+func TestIsBuiltInFileExtension_KePub(t *testing.T) {
+	t.Parallel()
+	assert.True(t, IsBuiltInFileExtension("kepub"))
+	assert.Contains(t, BuiltInFileExtensions(), "kepub")
 }

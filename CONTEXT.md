@@ -15,7 +15,7 @@ A single media file (EPUB, KePub, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to 
 _Avoid_: asset, media
 
 **File Type**:
-The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. A KePub is a File named `.kepub.epub`; one converted from an EPUB or CBZ exists only as a delivery.
+The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. A KePub is a File named `.kepub.epub`, or `.kepub` as Calibre stores one; one converted from an EPUB or CBZ exists only as a delivery.
 _Avoid_: format, file format
 
 **Reflowable**:
