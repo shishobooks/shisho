@@ -5,7 +5,9 @@ import { PUBLISHER_SORT } from "@/libraries/resourceSort";
 
 const PublishersList = () => {
   const state = useResourceListState(PUBLISHER_SORT);
-  const query = usePublishersList(state.queryParams);
+  const query = usePublishersList(state.queryParams, {
+    enabled: state.pageSizeResolved,
+  });
 
   return (
     <ResourceList

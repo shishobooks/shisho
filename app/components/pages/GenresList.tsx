@@ -5,7 +5,9 @@ import { BOOK_COUNT_RESOURCE_SORT } from "@/libraries/resourceSort";
 
 const GenresList = () => {
   const state = useResourceListState(BOOK_COUNT_RESOURCE_SORT);
-  const query = useGenresList(state.queryParams);
+  const query = useGenresList(state.queryParams, {
+    enabled: state.pageSizeResolved,
+  });
 
   return (
     <ResourceList

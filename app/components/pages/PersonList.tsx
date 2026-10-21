@@ -5,7 +5,9 @@ import { PERSON_SORT } from "@/libraries/resourceSort";
 
 const PersonList = () => {
   const state = useResourceListState(PERSON_SORT);
-  const query = usePeopleList(state.queryParams);
+  const query = usePeopleList(state.queryParams, {
+    enabled: state.pageSizeResolved,
+  });
 
   return (
     <ResourceList

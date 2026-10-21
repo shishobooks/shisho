@@ -2,6 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import GalleryGrid from "@/components/library/GalleryGrid";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter from "@/components/library/PaginationFooter";
@@ -62,6 +63,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
     searchQuery,
     setSearchQuery,
     sort,
+    columns,
     limit,
     offset,
     handlePageChange,
@@ -91,33 +93,32 @@ const ResourceList = <T extends { id: number }, F extends string>({
 
   const renderItem = (item: T) => {
     const config = itemConfig(item);
+    const details = [config.secondaryText, config.aliases.join(", ")]
+      .filter(Boolean)
+      .join(" · ");
 
     return (
       <Link
-        className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors"
+        className="flex items-center justify-between rounded-md border border-border p-3 transition-colors hover:bg-muted/50"
         key={item.id}
         to={linkTo(item, libraryId)}
       >
+        {/* The name over one line of sort name and aliases, each truncated,
+            so every cell in the grid keeps the same height. */}
         <div className="min-w-0 flex-1 mr-3">
-          <div className="flex items-baseline">
-            <span className="font-semibold text-lg">{config.name}</span>
-            {config.secondaryText && (
-              <span className="text-sm text-muted-foreground">
-                <span className="mx-1.5 text-muted-foreground/50">·</span>
-                {config.secondaryText}
-              </span>
-            )}
+          <div className="truncate text-lg font-semibold" title={config.name}>
+            {config.name}
           </div>
-          {config.aliases.length > 0 && (
+          {details && (
             <div
-              className="text-sm text-muted-foreground truncate"
-              title={config.aliases.join(", ")}
+              className="truncate text-sm text-muted-foreground"
+              title={details}
             >
-              {config.aliases.join(", ")}
+              {details}
             </div>
           )}
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           {config.badges.map((badge) => (
             <Badge key={badge.singular} variant={badge.variant ?? "secondary"}>
               {formatCount(badge.count, badge.singular, badge.plural)}
@@ -130,82 +131,80 @@ const ResourceList = <T extends { id: number }, F extends string>({
 
   return (
     <LibraryLayout>
-      {/* Rows keep a scannable width: a name and its counts sit at the two
-          ends of a row, and across a wide window they drift apart. */}
-      <div className="max-w-4xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2">{title}</h1>
-          <p className="text-muted-foreground">{subtitle}</p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold mb-2">{title}</h1>
+        <p className="text-muted-foreground">{subtitle}</p>
+      </div>
 
-        <div className="mb-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <SearchInput
-              initialValue={searchQuery}
-              label={searchLabel}
-              onDebouncedChange={setSearchQuery}
-              placeholder={searchPlaceholder ?? `${searchLabel}...`}
-            />
-            <SortSheet
-              fieldLabels={sort.config.labels}
-              fields={sort.config.fields}
-              isDirty={sort.isDirty}
-              levels={sort.levels}
-              onChange={sort.apply}
-              trigger={<SortButton isDirty={sort.isDirty} />}
-            />
-          </div>
-          <SortedByChips
+      <div className="mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            initialValue={searchQuery}
+            label={searchLabel}
+            onDebouncedChange={setSearchQuery}
+            placeholder={searchPlaceholder ?? `${searchLabel}...`}
+          />
+          <SortSheet
             fieldLabels={sort.config.labels}
-            levels={sort.isDirty ? sort.levels : []}
-            onRemoveLevel={(index) =>
-              sort.apply(sort.levels.filter((_, i) => i !== index))
-            }
-            onReset={sort.reset}
+            fields={sort.config.fields}
+            isDirty={sort.isDirty}
+            levels={sort.levels}
+            onChange={sort.apply}
+            trigger={<SortButton isDirty={sort.isDirty} />}
           />
         </div>
+        <SortedByChips
+          fieldLabels={sort.config.labels}
+          levels={sort.isDirty ? sort.levels : []}
+          onRemoveLevel={(index) =>
+            sort.apply(sort.levels.filter((_, i) => i !== index))
+          }
+          onReset={sort.reset}
+        />
+      </div>
 
-        {/* One live region that stays mounted while the results load and
+      {/* One live region that stays mounted while the results load and
           change, so a new count or the empty state is announced. A region
           mounted with its text is often not. */}
-        <div role="status">
-          {showsResults && query.data && showing && (
-            <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
-          )}
-          {showsResults && query.data?.total === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              {confirmedSearch
-                ? `No ${itemLabel} found matching your search.`
-                : `No ${itemLabel} in this library yet.`}
-            </div>
-          )}
-        </div>
-
-        {(query.isLoading || query.isFetching || isStaleData) && (
-          <LoadingSpinner />
+      <div role="status">
+        {showsResults && query.data && showing && (
+          <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
         )}
-
-        {query.error && !query.data && !query.isFetching && !isStaleData && (
-          <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
-        )}
-
-        {showsResults && query.data && (
-          <>
-            {query.data.items.length > 0 && (
-              <div className="space-y-1 mb-6">
-                {query.data.items.map(renderItem)}
-              </div>
-            )}
-
-            <PaginationFooter
-              currentPage={currentPage}
-              onPageChange={handlePageChange}
-              totalIsCurrent={!query.isPlaceholderData}
-              totalPages={totalPages}
-            />
-          </>
+        {showsResults && query.data?.total === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            {confirmedSearch
+              ? `No ${itemLabel} found matching your search.`
+              : `No ${itemLabel} in this library yet.`}
+          </div>
         )}
       </div>
+
+      {(query.isLoading || query.isFetching || isStaleData) && (
+        <LoadingSpinner />
+      )}
+
+      {query.error && !query.data && !query.isFetching && !isStaleData && (
+        <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
+      )}
+
+      {showsResults && query.data && (
+        <>
+          {query.data.items.length > 0 && (
+            // Rows sit side by side rather than stretching, so a name and
+            // its counts stay close on a wide window.
+            <GalleryGrid className="gap-2 md:mb-6" columns={columns}>
+              {query.data.items.map(renderItem)}
+            </GalleryGrid>
+          )}
+
+          <PaginationFooter
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            totalIsCurrent={!query.isPlaceholderData}
+            totalPages={totalPages}
+          />
+        </>
+      )}
     </LibraryLayout>
   );
 };

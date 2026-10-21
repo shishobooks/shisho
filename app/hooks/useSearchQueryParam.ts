@@ -25,7 +25,7 @@ export function useSearchQueryParam() {
           } else {
             newParams.delete("search");
           }
-          // Galleries page with `start`, resource lists with `page`.
+          // Clears `start`, and an old link's `page`.
           resetPaging(newParams);
           return newParams;
         },
