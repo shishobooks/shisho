@@ -82,3 +82,24 @@ func TestListPeopleHandler_SortsByDateAdded(t *testing.T) {
 	}
 	assert.Equal(t, []string{"Newest", "Middle", "Oldest"}, names)
 }
+
+func TestListPeople_SortsByAuthoredBooksNotRoles(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := NewService(db)
+	lib := createPersonDeleteLibrary(t, db)
+	artist := createNamedPerson(t, svc, lib, "Artist")
+	writer := createNamedPerson(t, svc, lib, "Writer")
+	addAuthorRoles(t, db, createAuthoredBook(t, db, lib, models.DataSourceManual), artist.ID,
+		models.AuthorRoleWriter, models.AuthorRolePenciller, models.AuthorRoleInker)
+	createAuthoredBook(t, db, lib, models.DataSourceManual, writer.ID)
+	createAuthoredBook(t, db, lib, models.DataSourceManual, writer.ID)
+
+	people, err := svc.ListPeople(ctx, ListPeopleOptions{
+		LibraryID: &lib.ID,
+		Sort:      []sortspec.SortLevel{{Field: sortspec.FieldAuthoredBookCount, Direction: sortspec.DirDesc}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Writer", "Artist"}, personNames(people))
+}
