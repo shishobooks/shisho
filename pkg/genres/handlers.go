@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -20,6 +21,7 @@ import (
 
 type handler struct {
 	genreService     *Service
+	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
@@ -106,12 +108,24 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	result := make([]GenreResponse, len(genres))
+	// Previews are picked for the whole page in one query, so they are
+	// attached here rather than in the per-row build.
+	ids := make([]int, len(genres))
 	for i, g := range genres {
-		result[i], err = h.buildGenreResponse(ctx, g)
+		ids[i] = g.ID
+	}
+	previews, err := h.bookPreviews.Load(ctx, bookpreviews.Genres, ids)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	result := make([]GenreListItem, len(genres))
+	for i, g := range genres {
+		response, err := h.buildGenreResponse(ctx, g)
 		if err != nil {
 			return err
 		}
+		result[i] = GenreListItem{GenreResponse: response, PreviewBooks: previews.For(g.ID)}
 	}
 
 	response := ListGenresResponse{Items: result, Total: total}

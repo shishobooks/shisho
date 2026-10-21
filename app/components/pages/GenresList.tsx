@@ -16,6 +16,7 @@ const GenresList = () => {
         return {
           name: genre.name,
           aliases: genre.aliases,
+          previewBooks: genre.preview_books,
           badges: [
             {
               count: bookCount,

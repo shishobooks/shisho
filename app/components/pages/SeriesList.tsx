@@ -9,16 +9,11 @@ import { SearchInput } from "@/components/library/SearchInput";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import SortedByChips from "@/components/library/SortedByChips";
 import SortSheet, { SortButton } from "@/components/library/SortSheet";
+import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useSeriesList } from "@/hooks/queries/series";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
-import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { useSortParam } from "@/hooks/useSortParam";
@@ -57,7 +52,6 @@ export const SeriesCard = ({
   aspectClass,
   isAudiobook,
 }: SeriesCardProps) => {
-  const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
   const coverUrl = seriesCoverUrl(seriesItem);
   const [coverLoaded, setCoverLoaded] = useState(() => isCoverLoaded(coverUrl));
   const [coverError, setCoverError] = useState(false);
@@ -101,20 +95,9 @@ export const SeriesCard = ({
             />
           )}
         </div>
-        <Tooltip
-          delayDuration={300}
-          open={isTitleTruncated ? undefined : false}
-        >
-          <TooltipTrigger asChild>
-            <div
-              className="mt-2 group-hover:underline text-sm font-bold line-clamp-2"
-              ref={titleRef}
-            >
-              {seriesItem.name}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>{seriesItem.name}</TooltipContent>
-        </Tooltip>
+        <TruncatedText className="mt-2 group-hover:underline text-sm font-bold line-clamp-2">
+          {seriesItem.name}
+        </TruncatedText>
       </Link>
       <div className="mt-1 text-xs line-clamp-1 text-muted-foreground">
         <Badge className="text-xs" variant="secondary">

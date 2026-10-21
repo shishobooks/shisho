@@ -1,6 +1,9 @@
 package genres
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
+	"github.com/shishobooks/shisho/pkg/models"
+)
 
 // GenreResponse is the single-genre API response. It embeds the Genre model by
 // value (so tygo emits `extends Genre`) and reshapes the aliases relation into a
@@ -12,9 +15,16 @@ type GenreResponse struct {
 	Aliases      []string `json:"aliases"`
 }
 
+// GenreListItem is a genre row of the list endpoint: the single-genre
+// response plus the covers the list shows for it.
+type GenreListItem struct {
+	GenreResponse `tstype:",extends"`
+	PreviewBooks  []bookpreviews.PreviewBook `json:"preview_books" tstype:"PreviewBook[]"`
+}
+
 // ListGenresResponse is the list-endpoint envelope.
 type ListGenresResponse struct {
-	Items []GenreResponse `json:"items"`
+	Items []GenreListItem `json:"items"`
 	Total int             `json:"total"`
 }
 

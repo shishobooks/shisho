@@ -42,6 +42,7 @@ const PersonList = () => {
           secondaryText:
             person.sort_name !== person.name ? person.sort_name : undefined,
           aliases: person.aliases,
+          previewBooks: person.preview_books,
           badges,
         };
       }}

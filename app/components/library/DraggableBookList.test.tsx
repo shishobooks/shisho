@@ -22,16 +22,24 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
 });
 
 vi.mock("@/components/library/BookItem", () => ({
-  default: ({ book }: { book: { title: string } }) => (
-    <span data-testid="title">{book.title}</span>
+  default: ({
+    book,
+    coverAspectRatio,
+  }: {
+    book: { title: string };
+    coverAspectRatio?: string;
+  }) => (
+    <span data-aspect={coverAspectRatio} data-testid="title">
+      {book.title}
+    </span>
   ),
 }));
 
-const listBook = (id: number, title: string) =>
+const listBook = (id: number, title: string, library_id = 1) =>
   ({
     id,
     book_id: id,
-    book: { id, title, library_id: 1, cover_cache_key: "" },
+    book: { id, title, library_id, cover_cache_key: "" },
   }) as unknown as ListBook;
 
 const books = [listBook(1, "First"), listBook(2, "Second")];
@@ -49,12 +57,31 @@ const drag = async (active: number, over: number) => {
 const dragFirstOntoSecond = () => drag(1, 2);
 
 describe("DraggableBookList", () => {
+  it("shapes each book's cover by its own library's cover aspect ratio", () => {
+    render(
+      <DraggableBookList
+        books={[listBook(1, "First"), listBook(2, "Second", 2)]}
+        columns={4}
+        coverAspectRatioFor={(libraryId) =>
+          libraryId === 2 ? "audiobook" : "book"
+        }
+        isOwner
+        onReorder={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getAllByTestId("title").map((node) => node.dataset.aspect),
+    ).toEqual(["book", "audiobook"]);
+  });
+
   it("keeps the new order when the reorder succeeds", async () => {
     const onReorder = vi.fn().mockResolvedValue(undefined);
     render(
       <DraggableBookList
         books={books}
         columns={4}
+        coverAspectRatioFor={() => "book"}
         isOwner
         onReorder={onReorder}
       />,
@@ -72,6 +99,7 @@ describe("DraggableBookList", () => {
       <DraggableBookList
         books={books}
         columns={4}
+        coverAspectRatioFor={() => "book"}
         isOwner
         onReorder={onReorder}
       />,
@@ -97,6 +125,7 @@ describe("DraggableBookList", () => {
       <DraggableBookList
         books={threeBooks}
         columns={4}
+        coverAspectRatioFor={() => "book"}
         isOwner
         onReorder={onReorder}
       />,

@@ -45,6 +45,7 @@ const PublishersList = () => {
           name: publisher.name,
           secondaryText: publisher.parent_name ?? undefined,
           aliases: publisher.aliases,
+          previewBooks: publisher.preview_books,
           badges,
         };
       }}

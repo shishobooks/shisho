@@ -1,6 +1,9 @@
 package people
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
+	"github.com/shishobooks/shisho/pkg/models"
+)
 
 // PersonResponse is the single-person API response. It embeds the Person model
 // by value (so tygo emits `extends Person`) and reshapes the aliases relation
@@ -14,9 +17,16 @@ type PersonResponse struct {
 	Aliases           []string `json:"aliases"`
 }
 
+// PersonListItem is a person row of the list endpoint: the single-person
+// response plus the covers the list shows for it.
+type PersonListItem struct {
+	PersonResponse `tstype:",extends"`
+	PreviewBooks   []bookpreviews.PreviewBook `json:"preview_books" tstype:"PreviewBook[]"`
+}
+
 // ListPeopleResponse is the list-endpoint envelope.
 type ListPeopleResponse struct {
-	Items []PersonResponse `json:"items"`
+	Items []PersonListItem `json:"items"`
 	Total int              `json:"total"`
 }
 

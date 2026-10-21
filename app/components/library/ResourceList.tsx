@@ -2,6 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import CoverFan from "@/components/library/CoverFan";
 import GalleryGrid from "@/components/library/GalleryGrid";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -10,10 +11,13 @@ import QueryError from "@/components/library/QueryError";
 import { SearchInput } from "@/components/library/SearchInput";
 import SortedByChips from "@/components/library/SortedByChips";
 import SortSheet, { SortButton } from "@/components/library/SortSheet";
+import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
+import { useUserLibrary } from "@/hooks/queries/libraries";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { ResourceListState } from "@/hooks/useResourceListState";
-import type { ResourceListResponse } from "@/types";
+import type { PreviewBook, ResourceListResponse } from "@/types";
 import { formatCount, formatShowingRange } from "@/utils/format";
 
 interface BadgeConfig {
@@ -28,6 +32,8 @@ interface ItemConfig {
   secondaryText?: string;
   aliases: string[];
   badges: BadgeConfig[];
+  /** Covers of a few of the entry's books, from the list response. */
+  previewBooks?: PreviewBook[];
 }
 
 interface ResourceListProps<T extends { id: number }, F extends string> {
@@ -56,6 +62,11 @@ const ResourceList = <T extends { id: number }, F extends string>({
   itemLabel,
 }: ResourceListProps<T, F>) => {
   usePageTitle(title);
+  // Covers come from Books Read routes; a role without it gets no slot.
+  const canReadBooks = useCan("books:read");
+  // The library's cover preference shapes the covers, as in its gallery.
+  const library = useUserLibrary(state.libraryId);
+  const libraryCoverAspectRatio = library.data?.cover_aspect_ratio ?? "book";
 
   const {
     libraryId,
@@ -103,19 +114,25 @@ const ResourceList = <T extends { id: number }, F extends string>({
         key={item.id}
         to={linkTo(item, libraryId)}
       >
-        {/* The name over one line of sort name and aliases, each truncated,
-            so every cell in the grid keeps the same height. */}
-        <div className="min-w-0 flex-1 mr-3">
-          <div className="truncate text-lg font-semibold" title={config.name}>
-            {config.name}
+        {canReadBooks && config.previewBooks && (
+          <div className="mr-3">
+            <CoverFan
+              books={config.previewBooks}
+              libraryCoverAspectRatio={libraryCoverAspectRatio}
+            />
           </div>
+        )}
+        {/* The name over one line of sort name and aliases, each truncated
+            with the full text in a tooltip, so every cell in the grid keeps
+            the same height. */}
+        <div className="min-w-0 flex-1 mr-3">
+          <TruncatedText className="truncate text-lg font-semibold">
+            {config.name}
+          </TruncatedText>
           {details && (
-            <div
-              className="truncate text-sm text-muted-foreground"
-              title={details}
-            >
+            <TruncatedText className="truncate text-sm text-muted-foreground">
               {details}
-            </div>
+            </TruncatedText>
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">

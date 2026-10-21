@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/search"
@@ -21,6 +22,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 
 	h := &handler{
 		tagService:       tagService,
+		bookPreviews:     bookpreviews.NewService(db),
 		aliasService:     aliasService,
 		searchService:    searchService,
 		reviewRecomputer: reviewRecomputer,

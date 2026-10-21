@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/aliases"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -20,6 +21,7 @@ import (
 
 type handler struct {
 	tagService       *Service
+	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
@@ -105,12 +107,24 @@ func (h *handler) list(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	result := make([]TagResponse, len(tags))
+	// Previews are picked for the whole page in one query, so they are
+	// attached here rather than in the per-row build.
+	ids := make([]int, len(tags))
 	for i, t := range tags {
-		result[i], err = h.buildTagResponse(ctx, t)
+		ids[i] = t.ID
+	}
+	previews, err := h.bookPreviews.Load(ctx, bookpreviews.Tags, ids)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	result := make([]TagListItem, len(tags))
+	for i, t := range tags {
+		response, err := h.buildTagResponse(ctx, t)
 		if err != nil {
 			return err
 		}
+		result[i] = TagListItem{TagResponse: response, PreviewBooks: previews.For(t.ID)}
 	}
 
 	response := ListTagsResponse{Items: result, Total: total}

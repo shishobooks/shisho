@@ -6,6 +6,7 @@ import {
   type BulkDownloadContextValue,
 } from "@/contexts/BulkDownload";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
+import { invalidateCoverPreviewLists } from "@/hooks/queries/coverPreviews";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
 import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { QueryKey as LogsQueryKey } from "@/hooks/queries/logs";
@@ -68,6 +69,8 @@ export function useSSE() {
           queryClient.invalidateQueries({
             queryKey: [BooksQueryKey.ListBooks],
           });
+          // A scan can add books and change covers on list entries too.
+          invalidateCoverPreviewLists(queryClient);
           // Also invalidate library languages in case scanned files introduced new languages
           queryClient.invalidateQueries({
             queryKey: [LibrariesQueryKey.LibraryLanguages],

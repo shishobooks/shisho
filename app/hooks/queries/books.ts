@@ -26,6 +26,7 @@ import type {
 } from "@/types";
 import { fileCoverUploadUrl } from "@/utils/coverUrl";
 
+import { invalidateCoverPreviewLists } from "./coverPreviews";
 import { QueryKey as GenresQueryKey } from "./genres";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as PeopleQueryKey } from "./people";
@@ -179,6 +180,7 @@ export const useUploadFileCover = () => {
       // Invalidate book queries to refresh file/cover data
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      invalidateCoverPreviewLists(queryClient);
     },
   });
 };
@@ -200,6 +202,7 @@ export const useSetFileCoverPage = () => {
       // Invalidate book queries to refresh file/cover data
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      invalidateCoverPreviewLists(queryClient);
     },
   });
 };

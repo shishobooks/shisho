@@ -1,6 +1,9 @@
 package tags
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"github.com/shishobooks/shisho/pkg/bookpreviews"
+	"github.com/shishobooks/shisho/pkg/models"
+)
 
 // TagResponse is the single-tag API response. It embeds the Tag model by value
 // (so tygo emits `extends Tag`) and reshapes the aliases relation into a flat
@@ -12,9 +15,16 @@ type TagResponse struct {
 	Aliases    []string `json:"aliases"`
 }
 
+// TagListItem is a tag row of the list endpoint: the single-tag
+// response plus the covers the list shows for it.
+type TagListItem struct {
+	TagResponse  `tstype:",extends"`
+	PreviewBooks []bookpreviews.PreviewBook `json:"preview_books" tstype:"PreviewBook[]"`
+}
+
 // ListTagsResponse is the list-endpoint envelope.
 type ListTagsResponse struct {
-	Items []TagResponse `json:"items"`
+	Items []TagListItem `json:"items"`
 	Total int           `json:"total"`
 }
 

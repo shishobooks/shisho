@@ -17,6 +17,7 @@ import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import { RescanDialog } from "@/components/library/RescanDialog";
+import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,14 +27,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { useCan } from "@/hooks/useCan";
-import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
@@ -94,7 +89,6 @@ const BookItem = ({
   onSelect,
   onShiftSelect,
 }: BookItemProps) => {
-  const [titleRef, isTitleTruncated] = useIsTruncated<HTMLDivElement>();
   // Author pages need People Read; without it the names are plain text.
   const linkPeople = useCan("people:read");
   // Rescan, identify, and delete all require Books Write on the backend.
@@ -293,33 +287,25 @@ const BookItem = ({
             </Badge>
           )}
         </div>
-        <Tooltip
-          delayDuration={300}
-          open={isTitleTruncated ? undefined : false}
+        <TruncatedText
+          className={cn(
+            "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
+            seriesNumber != null && "leading-[1.6]",
+          )}
+          tooltip={book.title}
         >
-          <TooltipTrigger asChild>
-            <div
-              className={cn(
-                "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
-                seriesNumber != null && "leading-[1.6]",
+          {seriesNumber != null && (
+            <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
+              {formatSeriesNumber(
+                seriesNumber,
+                seriesNumberEnd,
+                seriesNumberUnit,
+                anyCBZ ? "cbz" : null,
               )}
-              ref={titleRef}
-            >
-              {seriesNumber != null && (
-                <span className="inline-flex items-center justify-center align-text-top min-w-5 h-[18px] px-[5px] bg-primary text-primary-foreground rounded text-[11px] font-extrabold tabular-nums tracking-tight mr-1.5">
-                  {formatSeriesNumber(
-                    seriesNumber,
-                    seriesNumberEnd,
-                    seriesNumberUnit,
-                    anyCBZ ? "cbz" : null,
-                  )}
-                </span>
-              )}
-              {book.title}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>{book.title}</TooltipContent>
-        </Tooltip>
+            </span>
+          )}
+          {book.title}
+        </TruncatedText>
       </Link>
       {book.authors &&
         book.authors.length > 0 &&

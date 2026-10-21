@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { GALLERY_MAX_PAGE_SIZE } from "@/constants/gallerySize";
 import { ContentWidth } from "@/contexts/ContentWidth";
+import { useUserLibraries } from "@/hooks/queries/libraries";
 import {
   useDeleteList,
   useList,
@@ -87,6 +88,12 @@ const ListDetail = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
+  // A list can hold books from several libraries; each book's cover takes
+  // the shape its own library's gallery gives it.
+  const userLibrariesQuery = useUserLibraries();
+  const coverAspectRatioFor = (libraryId: number) =>
+    userLibrariesQuery.data?.find((library) => library.id === libraryId)
+      ?.cover_aspect_ratio ?? "book";
 
   // Permission helpers
   const permission = listQuery.data?.permission ?? "viewer";
@@ -352,6 +359,7 @@ const ListDetail = () => {
                 <DraggableBookList
                   books={books}
                   columns={columns}
+                  coverAspectRatioFor={coverAspectRatioFor}
                   isOwner={isOwner}
                   onReorder={handleReorder}
                 />
@@ -377,6 +385,9 @@ const ListDetail = () => {
                         !isOwner ? listBook.added_by_user?.username : undefined
                       }
                       book={listBook.book}
+                      coverAspectRatio={coverAspectRatioFor(
+                        listBook.book.library_id,
+                      )}
                       key={listBook.id}
                       libraryId={listBook.book.library_id.toString()}
                     />

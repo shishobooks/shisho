@@ -121,3 +121,8 @@ func newestFileCoalesce(field string) string {
             (SELECT f.%[1]s FROM files f WHERE f.book_id = b.id AND f.%[1]s IS NOT NULL ORDER BY f.id DESC LIMIT 1)
         )`, field)
 }
+
+// BookReleaseDate is a book's release date as the release-date sort reads it,
+// for queries that select from books as `b`. Other book lists that order by
+// release use it so they agree with the gallery sort.
+var BookReleaseDate = newestFileCoalesce("release_date")

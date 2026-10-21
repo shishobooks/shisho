@@ -25,7 +25,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 ## Long text and overflow
 
 - Nothing user-supplied causes horizontal scroll on a phone. Rows of stats and actions wrap. The shared `LibraryLayout` `<main>` has no `overflow-x-hidden`, so a non-wrapping row scrolls the whole page. Prefer per-element fixes (`break-words`, `min-w-0`, `minmax(0,1fr)` tracks) over a blanket `overflow-x-hidden`, which masks bugs and clips popovers and focus rings.
-- `truncate` inside flex works only when the parent has `min-w-0`. Truncated text carries `title={text}`. Dialog titles wrap rather than truncate.
+- `truncate` inside flex works only when the parent has `min-w-0`. Truncated text shows its full text on hover: `TruncatedText` for names and titles, which tooltips only while cut off, or `title={text}`. Dialog titles wrap rather than truncate.
 
 ## Controls
 
