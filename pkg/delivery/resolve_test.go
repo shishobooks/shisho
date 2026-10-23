@@ -82,6 +82,11 @@ func TestResolve_UserDefault(t *testing.T) {
 			ebook: []delivered{{0, models.FileTypeKePub}},
 		},
 		{
+			name:  "a custom list without a KePub rule does not deliver a KePub-only book",
+			rules: []Rule{{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeEPUB}},
+			files: []testFile{{fileType: models.FileTypeKePub}},
+		},
+		{
 			name:  "following the built-in rules, EPUB outranks KePub",
 			files: []testFile{{fileType: models.FileTypeKePub}, {fileType: models.FileTypeEPUB}},
 			ebook: []delivered{{1, models.FileTypeEPUB}},

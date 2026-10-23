@@ -50,6 +50,7 @@ var ConversionSteps = conversionGraph{
 	{From: FileTypeEPUB, To: FileTypeKePub},
 	{From: FileTypeCBZ, To: FileTypeKePub},
 	{From: FileTypeCBZ, To: FileTypeEPUB},
+	{From: FileTypeKePub, To: FileTypeEPUB},
 }
 
 type conversionGraph []ConversionStep

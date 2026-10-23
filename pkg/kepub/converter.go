@@ -171,7 +171,26 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 			body = append(body, e)
 		}
 	}
+	lead := []leadEntry{{name: "mimetype", method: zip.Store, content: []byte("application/epub+zip")}}
+	// Add kobo.js file for pagination and progress tracking (only if not present)
+	if !hasKoboJS {
+		lead = append(lead, leadEntry{name: koboJSPath, method: zip.Deflate, content: []byte(koboJS)})
+	}
+	return writeZip(ctx, w, lead, body, convert)
+}
 
+// leadEntry is an entry written ahead of the converted ones.
+type leadEntry struct {
+	name    string
+	method  uint16
+	content []byte
+}
+
+// writeZip writes lead and then body to w front to back. Each entry of body
+// is written as convert returns it, or copied without recompressing when
+// convert returns nil. convert runs up to lookahead entries ahead of the
+// writer.
+func writeZip(ctx context.Context, w io.Writer, lead []leadEntry, body []Entry, convert func(context.Context, Entry) (*ziputil.Entry, error)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	results := convertAhead(ctx, body, convert)
 	defer func() {
@@ -180,20 +199,12 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 	}()
 
 	zw := zip.NewWriter(w)
-	mimetype, err := ziputil.Compress("mimetype", zip.Store, []byte("application/epub+zip"))
-	if err != nil {
-		return err
-	}
-	if err := mimetype.Write(zw); err != nil {
-		return err
-	}
-	// Add kobo.js file for pagination and progress tracking (only if not present)
-	if !hasKoboJS {
-		js, err := ziputil.Compress("kobo.js", zip.Deflate, []byte(koboJS))
+	for _, l := range lead {
+		entry, err := ziputil.Compress(l.name, l.method, l.content)
 		if err != nil {
 			return err
 		}
-		if err := js.Write(zw); err != nil {
+		if err := entry.Write(zw); err != nil {
 			return err
 		}
 	}

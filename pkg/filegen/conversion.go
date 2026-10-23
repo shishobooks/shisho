@@ -44,6 +44,7 @@ var conversionSteps = map[models.ConversionStep]conversionStep{
 	{From: models.FileTypeEPUB, To: models.FileTypeKePub}: epubToKepub{converter: kepub.NewConverter()},
 	{From: models.FileTypeCBZ, To: models.FileTypeKePub}:  cbzFixedLayout{fileType: models.FileTypeKePub},
 	{From: models.FileTypeCBZ, To: models.FileTypeEPUB}:   cbzFixedLayout{fileType: models.FileTypeEPUB},
+	{From: models.FileTypeKePub, To: models.FileTypeEPUB}: kepubToEPUB{},
 }
 
 // GeneratorFor returns the generator that delivers a File of type fileType as

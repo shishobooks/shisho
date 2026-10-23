@@ -18,8 +18,9 @@ func TestReachableFileTypes_EveryChainRuns(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	samples := map[string]string{
-		models.FileTypeEPUB: testgen.GenerateEPUB(t, dir, "book.epub", testgen.EPUBOptions{Title: "Book"}),
-		models.FileTypeCBZ:  testgen.GenerateCBZ(t, dir, "book.cbz", testgen.CBZOptions{Title: "Book"}),
+		models.FileTypeEPUB:  testgen.GenerateEPUB(t, dir, "book.epub", testgen.EPUBOptions{Title: "Book"}),
+		models.FileTypeCBZ:   testgen.GenerateCBZ(t, dir, "book.cbz", testgen.CBZOptions{Title: "Book"}),
+		models.FileTypeKePub: testgen.GenerateEPUB(t, dir, "book.kepub.epub", testgen.EPUBOptions{Title: "Book", KoboMarkup: true}),
 	}
 	for _, fileType := range models.BuiltInFileTypes {
 		for _, to := range models.ReachableFileTypes(fileType)[1:] {
