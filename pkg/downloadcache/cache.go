@@ -95,8 +95,10 @@ func NewCache(dir string, maxSizeBytes int64, opts ...Option) *Cache {
 // complete file in the cache, or the file is still being built and Body
 // streams it.
 type Generated struct {
-	// Filename is the name to save the download under.
-	Filename string
+	// Filename is the name to save the download under, and ASCIIFilename
+	// the same name in ASCII alone (DownloadFilenames).
+	Filename      string
+	ASCIIFilename string
 	// Path is the complete file in the cache, or "" while it is being built.
 	Path string
 	// Size is the exact size of a file still being built, or -1 when it is
@@ -156,8 +158,9 @@ type entry struct {
 	hash          string
 	// destPath is where the complete file is published. Fingerprints of one
 	// file share it.
-	destPath string
-	filename string
+	destPath      string
+	filename      string
+	asciiFilename string
 	// lookup returns the published path if it matches the current
 	// fingerprint, or "" on a miss.
 	lookup func() (string, error)
@@ -198,7 +201,7 @@ func (c *Cache) entryFor(book *models.Book, file *models.File, deliveredType str
 	e := &entry{book: book, file: file, deliveredType: deliveredType, hash: hash}
 	e.generator = func() (filegen.StreamGenerator, error) { return c.generatorFor(e) }
 	e.destPath = cachedFilename(c.dir, file.ID, deliveredType)
-	e.filename = DownloadFilename(book, file, deliveredType)
+	e.filename, e.asciiFilename = DownloadFilenames(book, file, deliveredType)
 	e.lookup = func() (string, error) { return GetCachedFilePath(c.dir, file.ID, deliveredType, hash) }
 	e.touch = func() { _ = UpdateLastAccessed(c.dir, file.ID, deliveredType) }
 	e.readMeta = func() (*CacheMetadata, error) { return ReadMetadata(c.dir, file.ID, deliveredType) }
@@ -236,7 +239,7 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 		return nil, err
 	}
 	if hit != "" {
-		return &Generated{Filename: e.filename, Path: hit}, nil
+		return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Path: hit}, nil
 	}
 	if err := c.rememberedFailure(e); err != nil {
 		return nil, err
@@ -263,7 +266,7 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 		return nil, err
 	}
 	if hit != "" {
-		return &Generated{Filename: e.filename, Path: hit}, nil
+		return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Path: hit}, nil
 	}
 	select {
 	case <-j.prepared:
@@ -274,7 +277,7 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 		return nil, j.prepErr
 	}
 	if head {
-		return &Generated{Filename: e.filename, Size: j.size}, nil
+		return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Size: j.size}, nil
 	}
 	return c.served(ctx, e, j)
 }
@@ -286,7 +289,7 @@ func (c *Cache) served(ctx context.Context, e *entry, j *job) (*Generated, error
 	body, state := j.reader(ctx)
 	switch state {
 	case attached:
-		return &Generated{Filename: e.filename, Size: j.size, Body: body}, nil
+		return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Size: j.size, Body: body}, nil
 	case cacheDropped:
 		return c.stream(ctx, e, j.gen)
 	case jobEnded:
@@ -367,7 +370,7 @@ func (c *Cache) prepareOnly(ctx context.Context, e *entry, gen filegen.StreamGen
 	if built, ok := prepared.(*builtFile); ok {
 		os.RemoveAll(built.dir)
 	}
-	g := &Generated{Filename: e.filename, Size: -1}
+	g := &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Size: -1}
 	if size, ok := prepared.Size(); ok {
 		g.Size = size
 	}
@@ -530,7 +533,7 @@ func (c *Cache) stream(ctx context.Context, e *entry, gen filegen.StreamGenerato
 		}
 		pw.CloseWithError(err)
 	}()
-	return &Generated{Filename: e.filename, Size: size, Body: pr}, nil
+	return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Size: size, Body: pr}, nil
 }
 
 // clientWriter notes when the download it writes to has gone away.

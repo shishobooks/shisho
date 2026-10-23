@@ -46,7 +46,7 @@ func TestDownloadOriginalFile_MOBIContentTypes(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 			assert.Equal(t, tt.contentType, rr.Header().Get(echo.HeaderContentType))
-			assert.Contains(t, rr.Header().Get(echo.HeaderContentDisposition), tt.filename)
+			assert.Contains(t, rr.Header().Get(echo.HeaderContentDisposition), `filename="Test Book`+filepath.Ext(tt.filename)+`"`, "named after the book, with the file's own extension")
 			assert.True(t, bytes.Equal(content, rr.Body.Bytes()), "the file is served untouched")
 		})
 	}

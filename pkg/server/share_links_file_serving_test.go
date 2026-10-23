@@ -133,6 +133,6 @@ func TestShareLinks_DownloadHeaders(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "application/pdf", rec.Header().Get("Content-Type"))
 	assert.Equal(t,
-		`attachment; filename="Notes \"Quoted\" ncode.pdf"; filename*=UTF-8''Notes%20%22Quoted%22%20%C3%9Cn%C3%AFcode.pdf`,
+		`attachment; filename="Saga - Alpha - Notes Quoted Unicode.pdf"`,
 		rec.Header().Get("Content-Disposition"))
 }

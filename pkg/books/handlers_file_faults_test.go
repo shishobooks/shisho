@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -300,7 +301,7 @@ func TestDownloadOriginal_Head(t *testing.T) {
 	req := httptest.NewRequest(http.MethodHead, fileURL(file, "/download/original"), nil)
 	rr := executeRequestWithUser(t, f.e, req, f.user)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, `attachment; filename="book.epub"`, rr.Header().Get("Content-Disposition"))
+	assert.Equal(t, `attachment; filename="Original Book.epub"`, rr.Header().Get("Content-Disposition"))
 }
 
 // A CBZ downloaded as EPUB is a fixed-layout EPUB named for the EPUB.
@@ -335,7 +336,7 @@ func TestDownload_CBZAsEPUB(t *testing.T) {
 // filename plus the UTF-8 filename* form.
 func TestDownload_FilenameEscaping(t *testing.T) {
 	t.Parallel()
-	f := newServingFixture(t, `Title "Quoted" Ünïcode`)
+	f := newServingFixture(t, `Title "Quoted" Война`)
 	file := f.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(t, f.dir, "book.epub", testgen.EPUBOptions{Title: "x"}))
 
 	rr := f.get(fileURL(file, "/download"))
@@ -343,7 +344,18 @@ func TestDownload_FilenameEscaping(t *testing.T) {
 	disposition := rr.Header().Get("Content-Disposition")
 	assert.Contains(t, disposition, `attachment; filename="`)
 	assert.Contains(t, disposition, "; filename*=UTF-8''")
-	assert.Contains(t, disposition, "%C3%9Cn%C3%AFcode")
+	assert.Contains(t, disposition, "%D0%92%D0%BE%D0%B9%D0%BD%D0%B0")
+	// The ASCII name is built with the KePub rules: the quotes go and the
+	// Cyrillic word is dropped, without a stray space before the extension.
+	assert.Contains(t, disposition, `attachment; filename="Title Quoted.epub";`)
+
+	// A title with nothing left in ASCII falls back to the file, as a
+	// KePub's name does.
+	f2 := newServingFixture(t, "吾輩は猫である")
+	other := f2.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(t, f2.dir, "book.epub", testgen.EPUBOptions{Title: "x"}))
+	rr = f2.get(fileURL(other, "/download"))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Header().Get("Content-Disposition"), fmt.Sprintf(`attachment; filename="File %d.epub";`, other.ID))
 }
 
 // A page past the end is a 404 even when the file has no stored page count,
@@ -394,4 +406,27 @@ func TestDownload_UnsatisfiableRangeIsNotAnAttachment(t *testing.T) {
 	rr := f.get(fileURL(file, "/download/original"), "Range", "bytes=5000-")
 	require.Equal(t, http.StatusRequestedRangeNotSatisfiable, rr.Code)
 	assert.Empty(t, rr.Header().Get("Content-Disposition"))
+}
+
+// Download Original names the file the way a Generated File is named, with
+// the file's own extension, and a supplement after its book.
+func TestDownloadOriginal_Filename(t *testing.T) {
+	t.Parallel()
+	f := newServingFixture(t, "吾輩は猫である")
+	main := f.addFile(models.FileTypeEPUB, testgen.GenerateEPUB(t, f.dir, "neko on disk.epub", testgen.EPUBOptions{Title: "x"}))
+	rr := f.get(fileURL(main, "/download/original"))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t,
+		fmt.Sprintf(`attachment; filename="File %d.epub"; filename*=UTF-8''%%E5%%90%%BE%%E8%%BC%%A9%%E3%%81%%AF%%E7%%8C%%AB%%E3%%81%%A7%%E3%%81%%82%%E3%%82%%8B.epub`, main.ID),
+		rr.Header().Get("Content-Disposition"))
+
+	notes := filepath.Join(f.dir, "Supplement.txt")
+	require.NoError(t, os.WriteFile(notes, []byte("notes"), 0o600))
+	supplement := f.addFile("txt", notes)
+	_, err := f.db.NewUpdate().Model(supplement).Set("file_role = ?", models.FileRoleSupplement).WherePK().Exec(context.Background())
+	require.NoError(t, err)
+	rr = f.get(fileURL(supplement, "/download/original"))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Header().Get("Content-Disposition"), `filename="Supplement.txt"; filename*=UTF-8''%E5`)
+	assert.Contains(t, rr.Header().Get("Content-Disposition"), `%20-%20Supplement.txt`)
 }

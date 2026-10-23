@@ -22,6 +22,14 @@ The OPDS, eReader, Kobo Sync, and Share Link downloads send the original file wh
 
 CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parsers or converters for CBR and other formats.
 
+## Download Filenames
+
+A generated download is named `Author - Series 002 - Title.epub`, and an audiobook adds its narrator: `Author - Series 002 - Title (Narrator).m4b`. The author and series are the book's first ones, and the title is the file's **Name**, or the book's title when the file has no name. A part with no value is left out. When the title has its own volume number, such as `Manga v1`, the series is left out unless the book covers a range of the series, and the volume number is padded to three digits (`Manga v001`). Series numbers are padded the same way (`Series 002`, `Series 001.5`), so a series sorts in order by filename. **Download Original** uses the same name with the file's own extension, and a device or Share Link that gets the original file in place of a generated one uses its file type's extension, such as `.kepub.epub` for a KePub. A supplement is named after its book, followed by its own name, such as `Author - Series 002 - Title - Map.pdf`, so a book's files sort together; a supplement name with nothing left after the rules below becomes `File` and the file's ID. A Kindle names its downloads from the link instead, as [eReader Browser](./ereader-browser.md) describes.
+
+Accented letters become plain ones, so `Les Misérables` downloads as `Les Miserables` and `Straße` as `Strasse`. Characters that are invalid in filenames or that shells and URLs treat specially are removed: ``/ \ : * ? " < > | [ ] { } # $ % ` `` and invisible control characters. Letters of other scripts, such as Japanese or Cyrillic, are kept. A name that would be too long for a filesystem is shortened, its title first. A leading dot is dropped, so the file is not hidden, and a name Windows reserves for a device, such as `Con`, gets a leading `_`.
+
+A KePub's name keeps only the letters A to Z, digits, spaces, and `-_.,()'`, because other characters can stop a Kobo from reading the file, so other scripts are dropped from it. A KePub whose title has none of those characters is named `File` and the file's ID, such as `Author - File 42.kepub.epub`. The book's metadata keeps every character. A download whose name has characters outside ASCII also carries an ASCII name, which an app that cannot handle the full name saves the file under instead. It is built the same way as a KePub's name.
+
 ## First Downloads
 
 A generated download starts as soon as it is requested and is built while it is sent. EPUB, KePub, M4B, MOBI, AZW3, and PDF downloads of a file as its own type know their size before they start, so the device or browser shows progress even the first time. A CBZ, a KePub converted from an EPUB or CBZ, and an EPUB made from a CBZ or a KePub do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
@@ -54,7 +62,7 @@ Series, tags, and author roles have no place in these formats. Set them through 
 
 Downloads write the same fields back into the file, with Shisho's current values: title, authors, description, publisher, release date, language, ISBN and ASIN, genres, and the cover. A field Shisho has no value for keeps the value already in the file. Series, tags, author roles, and narrators are not written, and the series is never added to the title. In a combo `.mobi`, both books get the new metadata and [chapter edits](./metadata.md#chapters), so a Kindle shows them whichever book it opens. A file with no cover gets one. Covers are written as JPEG, because older Kindles cannot show a PNG. Some older files store text as Windows-1252; a character that encoding cannot hold, such as one from a non-Latin script, is written as `?` in those files.
 
-A generated download is named with its file type, so an `.azw` or `.prc` file downloads as `.mobi`. **Download Original** keeps the file's own name.
+A generated download is named with its file type, so an `.azw` or `.prc` file downloads as `.mobi`. **Download Original** keeps the file's own extension.
 
 DRM-protected files are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-file-never-appears). KFX, Topaz, and other Kindle formats that are not MOBI or AZW3 are skipped, even when they use the `.azw` extension.
 

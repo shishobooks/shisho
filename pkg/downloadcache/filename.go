@@ -2,10 +2,13 @@ package downloadcache
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/shishobooks/shisho/pkg/filenames"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/seriesnum"
 )
@@ -30,67 +33,220 @@ func padVolumeNumber(title string) string {
 	})
 }
 
-// invalidFilenameChars contains characters that are not allowed in filenames
-// across Windows, macOS, and Linux.
-var invalidFilenameChars = []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
-
-// FormatDownloadFilename generates a formatted filename for downloading a file.
-// Format: [Author] Series #Number - Title.ext
-// For audiobooks with narrators: [Author] Series #Number - Title {Narrator}.ext
-// If no series: [Author] Title.ext.
-// If no author: Title.ext.
-func FormatDownloadFilename(book *models.Book, file *models.File) string {
-	return DownloadFilename(book, file, file.FileType)
-}
-
-// DownloadFilename returns the filename for downloading the file delivered
-// as deliveredType: FormatKepubDownloadFilename for a KePub, and
-// FormatDownloadFilename with the delivered File Type's extension otherwise.
-func DownloadFilename(book *models.Book, file *models.File, deliveredType string) string {
-	if deliveredType == models.FileTypeKePub {
-		return FormatKepubDownloadFilename(book, file)
+// padSeriesNumber formats a series number with its whole part padded to at
+// least three digits, as padVolumeNumber pads a title's volume, so names
+// sort in series order: 2 becomes "002" and 1.5 "001.5".
+func padSeriesNumber(n float64) string {
+	if n == 0 {
+		// Negative zero formats as "-0".
+		n = 0
 	}
-	return formatDownloadFilename(book, file, deliveredType)
+	formatted := seriesnum.FormatRange(n, nil)
+	if n < 0 {
+		return formatted
+	}
+	whole, fraction, _ := strings.Cut(formatted, ".")
+	if len(whole) < 3 {
+		whole = strings.Repeat("0", 3-len(whole)) + whole
+	}
+	if fraction != "" {
+		return whole + "." + fraction
+	}
+	return whole
 }
 
-func formatDownloadFilename(book *models.Book, file *models.File, ext string) string {
-	titleSource := file.ResolveTitle(book.Title)
-	// Pad volume numbers for lexicographic sorting, then sanitize
-	title := sanitizeFilename(padVolumeNumber(titleSource))
-	author := getFirstAuthorName(book)
-	series, number, numberEnd := getFirstSeries(book)
-	narrator := getFirstNarratorName(file)
+// DownloadFilenames returns the name a file delivered as deliveredType
+// downloads under. Every delivered File Type has the same shape:
+//
+//	Author - Series 002 - Title.ext
+//	Author - Series 002 - Title (Narrator).m4b
+//
+// A part that is empty after sanitizing is left out, and a name too long
+// for a filesystem is shortened. The series part is left
+// out when the title carries its own volume marker, unless the book is an
+// omnibus, whose range the title cannot show. Every part goes through
+// filenames.Clean, and a KePub's through filenames.CleanASCII. A
+// title that sanitizes to nothing, such as a Japanese title in a KePub,
+// becomes "File <file ID>", so the name is never empty and two files of one
+// book never share it.
+//
+// It also returns the same name in ASCII alone, for the clients that ignore
+// a UTF-8 one. That name is built from the same parts with the KePub
+// character rules, so it matches a KePub's name and falls back to
+// "File <file ID>" the same way.
+//
+// The name is only the Content-Disposition name: the download cache keys its
+// files on the file ID, delivered File Type, and fingerprint, so changing the
+// name regenerates nothing.
+func DownloadFilenames(book *models.Book, file *models.File, deliveredType string) (name, ascii string) {
+	ascii = buildDownloadFilename(book, file, deliveredType, filenames.CleanASCII)
+	if deliveredType == models.FileTypeKePub {
+		return ascii, ascii
+	}
+	return buildDownloadFilename(book, file, deliveredType, filenames.Clean), ascii
+}
 
-	var parts []string
+// OriginalFilenames returns the name an Original File downloads under, and
+// the same name in ASCII alone, the way DownloadFilenames does, with ext
+// (including its dot) as the extension. A main File's name has the same
+// parts as its Generated File's. A supplement's is its book's name with the
+// supplement's own name after it, its Name or else its filename, so a
+// book's files sort together:
+//
+//	Author - Series 002 - Title - Supplement.pdf
+//
+// A supplement name that sanitizes to nothing becomes "File <file ID>".
+func OriginalFilenames(book *models.Book, file *models.File, ext string) (name, ascii string) {
+	parts := filenameParts{titleSource: file.ResolveTitle(book.Title), narrators: true}
+	if file.FileRole == models.FileRoleSupplement {
+		parts = filenameParts{titleSource: book.Title, supplement: supplementName(book, file)}
+	}
+	ascii = buildFilename(book, file, parts, ext, filenames.CleanASCII)
+	if file.FileType == models.FileTypeKePub {
+		// A KePub's name is Kobo-safe, as a Generated one's is.
+		return ascii, ascii
+	}
+	return buildFilename(book, file, parts, ext, filenames.Clean), ascii
+}
 
-	// Add author if available
-	if author != "" {
-		parts = append(parts, fmt.Sprintf("[%s]", sanitizeFilename(author)))
+// supplementName returns a supplement's own part of its download name: the
+// name the user set, or else its filename without the extension, as
+// File.ResolveDisplayName labels it. A filename that starts with the book's
+// title, as a supplement beside the book's file at a library's root does,
+// loses it, since the name already starts with the title.
+func supplementName(book *models.Book, file *models.File) string {
+	if file.HasName() && file.NameSource != nil && *file.NameSource == models.DataSourceManual {
+		return *file.Name
+	}
+	base := filepath.Base(file.Filepath)
+	stem := strings.TrimSuffix(base, models.FileExtensionForPath(base))
+	if title := strings.TrimSpace(book.Title); title != "" && len(stem) > len(title) && strings.EqualFold(stem[:len(title)], title) && strings.ContainsRune(" -_.", rune(stem[len(title)])) {
+		if rest := strings.TrimLeft(stem[len(title):], " -_."); rest != "" {
+			return rest
+		}
+	}
+	return stem
+}
+
+// filenameParts is what a download name is built from beyond the book's
+// author and series.
+type filenameParts struct {
+	// titleSource is the title before sanitizing.
+	titleSource string
+	// supplement is a supplement's own name, or "" for a main File.
+	supplement string
+	// narrators adds the File's first narrator.
+	narrators bool
+}
+
+// buildDownloadFilename builds a Generated File's download name with clean
+// applied to each part.
+func buildDownloadFilename(book *models.Book, file *models.File, deliveredType string, clean func(string) string) string {
+	parts := filenameParts{titleSource: file.ResolveTitle(book.Title), narrators: true}
+	return buildFilename(book, file, parts, "."+models.DeliveredFileTypeExtension(deliveredType), clean)
+}
+
+// buildFilename builds a download name from parts with clean applied to
+// each, and ext, including its dot, as the extension.
+func buildFilename(book *models.Book, file *models.File, parts filenameParts, ext string, clean func(string) string) string {
+	titleSource := parts.titleSource
+	// Pad volume numbers for lexicographic sorting, then sanitize.
+	title := clean(padVolumeNumber(titleSource))
+	supplement := ""
+	if parts.supplement != "" || file.FileRole == models.FileRoleSupplement {
+		supplement = clean(parts.supplement)
+		if supplement == "" {
+			supplement = fmt.Sprintf("File %d", file.ID)
+		}
+	} else if title == "" {
+		title = fmt.Sprintf("File %d", file.ID)
+	}
+
+	author := clean(getFirstAuthorName(book))
+	narrator := ""
+	if parts.narrators {
+		narrator = clean(getFirstNarratorName(file))
 	}
 
 	// A title volume marker suppresses a redundant single position, but an
 	// omnibus still needs its complete range represented in the filename.
+	seriesName, number, numberEnd := getFirstSeries(book)
+	seriesName = clean(seriesName)
 	titleHasVolume := volumePattern.MatchString(titleSource)
-	if series != "" && (!titleHasVolume || numberEnd != nil) {
-		seriesPart := sanitizeFilename(series)
-		if number != nil {
-			seriesPart += " #" + seriesnum.FormatRange(*number, numberEnd)
+	if seriesName == "" || (titleHasVolume && numberEnd == nil) {
+		seriesName = ""
+	} else if number != nil {
+		seriesName += " " + padSeriesNumber(*number)
+		if numberEnd != nil {
+			seriesName += "-" + padSeriesNumber(*numberEnd)
 		}
-		parts = append(parts, seriesPart)
-		parts = append(parts, "-")
 	}
 
-	// Add title
-	parts = append(parts, title)
-
-	// Add narrator for audiobooks if available
-	if narrator != "" {
-		parts = append(parts, fmt.Sprintf("{%s}", sanitizeFilename(narrator)))
+	ext = clean(ext)
+	stem := func() string {
+		var parts []string
+		for _, part := range []string{author, seriesName, title, supplement} {
+			if part != "" {
+				parts = append(parts, part)
+			}
+		}
+		name := strings.Join(parts, " - ")
+		if narrator != "" {
+			name += " (" + narrator + ")"
+		}
+		return name
+	}
+	// Shorten a name too long for a filesystem: the title and a
+	// supplement's name down to short stubs first, then the series, author,
+	// and narrator, and then the title and supplement name the rest of the
+	// way.
+	budget := maxFilenameBytes - len(ext)
+	for _, cut := range []struct {
+		part *string
+		keep int
+	}{{&title, minTitleBytes}, {&supplement, minTitleBytes}, {&seriesName, 0}, {&author, 0}, {&narrator, 0}, {&title, 1}, {&supplement, 1}} {
+		if over := len(stem()) - budget; over > 0 {
+			*cut.part = truncateBytes(*cut.part, max(len(*cut.part)-over, cut.keep))
+		}
 	}
 
-	// Join parts with spaces and add extension
-	filename := strings.Join(parts, " ")
-	return filename + "." + ext
+	name := strings.TrimLeft(stem(), ". ")
+	if name == "" {
+		name = fmt.Sprintf("File %d", file.ID)
+	}
+	if windowsReservedNames[strings.ToUpper(name)] {
+		name = "_" + name
+	}
+	return name + ext
+}
+
+const (
+	// maxFilenameBytes keeps a download name under the 255-byte limit of
+	// common filesystems, with room for a client's " (1)" suffix.
+	maxFilenameBytes = 240
+	// minTitleBytes is how much of the title shortening keeps before it
+	// cuts the other parts.
+	minTitleBytes = 48
+)
+
+// truncateBytes shortens s to at most n bytes at a character boundary, and
+// trims the spaces and punctuation a cut leaves at its end.
+func truncateBytes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return strings.TrimRight(s[:n], " -,.")
+}
+
+// windowsReservedNames are the names Windows reserves for devices. A file
+// named one of them, with any extension, cannot be saved there.
+var windowsReservedNames = map[string]bool{
+	"CON": true, "PRN": true, "AUX": true, "NUL": true,
+	"COM1": true, "COM2": true, "COM3": true, "COM4": true, "COM5": true, "COM6": true, "COM7": true, "COM8": true, "COM9": true,
+	"LPT1": true, "LPT2": true, "LPT3": true, "LPT4": true, "LPT5": true, "LPT6": true, "LPT7": true, "LPT8": true, "LPT9": true,
 }
 
 // getFirstAuthorName returns the name of the first author by sort order.
@@ -154,88 +310,4 @@ func getFirstSeries(book *models.Book) (string, *float64, *float64) {
 		return first.Series.Name, first.SeriesNumber, first.SeriesNumberEnd
 	}
 	return "", nil, nil
-}
-
-// formatSeriesNumber formats a series number for display.
-// Whole numbers are displayed without decimal (e.g., "1").
-// Non-whole numbers keep their decimal (e.g., "1.5").
-func formatSeriesNumber(n float64) string {
-	return seriesnum.FormatRange(n, nil)
-}
-
-// sanitizeFilename removes or replaces characters that are not valid in filenames.
-func sanitizeFilename(s string) string {
-	result := s
-	for _, char := range invalidFilenameChars {
-		result = strings.ReplaceAll(result, char, "")
-	}
-	// Also trim leading/trailing whitespace and collapse multiple spaces
-	result = strings.TrimSpace(result)
-	for strings.Contains(result, "  ") {
-		result = strings.ReplaceAll(result, "  ", " ")
-	}
-	return result
-}
-
-// koboUnsafeChars contains characters that cause problems with Kobo e-readers.
-// Based on https://github.com/kobolabs/epub-spec which states:
-// "File names containing non-alphanumeric characters are not fully supported,
-// and their use may lead to undefined behaviour."
-// Additionally, colons are known to prevent Kobo from seeing kepub files:
-// https://github.com/seblucas/cops/issues/263
-var koboUnsafeChars = regexp.MustCompile(`[^a-zA-Z0-9\s\-_.,()']`)
-
-// sanitizeKoboFilename aggressively sanitizes a filename for Kobo compatibility.
-// It removes special characters that can cause Kobo to fail reading the file.
-func sanitizeKoboFilename(s string) string {
-	// Replace unsafe characters with nothing
-	result := koboUnsafeChars.ReplaceAllString(s, "")
-	// Trim leading/trailing whitespace and collapse multiple spaces
-	result = strings.TrimSpace(result)
-	for strings.Contains(result, "  ") {
-		result = strings.ReplaceAll(result, "  ", " ")
-	}
-	return result
-}
-
-// FormatKepubDownloadFilename generates a formatted filename for downloading a KePub file.
-// Uses Kobo-safe characters only to ensure compatibility with Kobo e-readers.
-// Format: Author - Series Number - Title.kepub.epub (no brackets, no hash symbols).
-func FormatKepubDownloadFilename(book *models.Book, file *models.File) string {
-	titleSource := file.ResolveTitle(book.Title)
-	// Pad volume numbers for lexicographic sorting, then sanitize for Kobo
-	title := sanitizeKoboFilename(padVolumeNumber(titleSource))
-	author := sanitizeKoboFilename(getFirstAuthorName(book))
-	series, number, numberEnd := getFirstSeries(book)
-
-	var parts []string
-
-	// Add author if available (no brackets - Kobo doesn't like them)
-	if author != "" {
-		parts = append(parts, author)
-		parts = append(parts, "-")
-	}
-
-	// A title volume marker suppresses a redundant single position, but an
-	// omnibus still needs its complete range represented in the filename.
-	// Use plain number format instead of # (Kobo doesn't like #).
-	titleHasVolume := volumePattern.MatchString(titleSource)
-	if series != "" && (!titleHasVolume || numberEnd != nil) {
-		seriesPart := sanitizeKoboFilename(series)
-		if number != nil {
-			seriesPart += " " + seriesnum.FormatRange(*number, numberEnd)
-		}
-		parts = append(parts, seriesPart)
-		parts = append(parts, "-")
-	}
-
-	// Add title
-	parts = append(parts, title)
-
-	// Skip narrator for KePub (CBZ converted to KePub won't have narrators anyway,
-	// and curly braces are problematic for Kobo)
-
-	// Join parts with spaces and add .kepub.epub extension
-	filename := strings.Join(parts, " ")
-	return filename + ".kepub.epub"
 }

@@ -20,6 +20,7 @@ type ServeOption func(*serveOptions)
 type serveOptions struct {
 	contentType  string
 	attachment   string
+	asciiName    string
 	cacheControl string
 	etag         string
 }
@@ -37,7 +38,13 @@ func WithContentType(contentType string) ServeOption {
 // outside printable ASCII). An empty filename sends no Content-Disposition,
 // which overrides an earlier WithAttachment.
 func WithAttachment(filename string) ServeOption {
-	return func(o *serveOptions) { o.attachment = filename }
+	return func(o *serveOptions) { o.attachment, o.asciiName = filename, "" }
+}
+
+// WithAttachmentNames is WithAttachment with the ASCII fallback given
+// (SetAttachmentFilenames).
+func WithAttachmentNames(filename, ascii string) ServeOption {
+	return func(o *serveOptions) { o.attachment, o.asciiName = filename, ascii }
 }
 
 // WithCacheControl sets the Cache-Control header.
@@ -93,7 +100,7 @@ func ServeFile(c echo.Context, path string, notFound error, opts ...ServeOption)
 		header.Set(echo.HeaderContentType, o.contentType)
 	}
 	if o.attachment != "" {
-		SetAttachmentFilename(c.Response(), o.attachment)
+		SetAttachmentFilenames(c.Response(), o.attachment, o.asciiName)
 		// ServeContent can still answer 412 or 416 after the open, and Go
 		// strips the cache headers from those but not this one.
 		res := c.Response()
@@ -148,7 +155,7 @@ func ServeStream(c echo.Context, body io.Reader, size int64, opts ...ServeOption
 	}
 	header.Set(echo.HeaderContentType, contentType)
 	if o.attachment != "" {
-		SetAttachmentFilename(res, o.attachment)
+		SetAttachmentFilenames(res, o.attachment, o.asciiName)
 	}
 	if o.cacheControl != "" {
 		header.Set("Cache-Control", o.cacheControl)

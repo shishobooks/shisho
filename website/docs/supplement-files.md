@@ -84,8 +84,8 @@ Demoting a main file clears its extracted format metadata, including its cover a
 
 You can:
 
-- Download a supplement.
-- Give it a display name. The name you set replaces the filename as its label.
+- Download a supplement. It downloads named after its book, then its own name, as [Download Filenames](./supported-formats.md#download-filenames) describes.
+- Give it a display name. The name you set replaces the filename as its label and in its download name.
 - Promote a supported supplement to a main file. In the file's **Edit File** dialog, set **File Role** to **Main File** and select **Save Changes**. Promotion triggers metadata extraction for that format.
 - Demote a main file to a supplement. Set **File Role** to **Supplement**, then select **Save Changes** twice to confirm. Demotion clears its format-specific metadata.
 

@@ -169,7 +169,11 @@ func TestDownloadHandlers_ServesOriginalWhenNothingToGenerate(t *testing.T) {
 			rec := f.serve(file, "")
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 			assert.Equal(t, "original bytes", rec.Body.String())
-			assert.Equal(t, `attachment; filename="original.`+tt.fileType+`"`, rec.Header().Get("Content-Disposition"))
+			want := "Original." + tt.fileType
+			if tt.role == models.FileRoleSupplement {
+				want = "Original - original." + tt.fileType
+			}
+			assert.Equal(t, `attachment; filename="`+want+`"`, rec.Header().Get("Content-Disposition"), "named after the book")
 			assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
 			if tt.contentType != "" {
 				assert.Equal(t, tt.contentType, rec.Header().Get("Content-Type"))
@@ -185,12 +189,12 @@ func TestDownloadHandlers_GeneratedHeaders(t *testing.T) {
 
 	t.Run("epub", func(t *testing.T) {
 		t.Parallel()
-		f := newDownloadFixture(t, `Title "Quoted" Ünïcode`)
+		f := newDownloadFixture(t, `Title "Quoted" Война`)
 		rec := f.serve(f.addEPUB(), "epub")
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), "; filename*=UTF-8''")
-		assert.Contains(t, rec.Header().Get("Content-Disposition"), "%C3%9Cn%C3%AFcode")
+		assert.Contains(t, rec.Header().Get("Content-Disposition"), "%D0%92%D0%BE%D0%B9%D0%BD%D0%B0")
 	})
 	// MOBI and AZW3 downloads are generated with the book's metadata and
 	// keep the type's media type and extension.
@@ -264,7 +268,7 @@ func TestDownloadHandlers_DamagedEPUB(t *testing.T) {
 			rec := f.serve(addDamaged(f), ext)
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 			assert.Equal(t, "not a zip", rec.Body.String())
-			assert.Equal(t, `attachment; filename="broken.bin"`, rec.Header().Get("Content-Disposition"))
+			assert.Equal(t, `attachment; filename="Broken.epub"`, rec.Header().Get("Content-Disposition"), "named after the book, with its File Type's extension")
 			assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 		})
 	}

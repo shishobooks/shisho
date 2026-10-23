@@ -1777,7 +1777,13 @@ func (h *handler) downloadOriginalFile(c echo.Context) error {
 		return err
 	}
 
-	return OriginalDownload(file).Serve(c)
+	// The book's authors and series name the download.
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &file.BookID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return OriginalDownload(book, file).Serve(c)
 }
 
 func (h *handler) resyncFile(c echo.Context) error {

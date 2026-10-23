@@ -136,7 +136,7 @@ func TestHandleDownload_UnreadableFileIsServerError(t *testing.T) {
 }
 
 // The Kobo download is named with the Kobo-safe KePub filename, not the raw
-// title. The Kobo scope holds only EPUB and CBZ files, which KePub always
+// title: accents become plain letters and other unsafe characters are dropped. The Kobo scope holds only EPUB and CBZ files, which KePub always
 // converts, so there is no original fallback to name.
 func TestHandleDownload_Filename(t *testing.T) {
 	t.Parallel()
@@ -144,8 +144,8 @@ func TestHandleDownload_Filename(t *testing.T) {
 	file := f.addEPUB()
 	rec := f.serve(file)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	want := downloadcache.FormatKepubDownloadFilename(f.book, file)
-	assert.Equal(t, "Title Quoted ncode.kepub.epub", want)
+	want, _ := downloadcache.DownloadFilenames(f.book, file, models.FileTypeKePub)
+	assert.Equal(t, "Title Quoted Unicode.kepub.epub", want)
 	assert.Equal(t, `attachment; filename="`+want+`"`, rec.Header().Get("Content-Disposition"))
 	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"))
 	assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))

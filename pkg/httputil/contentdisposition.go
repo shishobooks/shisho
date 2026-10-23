@@ -4,7 +4,10 @@ package httputil
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
+
+	"github.com/shishobooks/shisho/pkg/filenames"
 )
 
 // SetAttachmentFilename writes a Content-Disposition: attachment header that
@@ -19,7 +22,24 @@ import (
 // This matters for OPDS clients like KOReader's "Use server filenames" mode,
 // which parses the header to name the downloaded file on the device.
 func SetAttachmentFilename(w http.ResponseWriter, filename string) {
-	fallback := asciiFallback(filename)
+	SetAttachmentFilenames(w, filename, "")
+}
+
+// SetAttachmentFilenames is SetAttachmentFilename with the ASCII fallback
+// given, as a generated download builds it from the same parts as its name
+// (downloadcache.DownloadFilenames). An empty ascii derives it from
+// filename.
+func SetAttachmentFilenames(w http.ResponseWriter, filename, ascii string) {
+	var fallback string
+	switch {
+	case !needsExtendedForm(filename):
+		// A name already in printable ASCII is sent as it is.
+		fallback = guardFallback(strings.TrimSpace(filename))
+	case ascii != "" && !needsExtendedForm(ascii):
+		fallback = guardFallback(ascii)
+	default:
+		fallback = asciiFallback(filename)
+	}
 	header := `attachment; filename="` + escapeQuoted(fallback) + `"`
 	if needsExtendedForm(filename) {
 		header += "; filename*=UTF-8''" + percentEncode(filename)
@@ -27,29 +47,41 @@ func SetAttachmentFilename(w http.ResponseWriter, filename string) {
 	w.Header().Set("Content-Disposition", header)
 }
 
-// asciiFallback strips runes outside printable ASCII and tidies the result so
-// it is safe to drop into a quoted-string. Invalid UTF-8 decodes to U+FFFD
-// which is also out of range and gets stripped. Returns "download" if nothing
-// usable remains, and prepends "download" to results that would start with a
-// dot (e.g. "тест.epub" -> ".epub" -> "download.epub").
+// asciiFallback makes the ASCII name for filename with the rules every ASCII
+// download name follows (filenames.CleanASCII): accented letters become
+// plain ones and everything else outside the safe set is dropped. Invalid
+// UTF-8 decodes to U+FFFD, which is dropped too. The name is cleaned
+// without its extension, and the separators a dropped part leaves at the
+// end are trimmed, so "Author - 吾輩.epub" becomes "Author.epub".
 func asciiFallback(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r >= 0x20 && r <= 0x7E {
-			b.WriteRune(r)
-		}
+	stem, ext := splitExtension(s)
+	stem = strings.Trim(filenames.CleanASCII(stem), " -_.,")
+	return guardFallback(stem + filenames.CleanASCII(ext))
+}
+
+// splitExtension splits a filename's extension off, keeping a KePub's
+// ".kepub.epub" whole.
+func splitExtension(s string) (stem, ext string) {
+	if strings.HasSuffix(strings.ToLower(s), kepubExtension) {
+		return s[:len(s)-len(kepubExtension)], s[len(s)-len(kepubExtension):]
 	}
-	cleaned := strings.TrimSpace(b.String())
-	for strings.Contains(cleaned, "  ") {
-		cleaned = strings.ReplaceAll(cleaned, "  ", " ")
-	}
-	if cleaned == "" {
+	ext = filepath.Ext(s)
+	return strings.TrimSuffix(s, ext), ext
+}
+
+// kepubExtension is a KePub's two-part extension.
+const kepubExtension = ".kepub.epub"
+
+// guardFallback returns "download" for an empty name and prepends it to a
+// name that would start with a dot and so save as a hidden file.
+func guardFallback(s string) string {
+	if s == "" {
 		return "download"
 	}
-	if strings.HasPrefix(cleaned, ".") {
-		return "download" + cleaned
+	if strings.HasPrefix(s, ".") {
+		return "download" + s
 	}
-	return cleaned
+	return s
 }
 
 // escapeQuoted escapes backslashes and double quotes for use inside an

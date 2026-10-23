@@ -96,7 +96,7 @@ func TestServeFile_OptionsSetHeadersOnSuccess(t *testing.T) {
 	assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 	assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
 	assert.Equal(t,
-		`attachment; filename="Title \"Quoted\" ncode.epub"; filename*=UTF-8''Title%20%22Quoted%22%20%C3%9Cn%C3%AFcode.epub`,
+		`attachment; filename="Title Quoted Unicode.epub"; filename*=UTF-8''Title%20%22Quoted%22%20%C3%9Cn%C3%AFcode.epub`,
 		rec.Header().Get("Content-Disposition"))
 	assert.NotEmpty(t, rec.Header().Get("Last-Modified"))
 }
