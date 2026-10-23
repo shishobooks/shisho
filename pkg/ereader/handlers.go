@@ -197,6 +197,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	typesFilter = typesFilterFor(r, typesFilter)
 
 	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
@@ -207,7 +208,7 @@ func (h *handler) LibraryAllBooks(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt})
+	fileTypes, err := h.reachService.DeliveredFileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -301,6 +302,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	typesFilter = typesFilterFor(r, typesFilter)
 
 	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
@@ -327,7 +329,7 @@ func (h *handler) SeriesBooks(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, SeriesID: &seriesIDInt})
+	fileTypes, err := h.reachService.DeliveredFileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, SeriesID: &seriesIDInt})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -421,6 +423,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	typesFilter = typesFilterFor(r, typesFilter)
 
 	// Get author info, scoped to the library param so a person ID from a
 	// sibling library cannot leak its name through the page heading.
@@ -449,7 +452,7 @@ func (h *handler) AuthorBooks(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, PersonID: &authorIDInt})
+	fileTypes, err := h.reachService.DeliveredFileTypesWithBooks(ctx, r, books.ListBooksOptions{LibraryID: &libraryIDInt, PersonID: &authorIDInt})
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -500,6 +503,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	typesFilter = typesFilterFor(r, typesFilter)
 
 	sort := h.resolveSort(ctx, user.ID, libraryIDInt)
 
@@ -512,7 +516,7 @@ func (h *handler) LibrarySearch(c echo.Context) error {
 	if query != "" {
 		filterOpts.Search = &query
 	}
-	fileTypes, err := h.reachService.FileTypesWithBooks(ctx, r, filterOpts)
+	fileTypes, err := h.reachService.DeliveredFileTypesWithBooks(ctx, r, filterOpts)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -973,21 +977,28 @@ func parsePageParam(raw string) int {
 	return 1
 }
 
+// typesFilterFor returns the type filter a page applies: typesFilter, or
+// "" (All) when the rules deliver nothing as that File Type, as in a link
+// saved before the rules changed, so the link still opens a full list.
+func typesFilterFor(r *reach.Reach, typesFilter string) string {
+	if typesFilter == "" || typesFilter == "all" || len(reach.DeliveredAs(r.Rules, strings.ToLower(typesFilter))) == 0 {
+		return ""
+	}
+	return strings.ToLower(typesFilter)
+}
+
 // listBooksPaginated fetches a single page of books in scope that the
-// Device's Delivery Rules deliver something from, narrowed to books with a
-// main file of typesFilter's type unless it is empty or "all". Returns the
+// Device's Delivery Rules deliver something from, narrowed to books they
+// deliver as typesFilter's File Type unless it is empty or "all". A type
+// they deliver nothing as, such as a source File Type in a link saved
+// before the rules sent it as another type, matches no book. Returns the
 // books for the requested page and the total count used to drive the
 // pagination UI.
 func (h *handler) listBooksPaginated(ctx context.Context, r *reach.Reach, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
 	opts.ListID = r.ListID()
 	opts.MainFileTypes = r.SourceFileTypes()
 	if typesFilter != "" && typesFilter != "all" {
-		filter := strings.ToLower(typesFilter)
-		if slices.Contains(opts.MainFileTypes, filter) {
-			opts.MainFileTypes = []string{filter}
-		} else {
-			opts.MainFileTypes = []string{}
-		}
+		opts.MainFileMatches = reach.DeliveredAs(r.Rules, strings.ToLower(typesFilter))
 	}
 
 	offset := (page - 1) * defaultPageSize

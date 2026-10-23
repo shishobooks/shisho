@@ -235,21 +235,39 @@ func (s *Service) Libraries(ctx context.Context, r *Reach) ([]*models.Library, e
 	return libs, errors.WithStack(err)
 }
 
-// FileTypesWithBooks returns the source File Types, in rule order, of the
-// books opts matches in reach, so a type filter offers only types that
-// match something.
-func (s *Service) FileTypesWithBooks(ctx context.Context, r *Reach, opts books.ListBooksOptions) ([]string, error) {
-	opts, ok := r.narrow(opts)
-	if !ok {
-		return []string{}, nil
+// DeliveredAs returns the book filter matching the books the rules deliver
+// some File of as fileType (delivery.DeliveredAs).
+func DeliveredAs(rules []delivery.Rule, fileType string) []books.MainFileMatch {
+	matches := []books.MainFileMatch{}
+	for _, m := range delivery.DeliveredAs(rules, fileType) {
+		matches = append(matches, books.MainFileMatch{FileType: m.SourceFileType, Unless: m.Unless})
 	}
-	found, err := s.bookService.MainFileTypesWithBooks(ctx, opts)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+	return matches
+}
+
+// DeliveredFileTypesWithBooks returns the File Types, in rule order, that
+// the rules deliver some book opts matches in reach as, so a type filter
+// offers only types that match something. It runs one query per distinct
+// delivered File Type, a handful at most, rather than one query that
+// resolves every book.
+func (s *Service) DeliveredFileTypesWithBooks(ctx context.Context, r *Reach, opts books.ListBooksOptions) ([]string, error) {
 	types := []string{}
-	for _, fileType := range r.SourceFileTypes() {
-		if slices.Contains(found, fileType) {
+	var checked []string
+	for _, rule := range r.Rules {
+		fileType := rule.DeliveredFileType
+		if slices.Contains(checked, fileType) {
+			continue
+		}
+		checked = append(checked, fileType)
+		opts.MainFileMatches = DeliveredAs(r.Rules, fileType)
+		if len(opts.MainFileMatches) == 0 {
+			continue
+		}
+		has, err := s.HasBooks(ctx, r, opts)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		if has {
 			types = append(types, fileType)
 		}
 	}

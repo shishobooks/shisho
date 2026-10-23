@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/models"
@@ -296,4 +297,56 @@ func TestBuiltInRules_DeliverEveryBuiltInFileTypeAsItself(t *testing.T) {
 	}
 	assert.ElementsMatch(t, models.BuiltInFileTypes, sources)
 	require.NoError(t, Validate(rules))
+}
+
+// DeliveredAs and Resolve agree on every book: a book meets one of the
+// matches for a File Type exactly when Resolve delivers some File of it as
+// that type.
+func TestDeliveredAs_AgreesWithResolve(t *testing.T) {
+	t.Parallel()
+	ruleLists := map[string][]Rule{
+		"built-in": BuiltInRules(),
+		"CBZ as EPUB first": {
+			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeEPUB},
+			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeM4B, DeliveredFileType: models.FileTypeM4B},
+		},
+		"a rule with no chain first": {
+			{SourceFileType: models.FileTypePDF, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeEPUB},
+		},
+	}
+	books := [][]testFile{
+		{{fileType: models.FileTypeKePub}},
+		{{fileType: models.FileTypeEPUB}, {fileType: models.FileTypeCBZ}},
+		{{fileType: models.FileTypeKePub}, {fileType: models.FileTypeEPUB}},
+		{{fileType: models.FileTypeEPUB}, {fileType: models.FileTypeM4B}},
+		{{fileType: models.FileTypePDF}, {fileType: models.FileTypeCBZ, supplement: true}},
+		{{fileType: models.FileTypeMOBI}, {fileType: models.FileTypeAZW3}},
+	}
+	for name, rules := range ruleLists {
+		for i, files := range books {
+			book := buildBook(files)
+			has := map[string]bool{}
+			for _, f := range book.Files {
+				if f.FileRole == models.FileRoleMain {
+					has[f.FileType] = true
+				}
+			}
+			delivered := map[string]bool{}
+			for _, d := range Resolve(rules, book).All() {
+				delivered[d.DeliveredFileType] = true
+			}
+			for _, fileType := range models.BuiltInFileTypes {
+				meets := false
+				for _, m := range DeliveredAs(rules, fileType) {
+					if has[m.SourceFileType] && !slices.ContainsFunc(m.Unless, func(u string) bool { return has[u] }) {
+						meets = true
+					}
+				}
+				assert.Equal(t, delivered[fileType], meets, "%s, book %d, as %s", name, i, fileType)
+			}
+		}
+	}
 }

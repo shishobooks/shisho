@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// HasBooks, LibraryIDsWithBooks, and MainFileTypesWithBooks answer from the
-// same filters as ListBooksWithTotal, without loading books.
+// HasBooks and LibraryIDsWithBooks answer from the same filters as
+// ListBooksWithTotal, without loading books.
 func TestService_ExistenceQueriesUseTheListFilters(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
@@ -62,12 +62,4 @@ func TestService_ExistenceQueriesUseTheListFilters(t *testing.T) {
 	ids, err = svc.LibraryIDsWithBooks(ctx, ListBooksOptions{MainFileTypes: cbz})
 	require.NoError(t, err)
 	assert.Equal(t, []int{comics.ID}, ids)
-
-	// A supplement's type doesn't count.
-	types, err := svc.MainFileTypesWithBooks(ctx, ListBooksOptions{LibraryID: &novels.ID})
-	require.NoError(t, err)
-	assert.Equal(t, []string{models.FileTypeEPUB}, types)
-	types, err = svc.MainFileTypesWithBooks(ctx, ListBooksOptions{MainFileTypes: cbz})
-	require.NoError(t, err)
-	assert.Equal(t, cbz, types)
 }

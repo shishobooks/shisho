@@ -179,7 +179,7 @@ func TestListBooksPaginated_TypeFilter(t *testing.T) {
 
 // TestListBooksPaginated_TypeFilterPagesAndMatching confirms a type filter
 // pages through the matching books, ignores the type's case, and matches a
-// book by any of its main files but never by a supplement.
+// book by the File Type its rules deliver it as, never by a supplement.
 func TestListBooksPaginated_TypeFilterPagesAndMatching(t *testing.T) {
 	t.Parallel()
 
@@ -234,24 +234,31 @@ func TestListBooksPaginated_TypeFilterPagesAndMatching(t *testing.T) {
 
 	h := &handler{bookService: books.NewService(db, appsettings.NewService(db))}
 	opts := books.ListBooksOptions{LibraryID: &lib.ID}
+	mobiFirst := &reach.Reach{Rules: []delivery.Rule{
+		{SourceFileType: models.FileTypeMOBI, DeliveredFileType: models.FileTypeMOBI},
+		{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeEPUB},
+		{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeCBZ},
+		{SourceFileType: models.FileTypePDF, DeliveredFileType: models.FileTypePDF},
+	}}
 
-	got, total, err := h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "mobi")
+	got, total, err := h.listBooksPaginated(ctx, mobiFirst, opts, 1, "mobi")
 	require.NoError(t, err)
 	assert.Equal(t, n, total)
 	assert.Len(t, got, defaultPageSize)
 
-	got, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 2, "mobi")
+	got, total, err = h.listBooksPaginated(ctx, mobiFirst, opts, 2, "mobi")
 	require.NoError(t, err)
 	assert.Equal(t, n, total)
 	assert.Len(t, got, 3)
 
-	// The second type of a book's main files matches, in any case.
-	_, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "EPUB")
+	// A book is under the type its earliest matching rule sends it as, in
+	// any case, so the books sent as MOBI are not under EPUB.
+	_, total, err = h.listBooksPaginated(ctx, mobiFirst, opts, 1, "EPUB")
 	require.NoError(t, err)
-	assert.Equal(t, n+1, total)
+	assert.Equal(t, 1, total)
 
 	// A supplement's type matches nothing.
-	got, total, err = h.listBooksPaginated(ctx, &reach.Reach{Rules: delivery.BuiltInRules()}, opts, 1, "pdf")
+	got, total, err = h.listBooksPaginated(ctx, mobiFirst, opts, 1, "pdf")
 	require.NoError(t, err)
 	assert.Equal(t, 0, total)
 	assert.Empty(t, got)

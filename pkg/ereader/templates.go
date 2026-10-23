@@ -147,9 +147,10 @@ func searchForm(actionURL, query string) string {
 }
 
 // filterBar generates the file type and cover filter UI with
-// button-style links. The type filter offers fileTypes, the source File
-// Types of the books the page could show (reach.FileTypesWithBooks), so no
-// filter opens an empty page, and is left out when there is only one.
+// button-style links. The type filter offers fileTypes, the File Types the
+// books the page could show are delivered as
+// (reach.DeliveredFileTypesWithBooks), so no filter opens an empty page,
+// and is left out when there is only one.
 // extraParams preserves additional query params (e.g., "q" on the search
 // page) so changing a filter doesn't drop the user's in-progress state.
 func filterBar(baseURL string, fileTypes []string, currentTypes, currentCovers string, extraParams ...[2]string) string {

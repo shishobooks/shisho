@@ -51,6 +51,10 @@ type ListBooksOptions struct {
 	Search         *string  // Search query for title/author
 	ReviewedFilter string   // "" (default = all), "needs_review", "reviewed"
 
+	// MainFileMatches keeps the books that meet at least one of the matches.
+	// Nil means no filter; an empty list matches no book.
+	MainFileMatches []MainFileMatch
+
 	// Sort overrides the default ordering. When nil and SeriesID is set,
 	// single-numbered books precede ranges, then endpoints and sort title order. When nil
 	// and SeriesID is not set, the service falls back to
@@ -60,6 +64,13 @@ type ListBooksOptions struct {
 
 	includeTotal  bool
 	orderByRecent bool // Order by updated_at DESC instead of created_at ASC
+}
+
+// MainFileMatch matches a book with a main File of FileType and no main
+// File of any type in Unless. Supplements never count.
+type MainFileMatch struct {
+	FileType string
+	Unless   []string
 }
 
 type UpdateBookOptions struct {
@@ -479,6 +490,9 @@ func applyBookFilters(q *bun.SelectQuery, opts ListBooksOptions) *bun.SelectQuer
 	if opts.MainFileTypes != nil {
 		q = q.Where("b.id IN (SELECT DISTINCT book_id FROM files WHERE file_type IN (?) AND file_role = ?)", bun.List(opts.MainFileTypes), models.FileRoleMain)
 	}
+	if opts.MainFileMatches != nil {
+		q = applyMainFileMatches(q, opts.MainFileMatches)
+	}
 
 	// Filter by genre IDs
 	if len(opts.GenreIDs) > 0 {
@@ -527,6 +541,25 @@ func applyBookFilters(q *bun.SelectQuery, opts ListBooksOptions) *bun.SelectQuer
 	return q
 }
 
+// applyMainFileMatches keeps the books that meet at least one of matches.
+func applyMainFileMatches(q *bun.SelectQuery, matches []MainFileMatch) *bun.SelectQuery {
+	if len(matches) == 0 {
+		return q.Where("1 = 0")
+	}
+	return q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+		for _, m := range matches {
+			q = q.WhereGroup(" OR ", func(q *bun.SelectQuery) *bun.SelectQuery {
+				q = q.Where("EXISTS (SELECT 1 FROM files mfm WHERE mfm.book_id = b.id AND mfm.file_role = ? AND mfm.file_type = ?)", models.FileRoleMain, m.FileType)
+				if len(m.Unless) > 0 {
+					q = q.Where("NOT EXISTS (SELECT 1 FROM files mfu WHERE mfu.book_id = b.id AND mfu.file_role = ? AND mfu.file_type IN (?))", models.FileRoleMain, bun.List(m.Unless))
+				}
+				return q
+			})
+		}
+		return q
+	})
+}
+
 // matchingBooks returns a query over the books opts matches, aliased b,
 // with every filter applied and nothing selected.
 func (svc *Service) matchingBooks(opts ListBooksOptions) *bun.SelectQuery {
@@ -550,23 +583,6 @@ func (svc *Service) LibraryIDsWithBooks(ctx context.Context, opts ListBooksOptio
 	ids := []int{}
 	err := svc.matchingBooks(opts).ColumnExpr("DISTINCT b.library_id").Scan(ctx, &ids)
 	return ids, errors.WithStack(err)
-}
-
-// MainFileTypesWithBooks returns the types of the main files of the books
-// matching opts' filters, restricted to opts.MainFileTypes when set, in one
-// query.
-func (svc *Service) MainFileTypesWithBooks(ctx context.Context, opts ListBooksOptions) ([]string, error) {
-	types := []string{}
-	q := svc.db.NewSelect().
-		TableExpr("files AS mf").
-		ColumnExpr("DISTINCT mf.file_type").
-		Where("mf.file_role = ?", models.FileRoleMain).
-		Where("mf.book_id IN (?)", svc.matchingBooks(opts).Column("b.id"))
-	if opts.MainFileTypes != nil {
-		q = q.Where("mf.file_type IN (?)", bun.List(opts.MainFileTypes))
-	}
-	err := q.Scan(ctx, &types)
-	return types, errors.WithStack(err)
 }
 
 func (svc *Service) UpdateBook(ctx context.Context, book *models.Book, opts UpdateBookOptions) error {
