@@ -24,13 +24,13 @@ CBR is not a native format. [Using Plugins](./plugins/overview.md) may add parse
 
 ## First Downloads
 
-A generated download starts as soon as it is requested and is built while it is sent. EPUB, KePub, M4B, MOBI, AZW3, and PDF downloads of a file as its own type know their size before they start, so the device or browser shows progress even the first time. A CBZ, a KePub converted from an EPUB or CBZ, and an EPUB made from a CBZ do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+A generated download starts as soon as it is requested and is built while it is sent. EPUB, KePub, M4B, MOBI, AZW3, and PDF downloads of a file as its own type know their size before they start, so the device or browser shows progress even the first time. A CBZ, a KePub converted from an EPUB or CBZ, and an EPUB made from a CBZ or a KePub do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
 
 ## KePub
 
 A KePub is the EPUB variant Kobo's own reader is built for. Shisho imports any file named `.kepub.epub` as a **KePub**, and every other `.epub` as an EPUB. A file named just `.kepub`, as Calibre stores a KePub in its library, is a KePub too. A scan reads a KePub's metadata, chapters, and cover the same way it reads an EPUB's. Organizing a library keeps the file's own extension, `.kepub.epub` or `.kepub`, and so does **Download Original**. A generated KePub download is always named `.kepub.epub`, the name Kobo's reader and KOReader recognize.
 
-A KePub downloaded as KePub gets Shisho's current metadata, cover, and chapter edits, the same as an EPUB download, and keeps the Kobo markup inside it, so it still opens in Kobo's own reader. A KePub converted from an EPUB or CBZ is a different download; see [Conversions](#conversions).
+A KePub downloaded as KePub gets Shisho's current metadata, cover, and chapter edits, the same as an EPUB download, and keeps the Kobo markup inside it, so it still opens in Kobo's own reader. A KePub can also be downloaded as a plain EPUB, without the Kobo markup, for readers that aren't Kobos. A KePub converted from an EPUB or CBZ is a different download. See [Conversions](#conversions) for both.
 
 DRM-protected KePubs, such as books bought from the Kobo store and copied off a Kobo, are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-file-never-appears).
 
@@ -92,8 +92,9 @@ A file can be downloaded as its own file type or as another one Shisho converts 
 | **EPUB** | **KePub** | A Kobo-optimized EPUB with the book's metadata, named `.kepub.epub` |
 | **CBZ** | **KePub** | A fixed-layout KePub with one page per image, named `.kepub.epub` |
 | **CBZ** | **EPUB** | A fixed-layout EPUB 3 with one page per image, for readers that open EPUB but not CBZ |
+| **KePub** | **EPUB** | A plain EPUB with the book's metadata and the Kobo markup removed, for readers that aren't Kobos |
 
-KePub, M4B, PDF, MOBI, and AZW3 files download only as themselves. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
+M4B, PDF, MOBI, and AZW3 files download only as themselves. A KePub converted to EPUB keeps its text, images, and internal links; a link or table of contents entry that pointed inside a paragraph goes to the start of that paragraph. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
 
 Each file type a file is downloaded as is generated and cached on its own, so downloading a CBZ as EPUB does not replace its cached CBZ or KePub. Editing the book's metadata regenerates each of them on its next download.
 

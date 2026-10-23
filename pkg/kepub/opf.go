@@ -170,6 +170,30 @@ func addItemProperty(tag, prop string) string {
 	return strings.TrimSuffix(tag, ">") + ` properties="` + prop + `">`
 }
 
+// removeItemProperty removes prop from a manifest item tag's properties,
+// and the properties attribute when nothing is left in it.
+func removeItemProperty(tag, prop string) string {
+	loc := propertiesPattern.FindStringSubmatchIndex(tag)
+	if loc == nil {
+		return tag
+	}
+	// The value is group 2 when double-quoted and group 3 when single-
+	// quoted.
+	start, end := loc[4], loc[5]
+	if start < 0 {
+		start, end = loc[6], loc[7]
+	}
+	tokens := strings.Fields(tag[start:end])
+	kept := slices.DeleteFunc(slices.Clone(tokens), func(t string) bool { return t == prop })
+	if len(kept) == len(tokens) {
+		return tag
+	}
+	if len(kept) == 0 {
+		return tag[:loc[0]] + tag[loc[1]:]
+	}
+	return tag[:start] + strings.Join(kept, " ") + tag[end:]
+}
+
 // TransformOPFBytes is a convenience function that transforms OPF from bytes.
 func TransformOPFBytes(input []byte) ([]byte, error) {
 	var buf bytes.Buffer

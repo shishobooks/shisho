@@ -49,6 +49,7 @@ func TestGeneratorFor(t *testing.T) {
 			{models.FileTypeEPUB, models.FileTypeKePub},
 			{models.FileTypeCBZ, models.FileTypeKePub},
 			{models.FileTypeCBZ, models.FileTypeEPUB},
+			{models.FileTypeKePub, models.FileTypeEPUB},
 		} {
 			gen := conversionFor(t, tc[0], tc[1])
 			assert.Equal(t, tc[1], gen.SupportedType())

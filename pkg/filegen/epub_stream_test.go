@@ -9,7 +9,9 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -514,5 +516,137 @@ func TestEPUBGenerators_RejectEntryPastEndOfSource(t *testing.T) {
 			_, err = gen.Prepare(context.Background(), s, book, file)
 			require.Error(t, err)
 		})
+	}
+}
+
+// A KePub delivered as EPUB loses its Kobo markup and keeps the book's
+// text, images, links, and metadata. The source is a KePub converted from
+// streamEPUBEntries, so the output is checked against the EPUB it came
+// from, a round trip.
+func TestKePubToEPUB_Conformance(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain.epub")
+	entries := streamEPUBEntries()
+	for i, e := range entries {
+		if e.name == "OEBPS/chapter1.xhtml" {
+			entries[i].content = []byte(strings.Replace(string(e.content), `<p>Text`, `<p id="start">Text`, 1))
+			entries[i].content = []byte(strings.Replace(string(entries[i].content), `</body>`, `<p>Go <a href="chapter2.xhtml">on</a> or <a href="#start">back</a>.</p></body>`, 1))
+		}
+	}
+	writeStreamEPUB(t, plain, entries)
+	kepubBytes, _, _ := prepareAndWrite(t, conversionGenerator(t, models.FileTypeEPUB, models.FileTypeKePub), plain,
+		&models.Book{Title: "Original Title"}, &models.File{FileType: models.FileTypeEPUB, Filepath: plain})
+	// Link chapter 1 to a span in chapter 2, as a Kobo store book can.
+	kepubZip, err := zip.NewReader(bytes.NewReader(kepubBytes), int64(len(kepubBytes)))
+	require.NoError(t, err)
+	var kepubEntries []streamEPUBEntry
+	for _, f := range kepubZip.File {
+		content := readZipEntry(t, f)
+		if f.Name == "OEBPS/chapter1.xhtml" {
+			require.Contains(t, string(readZipEntry(t, findZipEntry(t, kepubZip, "OEBPS/chapter2.xhtml"))), `id="kobo.2.2"`)
+			content = []byte(strings.Replace(string(content), `</body>`, `<p><a href="chapter2.xhtml#kobo.2.2">to the second sentence</a></p></body>`, 1))
+		}
+		kepubEntries = append(kepubEntries, streamEPUBEntry{name: f.Name, content: content, method: f.Method})
+	}
+	src := filepath.Join(dir, "source.kepub.epub")
+	writeStreamEPUB(t, src, kepubEntries)
+
+	book, file := streamEPUBBook(t, src)
+	file.FileType = models.FileTypeKePub
+	broken := filepath.Join(dir, "broken.kepub.epub")
+	writeStreamEPUB(t, broken, []streamEPUBEntry{
+		{name: "mimetype", content: []byte("application/epub+zip"), method: zip.Store},
+		{name: "chapter1.xhtml", content: []byte("<html/>"), method: zip.Deflate},
+	})
+
+	gen := conversionGenerator(t, models.FileTypeKePub, models.FileTypeEPUB)
+	assert.Equal(t, models.FileTypeEPUB, gen.(filegen.Generator).SupportedType())
+	filegentest.Run(t, filegentest.Case{
+		Generator: gen,
+		Source:    src,
+		Book:      book,
+		File:      file,
+		Broken:    broken,
+		Check: func(t *testing.T, output []byte) {
+			outPath := filepath.Join(t.TempDir(), "out.epub")
+			require.NoError(t, os.WriteFile(outPath, output, 0o600))
+			parsed, err := epub.Parse(outPath)
+			require.NoError(t, err)
+			assert.Equal(t, "Streamed Title", parsed.Title)
+			require.Len(t, parsed.Authors, 1)
+			assert.Equal(t, "New Author", parsed.Authors[0].Name)
+			assert.Equal(t, "Stream Series", parsed.Series)
+			assert.Equal(t, []byte("new cover bytes"), parsed.CoverData)
+
+			zr, err := zip.NewReader(bytes.NewReader(output), int64(len(output)))
+			require.NoError(t, err)
+			assert.Equal(t, "mimetype", zr.File[0].Name)
+			want := map[string][]byte{}
+			for _, e := range entries {
+				want[e.name] = e.content
+			}
+			for _, f := range zr.File {
+				assert.NotEqual(t, "kobo.js", path.Base(f.Name), "kobo.js is removed")
+				data := string(readZipEntry(t, f))
+				switch {
+				case f.Name == "OEBPS/images/plate.png":
+					assert.Equal(t, want[f.Name], []byte(data), "images are copied as they were")
+				case strings.HasSuffix(f.Name, ".xhtml"):
+					for _, markup := range []string{"koboSpan", "kobo.", "book-columns", "book-inner", "kobostylehacks"} {
+						assert.NotContains(t, data, markup, f.Name)
+					}
+				case strings.HasSuffix(f.Name, ".opf"):
+					assert.NotContains(t, data, "kobo.js")
+					assert.NotContains(t, data, "scripted")
+				}
+			}
+			for _, name := range []string{"OEBPS/chapter1.xhtml", "OEBPS/chapter2.xhtml"} {
+				got := docText(t, readZipEntry(t, findZipEntry(t, zr, name)))
+				assert.True(t, strings.HasPrefix(got, docText(t, want[name])), "%s keeps its text: %s", name, got)
+			}
+			ch1 := string(readZipEntry(t, findZipEntry(t, zr, "OEBPS/chapter1.xhtml")))
+			assert.Contains(t, ch1, `<p id="start">`)
+			assert.Contains(t, ch1, `<a href="chapter2.xhtml">on</a>`)
+			assert.Contains(t, ch1, `<a href="#start">back</a>`)
+			assert.Contains(t, ch1, `<img src="images/plate.png"/>`)
+			assertEPUBLinksResolve(t, zr)
+			m := regexp.MustCompile(`<a href="chapter2.xhtml#([^"]+)">to the second sentence</a>`).FindStringSubmatch(ch1)
+			require.NotNil(t, m, "the link to a removed span keeps a fragment")
+			assert.Regexp(t, `<p id="`+regexp.QuoteMeta(m[1])+`">Text of chapter 2\.`, string(readZipEntry(t, findZipEntry(t, zr, "OEBPS/chapter2.xhtml"))))
+		},
+	})
+}
+
+// docText returns the text of a document's body with runs of whitespace
+// collapsed.
+func docText(t *testing.T, doc []byte) string {
+	t.Helper()
+	body := string(doc)
+	start, end := strings.Index(body, "<body"), strings.LastIndex(body, "</body>")
+	require.True(t, start >= 0 && end > start)
+	body = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(body[start:end], "")
+	return strings.Join(strings.Fields(body), " ")
+}
+
+// assertEPUBLinksResolve checks that every relative link with a fragment in
+// the content documents and NCX of zr names an id its target document has.
+func assertEPUBLinksResolve(t *testing.T, zr *zip.Reader) {
+	t.Helper()
+	docs := map[string]string{}
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, ".xhtml") || strings.HasSuffix(f.Name, ".ncx") {
+			docs[f.Name] = string(readZipEntry(t, f))
+		}
+	}
+	links := regexp.MustCompile(`(?:href|src)="([^"#]*)#([^"]+)"`)
+	for name, content := range docs {
+		for _, m := range links.FindAllStringSubmatch(content, -1) {
+			target := name
+			if m[1] != "" {
+				target = path.Join(path.Dir(name), m[1])
+			}
+			assert.Contains(t, docs[target], `id="`+m[2]+`"`, "%s links to %s#%s", name, m[1], m[2])
+		}
 	}
 }

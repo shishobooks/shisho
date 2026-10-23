@@ -24,8 +24,10 @@ var builtInOrder = []string{
 }
 
 // BuiltInRules are Shisho's built-in Delivery Rules: every File Type
-// delivered as itself. A user's default follows them until edited, so a
-// change here reaches every user who never customized theirs.
+// delivered as itself. A KePub goes as itself too: it is a valid EPUB that
+// other readers open, and a Kobo it is copied to by hand keeps what KePub is
+// for. A user's default follows them until edited, so a change here reaches
+// every user who never customized theirs.
 func BuiltInRules() []Rule {
 	rules := make([]Rule, 0, len(builtInOrder))
 	for _, fileType := range builtInOrder {
