@@ -333,7 +333,7 @@ func TestHandleDownload_DamagedEPUB(t *testing.T) {
 		rec := f.serve(http.MethodGet, downloadPaths(f.prefix(), f.entryID(t, file.ID))[0])
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, "not a zip", rec.Body.String())
-		assert.Equal(t, `attachment; filename="broken.bin"`, rec.Header().Get("Content-Disposition"))
+		assert.Equal(t, `attachment; filename="Alpha.epub"`, rec.Header().Get("Content-Disposition"))
 	})
 }
 

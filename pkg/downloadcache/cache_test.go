@@ -45,7 +45,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, cachedPath)
-		assert.Equal(t, "[Test Author] Test Book.epub", downloadFilename)
+		assert.Equal(t, "Test Author - Test Book.epub", downloadFilename)
 
 		// Verify the cached file exists
 		_, err = os.Stat(cachedPath)
@@ -149,7 +149,7 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		_, downloadFilename, err := cache.GetOrGenerate(context.Background(), book, file, file.FileType)
 		require.NoError(t, err)
 
-		assert.Equal(t, "[Author] New Title.epub", downloadFilename)
+		assert.Equal(t, "Author - New Title.epub", downloadFilename)
 
 		// Fingerprint should have changed
 		meta2, err := ReadMetadata(cacheDir, file.ID, file.FileType)

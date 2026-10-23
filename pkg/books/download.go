@@ -5,8 +5,6 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"path/filepath"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -19,37 +17,48 @@ import (
 )
 
 // Download is a file ready to send: where it is, the name to save it under,
-// and its media type ("" to type it by extension).
+// and its media type ("" to type it by extension). ASCIIFilename is the name
+// in ASCII alone, or "" to derive it from Filename.
 type Download struct {
-	Path        string
-	Filename    string
-	ContentType string
+	Path          string
+	Filename      string
+	ASCIIFilename string
+	ContentType   string
 
 	// building is set instead of Path for a Generated File that is still
 	// being built: Serve streams it as it grows.
 	building *downloadcache.Generated
 }
 
-// OriginalDownload is the file as it is on disk, under its own name.
-func OriginalDownload(file *models.File) *Download {
-	return &Download{
-		Path:        file.Filepath,
-		Filename:    filepath.Base(file.Filepath),
-		ContentType: models.FileTypeMimeType(file.FileType),
-	}
+// OriginalDownload is the file as it is on disk, named the way a Generated
+// File is (downloadcache.OriginalFilenames) with the file's own extension.
+// book needs its authors and series loaded.
+func OriginalDownload(book *models.Book, file *models.File) *Download {
+	return originalDownload(book, file, models.FileExtensionForPath(file.Filepath))
 }
 
 // fallbackOriginal is the Original File a device or Share recipient gets in
-// place of a Generated File. A KePub is named .kepub.epub, as a Generated one
-// is, since Kobo's reader and KOReader take only that name as a KePub; a
-// bare .kepub from a Calibre library would otherwise keep its own.
-func fallbackOriginal(file *models.File) *Download {
-	download := OriginalDownload(file)
-	if file.FileType == models.FileTypeKePub {
-		base := strings.TrimSuffix(download.Filename, models.FileExtensionForPath(download.Filename))
-		download.Filename = base + "." + models.DeliveredFileTypeExtension(models.FileTypeKePub)
+// place of a Generated File. A built-in File Type gets the extension a
+// Generated File of its type has, which devices go by: a KePub is named
+// .kepub.epub, the only name Kobo's reader and KOReader take as a KePub,
+// where a bare .kepub from a Calibre library would otherwise keep its own.
+// Any other file keeps its own extension.
+func fallbackOriginal(book *models.Book, file *models.File) *Download {
+	ext := models.FileExtensionForPath(file.Filepath)
+	if models.IsBuiltInFileType(file.FileType) {
+		ext = "." + models.DeliveredFileTypeExtension(file.FileType)
 	}
-	return download
+	return originalDownload(book, file, ext)
+}
+
+func originalDownload(book *models.Book, file *models.File, ext string) *Download {
+	name, ascii := downloadcache.OriginalFilenames(book, file, ext)
+	return &Download{
+		Path:          file.Filepath,
+		Filename:      name,
+		ASCIIFilename: ascii,
+		ContentType:   models.FileTypeMimeType(file.FileType),
+	}
 }
 
 // FailedPartwayMessage is the web UI routes' answer to a Generated File
@@ -80,12 +89,12 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {
-		return fallbackOriginal(file), nil
+		return fallbackOriginal(book, file), nil
 	}
 	// Check for a generator before the cache is touched, so a full or
 	// read-only cache cannot fail a file there is nothing to generate for.
 	if _, err := filegen.GeneratorFor(file.FileType, file.FileType); errors.Is(err, filegen.ErrNotImplemented) {
-		return fallbackOriginal(file), nil
+		return fallbackOriginal(book, file), nil
 	}
 
 	download, err := GeneratedDownload(c, cache, book, file, file.FileType)
@@ -98,7 +107,7 @@ func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *m
 			"file_type": file.FileType,
 			"error":     err.Error(),
 		})
-		return fallbackOriginal(file), nil
+		return fallbackOriginal(book, file), nil
 	}
 	return nil, errors.WithStack(err)
 }
@@ -156,7 +165,7 @@ func GeneratedDownload(c echo.Context, cache *downloadcache.Cache, book *models.
 		return nil, err
 	}
 
-	download := &Download{Path: generated.Path, Filename: generated.Filename, ContentType: models.FileTypeMimeType(deliveredType)}
+	download := &Download{Path: generated.Path, Filename: generated.Filename, ASCIIFilename: generated.ASCIIFilename, ContentType: models.FileTypeMimeType(deliveredType)}
 	if generated.Path == "" {
 		download.building = generated
 	}
@@ -170,7 +179,7 @@ func GeneratedDownload(c echo.Context, cache *downloadcache.Cache, book *models.
 func (d *Download) Serve(c echo.Context, opts ...httputil.ServeOption) error {
 	opts = append([]httputil.ServeOption{
 		httputil.WithContentType(d.ContentType),
-		httputil.WithAttachment(d.Filename),
+		httputil.WithAttachmentNames(d.Filename, d.ASCIIFilename),
 		httputil.WithCacheControl("private, no-store"),
 	}, opts...)
 	if d.building != nil {
