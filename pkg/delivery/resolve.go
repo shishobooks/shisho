@@ -1,6 +1,10 @@
 package delivery
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"slices"
+
+	"github.com/shishobooks/shisho/pkg/models"
+)
 
 // Delivery is one File that goes to a reader: the File, the File Type it is
 // delivered as, and the Conversions that reach that type (none when it is
@@ -59,4 +63,43 @@ func resolveCategory(rules []Rule, files []*models.File, inCategory func(string)
 		}
 	}
 	return nil
+}
+
+// SourceMatch is one way a book can be delivered as a File Type: it has a
+// main File of SourceFileType and no main File of any type in Unless.
+type SourceMatch struct {
+	SourceFileType string
+	Unless         []string
+}
+
+// DeliveredAs returns the ways a book can be delivered as fileType under
+// rules, so a listing can filter on the File Type a reader receives before
+// paging. A book Resolve delivers some File of as fileType meets exactly one
+// of them: in each category, the earliest rule with a chain whose source File
+// Type the book has goes, so a rule delivering fileType counts only for
+// books with none of the earlier rules' source File Types in its category.
+// The result is never nil, so a File Type nothing is delivered as matches no
+// book. Keep it in step with resolveCategory.
+func DeliveredAs(rules []Rule, fileType string) []SourceMatch {
+	matches := []SourceMatch{}
+	var earlierEbooks, earlierAudiobooks []string
+	for _, rule := range rules {
+		if _, ok := models.ConversionChain(rule.SourceFileType, rule.DeliveredFileType); !ok {
+			continue
+		}
+		var earlier *[]string
+		switch {
+		case models.IsEbookFileType(rule.SourceFileType):
+			earlier = &earlierEbooks
+		case models.IsAudiobookFileType(rule.SourceFileType):
+			earlier = &earlierAudiobooks
+		default:
+			continue
+		}
+		if rule.DeliveredFileType == fileType {
+			matches = append(matches, SourceMatch{SourceFileType: rule.SourceFileType, Unless: slices.Clone(*earlier)})
+		}
+		*earlier = append(*earlier, rule.SourceFileType)
+	}
+	return matches
 }

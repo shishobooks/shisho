@@ -294,44 +294,40 @@ func TestBookLists_FileTypesSkipSupplements(t *testing.T) {
 	assert.NotContains(t, meta, "MOBI")
 }
 
-// The type filter offers the File Types the Device's rules deliver from
-// that the page's books have, and narrows within them, so no filter opens
-// an empty page.
+// The type filter offers the File Types the Device's rules deliver the
+// page's books as, and narrows to the books delivered as the chosen one, so
+// no filter opens an empty page.
 func TestFilterBar_FollowsTheDeviceRules(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
 	lib := strconv.Itoa(f.libA.ID)
 
+	// The built-in rules send every book here as its EPUB, so there is
+	// nothing to filter by.
 	body := f.page(t, "/libraries/"+lib+"/all", "")
-	for _, fileType := range []string{"epub", "azw3", "mobi", "pdf"} {
-		assert.Contains(t, body, "types="+fileType)
-	}
-	// The rules deliver CBZ and M4B, but no book here has one, and a MOBI
-	// supplement doesn't count.
-	for _, fileType := range []string{"cbz", "m4b"} {
-		assert.NotContains(t, body, "types="+fileType)
-	}
+	assert.NotContains(t, body, "types=")
 
-	body = f.page(t, "/libraries/"+lib+"/all?types=azw3", "")
-	assert.Contains(t, body, "All Formats")
-	assert.Contains(t, body, "Has AZW3")
-	assert.NotContains(t, body, "EPUB Only")
-
-	// A book matches when any of its main files has the type, so a MOBI
-	// next to an EPUB is not hidden behind it, and a supplement never counts.
-	body = f.page(t, "/libraries/"+lib+"/all?types=mobi", "")
-	assert.Contains(t, body, "All Formats")
-	assert.Contains(t, body, "Has MOBI")
-	assert.NotContains(t, body, "Has AZW3")
-	assert.NotContains(t, body, "Has Supplement")
-
+	// A Kindle gets AZW3 before MOBI, so a book with both is sent as AZW3,
+	// and a MOBI supplement doesn't count.
 	f.setType(t, devices.DeviceTypeKindle)
 	body = f.page(t, "/libraries/"+lib+"/all", kindleUserAgent)
 	assert.Contains(t, body, "types=azw3")
 	assert.Contains(t, body, "types=mobi")
 	assert.NotContains(t, body, "types=epub")
+
+	body = f.page(t, "/libraries/"+lib+"/all?types=azw3", kindleUserAgent)
+	assert.Contains(t, body, "All Formats")
+	assert.Contains(t, body, "Has AZW3")
+	assert.NotContains(t, body, "Has MOBI")
+
+	body = f.page(t, "/libraries/"+lib+"/all?types=mobi", kindleUserAgent)
+	assert.Contains(t, body, "Has MOBI")
+	assert.NotContains(t, body, "All Formats", "its AZW3 is sent instead")
+	assert.NotContains(t, body, "Has Supplement")
+
 	body = f.page(t, "/libraries/"+lib+"/all?types=epub", kindleUserAgent)
-	assert.NotContains(t, body, "All Formats", "a type the rules don't deliver matches nothing")
+	assert.Contains(t, body, "All Formats", "a type the rules don't deliver shows every book")
+	assert.Contains(t, body, "Has MOBI")
 }
 
 // The Kindle download route serves the file with no Content-Disposition, so
