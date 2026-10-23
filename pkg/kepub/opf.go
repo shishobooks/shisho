@@ -1,8 +1,6 @@
 package kepub
 
 import (
-	"bytes"
-	"io"
 	"net/url"
 	"path"
 	"regexp"
@@ -11,20 +9,7 @@ import (
 	"strings"
 )
 
-// TransformOPF transforms an OPF file for KePub compatibility.
-// It ensures the cover image has the cover-image property set.
-func TransformOPF(r io.Reader, w io.Writer) error {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	result := transformOPFContent(data)
-	_, err = w.Write(result)
-	return err
-}
-
-// transformOPFContent transforms OPF content for KePub compatibility.
+// transformOPFContent gives the OPF's cover image the cover-image property.
 func transformOPFContent(data []byte) []byte {
 	content := string(data)
 
@@ -192,13 +177,4 @@ func removeItemProperty(tag, prop string) string {
 		return tag[:loc[0]] + tag[loc[1]:]
 	}
 	return tag[:start] + strings.Join(kept, " ") + tag[end:]
-}
-
-// TransformOPFBytes is a convenience function that transforms OPF from bytes.
-func TransformOPFBytes(input []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := TransformOPF(bytes.NewReader(input), &buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }

@@ -11,8 +11,10 @@ import (
 	"golang.org/x/net/html"
 )
 
-// The ids and class Kobo's markup is recognized by, which the predicates
-// below use to strip it.
+// The ids and class Kobo's markup is recognized by. The converter writes
+// the markup from them, and the predicates below recognize it, both to
+// leave out what a document already has and to strip it, so writing,
+// detecting, and removing stay in step.
 const (
 	koboSpanClass    = "koboSpan"
 	koboStyleHacksID = "kobostylehacks"
@@ -20,10 +22,19 @@ const (
 	bookInnerID      = "book-inner"
 )
 
-// voidElements are the HTML elements that never have an end tag.
-var voidElements = map[string]bool{
-	"area": true, "base": true, "br": true, "col": true, "embed": true, "hr": true, "img": true,
-	"input": true, "link": true, "meta": true, "param": true, "source": true, "track": true, "wbr": true,
+// Kobo's markup that transformDocument adds.
+const (
+	koboStyleHacks     = `<style type="text/css" id="` + koboStyleHacksID + `">div#` + bookInnerID + ` { margin-top: 0; margin-bottom: 0; }</style>`
+	bookWrappersStart  = `<div id="` + bookColumnsID + `"><div id="` + bookInnerID + `">`
+	bookWrappersEnd    = `</div></div>`
+	koboSpanStart      = `<span class="` + koboSpanClass + `" id="`
+	koboSpanStartClose = `">`
+	koboSpanEnd        = `</span>`
+)
+
+// koboScriptTag is the script tag that loads kobo.js from scriptPath.
+func koboScriptTag(scriptPath string) string {
+	return `<script type="text/javascript" src="` + html.EscapeString(scriptPath) + `"/>`
 }
 
 func isKoboSpan(name string, attrs map[string]string) bool {

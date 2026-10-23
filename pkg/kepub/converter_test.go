@@ -381,10 +381,11 @@ func TestConverter_ConvertEPUB(t *testing.T) {
 		err = converter.ConvertEPUB(context.Background(), firstDest, secondDest)
 		require.NoError(t, err)
 
-		// Both should have the same structure (though span IDs might differ)
 		firstFiles := listFilesInEPUB(t, firstDest)
 		secondFiles := listFilesInEPUB(t, secondDest)
 		assert.Len(t, secondFiles, len(firstFiles))
+		// The chapter is not wrapped a second time.
+		assert.Equal(t, string(readFileFromEPUB(t, firstDest, "chapter1.xhtml")), string(readFileFromEPUB(t, secondDest, "chapter1.xhtml")))
 	})
 }
 
