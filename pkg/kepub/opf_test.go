@@ -1,15 +1,13 @@
 package kepub
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestTransformOPF(t *testing.T) {
+func TestTransformOPFContent(t *testing.T) {
 	t.Parallel()
 	t.Run("adds cover-image property when meta cover exists", func(t *testing.T) {
 		input := `<?xml version="1.0"?>
@@ -21,12 +19,7 @@ func TestTransformOPF(t *testing.T) {
     <item id="cover-id" href="cover.jpg" media-type="image/jpeg"/>
   </manifest>
 </package>`
-		var buf bytes.Buffer
-
-		err := TransformOPF(strings.NewReader(input), &buf)
-		require.NoError(t, err)
-
-		output := buf.String()
+		output := string(transformOPFContent([]byte(input)))
 		assert.Contains(t, output, `properties="cover-image"`)
 	})
 
@@ -38,12 +31,7 @@ func TestTransformOPF(t *testing.T) {
     <item id="cover" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>
   </manifest>
 </package>`
-		var buf bytes.Buffer
-
-		err := TransformOPF(strings.NewReader(input), &buf)
-		require.NoError(t, err)
-
-		output := buf.String()
+		output := string(transformOPFContent([]byte(input)))
 		// Should still have exactly one cover-image property
 		count := strings.Count(output, "cover-image")
 		assert.Equal(t, 1, count)
@@ -57,12 +45,7 @@ func TestTransformOPF(t *testing.T) {
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
 </package>`
-		var buf bytes.Buffer
-
-		err := TransformOPF(strings.NewReader(input), &buf)
-		require.NoError(t, err)
-
-		output := buf.String()
+		output := string(transformOPFContent([]byte(input)))
 		assert.NotContains(t, output, "cover-image")
 	})
 
@@ -76,12 +59,7 @@ func TestTransformOPF(t *testing.T) {
     <item id="my-cover" href="cover.png" media-type="image/png"/>
   </manifest>
 </package>`
-		var buf bytes.Buffer
-
-		err := TransformOPF(strings.NewReader(input), &buf)
-		require.NoError(t, err)
-
-		output := buf.String()
+		output := string(transformOPFContent([]byte(input)))
 		assert.Contains(t, output, `properties="cover-image"`)
 	})
 
@@ -93,12 +71,7 @@ func TestTransformOPF(t *testing.T) {
     <item id="cover" properties="cover-image" href="cover.jpg" media-type="image/jpeg"/>
   </manifest>
 </package>`
-		var buf bytes.Buffer
-
-		err := TransformOPF(strings.NewReader(input), &buf)
-		require.NoError(t, err)
-
-		output := buf.String()
+		output := string(transformOPFContent([]byte(input)))
 		// Should preserve the existing property
 		assert.Contains(t, output, "cover-image")
 		count := strings.Count(output, "cover-image")
@@ -115,12 +88,7 @@ func TestTransformOPF(t *testing.T) {
     <item id="cover-id" href="cover.svg" media-type="image/svg+xml" properties="svg"/>
   </manifest>
 </package>`
-		var buf bytes.Buffer
-
-		err := TransformOPF(strings.NewReader(input), &buf)
-		require.NoError(t, err)
-
-		output := buf.String()
+		output := string(transformOPFContent([]byte(input)))
 		assert.Contains(t, output, "svg")
 		assert.Contains(t, output, "cover-image")
 	})
@@ -207,26 +175,6 @@ func TestAddCoverImageProperty(t *testing.T) {
 			assert.Contains(t, result, tt.contains)
 		})
 	}
-}
-
-func TestTransformOPFBytes(t *testing.T) {
-	t.Parallel()
-	t.Run("transforms OPF correctly", func(t *testing.T) {
-		input := []byte(`<?xml version="1.0"?>
-<package>
-  <metadata>
-    <meta name="cover" content="cover"/>
-  </metadata>
-  <manifest>
-    <item id="cover" href="cover.jpg" media-type="image/jpeg"/>
-  </manifest>
-</package>`)
-
-		output, err := TransformOPFBytes(input)
-		require.NoError(t, err)
-
-		assert.Contains(t, string(output), `properties="cover-image"`)
-	})
 }
 
 // TestAddCoverImageProperty_ChecksPropertiesTokens is a regression test: the

@@ -260,6 +260,33 @@ func TestStrip_RoundTripFromEPUB(t *testing.T) {
 	assert.NotContains(t, files["OEBPS/content.opf"], "scripted")
 }
 
+// Converting an EPUB to KePub and stripping the KePub gives back each
+// content document byte for byte.
+func TestStrip_RoundTripGivesBackEachDocument(t *testing.T) {
+	t.Parallel()
+	source := validityEntries("3.0")
+	for i, e := range source {
+		if e.Name == "OEBPS/text/ch1.xhtml" {
+			source[i].Content = []byte(fidelityDoc(`<link rel="stylesheet" href="../style.css"/>`, "\n"+fidelityBody+"\n<p>Plate: <img src=\"../images/cover.png\" alt=\"\"/></p>\n"))
+		}
+	}
+	var kepubOut bytes.Buffer
+	require.NoError(t, NewConverter().WriteEPUB(context.Background(), &kepubOut, source))
+	zr, err := zip.NewReader(bytes.NewReader(kepubOut.Bytes()), int64(kepubOut.Len()))
+	require.NoError(t, err)
+	var kepubEntries []Entry
+	for _, f := range zr.File {
+		kepubEntries = append(kepubEntries, Entry{Name: f.Name, File: f})
+	}
+
+	files := stripEntries(t, kepubEntries)
+	for _, e := range source {
+		if strings.HasSuffix(e.Name, ".xhtml") {
+			assert.Equal(t, string(e.Content), files[e.Name], e.Name)
+		}
+	}
+}
+
 // A plain EPUB has nothing to strip, so it comes through as it was.
 func TestStrip_PlainEPUB(t *testing.T) {
 	t.Parallel()
@@ -387,4 +414,42 @@ func TestStripDocument_CDATA(t *testing.T) {
 	out, _, err := stripDocument([]byte(in), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, `<p>x</p><svg><![CDATA[ a > b <span class="koboSpan" id="kobo.2.1">y</span> ]]></svg>`, string(out))
+}
+
+// A document without a body start tag strips back to what it was. With no
+// head either, the head added for the style and script stays, empty.
+func TestStrip_RoundTripWithoutBodyTag(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "content after the head",
+			in:   "<html><head><title>T</title></head>\n<p>Hi. <img src=\"a.png\"/></p>\n</html>",
+			want: "<html><head><title>T</title></head>\n<p>Hi. <img src=\"a.png\"/></p>\n</html>",
+		},
+		{
+			name: "no head",
+			in:   "<html><p>Hi.</p></html>",
+			want: "<html><head></head><p>Hi.</p></html>",
+		},
+		{
+			name: "a fragment",
+			in:   "<p>Hi.</p>",
+			want: "<head></head><p>Hi.</p>",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			kobo, err := transformDocument([]byte(tt.in), NewSpanCounter(), "../kobo.js")
+			require.NoError(t, err)
+			require.Contains(t, string(kobo), `class="koboSpan"`)
+			out, _, err := stripDocument(kobo, nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(out))
+		})
+	}
 }
