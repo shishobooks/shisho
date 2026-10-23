@@ -27,7 +27,7 @@ An ebook **File** made of fixed pages (CBZ, PDF). Positions within it are page n
 _Avoid_: fixed-layout (that is an EPUB rendering mode, not this distinction)
 
 **Original File**:
-A **File** exactly as it sits in the library on disk.
+A **File** exactly as it sits in the library on disk. The web app calls it the "unmodified file" (**Download unmodified file**), because its download menu uses "original" for the File's own File Type, as opposed to a **Conversion**.
 _Avoid_: source file, raw file
 
 **Generated File**:

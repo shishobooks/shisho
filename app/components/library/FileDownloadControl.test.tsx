@@ -83,7 +83,10 @@ describe("FileDownloadControl", () => {
         file_type: FileTypeEPUB,
         reachable_file_types: [FileTypeEPUB, FileTypeKePub],
       },
-      ["Download The Book as EPUB", "Download The Book as KePub"],
+      [
+        "Download The Book as EPUB (original)",
+        "Download The Book as KePub (converted)",
+      ],
     ],
     [
       "a CBZ",
@@ -93,15 +96,15 @@ describe("FileDownloadControl", () => {
         reachable_file_types: [FileTypeCBZ, FileTypeKePub, FileTypeEPUB],
       },
       [
-        "Download The Book as CBZ",
-        "Download The Book as KePub",
-        "Download The Book as EPUB",
+        "Download The Book as CBZ (original)",
+        "Download The Book as KePub (converted)",
+        "Download The Book as EPUB (converted)",
       ],
     ],
     [
       "an M4B",
       { id: 7, file_type: FileTypeM4B, reachable_file_types: [FileTypeM4B] },
-      ["Download The Book as M4B"],
+      ["Download The Book as M4B (original)"],
     ],
   ])(
     "lists exactly the File Types %s can become, its own first",
@@ -113,7 +116,7 @@ describe("FileDownloadControl", () => {
     },
   );
 
-  it("heads the menu with the File's own title and shows only the File Type in each entry", async () => {
+  it("heads the menu with the File's own title and marks its own File Type as the original", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderControl({
       file: {
@@ -125,8 +128,8 @@ describe("FileDownloadControl", () => {
     });
 
     expect(await openMenu(user)).toEqual([
-      "Download Special Edition as EPUB",
-      "Download Special Edition as KePub",
+      "Download Special Edition as EPUB (original)",
+      "Download Special Edition as KePub (converted)",
     ]);
     const menu = screen.getByRole("menu");
     expect(menu).toHaveTextContent(/^Special Edition/);
@@ -134,7 +137,7 @@ describe("FileDownloadControl", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["EPUB", "KePub"]);
+    ).toEqual(["EPUBoriginal", "KePubconverted"]);
   });
 
   it.each([FileTypeCBZ, FileTypeKePub, FileTypeEPUB])(
@@ -152,7 +155,7 @@ describe("FileDownloadControl", () => {
       await openMenu(user);
       await user.click(
         screen.getByRole("menuitem", {
-          name: new RegExp(` as ${fileType}$`, "i"),
+          name: new RegExp(` as ${fileType} \\(`, "i"),
         }),
       );
 
@@ -165,11 +168,9 @@ describe("FileDownloadControl", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { props } = renderControl({ deliveredFileType: FileTypeKePub });
 
-    const button = screen.getByRole("button", { name: "Download" });
-    await user.hover(button);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Download as KePub",
-    );
+    // The button shows the File Type it delivers, and its name says so.
+    const button = screen.getByRole("button", { name: "Download KePub" });
+    expect(button).toHaveTextContent("KePub");
     await user.click(button);
 
     expectOnlyCalled(props, "onDownload");

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -91,6 +91,19 @@ const baseFile: File = {
 };
 
 describe("ReviewPanel", () => {
+  it("groups the checkbox under its Review label", () => {
+    const files: File[] = [{ ...baseFile, reviewed: true }];
+
+    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
+      wrapper,
+    });
+
+    const group = screen.getByRole("group", { name: "Review" });
+    expect(
+      within(group).getByRole("checkbox", { name: "Reviewed" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders Reviewed toggle ON when all main files are reviewed", () => {
     const files: File[] = [{ ...baseFile, reviewed: true }];
 
@@ -98,7 +111,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     expect(toggle).toBeChecked();
   });
 
@@ -118,11 +131,11 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     expect(toggle).not.toBeChecked();
   });
 
-  it("names each switch when two panels are on the page", () => {
+  it("names each checkbox when two panels are on the page", () => {
     const files: File[] = [{ ...baseFile, reviewed: true }];
 
     render(
@@ -133,12 +146,12 @@ describe("ReviewPanel", () => {
       { wrapper },
     );
 
-    const switches = screen.getAllByRole("switch", { name: "Reviewed" });
-    expect(switches).toHaveLength(2);
-    expect(switches[0].id).not.toBe(switches[1].id);
+    const boxes = screen.getAllByRole("checkbox", { name: "Reviewed" });
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0].id).not.toBe(boxes[1].id);
   });
 
-  it("renders status icon in green when book is reviewed", () => {
+  it("says the state is set automatically when no overrides are set", () => {
     const files: File[] = [
       { ...baseFile, reviewed: true, review_override: undefined },
     ];
@@ -147,44 +160,13 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen
-      .getByRole("button", { name: "Reviewed status" })
-      .querySelector("svg");
-    expect(icon?.getAttribute("class")).toMatch(/text-green/);
+    // Said under the checkbox, not in a tooltip, so it reads on a phone too.
+    expect(
+      screen.getByRole("checkbox", { name: "Reviewed" }),
+    ).toHaveAccessibleDescription(/Set automatically from the review criteria/);
   });
 
-  it("renders status icon in muted color when book needs review", () => {
-    const files: File[] = [
-      { ...baseFile, reviewed: false, review_override: undefined },
-    ];
-
-    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
-      wrapper,
-    });
-
-    const icon = screen
-      .getByRole("button", { name: "Needs review status" })
-      .querySelector("svg");
-    expect(icon?.getAttribute("class")).toMatch(/text-muted-foreground/);
-  });
-
-  it("status icon has tooltip describing auto behavior when no overrides are set", async () => {
-    const files: File[] = [
-      { ...baseFile, reviewed: true, review_override: undefined },
-    ];
-
-    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
-      wrapper,
-    });
-
-    const icon = screen.getByLabelText("Reviewed status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText(/automatically from the required/);
-    expect(tip.length).toBeGreaterThan(0);
-  });
-
-  it("status icon has tooltip with date when all files have reviewed override", async () => {
+  it("says when every file was marked reviewed by hand", () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -198,14 +180,12 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Reviewed status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText(/Manually marked reviewed on/);
-    expect(tip.length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Marked reviewed by hand on Jun 15, 2024/),
+    ).toBeInTheDocument();
   });
 
-  it("status icon has tooltip with date when all files have unreviewed override", async () => {
+  it("says when every file was marked as needing review by hand", () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -219,14 +199,12 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Needs review status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText(/Manually marked needs review on/);
-    expect(tip.length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Marked as needing review by hand on Jun 15, 2024/),
+    ).toBeInTheDocument();
   });
 
-  it("status icon has tooltip indicating mixed state when overrides differ across files", async () => {
+  it("says when overrides differ across files", () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -250,11 +228,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Needs review status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText("Manually set on multiple files");
-    expect(tip.length).toBeGreaterThan(0);
+    expect(screen.getByText(/Set by hand on some files/)).toBeInTheDocument();
   });
 
   it("shows missing fields list when book needs review", () => {
@@ -361,6 +335,48 @@ describe("ReviewPanel", () => {
     expect(hint.textContent).toMatch(/narrators.*M4B|M4B.*narrators/);
   });
 
+  it("names files that share a type instead of repeating the type", () => {
+    // Two audiobooks miss a cover and the EPUB has one, so "cover (M4B)"
+    // twice would not say which audiobooks.
+    const files: File[] = [
+      {
+        ...baseFile,
+        id: 10,
+        file_type: FileTypeEPUB,
+        reviewed: false,
+        cover_image_filename: "book.epub.cover.jpg",
+      },
+      {
+        ...baseFile,
+        id: 11,
+        file_type: FileTypeM4B,
+        display_name: "Read by Fry",
+        reviewed: false,
+        cover_image_filename: undefined,
+        cover_mime_type: undefined,
+        narrators: [{ id: 1 } as never],
+      },
+      {
+        ...baseFile,
+        id: 12,
+        file_type: FileTypeM4B,
+        display_name: "Read by Dale",
+        reviewed: false,
+        cover_image_filename: undefined,
+        cover_mime_type: undefined,
+        narrators: [{ id: 2 } as never],
+      },
+    ];
+
+    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
+      wrapper,
+    });
+
+    const hint = screen.getByText(/Missing:/);
+    expect(hint).toHaveTextContent("cover (Read by Fry, Read by Dale)");
+    expect(hint.textContent).not.toMatch(/M4B/);
+  });
+
   it("does not show missing fields hint when book is fully reviewed", () => {
     const files: File[] = [{ ...baseFile, reviewed: true }];
 
@@ -380,7 +396,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     await user.click(toggle);
 
     expect(onChange).toHaveBeenCalledWith(ReviewOverrideReviewed);
@@ -395,7 +411,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     await user.click(toggle);
 
     expect(onChange).toHaveBeenCalledWith(ReviewOverrideUnreviewed);
@@ -426,7 +442,7 @@ describe("ReviewPanel", () => {
         { wrapper },
       );
 
-      expect(screen.getByRole("switch")).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Reviewed" })).toBeChecked();
     });
 
     it("toggle reflects toggleValue=false even when committed reviewed is true", () => {
@@ -444,7 +460,9 @@ describe("ReviewPanel", () => {
         { wrapper },
       );
 
-      expect(screen.getByRole("switch")).not.toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Reviewed" }),
+      ).not.toBeChecked();
     });
 
     it("falls back to committed reviewed when toggleValue is undefined", () => {
@@ -462,7 +480,7 @@ describe("ReviewPanel", () => {
         { wrapper },
       );
 
-      expect(screen.getByRole("switch")).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Reviewed" })).toBeChecked();
     });
 
     it("missing-fields hint follows committed state, not toggleValue", () => {
@@ -493,89 +511,6 @@ describe("ReviewPanel", () => {
       );
 
       expect(screen.getByText(/Missing:.*description/)).toBeInTheDocument();
-    });
-  });
-
-  describe("readOnly", () => {
-    it("shows the reviewed state without a toggle", () => {
-      const files: File[] = [{ ...baseFile, reviewed: true }];
-
-      render(
-        <ReviewPanel
-          book={baseBook}
-          files={files}
-          onChange={vi.fn()}
-          readOnly
-        />,
-        { wrapper },
-      );
-
-      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-      expect(screen.getByText("Reviewed")).toBeInTheDocument();
-      expect(screen.getByLabelText("Reviewed status")).toBeInTheDocument();
-    });
-
-    it("opens the status tooltip from the keyboard", async () => {
-      const user = createUser();
-      const files: File[] = [{ ...baseFile, reviewed: true }];
-
-      render(
-        <ReviewPanel
-          book={baseBook}
-          files={files}
-          onChange={vi.fn()}
-          readOnly
-        />,
-        { wrapper },
-      );
-
-      await user.tab();
-      expect(
-        screen.getByRole("button", { name: "Reviewed status" }),
-      ).toHaveFocus();
-      expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        /determined automatically/,
-      );
-    });
-
-    it("does not tell a read-only user to toggle the state", async () => {
-      const user = createUser();
-      const files: File[] = [{ ...baseFile, reviewed: true }];
-
-      render(
-        <ReviewPanel
-          book={baseBook}
-          files={files}
-          onChange={vi.fn()}
-          readOnly
-        />,
-        { wrapper },
-      );
-
-      await user.hover(screen.getByLabelText("Reviewed status"));
-      const tooltip = await screen.findByRole("tooltip");
-      expect(tooltip).toHaveTextContent(/determined automatically/);
-      expect(tooltip).not.toHaveTextContent(/Toggle manually/);
-    });
-
-    it("shows the needs-review state and the missing hint without a toggle", () => {
-      const files: File[] = [
-        { ...baseFile, reviewed: false, cover_image_filename: undefined },
-      ];
-
-      render(
-        <ReviewPanel
-          book={baseBook}
-          files={files}
-          onChange={vi.fn()}
-          readOnly
-        />,
-        { wrapper },
-      );
-
-      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-      expect(screen.getByText("Needs review")).toBeInTheDocument();
-      expect(screen.getByText(/Missing: cover/)).toBeInTheDocument();
     });
   });
 });

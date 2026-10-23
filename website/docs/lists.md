@@ -22,7 +22,7 @@ If creating or editing a list fails, an error notification appears and the dialo
 
 Add books in either of these ways:
 
-- On a book detail page, choose **Add to list**.
+- On a book's page, open the **⋯** menu and choose **Add to list**.
 - In a library gallery, click **Select**, select one or more books, then choose **Add** and pick a list.
 
 The list detail page has no add-books picker. A list can contain books from different libraries, subject to each viewer's library access.

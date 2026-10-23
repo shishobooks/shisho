@@ -17,9 +17,10 @@ beforeAll(() => {
 });
 
 const SHARING_SETTINGS = "/settings/sharing";
-const IDENTIFIER_TYPES = "/plugins/identifier-types";
 const DELIVERY_RULES = "/user/delivery-rules";
 
+// An unreviewed file and an author, so the review badge and every Related
+// tab would ask for their data if they were allowed to.
 const book = {
   id: 7,
   library_id: 1,
@@ -27,7 +28,22 @@ const book = {
   filepath: "",
   created_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
-  files: [],
+  authors: [{ id: 1, person_id: 10, person: { id: 10, name: "Ada Author" } }],
+  files: [
+    {
+      id: 42,
+      book_id: 7,
+      library_id: 1,
+      file_type: "epub",
+      file_role: "main",
+      filepath: "",
+      filesize_bytes: 1,
+      reviewed: false,
+      reachable_file_types: ["epub"],
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    },
+  ],
 } as unknown as Book;
 
 const shareLink: ShareLinkContext = {
@@ -71,9 +87,23 @@ describe("BookDetailBody requests", () => {
 
     const paths = await requestedPaths({ shareLink });
 
-    expect(paths).not.toContain(SHARING_SETTINGS);
-    expect(paths).not.toContain(IDENTIFIER_TYPES);
-    expect(paths).not.toContain(DELIVERY_RULES);
+    // Not one: the recipient's page reads only its public share endpoint.
+    expect(paths).toEqual([]);
+  });
+
+  it("loads the Related panel's tabs and the review criteria for Books Read", async () => {
+    setAuth({ permissions: ["books:read"] });
+
+    const paths = await requestedPaths();
+
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "/books",
+        "/books/7/lists",
+        "/books/7/devices",
+        "/settings/review-criteria",
+      ]),
+    );
   });
 
   it("loads the user's default Delivery Rules with no permission", async () => {

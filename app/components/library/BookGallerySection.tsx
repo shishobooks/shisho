@@ -10,6 +10,7 @@ import SortedByChips from "@/components/library/SortedByChips";
 import SortSheet, { SortButton } from "@/components/library/SortSheet";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
+import { SECTION_CLASS, useSectionPaging } from "@/hooks/useSectionPaging";
 import type { SortParam } from "@/hooks/useSortParam";
 import { firstFailedQuery } from "@/libraries/api";
 import type { Book, ResourceListResponse } from "@/types";
@@ -54,6 +55,8 @@ export function BookGallerySection<F extends string>({
     applyGallerySize,
     saveSizeAsDefault,
   } = useGallerySizeParam();
+  const { sectionRef, sectionPageChange } =
+    useSectionPaging<HTMLElement>(goToPage);
   // Covers take the shape the library's gallery gives them.
   const library = useUserLibrary(libraryId);
   const coverAspectRatio = library.data?.cover_aspect_ratio ?? "book";
@@ -65,7 +68,7 @@ export function BookGallerySection<F extends string>({
   // with books briefly flashes the empty state before the query is enabled.
   if (!query.isSuccess && !query.isError) {
     return (
-      <section className="mb-10">
+      <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <LoadingSpinner />
       </section>
@@ -74,7 +77,7 @@ export function BookGallerySection<F extends string>({
 
   if (firstFailedQuery(query)) {
     return (
-      <section className="mb-10">
+      <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <QueryError fallback="Failed to load books" query={query} />
       </section>
@@ -86,7 +89,7 @@ export function BookGallerySection<F extends string>({
 
   if (total === 0) {
     return (
-      <section className="mb-10">
+      <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <div className="text-center py-8 text-muted-foreground">
           {emptyMessage ?? "No books found."}
@@ -96,7 +99,7 @@ export function BookGallerySection<F extends string>({
   }
 
   return (
-    <section className="mb-10">
+    <section className={SECTION_CLASS} ref={sectionRef}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold">{title}</h2>
         <div className="flex items-center gap-2">
@@ -154,7 +157,7 @@ export function BookGallerySection<F extends string>({
       <PaginationFooter
         className="mb-8"
         currentPage={currentPage}
-        onPageChange={goToPage}
+        onPageChange={sectionPageChange}
         totalIsCurrent={!query.isPlaceholderData}
         totalPages={totalPages}
       />

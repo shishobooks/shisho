@@ -25,7 +25,7 @@ The demo runs with [Demo Mode](./configuration.md#demo-mode) on, which rejects e
 
 - Editing books, files, metadata, series, and lists, including cover uploads, rescans, and deletion.
 - Sharing a list with other users.
-- Downloading files: the original, KePub, supplement, and bulk download controls are hidden, and direct original, KePub, and bulk download links are also blocked.
+- Downloading files: the download controls for files, supplements, and whole books are hidden, and direct links to an unmodified file, a conversion such as KePub, or a bulk download are also blocked.
 - Administration: libraries, users, roles, plugins, and security settings.
 - Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and [Share Links](./sharing.md) are not available.
 - Account changes such as the password and server-side preferences.

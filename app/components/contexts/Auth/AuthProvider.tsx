@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 
 import { API } from "@/libraries/api";
 import { queryClient } from "@/libraries/query-client";
@@ -64,8 +65,12 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch {
       // Ignore logout errors
     }
+    // Commit the signed-out render before clearing, so the signed-in page is
+    // gone by then. A clear re-renders every mounted query at once, ahead of
+    // a plain state update, and a query still on screen would fetch again:
+    // a 401, since the server has ended the session.
+    flushSync(() => setUser(null));
     queryClient.clear();
-    setUser(null);
   }, []);
 
   const can = useCallback(

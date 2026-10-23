@@ -87,9 +87,6 @@ describe("BookDevicesPanel", () => {
       }),
     ]);
 
-    expect(
-      await screen.findByRole("heading", { name: "On your Devices" }),
-    ).toBeInTheDocument();
     const kobo = await row("Kobo");
     expect(
       kobo.getByRole("img", { name: "EPUB as KePub" }),
@@ -104,10 +101,9 @@ describe("BookDevicesPanel", () => {
     expect((await row("Tablet")).getByText(/Not delivered/)).toHaveTextContent(
       "Not delivered · Outside its scope",
     );
-    expect(screen.getByRole("link", { name: "Manage" })).toHaveAttribute(
-      "href",
-      "/user/devices",
-    );
+    expect(
+      screen.getByRole("link", { name: "Manage Devices" }),
+    ).toHaveAttribute("href", "/user/devices");
   });
 
   it("names each File when tied Files both go", async () => {
@@ -128,6 +124,50 @@ describe("BookDevicesPanel", () => {
     );
     expect(koreader.getByText("Novel (2001)")).toBeInTheDocument();
     expect(koreader.getByText("Novel (Annotated)")).toBeInTheDocument();
+  });
+
+  it("names the one File a Device gets, so the row reads as a line", async () => {
+    renderPanel([
+      line({
+        device_name: "Kobo",
+        deliveries: [
+          {
+            file_id: 1,
+            source_file_type: "epub",
+            delivered_file_type: "kepub",
+          },
+        ],
+      }),
+    ]);
+
+    expect((await row("Kobo")).getByText("Novel (2001)")).toBeInTheDocument();
+  });
+
+  it("names same-titled editions of different types without their file names", async () => {
+    const ebook = file(1, "epub", "Novel", "/lib/Novel/Novel.epub");
+    const audiobook = file(2, "m4b", "Novel", "/lib/Novel/Novel {Reader}.m4b");
+    renderPanel(
+      [
+        line({
+          device_name: "Panels",
+          device_type: "opds",
+          deliveries: [
+            {
+              file_id: 1,
+              source_file_type: "epub",
+              delivered_file_type: "epub",
+            },
+            { file_id: 2, source_file_type: "m4b", delivered_file_type: "m4b" },
+          ],
+        }),
+      ],
+      [ebook, audiobook],
+    );
+
+    // The source types already tell them apart.
+    const panels = await row("Panels");
+    expect(panels.getAllByText("Novel")).toHaveLength(2);
+    expect(panels.queryByText(/Novel\.epub|Novel \{Reader\}\.m4b/)).toBeNull();
   });
 
   it("tells editions with the same name apart by their file names", async () => {

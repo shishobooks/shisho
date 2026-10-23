@@ -15,7 +15,7 @@ import (
 
 // A device or Share recipient given the original of a bare .kepub gets it
 // named .kepub.epub, the only name Kobo's reader and KOReader take as a
-// KePub. Download Original keeps the file's own extension.
+// KePub. Download unmodified file keeps the file's own extension.
 func TestResolveFallbackDownload_BareKePubIsNamedKePubEPUB(t *testing.T) {
 	t.Parallel()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())

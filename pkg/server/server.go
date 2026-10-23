@@ -166,7 +166,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	// These routes require authentication and appropriate permissions
 	registerProtectedRoutes(api, db, cfg, authMiddleware, w, pm, broker, svcs)
 
-	// What each Device gets: a book's "On your Devices" panel and a
+	// What each Device gets: a book page's Devices tab and a
 	// Device's delivery preview
 	reach.RegisterRoutes(api, db, svcs.books, authMiddleware)
 

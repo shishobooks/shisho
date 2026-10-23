@@ -111,7 +111,10 @@ const MobileDrawer = () => {
     try {
       await logout();
       toast.success("Signed out successfully");
-      navigate("/login");
+      // Signing out already sent the page to /login?redirect=... in place;
+      // replacing that entry leaves one plain /login, so the next person to
+      // sign in is not sent to the page the last one was on.
+      navigate("/login", { replace: true });
     } catch (error) {
       toastRequestError(error, "Failed to sign out");
     }

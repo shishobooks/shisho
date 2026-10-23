@@ -98,7 +98,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useDevice: authenticated(["abc"]),
   useAllDevices: requires("users:read", []),
   useDeliveryPreview: authenticated(["abc"]),
-  useBookDevices: requires("books:read", [1, "1:epub:main"]),
+  useBookDevices: requires("books:read", [{ id: 1, files: [] }]),
   // delivery
   useDeliveryRules: authenticated([]),
   // entity-search

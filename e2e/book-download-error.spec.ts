@@ -77,17 +77,10 @@ test.describe("Book detail download errors", () => {
       waitUntil: "domcontentloaded",
     });
     await expect(
-      page.getByRole("heading", { name: "Files (1)", exact: true }),
+      page.getByRole("heading", { name: "1 file", exact: true }),
     ).toBeVisible();
 
-    // The download button is icon-only (its label is a tooltip), and the file
-    // row renders it in both the desktop and mobile layouts. Click the visible
-    // one by its Lucide icon.
-    await page
-      .locator("button:has(svg.lucide-download)")
-      .filter({ visible: true })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "Download EPUB" }).click();
 
     const dialog = page.getByRole("dialog", {
       name: "Download Failed",
