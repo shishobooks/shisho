@@ -1146,6 +1146,33 @@ describe("BookDetailBody supplement names", () => {
     expect(screen.queryByText("Original Title")).not.toBeInTheDocument();
   });
 
+  it("shows a supplement's cover, or its first page when it has none", () => {
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          epub,
+          { ...supplement, cover_image_filename: "cover.jpg" },
+          {
+            ...supplement,
+            id: 45,
+            display_name: "Map.pdf",
+            page_count: 3,
+          } as File,
+        ],
+      },
+    });
+
+    expect(
+      screen.getByRole("button", {
+        name: "View cover of The Lighthouse Keeper.pdf",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View first page of Map.pdf" }),
+    ).toBeInTheDocument();
+  });
+
   it("uses the display name in the Share Link view, where the path is blank", () => {
     renderBody({
       book: { ...book, files: [epub, { ...supplement, filepath: "" }] },

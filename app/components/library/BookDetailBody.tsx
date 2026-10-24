@@ -9,7 +9,7 @@ import {
   Share2,
   Trash2,
 } from "lucide-react";
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ import BookRelatedPanel from "@/components/library/BookRelatedPanel";
 import BookReviewBadge from "@/components/library/BookReviewBadge";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import DetailsDialog from "@/components/library/DetailsDialog";
+import DownloadErrorDialog from "@/components/library/DownloadErrorDialog";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
@@ -28,15 +29,6 @@ import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import { ShareLinkDialog } from "@/components/library/ShareLinkDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,12 +47,8 @@ import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useSharingSettings } from "@/hooks/queries/sharing";
 import { useBookRelatedTabs } from "@/hooks/useBookRelatedTabs";
 import { useCan } from "@/hooks/useCan";
-import {
-  API,
-  requestErrorMessage,
-  ShishoAPIError,
-  toastRequestError,
-} from "@/libraries/api";
+import { useFileDownload } from "@/hooks/useFileDownload";
+import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type {
   Book,
@@ -73,11 +61,6 @@ import type {
 import { getCoverFileType } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { defaultDeliveredFileType } from "@/utils/delivery";
-import {
-  fileDownloadAsUrl,
-  fileDownloadUrl,
-  fileOriginalDownloadUrl,
-} from "@/utils/downloadUrl";
 import { fileLabel, formatCount, formatDateTime } from "@/utils/format";
 import { anyOf } from "@/utils/permissions";
 
@@ -103,11 +86,6 @@ export interface ShareLinkContext {
    * Defaults to "book" (2:3).
    */
   coverAspectRatio?: CoverAspectRatio;
-}
-
-interface DownloadError {
-  fileId: number;
-  message: string;
 }
 
 interface BookMenuEntry {
@@ -193,14 +171,8 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const [showMergeIntoDialog, setShowMergeIntoDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingFile, setEditingFile] = useState<File | null>(null);
-  const [downloadError, setDownloadError] = useState<DownloadError | null>(
-    null,
-  );
-  const [downloadingFileId, setDownloadingFileId] = useState<number | null>(
-    null,
-  );
+  const downloads = useFileDownload(shareLink);
   const [resyncingFileId, setResyncingFileId] = useState<number | null>(null);
-  const downloadAbortController = useRef<AbortController | null>(null);
   const [moveFileId, setMoveFileId] = useState<number | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [fileToDelete, setFileToDelete] = useState<File | null>(null);
@@ -217,108 +189,6 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     !isShareLink && related.tabs.length > 0 ? (
       <BookRelatedPanel book={book} related={related} />
     ) : null;
-
-  const handleDownloadWithEndpoint = async (
-    fileId: number,
-    endpoint: string,
-  ) => {
-    setDownloadError(null);
-    setDownloadingFileId(fileId);
-
-    // Create abort controller for this download
-    const abortController = new AbortController();
-    downloadAbortController.current = abortController;
-
-    try {
-      // Use HEAD request to trigger generation and check for errors
-      // This avoids loading the entire file into browser memory
-      const headResponse = await fetch(endpoint, {
-        method: "HEAD",
-        signal: abortController.signal,
-      });
-
-      if (!headResponse.ok) {
-        // A HEAD response has no body, so GET the error message. The dialog
-        // shows the API's message, or the fallback when a proxy answered or
-        // the server failed without one (requestErrorMessage). A GET that
-        // succeeds after all is not read, since its body is the whole file.
-        const errorResponse = await fetch(endpoint, {
-          signal: abortController.signal,
-        });
-        let message = "Failed to download file";
-        if (!errorResponse.ok) {
-          try {
-            await API.checkStatus(errorResponse);
-          } catch (error) {
-            // A cancel while reading the body is an AbortError, which the
-            // outer catch ignores.
-            if (!(error instanceof ShishoAPIError)) throw error;
-            message = requestErrorMessage(error, message);
-          }
-        }
-        setDownloadError({ fileId, message });
-        return;
-      }
-
-      // HEAD succeeded - file is ready, trigger streaming download
-      window.location.assign(endpoint);
-      toast.success("Download started");
-    } catch (error) {
-      // Don't show error dialog for user-initiated cancellation
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-      console.error("Download error:", error);
-      toastRequestError(error, "Failed to download file");
-    } finally {
-      downloadAbortController.current = null;
-      setDownloadingFileId(null);
-    }
-  };
-
-  const handleDownload = async (
-    file: File,
-    deliveredFileType: DeliveredFileType,
-  ) => {
-    if (shareLink) {
-      await handleDownloadWithEndpoint(file.id, shareLink.downloadUrl(file));
-      return;
-    }
-
-    await handleDownloadWithEndpoint(
-      file.id,
-      deliveredFileType === file.file_type
-        ? fileDownloadUrl(file.id)
-        : fileDownloadAsUrl(file.id, deliveredFileType),
-    );
-  };
-
-  const handleDownloadAs = async (file: File, fileType: DeliveredFileType) => {
-    await handleDownloadWithEndpoint(
-      file.id,
-      shareLink
-        ? shareLink.downloadAsUrl(file, fileType)
-        : fileDownloadAsUrl(file.id, fileType),
-    );
-  };
-
-  const handleDownloadOriginal = (fileId: number) => {
-    // A Share Link exposes only the generated download.
-    if (shareLink) {
-      const file = book.files?.find((f) => f.id === fileId);
-      if (file) handleDownload(file, file.file_type);
-      return;
-    }
-    // Direct download of original file - this won't show any error since it's a simple file serve
-    window.location.assign(fileOriginalDownloadUrl(fileId));
-    setDownloadError(null);
-  };
-
-  const handleCancelDownload = () => {
-    downloadAbortController.current?.abort();
-    downloadAbortController.current = null;
-    setDownloadingFileId(null);
-  };
 
   const handleRescanFile = async (fileId: number, mode: ResyncMode) => {
     setResyncingFileId(fileId);
@@ -538,19 +408,19 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         file={file}
         getCoverUrl={shareLink?.fileCoverUrl}
         isDeletingFile={deletingFileId === file.id}
-        isDownloading={downloadingFileId === file.id}
+        isDownloading={downloads.downloadingFileId === file.id}
         isResyncing={resyncingFileId === file.id}
         isShareLink={isShareLink}
         isSupplement={isSupplement}
         key={file.id}
         libraryId={libraryId}
-        onCancelDownload={handleCancelDownload}
+        onCancelDownload={downloads.cancel}
         onDeleteFile={() => setFileToDelete(file)}
         onDownload={() =>
-          deliveredFileType && handleDownload(file, deliveredFileType)
+          deliveredFileType && downloads.download(file, deliveredFileType)
         }
-        onDownloadAs={(fileType) => handleDownloadAs(file, fileType)}
-        onDownloadOriginal={() => handleDownloadOriginal(file.id)}
+        onDownloadAs={(fileType) => downloads.downloadAs(file, fileType)}
+        onDownloadOriginal={() => downloads.downloadOriginal(file)}
         onEdit={() => setEditingFile(file)}
         onMoveFile={isSupplement ? undefined : () => setMoveFileId(file.id)}
         onRescan={() => setRescanFileId(file.id)}
@@ -710,48 +580,16 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         </>
       )}
 
-      {/* Download Error Dialog */}
-      <Dialog
-        onOpenChange={(open) => {
-          if (!open) setDownloadError(null);
-        }}
-        open={!!downloadError}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Download Failed</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <DialogDescription>{downloadError?.message}</DialogDescription>
-            {/* The way out: the file as it is on disk, which skips writing
-                Shisho's metadata into it and so cannot fail the same way. */}
-            {downloadError && !isShareLink && (
-              <p className="mt-3 text-sm text-muted-foreground">
-                You can still download the unmodified file, as it is on disk,
-                without the metadata Shisho writes into downloads.
-              </p>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button
-              onClick={() => setDownloadError(null)}
-              size="sm"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            {/* The original-file variant is not exposed in Share Link context. */}
-            {downloadError && !isShareLink && (
-              <Button
-                onClick={() => handleDownloadOriginal(downloadError.fileId)}
-                size="sm"
-              >
-                Download unmodified file
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DownloadErrorDialog
+        failure={downloads.failure}
+        onClose={downloads.clearFailure}
+        // A recipient cannot have the file as it is on disk.
+        onDownloadOriginal={
+          isShareLink
+            ? undefined
+            : (failure) => downloads.downloadOriginal(failure.file)
+        }
+      />
 
       {canWriteBooks && library && (
         <MergeIntoDialog

@@ -2,10 +2,12 @@ import { useRef } from "react";
 
 import type { PageChangeHandler } from "@/components/library/PaginationFooter";
 
-// Room above the section once scrolled to, clear of the Demo Mode banner
+// Room above a section scrolled into view, clear of the Demo Mode banner
 // and the sticky top nav: its row (TOP_NAV_ROW) plus its 1px border.
-export const SECTION_CLASS =
-  "mb-10 scroll-mt-[calc(var(--demo-banner-height,0px)+57px+1rem)] md:scroll-mt-[calc(var(--demo-banner-height,0px)+65px+1rem)]";
+export const SCROLL_CLEAR_OF_NAV =
+  "scroll-mt-[calc(var(--demo-banner-height,0px)+57px+1rem)] md:scroll-mt-[calc(var(--demo-banner-height,0px)+65px+1rem)]";
+
+export const SECTION_CLASS = `mb-10 ${SCROLL_CLEAR_OF_NAV}`;
 
 /**
  * Paging for a section of a page, such as a person's narrated files below

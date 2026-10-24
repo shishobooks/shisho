@@ -30,6 +30,8 @@ CBZ and PDF use the same page-based reader. It provides:
 - Configurable preloading of nearby pages
 - Optional automatic hiding of controls
 
+A CBZ or PDF file's page shows its pages as a grid; select one to open the reader on that page.
+
 The current page is stored in the URL as `?page=`, so refreshing or bookmarking that URL returns to the same page. It is not stored as account-level reading progress.
 
 Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page.

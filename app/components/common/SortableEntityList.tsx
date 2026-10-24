@@ -41,7 +41,7 @@ interface SortableEntityListProps<T extends object> {
 
 // Module-level monotonic counter for assigning stable client-side ids to
 // list rows. Mirrors the `_editKey` pattern used by chapter editing
-// (`app/components/files/FileChaptersTab.tsx`): index- or label-based ids
+// (`app/components/files/FileChaptersEditor.tsx`): index- or label-based ids
 // would change after a reorder/remove and confuse dnd-kit's drag tracking.
 let rowKeyCounter = 0;
 const nextRowKey = () => `row-${++rowKeyCounter}`;

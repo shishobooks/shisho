@@ -60,7 +60,7 @@ With the built-in **viewer** role, or any role without Books Write, Series Write
 
 - Book tiles in the gallery show no actions menu (rescan, identify, delete). **Add to list** stays available.
 - The book page shows no **Edit**, **Identify**, rescan, merge, or delete actions, and a file's actions menu offers only **File details**. The **Needs review** badge still says what is missing but opens no editor. Reading, listening, downloading, and **Add to list** remain.
-- The file page shows no **Edit** or **Delete** buttons, and the chapters tab offers no chapter editing.
+- The file page shows no **Edit** button or actions menu (rescan, move, delete), and offers no **Edit chapters** or **Fetch from Audible**.
 - Series, person, genre, tag, and publisher pages show no **Edit**, **Merge**, or **Delete** buttons.
 - Selection mode still works for adding books to lists, and for downloads when the role has the [bulk download permissions](./browsing-search-bulk-actions.md#bulk-download-permissions). **Merge**, **Delete**, and the review actions are hidden.
 

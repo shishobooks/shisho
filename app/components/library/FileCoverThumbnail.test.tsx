@@ -1,10 +1,13 @@
 import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { File } from "@/types";
 
 import FileCoverThumbnail from "./FileCoverThumbnail";
+
+// Page images carry the server's PDF render key from useAuth.
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 mockCoverDimensions();
 
@@ -28,6 +31,49 @@ function makeFile(overrides: Partial<File> = {}): File {
 }
 
 describe("FileCoverThumbnail", () => {
+  it("shows a PDF's first page when it has no cover", () => {
+    const { container } = render(
+      <FileCoverThumbnail
+        file={makeFile({
+          file_type: "pdf",
+          cover_image_filename: undefined,
+          page_count: 12,
+        })}
+      />,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toMatch(
+      /^\/api\/books\/files\/1\/page\/0\b/,
+    );
+  });
+
+  it("shows a supplement with no picture as a tile of its type", () => {
+    const { container, getByText } = render(
+      <FileCoverThumbnail
+        file={makeFile({
+          file_role: "supplement",
+          cover_image_filename: undefined,
+        })}
+      />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(getByText("EPUB")).toBeInTheDocument();
+  });
+
+  it("asks a supplied builder, with no page fallback, on a Share Link page", () => {
+    const { container } = render(
+      <FileCoverThumbnail
+        file={makeFile({
+          file_type: "pdf",
+          file_role: "supplement",
+          cover_image_filename: undefined,
+          page_count: 12,
+        })}
+        getCoverUrl={() => null}
+      />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
+
   it("shows the pointer cursor only when clicking does something", () => {
     const { container, rerender } = render(
       <FileCoverThumbnail file={makeFile()} />,

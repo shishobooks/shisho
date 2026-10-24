@@ -14,6 +14,9 @@ import type { File, ResourceListResponse } from "@/types";
 
 import { FileListSection } from "./FileListSection";
 
+// Page images carry the server's PDF render key from useAuth.
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
 mockCoverDimensions();
 
 beforeAll(() => {

@@ -37,9 +37,7 @@ const shareLinkContext = (
   // The payload blanks cover filenames, but the cover's type stays and is
   // cleared along with them, so it says whether the file has a cover.
   fileCoverUrl: (file) =>
-    file.file_role === "supplement" || !file.cover_mime_type
-      ? null
-      : shareFileCoverUrl(token, file),
+    file.cover_mime_type ? shareFileCoverUrl(token, file) : null,
   coverAspectRatio: shared.cover_aspect_ratio,
 });
 

@@ -122,7 +122,7 @@ Review state is tracked per main file. A book is **Reviewed** only when all of i
 
 Automatic review checks the fields configured under **Administration > Review Criteria**. Defaults require authors, description, cover, and genres for every main file, plus narrators for M4B files. Adding a missing required value can mark the file reviewed, and removing one can return it to needs review.
 
-On a book's page, a **Needs review** badge on the cover lists what is missing when you hover over it. Select it to open the editor that can fill the gap: the book's when a book field is missing, otherwise the file's.
+On a book's page, a **Needs review** badge on the cover lists what is missing when you hover over it. Select it to open the editor that can fill the gap: the book's when a book field is missing, otherwise the file's. A file's page shows the same badge for that file alone.
 
 To set review state by hand, check or uncheck **Reviewed** under **Review** in **Edit**. A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review state from **Review Criteria**.
 
@@ -132,7 +132,7 @@ Use the gallery's **Review state** filter to work through the queue. Bulk select
 
 ## Chapters
 
-A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB, KePub, MOBI, and AZW3 chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. In an EPUB or KePub, a heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
+A file's page lists the chapters a scan found under **Chapters**, and a user whose role has Books Write can choose **Edit chapters** to change them. EPUB, KePub, MOBI, and AZW3 chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. In an EPUB or KePub, a heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
 
 Renamed and deleted EPUB, KePub, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, including a KePub made from an EPUB and an EPUB or KePub made from a MOBI or AZW3. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so the unmodified file still has the original table of contents.
 
@@ -140,7 +140,7 @@ CBZ chapters are written into generated CBZ downloads as folders of pages; see [
 
 ## Fetch Chapters from Audible
 
-For an M4B file with an Audible ASIN, a user whose role has Books Write can open chapter editing and choose **Fetch from Audible**. Shisho sends the ASIN to [Audnexus](https://audnex.us), an external service that provides Audible chapter data.
+For an M4B file, a user whose role has Books Write can choose **Fetch from Audible** above the file's chapters, which opens chapter editing with the fetch dialog. When the file has an Audible ASIN, the lookup starts right away; otherwise enter one, and **Use a different ASIN** looks up another. Shisho sends the ASIN to [Audnexus](https://audnex.us), an external service that provides Audible chapter data.
 
 The dialog compares the Audible runtime and chapter count with the local file. It can account for a removed Audible intro, but you should verify the detected offset. A substantial duration difference often indicates a different edition, and imported timestamps may not align.
 

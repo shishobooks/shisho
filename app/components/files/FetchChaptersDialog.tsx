@@ -390,11 +390,13 @@ const FetchChaptersDialog = ({
   );
   const [submittedAsin, setSubmittedAsin] = useState<string | null>(null);
 
-  // Reset to entry stage and reseed ASIN whenever the dialog opens.
+  // With a known ASIN the lookup starts as the dialog opens, so Fetch from
+  // Audible is one click; "Use a different ASIN" goes back to the entry.
   useEffect(() => {
     if (open) {
-      setAsinInput(initialAsin ? normalizeAsin(initialAsin) : "");
-      setSubmittedAsin(null);
+      const seeded = initialAsin ? normalizeAsin(initialAsin) : "";
+      setAsinInput(seeded);
+      setSubmittedAsin(isValidAsin(seeded) ? seeded : null);
     }
   }, [open, initialAsin]);
 
@@ -449,6 +451,19 @@ const FetchChaptersDialog = ({
 
           {stage === "error" && (
             <ErrorStage code={query.error?.code} onRetry={handleRetry} />
+          )}
+
+          {(stage === "result" || stage === "error") && (
+            <p className="mb-3 text-xs text-muted-foreground">
+              ASIN <span className="font-mono">{submittedAsin}</span>.{" "}
+              <Button
+                className="text-xs"
+                onClick={() => setSubmittedAsin(null)}
+                variant="link"
+              >
+                Use a different ASIN
+              </Button>
+            </p>
           )}
 
           {stage === "result" && query.data && (

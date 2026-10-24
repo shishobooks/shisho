@@ -456,6 +456,25 @@ func TestShareLinks_RecipientCovers(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code, "a file outside the link's book is not served")
 }
 
+// A supplement shows its cover on the Share Link page, as on the book page.
+func TestShareLinks_RecipientSupplementCover(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	link := f.mustCreate(f.admin, f.bookA, `{}`)
+
+	coverName := "notes.pdf.cover.png"
+	require.NoError(t, os.WriteFile(filepath.Join(f.bookA.Filepath, coverName), []byte("cover-notes"), 0o600))
+	_, err := f.db.NewUpdate().Model(f.suppA).
+		Set("cover_image_filename = ?", coverName).
+		WherePK().Exec(context.Background())
+	require.NoError(t, err)
+
+	rec := f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/cover", link.Token, f.suppA.ID), "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "cover-notes", rec.Body.String())
+}
+
 func TestShareLinks_RecipientDownloads(t *testing.T) {
 	t.Parallel()
 	f := newShareLinksFixture(t)

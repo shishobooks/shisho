@@ -36,7 +36,7 @@ You can promote a supported supplement to a main file or demote a main file to a
 
 ## Moving Files Between Books
 
-Choose **Move to another book** from a file's actions menu on the book's page to move it to another book. Both books must be in the same library.
+Choose **Move to another book** from a file's actions menu, on the book's page or the file's own page, to move it to another book. Both books must be in the same library.
 
 - With file organization enabled, Shisho physically moves the media file, its cover, and its file sidecar into the target book's directory.
 - With file organization disabled, Shisho changes the file's book grouping but leaves the disk path unchanged.

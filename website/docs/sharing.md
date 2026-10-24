@@ -85,7 +85,7 @@ A recipient opens the link in any browser, on a phone or a computer, without sig
 
 - The Shisho logo and a notice saying who shared the book and when the link expires, if it does.
 - The book's cover, title, subtitle, authors, series, description, genres, and tags.
-- Each of the book's files with a download button, including supplements, and beside each main file's button a **Download as** menu. A file's details show its publisher, release date, language, and, for audiobooks, whether it is abridged.
+- Each of the book's files with its cover and a download button, including supplements, and beside each main file's button a **Download as** menu. A file's details show its publisher, release date, language, and, for audiobooks, whether it is abridged.
 
 The download button sends the file in its own format (EPUB, KePub, AZW3, MOBI, CBZ, PDF, or M4B) with the book's metadata written into it, whatever the sharer's [Delivery Rules](./supported-formats.md#delivery-rules) say. The **Download as** menu lists every file type the file can become, its own first, such as KePub or EPUB for a CBZ; see [Conversions](./supported-formats.md#conversions). Supplements download as they are. If Shisho cannot write metadata into the file in its own format, for example a format only a plugin can read or a damaged file, the recipient gets the unmodified file. A file type picked from **Download as** that fails to generate gets an error instead, never a different file type. Recipients cannot download the file exactly as it is on disk, read or listen in the browser, or follow links into the rest of your server. Names such as authors and series are plain text.
 

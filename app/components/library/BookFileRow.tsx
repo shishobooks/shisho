@@ -8,9 +8,13 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  fileEditionRows,
+  fileIdentifierRows,
+} from "@/components/files/fileFacts";
 import CoverImage from "@/components/library/CoverImage";
 import DetailsDialog, {
   type DetailRow,
@@ -40,8 +44,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getLanguageName } from "@/constants/languages";
 import { useCan } from "@/hooks/useCan";
+import { useFileImage } from "@/hooks/useFileImage";
 import { cn } from "@/libraries/utils";
 import {
   FileTypeM4B,
@@ -49,38 +53,18 @@ import {
   type File,
   type PluginIdentifierType,
 } from "@/types";
-import { fileCoverUrl } from "@/utils/coverUrl";
 import {
   fileLabel,
   fileTypeLabel,
   formatBitrate,
-  formatDate,
   formatDateTime,
   formatDuration,
   formatFileSize,
-  formatIdentifierType,
   formatPageCount,
   formatYear,
   getFilename,
 } from "@/utils/format";
-import { getIdentifierUrl } from "@/utils/identifiers";
 import { getReadingAction } from "@/utils/readingAction";
-
-const languageLabel = (code: string) => {
-  const name = getLanguageName(code);
-  return name ? `${name} (${code})` : code;
-};
-
-const externalLink = (href: string, children: ReactNode) => (
-  <a
-    className="break-all text-primary hover:underline"
-    href={href}
-    rel="noopener noreferrer"
-    target="_blank"
-  >
-    {children}
-  </a>
-);
 
 /**
  * Everything the File details dialog lists. A Share Link recipient sees the
@@ -90,12 +74,10 @@ const fileDetailRows = (
   file: File,
   {
     isShareLink,
-    libraryId,
     linkPublisher,
     pluginIdentifierTypes,
   }: {
     isShareLink: boolean;
-    libraryId: number;
     linkPublisher: boolean;
     pluginIdentifierTypes: PluginIdentifierType[] | undefined;
   },
@@ -125,51 +107,11 @@ const fileDetailRows = (
   if (file.chapters?.length) {
     rows.push({ label: "Chapters", value: file.chapters.length });
   }
-  if (file.publisher) {
-    rows.push({
-      label: "Publisher",
-      value: (
-        <TextLink
-          to={
-            linkPublisher
-              ? `/libraries/${libraryId}/publishers/${file.publisher.id}`
-              : null
-          }
-        >
-          {file.publisher.name}
-        </TextLink>
-      ),
-    });
-  }
-  if (file.release_date) {
-    rows.push({ label: "Released", value: formatDate(file.release_date) });
-  }
-  if (file.language) {
-    rows.push({ label: "Language", value: languageLabel(file.language) });
-  }
-  // Audiobooks were often sold abridged, so an M4B always says which it is;
-  // another format says so only when it is.
-  if (file.file_type === FileTypeM4B || file.abridged === true) {
-    rows.push({
-      label: "Abridged",
-      value: file.abridged == null ? "Unknown" : file.abridged ? "Yes" : "No",
-    });
-  }
+  rows.push(...fileEditionRows(file, { linkPublisher }));
   // A recipient has no use for catalog details, often internal ones such
   // as a UUID.
   if (!isShareLink) {
-    if (file.url)
-      rows.push({ label: "URL", value: externalLink(file.url, file.url) });
-    for (const id of file.identifiers ?? []) {
-      const url = getIdentifierUrl(id.type, id.value, pluginIdentifierTypes);
-      const value = (
-        <span className="select-all font-mono break-all">{id.value}</span>
-      );
-      rows.push({
-        label: formatIdentifierType(id.type, pluginIdentifierTypes),
-        value: url ? externalLink(url, value) : value,
-      });
-    }
+    rows.push(...fileIdentifierRows(file, pluginIdentifierTypes));
     if (file.file_modified_at) {
       rows.push({
         label: "Modified",
@@ -265,18 +207,19 @@ const BookFileRow = ({
   const name = fileLabel(file);
   const readingAction = isShareLink ? null : getReadingAction(file.file_type);
   const isListen = readingAction === "listen";
-  const coverUrl = getCoverUrl
-    ? getCoverUrl(file)
-    : file.cover_image_filename
-      ? fileCoverUrl(file)
-      : null;
+  const image = useFileImage(file, getCoverUrl);
+  const coverUrl = image?.url ?? null;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 sm:flex-nowrap">
       {/* A fixed slot, so names line up whatever each cover's shape. */}
       <div className="flex w-14 shrink-0 justify-center self-start">
-        {isSupplement ? null : coverUrl ? (
+        {coverUrl ? (
           <Button
-            aria-label={`View cover of ${name}`}
+            aria-label={
+              image?.isPage
+                ? `View first page of ${name}`
+                : `View cover of ${name}`
+            }
             className={cn(
               "flex rounded",
               file.file_type === FileTypeM4B ? "w-14" : "w-[38px]",
@@ -448,7 +391,6 @@ const BookFileRow = ({
         open={detailsOpen}
         rows={fileDetailRows(file, {
           isShareLink,
-          libraryId,
           linkPublisher,
           pluginIdentifierTypes,
         })}
@@ -469,12 +411,20 @@ const BookFileRow = ({
                     : "aspect-[2/3] max-w-xs",
                 )}
               >
-                <CoverImage
-                  alt={`${name} cover`}
-                  className="size-full object-cover"
-                  key={coverUrl}
-                  src={coverUrl}
-                />
+                {image?.isPage ? (
+                  <img
+                    alt={`${name} first page`}
+                    className="size-full bg-white object-contain"
+                    src={coverUrl}
+                  />
+                ) : (
+                  <CoverImage
+                    alt={`${name} cover`}
+                    className="size-full object-cover"
+                    key={coverUrl}
+                    src={coverUrl}
+                  />
+                )}
               </div>
             </DialogBody>
           </DialogContent>
