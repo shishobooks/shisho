@@ -1,14 +1,21 @@
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
-import { FileTypeCBZ, FileTypePDF, type File } from "@/types";
+import {
+  FileTypeCBZ,
+  FileTypePDF,
+  type File,
+  type ThumbnailSize,
+} from "@/types";
 import { fileCoverUrl } from "@/utils/coverUrl";
 
 export interface FileImage {
   url: string;
-  /**
-   * A page of the file rather than a cover: render it with a plain `<img>`,
-   * since CoverImage rewrites cover URLs to cached thumbnails.
-   */
+  /** A page of the file rather than a cover. */
   isPage: boolean;
+  /**
+   * For a page, the URL of its thumbnail at a size: CoverImage's
+   * `thumbnailUrl`, since a page URL is not a cover's.
+   */
+  thumbnailUrl?: (size: ThumbnailSize) => string;
 }
 
 /**
@@ -33,7 +40,11 @@ export const useFileImage = (
     (file.file_type === FileTypeCBZ || file.file_type === FileTypePDF) &&
     (file.page_count ?? 0) > 0
   ) {
-    return { url: pageUrl(file, 0), isPage: true };
+    return {
+      url: pageUrl(file, 0),
+      isPage: true,
+      thumbnailUrl: (size) => pageUrl(file, 0, size),
+    };
   }
   return null;
 };

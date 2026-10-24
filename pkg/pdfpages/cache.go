@@ -3,6 +3,7 @@ package pdfpages
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"image/jpeg"
 	"os"
 	"path/filepath"
@@ -57,16 +58,35 @@ func (c *Cache) GetPage(pdfPath string, fileID int, pageNum int) (cachedPath str
 		return expected, "image/jpeg", nil
 	}
 
-	// Render the page
-	return c.renderPage(pdfPath, fileID, pageNum)
+	path, err := c.renderPage(pdfPath, pageNum, expected, 0)
+	if err != nil {
+		return "", "", err
+	}
+	return path, "image/jpeg", nil
 }
 
-// renderPage renders a single PDF page and caches the result as JPEG.
+// GetThumbnailPage returns the path to a cached rendering of the page that
+// fits within size pixels on its longest side, rendering it if necessary.
+// It renders straight at that size, a fraction of the work of a full page at
+// the configured DPI, for page thumbnails. pageNum is 0-indexed.
+func (c *Cache) GetThumbnailPage(pdfPath string, fileID int, pageNum int, size int) (string, error) {
+	if pageNum < 0 {
+		return "", errors.Wrapf(ErrPageOutOfRange, "page %d", pageNum)
+	}
+	expected := c.thumbnailPath(fileID, pageNum, size)
+	if c.lru.Used(expected) {
+		return expected, nil
+	}
+	return c.renderPage(pdfPath, pageNum, expected, size)
+}
+
+// renderPage renders a single PDF page to outPath as JPEG: at the configured
+// DPI, or within size pixels on its longest side when size is not 0.
 // Thread safety: concurrent calls are serialized by the pdfium pool (MaxTotal: 1).
-func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath string, mimeType string, err error) {
+func (c *Cache) renderPage(pdfPath string, pageNum int, outPath string, size int) (string, error) {
 	instance, err := pdf.PdfiumInstance(pdf.InteractivePdfiumTimeout)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get pdfium instance")
+		return "", errors.Wrap(err, "failed to get pdfium instance")
 	}
 	defer instance.Close()
 
@@ -74,7 +94,7 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 		FilePath: &pdfPath,
 	})
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to open PDF")
+		return "", errors.Wrap(err, "failed to open PDF")
 	}
 	defer func() {
 		_, _ = instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{
@@ -87,48 +107,61 @@ func (c *Cache) renderPage(pdfPath string, fileID int, pageNum int) (cachedPath 
 		Document: doc.Document,
 	})
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get page count")
+		return "", errors.Wrap(err, "failed to get page count")
 	}
 	if pageNum >= pageCountResp.PageCount {
-		return "", "", errors.Wrapf(ErrPageOutOfRange, "page %d (0-%d)", pageNum, pageCountResp.PageCount-1)
+		return "", errors.Wrapf(ErrPageOutOfRange, "page %d (0-%d)", pageNum, pageCountResp.PageCount-1)
 	}
 
-	// Render the page
-	render, err := instance.RenderPageInDPI(&requests.RenderPageInDPI{
-		DPI: c.dpi,
-		Page: requests.Page{
-			ByIndex: &requests.PageByIndex{
-				Document: doc.Document,
-				Index:    pageNum,
-			},
+	page := requests.Page{
+		ByIndex: &requests.PageByIndex{
+			Document: doc.Document,
+			Index:    pageNum,
 		},
-	})
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to render page")
 	}
-	defer render.Cleanup()
+	var rendered image.Image
+	if size > 0 {
+		// Width and Height bound the image; PDFium keeps the page's shape.
+		render, err := instance.RenderPageInPixels(&requests.RenderPageInPixels{
+			Page:   page,
+			Width:  size,
+			Height: size,
+		})
+		if err != nil {
+			return "", errors.Wrap(err, "failed to render page")
+		}
+		defer render.Cleanup()
+		rendered = render.Result.RenderedImage
+	} else {
+		render, err := instance.RenderPageInDPI(&requests.RenderPageInDPI{
+			DPI:  c.dpi,
+			Page: page,
+		})
+		if err != nil {
+			return "", errors.Wrap(err, "failed to render page")
+		}
+		defer render.Cleanup()
+		rendered = render.Result.RenderedImage
+	}
 
 	// Encode to JPEG
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, render.Result.RenderedImage, &jpeg.Options{Quality: c.quality}); err != nil {
-		return "", "", errors.Wrap(err, "failed to encode JPEG")
+	if err := jpeg.Encode(&buf, rendered, &jpeg.Options{Quality: c.quality}); err != nil {
+		return "", errors.Wrap(err, "failed to encode JPEG")
 	}
 
-	// Write to cache
-	cacheDir := c.pageDir(fileID)
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return "", "", errors.WithStack(err)
+	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+		return "", errors.WithStack(err)
 	}
 
-	// Write atomically so GetPage's existence check never serves a partially
-	// written page to a concurrent request.
-	outPath := c.pagePath(fileID, pageNum)
+	// Write atomically so a concurrent request's existence check never
+	// serves a partially written page.
 	if err := fileutils.WriteFileAtomic(outPath, buf.Bytes(), 0644); err != nil { //nolint:gosec // Cache files need to be readable by the HTTP server
-		return "", "", err
+		return "", err
 	}
 	c.lru.Added(outPath)
 
-	return outPath, "image/jpeg", nil
+	return outPath, nil
 }
 
 // Invalidate removes all cached pages for a file, at every render setting.
@@ -214,4 +247,12 @@ func (c *Cache) pageDir(fileID int) string {
 // pagePath returns the expected cache path for a specific page.
 func (c *Cache) pagePath(fileID int, pageNum int) string {
 	return filepath.Join(c.pageDir(fileID), fmt.Sprintf("page_%d.jpg", pageNum))
+}
+
+// thumbnailPath returns the cache path for a page rendered within size
+// pixels, under the file's directory so Invalidate removes it too. It is
+// keyed by the JPEG quality, the one render setting a thumbnail shares with
+// a full page.
+func (c *Cache) thumbnailPath(fileID int, pageNum int, size int) string {
+	return filepath.Join(c.fileDir(fileID), fmt.Sprintf("thumb-%d-%d", size, c.quality), fmt.Sprintf("page_%d.jpg", pageNum))
 }

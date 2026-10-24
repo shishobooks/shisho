@@ -60,7 +60,8 @@ Every form that creates or updates data has unsaved changes protection. Keep an 
 Cover and page endpoints are cached `immutable`, and browsers also keep an in-memory image cache that reuses the bitmap for any `src` already rendered this session, so a changed image needs a changed URL. Every URL carries a `?v=` key built by the helpers in `app/utils` (`coverUrl.ts`, `pageUrl.ts`, `downloadUrl.ts`), which document their keys.
 
 - Components take the model (book, series, file) and call the helper, never a bare id or key. Page URLs come from `useFilePageUrl()`, which adds the PDF render key.
-- Render server covers with `CoverImage`, keyed `key={coverUrl}` where the cover can change while mounted; use a plain `<img>` for local previews, provider images, and CBZ/PDF pages. Tests rendering covers call `mockCoverDimensions()` (jsdom has no layout).
+- Render server covers with `CoverImage`, keyed `key={coverUrl}` where the cover can change while mounted; use a plain `<img>` for local previews and provider images. Tests rendering covers call `mockCoverDimensions()` (jsdom has no layout).
+- A CBZ or PDF page shown smaller than the reader shows it asks for a thumbnail, never the whole page: a full PDF page is a render at `pdf_render_dpi`, one at a time on the server. Pass a size to `useFilePageUrl()`'s function, from `pageThumbnailSize(cssPixels)` for a fixed box, or render `CoverImage` with `thumbnailUrl` so it picks the size from its box. Only the readers load whole pages.
 - A cover-changing mutation invalidates the query whose data drives the key.
 
 ## Testing

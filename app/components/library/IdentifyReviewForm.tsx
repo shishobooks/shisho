@@ -79,6 +79,7 @@ import {
   formatPageCount,
 } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
+import { pageThumbnailSize } from "@/utils/pageUrl";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import {
@@ -783,7 +784,7 @@ export function IdentifyReviewForm({
   const newCoverPreviewUrl =
     newCoverUrl ??
     (file && newCoverPage != null
-      ? filePageUrl(file, newCoverPage)
+      ? filePageUrl(file, newCoverPage, pageThumbnailSize(144))
       : undefined);
   const currentCoverUrl = file?.cover_image_filename
     ? fileCoverUrl(file)

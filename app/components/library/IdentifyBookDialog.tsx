@@ -40,7 +40,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
-import type { PageSourceFile } from "@/utils/pageUrl";
+import { pageThumbnailSize, type PageSourceFile } from "@/utils/pageUrl";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 import { computeIdentifyEmptyState, pickInitialFile } from "./identify-utils";
@@ -781,7 +781,7 @@ function ResultCoverThumbnail({
   const [imgError, setImgError] = useState(false);
   const pageUrl =
     previewFile && coverPage != null
-      ? filePageUrl(previewFile, coverPage)
+      ? filePageUrl(previewFile, coverPage, pageThumbnailSize(96))
       : undefined;
   // Reset on URL change so a previous broken result doesn't latch the
   // placeholder when results swap in.

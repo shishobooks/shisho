@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/hover-card";
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { cn } from "@/libraries/utils";
-import type { PageSourceFile } from "@/utils/pageUrl";
+import { pageThumbnailSize, type PageSourceFile } from "@/utils/pageUrl";
 
 export interface PagePreviewProps {
   file: PageSourceFile;
@@ -59,7 +59,18 @@ const PagePreview = ({
   const [hasError, setHasError] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
 
-  const imageUrl = filePageUrl(file, page);
+  // Thumbnails sized for each box. A landscape page is up to half again as
+  // wide as it is tall, so each asks for that much.
+  const imageUrl = filePageUrl(
+    file,
+    page,
+    pageThumbnailSize(thumbnailSize * 1.5),
+  );
+  const previewUrl = filePageUrl(
+    file,
+    page,
+    pageThumbnailSize(previewSize * 1.5),
+  );
   // Start over when the URL changes (another page, or a new cache key after
   // the file was replaced), so an earlier error does not hide the new image.
   const [shownUrl, setShownUrl] = useState(imageUrl);
@@ -167,7 +178,7 @@ const PagePreview = ({
                 previewLoading && "opacity-0",
               )}
               onLoad={() => setPreviewLoading(false)}
-              src={imageUrl}
+              src={previewUrl}
             />
           </div>
           <p className="text-center text-sm text-muted-foreground mt-1">

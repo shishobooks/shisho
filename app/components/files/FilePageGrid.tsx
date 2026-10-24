@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import CoverImage from "@/components/library/CoverImage";
 import { Button } from "@/components/ui/button";
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { FileTypePDF, type File } from "@/types";
@@ -24,10 +25,11 @@ const FADE = "linear-gradient(to bottom, black 60%, transparent 100%)";
 // it still open. In memory on purpose: a reload starts it closed.
 const expandedEntries = new Set<string>();
 
-// Each tile shows its page rendered whole. The server renders a PDF's pages
-// one at a time, so a PDF loads one tile at a time and opening the reader
-// never waits behind a queue of renders; a CBZ page is only unpacked.
-const loadsAtOnce = (file: File) => (file.file_type === FileTypePDF ? 1 : 4);
+// Each tile asks for a thumbnail. The server renders a PDF's pages one at a
+// time, so a PDF loads a few tiles at once, and opening the reader waits
+// behind no more than those few small renders; a CBZ page is only unpacked
+// and resized.
+const loadsAtOnce = (file: File) => (file.file_type === FileTypePDF ? 3 : 6);
 
 /**
  * Which tiles are on screen (or near it), so their pages can load as the
@@ -164,12 +166,13 @@ const FilePageGrid = ({ file }: { file: File }) => {
             >
               <span className="block aspect-[2/3] overflow-hidden rounded border border-border bg-muted">
                 {mayLoad(page) && (
-                  <img
+                  <CoverImage
                     alt=""
                     className="h-full w-full bg-white object-contain transition-opacity group-hover:opacity-80"
                     onError={() => finished(page)}
                     onLoad={() => finished(page)}
                     src={pageUrl(file, page)}
+                    thumbnailUrl={(size) => pageUrl(file, page, size)}
                   />
                 )}
               </span>

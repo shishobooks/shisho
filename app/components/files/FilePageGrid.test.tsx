@@ -3,11 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { File } from "@/types";
 
 import FilePageGrid from "./FilePageGrid";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+mockCoverDimensions();
 
 // Each test opens its own file: the grid remembers an opened grid by
 // history entry and file, and a memory router's first entry is always
@@ -105,24 +108,32 @@ describe("FilePageGrid", () => {
     expect(screen.getAllByRole("link")).toHaveLength(22);
   });
 
-  it("loads a PDF's pages one at a time, in order", () => {
+  it("loads a PDF's pages a few at a time, in order", () => {
     const { container } = render(
-      <RouterProviderFor file={{ ...comic(5), file_type: "pdf" } as File} />,
+      <RouterProviderFor file={{ ...comic(8), file_type: "pdf" } as File} />,
     );
     const images = () => container.querySelectorAll("img");
 
-    expect(images()).toHaveLength(1);
+    expect(images()).toHaveLength(3);
     fireEvent.load(images()[0]);
-    expect(images()).toHaveLength(2);
+    expect(images()).toHaveLength(4);
     // A page that fails to load lets the next one go too.
     fireEvent.error(images()[1]);
-    expect(images()).toHaveLength(3);
+    expect(images()).toHaveLength(5);
   });
 
-  it("loads a few CBZ pages at once", () => {
+  it("loads more CBZ pages at once", () => {
     const { container } = render(<RouterProviderFor file={comic(10)} />);
 
-    expect(container.querySelectorAll("img")).toHaveLength(4);
+    expect(container.querySelectorAll("img")).toHaveLength(6);
+  });
+
+  it("asks for a thumbnail of each page, not the whole page", () => {
+    const { container } = render(<RouterProviderFor file={comic(2)} />);
+
+    expect(container.querySelector("img")?.getAttribute("src")).toMatch(
+      /\/page\/0\?v=\d+&size=\d+&r=/,
+    );
   });
 });
 

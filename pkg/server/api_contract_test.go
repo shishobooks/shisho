@@ -299,6 +299,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusNotFound, code: "not_found", message: "Page not found.",
 		},
 		{
+			name:   "page thumbnail at a size that is not a tier",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/page/0?size=300", cbzFile.ID),
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+			message: "Thumbnail size must be 128, 256, 512, 1024, or 2048.",
+		},
+		{
 			name:   "bulk book delete with a malformed body",
 			method: http.MethodPost, path: "/api/books/delete",
 			body:   `{`,

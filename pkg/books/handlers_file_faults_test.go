@@ -175,6 +175,20 @@ func TestFileServing_UnreadableFileIsServerError(t *testing.T) {
 		assertServerFault(t, f.get(fileURL(file, "/page/0")))
 	})
 
+	t.Run("page thumbnail from an unreadable page", func(t *testing.T) {
+		t.Parallel()
+		f := newServingFixture(t, "Thumbnail Book")
+		path := filepath.Join(f.dir, "book.cbz")
+		createTestCBZWithPages(t, path, 3)
+		file := f.addFile(models.FileTypeCBZ, path)
+		require.Equal(t, http.StatusOK, f.get(fileURL(file, "/page/0")).Code)
+
+		for _, page := range cachedPages(t, f.cacheDir) {
+			lockFile(t, page)
+		}
+		assertServerFault(t, f.get(fileURL(file, "/page/0?size=128")))
+	})
+
 	for _, rangeHeader := range []string{"", "bytes=0-99", "bytes=-500"} {
 		t.Run("stream with Range "+rangeHeader, func(t *testing.T) {
 			t.Parallel()
