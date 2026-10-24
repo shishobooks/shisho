@@ -383,7 +383,7 @@ func TestGetPage_OutOfRangeWithoutPageCountIsNotFound(t *testing.T) {
 }
 
 // The web download answers a type with no generator with a 422: the user
-// can use Download Original instead.
+// can use Download unmodified file instead.
 func TestDownload_NoGeneratorIsInvalidState(t *testing.T) {
 	t.Parallel()
 	f := newServingFixture(t, "Plugin Format")
@@ -408,7 +408,7 @@ func TestDownload_UnsatisfiableRangeIsNotAnAttachment(t *testing.T) {
 	assert.Empty(t, rr.Header().Get("Content-Disposition"))
 }
 
-// Download Original names the file the way a Generated File is named, with
+// Download unmodified file names the file the way a Generated File is named, with
 // the file's own extension, and a supplement after its book.
 func TestDownloadOriginal_Filename(t *testing.T) {
 	t.Parallel()

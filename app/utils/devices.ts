@@ -12,6 +12,7 @@ import {
   type DeviceResponse,
   type DeviceType,
 } from "@/types/generated/devices";
+import type { BookDevice } from "@/types/generated/reach";
 
 export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   [DeviceTypeKobo]: "Kobo",
@@ -80,3 +81,7 @@ export const scopeLabel = (device: DeviceResponse): string => {
       return "All books";
   }
 };
+
+/** Whether a Kobo's next sync would change the book on it. */
+export const deviceHasWarning = (line: BookDevice): boolean =>
+  Boolean(line.type_switch) || line.edition_moves.length > 0;

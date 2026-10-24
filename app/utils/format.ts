@@ -179,6 +179,21 @@ export const formatDate = (dateString: string): string => {
 };
 
 /**
+ * An audio bitrate in kilobits per second.
+ * @example formatBitrate(64000) // "64 kbps"
+ */
+export const formatBitrate = (bitsPerSecond: number): string =>
+  `${Math.round(bitsPerSecond / 1000)} kbps`;
+
+/**
+ * The year of an ISO date, read in UTC like `formatDate`, so a release dated
+ * January 1 does not show as the year before west of UTC.
+ * @example formatYear("2015-01-01T00:00:00Z") // "2015"
+ */
+export const formatYear = (dateString: string): string =>
+  String(new Date(dateString).getUTCFullYear());
+
+/**
  * Formats an ISO datetime string into a localized date+time string in the user's timezone.
  * Includes the short timezone name so it's clear the time is local.
  * @example formatDateTime("2024-01-15T18:30:00Z") // "1/15/2024, 12:30 PM CST" (locale-dependent)

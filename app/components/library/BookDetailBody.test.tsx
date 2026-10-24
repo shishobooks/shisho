@@ -16,7 +16,7 @@ import {
 
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
-import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
+import { emulatePhoneWidth } from "@/testing/phoneWidth";
 import type { Book, File, Rule, SharingSettingsResponse } from "@/types";
 import type { Permission } from "@/utils/permissions";
 
@@ -89,11 +89,15 @@ beforeEach(() => {
   resync.book = undefined;
   delivery.rules = undefined;
   delivery.pending = false;
+  review.criteria = { book_fields: [], audio_fields: [] };
+  relatedTabs.tabs = [{ key: "series", label: "Series" }];
 });
 
 const { idle, review, resync } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
-  review: { mutate: undefined as undefined | ((...args: never[]) => void) },
+  review: {
+    criteria: { book_fields: [] as string[], audio_fields: [] as string[] },
+  },
   resync: {
     file: undefined as undefined | ((...args: never[]) => Promise<unknown>),
     book: undefined as undefined | ((...args: never[]) => Promise<unknown>),
@@ -131,13 +135,7 @@ vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/queries/review", () => ({
-  useSetBookReview: () => ({
-    ...idle(),
-    ...(review.mutate ? { mutate: review.mutate } : {}),
-  }),
-  useReviewCriteria: () => ({
-    data: { book_fields: [], audio_fields: [] },
-  }),
+  useReviewCriteria: () => ({ data: review.criteria }),
 }));
 vi.mock("@/components/library/AddToListPopover", () => ({
   default: ({ trigger }: { trigger: ReactNode }) => (
@@ -145,7 +143,8 @@ vi.mock("@/components/library/AddToListPopover", () => ({
   ),
 }));
 vi.mock("@/components/library/BookEditDialog", () => ({
-  BookEditDialog: () => null,
+  BookEditDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="book-edit-dialog" /> : null,
 }));
 vi.mock("@/components/library/IdentifyBookDialog", () => ({
   IdentifyBookDialog: () => null,
@@ -157,7 +156,28 @@ vi.mock("@/components/library/MoveFilesDialog", () => ({
   MoveFilesDialog: () => null,
 }));
 vi.mock("@/components/library/FileEditDialog", () => ({
-  FileEditDialog: () => null,
+  FileEditDialog: ({ file }: { file: File }) => (
+    <div data-testid="file-edit-dialog">{file.id}</div>
+  ),
+}));
+// BookRelatedPanel.test.tsx covers the panel and the hook that loads it;
+// here the panel only marks its place, and a test can empty its tabs.
+const relatedTabs = vi.hoisted(() => ({
+  tabs: [{ key: "series", label: "Series" }] as {
+    key: string;
+    label: string;
+  }[],
+}));
+vi.mock("@/hooks/useBookRelatedTabs", () => ({
+  useBookRelatedTabs: (_book: unknown, options?: { enabled?: boolean }) => ({
+    tabs: options?.enabled === false ? [] : relatedTabs.tabs,
+    series: [],
+    lists: [],
+    linkPeople: true,
+  }),
+}));
+vi.mock("@/components/library/BookRelatedPanel", () => ({
+  default: () => <div data-testid="related-panel" />,
 }));
 
 const timestamps = {
@@ -239,6 +259,24 @@ const renderBody = (
     </QueryClientProvider>,
   );
 
+// Opens a file's menu and its File details dialog, and returns the dialog.
+const openFileDetails = async (index = 0) => {
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  await user.click(
+    screen.getAllByRole("button", { name: "File actions" })[index],
+  );
+  await user.click(screen.getByRole("menuitem", { name: "File details" }));
+  return screen.getByRole("dialog");
+};
+
+const menuItems = async () => {
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  await user.click(screen.getByRole("button", { name: "Book actions" }));
+  return within(screen.getByRole("menu"))
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent);
+};
+
 describe("BookDetailBody in Share Link context", () => {
   it("renders resource names as plain text with no links into the app", () => {
     renderBody({
@@ -248,7 +286,7 @@ describe("BookDetailBody in Share Link context", () => {
 
     for (const name of [
       "Ada Author",
-      "Great Series",
+      "Great Series #2",
       "Fantasy",
       "Favorite",
       "Nora Reader",
@@ -260,26 +298,42 @@ describe("BookDetailBody in Share Link context", () => {
   });
 
   it("renders the file publisher as plain text", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBody({ shareLink });
 
-    await user.click(screen.getByRole("button", { name: "Show file details" }));
-    expect(screen.getByText("Tor Books").closest("a")).toBeNull();
+    const dialog = await openFileDetails();
+    expect(within(dialog).getByText("Tor Books").closest("a")).toBeNull();
   });
 
-  it("hides every action control even with full permissions", () => {
+  it("hides every action control even with full permissions", async () => {
     renderBody({ book: { ...book, files: [epub, m4b] }, shareLink });
 
     expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+    for (const name of ["Edit", "Identify", "Share"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
     expect(screen.queryByTestId("add-to-list")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("File actions")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Select" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("related-panel")).not.toBeInTheDocument();
     expect(screen.queryAllByRole("link")).toHaveLength(0);
-    expect(screen.queryByText("Library")).not.toBeInTheDocument();
-    expect(screen.queryByText("File Path")).not.toBeInTheDocument();
+
+    // A file's menu keeps only its details, which change nothing.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(
+      screen.getAllByRole("button", { name: "File actions" })[0],
+    );
+    expect(
+      within(screen.getByRole("menu"))
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["File details"]);
+  });
+
+  it("shows no Needs review badge", () => {
+    renderBody({
+      book: { ...book, files: [{ ...epub, reviewed: false }] },
+      shareLink,
+    });
+
+    expect(screen.queryByText("Needs review")).not.toBeInTheDocument();
   });
 
   it("offers no Share entry", () => {
@@ -287,6 +341,9 @@ describe("BookDetailBody in Share Link context", () => {
     renderBody({ shareLink });
 
     expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
   });
 
   it("omits the sort title and the created and updated times", () => {
@@ -296,12 +353,12 @@ describe("BookDetailBody in Share Link context", () => {
     });
 
     expect(screen.queryByText(/Sort title/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Created")).not.toBeInTheDocument();
+    expect(screen.queryByText("Book, Test")).not.toBeInTheDocument();
+    expect(screen.queryByText("Added")).not.toBeInTheDocument();
     expect(screen.queryByText("Updated")).not.toBeInTheDocument();
   });
 
-  it("omits file identifiers and the file URL but keeps reader-facing details", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("omits file identifiers, the file URL, and the server's dates but keeps reader-facing details", async () => {
     renderBody({
       book: {
         ...book,
@@ -317,40 +374,22 @@ describe("BookDetailBody in Share Link context", () => {
       shareLink,
     });
 
-    await user.click(screen.getByRole("button", { name: "Show file details" }));
-    expect(screen.getByText("Tor Books")).toBeInTheDocument();
-    expect(screen.getByText("Released")).toBeInTheDocument();
-    expect(screen.getByText("Language")).toBeInTheDocument();
-    expect(screen.queryByText("urn:uuid:1234")).not.toBeInTheDocument();
-    expect(screen.queryByText("URL")).not.toBeInTheDocument();
-  });
-
-  it("offers no expander when a file's only details are hidden ones", () => {
-    renderBody({
-      book: {
-        ...book,
-        files: [
-          {
-            ...epub,
-            publisher: undefined,
-            release_date: undefined,
-            url: "https://example.com/book",
-            identifiers: [{ id: 1, type: "uuid", value: "urn:uuid:1234" }],
-          } as File,
-        ],
-      },
-      shareLink,
-    });
-
-    expect(
-      screen.queryByRole("button", { name: "Show file details" }),
-    ).not.toBeInTheDocument();
+    const dialog = await openFileDetails();
+    expect(within(dialog).getByText("Tor Books")).toBeInTheDocument();
+    expect(within(dialog).getByText("Released")).toBeInTheDocument();
+    expect(within(dialog).getByText("Language")).toBeInTheDocument();
+    expect(within(dialog).queryByText("urn:uuid:1234")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("URL")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Added")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Path")).not.toBeInTheDocument();
   });
 
   it("falls back to the file type when the payload blanks the path", () => {
     renderBody({ shareLink });
 
-    expect(screen.getByTitle("EPUB")).toHaveTextContent("EPUB");
+    const files = screen.getByRole("region", { name: "1 file" });
+    // The name and the format pill both read EPUB.
+    expect(within(files).getAllByText("EPUB").length).toBeGreaterThan(1);
   });
 
   it("uses the supplied cover URL builders", () => {
@@ -377,8 +416,7 @@ describe("BookDetailBody in Share Link context", () => {
 
     renderBody({ shareLink });
 
-    const downloads = screen.getAllByRole("button", { name: "Download" });
-    await user.click(downloads[0]);
+    await user.click(screen.getByRole("button", { name: "Download EPUB" }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/share/tok/files/42/download",
@@ -398,7 +436,9 @@ describe("BookDetailBody in Share Link context", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Download as" })[0]);
     await user.click(
-      screen.getByRole("menuitem", { name: "Download Test Book as KePub" }),
+      screen.getByRole("menuitem", {
+        name: "Download Test Book as KePub (converted)",
+      }),
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -456,7 +496,7 @@ describe("BookDetailBody in Share Link context", () => {
     );
 
     renderBody({ shareLink });
-    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+    await user.click(screen.getByRole("button", { name: "Download EPUB" }));
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(screen.queryByText(/Request failed/)).not.toBeInTheDocument();
@@ -473,7 +513,7 @@ describe("BookDetailBody in Share Link context", () => {
     );
 
     renderBody({ shareLink });
-    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+    await user.click(screen.getByRole("button", { name: "Download EPUB" }));
 
     await waitFor(() => {
       expect(error).toHaveBeenCalledWith("Failed to download file", undefined);
@@ -495,7 +535,7 @@ describe("BookDetailBody in Share Link context", () => {
     );
 
     renderBody({ shareLink });
-    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+    await user.click(screen.getByRole("button", { name: "Download EPUB" }));
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -519,7 +559,7 @@ describe("BookDetailBody in Share Link context", () => {
     } as File;
     renderBody({ book: { ...book, files: [supplement] }, shareLink });
 
-    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
+    await user.click(screen.getByRole("button", { name: "Download PDF" }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/share/tok/files/44/download",
@@ -540,7 +580,7 @@ describe("BookDetailBody without Share Link context", () => {
       "href",
       "/libraries/1/people/10",
     );
-    expect(screen.getByText("Great Series").closest("a")).toHaveAttribute(
+    expect(screen.getByText("Great Series #2").closest("a")).toHaveAttribute(
       "href",
       "/libraries/1/series/3",
     );
@@ -554,28 +594,39 @@ describe("BookDetailBody without Share Link context", () => {
     );
   });
 
+  it("names a comic's volume instead of numbering it", () => {
+    renderBody({
+      book: { ...book, files: [{ ...epub, file_type: "cbz" }] } as Book,
+    });
+
+    expect(screen.getByText("Great Series Vol. 2")).toBeInTheDocument();
+  });
+
+  it("links each file's name to its details page", () => {
+    renderBody({
+      book: { ...book, files: [{ ...epub, display_name: "Deluxe" }] } as Book,
+    });
+
+    expect(screen.getByRole("link", { name: "Deluxe" })).toHaveAttribute(
+      "href",
+      "/libraries/1/books/7/files/42",
+    );
+  });
+
   it("renders each file's Read and Listen action as one named link", () => {
     renderBody({ book: { ...book, files: [epub, m4b] } as Book });
 
-    // Each file row renders a phone and a desktop layout.
-    const reads = screen.getAllByRole("link", { name: "Read" });
-    const listens = screen.getAllByRole("link", { name: "Listen" });
-    expect(reads).toHaveLength(2);
-    expect(listens).toHaveLength(2);
-    for (const read of reads) {
-      expect(read).toHaveAttribute(
-        "href",
-        "/libraries/1/books/7/files/42/read",
-      );
-    }
-    for (const listen of listens) {
-      expect(listen).toHaveAttribute(
-        "href",
-        "/libraries/1/books/7/files/43/read",
-      );
-    }
+    expect(screen.getByRole("link", { name: "Read" })).toHaveAttribute(
+      "href",
+      "/libraries/1/books/7/files/42/read",
+    );
+    const listen = screen.getByRole("link", { name: "Listen" });
+    expect(listen).toHaveAttribute(
+      "href",
+      "/libraries/1/books/7/files/43/read",
+    );
     // A button nested in the link would be a second tab stop with no name.
-    for (const link of [...reads, ...listens]) {
+    for (const link of [screen.getByRole("link", { name: "Read" }), listen]) {
       expect(within(link).queryByRole("button")).toBeNull();
     }
   });
@@ -585,66 +636,115 @@ describe("BookDetailBody without Share Link context", () => {
     renderBody();
 
     expect(screen.getByText("Ada Author").closest("a")).toBeNull();
-    expect(screen.getByText("Great Series").closest("a")).toBeNull();
+    expect(screen.getByText("Great Series #2").closest("a")).toBeNull();
     expect(screen.getByText("Fantasy").closest("a")).toHaveAttribute(
       "href",
       "/libraries/1?genre_ids=4",
     );
   });
 
-  it("keeps the same book menu entries for Books Write", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("puts Edit and Identify in the header and the rest in the menu for Books Write", async () => {
     renderBody();
 
-    await user.click(screen.getByLabelText("Book actions"));
-    const menu = screen.getByRole("menu");
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(
-      within(menu)
-        .getAllByRole("menuitem")
-        .map((item) => item.textContent),
-    ).toEqual([
-      "Edit",
+      screen.getByRole("button", { name: "Identify" }),
+    ).toBeInTheDocument();
+    expect(await menuItems()).toEqual([
+      "Book details",
       "Add to list",
-      "Share",
       "Rescan book",
-      "Identify book",
       "Merge into another book",
       "Delete book",
     ]);
-    expect(within(menu).getAllByRole("separator")).toHaveLength(4);
+    expect(
+      within(screen.getByRole("menu")).getAllByRole("separator"),
+    ).toHaveLength(2);
+  });
+
+  it("keeps Book details and Add to list for a read-only role", async () => {
+    setAuth({ permissions: ["books:read"] });
+    renderBody();
+
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Identify" }),
+    ).not.toBeInTheDocument();
+    expect(await menuItems()).toEqual(["Book details", "Add to list"]);
+  });
+
+  it("shows the library, folder, sort title, and dates in Book details", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({
+      book: {
+        ...book,
+        filepath: "/books/Ada Author/Test Book",
+        sort_title: "Test Book, The",
+        library: { id: 1, name: "Main" },
+      } as Book,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Book actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Book details" }));
+    const dialog = screen.getByRole("dialog", { name: "Book details" });
+    expect(within(dialog).getByText("Main")).toBeInTheDocument();
+    expect(within(dialog).getByText("Test Book, The")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Folder").nextElementSibling,
+    ).toHaveTextContent("/books/Ada Author/Test Book");
+    expect(within(dialog).getByText("Added")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updated")).toBeInTheDocument();
+  });
+
+  it("places the Related panel", () => {
+    renderBody();
+
+    // One beside the header on wide screens, one after the files otherwise.
+    expect(screen.getAllByTestId("related-panel")).toHaveLength(2);
+  });
+
+  it("leaves out the Related panel and its space when no tab has anything", () => {
+    relatedTabs.tabs = [];
+    const { container } = renderBody();
+
+    expect(screen.queryByTestId("related-panel")).not.toBeInTheDocument();
+    expect(container.querySelector("aside")).toBeNull();
   });
 });
 
-describe("BookDetailBody Share entry", () => {
-  const menuItems = async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(screen.getByLabelText("Book actions"));
-    return within(screen.getByRole("menu"))
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent);
-  };
+describe("BookDetailBody at phone width", () => {
+  emulatePhoneWidth();
 
-  it("adds Share after Add to list when sharing is enabled", async () => {
+  it("keeps the header buttons' names, where their labels hide", () => {
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    expect(await menuItems()).toEqual([
-      "Edit",
-      "Add to list",
-      "Share",
-      "Rescan book",
-      "Identify book",
-      "Merge into another book",
-      "Delete book",
-    ]);
+    for (const name of ["Edit", "Identify", "Share"]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+});
+
+describe("BookDetailBody Share button", () => {
+  it("shows Share when sharing is enabled", () => {
+    sharing.settings = { enabled: true, require_expiration: false };
+    renderBody();
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
   });
 
-  it("shows the menu with Share and Add to list for Shares Write without Books Write", async () => {
+  it("shows Share but not Edit or Identify for Shares Write without Books Write", async () => {
     setAuth({ permissions: ["books:read", "shares:read", "shares:write"] });
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    expect(await menuItems()).toEqual(["Add to list", "Share"]);
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+    expect(await menuItems()).toEqual(["Book details", "Add to list"]);
   });
 
   it("offers Share while sharing is disabled so links can be revoked", async () => {
@@ -652,8 +752,7 @@ describe("BookDetailBody Share entry", () => {
     setAuth({ permissions: ["books:read", "shares:read", "shares:write"] });
     renderBody();
 
-    expect(await menuItems()).toEqual(["Add to list", "Share"]);
-    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Share" }));
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
@@ -671,8 +770,9 @@ describe("BookDetailBody Share entry", () => {
     sharing.settings = undefined;
     renderBody();
 
-    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
-    expect(screen.getByTestId("add-to-list")).toHaveTextContent("Add to list");
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides Share without a shares permission", () => {
@@ -680,7 +780,9 @@ describe("BookDetailBody Share entry", () => {
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    expect(screen.queryByText("Share")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the dialog with the form, the policy, and the settings link for Config Write", async () => {
@@ -689,8 +791,7 @@ describe("BookDetailBody Share entry", () => {
     sharing.settings = { enabled: true, require_expiration: true };
     renderBody();
 
-    await user.click(screen.getByLabelText("Book actions"));
-    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Share" }));
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
@@ -709,8 +810,7 @@ describe("BookDetailBody Share entry", () => {
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    await user.click(screen.getByLabelText("Book actions"));
-    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Share" }));
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
@@ -729,8 +829,7 @@ describe("BookDetailBody Share entry", () => {
     sharing.settings = { enabled: true, require_expiration: false };
     renderBody();
 
-    await user.click(screen.getByLabelText("Book actions"));
-    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Share" }));
 
     expect(
       JSON.parse(screen.getByTestId("share-dialog").textContent ?? ""),
@@ -745,56 +844,112 @@ describe("BookDetailBody Share entry", () => {
 });
 
 describe("BookDetailBody file rows", () => {
-  it("names the details toggle and reports its state", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderBody();
-
-    const toggle = screen.getByRole("button", { name: "Show file details" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(toggle);
-    expect(
-      screen.getByRole("button", { name: "Hide file details" }),
-    ).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("selects files with labeled checkboxes", async () => {
+  it("edits a file from its own button, as the book has", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBody({ book: { ...book, files: [epub, m4b] } });
 
-    await user.click(screen.getByRole("button", { name: "Select" }));
-    const checkboxes = screen.getAllByRole("checkbox", { name: /^Select / });
-    expect(checkboxes).toHaveLength(2);
+    await user.click(screen.getAllByRole("button", { name: "Edit file" })[1]);
 
-    await user.click(checkboxes[0]);
-    expect(checkboxes[0]).toBeChecked();
-    expect(checkboxes[1]).not.toBeChecked();
-    expect(screen.getByText("1 file selected")).toBeInTheDocument();
+    expect(screen.getByTestId("file-edit-dialog")).toHaveTextContent("43");
+  });
+
+  it("opens a file's details from its menu", async () => {
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          {
+            ...epub,
+            filepath: "/books/Test Book/test.epub",
+            identifiers: [{ id: 1, type: "isbn_13", value: "9780000000001" }],
+          } as File,
+        ],
+      },
+    });
+
+    const dialog = await openFileDetails();
+    expect(within(dialog).getByText("Tor Books").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1/publishers/5",
+    );
+    expect(
+      within(dialog).getByText("/books/Test Book/test.epub"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("9780000000001")).toBeInTheDocument();
   });
 
   it("says Yes for an abridged file instead of repeating the label", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBody({ book: { ...book, files: [{ ...epub, abridged: true }] } });
 
-    await user.click(screen.getByRole("button", { name: "Show file details" }));
-    const label = screen.getByText("Abridged");
+    const dialog = await openFileDetails();
+    const label = within(dialog).getByText("Abridged");
     expect(label.nextElementSibling).toHaveTextContent("Yes");
   });
 
   it("says No for an unabridged audiobook", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBody({ book: { ...book, files: [{ ...m4b, abridged: false }] } });
 
-    await user.click(screen.getByRole("button", { name: "Show file details" }));
-    const label = screen.getByText("Abridged");
+    const dialog = await openFileDetails();
+    const label = within(dialog).getByText("Abridged");
     expect(label.nextElementSibling).toHaveTextContent("No");
   });
 
-  it.each<[string, Rule[] | undefined, string]>([
-    ["without rules", undefined, "/api/books/files/42/download"],
+  it("shows a file's cover large from its row", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          { ...epub, display_name: "Deluxe", cover_image_filename: "c.jpg" },
+        ],
+      } as Book,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "View cover of Deluxe" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Deluxe" });
+    expect(within(dialog).getByAltText("Deluxe cover")).toBeInTheDocument();
+  });
+
+  it("offers no cover view for a file without a cover", () => {
+    renderBody();
+
+    expect(
+      screen.queryByRole("button", { name: /^View cover of/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("moves a main file but not a supplement from its menu", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const supplement = {
+      ...epub,
+      id: 44,
+      file_type: "pdf",
+      file_role: "supplement",
+    } as File;
+    renderBody({ book: { ...book, files: [epub, supplement] } });
+
+    const [main, extra] = screen.getAllByRole("button", {
+      name: "File actions",
+    });
+    await user.click(main);
+    expect(
+      screen.getByRole("menuitem", { name: "Move to another book" }),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(extra);
+    expect(
+      screen.queryByRole("menuitem", { name: "Move to another book" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each<[string, Rule[] | undefined, string, string]>([
+    ["without rules", undefined, "CBZ", "/api/books/files/42/download"],
     [
       "under rules that deliver CBZ as itself",
       [{ source_file_type: "cbz", delivered_file_type: "cbz" }],
+      "CBZ",
       "/api/books/files/42/download",
     ],
     [
@@ -803,29 +958,73 @@ describe("BookDetailBody file rows", () => {
         { source_file_type: "epub", delivered_file_type: "epub" },
         { source_file_type: "cbz", delivered_file_type: "epub" },
       ],
+      "EPUB",
       "/api/books/files/42/download/epub",
     ],
-  ])("downloads a CBZ from the main button %s", async (_, rules, endpoint) => {
+  ])(
+    "downloads a CBZ from the main button %s",
+    async (_, rules, label, endpoint) => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+      vi.stubGlobal("fetch", fetchMock);
+      const assign = vi.fn();
+      vi.stubGlobal("location", { ...window.location, assign });
+      delivery.rules = rules;
+      const cbz = {
+        ...epub,
+        file_type: "cbz",
+        reachable_file_types: ["cbz", "kepub", "epub"],
+      } as File;
+      renderBody({ book: { ...book, files: [cbz] } });
+
+      // The main button names the File Type it delivers.
+      await user.click(
+        screen.getByRole("button", { name: `Download ${label}` }),
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        endpoint,
+        expect.objectContaining({ method: "HEAD" }),
+      );
+      expect(assign).toHaveBeenCalledWith(endpoint);
+    },
+  );
+
+  it("offers the unmodified file when a download fails", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
-    vi.stubGlobal("fetch", fetchMock);
     const assign = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign });
-    delivery.rules = rules;
-    const cbz = {
-      ...epub,
-      file_type: "cbz",
-      reachable_file_types: ["cbz", "kepub", "epub"],
-    } as File;
-    renderBody({ book: { ...book, files: [cbz] } });
-
-    await user.click(screen.getAllByRole("button", { name: "Download" })[0]);
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      endpoint,
-      expect.objectContaining({ method: "HEAD" }),
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 422 }))
+        .mockResolvedValueOnce(
+          Response.json(
+            {
+              error: {
+                code: "invalid_state",
+                message: "Cannot write metadata",
+              },
+            },
+            { status: 422 },
+          ),
+        ),
     );
-    expect(assign).toHaveBeenCalledWith(endpoint);
+    renderBody();
+
+    await user.click(screen.getByRole("button", { name: "Download EPUB" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download Failed",
+    });
+    expect(dialog).toHaveTextContent("without the metadata Shisho writes");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Download unmodified file" }),
+    );
+
+    expect(assign).toHaveBeenCalledWith(
+      expect.stringContaining("/api/books/files/42/download/original"),
+    );
   });
 
   it("disables the main button until the Delivery Rules load", () => {
@@ -833,11 +1032,9 @@ describe("BookDetailBody file rows", () => {
     renderBody({ book: { ...book, files: [epub] } });
 
     expect(
-      screen.getAllByRole("button", { name: "Download" })[0],
+      screen.getByRole("button", { name: "Download EPUB" }),
     ).toBeDisabled();
-    expect(
-      screen.getAllByRole("button", { name: "Download as" })[0],
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Download as" })).toBeEnabled();
   });
 
   it("downloads a CBZ as EPUB from the download menu", async () => {
@@ -854,18 +1051,20 @@ describe("BookDetailBody file rows", () => {
     } as File;
     renderBody({ book: { ...book, files: [cbz] } });
 
-    await user.click(screen.getAllByRole("button", { name: "Download as" })[0]);
+    await user.click(screen.getByRole("button", { name: "Download as" }));
     expect(
       within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
         .map((item) => item.getAttribute("aria-label")),
     ).toEqual([
-      "Download Deluxe as CBZ",
-      "Download Deluxe as KePub",
-      "Download Deluxe as EPUB",
+      "Download Deluxe as CBZ (original)",
+      "Download Deluxe as KePub (converted)",
+      "Download Deluxe as EPUB (converted)",
     ]);
     await user.click(
-      screen.getByRole("menuitem", { name: "Download Deluxe as EPUB" }),
+      screen.getByRole("menuitem", {
+        name: "Download Deluxe as EPUB (converted)",
+      }),
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -875,13 +1074,41 @@ describe("BookDetailBody file rows", () => {
     expect(assign).toHaveBeenCalledWith("/api/books/files/42/download/epub");
   });
 
+  it("tells audiobooks apart by bitrate and leaves the language and filename to File details", () => {
+    renderBody({
+      book: {
+        ...book,
+        files: [
+          {
+            ...m4b,
+            audiobook_duration_seconds: 31440,
+            audiobook_bitrate_bps: 64000,
+            release_date: "2015-01-01T00:00:00Z",
+            language: "en",
+            filepath: "/books/Test Book/Test Book {Reader}.m4b",
+            display_name: "Test Book",
+          },
+        ],
+      } as Book,
+    });
+
+    // The year reads in UTC, so January 1 stays in 2015 west of UTC.
+    expect(
+      screen.getByText("8h 44m · 64 kbps · 2015 · 1.95 KB"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/English/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Test Book {Reader}.m4b"),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses the singular for a one-page file", () => {
     renderBody({
       book: { ...book, files: [{ ...epub, file_type: "cbz", page_count: 1 }] },
     });
 
-    expect(screen.getAllByText("1 page").length).toBeGreaterThan(0);
-    expect(screen.queryByText("1 pages")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 page\b/)).toBeInTheDocument();
+    expect(screen.queryByText(/1 pages/)).not.toBeInTheDocument();
   });
 });
 
@@ -897,6 +1124,7 @@ describe("BookDetailBody supplement names", () => {
     filesize_bytes: 500,
     name: "Original Title",
     display_name: "The Lighthouse Keeper.pdf",
+    reachable_file_types: ["pdf"],
   } as unknown as File;
 
   it("labels a supplement with the server's display name, not its stale stored name", () => {
@@ -917,20 +1145,67 @@ describe("BookDetailBody supplement names", () => {
   });
 });
 
-describe("BookDetailBody review toggle", () => {
-  afterEach(() => {
-    review.mutate = undefined;
-  });
+describe("BookDetailBody review badge", () => {
+  const needsReview = (overrides: Partial<File> = {}) =>
+    ({ ...epub, reviewed: false, ...overrides }) as File;
 
-  it("toasts when the review change fails", async () => {
-    const error = vi.spyOn(toast, "error");
-    review.mutate = rejectingMutate();
+  it("shows no badge on a reviewed book", () => {
     renderBody();
 
-    await userEvent.click(screen.getByRole("switch"));
+    expect(screen.queryByText("Needs review")).not.toBeInTheDocument();
+  });
 
-    expect(review.mutate).toHaveBeenCalled();
-    expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
+  it("says what the book and its files are missing", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    review.criteria = {
+      book_fields: ["description", "language"],
+      audio_fields: [],
+    };
+    renderBody({
+      book: {
+        ...book,
+        files: [needsReview({ display_name: "Deluxe" })],
+      } as Book,
+    });
+
+    await user.hover(screen.getByRole("button", { name: "Needs review" }));
+    act(() => vi.advanceTimersByTime(800));
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Book: missing description");
+    expect(tooltip).toHaveTextContent("Deluxe: missing language");
+  });
+
+  it("opens the book editor when a book field is missing", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    review.criteria = { book_fields: ["description"], audio_fields: [] };
+    renderBody({ book: { ...book, files: [needsReview()] } });
+
+    await user.click(screen.getByRole("button", { name: "Needs review" }));
+
+    expect(screen.getByTestId("book-edit-dialog")).toBeInTheDocument();
+  });
+
+  it("opens the file's editor when only a file field is missing", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    review.criteria = { book_fields: ["language"], audio_fields: [] };
+    renderBody({ book: { ...book, files: [needsReview()] } });
+
+    await user.click(screen.getByRole("button", { name: "Needs review" }));
+
+    expect(screen.getByTestId("file-edit-dialog")).toHaveTextContent("42");
+    expect(screen.queryByTestId("book-edit-dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens no editor for a role without Books Write", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    setAuth({ permissions: ["books:read"] });
+    review.criteria = { book_fields: ["description"], audio_fields: [] };
+    renderBody({ book: { ...book, files: [needsReview()] } });
+
+    await user.click(screen.getByRole("button", { name: "Needs review" }));
+
+    expect(screen.queryByTestId("book-edit-dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -994,53 +1269,5 @@ describe("BookDetailBody rescans that remove the book", () => {
     await user.click(screen.getByRole("button", { name: "Rescan" }));
 
     expect(await screen.findByText("Home page")).toBeInTheDocument();
-  });
-});
-
-describe("BookDetailBody cover gallery", () => {
-  const withCover = (id: number, fileType: string, preferred = false): File =>
-    ({
-      ...epub,
-      id,
-      file_type: fileType,
-      cover_image_filename: `${fileType}.cover.jpg`,
-      is_preferred_cover: preferred,
-    }) as File;
-
-  const pressedTab = () =>
-    screen
-      .getAllByRole("button", { pressed: true })
-      .map((button) => button.textContent);
-
-  it("opens on the file whose cover represents the book", () => {
-    renderBody({
-      book: { ...book, files: [withCover(50, "mobi"), withCover(51, "azw3")] },
-    });
-
-    expect(pressedTab()).toEqual(["AZW3"]);
-  });
-
-  it("opens on the file the server names for a Share Link recipient", () => {
-    // A recipient's payload has no cover filenames, so the page cannot pick
-    // the cover file itself.
-    const blanked = (id: number, fileType: string) =>
-      ({ ...withCover(id, fileType), cover_image_filename: undefined }) as File;
-    renderBody({
-      book: { ...book, files: [blanked(50, "azw3"), blanked(51, "mobi")] },
-      shareLink: { ...shareLink, coverFileId: 51 },
-    });
-
-    expect(pressedTab()).toEqual(["MOBI"]);
-  });
-
-  it("opens on the Preferred Cover file", () => {
-    renderBody({
-      book: {
-        ...book,
-        files: [withCover(50, "azw3"), withCover(51, "mobi", true)],
-      },
-    });
-
-    expect(pressedTab()).toEqual(["MOBI"]);
   });
 });

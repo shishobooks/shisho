@@ -55,6 +55,7 @@ const shared = {
       name: "The Shared Book",
       reachable_file_types: ["epub", "kepub"],
       is_preferred_cover: false,
+      cover_mime_type: "image/jpeg",
     },
   ],
   shared_by: "sharer",
@@ -94,6 +95,25 @@ afterEach(() => {
 });
 
 describe("SharedBook", () => {
+  it("offers a file's cover only when the file has one", async () => {
+    const coverless = {
+      ...shared.files[0],
+      id: 43,
+      file_type: "pdf",
+      cover_mime_type: null,
+    };
+    respondWith(200, { ...shared, files: [coverless, shared.files[0]] });
+    renderPage();
+
+    await screen.findByRole("heading", { name: "The Shared Book" });
+    expect(
+      screen.getByRole("button", { name: "View cover of EPUB" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "View cover of PDF" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the book with who shared it and when the link expires", async () => {
     respondWith(200, shared);
     renderPage();
@@ -125,10 +145,10 @@ describe("SharedBook", () => {
       "src",
       `/api/share/${TOKEN}/files/42/cover?v=${Date.parse("2026-09-02T00:00:00Z")}&size=512&aspect=book&r=2`,
     );
-    // The file row renders its download button once per layout breakpoint.
+    // The file's download button names the format it delivers.
     expect(
-      screen.getAllByRole("button", { name: "Download" }).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("button", { name: "Download EPUB" }),
+    ).toBeInTheDocument();
   });
 
   it("offers every File Type a file can become, each from the public endpoint", async () => {
@@ -150,15 +170,15 @@ describe("SharedBook", () => {
         .getAllByRole("menuitem")
         .map((item) => item.getAttribute("aria-label")),
     ).toEqual([
-      "Download The Shared Book as CBZ",
-      "Download The Shared Book as KePub",
-      "Download The Shared Book as EPUB",
+      "Download The Shared Book as CBZ (original)",
+      "Download The Shared Book as KePub (converted)",
+      "Download The Shared Book as EPUB (converted)",
     ]);
 
     fetchMock.mockResolvedValue(new Response(null));
     await user.click(
       screen.getByRole("menuitem", {
-        name: "Download The Shared Book as EPUB",
+        name: "Download The Shared Book as EPUB (converted)",
       }),
     );
     expect(fetchMock).toHaveBeenLastCalledWith(

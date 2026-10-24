@@ -113,7 +113,7 @@ describe("book save failures", () => {
           "Edited title",
         );
         if (path.endsWith("/review"))
-          await user.click(screen.getByRole("switch"));
+          await user.click(screen.getByRole("checkbox", { name: "Reviewed" }));
         await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
         expect(await screen.findByRole("alert")).toHaveTextContent(message);
@@ -124,7 +124,9 @@ describe("book save failures", () => {
           "Edited title",
         );
         if (path.endsWith("/review"))
-          expect(screen.getByRole("switch")).toBeChecked();
+          expect(
+            screen.getByRole("checkbox", { name: "Reviewed" }),
+          ).toBeChecked();
 
         fail = false;
         await user.click(screen.getByRole("button", { name: "Save Changes" }));

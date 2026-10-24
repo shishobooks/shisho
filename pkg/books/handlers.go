@@ -1722,7 +1722,7 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 	if err != nil {
 		// A type with no generator, a file Shisho cannot decrypt, and a file
 		// whose earlier build failed partway (logged when it happened), are
-		// ones the user can work around with Download Original (422); any
+		// ones the user can work around with Download unmodified file (422); any
 		// other generation failure, a failed Conversion included, is a
 		// server fault. Device routes fall back to the original for a File's
 		// own File Type instead (ResolveFallbackDownload), since a device has

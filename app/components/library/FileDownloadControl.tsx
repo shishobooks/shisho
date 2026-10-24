@@ -57,21 +57,26 @@ const FileDownloadControl = ({
     return null;
   }
 
+  // The button shows the format; its name adds the action around the visible
+  // text, so it reads "Download EPUB" and still contains what is on screen.
+  const label = (fileType: string) => (
+    <>
+      <Download aria-hidden="true" className="h-3.5 w-3.5" />
+      {fileTypeLabel(fileType)}
+    </>
+  );
+
   if (isSupplement) {
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label="Download"
-            onClick={onDownloadOriginal}
-            size="sm"
-            variant="ghost"
-          >
-            <Download className="h-3 w-3" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Download</TooltipContent>
-      </Tooltip>
+      <Button
+        aria-label={`Download ${fileTypeLabel(file.file_type)}`}
+        className="gap-1.5"
+        onClick={onDownloadOriginal}
+        size="sm"
+        variant="outline"
+      >
+        {label(file.file_type)}
+      </Button>
     );
   }
 
@@ -115,13 +120,20 @@ const FileDownloadControl = ({
         </DropdownMenuLabel>
         {file.reachable_file_types.map((fileType) => {
           const label = fileTypeLabel(fileType);
+          // Marks which entry is the file's own File Type and which is a
+          // Conversion. "Original" names the type, not the Original File:
+          // both entries download a Generated File.
+          const kind = fileType === file.file_type ? "original" : "converted";
           return (
             <DropdownMenuItem
-              aria-label={`Download ${title} as ${label}`}
+              aria-label={`Download ${title} as ${label} (${kind})`}
               key={fileType}
               onSelect={() => onDownloadAs(fileType)}
             >
               {label}
+              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                {kind}
+              </span>
             </DropdownMenuItem>
           );
         })}
@@ -129,35 +141,28 @@ const FileDownloadControl = ({
     </DropdownMenu>
   );
 
+  // A split button: the main part names the File Type it delivers, which
+  // varies by file and by Delivery Rules, and the arrow offers the rest.
   return (
     <div className="flex items-center">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label="Download"
-            className="rounded-r-none pr-1.5"
-            disabled={deliveredFileType === undefined}
-            onClick={onDownload}
-            size="sm"
-            variant="ghost"
-          >
-            <Download className="h-3 w-3" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {deliveredFileType === undefined
-            ? "Download"
-            : `Download as ${fileTypeLabel(deliveredFileType)}`}
-        </TooltipContent>
-      </Tooltip>
+      <Button
+        aria-label={`Download ${fileTypeLabel(deliveredFileType ?? file.file_type)}`}
+        className="gap-1.5 rounded-r-none"
+        disabled={deliveredFileType === undefined}
+        onClick={onDownload}
+        size="sm"
+        variant="outline"
+      >
+        {label(deliveredFileType ?? file.file_type)}
+      </Button>
       {menu(
         <Button
           aria-label="Download as"
-          className="rounded-l-none px-1"
+          className="rounded-l-none border-l-0 px-1.5"
           size="sm"
-          variant="ghost"
+          variant="outline"
         >
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-3.5 w-3.5" />
         </Button>,
         "Download as",
       )}

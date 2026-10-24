@@ -622,7 +622,7 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 
 // A PDF that needs a password to open cannot get Shisho's metadata: device
 // routes serve the Original File, and web UI routes answer with an
-// invalid_state error the download dialog shows beside Download Original,
+// invalid_state error the download dialog shows beside Download unmodified file,
 // not a server error.
 func TestGeneratedDownload_PasswordProtectedPDF(t *testing.T) {
 	t.Parallel()

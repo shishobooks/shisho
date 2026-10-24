@@ -61,12 +61,13 @@ test.describe("Device Delivery Rules", () => {
     await page.waitForURL(/\/admin\/libraries|\/libraries\//);
   }
 
+  // Opens the book page on its Devices tab.
   const bookPage = (page: Page) =>
-    page.goto(`/libraries/${libraryId}/books/${bookId}`, {
+    page.goto(`/libraries/${libraryId}/books/${bookId}?related=devices`, {
       waitUntil: "domcontentloaded",
     });
 
-  // The Device's row in the book page's "On your Devices" panel.
+  // The Device's row in the book page's Devices tab.
   const panelRow = (page: Page) =>
     page.getByRole("listitem", { name: DEVICE, exact: true });
 

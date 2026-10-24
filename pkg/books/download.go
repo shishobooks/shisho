@@ -74,7 +74,7 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 // for the file as its own File Type: the Generated File, or the Original
 // File when generation is not possible, since a failed generation of a
 // File's own File Type only loses Shisho's metadata. A device or a Share
-// recipient has no Download Original to turn to, so a supplement, a type
+// recipient has no Download unmodified file to turn to, so a supplement, a type
 // with no generator (filegen.ErrNotImplemented), and any other
 // filegen.GenerationError get the original. The exceptions are a permission
 // error and a canceled or timed-out request, which are faults the original
@@ -85,7 +85,7 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 // Nothing falls back from a Conversion: a channel delivering another File
 // Type uses ResolveDeliveryDownload, and a download menu entry
 // GeneratedDownload. The web app's download routes do not fall back either:
-// a browser user sees the error and has Download Original.
+// a browser user sees the error and has Download unmodified file.
 func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {

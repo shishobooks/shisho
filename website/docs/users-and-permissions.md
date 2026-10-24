@@ -45,10 +45,10 @@ Some reads follow the data they return rather than the page that shows it:
 
 - A list's books need Books Read, like other book data. See [Lists](./lists.md#permissions) for what lists allow without role permissions.
 - Global search results follow the permission for each result type. See [Search](./browsing-search-bulk-actions.md#search).
-- The review criteria can be read with Books Read, for the review panel on book pages, or with Config Read, for **Administration > Review Criteria**. Changing them requires Config Write.
+- The review criteria can be read with Books Read, for the **Needs review** badge on book pages, or with Config Read, for **Administration > Review Criteria**. Changing them requires Config Write.
 - The plugin order under **Administration > Plugins** needs Books Read as well as Config Read. See [Plugins](./plugins/overview.md#open-the-plugin-manager) for the plugin manager's other permissions.
 
-Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role. Shares permissions and library access are all the server checks; they do not depend on Books Read. The **Share** entry lives on the book page, though, and opening a book page needs Books Read.
+Share Links are managed with Shares permissions. Granting Shares Write lets a user expose books to people outside your server, so review [Sharing](./sharing.md) before adding it to a role. Shares permissions and library access are all the server checks; they do not depend on Books Read. The **Share** button lives on the book page, though, and opening a book page needs Books Read.
 
 The server log under **Administration > Logs** requires Config Read. Live log updates follow the same rule, so users without Config Read never receive server log lines.
 
@@ -59,7 +59,7 @@ A user whose role has Read but not Write for a resource does not see the control
 With the built-in **viewer** role, or any role without Books Write, Series Write, or People Write:
 
 - Book tiles in the gallery show no actions menu (rescan, identify, delete). **Add to list** stays available.
-- The book page shows no edit, rescan, identify, merge, or delete actions, no per-file actions menu, and no file selection for moving files. The review panel shows the current state without a toggle. Reading, listening, downloading, and **Add to list** remain.
+- The book page shows no **Edit**, **Identify**, rescan, merge, or delete actions, and a file's actions menu offers only **File details**. The **Needs review** badge still says what is missing but opens no editor. Reading, listening, downloading, and **Add to list** remain.
 - The file page shows no **Edit** or **Delete** buttons, and the chapters tab offers no chapter editing.
 - Series, person, genre, tag, and publisher pages show no **Edit**, **Merge**, or **Delete** buttons.
 - Selection mode still works for adding books to lists, and for downloads when the role has the [bulk download permissions](./browsing-search-bulk-actions.md#bulk-download-permissions). **Merge**, **Delete**, and the review actions are hidden.
@@ -186,7 +186,7 @@ Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules),
 
 Under the rules, the Device's page previews how many books in its scope the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
 
-Each book's page has an **On your Devices** panel with a row for each of your Devices: the file type each of the book's files goes out as, such as EPUB to KePub, or why it receives nothing, such as no rule for the book's file types or the book being outside its scope. For a Kobo, the row also warns when its next sync would move the book to a different edition or switch it between KePub and EPUB.
+The **Devices** tab on each book's page has a row for each of your Devices: the file type each of the book's files goes out as, such as EPUB to KePub, or why it receives nothing, such as no rule for the book's file types or the book being outside its scope. For a Kobo, the row also warns when its next sync would move the book to a different edition or switch it between KePub and EPUB.
 
 ### Delete a Device
 

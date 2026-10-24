@@ -97,18 +97,17 @@ test.describe("Book detail overflow", () => {
       waitUntil: "domcontentloaded",
     });
 
-    // Wait for the file row to render. The Files heading only appears once the
+    // Wait for the file row to render. The files heading only appears once the
     // book data resolves, which guarantees the stats/actions row is present.
     await expect(
-      page.getByRole("heading", { name: "Files (1)", exact: true }),
+      page.getByRole("heading", { name: "1 file", exact: true }),
     ).toBeVisible();
 
-    // The audiobook stat payload must actually render. Otherwise the overflow
+    // The audiobook's stats must actually render. Otherwise the overflow
     // check below could pass for the wrong reason (no stats means nothing wide
-    // enough to overflow). The mobile stats row renders the bitrate inline from
-    // audiobook_bitrate_bps, so assert the visible copy is present.
+    // enough to overflow). The row's facts line carries the duration.
     await expect(
-      page.getByText("128 kbps").filter({ visible: true }),
+      page.getByText(/8h 44m/).filter({ visible: true }),
     ).toBeVisible();
 
     // The document must not be scrollable horizontally.

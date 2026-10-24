@@ -109,8 +109,7 @@ test.describe("Share Links", () => {
     await page.goto(`/libraries/${libraryId}/books/${bookId}`, {
       waitUntil: "domcontentloaded",
     });
-    await page.getByLabel("Book actions").click();
-    await page.getByRole("menuitem", { name: "Share", exact: true }).click();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Share", exact: true });
     await dialog.getByLabel("Label (optional)").fill("for the e2e test");
     await dialog.getByRole("button", { name: "Create link" }).click();
@@ -154,8 +153,7 @@ test.describe("Share Links", () => {
 
       const downloadPromise = recipient.waitForEvent("download");
       await recipient
-        .getByRole("button", { name: "Download", exact: true })
-        .filter({ visible: true })
+        .getByRole("button", { name: /^Download [A-Z]/ })
         .first()
         .click();
       const download = await downloadPromise;
@@ -165,8 +163,7 @@ test.describe("Share Links", () => {
       // Reopening the dialog shows the recipient's open and download.
       await page.keyboard.press("Escape");
       await expect(dialog).toBeHidden();
-      await page.getByLabel("Book actions").click();
-      await page.getByRole("menuitem", { name: "Share", exact: true }).click();
+      await page.getByRole("button", { name: "Share", exact: true }).click();
       await expect(row).toContainText("1 open · 1 download");
       await expect(row).toContainText("Last used");
 
@@ -226,7 +223,7 @@ test.describe("Share Links", () => {
       expect(overflow).toBeLessThanOrEqual(0);
       await expect(
         recipient
-          .getByRole("button", { name: "Download", exact: true })
+          .getByRole("button", { name: /^Download [A-Z]/ })
           .filter({ visible: true }),
       ).not.toHaveCount(0);
 

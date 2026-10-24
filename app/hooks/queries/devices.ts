@@ -8,6 +8,7 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
+  Book,
   BookDevice,
   DeliveryPreviewQuery,
   DeliveryPreviewResponse,
@@ -207,15 +208,21 @@ export const fetchDeliveryPreview = (
   });
 
 // What each of the caller's Devices gets of a book. Like the preview, it
-// depends on what a Kobo last synced, so it is refetched when shown.
-// filesKey describes the book's Files, so a change to them, from this page
-// or a scan, refetches it along with the book.
-export const useBookDevices = (bookId: number, filesKey: string) => {
+// depends on what a Kobo last synced, so it is refetched when shown. What a
+// Device gets follows the book's Files, so the key describes them: a File
+// added, removed, or moved, from the book page or a scan, refetches it.
+export const useBookDevices = (
+  book: Pick<Book, "id" | "files">,
+  options: { enabled?: boolean } = {},
+) => {
+  const filesKey = (book.files ?? [])
+    .map((f) => `${f.id}:${f.file_type}:${f.file_role}`)
+    .join(",");
   return useQuery<BookDevice[], ShishoAPIError>({
-    enabled: useRequires("books:read"),
+    enabled: useRequires("books:read", options.enabled ?? true),
     staleTime: 0,
-    queryKey: [QueryKey.BookDevices, bookId, filesKey],
+    queryKey: [QueryKey.BookDevices, book.id, filesKey],
     queryFn: ({ signal }) =>
-      API.request("GET", `/books/${bookId}/devices`, null, null, signal),
+      API.request("GET", `/books/${book.id}/devices`, null, null, signal),
   });
 };

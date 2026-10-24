@@ -24,7 +24,7 @@ Both also require access to the book's library. To let other users share books, 
 
 ## Creating a Link
 
-Users with Shares Read or Shares Write see a **Share** entry in a book's action menu (the **⋮** button next to the title). It appears even for users who cannot edit the book. Choosing it opens the Share dialog.
+Users with Shares Read or Shares Write see a **Share** button on a book's page, beside **Edit** and **Identify**. It appears even for users who cannot edit the book. Selecting it opens the Share dialog.
 
 With sharing turned on, users with Shares Write see a form at the top of the dialog:
 
@@ -87,7 +87,7 @@ A recipient opens the link in any browser, on a phone or a computer, without sig
 - The book's cover, title, subtitle, authors, series, description, genres, and tags.
 - Each of the book's files with a download button, including supplements, and beside each main file's button a **Download as** menu. A file's details show its publisher, release date, language, and, for audiobooks, whether it is abridged.
 
-The download button sends the file in its own format (EPUB, KePub, AZW3, MOBI, CBZ, PDF, or M4B) with the book's metadata written into it, whatever the sharer's [Delivery Rules](./supported-formats.md#delivery-rules) say. The **Download as** menu lists every file type the file can become, its own first, such as KePub or EPUB for a CBZ; see [Conversions](./supported-formats.md#conversions). Supplements download as they are. If Shisho cannot write metadata into the file in its own format, for example a format only a plugin can read or a damaged file, the recipient gets the original file. A file type picked from **Download as** that fails to generate gets an error instead, never a different file type. Recipients cannot download the file exactly as it is on disk, read or listen in the browser, or follow links into the rest of your server. Names such as authors and series are plain text.
+The download button sends the file in its own format (EPUB, KePub, AZW3, MOBI, CBZ, PDF, or M4B) with the book's metadata written into it, whatever the sharer's [Delivery Rules](./supported-formats.md#delivery-rules) say. The **Download as** menu lists every file type the file can become, its own first, such as KePub or EPUB for a CBZ; see [Conversions](./supported-formats.md#conversions). Supplements download as they are. If Shisho cannot write metadata into the file in its own format, for example a format only a plugin can read or a damaged file, the recipient gets the unmodified file. A file type picked from **Download as** that fails to generate gets an error instead, never a different file type. Recipients cannot download the file exactly as it is on disk, read or listen in the browser, or follow links into the rest of your server. Names such as authors and series are plain text.
 
 The page never shows file paths or other details about how your server is laid out. It also leaves out what only matters inside your library: the sort title, when the book was added and last updated, file identifiers, and file URLs. The downloaded file itself still contains the book's full metadata, including identifiers such as the ISBN.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatSeriesNumber } from "./seriesNumber";
+import { formatSeriesNumber, seriesNumberLabel } from "./seriesNumber";
 
 describe("formatSeriesNumber", () => {
   it("renders a bare range", () => {
@@ -37,5 +37,21 @@ describe("formatSeriesNumber", () => {
 
   it("formats fractional", () => {
     expect(formatSeriesNumber(7.5, null, "chapter", "cbz")).toBe("Ch. 7.5");
+  });
+});
+
+describe("seriesNumberLabel", () => {
+  it("marks a bare number with #", () => {
+    expect(seriesNumberLabel(5, null, null, "epub")).toBe("#5");
+    expect(seriesNumberLabel(1, 3, null, null)).toBe("#1-3");
+  });
+
+  it("leaves a comic's volume or chapter as it is", () => {
+    expect(seriesNumberLabel(5, null, "volume", "cbz")).toBe("Vol. 5");
+    expect(seriesNumberLabel(42, null, "chapter", "cbz")).toBe("Ch. 42");
+  });
+
+  it("is empty without a number", () => {
+    expect(seriesNumberLabel(null, null, null, "cbz")).toBe("");
   });
 });

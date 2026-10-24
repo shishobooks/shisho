@@ -122,7 +122,9 @@ Review state is tracked per main file. A book is **Reviewed** only when all of i
 
 Automatic review checks the fields configured under **Administration > Review Criteria**. Defaults require authors, description, cover, and genres for every main file, plus narrators for M4B files. Adding a missing required value can mark the file reviewed, and removing one can return it to needs review.
 
-A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review state from **Review Criteria**.
+On a book's page, a **Needs review** badge on the cover lists what is missing when you hover over it. Select it to open the editor that can fill the gap: the book's when a book field is missing, otherwise the file's.
+
+To set review state by hand, check or uncheck **Reviewed** under **Review** in **Edit**. A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review state from **Review Criteria**.
 
 Use the gallery's **Review state** filter to work through the queue. Bulk selection offers **Mark reviewed** and **Mark needs review**.
 
@@ -130,7 +132,7 @@ Use the gallery's **Review state** filter to work through the queue. Bulk select
 
 A file's **Chapters** tab lists the chapters a scan found, and a user whose role has Books Write can edit them. EPUB, KePub, MOBI, and AZW3 chapters can be renamed and deleted, but not added or reordered. Deleting a chapter also deletes the chapters nested under it. In an EPUB or KePub, a heading is an entry without its own location, such as a part title. If your deletions leave a heading with no chapters under it, **Save** stays disabled until you delete that heading, because downloads would otherwise drop it.
 
-Renamed and deleted EPUB, KePub, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, KePub included for EPUB. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so **Download Original** still has the original table of contents.
+Renamed and deleted EPUB, KePub, MOBI, and AZW3 chapters appear in the web reader's table of contents and in generated downloads of the file, KePub included for EPUB. One exception: for a `.mobi` that holds only an older Mobipocket book, the web reader builds its table of contents from the book's printed contents page, so it shows the chapters as written; the edits are still in the download's table of contents. Downloads keep the book's original table of contents when every chapter is deleted, or when the chapters no longer match it, for example after a sidecar or plugin replaced them. A table of contents printed as a page inside the book's text is left as written. The file on disk is not changed, so the unmodified file still has the original table of contents.
 
 CBZ chapters are written into generated CBZ downloads as folders of pages; see [CBZ Downloads](./supported-formats.md#cbz-downloads).
 
