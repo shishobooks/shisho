@@ -138,6 +138,9 @@ func (p *preparedKindleEPUB) Size() (int64, bool) {
 }
 
 func (p *preparedKindleEPUB) Write(ctx context.Context, w io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return NewGenerationError(models.FileTypeEPUB, err, "generation cancelled")
+	}
 	if err := p.ready(); err != nil {
 		return NewGenerationError(models.FileTypeEPUB, err, err.Error())
 	}

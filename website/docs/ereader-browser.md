@@ -52,7 +52,7 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 
 ## Downloads
 
-What a book's page offers comes from the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), never from the browser. A new Kobo Device follows its preset and gets EPUB and CBZ files as KePub; a Browser Device follows your default rules. Each download is generated with the metadata its file type supports. The first download of some formats shows no progress or size on the device; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
+What a book's page offers comes from the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), never from the browser. A new Kobo Device follows its preset and gets EPUB, CBZ, AZW3, and MOBI files as KePub; a Browser Device follows your default rules. Each download is generated with the metadata its file type supports. The first download of some formats shows no progress or size on the device; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
 
 A download delivered through a [conversion](./supported-formats.md#conversions), such as a KePub made from an EPUB, fails with an error when the conversion fails, for example on a damaged EPUB, and never sends the original file in its place. A file delivered as its own file type still falls back to the original file when Shisho cannot write metadata into it.
 

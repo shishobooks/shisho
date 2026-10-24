@@ -187,6 +187,11 @@ func TestKindleToEPUB_DeclinesUnsupported(t *testing.T) {
 		"HUFF/CDIC":     {huff, "HUFF/CDIC compression"},
 		"embedded font": {font, "embeds fonts"},
 		"DRM":           {drm, "DRM"},
+		"huge image": {func() testgen.MOBIOptions {
+			o := testgen.KF8Sample(testgen.MOBIKindKF8)
+			o.KF8.Images = [][]byte{append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64<<20)...)}
+			return o
+		}(), "image too large"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -197,6 +202,7 @@ func TestKindleToEPUB_DeclinesUnsupported(t *testing.T) {
 			for _, to := range []string{models.FileTypeEPUB, models.FileTypeKePub} {
 				gen := conversionGenerator(t, models.FileTypeAZW3, to)
 				_, err = gen.Prepare(context.Background(), src, &models.Book{Title: "Book"}, &models.File{FileType: models.FileTypeAZW3})
+				require.ErrorIs(t, err, filegen.ErrUnsupportedContent, "the web routes answer it with the reason")
 				var genErr *filegen.GenerationError
 				require.ErrorAs(t, err, &genErr)
 				assert.Equal(t, to, genErr.FileType)

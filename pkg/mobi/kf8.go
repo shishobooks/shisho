@@ -220,11 +220,11 @@ func ReadKF8(ctx context.Context, r io.ReaderAt, size int64) (*KF8, error) {
 			case sub[1] != nil:
 				target = k.hrefs[strings.ToUpper(string(m))]
 			case sub[3] != nil:
-				n, _ := strconv.ParseUint(string(sub[3]), 32, 32)
-				target = embed(n)
+				if n, err := strconv.ParseUint(string(sub[3]), 32, 32); err == nil {
+					target = embed(n)
+				}
 			case sub[4] != nil:
-				n, _ := strconv.ParseUint(string(sub[4]), 32, 32)
-				if n > 0 && n < uint64(len(styleNames)) {
+				if n, err := strconv.ParseUint(string(sub[4]), 32, 32); err == nil && n > 0 && n < uint64(len(styleNames)) {
 					target = styleNames[n]
 				}
 			}
@@ -261,7 +261,7 @@ func ReadKF8(ctx context.Context, r io.ReaderAt, size int64) (*KF8, error) {
 		}
 	}
 	if tooLarge != "" {
-		return nil, errors.Errorf("image %s is too large", tooLarge)
+		return nil, unsupported("it has an image too large to copy (" + tooLarge + ")")
 	}
 	for _, r := range res.all {
 		if used[r.record] {
@@ -622,10 +622,7 @@ func withIDs(doc []byte, tags []startTag, ids map[int]string) []byte {
 		if !ok {
 			continue
 		}
-		name := t.start + 1
-		for name < t.end && !isSpace(doc[name]) && doc[name] != '>' && doc[name] != '/' {
-			name++
-		}
+		name := t.start + nameEnd(doc[t.start:t.end])
 		out.Write(doc[last:name])
 		out.WriteString(` id="` + html.EscapeString(id) + `"`)
 		out.Write(idAttr.ReplaceAll(doc[name:t.end], nil))
@@ -684,16 +681,6 @@ func eachStartTag(doc []byte, fn func(start, end int)) {
 			i = end - 1
 		}
 	}
-}
-
-// anchorAt returns where the start tag a position names begins, and its id
-// or "" when it has none.
-func anchorAt(doc []byte, pos int) (int, string) {
-	t, ok := anchorTag(doc, startTags(doc), pos)
-	if !ok {
-		return -1, ""
-	}
-	return t.start, t.id
 }
 
 // maxNesting caps how many enclosing elements anchorTag looks through for
@@ -761,11 +748,16 @@ func tagID(tag []byte) string {
 
 // tagName returns a start tag's element name, in lower case.
 func tagName(tag []byte) string {
+	return strings.ToLower(string(tag[1:nameEnd(tag)]))
+}
+
+// nameEnd returns where a start tag's element name ends.
+func nameEnd(tag []byte) int {
 	end := 1
 	for end < len(tag) && !isSpace(tag[end]) && tag[end] != '>' && tag[end] != '/' {
 		end++
 	}
-	return strings.ToLower(string(tag[1:end]))
+	return end
 }
 
 func isSpace(c byte) bool {
@@ -782,6 +774,7 @@ func editDocument(doc []byte, editTag, editStyle func([]byte) []byte) []byte {
 	out.Grow(len(doc))
 	last := 0
 	styleEnd := -1
+	closes := styleEndTags(doc)
 	eachStartTag(doc, func(start, end int) {
 		if start < styleEnd {
 			return
@@ -789,15 +782,55 @@ func editDocument(doc []byte, editTag, editStyle func([]byte) []byte) []byte {
 		out.Write(doc[last:start])
 		out.Write(editTag(doc[start:end]))
 		last = end
-		if tagName(doc[start:end]) == "style" {
-			if styleClose := bytes.Index(bytes.ToLower(doc[end:]), []byte("</style")); styleClose >= 0 {
-				out.Write(editStyle(doc[end : end+styleClose]))
-				last, styleEnd = end+styleClose, end+styleClose
-			}
+		if tagName(doc[start:end]) != "style" || bytes.HasSuffix(doc[start:end], []byte("/>")) {
+			return
+		}
+		for len(closes) > 0 && closes[0] < end {
+			closes = closes[1:]
+		}
+		if len(closes) > 0 {
+			out.Write(editStyle(doc[end:closes[0]]))
+			last, styleEnd = closes[0], closes[0]
 		}
 	})
 	out.Write(doc[last:])
 	return out.Bytes()
+}
+
+// styleEndTags returns where each "</style" in doc begins, in any letter
+// case, in order. It compares bytes, so the positions are doc's own, which
+// lowercasing a copy would not keep for text that isn't ASCII.
+func styleEndTags(doc []byte) []int {
+	const tag = "</style"
+	var out []int
+	for i := 0; ; i++ {
+		at := bytes.Index(doc[i:], []byte("</"))
+		if at < 0 || i+at+len(tag) > len(doc) {
+			return out
+		}
+		i += at
+		if asciiEqualFold(doc[i:i+len(tag)], tag) {
+			out = append(out, i)
+		}
+	}
+}
+
+// asciiEqualFold reports whether b is s, with ASCII letters compared in
+// either case and every other byte compared as is.
+func asciiEqualFold(b []byte, s string) bool {
+	if len(b) != len(s) {
+		return false
+	}
+	for i := range b {
+		c := b[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != s[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // resources is the resource section of a file: the records from the first

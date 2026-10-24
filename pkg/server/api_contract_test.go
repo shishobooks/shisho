@@ -85,6 +85,9 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	lockedPath := testgen.GeneratePDF(t, fileBook.Filepath, "locked.pdf", testgen.PDFOptions{UserPassword: "secret"})
 	lockedFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypePDF, FileRole: models.FileRoleMain, Filepath: lockedPath, FilesizeBytes: 1}
 	f.insert(lockedFile)
+	oldMOBIPath := testgen.GenerateMOBI(t, fileBook.Filepath, "old.mobi", testgen.MOBIOptions{Kind: testgen.MOBIKindMOBI6, Title: "Old"})
+	oldMOBIFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain, Filepath: oldMOBIPath, FilesizeBytes: 1}
+	f.insert(oldMOBIFile)
 	cbzPath := testgen.GenerateCBZ(t, fileBook.Filepath, "comic.cbz", testgen.CBZOptions{Title: "Comic"})
 	cbzFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain, Filepath: cbzPath, FilesizeBytes: 1}
 	f.insert(cbzFile)
@@ -271,6 +274,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download", lockedFile.ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state",
 			message: books.CannotDecryptMessage,
+		},
+		{
+			name:   "download as a File Type whose Conversion declines the file",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download/epub", oldMOBIFile.ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+			message: "This Kindle book can't be converted: it holds only an older MOBI (KF7) book, which Shisho can't convert yet.",
 		},
 		{
 			name:   "download as a File Type no Conversion reaches",

@@ -16,6 +16,8 @@ func TestReachableFileTypes(t *testing.T) {
 		{FileTypeEPUB, []string{FileTypeEPUB, FileTypeKePub}},
 		{FileTypeCBZ, []string{FileTypeCBZ, FileTypeKePub, FileTypeEPUB}},
 		{FileTypeKePub, []string{FileTypeKePub, FileTypeEPUB}},
+		{FileTypeAZW3, []string{FileTypeAZW3, FileTypeEPUB, FileTypeKePub}},
+		{FileTypeMOBI, []string{FileTypeMOBI, FileTypeEPUB, FileTypeKePub}},
 		{FileTypeM4B, []string{FileTypeM4B}},
 		{FileTypePDF, []string{FileTypePDF}},
 	}

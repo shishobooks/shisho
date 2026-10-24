@@ -8,11 +8,22 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// anchorAt returns where the start tag a position names begins, and its id
+// or "" when it has none, or -1 when there is no such tag.
+func anchorAt(doc []byte, pos int) (int, string) {
+	t, ok := anchorTag(doc, startTags(doc), pos)
+	if !ok {
+		return -1, ""
+	}
+	return t.start, t.id
+}
 
 func readBuiltKF8(t *testing.T, opts testgen.MOBIOptions) (*KF8, error) {
 	t.Helper()
@@ -298,4 +309,34 @@ func TestAssembleParts_RejectsCraftedIndexes(t *testing.T) {
 	}
 	_, err = assembleParts(ctx, []kf8Skeleton{{fragments: len(frags), start: 0, length: len(big)}}, frags, append(big, bytes.Repeat([]byte("y"), len(frags))...))
 	require.ErrorContains(t, err, "out of order")
+}
+
+func TestEditDocument_StyleElements(t *testing.T) {
+	t.Parallel()
+	upper := bytes.ToUpper
+	mark := func(b []byte) []byte { return append([]byte("[css]"), b...) }
+
+	for name, c := range map[string]struct{ in, want string }{
+		// Lowercasing "\xe9" (Windows-1252 é, invalid UTF-8) changes its
+		// length, so offsets must come from the bytes as they are.
+		"text that isn't UTF-8":  {"<style>a\xe9\xe9\xe9</style><p>x</p>", "<STYLE>[css]a\xe9\xe9\xe9</style><P>x</p>"},
+		"an end tag in capitals": {"<style>a</STYLE><p>x</p>", "<STYLE>[css]a</STYLE><P>x</p>"},
+		"a self-closed style":    {"<style/><p>x</p><style>b</style>", "<STYLE/><P>x</p><STYLE>[css]b</style>"},
+		"a style never closed":   {"<style>a<p>x</p>", "<STYLE>a<P>x</p>"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, c.want, string(editDocument([]byte(c.in), upper, mark)))
+		})
+	}
+}
+
+// A document full of style elements is edited in linear time.
+func TestEditDocument_ManyStyles(t *testing.T) {
+	t.Parallel()
+	doc := append(bytes.Repeat([]byte("<style>a</style>"), 20_000), bytes.Repeat([]byte("text "), 1<<20)...)
+	start := time.Now()
+	out := editDocument(doc, func(b []byte) []byte { return b }, func(b []byte) []byte { return b })
+	assert.Equal(t, doc, out)
+	assert.Less(t, time.Since(start), 5*time.Second)
 }
