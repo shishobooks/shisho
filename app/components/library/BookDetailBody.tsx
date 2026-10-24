@@ -615,9 +615,10 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       {/* Under 1280px the Related panel follows the files: they matter more.
           It renders twice, one copy hidden by CSS at each width, so it can
           sit beside the header or below the files without a resize hook. */}
-      {/* Keyed like the header, so the next book's panel opens centered on it. */}
+      {/* Keyed by the book like the header, so the next book's panel opens
+          centered on it. The prefix keeps the two sibling keys apart. */}
       {relatedPanel && (
-        <div className="mt-10 xl:hidden" key={book.id}>
+        <div className="mt-10 xl:hidden" key={`related-${book.id}`}>
           {relatedPanel}
         </div>
       )}
