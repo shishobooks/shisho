@@ -26,12 +26,16 @@ type deviceTypeRules struct {
 // live in code and change with releases, so a Device following one picks up
 // the change without a data migration.
 var typeRules = map[string]deviceTypeRules{
+	// The Kindle File Types come last: they reach KePub through EPUB, so a
+	// book with a File any earlier rule takes is converted less.
 	DeviceTypeKobo: {
 		allowed: []string{models.FileTypeKePub, models.FileTypeEPUB},
 		preset: []delivery.Rule{
 			{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeKePub},
 			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeKePub},
 			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeAZW3, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeMOBI, DeliveredFileType: models.FileTypeKePub},
 		},
 	},
 	// A Kindle's browser downloads only its own formats. AZW3 comes first

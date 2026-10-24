@@ -984,3 +984,26 @@ func TestShareLinks_RevokeAndDeleteWorkWhileSharingDisabled(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+leaked.Token, "").Code)
 	assert.Equal(t, models.ShareLinkStateRevoked, f.listed(f.bookA)[leaked.ID].State)
 }
+
+// A Download as entry whose Conversion declines the file is a 422 saying
+// why, as in the web app, and counts no download.
+func TestShareLinks_DeclinedConversionSaysWhy(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	ctx := context.Background()
+	path := testgen.GenerateMOBI(t, f.bookA.Filepath, "old.mobi", testgen.MOBIOptions{Kind: testgen.MOBIKindMOBI6, Title: "Old"})
+	mobiFile := &models.File{LibraryID: f.bookA.LibraryID, BookID: f.bookA.ID, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain, Filepath: path, FilesizeBytes: 1}
+	_, err := f.db.NewInsert().Model(mobiFile).Exec(ctx)
+	require.NoError(t, err)
+	link := f.mustCreate(f.admin, f.bookA, `{}`)
+
+	for _, fileType := range []string{models.FileTypeEPUB, models.FileTypeKePub} {
+		rec := f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/download/%s", link.Token, mobiFile.ID, fileType), "")
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Body.String(), `"code":"invalid_state"`)
+		assert.Contains(t, rec.Body.String(), "This Kindle book can't be converted: it holds only an older MOBI (KF7) book")
+		assert.Empty(t, rec.Header().Get("Content-Disposition"))
+	}
+	assert.Zero(t, f.listed(f.bookA)[link.ID].DownloadCount)
+}

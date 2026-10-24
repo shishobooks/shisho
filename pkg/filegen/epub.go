@@ -59,13 +59,7 @@ func (g *EPUBGenerator) Prepare(ctx context.Context, src Source, book *models.Bo
 		if e.source != nil {
 			continue
 		}
-		// A rewritten entry keeps a stored source entry stored; any other
-		// method, including ones Shisho cannot write, becomes deflate.
-		method := zip.Deflate
-		if e.method == zip.Store {
-			method = zip.Store
-		}
-		entry, err := ziputil.Compress(e.name, method, e.content)
+		entry, err := ziputil.Compress(e.name, rewrittenMethod(e), e.content)
 		if err != nil {
 			return nil, NewGenerationError(fileType, err, "failed to compress rewritten entry")
 		}
@@ -131,18 +125,37 @@ func (p *preparedEPUB) write(ctx context.Context, w io.Writer, body func(io.Writ
 	return errors.Wrap(zw.Close(), "failed to finalize destination EPUB")
 }
 
-// zeros is what skipBody writes in place of an entry's data.
+// rewrittenMethod is how a rewritten entry is compressed: a stored source
+// entry stays stored, and any other method, including ones Shisho cannot
+// write, becomes deflate.
+func rewrittenMethod(e epubEntry) uint16 {
+	if e.method == zip.Store {
+		return zip.Store
+	}
+	return zip.Deflate
+}
+
+// zeros is what writeZeros writes.
 var zeros = make([]byte, 64*1024)
 
 // skipBody writes as many bytes as f's raw data holds without reading it,
 // for measuring the output.
 func skipBody(w io.Writer, f *zip.File) error {
-	for left := f.CompressedSize64; left > 0; {
-		n := min(left, uint64(len(zeros)))
-		if _, err := w.Write(zeros[:n]); err != nil {
+	if f.CompressedSize64 > math.MaxInt64 {
+		return errors.Errorf("%s is too large", f.Name)
+	}
+	return writeZeros(w, int64(f.CompressedSize64)) //nolint:gosec // checked against MaxInt64 above
+}
+
+// writeZeros writes n zero bytes, standing in for data a measurement does
+// not read.
+func writeZeros(w io.Writer, n int64) error {
+	for n > 0 {
+		chunk := min(n, int64(len(zeros)))
+		if _, err := w.Write(zeros[:chunk]); err != nil {
 			return errors.WithStack(err)
 		}
-		left -= n
+		n -= chunk
 	}
 	return nil
 }

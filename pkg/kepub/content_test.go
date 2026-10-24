@@ -402,6 +402,19 @@ func TestTransformDocument_ImagesAndSkippedElements(t *testing.T) {
 	assert.Equal(t, want, string(out))
 }
 
+// Elements HTML lets hold only text get no spans: a time with no datetime
+// attribute, whose text is the date, and an option. A time with a datetime
+// attribute holds phrasing content, so its text is wrapped.
+func TestTransformDocument_TextOnlyElements(t *testing.T) {
+	t.Parallel()
+	in := fidelityDoc("", `<p>In <time>1900</time>, <time datetime="1993">later</time>.</p><select><option>One</option></select>`)
+	out, err := transformDocument([]byte(in), NewSpanCounter(), "")
+	require.NoError(t, err)
+	want := fidelityDoc(koboStyleHacksTag,
+		`<div id="book-columns"><div id="book-inner"><p><span class="koboSpan" id="kobo.1.1">In </span><time>1900</time><span class="koboSpan" id="kobo.1.2">, </span><time datetime="1993"><span class="koboSpan" id="kobo.1.3">later</span></time><span class="koboSpan" id="kobo.1.4">.</span></p><select><option>One</option></select></div></div>`)
+	assert.Equal(t, want, string(out))
+}
+
 // Transforming a KePub again changes nothing: its spans, wrappers, style
 // hacks, and script stay as they were, without a second copy.
 func TestTransformDocument_Idempotent(t *testing.T) {

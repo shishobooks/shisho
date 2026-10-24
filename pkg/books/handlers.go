@@ -1736,6 +1736,9 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 		if errors.Is(err, filegen.ErrCannotDecrypt) {
 			return errcodes.InvalidState(CannotDecryptMessage)
 		}
+		if message, ok := UnsupportedContentMessage(err); ok {
+			return errcodes.InvalidState(message)
+		}
 		if errors.Is(err, downloadcache.ErrFailedPartway) {
 			return errcodes.InvalidState(FailedPartwayMessage)
 		}

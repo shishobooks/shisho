@@ -45,6 +45,8 @@ var conversionSteps = map[models.ConversionStep]conversionStep{
 	{From: models.FileTypeCBZ, To: models.FileTypeKePub}:  cbzFixedLayout{fileType: models.FileTypeKePub},
 	{From: models.FileTypeCBZ, To: models.FileTypeEPUB}:   cbzFixedLayout{fileType: models.FileTypeEPUB},
 	{From: models.FileTypeKePub, To: models.FileTypeEPUB}: kepubToEPUB{},
+	{From: models.FileTypeAZW3, To: models.FileTypeEPUB}:  kindleToEPUB{fileType: models.FileTypeAZW3},
+	{From: models.FileTypeMOBI, To: models.FileTypeEPUB}:  kindleToEPUB{fileType: models.FileTypeMOBI},
 }
 
 // GeneratorFor returns the generator that delivers a File of type fileType as
@@ -104,7 +106,9 @@ func (g *conversionGenerator) Prepare(ctx context.Context, src Source, book *mod
 		var err error
 		prepared, err = step.prepare(ctx, in)
 		if err != nil {
-			return nil, err
+			// A step before the last names the File Type it makes; the
+			// error is about the File Type delivered.
+			return nil, relabelError(err, g.to)
 		}
 	}
 	return prepared, nil
