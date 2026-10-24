@@ -48,7 +48,7 @@ func (s kindleToEPUB) prepare(ctx context.Context, in stepInput) (Prepared, erro
 		var unsupported *mobi.UnsupportedError
 		switch {
 		case errors.As(err, &unsupported), errors.Is(err, mobi.ErrDRMProtected):
-			return nil, NewGenerationError(models.FileTypeEPUB, err, err.Error())
+			return nil, NewGenerationError(models.FileTypeEPUB, fmt.Errorf("%w: %w", ErrUnsupportedContent, err), err.Error())
 		default:
 			return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to read "+label+": "+err.Error())
 		}

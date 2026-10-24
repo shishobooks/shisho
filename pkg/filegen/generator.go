@@ -60,6 +60,12 @@ func relabelError(err error, fileType string) error {
 // the original file for it; any other generation failure is a server fault.
 var ErrNotImplemented = errors.New("no generator for this file type")
 
+// ErrUnsupportedContent is wrapped by the GenerationError for a source a
+// Conversion declines because it holds something the Conversion can't
+// convert, such as a Kindle book with embedded fonts. The GenerationError's
+// Message says what, in a sentence the web UI routes show the user.
+var ErrUnsupportedContent = errors.New("file holds content this Conversion can't convert")
+
 // ErrCannotDecrypt is wrapped by the GenerationError for a source whose
 // encryption Shisho cannot open, such as a PDF that needs a password. The
 // web UI routes answer it with a message instead of a server error.

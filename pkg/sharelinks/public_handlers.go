@@ -234,6 +234,9 @@ func (h *publicHandler) serveDownload(c echo.Context, deliveredType string) erro
 	} else {
 		download, err = books.GeneratedDownload(c, h.downloadCache, book, file, deliveredType)
 	}
+	if message, ok := books.UnsupportedContentMessage(err); ok {
+		return errcodes.InvalidState(message)
+	}
 	if err != nil {
 		return errors.WithStack(err)
 	}
