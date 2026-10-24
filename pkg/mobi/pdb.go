@@ -83,3 +83,15 @@ func (p *pdb) record(i int, limit int64) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// prefix reads up to n bytes from the start of record i.
+func (p *pdb) prefix(i, n int) ([]byte, error) {
+	if i < 0 || i >= p.count() {
+		return nil, errors.Errorf("record %d is out of range", i)
+	}
+	data := make([]byte, min(int64(n), p.offsets[i+1]-p.offsets[i]))
+	if _, err := p.r.ReadAt(data, p.offsets[i]); err != nil {
+		return nil, errors.Wrapf(err, "read record %d", i)
+	}
+	return data, nil
+}

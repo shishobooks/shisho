@@ -21,6 +21,8 @@ func TestReachableFileTypes_EveryChainRuns(t *testing.T) {
 		models.FileTypeEPUB:  testgen.GenerateEPUB(t, dir, "book.epub", testgen.EPUBOptions{Title: "Book"}),
 		models.FileTypeCBZ:   testgen.GenerateCBZ(t, dir, "book.cbz", testgen.CBZOptions{Title: "Book"}),
 		models.FileTypeKePub: testgen.GenerateEPUB(t, dir, "book.kepub.epub", testgen.EPUBOptions{Title: "Book", KoboMarkup: true}),
+		models.FileTypeAZW3:  testgen.GenerateMOBI(t, dir, "book.azw3", testgen.KF8Sample(testgen.MOBIKindKF8)),
+		models.FileTypeMOBI:  testgen.GenerateMOBI(t, dir, "book.mobi", testgen.KF8Sample(testgen.MOBIKindCombo)),
 	}
 	for _, fileType := range models.BuiltInFileTypes {
 		for _, to := range models.ReachableFileTypes(fileType)[1:] {

@@ -145,7 +145,7 @@ Choose the type when adding a Device. It decides which connections the Device ca
 
 | Type | Connections | Can receive | Starts with |
 |------|-------------|-------------|-------------|
-| **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub |
+| **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub, then AZW3 as KePub, then MOBI as KePub |
 | **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI |
 | **OPDS app** | OPDS, for reading apps such as KOReader, Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |

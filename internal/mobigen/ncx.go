@@ -37,6 +37,7 @@ type ncxEntry struct {
 	parent                int // -1 at the top level
 	firstChild, lastChild int // -1 without children
 	order                 int // position in reading order
+	target                string
 }
 
 // ncxRecords returns the NCX index of a book: the primary INDX record, the
@@ -46,7 +47,9 @@ type ncxEntry struct {
 // level at a time, as KindleGen and Calibre's KF8 output do, so each entry's
 // children are a contiguous range; a flat index lists them in reading order
 // at depth 0, as Calibre's MOBI6 output does.
-func ncxRecords(toc []TOCEntry, kf8, flat, cp1252 bool, perRecord, perCNCX int) ([][]byte, error) {
+// targets, for KF8 content, maps an entry's Target to its fragment and
+// offset; without it, targets are ignored.
+func ncxRecords(toc []TOCEntry, kf8, flat, cp1252 bool, perRecord, perCNCX int, targets map[string][2]uint32) ([][]byte, error) {
 	entries := levelOrder(toc)
 	if flat {
 		entries = readingOrder(toc)
@@ -108,6 +111,13 @@ func ncxRecords(toc []TOCEntry, kf8, flat, cp1252 bool, perRecord, perCNCX int) 
 				ncxTagLabel:  {u32(labels[i])},
 				ncxTagDepth:  {u32(e.depth)},
 				ncxTagPosFID: {u32(e.order), 0},
+			}
+			if e.target != "" && targets != nil {
+				target, ok := targets[e.target]
+				if !ok {
+					return nil, errors.Errorf("no element with id %q", e.target)
+				}
+				values[ncxTagPosFID] = target[:]
 			}
 			if e.parent >= 0 {
 				values[ncxTagParent] = []uint32{u32(e.parent)}
@@ -244,7 +254,7 @@ func levelOrder(toc []TOCEntry) []ncxEntry {
 	for depth := 0; len(level) > 0; depth++ {
 		start := len(out)
 		for i, e := range level {
-			out = append(out, ncxEntry{title: e.Title, depth: depth, parent: parents[i], firstChild: -1, lastChild: -1, order: order[e]})
+			out = append(out, ncxEntry{title: e.Title, depth: depth, parent: parents[i], firstChild: -1, lastChild: -1, order: order[e], target: e.Target})
 		}
 		var next []*TOCEntry
 		var nextParents []int

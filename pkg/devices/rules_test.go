@@ -28,6 +28,8 @@ func TestService_Rules(t *testing.T) {
 		rule(models.FileTypeKePub, models.FileTypeKePub),
 		rule(models.FileTypeEPUB, models.FileTypeKePub),
 		rule(models.FileTypeCBZ, models.FileTypeKePub),
+		rule(models.FileTypeAZW3, models.FileTypeKePub),
+		rule(models.FileTypeMOBI, models.FileTypeKePub),
 	}
 	cases := []struct {
 		name        string
@@ -155,6 +157,37 @@ func TestKoboPreset_PrefersKePub(t *testing.T) {
 	require.Len(t, result.Ebook, 1)
 	assert.Equal(t, 1, result.Ebook[0].File.ID)
 	assert.Equal(t, models.FileTypeKePub, result.Ebook[0].DeliveredFileType)
+}
+
+// Under the Kobo preset, a Kindle-only book reaches the Kobo as KePub, and a
+// book that also has an EPUB sends the EPUB, which needs one Conversion
+// instead of two.
+func TestKoboPreset_DeliversKindleBooksAsKePub(t *testing.T) {
+	t.Parallel()
+	preset := PresetRules(DeviceTypeKobo)
+	for _, fileType := range []string{models.FileTypeAZW3, models.FileTypeMOBI} {
+		book := &models.Book{ID: 1, Files: []*models.File{{ID: 1, BookID: 1, FileType: fileType, FileRole: models.FileRoleMain}}}
+		result := delivery.Resolve(preset, book)
+		require.Len(t, result.Ebook, 1, fileType)
+		assert.Equal(t, models.FileTypeKePub, result.Ebook[0].DeliveredFileType, fileType)
+
+		book.Files = append(book.Files, &models.File{ID: 2, BookID: 1, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain})
+		result = delivery.Resolve(preset, book)
+		require.Len(t, result.Ebook, 1, fileType)
+		assert.Equal(t, 2, result.Ebook[0].File.ID, fileType)
+	}
+}
+
+// A custom rule for a Kobo can deliver a Kindle File Type as KePub or EPUB,
+// and the editor offers both.
+func TestRuleOptions_KoboOffersKindleConversions(t *testing.T) {
+	t.Parallel()
+	offered := map[string][]string{}
+	for _, option := range RuleOptions(DeviceTypeKobo) {
+		offered[option.SourceFileType] = option.DeliveredFileTypes
+	}
+	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub}, offered[models.FileTypeAZW3])
+	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub}, offered[models.FileTypeMOBI])
 }
 
 // A Device following the default follows later edits to it, and stops once

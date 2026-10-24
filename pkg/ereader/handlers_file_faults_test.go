@@ -263,9 +263,9 @@ func TestDownloadHandlers_UnreachableFileType(t *testing.T) {
 	path := filepath.Join(f.dir, "audio.m4b")
 	require.NoError(t, os.WriteFile(path, []byte("original bytes"), 0o644))
 	audio := f.addFile(models.FileTypeM4B, models.FileRoleMain, path)
-	mobiPath := filepath.Join(f.dir, "book.mobi")
-	require.NoError(t, os.WriteFile(mobiPath, []byte("original bytes"), 0o644))
-	mobi := f.addFile(models.FileTypeMOBI, models.FileRoleMain, mobiPath)
+	pdfPath := filepath.Join(f.dir, "book.pdf")
+	require.NoError(t, os.WriteFile(pdfPath, []byte("original bytes"), 0o644))
+	pdf := f.addFile(models.FileTypePDF, models.FileRoleMain, pdfPath)
 	supplementPath := filepath.Join(f.dir, "extras.cbz")
 	require.NoError(t, os.WriteFile(supplementPath, []byte("original bytes"), 0o644))
 	supplement := f.addFile(models.FileTypeCBZ, models.FileRoleSupplement, supplementPath)
@@ -276,7 +276,7 @@ func TestDownloadHandlers_UnreachableFileType(t *testing.T) {
 		status        int
 	}{
 		{audio, models.FileTypeKePub, http.StatusUnprocessableEntity},
-		{mobi, models.FileTypeKePub, http.StatusUnprocessableEntity},
+		{pdf, models.FileTypeKePub, http.StatusUnprocessableEntity},
 		{supplement, models.FileTypeEPUB, http.StatusUnprocessableEntity},
 		{audio, "fb2", http.StatusNotFound},
 	} {

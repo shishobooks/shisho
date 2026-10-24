@@ -105,11 +105,17 @@ type Options struct {
 	// bytes after the cover and thumbnail, making the file larger without
 	// changing what it says about itself.
 	ExtraImageBytes int
+	// KF8 is the text of the KF8 book, which otherwise holds one short
+	// chapter with no skeleton or fragment index.
+	KF8 *KF8Content
 }
 
 // TOCEntry is one entry of a generated table of contents.
 type TOCEntry struct {
-	Title    string
+	Title string
+	// Target is the id of the element a KF8 entry points at, in KF8
+	// content; without it the entry's position is a placeholder.
+	Target   string
 	Children []TOCEntry
 }
 
@@ -138,13 +144,25 @@ func Build(opts Options) ([]byte, error) {
 		images = append(images, extra)
 	}
 
+	var layout *kf8Layout
+	if opts.KF8 != nil {
+		var err error
+		if layout, err = layoutKF8(opts.KF8, len(images)+1); err != nil {
+			return nil, err
+		}
+		images = append(images, opts.KF8.Images...)
+		if opts.KF8.Font {
+			images = append(images, append([]byte("FONT"), make([]byte, 20)...))
+		}
+	}
+
 	var records [][]byte
 	var err error
 	switch opts.Kind {
 	case KindMOBI6:
-		records, err = buildMOBIBook(opts, 6, 0, images, -1)
+		records, err = buildMOBIBook(opts, 6, 0, images, -1, nil)
 	case KindKF8:
-		records, err = buildMOBIBook(opts, 8, 0, images, -1)
+		records, err = buildMOBIBook(opts, 8, 0, images, -1, layout)
 	case KindCombo:
 		mobi6Opts := opts
 		if opts.MOBI6Title != "" {
@@ -158,14 +176,14 @@ func Build(opts Options) ([]byte, error) {
 		// index it stores, so build it once to learn where the KF8 header
 		// lands, then again with that index.
 		var probe, kf8 [][]byte
-		if probe, err = buildMOBIBook(mobi6Opts, 6, 0, images, 0); err != nil {
+		if probe, err = buildMOBIBook(mobi6Opts, 6, 0, images, 0, nil); err != nil {
 			return nil, err
 		}
 		kf8Index := len(probe) + 1
-		if records, err = buildMOBIBook(mobi6Opts, 6, 0, images, kf8Index); err != nil {
+		if records, err = buildMOBIBook(mobi6Opts, 6, 0, images, kf8Index, nil); err != nil {
 			return nil, err
 		}
-		if kf8, err = buildMOBIBook(opts, 8, kf8Index, nil, -1); err != nil {
+		if kf8, err = buildMOBIBook(opts, 8, kf8Index, nil, -1, layout); err != nil {
 			return nil, err
 		}
 		records = append(records, []byte("BOUNDARY"))
@@ -208,10 +226,17 @@ func coverImage(mimeType string) ([]byte, error) {
 // records, the HUFF and CDIC records when compressed that way, the images,
 // and then FDST (KF8 only), FLIS, and FCIS. base is the absolute index of the
 // header record. kf8Index, when not negative, is written as the KF8 boundary
-// record (121) of a combo file's MOBI6 header.
-func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8Index int) ([][]byte, error) {
+// record (121) of a combo file's MOBI6 header. layout, for a KF8 book, is
+// its text and indexes.
+func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8Index int, layout *kf8Layout) ([][]byte, error) {
 	text := []byte("<html><head></head><body><h1>Chapter One</h1><p>Hello world.</p></body></html>")
-	textRecords := [][]byte{compressMOBIText(text, opts.Compression)}
+	if layout != nil {
+		text = layout.text
+	}
+	var textRecords [][]byte
+	for _, rec := range splitTextRecords(text, mobiTextRecordSize) {
+		textRecords = append(textRecords, compressMOBIText(rec, opts.Compression))
+	}
 
 	var extraFlags uint32
 	if len(opts.TOC) > 0 {
@@ -239,11 +264,23 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 	if len(opts.TOC) > 0 {
 		ncxIndex = u32(1 + len(textRecords) + len(after))
 		flat := version != 8 && opts.FlatMOBI6TOC
-		ncx, err := ncxRecords(opts.TOC, version == 8, flat, opts.CP1252, opts.NCXEntriesPerRecord, opts.NCXLabelsPerCNCX)
+		var targets map[string][2]uint32
+		if layout != nil {
+			targets = layout.targets
+		}
+		ncx, err := ncxRecords(opts.TOC, version == 8, flat, opts.CP1252, opts.NCXEntriesPerRecord, opts.NCXLabelsPerCNCX, targets)
 		if err != nil {
 			return nil, err
 		}
 		after = append(after, ncx...)
+	}
+	// Calibre writes the skeleton and fragment indexes after the NCX.
+	skeletonIndex, fragmentIndex := uint32(mobiNullIndex), uint32(mobiNullIndex)
+	if layout != nil {
+		skeletonIndex = u32(1 + len(textRecords) + len(after))
+		after = append(after, layout.skeletonIndex()...)
+		fragmentIndex = u32(1 + len(textRecords) + len(after))
+		after = append(after, layout.fragmentIndex()...)
 	}
 	firstImage := uint32(mobiNullIndex)
 	if len(images) > 0 {
@@ -259,7 +296,11 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 	fdstIndex := uint32(mobiNullIndex)
 	if version == 8 {
 		fdstIndex = u32(1 + len(textRecords) + len(after))
-		after = append(after, fdstRecord(len(text)))
+		if layout != nil {
+			after = append(after, layout.fdst())
+		} else {
+			after = append(after, fdstRecord(len(text)))
+		}
 	}
 	flisIndex := u32(1 + len(textRecords) + len(after))
 	after = append(after, flisRecord(), fcisRecord(len(text)))
@@ -277,6 +318,9 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 		flisIndex:    flisIndex,
 		fcisIndex:    flisIndex + 1,
 		ncxIndex:     ncxIndex,
+		skeleton:     skeletonIndex,
+		fragment:     fragmentIndex,
+		fdstCount:    fdstCount(layout),
 		extraFlags:   extraFlags,
 		kf8Index:     kf8Index,
 	})
@@ -302,6 +346,9 @@ type mobiHeaderSpec struct {
 	flisIndex    uint32
 	fcisIndex    uint32
 	ncxIndex     uint32
+	skeleton     uint32
+	fragment     uint32
+	fdstCount    uint32
 	extraFlags   uint32
 	kf8Index     int
 }
@@ -410,6 +457,11 @@ func buildMOBIHeaderRecord(opts Options, spec mobiHeaderSpec) ([]byte, error) {
 		for off := 248; off < 280; off += 4 {
 			be.PutUint32(h[off:], mobiNullIndex)
 		}
+		if spec.version == 8 {
+			be.PutUint32(h[196:], spec.fdstCount)
+			be.PutUint32(h[248:], spec.fragment)
+			be.PutUint32(h[252:], spec.skeleton)
+		}
 	}
 
 	var rec bytes.Buffer
@@ -422,6 +474,14 @@ func buildMOBIHeaderRecord(opts Options, spec mobiHeaderSpec) ([]byte, error) {
 		return nil, encodeErr
 	}
 	return rec.Bytes(), nil
+}
+
+// fdstCount is the number of flows the FDST record lists.
+func fdstCount(layout *kf8Layout) uint32 {
+	if layout == nil {
+		return 1
+	}
+	return u32(len(layout.flowEnds))
 }
 
 // buildEXTH writes the EXTH block in the record order Calibre uses.

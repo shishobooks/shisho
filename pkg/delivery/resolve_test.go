@@ -93,6 +93,23 @@ func TestResolve_UserDefault(t *testing.T) {
 			ebook: []delivered{{1, models.FileTypeEPUB}},
 		},
 		{
+			name:  "following the built-in rules, an AZW3 goes as itself",
+			files: []testFile{{fileType: models.FileTypeAZW3}},
+			ebook: []delivered{{0, models.FileTypeAZW3}},
+		},
+		{
+			name:  "a custom rule delivers an AZW3-only book as EPUB",
+			rules: []Rule{{SourceFileType: models.FileTypeAZW3, DeliveredFileType: models.FileTypeEPUB}},
+			files: []testFile{{fileType: models.FileTypeAZW3}},
+			ebook: []delivered{{0, models.FileTypeEPUB}},
+		},
+		{
+			name:  "a custom rule delivers a MOBI-only book as KePub, through EPUB",
+			rules: []Rule{{SourceFileType: models.FileTypeMOBI, DeliveredFileType: models.FileTypeKePub}},
+			files: []testFile{{fileType: models.FileTypeMOBI}},
+			ebook: []delivered{{0, models.FileTypeKePub}},
+		},
+		{
 			name:  "a custom rule converts its source File Type",
 			rules: []Rule{{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeEPUB}},
 			files: []testFile{{fileType: models.FileTypeCBZ}},
@@ -180,6 +197,20 @@ func TestResolve_ChainReachesTheDeliveredFileType(t *testing.T) {
 	asItself := Resolve([]Rule{{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeCBZ}}, book)
 	require.Len(t, asItself.Ebook, 1)
 	assert.Empty(t, asItself.Ebook[0].Chain)
+}
+
+// An AZW3 reaches KePub through EPUB, so its chain has both steps.
+func TestResolve_KindleChainGoesThroughEPUB(t *testing.T) {
+	t.Parallel()
+	book := buildBook([]testFile{{fileType: models.FileTypeAZW3}})
+
+	result := Resolve([]Rule{{SourceFileType: models.FileTypeAZW3, DeliveredFileType: models.FileTypeKePub}}, book)
+
+	require.Len(t, result.Ebook, 1)
+	assert.Equal(t, []models.ConversionStep{
+		{From: models.FileTypeAZW3, To: models.FileTypeEPUB},
+		{From: models.FileTypeEPUB, To: models.FileTypeKePub},
+	}, result.Ebook[0].Chain)
 }
 
 // A rule saved before a Conversion was removed can name a File Type its

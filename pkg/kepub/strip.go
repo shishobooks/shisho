@@ -176,7 +176,7 @@ func (s *Strip) Write(ctx context.Context, w io.Writer) error {
 			}
 			return ziputil.Compress(e.Name, zip.Deflate, s.rewriteLinkAttrs(e.Name, data))
 		case e.File == nil:
-			return ziputil.Compress(e.Name, zip.Deflate, e.Content)
+			return compressReplaced(e)
 		default:
 			return nil, nil
 		}
