@@ -126,6 +126,8 @@ On a book's page, a **Needs review** badge on the cover lists what is missing wh
 
 To set review state by hand, check or uncheck **Reviewed** under **Review** in **Edit**. A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review state from **Review Criteria**.
 
+To clear the override on one book or file, select **Use automatic** next to the line that says when it was set by hand, then save. Review state follows the review criteria again. On a book, this clears the override on every main file, including when only some of them were set by hand. **Use automatic** also undoes a change to **Reviewed** that you haven't saved yet.
+
 Use the gallery's **Review state** filter to work through the queue. Bulk selection offers **Mark reviewed** and **Mark needs review**.
 
 ## Chapters
