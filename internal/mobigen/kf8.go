@@ -2,6 +2,7 @@ package mobigen
 
 import (
 	"bytes"
+	"compress/zlib"
 	"encoding/binary"
 	"fmt"
 	"regexp"
@@ -20,6 +21,7 @@ import (
 // resolves:
 //
 //   - kindle:embed:img:N names Images[N]
+//   - kindle:embed:font:N names Fonts[N]
 //   - kindle:pos:id:ID names the element with id="ID", or with
 //     data-anchor="ID" for an element that has no id, as a link and as a
 //     TOCEntry's Target do
@@ -30,8 +32,9 @@ type KF8Content struct {
 	Styles []string
 	// Images are resource records after the cover and thumbnail.
 	Images [][]byte
-	// Font adds a FONT resource record, as a book with an embedded font has.
-	Font bool
+	// Fonts are font files, each written as a FONT resource record after
+	// the images, compressed and obfuscated as Calibre writes them.
+	Fonts [][]byte
 }
 
 // KF8Part is one XHTML document. Head and Tail are its skeleton, before and
@@ -53,7 +56,7 @@ const (
 )
 
 var (
-	embedRef = regexp.MustCompile(`kindle:embed:img:(\d+)`)
+	embedRef = regexp.MustCompile(`kindle:embed:(img|font):(\d+)`)
 	posRef   = regexp.MustCompile(`kindle:pos:id:([A-Za-z0-9_.-]+)`)
 )
 
@@ -82,11 +85,19 @@ func layoutKF8(c *KF8Content, firstEmbed int) (*kf8Layout, error) {
 	resolve := func(s string) (string, error) {
 		var err error
 		s = embedRef.ReplaceAllStringFunc(s, func(m string) string {
-			n, _ := strconv.Atoi(embedRef.FindStringSubmatch(m)[1])
-			if n >= len(c.Images) {
+			sub := embedRef.FindStringSubmatch(m)
+			n, _ := strconv.Atoi(sub[2])
+			mime := "image/png"
+			if sub[1] == "font" {
+				if n >= len(c.Fonts) {
+					err = errors.Errorf("no font %d", n)
+				}
+				n += len(c.Images)
+				mime = "application/x-font-ttf"
+			} else if n >= len(c.Images) {
 				err = errors.Errorf("no image %d", n)
 			}
-			return fmt.Sprintf("kindle:embed:%04s?mime=image/png", strings.ToUpper(strconv.FormatInt(int64(firstEmbed+n), 32)))
+			return fmt.Sprintf("kindle:embed:%04s?mime=%s", strings.ToUpper(strconv.FormatInt(int64(firstEmbed+n), 32)), mime)
 		})
 		return s, err
 	}
@@ -323,4 +334,36 @@ func splitTextRecords(text []byte, size int) [][]byte {
 		text = text[size:]
 	}
 	return append(out, text)
+}
+
+// fontKey is the key a FONT record's first bytes are obfuscated with.
+var fontKey = []byte("shisho-font-key-0123")
+
+// fontRecord returns a FONT resource record as Calibre writes one: "FONT",
+// the font's size, flags saying the data is zlib compressed and its first
+// 1040 bytes are XORed with the key, where the data starts, and the key's
+// length and start, then the key and the data.
+func fontRecord(font []byte) ([]byte, error) {
+	var z bytes.Buffer
+	zw := zlib.NewWriter(&z)
+	if _, err := zw.Write(font); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if err := zw.Close(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	data := z.Bytes()
+	for i := range min(1040, len(data)) {
+		data[i] ^= fontKey[i%len(fontKey)]
+	}
+	be := binary.BigEndian
+	r := make([]byte, 24, 24+len(fontKey)+len(data))
+	copy(r, "FONT")
+	be.PutUint32(r[4:], u32(len(font)))
+	be.PutUint32(r[8:], 0b11)
+	be.PutUint32(r[12:], u32(24+len(fontKey)))
+	be.PutUint32(r[16:], u32(len(fontKey)))
+	be.PutUint32(r[20:], 24)
+	r = append(r, fontKey...)
+	return append(r, data...), nil
 }

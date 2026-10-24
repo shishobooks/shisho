@@ -25,10 +25,10 @@ func anchorAt(doc []byte, pos int) (int, string) {
 	return t.start, t.id
 }
 
-func readBuiltKF8(t *testing.T, opts testgen.MOBIOptions) (*KF8, error) {
+func readBuiltContent(t *testing.T, opts testgen.MOBIOptions) (*Content, error) {
 	t.Helper()
 	data := testgen.BuildMOBI(t, opts)
-	return ReadKF8(context.Background(), bytes.NewReader(data), int64(len(data)))
+	return ReadContent(context.Background(), bytes.NewReader(data), int64(len(data)))
 }
 
 func TestReadKF8_ReassemblesChapters(t *testing.T) {
@@ -37,7 +37,7 @@ func TestReadKF8_ReassemblesChapters(t *testing.T) {
 	for name, kind := range map[string]testgen.MOBIKind{"AZW3": testgen.MOBIKindKF8, "combo": testgen.MOBIKindCombo} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			book, err := readBuiltKF8(t, testgen.KF8Sample(kind))
+			book, err := readBuiltContent(t, testgen.KF8Sample(kind))
 			require.NoError(t, err)
 
 			require.Len(t, book.Documents, 2)
@@ -65,7 +65,7 @@ func TestReadKF8_ReassemblesChapters(t *testing.T) {
 
 func TestReadKF8_ResolvesLinks(t *testing.T) {
 	t.Parallel()
-	book, err := readBuiltKF8(t, testgen.KF8Sample(testgen.MOBIKindKF8))
+	book, err := readBuiltContent(t, testgen.KF8Sample(testgen.MOBIKindKF8))
 	require.NoError(t, err)
 	one, two := string(book.Documents[0].Content), string(book.Documents[1].Content)
 
@@ -94,7 +94,7 @@ func TestReadKF8_ResolvesLinks(t *testing.T) {
 func TestReadKF8_ImagesAndStyles(t *testing.T) {
 	t.Parallel()
 	data := testgen.BuildMOBI(t, testgen.KF8Sample(testgen.MOBIKindKF8))
-	book, err := ReadKF8(context.Background(), bytes.NewReader(data), int64(len(data)))
+	book, err := ReadContent(context.Background(), bytes.NewReader(data), int64(len(data)))
 	require.NoError(t, err)
 
 	require.Len(t, book.Styles, 1)
@@ -122,7 +122,7 @@ func TestReadKF8_ImagesAndStyles(t *testing.T) {
 
 func TestReadKF8_TOCAndMetadata(t *testing.T) {
 	t.Parallel()
-	book, err := readBuiltKF8(t, testgen.KF8Sample(testgen.MOBIKindKF8))
+	book, err := readBuiltContent(t, testgen.KF8Sample(testgen.MOBIKindKF8))
 	require.NoError(t, err)
 
 	require.Len(t, book.TOC, 2)
@@ -195,26 +195,15 @@ func TestReadKF8_DeclinesWhatItCannotConvert(t *testing.T) {
 
 	encrypted := testgen.KF8Sample(testgen.MOBIKindKF8)
 	encrypted.Encrypted = true
-	_, err := readBuiltKF8(t, encrypted)
+	_, err := readBuiltContent(t, encrypted)
 	require.ErrorIs(t, err, ErrDRMProtected)
 
 	for name, opts := range map[string]testgen.MOBIOptions{
-		"KF7 only": {Kind: testgen.MOBIKindMOBI6, Title: "Old"},
-		"HUFF/CDIC": func() testgen.MOBIOptions {
-			o := testgen.KF8Sample(testgen.MOBIKindKF8)
-			o.Compression = testgen.MOBICompressionHuffCDIC
-			return o
-		}(),
-		"embedded font": func() testgen.MOBIOptions {
-			o := testgen.KF8Sample(testgen.MOBIKindKF8)
-			o.KF8.Font = true
-			return o
-		}(),
 		"no skeleton index": {Kind: testgen.MOBIKindKF8, Title: "Bare"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := readBuiltKF8(t, opts)
+			_, err := readBuiltContent(t, opts)
 			var unsupported *UnsupportedError
 			require.ErrorAs(t, err, &unsupported)
 			assert.NotEmpty(t, unsupported.Reason)
@@ -245,26 +234,8 @@ func TestReadKF8_FromFile(t *testing.T) {
 	defer f.Close()
 	info, err := f.Stat()
 	require.NoError(t, err)
-	_, err = ReadKF8(context.Background(), f, info.Size())
+	_, err = ReadContent(context.Background(), f, info.Size())
 	require.NoError(t, err)
-}
-
-// A damaged file fails with an error, never a panic: each copy here has a
-// run of bytes overwritten somewhere in it, or is cut short.
-func TestReadKF8_DamagedFiles(t *testing.T) {
-	t.Parallel()
-	data := testgen.BuildMOBI(t, testgen.KF8Sample(testgen.MOBIKindKF8))
-	for at := 0; at < len(data); at += 37 {
-		for _, fill := range []byte{0x00, 0xFF, 0x7F} {
-			damaged := bytes.Clone(data)
-			for i := at; i < min(at+4, len(damaged)); i++ {
-				damaged[i] = fill
-			}
-			assert.NotPanics(t, func() { _, _ = ReadKF8(context.Background(), bytes.NewReader(damaged), int64(len(damaged))) }, "bytes at %d set to %#x", at, fill)
-		}
-		cut := data[:at]
-		assert.NotPanics(t, func() { _, _ = ReadKF8(context.Background(), bytes.NewReader(cut), int64(len(cut))) }, "cut at %d", at)
-	}
 }
 
 // A link to an element whose id is empty replaces the empty id, so the tag

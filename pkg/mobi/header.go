@@ -23,6 +23,7 @@ const (
 	offFullNameLength = 88
 	offFirstImage     = 108
 	offHuffRecord     = 112
+	offHuffCount      = 116
 	offEXTHFlags      = 128
 	minHeaderRecord   = offEXTHFlags + 4
 

@@ -108,13 +108,17 @@ type Options struct {
 	// KF8 is the text of the KF8 book, which otherwise holds one short
 	// chapter with no skeleton or fragment index.
 	KF8 *KF8Content
+	// MOBI6 is the text of the MOBI6 book, which otherwise holds one short
+	// chapter.
+	MOBI6 *MOBI6Content
 }
 
 // TOCEntry is one entry of a generated table of contents.
 type TOCEntry struct {
 	Title string
 	// Target is the id of the element a KF8 entry points at, in KF8
-	// content; without it the entry's position is a placeholder.
+	// content, or the place a MOBI6 entry points at, in MOBI6 content;
+	// without it the entry's position is a placeholder.
 	Target   string
 	Children []TOCEntry
 }
@@ -144,6 +148,14 @@ func Build(opts Options) ([]byte, error) {
 		images = append(images, extra)
 	}
 
+	var mobi6 *mobi6Layout
+	if opts.MOBI6 != nil {
+		var err error
+		if mobi6, err = layoutMOBI6(opts.MOBI6, len(images)+1, opts.CP1252); err != nil {
+			return nil, err
+		}
+		images = append(images, opts.MOBI6.Images...)
+	}
 	var layout *kf8Layout
 	if opts.KF8 != nil {
 		var err error
@@ -151,8 +163,12 @@ func Build(opts Options) ([]byte, error) {
 			return nil, err
 		}
 		images = append(images, opts.KF8.Images...)
-		if opts.KF8.Font {
-			images = append(images, append([]byte("FONT"), make([]byte, 20)...))
+		for _, font := range opts.KF8.Fonts {
+			rec, err := fontRecord(font)
+			if err != nil {
+				return nil, err
+			}
+			images = append(images, rec)
 		}
 	}
 
@@ -160,9 +176,9 @@ func Build(opts Options) ([]byte, error) {
 	var err error
 	switch opts.Kind {
 	case KindMOBI6:
-		records, err = buildMOBIBook(opts, 6, 0, images, -1, nil)
+		records, err = buildMOBIBook(opts, 6, 0, images, -1, nil, mobi6)
 	case KindKF8:
-		records, err = buildMOBIBook(opts, 8, 0, images, -1, layout)
+		records, err = buildMOBIBook(opts, 8, 0, images, -1, layout, nil)
 	case KindCombo:
 		mobi6Opts := opts
 		if opts.MOBI6Title != "" {
@@ -176,14 +192,14 @@ func Build(opts Options) ([]byte, error) {
 		// index it stores, so build it once to learn where the KF8 header
 		// lands, then again with that index.
 		var probe, kf8 [][]byte
-		if probe, err = buildMOBIBook(mobi6Opts, 6, 0, images, 0, nil); err != nil {
+		if probe, err = buildMOBIBook(mobi6Opts, 6, 0, images, 0, nil, mobi6); err != nil {
 			return nil, err
 		}
 		kf8Index := len(probe) + 1
-		if records, err = buildMOBIBook(mobi6Opts, 6, 0, images, kf8Index, nil); err != nil {
+		if records, err = buildMOBIBook(mobi6Opts, 6, 0, images, kf8Index, nil, mobi6); err != nil {
 			return nil, err
 		}
-		if kf8, err = buildMOBIBook(opts, 8, kf8Index, nil, -1, layout); err != nil {
+		if kf8, err = buildMOBIBook(opts, 8, kf8Index, nil, -1, layout, nil); err != nil {
 			return nil, err
 		}
 		records = append(records, []byte("BOUNDARY"))
@@ -227,25 +243,41 @@ func coverImage(mimeType string) ([]byte, error) {
 // and then FDST (KF8 only), FLIS, and FCIS. base is the absolute index of the
 // header record. kf8Index, when not negative, is written as the KF8 boundary
 // record (121) of a combo file's MOBI6 header. layout, for a KF8 book, is
-// its text and indexes.
-func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8Index int, layout *kf8Layout) ([][]byte, error) {
+// its text and indexes; mobi6, for a MOBI6 book, is its text.
+func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8Index int, layout *kf8Layout, mobi6 *mobi6Layout) ([][]byte, error) {
 	text := []byte("<html><head></head><body><h1>Chapter One</h1><p>Hello world.</p></body></html>")
-	if layout != nil {
+	switch {
+	case layout != nil:
 		text = layout.text
+	case mobi6 != nil:
+		text = mobi6.text
 	}
+	raw := splitTextRecords(text, mobiTextRecordSize)
 	var textRecords [][]byte
-	for _, rec := range splitTextRecords(text, mobiTextRecordSize) {
+	for _, rec := range raw {
 		textRecords = append(textRecords, compressMOBIText(rec, opts.Compression))
 	}
 
 	var extraFlags uint32
 	if len(opts.TOC) > 0 {
-		// Calibre ends each text record with a multibyte byte and then the
+		// Calibre ends each text record with a multibyte entry and then the
 		// trailing byte sequence (TBS) that names the index entries the
-		// record touches; this TBS is three opaque bytes and its size.
+		// record touches; this TBS is three opaque bytes and its size. The
+		// multibyte entry repeats the bytes that finish a character the
+		// record ends inside, which readers drop, and then their count.
 		extraFlags = 0b11
 		for i := range textRecords {
-			textRecords[i] = append(textRecords[i], 0x00, 0x86, 0x80, 0x07, 0x84)
+			var overlap []byte
+			if i+1 < len(raw) && !opts.CP1252 {
+				for _, b := range raw[i+1][:min(3, len(raw[i+1]))] {
+					if b&0xC0 != 0x80 {
+						break
+					}
+					overlap = append(overlap, b)
+				}
+			}
+			textRecords[i] = append(textRecords[i], overlap...)
+			textRecords[i] = append(textRecords[i], byte(len(overlap)), 0x86, 0x80, 0x07, 0x84)
 		}
 	}
 
@@ -253,8 +285,10 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 	var huffIndex, huffCount uint32 = 0, 0
 	if opts.Compression == CompressionHuffCDIC {
 		huffIndex = u32(1 + len(textRecords))
-		huffCount = 2
-		after = append(after, huffRecord(), cdicRecord())
+		cdic := cdicRecords()
+		huffCount = u32(1 + len(cdic))
+		after = append(after, huffRecord())
+		after = append(after, cdic...)
 	}
 
 	firstNonBook := 1 + len(textRecords) + len(after)
@@ -268,7 +302,11 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 		if layout != nil {
 			targets = layout.targets
 		}
-		ncx, err := ncxRecords(opts.TOC, version == 8, flat, opts.CP1252, opts.NCXEntriesPerRecord, opts.NCXLabelsPerCNCX, targets)
+		var places map[string]uint32
+		if mobi6 != nil {
+			places = mobi6.places
+		}
+		ncx, err := ncxRecords(opts.TOC, version == 8, flat, opts.CP1252, opts.NCXEntriesPerRecord, opts.NCXLabelsPerCNCX, targets, places)
 		if err != nil {
 			return nil, err
 		}
@@ -550,14 +588,13 @@ func buildEXTH(opts Options, spec mobiHeaderSpec, encode func(string) []byte) []
 }
 
 // compressMOBIText returns one text record. PalmDOC output uses only the
-// literal forms of the format, which any decoder reads; HUFF/CDIC output is
-// opaque bytes, since only the header's compression field matters to tests.
+// literal forms of the format, which any decoder reads.
 func compressMOBIText(text []byte, compression Compression) []byte {
 	switch compression {
 	case CompressionNone:
 		return append([]byte(nil), text...)
 	case CompressionHuffCDIC:
-		return bytes.Repeat([]byte{0xA5}, len(text)/2)
+		return huffEncode(text, true)
 	case CompressionPalmDOC:
 	}
 	var out []byte
@@ -569,22 +606,6 @@ func compressMOBIText(text []byte, compression Compression) []byte {
 		}
 	}
 	return out
-}
-
-func huffRecord() []byte {
-	r := make([]byte, 24+256*4+64*4)
-	copy(r, "HUFF")
-	binary.BigEndian.PutUint32(r[4:], 24)
-	binary.BigEndian.PutUint32(r[8:], 24)
-	binary.BigEndian.PutUint32(r[12:], 24+256*4)
-	return r
-}
-
-func cdicRecord() []byte {
-	r := make([]byte, 16)
-	copy(r, "CDIC")
-	binary.BigEndian.PutUint32(r[4:], 16)
-	return r
 }
 
 func fdstRecord(textLength int) []byte {
