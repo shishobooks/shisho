@@ -52,7 +52,6 @@ import {
   DataSourceManual,
   FileRoleMain,
   FileTypeCBZ,
-  ReviewOverrideReviewed,
   type AuthorInput,
   type AuthorRole,
   type Book,
@@ -61,6 +60,7 @@ import {
 } from "@/types";
 import { AUTHOR_ROLES } from "@/utils/authorRoles";
 import { formatCount } from "@/utils/format";
+import { reviewDraftChanged } from "@/utils/review";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 import { forTitle } from "@/utils/sortname";
 
@@ -149,10 +149,11 @@ export function BookEditDialog({
   // Check if book has CBZ files (determines whether to show role selection)
   const hasCBZFiles = book.files?.some((f) => f.file_type === FileTypeCBZ);
 
-  // Draft review override — toggling the panel updates this; the actual
-  // setBookReview mutation only fires on Save.
-  const [draftReviewOverride, setDraftReviewOverride] =
-    useState<ReviewOverride | null>(null);
+  // Draft review override: undefined until the panel is touched, null after
+  // Use automatic. The setBookReview mutation only fires on Save.
+  const [draftReviewOverride, setDraftReviewOverride] = useState<
+    ReviewOverride | null | undefined
+  >(undefined);
 
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
@@ -164,8 +165,8 @@ export function BookEditDialog({
     series: SeriesEntry[];
     genres: string[];
     tags: string[];
-    /** null means "auto" — no explicit override on any main file. */
-    reviewOverride: ReviewOverride | null;
+    /** Each main file's saved override; null means "auto". */
+    reviewOverrides: Array<ReviewOverride | null>;
   } | null>(null);
 
   // Track previous open state to detect open transitions.
@@ -207,21 +208,13 @@ export function BookEditDialog({
     const initialTags =
       book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [];
 
-    // Capture the actual override state (not the aggregate `reviewed`) so we
-    // can distinguish "auto-reviewed" from "explicitly reviewed". If every
-    // main file shares the same override value, use it; otherwise fall back
-    // to null ("auto" / mixed). This preserves user intent: toggling a book
-    // that's currently auto-reviewed actually persists the explicit override.
-    const mainFiles =
-      book.files?.filter((f) => f.file_role === FileRoleMain) ?? [];
-    let initialReviewOverride: ReviewOverride | null = null;
-    if (mainFiles.length > 0) {
-      const first = mainFiles[0].review_override ?? null;
-      const allMatch = mainFiles.every(
-        (f) => (f.review_override ?? null) === first,
-      );
-      if (allMatch) initialReviewOverride = first;
-    }
+    // Capture each main file's override (not the aggregate `reviewed`), so
+    // ticking a book that is reviewed automatically still saves an override,
+    // and Use automatic on a book with mixed overrides clears them all.
+    const initialReviewOverrides =
+      book.files
+        ?.filter((f) => f.file_role === FileRoleMain)
+        .map((f) => f.review_override ?? null) ?? [];
 
     setTitle(initialTitle);
     // Use semantic value for state (what we send to server)
@@ -232,7 +225,7 @@ export function BookEditDialog({
     setSeriesEntries(initialSeries);
     setGenres(initialGenres);
     setTags(initialTags);
-    setDraftReviewOverride(initialReviewOverride);
+    setDraftReviewOverride(undefined);
 
     // Store initial values for comparison (use effective sort title, not semantic)
     setInitialValues({
@@ -244,7 +237,7 @@ export function BookEditDialog({
       series: initialSeries.map((entry) => ({ ...entry })),
       genres: [...initialGenres].sort(),
       tags: [...initialTags].sort(),
-      reviewOverride: initialReviewOverride,
+      reviewOverrides: initialReviewOverrides,
     });
   }, [open, book]);
 
@@ -263,7 +256,7 @@ export function BookEditDialog({
       !equal(seriesEntries, initialValues.series) ||
       !equal([...genres].sort(), initialValues.genres) ||
       !equal([...tags].sort(), initialValues.tags) ||
-      draftReviewOverride !== initialValues.reviewOverride
+      reviewDraftChanged(draftReviewOverride, initialValues.reviewOverrides)
     );
   }, [
     title,
@@ -421,9 +414,10 @@ export function BookEditDialog({
       payload.tags = tags.filter((t) => t.trim());
     }
 
-    const reviewChanged =
-      draftReviewOverride !== (initialValues?.reviewOverride ?? null) &&
-      draftReviewOverride !== null;
+    const reviewChanged = reviewDraftChanged(
+      draftReviewOverride,
+      initialValues?.reviewOverrides ?? [],
+    );
 
     // Only submit if something changed
     if (Object.keys(payload).length === 0 && !reviewChanged) {
@@ -442,7 +436,7 @@ export function BookEditDialog({
       if (reviewChanged) {
         await setBookReviewMutation.mutateAsync({
           bookId: book.id,
-          override: draftReviewOverride,
+          override: draftReviewOverride ?? null,
         });
       }
     } catch (error) {
@@ -465,7 +459,9 @@ export function BookEditDialog({
       series: seriesEntries.map((entry) => ({ ...entry })),
       genres: [...genres].sort(),
       tags: [...tags].sort(),
-      reviewOverride: draftReviewOverride,
+      reviewOverrides: (initialValues?.reviewOverrides ?? []).map((saved) =>
+        draftReviewOverride === undefined ? saved : draftReviewOverride,
+      ),
     });
     requestClose();
   };
@@ -849,19 +845,13 @@ export function BookEditDialog({
             />
           </div>
 
-          {/* Review Panel — controlled (deferred to Save button).
-              When draftReviewOverride is null (auto), pass undefined so the
-              panel falls back to the file-derived aggregate state. */}
+          {/* Review Panel: controlled, deferred to the Save button. */}
           <ReviewPanel
             book={book}
+            draft={draftReviewOverride}
             files={book.files ?? []}
             isPending={setBookReviewMutation.isPending}
             onChange={(override) => setDraftReviewOverride(override)}
-            toggleValue={
-              draftReviewOverride === null
-                ? undefined
-                : draftReviewOverride === ReviewOverrideReviewed
-            }
           />
         </DialogBody>
 

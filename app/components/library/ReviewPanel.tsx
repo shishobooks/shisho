@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useReviewCriteria } from "@/hooks/queries/review";
@@ -18,16 +19,18 @@ import { missingReviewFields } from "@/utils/review";
 interface ReviewPanelProps {
   book: Book;
   files: File[];
-  onChange: (override: ReviewOverride) => void;
+  /** Receives the override to apply on save; `null` returns to automatic. */
+  onChange: (override: ReviewOverride | null) => void;
   isPending?: boolean;
   /**
-   * When provided, the checkbox reflects this
-   * value instead of the aggregate `reviewed` state computed from `files`.
-   * Use for controlled / draft mode (e.g. edit dialogs that defer to Save).
-   * The committed-state-driven status text and missing-fields hint are
-   * unaffected.
+   * The unsaved override from an edit dialog that defers to Save:
+   * `undefined` when untouched, `null` after Use automatic. A reviewed or
+   * unreviewed draft sets the checkbox. A `null` draft on an overridden item
+   * shows what the review criteria predict, or the saved state until they
+   * load; otherwise the checkbox shows the saved state. The missing-fields
+   * hint is built from saved metadata, never from a drafted override.
    */
-  toggleValue?: boolean;
+  draft?: ReviewOverride | null;
 }
 
 /**
@@ -98,7 +101,7 @@ export function ReviewPanel({
   files,
   onChange,
   isPending = false,
-  toggleValue,
+  draft,
 }: ReviewPanelProps) {
   const { data: criteria } = useReviewCriteria();
   // Book detail and an edit dialog over it can both render a panel.
@@ -113,10 +116,6 @@ export function ReviewPanel({
   // Used for the missing-fields hint (which always reflects saved state).
   const committedAllReviewed =
     mainFiles.length > 0 && mainFiles.every((f) => f.reviewed === true);
-
-  // The toggle's checked state and the icon's color follow `toggleValue`
-  // when caller is in controlled mode; otherwise default to committed state.
-  const allReviewed = toggleValue ?? committedAllReviewed;
 
   // Determine override indicator
   const allOverrideReviewed = mainFiles.every(
@@ -135,11 +134,44 @@ export function ReviewPanel({
   const mostRecentDate = sortedDates[sortedDates.length - 1];
 
   const isAuto = allNoOverride;
+  const revertingToAuto = !isAuto && draft === null;
+  // A ticked or unticked checkbox that saving would turn into an override.
+  const draftsOverride =
+    draft != null &&
+    mainFiles.some((f) => (f.review_override ?? null) !== draft);
+  // Use automatic is offered whenever saving would leave an override.
+  const offerAutomatic = draft !== null && (!isAuto || draft !== undefined);
+
+  // Going back to automatic, the criteria predict the state the server will
+  // compute; until they load, the checkbox keeps the saved state.
+  const predictedAllReviewed =
+    revertingToAuto && criteria
+      ? mainFiles.every(
+          (f) =>
+            missingReviewFields(
+              f,
+              book,
+              criteria.book_fields,
+              criteria.audio_fields,
+            ).length === 0,
+        )
+      : undefined;
+  const allReviewed =
+    draft == null
+      ? (predictedAllReviewed ?? committedAllReviewed)
+      : draft === ReviewOverrideReviewed;
 
   // How the state was set, said under the checkbox rather than in a tooltip,
   // so it reads the same on a phone.
   let statusText: string;
-  if (isAuto) {
+  if (revertingToAuto) {
+    statusText = "Goes back to the review criteria when you save.";
+  } else if (draftsOverride) {
+    statusText =
+      draft === ReviewOverrideReviewed
+        ? "Marked reviewed by hand when you save."
+        : "Marked as needing review by hand when you save.";
+  } else if (isAuto) {
     statusText =
       "Set automatically from the review criteria. Check or uncheck to set it by hand.";
   } else if (allOverrideReviewed && mostRecentDate) {
@@ -150,14 +182,16 @@ export function ReviewPanel({
     statusText = "Set by hand on some files.";
   }
 
-  // Build missing-fields hint (only when book needs review).
-  // Uses committed state — the hint reflects what's actually missing on disk,
-  // not the draft toggle state in controlled mode.
-  const needsReview = !committedAllReviewed;
+  // Build the missing-fields hint when the book needs review, or will once it
+  // goes back to automatic. It follows saved data, not a drafted override.
+  const needsReview = !committedAllReviewed || predictedAllReviewed === false;
   let missingHint: string | null = null;
 
   if (needsReview && criteria) {
-    const needsReviewFiles = mainFiles.filter((f) => f.reviewed === false);
+    // buildMissingHint skips files with nothing missing.
+    const needsReviewFiles = revertingToAuto
+      ? mainFiles
+      : mainFiles.filter((f) => f.reviewed === false);
     missingHint = buildMissingHint(
       needsReviewFiles,
       mainFiles,
@@ -201,6 +235,19 @@ export function ReviewPanel({
       <p className="text-xs text-muted-foreground" id={`${toggleId}-status`}>
         {statusText}
         {missingHint && ` ${missingHint}.`}
+        {offerAutomatic && (
+          <>
+            {" "}
+            <Button
+              className="text-xs"
+              disabled={isPending}
+              onClick={() => onChange(null)}
+              variant="link"
+            >
+              Use automatic
+            </Button>
+          </>
+        )}
       </p>
     </div>
   );

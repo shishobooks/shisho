@@ -1,4 +1,9 @@
-import { FileTypeM4B, type Book, type File } from "@/types";
+import {
+  FileTypeM4B,
+  type Book,
+  type File,
+  type ReviewOverride,
+} from "@/types";
 
 /**
  * The review fields that belong to the book rather than to one of its
@@ -102,4 +107,16 @@ export function missingReviewFields(
   }
 
   return missing;
+}
+
+/**
+ * Whether saving an edit dialog's review draft changes anything. The draft is
+ * `undefined` while untouched and `null` after Use automatic; `saved` holds
+ * the override of each main file it applies to (`null` for none).
+ */
+export function reviewDraftChanged(
+  draft: ReviewOverride | null | undefined,
+  saved: Array<ReviewOverride | null>,
+): boolean {
+  return draft !== undefined && saved.some((override) => override !== draft);
 }
