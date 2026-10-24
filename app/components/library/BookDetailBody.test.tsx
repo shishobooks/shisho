@@ -705,6 +705,18 @@ describe("BookDetailBody without Share Link context", () => {
     expect(screen.getAllByTestId("related-panel")).toHaveLength(2);
   });
 
+  it("gives the header and the Related panel below it their own keys", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderBody();
+
+    expect(
+      errors.mock.calls.filter((args) =>
+        String(args[0]).includes("two children with the same key"),
+      ),
+    ).toEqual([]);
+    errors.mockRestore();
+  });
+
   it("leaves out the Related panel and its space when no tab has anything", () => {
     relatedTabs.tabs = [];
     const { container } = renderBody();
