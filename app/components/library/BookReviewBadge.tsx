@@ -18,6 +18,12 @@ import {
 interface BookReviewBadgeProps {
   book: Book;
   /**
+   * The main files to judge. The file page passes its own file, so the badge
+   * speaks for that file alone; the book page leaves it out to judge them
+   * all, as the gallery's badge does.
+   */
+  files?: File[];
+  /**
    * Opens the editor that can fix what is missing. Absent for a role that
    * cannot edit, which gets the badge and its explanation but no action.
    */
@@ -33,15 +39,16 @@ interface BookReviewBadgeProps {
  */
 const BookReviewBadge = ({
   book,
+  files,
   onEditBook,
   onEditFile,
 }: BookReviewBadgeProps) => {
   const { data: criteria } = useReviewCriteria();
-  if (!isBookNeedsReview(book)) return null;
-
-  const unreviewed = book.files.filter(
+  const unreviewed = (files ?? book.files ?? []).filter(
     (f) => f.file_role === FileRoleMain && f.reviewed !== true,
   );
+  if (files ? unreviewed.length === 0 : !isBookNeedsReview(book)) return null;
+
   const bookMissing = new Set<string>();
   const fileMissing: { file: File; fields: string[] }[] = [];
   for (const file of unreviewed) {
@@ -64,7 +71,9 @@ const BookReviewBadge = ({
     criteria !== undefined &&
     bookMissing.size === 0 &&
     fileMissing.length === 0;
-  const firstFile = fileMissing[0]?.file;
+  // Scoped to files (the file page), a badge with nothing missing opens
+  // that file's editor, where its Reviewed control is.
+  const firstFile = fileMissing[0]?.file ?? (files ? unreviewed[0] : undefined);
   const onClick =
     bookMissing.size > 0 || !firstFile
       ? onEditBook

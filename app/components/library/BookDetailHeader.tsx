@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import FadedText from "@/components/library/FadedText";
+import LabelGrid, { type LabelGridRow } from "@/components/library/LabelGrid";
 import TextLink from "@/components/library/TextLink";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/libraries/utils";
@@ -97,7 +98,7 @@ const BookDetailHeader = ({
   const people = creditedPeople(book);
   const libraryId = book.library_id;
 
-  const rows: { label: string; value: ReactNode }[] = [];
+  const rows: LabelGridRow[] = [];
   if (book.book_series?.length) {
     rows.push({
       label: "Series",
@@ -248,18 +249,7 @@ const BookDetailHeader = ({
           )}
         </div>
         {actions}
-        {rows.length > 0 && (
-          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-            {rows.map((row) => (
-              <div className="contents" key={row.label}>
-                <dt className="pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  {row.label}
-                </dt>
-                <dd className="min-w-0 break-words">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        <LabelGrid rows={rows} />
         {book.description && <FadedText text={book.description} />}
       </div>
 

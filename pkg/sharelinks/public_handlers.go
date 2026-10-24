@@ -187,9 +187,6 @@ func (h *publicHandler) fileCover(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if file.FileRole == models.FileRoleSupplement {
-		return errcodes.NotFound("Cover")
-	}
 	return covers.ServeFileCover(c, file, covers.CacheControlImmutable, "Cover", h.coverCache)
 }
 

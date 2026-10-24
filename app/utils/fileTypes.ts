@@ -46,6 +46,14 @@ export const isReflowableFileType = (fileType: string): boolean =>
 export const isMainEligibleFileType = (fileType: string): boolean =>
   MAIN_ELIGIBLE_FILE_TYPES.includes(fileType);
 
+/** Whether chapters can be added to the type: pages and audio positions can
+ *  be chosen, while a reflowable ebook's chapters can only be renamed or
+ *  removed. */
+export const canAddChapters = (fileType: string): boolean =>
+  fileType === FileTypeCBZ ||
+  fileType === FileTypePDF ||
+  fileType === FileTypeM4B;
+
 /** Orders ebook files when none is the Preferred Cover: EPUB, then KePub,
  *  then AZW3, then MOBI, then the other ebook formats, which share a rank so a
  *  stable sort keeps their order. Mirrors models.EbookCoverRank. */

@@ -52,7 +52,7 @@ Before enabling file organization, back up the library and test the setting on a
 
 ## A File Is Marked Unreadable
 
-**Symptom:** A file shows an **Unreadable** badge on the book page, or the file details page shows a "This file could not be read" notice. The scan job log contains `failed to parse file metadata` for the same path, often with `zip: not a valid zip file` for EPUB and CBZ files.
+**Symptom:** A file shows an **Unreadable** badge on the book page, or the file's page shows a "This file could not be read" notice. The scan job log contains `failed to parse file metadata` for the same path, often with `zip: not a valid zip file` for EPUB and CBZ files.
 
 **Likely cause:** The file on disk is damaged. The most common case is a zip-based file (EPUB, CBZ) whose central directory was cut off by an interrupted copy or a reader application that rewrote the file over a network share. The book keeps the metadata from the last successful scan, but the in-app reader and KePub conversion will fail for that file until it is repaired.
 

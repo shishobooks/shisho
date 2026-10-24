@@ -14,8 +14,9 @@ export enum QueryKey {
 }
 
 /**
- * Fetch chapter data for an Audible ASIN. Disabled by default — enable only
- * when the user explicitly triggers a lookup from the fetch dialog.
+ * Fetch chapter data for an Audible ASIN. Disabled by default: the fetch
+ * dialog enables it for the file's ASIN as it opens, or for one the user
+ * enters.
  */
 export const useAudnexusChapters = (
   asin: string | null,

@@ -114,6 +114,27 @@ describe("SharedBook", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a supplement's cover through the share endpoint", async () => {
+    const supplement = {
+      ...shared.files[0],
+      id: 44,
+      file_type: "pdf",
+      file_role: "supplement",
+      display_name: "Map.pdf",
+      reachable_file_types: ["pdf"],
+    };
+    respondWith(200, { ...shared, files: [shared.files[0], supplement] });
+    renderPage();
+
+    await screen.findByRole("heading", { name: "The Shared Book" });
+    expect(
+      screen.getByRole("button", { name: "View cover of Map.pdf" }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector(`img[src^="/api/share/${TOKEN}/files/44/cover"]`),
+    ).not.toBeNull();
+  });
+
   it("renders the book with who shared it and when the link expires", async () => {
     respondWith(200, shared);
     renderPage();
