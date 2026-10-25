@@ -177,3 +177,16 @@ func TestReadFont_Limit(t *testing.T) {
 	_, err = readFont(db, record, 4, int64(len(testgen.KF8SampleFont))-1)
 	require.ErrorIs(t, err, errFontsTooLarge)
 }
+
+// KindleGen gives a KF8 book's text length as the end of its documents,
+// before its stylesheets, though the text records hold both: the text is
+// all the records hold.
+func TestReadContent_KindleGenTextLength(t *testing.T) {
+	t.Parallel()
+	opts := testgen.KF8Sample(testgen.MOBIKindCombo)
+	opts.KindleGenTextLength = true
+	book, err := readBuiltContent(t, opts)
+	require.NoError(t, err)
+	require.Len(t, book.Styles, 1)
+	assert.Contains(t, string(book.Styles[0].Content), "h1 { color: red; }")
+}

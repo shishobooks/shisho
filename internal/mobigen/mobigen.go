@@ -89,6 +89,10 @@ type Options struct {
 	Compression Compression
 	// CP1252 writes the header and EXTH text as Windows-1252 instead of UTF-8.
 	CP1252 bool
+	// KindleGenTextLength writes a KF8 book's text length as the end of its
+	// first flow, as KindleGen does, though its text records hold every
+	// flow.
+	KindleGenTextLength bool
 	// TOC is written as the NCX index of every book in the file, nested
 	// through parent and child tags as KindleGen writes it.
 	TOC []TOCEntry
@@ -345,7 +349,7 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 
 	header, err := buildMOBIHeaderRecord(opts, mobiHeaderSpec{
 		version:      version,
-		textLength:   u32(len(text)),
+		textLength:   textLength(opts, text, layout),
 		textRecords:  u16(len(textRecords)),
 		firstNonBook: u32(firstNonBook),
 		firstImage:   firstImage,
@@ -512,6 +516,14 @@ func buildMOBIHeaderRecord(opts Options, spec mobiHeaderSpec) ([]byte, error) {
 		return nil, encodeErr
 	}
 	return rec.Bytes(), nil
+}
+
+// textLength is the text length the header gives.
+func textLength(opts Options, text []byte, layout *kf8Layout) uint32 {
+	if opts.KindleGenTextLength && layout != nil {
+		return u32(layout.flowEnds[0])
+	}
+	return u32(len(text))
 }
 
 // fdstCount is the number of flows the FDST record lists.
