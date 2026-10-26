@@ -32,7 +32,7 @@ A KePub's name keeps only the letters A to Z, digits, spaces, and `-_.,()'`, bec
 
 ## First Downloads
 
-A generated download starts as soon as it is requested and is built while it is sent. EPUB, KePub, M4B, MOBI, AZW3, and PDF downloads of a file as its own type know their size before they start, so the device or browser shows progress even the first time. An EPUB converted from an AZW3 or MOBI does too. A CBZ, a KePub converted from another file type, and an EPUB made from a CBZ or a KePub do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
+A generated download starts as soon as it is requested and is built while it is sent. EPUB, KePub, M4B, MOBI, AZW3, and PDF downloads of a file as its own type know their size before they start, so the device or browser shows progress even the first time. An EPUB converted from an AZW3 or MOBI does too. An AZW3 converted from another file type is built in full before its download starts, so it shows its size, but its first download waits until the whole book is built. A CBZ, a KePub converted from another file type, and an EPUB made from a CBZ or a KePub do not: their first download has no file size, so the device or browser cannot show a percentage, and an interrupted download starts over. Later downloads of the same file show their size while it stays in the download cache.
 
 ## KePub
 
@@ -103,10 +103,13 @@ A file can be downloaded as its own file type or as another one Shisho converts 
 | **KePub** | **EPUB** | A plain EPUB with the book's metadata and the Kobo markup removed, for readers that aren't Kobos |
 | **AZW3** | **EPUB** | An EPUB 3 with the book's metadata, for readers that open EPUB but not Kindle files |
 | **MOBI** | **EPUB** | The same |
+| **EPUB** | **AZW3** | A Kindle book (KF8) with the book's metadata, for Kindles and the Kindle apps |
 
-Conversions chain, so an AZW3 or MOBI also reaches KePub through EPUB. M4B and PDF files download only as themselves.
+Conversions chain, so an AZW3 or MOBI also reaches KePub through EPUB, and a KePub, CBZ, or MOBI reaches AZW3 through EPUB. M4B and PDF files download only as themselves.
 
 An AZW3 or MOBI converted to EPUB keeps its text, images, stylesheets, embedded fonts, internal links, and table of contents. A `.mobi` that holds both an older Mobipocket book and a newer KF8 book converts from the KF8 book. A `.mobi` that holds only an older Mobipocket book keeps its formatting, such as indents, alignment, and font sizes. A file that cannot be converted, such as a damaged one or one with an image over 64 MB, fails instead of sending a broken EPUB, and the web app and Share Links say why.
+
+An EPUB converted to AZW3 keeps its text, images, stylesheets, cover, and table of contents, and carries the metadata a [MOBI or AZW3 download](#mobi-and-azw3) writes, except the ASIN: its ASIN record holds the identifier described below. Links between places in the book and embedded fonts are not carried over: a link does nothing, and text set in an embedded font uses the Kindle's own. Each file converted to AZW3 keeps one identifier across regenerations, so after a metadata edit a Kindle opens the new download where the reader left off.
 
 A KePub converted to EPUB keeps its text, images, and internal links; a link or table of contents entry that pointed inside a paragraph goes to the start of that paragraph. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
 

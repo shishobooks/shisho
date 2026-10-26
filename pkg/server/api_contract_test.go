@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -88,6 +90,20 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	bareKF8Path := testgen.GenerateMOBI(t, fileBook.Filepath, "bare.azw3", testgen.MOBIOptions{Kind: testgen.MOBIKindKF8, Title: "Bare"})
 	bareKF8File := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeAZW3, FileRole: models.FileRoleMain, Filepath: bareKF8Path, FilesizeBytes: 1}
 	f.insert(bareKF8File)
+	var emptyEPUB bytes.Buffer
+	zw := zip.NewWriter(&emptyEPUB)
+	for _, entry := range [][2]string{
+		{"mimetype", "application/epub+zip"},
+		{"OEBPS/content.opf", `<package version="3.0" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Empty</dc:title></metadata><manifest/><spine/></package>`},
+	} {
+		w, err := zw.Create(entry[0])
+		require.NoError(t, err)
+		_, err = w.Write([]byte(entry[1]))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	emptyEPUBFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, Filepath: testgen.WriteFile(t, fileBook.Filepath, "empty.epub", emptyEPUB.Bytes()), FilesizeBytes: 1}
+	f.insert(emptyEPUBFile)
 	cbzPath := testgen.GenerateCBZ(t, fileBook.Filepath, "comic.cbz", testgen.CBZOptions{Title: "Comic"})
 	cbzFile := &models.File{LibraryID: f.lib.ID, BookID: fileBook.ID, FileType: models.FileTypeCBZ, FileRole: models.FileRoleMain, Filepath: cbzPath, FilesizeBytes: 1}
 	f.insert(cbzFile)
@@ -280,6 +296,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download/epub", bareKF8File.ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state",
 			message: "This Kindle book can't be converted: it has no skeleton or fragment index, so its documents can't be found.",
+		},
+		{
+			name:   "download as AZW3 of an EPUB with no documents",
+			method: http.MethodGet, path: fmt.Sprintf("/api/books/files/%d/download/azw3", emptyEPUBFile.ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+			message: "This book can't be converted to AZW3: its EPUB has no documents.",
 		},
 		{
 			name:   "download as a File Type no Conversion reaches",

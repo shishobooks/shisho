@@ -39,12 +39,16 @@ var typeRules = map[string]deviceTypeRules{
 		},
 	},
 	// A Kindle's browser downloads only its own formats. AZW3 comes first
-	// because it renders as KF8; MOBI covers books without one.
+	// because it renders as KF8; MOBI covers books without one. A book with
+	// neither reaches the Kindle as AZW3 from its EPUB or KePub, which come
+	// last so a book's own Kindle file is sent unconverted.
 	DeviceTypeKindle: {
 		allowed: []string{models.FileTypeAZW3, models.FileTypeMOBI},
 		preset: []delivery.Rule{
 			{SourceFileType: models.FileTypeAZW3, DeliveredFileType: models.FileTypeAZW3},
 			{SourceFileType: models.FileTypeMOBI, DeliveredFileType: models.FileTypeMOBI},
+			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeAZW3},
+			{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeAZW3},
 		},
 	},
 	DeviceTypeOPDS:    {},

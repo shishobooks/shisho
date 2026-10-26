@@ -1,5 +1,6 @@
 // Package mobi reads MOBI and AZW3 files: Mobipocket (MOBI6) books, KF8
-// books, and combo files that hold a MOBI6 book followed by a KF8 one. It is
+// books, and combo files that hold a MOBI6 book followed by a KF8 one. It
+// rewrites their metadata, and writes new AZW3 files (WriteKF8). It is
 // hand-written so Shisho takes on no GPL code (ADR 0009).
 package mobi
 

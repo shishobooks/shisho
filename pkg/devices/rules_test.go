@@ -50,7 +50,10 @@ func TestService_Rules(t *testing.T) {
 			name:       "a new Kindle follows its preset",
 			deviceType: DeviceTypeKindle,
 			wantMode:   RulesModePreset,
-			want:       []delivery.Rule{rule(models.FileTypeAZW3, models.FileTypeAZW3), rule(models.FileTypeMOBI, models.FileTypeMOBI)},
+			want: []delivery.Rule{
+				rule(models.FileTypeAZW3, models.FileTypeAZW3), rule(models.FileTypeMOBI, models.FileTypeMOBI),
+				rule(models.FileTypeEPUB, models.FileTypeAZW3), rule(models.FileTypeKePub, models.FileTypeAZW3),
+			},
 		},
 		{
 			name:       "a new OPDS app follows the built-in default",
@@ -176,6 +179,34 @@ func TestKoboPreset_DeliversKindleBooksAsKePub(t *testing.T) {
 		require.Len(t, result.Ebook, 1, fileType)
 		assert.Equal(t, 2, result.Ebook[0].File.ID, fileType)
 	}
+}
+
+// Under the Kindle preset, a book with no Kindle file reaches the Kindle as
+// AZW3 from its EPUB or KePub, a book with an AZW3 or MOBI sends that
+// instead, and a book with nothing that reaches a Kindle File Type is not
+// delivered.
+func TestKindlePreset_DeliversEPUBBooksAsAZW3(t *testing.T) {
+	t.Parallel()
+	preset := PresetRules(DeviceTypeKindle)
+	only := func(fileTypes ...string) *models.Book {
+		book := &models.Book{ID: 1}
+		for i, fileType := range fileTypes {
+			book.Files = append(book.Files, &models.File{ID: i + 1, BookID: 1, FileType: fileType, FileRole: models.FileRoleMain})
+		}
+		return book
+	}
+	for _, fileType := range []string{models.FileTypeEPUB, models.FileTypeKePub} {
+		result := delivery.Resolve(preset, only(fileType))
+		require.Len(t, result.Ebook, 1, fileType)
+		assert.Equal(t, models.FileTypeAZW3, result.Ebook[0].DeliveredFileType, fileType)
+	}
+
+	result := delivery.Resolve(preset, only(models.FileTypeEPUB, models.FileTypeMOBI))
+	require.Len(t, result.Ebook, 1)
+	assert.Equal(t, 2, result.Ebook[0].File.ID, "a book's own Kindle file goes before a converted one")
+	assert.Equal(t, models.FileTypeMOBI, result.Ebook[0].DeliveredFileType)
+
+	assert.Empty(t, delivery.Resolve(preset, only(models.FileTypePDF)).All())
 }
 
 // A custom rule for a Kobo can deliver a Kindle File Type as KePub or EPUB,
