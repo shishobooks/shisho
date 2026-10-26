@@ -102,15 +102,11 @@ A file can be downloaded as its own file type or as another one Shisho converts 
 | **CBZ** | **EPUB** | A fixed-layout EPUB 3 with one page per image, for readers that open EPUB but not CBZ |
 | **KePub** | **EPUB** | A plain EPUB with the book's metadata and the Kobo markup removed, for readers that aren't Kobos |
 | **AZW3** | **EPUB** | An EPUB 3 with the book's metadata, for readers that open EPUB but not Kindle files |
-| **MOBI** | **EPUB** | The same, for a `.mobi` that holds a KF8 book |
+| **MOBI** | **EPUB** | The same |
 
 Conversions chain, so an AZW3 or MOBI also reaches KePub through EPUB. M4B and PDF files download only as themselves.
 
-An AZW3 or MOBI converted to EPUB keeps its text, images, stylesheets, internal links, and table of contents. Only the newer KF8 format converts: an AZW3, or a `.mobi` that holds a KF8 book alongside an older Mobipocket one. These fail instead of sending a broken EPUB, and the web app and Share Links say why:
-
-- a `.mobi` that holds only an older Mobipocket book, which most `.mobi` files are
-- a book whose text uses HUFF/CDIC compression, which some large books do
-- a book with embedded fonts
+An AZW3 or MOBI converted to EPUB keeps its text, images, stylesheets, embedded fonts, internal links, and table of contents. A `.mobi` that holds both an older Mobipocket book and a newer KF8 book converts from the KF8 book. A `.mobi` that holds only an older Mobipocket book keeps its formatting, such as indents, alignment, and font sizes. A file that cannot be converted, such as a damaged one or one with an image over 64 MB, fails instead of sending a broken EPUB, and the web app and Share Links say why.
 
 A KePub converted to EPUB keeps its text, images, and internal links; a link or table of contents entry that pointed inside a paragraph goes to the start of that paragraph. A comic converted from CBZ keeps every page in reading order, uses the file's cover page as its cover, and lists its chapters in the table of contents. Pages are resized to fit an e-reader screen, and PNG pages become JPEG.
 

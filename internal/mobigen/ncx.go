@@ -48,8 +48,9 @@ type ncxEntry struct {
 // children are a contiguous range; a flat index lists them in reading order
 // at depth 0, as Calibre's MOBI6 output does.
 // targets, for KF8 content, maps an entry's Target to its fragment and
-// offset; without it, targets are ignored.
-func ncxRecords(toc []TOCEntry, kf8, flat, cp1252 bool, perRecord, perCNCX int, targets map[string][2]uint32) ([][]byte, error) {
+// offset, and places, for MOBI6 content, to its offset in the text; without
+// them, targets are ignored.
+func ncxRecords(toc []TOCEntry, kf8, flat, cp1252 bool, perRecord, perCNCX int, targets map[string][2]uint32, places map[string]uint32) ([][]byte, error) {
 	entries := levelOrder(toc)
 	if flat {
 		entries = readingOrder(toc)
@@ -118,6 +119,13 @@ func ncxRecords(toc []TOCEntry, kf8, flat, cp1252 bool, perRecord, perCNCX int, 
 					return nil, errors.Errorf("no element with id %q", e.target)
 				}
 				values[ncxTagPosFID] = target[:]
+			}
+			if e.target != "" && places != nil {
+				place, ok := places[e.target]
+				if !ok {
+					return nil, errors.Errorf("no place %q", e.target)
+				}
+				values[ncxTagPos] = []uint32{place}
 			}
 			if e.parent >= 0 {
 				values[ncxTagParent] = []uint32{u32(e.parent)}
@@ -282,7 +290,7 @@ func readingOrder(toc []TOCEntry) []ncxEntry {
 	var walk func(entries []TOCEntry)
 	walk = func(entries []TOCEntry) {
 		for _, e := range entries {
-			out = append(out, ncxEntry{title: e.Title, parent: -1, firstChild: -1, lastChild: -1, order: len(out)})
+			out = append(out, ncxEntry{title: e.Title, parent: -1, firstChild: -1, lastChild: -1, order: len(out), target: e.Target})
 			walk(e.Children)
 		}
 	}

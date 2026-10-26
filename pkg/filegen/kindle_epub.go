@@ -20,19 +20,19 @@ import (
 )
 
 // kindleToEPUB is the Conversion step from MOBI or AZW3 to EPUB, for the
-// KF8 book in the file. It reads the book's documents, styles, and table of
-// contents into an EPUB held in memory, without its images, and runs the
-// EPUB generator's preparation on that, so the book's metadata is applied
-// as for any EPUB. The images are copied from the source as they are
-// written, after everything else, so the download starts before they are
-// read. The size is known up front.
+// KF8 book in the file, or else its MOBI6 book. It reads the book's
+// documents, styles, fonts, and table of contents into an EPUB held in
+// memory, without its images, and runs the EPUB generator's preparation on
+// that, so the book's metadata is applied as for any EPUB. The images are
+// copied from the source as they are written, after everything else, so the
+// download starts before they are read. The size is known up front.
 type kindleToEPUB struct {
 	fileType string
 }
 
 // kindleEPUBDir is the directory of the package in a converted EPUB. Every
-// document, style, and image sits in it beside the OPF, so the relative
-// hrefs mobi.ReadKF8 gives work as they are.
+// document, style, font, and image sits in it beside the OPF, so the relative
+// hrefs mobi.ReadContent gives work as they are.
 const kindleEPUBDir = "OEBPS"
 
 func (s kindleToEPUB) prepare(ctx context.Context, in stepInput) (Prepared, error) {
@@ -43,7 +43,7 @@ func (s kindleToEPUB) prepare(ctx context.Context, in stepInput) (Prepared, erro
 		return nil, NewGenerationError(models.FileTypeEPUB, err, "generation cancelled")
 	}
 	label := models.FileTypeLabel(s.fileType)
-	kf8, err := mobi.ReadKF8(ctx, in.src, in.src.Size())
+	kindle, err := mobi.ReadContent(ctx, in.src, in.src.Size())
 	if err != nil {
 		var unsupported *mobi.UnsupportedError
 		switch {
@@ -54,20 +54,20 @@ func (s kindleToEPUB) prepare(ctx context.Context, in stepInput) (Prepared, erro
 		}
 	}
 
-	base, err := kindleEPUBArchive(kf8)
+	base, err := kindleEPUBArchive(kindle)
 	if err != nil {
 		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to convert "+label+": "+err.Error())
 	}
 	file := *in.file
-	file.Chapters = kindleChapters(kf8, in.file.Chapters)
+	file.Chapters = kindleChapters(kindle, in.file.Chapters)
 	plan, err := planEPUB(ctx, bytes.NewReader(base), in.book, &file)
 	if err != nil {
 		return nil, err
 	}
 
-	p := &preparedKindleEPUB{kf8: kf8, plan: plan}
-	for _, r := range kf8.Resources {
-		if r != kf8.Cover {
+	p := &preparedKindleEPUB{kindle: kindle, plan: plan}
+	for _, r := range kindle.Resources {
+		if r != kindle.Cover {
 			p.images = append(p.images, r)
 		}
 	}
@@ -96,8 +96,8 @@ func compressPlanned(e epubEntry) (*ziputil.Entry, error) {
 // The entries are compressed and the output measured only once Size or
 // Write needs them, since a chain's next step reads entries instead.
 type preparedKindleEPUB struct {
-	kf8  *mobi.KF8
-	plan *epubPlan
+	kindle *mobi.Content
+	plan   *epubPlan
 	// images are the resources still to be read from the source: all but
 	// the cover, which the plan holds.
 	images []*mobi.Resource
@@ -186,7 +186,7 @@ func (p *preparedKindleEPUB) write(ctx context.Context, w io.Writer, measure boo
 			}
 			continue
 		}
-		data, err := p.kf8.ReadResource(r)
+		data, err := p.kindle.ReadResource(r)
 		if err != nil {
 			return err
 		}
@@ -213,7 +213,7 @@ func (p *preparedKindleEPUB) entries() []kepub.Entry {
 	}
 	for _, r := range p.images {
 		out = append(out, kepub.Entry{Name: path.Join(kindleEPUBDir, r.Name), Load: func() ([]byte, error) {
-			return p.kf8.ReadResource(r)
+			return p.kindle.ReadResource(r)
 		}})
 	}
 	return out
@@ -222,14 +222,14 @@ func (p *preparedKindleEPUB) entries() []kepub.Entry {
 // kindleChapters returns the stored chapters with each location replaced by
 // the href it became in the EPUB, so the EPUB generator matches them to the
 // table of contents the way it matches an EPUB's own.
-func kindleChapters(kf8 *mobi.KF8, stored []*models.Chapter) []*models.Chapter {
+func kindleChapters(kindle *mobi.Content, stored []*models.Chapter) []*models.Chapter {
 	var convert func([]*models.Chapter) []*models.Chapter
 	convert = func(level []*models.Chapter) []*models.Chapter {
 		out := make([]*models.Chapter, 0, len(level))
 		for _, ch := range level {
 			c := *ch
 			if ch.Href != nil {
-				if href, ok := kf8.Href(*ch.Href); ok {
+				if href, ok := kindle.Href(*ch.Href); ok {
 					c.Href = &href
 				}
 			}
@@ -241,10 +241,10 @@ func kindleChapters(kf8 *mobi.KF8, stored []*models.Chapter) []*models.Chapter {
 	return convert(models.ChapterTree(stored))
 }
 
-// kindleEPUBArchive returns an EPUB of the KF8 book's documents, styles,
+// kindleEPUBArchive returns an EPUB of the book's documents, styles, fonts,
 // table of contents, and cover, with an OPF holding the metadata the file
 // carries. Only the cover of its images is in it.
-func kindleEPUBArchive(kf8 *mobi.KF8) ([]byte, error) {
+func kindleEPUBArchive(kindle *mobi.Content) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	add := func(name string, method uint16, content []byte) error {
@@ -265,20 +265,20 @@ func kindleEPUBArchive(kf8 *mobi.KF8) ([]byte, error) {
 `)); err != nil {
 		return nil, err
 	}
-	nav, ncx := kindleTOC(kf8)
-	files := []mobi.Document{{Name: "content.opf", Content: kindleOPF(kf8)}, {Name: "nav.xhtml", Content: nav}, {Name: "toc.ncx", Content: ncx}}
-	files = append(append(files, kf8.Styles...), kf8.Documents...)
+	nav, ncx := kindleTOC(kindle)
+	files := []mobi.Document{{Name: "content.opf", Content: kindleOPF(kindle)}, {Name: "nav.xhtml", Content: nav}, {Name: "toc.ncx", Content: ncx}}
+	files = append(append(append(files, kindle.Styles...), kindle.Fonts...), kindle.Documents...)
 	for _, f := range files {
 		if err := add(path.Join(kindleEPUBDir, f.Name), zip.Deflate, f.Content); err != nil {
 			return nil, err
 		}
 	}
-	if kf8.Cover != nil {
-		data, err := kf8.ReadResource(kf8.Cover)
+	if kindle.Cover != nil {
+		data, err := kindle.ReadResource(kindle.Cover)
 		if err != nil {
 			return nil, err
 		}
-		if err := add(path.Join(kindleEPUBDir, kf8.Cover.Name), zip.Store, data); err != nil {
+		if err := add(path.Join(kindleEPUBDir, kindle.Cover.Name), zip.Store, data); err != nil {
 			return nil, err
 		}
 	}
@@ -291,9 +291,9 @@ func kindleEPUBArchive(kf8 *mobi.KF8) ([]byte, error) {
 // kindleIdentifier returns the identifier of the converted EPUB, a UUID
 // derived from the book's documents, so converting the same file twice
 // gives the same identifier.
-func kindleIdentifier(kf8 *mobi.KF8) string {
+func kindleIdentifier(kindle *mobi.Content) string {
 	sum := sha256.New()
-	for _, d := range kf8.Documents {
+	for _, d := range kindle.Documents {
 		sum.Write(d.Content)
 	}
 	d := sum.Sum(nil)
@@ -302,9 +302,9 @@ func kindleIdentifier(kf8 *mobi.KF8) string {
 	return fmt.Sprintf("urn:uuid:%x-%x-%x-%x-%x", d[0:4], d[4:6], d[6:8], d[8:10], d[10:16])
 }
 
-// kindleOPF returns an EPUB 3 package document for the KF8 book.
-func kindleOPF(kf8 *mobi.KF8) []byte {
-	meta := kf8.Metadata
+// kindleOPF returns an EPUB 3 package document for the book.
+func kindleOPF(kindle *mobi.Content) []byte {
+	meta := kindle.Metadata
 	language := "und"
 	if meta.Language != nil && *meta.Language != "" {
 		language = *meta.Language
@@ -314,7 +314,7 @@ func kindleOPF(kf8 *mobi.KF8) []byte {
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="bookid">` + kindleIdentifier(kf8) + `</dc:identifier>
+    <dc:identifier id="bookid">` + kindleIdentifier(kindle) + `</dc:identifier>
 `)
 	element := func(name, value string) {
 		if value != "" {
@@ -337,7 +337,7 @@ func kindleOPF(kf8 *mobi.KF8) []byte {
 	for _, g := range meta.Genres {
 		element("subject", g)
 	}
-	if kf8.Cover != nil {
+	if kindle.Cover != nil {
 		b.WriteString(`    <meta name="cover" content="cover-image"/>` + "\n")
 	}
 	b.WriteString("  </metadata>\n  <manifest>\n")
@@ -350,25 +350,28 @@ func kindleOPF(kf8 *mobi.KF8) []byte {
 	}
 	item("nav", "nav.xhtml", "application/xhtml+xml", "nav")
 	item("ncx", "toc.ncx", "application/x-dtbncx+xml", "")
-	for i, d := range kf8.Styles {
+	for i, d := range kindle.Styles {
 		item(fmt.Sprintf("flow%d", i+1), d.Name, d.MediaType, "")
 	}
-	for i, d := range kf8.Documents {
+	for i, d := range kindle.Fonts {
+		item(fmt.Sprintf("font%d", i), d.Name, d.MediaType, "")
+	}
+	for i, d := range kindle.Documents {
 		properties := ""
 		if bytes.Contains(d.Content, []byte("<svg")) {
 			properties = "svg"
 		}
 		item(fmt.Sprintf("part%d", i), d.Name, d.MediaType, properties)
 	}
-	for i, r := range kf8.Resources {
-		if r == kf8.Cover {
+	for i, r := range kindle.Resources {
+		if r == kindle.Cover {
 			item("cover-image", r.Name, r.MediaType, "cover-image")
 		} else {
 			item(fmt.Sprintf("image%d", i), r.Name, r.MediaType, "")
 		}
 	}
 	b.WriteString("  </manifest>\n  <spine toc=\"ncx\">\n")
-	for i := range kf8.Documents {
+	for i := range kindle.Documents {
 		b.WriteString(fmt.Sprintf("    <itemref idref=\"part%d\"/>\n", i))
 	}
 	b.WriteString("  </spine>\n</package>\n")
@@ -377,14 +380,14 @@ func kindleOPF(kf8 *mobi.KF8) []byte {
 
 // kindleTOC returns the nav document and the NCX for the book's table of
 // contents. A book with none gets an entry per document.
-func kindleTOC(kf8 *mobi.KF8) ([]byte, []byte) {
-	points := kf8.TOC
+func kindleTOC(kindle *mobi.Content) ([]byte, []byte) {
+	points := kindle.TOC
 	if len(points) == 0 {
-		for i, d := range kf8.Documents {
+		for i, d := range kindle.Documents {
 			points = append(points, &mobi.NavPoint{Title: fmt.Sprintf("Section %d", i+1), Href: d.Name})
 		}
 	}
-	title := html.EscapeString(kf8.Metadata.Title)
+	title := html.EscapeString(kindle.Metadata.Title)
 
 	var nav strings.Builder
 	nav.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
@@ -414,7 +417,7 @@ func kindleTOC(kf8 *mobi.KF8) ([]byte, []byte) {
 	var ncx strings.Builder
 	ncx.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-<head><meta name="dtb:uid" content="` + kindleIdentifier(kf8) + `"/></head>
+<head><meta name="dtb:uid" content="` + kindleIdentifier(kindle) + `"/></head>
 <docTitle><text>` + title + `</text></docTitle>
 <navMap>
 `)
