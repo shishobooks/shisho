@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import { forwardRef, useId, useState } from "react";
 
-import { FilterChip } from "@/components/library/FilterChip";
+import {
+  FilterChip,
+  type SelectedFilter,
+} from "@/components/library/FilterChip";
 import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
@@ -69,7 +72,7 @@ interface FilterSheetProps {
   fileTypeOptions: readonly { value: string; label: string }[];
   onToggleFileType: (fileType: string) => void;
   selectedGenreIds: number[];
-  selectedGenres: Genre[];
+  selectedGenres: SelectedFilter[];
   genres: Genre[];
   genresLoading: boolean;
   /** The genres query, for its error report and Retry. */
@@ -78,7 +81,7 @@ interface FilterSheetProps {
   onGenreSearchChange: (value: string) => void;
   onToggleGenre: (genreId: number) => void;
   selectedTagIds: number[];
-  selectedTags: Tag[];
+  selectedTags: SelectedFilter[];
   tags: Tag[];
   tagsLoading: boolean;
   /** The tags query, for its error report and Retry. */
@@ -152,7 +155,7 @@ const FilterCombobox = ({
   emptyText,
 }: {
   chipKind: "genre" | "tag";
-  selected: FilterComboboxOption[];
+  selected: SelectedFilter[];
   options: FilterComboboxOption[];
   loading: boolean;
   query: FilterOptionsQuery;

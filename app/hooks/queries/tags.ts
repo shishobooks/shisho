@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
@@ -52,6 +53,20 @@ export const useTag = (
     },
   });
 };
+
+// Several tags at once, sharing the cache entries of useTag.
+export const useTagsByIds = (ids: number[]) => {
+  const permitted = useRequires("books:read");
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: [QueryKey.RetrieveTag, id],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        API.request<TagResponse>("GET", `/tags/${id}`, null, null, signal),
+      enabled: permitted,
+    })),
+  });
+};
+
 export const useUpdateTag = () => {
   const queryClient = useQueryClient();
 

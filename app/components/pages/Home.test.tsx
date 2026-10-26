@@ -179,3 +179,105 @@ describe("Home search failure", () => {
     );
   });
 });
+
+describe("Home active filter chips", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setAuth({ permissions: ["books:read"] });
+  });
+
+  it("shows chips for a selected tag and genre missing from the dropdown's first page", async () => {
+    // The dropdown lists only the first page of tags and genres, so the
+    // selected ones come from their own endpoints.
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/tags/99") return { id: 99, name: "Obscure Tag" };
+      if (path === "/genres/77") return { id: 77, name: "Obscure Genre" };
+      if (path === "/user/libraries" || path.endsWith("/languages")) return [];
+      return { items: [], total: 0 };
+    });
+
+    renderHome("/libraries/1?tag_ids=99&genre_ids=77");
+    await flush();
+
+    expect(screen.getByText("Obscure Tag")).toBeInTheDocument();
+    expect(screen.getByText("Obscure Genre")).toBeInTheDocument();
+  });
+
+  it("shows a removable chip for a selected tag or genre that no longer exists", async () => {
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/tags/99" || path === "/genres/77") {
+        throw new ShishoAPIError("Not found", "not_found", 404);
+      }
+      if (path === "/user/libraries" || path.endsWith("/languages")) return [];
+      return { items: [], total: 0 };
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    renderHome("/libraries/1?tag_ids=99&genre_ids=77");
+    await flush();
+
+    expect(screen.getByText("Unknown genre")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Remove Unknown tag" }),
+    );
+    expect(screen.queryByText("Unknown tag")).not.toBeInTheDocument();
+  });
+
+  it("shows a tag deleted since the dropdown loaded as unknown", async () => {
+    // The dropdown's list still names the tag, but the tag itself is gone,
+    // as after a merge earlier in the session.
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/tags/99") {
+        throw new ShishoAPIError("Not found", "not_found", 404);
+      }
+      if (path === "/tags") {
+        return { items: [{ id: 99, name: "Merged Away" }], total: 1 };
+      }
+      if (path === "/user/libraries" || path.endsWith("/languages")) return [];
+      return { items: [], total: 0 };
+    });
+
+    renderHome("/libraries/1?tag_ids=99");
+    await flush();
+
+    expect(screen.getByText("Unknown tag")).toBeInTheDocument();
+    expect(screen.queryByText("Merged Away")).not.toBeInTheDocument();
+  });
+
+  it("names a selected tag by id when it fails to load for another reason", async () => {
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/tags/99") {
+        throw new ShishoAPIError("Bad request", "bad_request", 400);
+      }
+      if (path === "/user/libraries" || path.endsWith("/languages")) return [];
+      return { items: [], total: 0 };
+    });
+
+    renderHome("/libraries/1?tag_ids=99");
+    await flush();
+
+    expect(screen.getByText("Tag #99")).toBeInTheDocument();
+    expect(screen.queryByText("Unknown tag")).not.toBeInTheDocument();
+  });
+
+  it("filters books only by ids in the URL that are positive integers", async () => {
+    const request = vi
+      .spyOn(API, "request")
+      .mockImplementation(async (_method, path) =>
+        path === "/user/libraries" || path.endsWith("/languages")
+          ? []
+          : { items: [], total: 0 },
+      );
+
+    renderHome("/libraries/1?tag_ids=abc,0,-1,1.5,5&genre_ids=xyz");
+    await flush();
+
+    const booksCall = request.mock.calls.find((call) => call[1] === "/books");
+    expect(booksCall?.[3]).toMatchObject({ tag_ids: [5] });
+    expect(booksCall?.[3]).not.toHaveProperty("genre_ids");
+    const tagPaths = requestedPaths(request).filter((path: string) =>
+      path.startsWith("/tags/"),
+    );
+    expect(tagPaths).toEqual(["/tags/5"]);
+  });
+});
