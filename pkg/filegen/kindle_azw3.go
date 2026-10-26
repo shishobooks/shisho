@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/shishobooks/shisho/pkg/epub"
@@ -179,7 +180,7 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 	for _, m := range pkg.Metadata.Meta {
 		if m.Property == "rendition:layout" && strings.TrimSpace(m.Text) == "pre-paginated" {
 			book.FixedLayout = true
-			book.OriginalResolution = viewportSize(book.Documents[0].Content)
+			book.OriginalResolution = pageResolution(book.Documents)
 		}
 	}
 	if opf.CoverFilepath != "" {
@@ -264,23 +265,38 @@ func kf8Metadata(opf *epub.OPF) mobi.Metadata {
 }
 
 var (
-	viewportMeta = regexp.MustCompile(`<meta\s+name=["']viewport["']\s+content=["']([^"']*)["']`)
+	metaTag      = regexp.MustCompile(`(?i)<meta\s[^>]*>`)
+	viewportName = regexp.MustCompile(`(?i)\sname\s*=\s*["']viewport["']`)
+	metaContent  = regexp.MustCompile(`(?i)\scontent\s*=\s*["']([^"']*)["']`)
 	viewportSide = regexp.MustCompile(`(width|height)\s*=\s*(\d+)`)
 )
 
-// viewportSize returns the page size a fixed-layout document's viewport
-// gives, as "800x1200", or "" when it gives none.
-func viewportSize(doc []byte) string {
-	m := viewportMeta.FindSubmatch(doc)
-	if m == nil {
+// pageResolution returns the size a fixed-layout book's pages were made
+// for, as "1600x1200": the largest width and height any document's viewport
+// gives, since pages can differ, such as a landscape spread among portrait
+// pages. It is "" when no viewport gives both.
+func pageResolution(docs []mobi.Document) string {
+	var width, height int
+	for _, d := range docs {
+		for _, tag := range metaTag.FindAll(d.Content, -1) {
+			content := metaContent.FindSubmatch(tag)
+			if !viewportName.Match(tag) || content == nil {
+				continue
+			}
+			for _, side := range viewportSide.FindAllSubmatch(content[1], -1) {
+				n, err := strconv.Atoi(string(side[2]))
+				switch {
+				case err != nil:
+				case string(side[1]) == "width":
+					width = max(width, n)
+				default:
+					height = max(height, n)
+				}
+			}
+		}
+	}
+	if width == 0 || height == 0 {
 		return ""
 	}
-	size := map[string]string{}
-	for _, side := range viewportSide.FindAllSubmatch(m[1], -1) {
-		size[string(side[1])] = string(side[2])
-	}
-	if size["width"] == "" || size["height"] == "" {
-		return ""
-	}
-	return size["width"] + "x" + size["height"]
+	return fmt.Sprintf("%dx%d", width, height)
 }
