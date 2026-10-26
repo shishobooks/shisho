@@ -1,13 +1,9 @@
 package filegen
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha1" //nolint:gosec // the IDPF font obfuscation key is a SHA-1
 	"crypto/sha256"
-	"encoding/hex"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"net/url"
@@ -48,7 +44,7 @@ func (epubToAZW3) prepare(ctx context.Context, in stepInput) (Prepared, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, NewGenerationError(models.FileTypeAZW3, err, "generation cancelled")
 	}
-	book, err := kf8Book(entries, sourceIdentifiers(in.src)...)
+	book, err := kf8Book(entries)
 	if err != nil {
 		return nil, err
 	}
@@ -106,55 +102,10 @@ func (p *preparedAZW3) Write(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-// sourceIdentifiers returns the identifiers in the OPF of an EPUB or KePub
-// source, the package's unique identifier first, or nil for any other
-// source. Preparation can replace the unique identifier, which keys the
-// obfuscation of the source's fonts.
-func sourceIdentifiers(src Source) []string {
-	if src == nil {
-		return nil
-	}
-	zr, err := zip.NewReader(src, src.Size())
-	if err != nil {
-		return nil
-	}
-	for _, f := range zr.File {
-		if path.Ext(f.Name) != ".opf" {
-			continue
-		}
-		r, err := f.Open()
-		if err != nil {
-			return nil
-		}
-		parsed, err := epub.ParseOPF(f.Name, r)
-		if err != nil {
-			return nil
-		}
-		return packageIdentifiers(parsed.Package)
-	}
-	return nil
-}
-
-// packageIdentifiers returns a package's identifiers, its unique
-// identifier first.
-func packageIdentifiers(pkg *epub.Package) []string {
-	var ids []string
-	for _, id := range pkg.Metadata.Identifier {
-		v := strings.TrimSpace(id.Text)
-		if id.ID == pkg.UniqueIdentifier && pkg.UniqueIdentifier != "" {
-			ids = append([]string{v}, ids...)
-		} else {
-			ids = append(ids, v)
-		}
-	}
-	return ids
-}
-
 // kf8Book reads an EPUB's entries into a book for mobi.WriteKF8. The
 // documents, stylesheets, and fonts are read now; the images only as they
-// are written. sourceIDs are the source's identifiers, tried first as keys
-// to obfuscated fonts.
-func kf8Book(entries []kepub.Entry, sourceIDs ...string) (*mobi.KF8Book, error) {
+// are written.
+func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 	byName := make(map[string]kepub.Entry, len(entries))
 	var opfName string
 	for _, e := range entries {
@@ -192,11 +143,16 @@ func kf8Book(entries []kepub.Entry, sourceIDs ...string) (*mobi.KF8Book, error) 
 		}
 		return path.Join(path.Dir(opfName), href)
 	}
-	obfuscated, err := obfuscatedFonts(byName)
-	if err != nil {
-		return nil, err
+	var obfuscated map[string]string
+	if e, ok := byName[encryptionPath]; ok {
+		data, err := e.Data()
+		if err != nil {
+			return nil, NewGenerationError(models.FileTypeAZW3, err, "failed to read "+encryptionPath+" from EPUB")
+		}
+		obfuscated = obfuscatedFonts(data)
 	}
-	keys := append(slices.Clone(sourceIDs), packageIdentifiers(pkg)...)
+	// Preparation keeps each font keyed on the identifiers the OPF holds.
+	keys := epubPackageIdentifiers(pkg)
 	items := map[string]string{}
 	for _, item := range pkg.Manifest.Item {
 		name := entryName(item.Href)
@@ -220,7 +176,9 @@ func kf8Book(entries []kepub.Entry, sourceIDs ...string) (*mobi.KF8Book, error) 
 				return nil, err
 			}
 			if algorithm, ok := obfuscated[name]; ok {
-				data = deobfuscateFont(data, algorithm, keys)
+				if plain, _, ok := deobfuscateFont(data, algorithm, keys); ok {
+					data = plain
+				}
 			}
 			book.Fonts = append(book.Fonts, mobi.Document{Name: name, MediaType: item.MediaType, Content: data})
 		}
@@ -352,93 +310,6 @@ var fontExtensions = map[string]bool{".ttf": true, ".otf": true, ".woff": true, 
 func isFontItem(mediaType, name string) bool {
 	return strings.Contains(mediaType, "font") ||
 		mediaType == "application/vnd.ms-opentype" || fontExtensions[strings.ToLower(path.Ext(name))]
-}
-
-// The font obfuscation algorithms, which pkg/epub also knows, as the ones
-// that leave a book readable, and how much of a font each obfuscates.
-const (
-	idpfObfuscation    = "http://www.idpf.org/2008/embedding"
-	adobeObfuscation   = "http://ns.adobe.com/pdf/enc#RC"
-	idpfObfuscatedLen  = 1040
-	adobeObfuscatedLen = 1024
-)
-
-// obfuscatedFonts returns the entries an EPUB's encryption.xml says are
-// obfuscated fonts, with the algorithm of each. An encryption.xml that
-// can't be read names none.
-func obfuscatedFonts(byName map[string]kepub.Entry) (map[string]string, error) {
-	out := map[string]string{}
-	e, ok := byName["META-INF/encryption.xml"]
-	if !ok {
-		return out, nil
-	}
-	data, err := e.Data()
-	if err != nil {
-		return nil, NewGenerationError(models.FileTypeAZW3, err, "failed to read META-INF/encryption.xml from EPUB")
-	}
-	var doc struct {
-		Data []struct {
-			Method struct {
-				Algorithm string `xml:"Algorithm,attr"`
-			} `xml:"EncryptionMethod"`
-			Cipher struct {
-				Reference struct {
-					URI string `xml:"URI,attr"`
-				} `xml:"CipherReference"`
-			} `xml:"CipherData"`
-		} `xml:"EncryptedData"`
-	}
-	if err := xml.Unmarshal(data, &doc); err != nil {
-		return out, nil //nolint:nilerr // an unreadable encryption.xml names no fonts
-	}
-	for _, d := range doc.Data {
-		if a := d.Method.Algorithm; a == idpfObfuscation || a == adobeObfuscation {
-			uri := d.Cipher.Reference.URI
-			if unescaped, err := url.PathUnescape(uri); err == nil {
-				uri = unescaped
-			}
-			out[path.Clean(strings.TrimPrefix(uri, "/"))] = a
-		}
-	}
-	return out, nil
-}
-
-// deobfuscateFont undoes a font's obfuscation. The IDPF algorithm XORs the
-// first 1040 bytes with the SHA-1 of the book's unique identifier, its
-// whitespace removed; Adobe's XORs the first 1024 with the 16 bytes of a
-// UUID identifier. Which identifier keyed it isn't recorded, and Shisho's
-// metadata can replace it, so each of ids is tried in turn, and the first
-// that gives a font a Kindle shows wins. Otherwise the font is returned as
-// it is, and the writer leaves it out.
-func deobfuscateFont(data []byte, algorithm string, ids []string) []byte {
-	for _, id := range ids {
-		var key []byte
-		n := idpfObfuscatedLen
-		switch algorithm {
-		case idpfObfuscation:
-			sum := sha1.Sum([]byte(strings.Map(func(r rune) rune { //nolint:gosec // the algorithm's key
-				if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
-					return -1
-				}
-				return r
-			}, id)))
-			key = sum[:]
-		case adobeObfuscation:
-			decoded, err := hex.DecodeString(strings.ReplaceAll(strings.TrimPrefix(strings.ToLower(id), "urn:uuid:"), "-", ""))
-			if err != nil || len(decoded) != 16 {
-				continue
-			}
-			key, n = decoded, adobeObfuscatedLen
-		}
-		out := bytes.Clone(data)
-		for i := range min(n, len(out)) {
-			out[i] ^= key[i%len(key)]
-		}
-		if mobi.KindleFont(out) {
-			return out
-		}
-	}
-	return data
 }
 
 // kf8NavPoints turns table of contents entries into the writer's, leaving

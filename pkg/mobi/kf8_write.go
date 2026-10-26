@@ -248,7 +248,7 @@ func newKF8Layout(b *KF8Book) *kf8Layout {
 		// A Kindle shows TrueType and OpenType fonts. Fonts past what a
 		// reader takes together are left out, as are fonts too large for a
 		// record.
-		if !KindleFont(f.Content) || fontsSize+len(f.Content) > maxFontsSize {
+		if !kindleFont(f.Content) || fontsSize+len(f.Content) > maxFontsSize {
 			continue
 		}
 		rec := fontRecord(f.Content)

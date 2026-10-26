@@ -98,9 +98,9 @@ func fontName(n int, ext string) string {
 	return fmt.Sprintf("font%04d%s", n, ext)
 }
 
-// KindleFont reports whether data is a font a Kindle shows: TrueType or
+// kindleFont reports whether data is a font a Kindle shows: TrueType or
 // OpenType. A Kindle takes no WOFF.
-func KindleFont(data []byte) bool {
+func kindleFont(data []byte) bool {
 	mediaType, _ := fontType(data)
 	return mediaType == "font/ttf" || mediaType == "font/otf"
 }
