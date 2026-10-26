@@ -132,7 +132,7 @@ func readKF8(ctx context.Context, db *pdb, b *book, ref bookRef) (*Content, erro
 			return []byte(target)
 		})
 	}
-	editTag := func(tag []byte) []byte { return aidAttr.ReplaceAll(rewrite(tag, true), nil) }
+	editTag := func(tag []byte) []byte { return withXHTMLNamespace(kindleAttrs.ReplaceAll(rewrite(tag, true), nil)) }
 	editStyle := func(css []byte) []byte { return rewrite(css, false) }
 	for f, style := range k.Styles {
 		content := text[flows[f+1][0]:flows[f+1][1]]
@@ -558,7 +558,23 @@ func isSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'
 }
 
-var aidAttr = regexp.MustCompile(`\s+aid\s*=\s*(?:"[^"]*"|'[^']*')`)
+// kindleAttrs matches the attributes KindleGen adds for Kindles alone: aid,
+// which the fragment index's selectors name, and data-AmznPageBreak and
+// the like, which XHTML rejects for their capitals.
+var kindleAttrs = regexp.MustCompile(`\s+(?:aid|data-Amzn[A-Za-z]*)\s*=\s*(?:"[^"]*"|'[^']*')`)
+
+// withXHTMLNamespace returns an html start tag with the XHTML namespace,
+// which KindleGen leaves out of a book built from HTML, and any other tag
+// as it is.
+func withXHTMLNamespace(tag []byte) []byte {
+	if tagName(tag) != "html" || xmlnsAttr.Match(tag) {
+		return tag
+	}
+	end := nameEnd(tag)
+	return slices.Concat(tag[:end], []byte(` xmlns="http://www.w3.org/1999/xhtml"`), tag[end:])
+}
+
+var xmlnsAttr = regexp.MustCompile(`\sxmlns\s*=`)
 
 // editDocument returns doc with each start tag passed through editTag and
 // the content of each style element through editStyle, leaving text,

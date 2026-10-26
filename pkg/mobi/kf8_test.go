@@ -311,3 +311,22 @@ func TestEditDocument_ManyStyles(t *testing.T) {
 	assert.Equal(t, doc, out)
 	assert.Less(t, time.Since(start), 5*time.Second)
 }
+
+// KindleGen, building a book from HTML, writes documents without the
+// XHTML namespace and with its own data-AmznPageBreak attributes: the
+// documents get the namespace, and the attributes go, as aid does.
+func TestReadKF8_KindleGenHTMLMarkup(t *testing.T) {
+	t.Parallel()
+	book, err := readBuiltContent(t, testgen.MOBIOptions{
+		Kind:  testgen.MOBIKindKF8,
+		Title: "From HTML",
+		KF8: &testgen.MOBIKF8Content{Parts: []testgen.MOBIKF8Part{{
+			Head:      `<html><head><title>One</title></head><body aid="0">`,
+			Tail:      `</body></html>`,
+			Fragments: []string{`<p aid="1" data-AmznPageBreak="always" class="c">One.</p>`},
+		}}},
+	})
+	require.NoError(t, err)
+	require.Len(t, book.Documents, 1)
+	assert.Equal(t, `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title></head><body><p class="c">One.</p></body></html>`, string(book.Documents[0].Content))
+}
