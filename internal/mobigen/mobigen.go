@@ -93,6 +93,11 @@ type Options struct {
 	// first flow, as KindleGen does, though its text records hold every
 	// flow.
 	KindleGenTextLength bool
+	// KindleGenNoFDST writes a KF8 book without an FDST record, as
+	// KindleGen does for a book of one flow: the header's FDST field holds
+	// the first and last text records, as a MOBI6 header's does, and its
+	// flow count is 1.
+	KindleGenNoFDST bool
 	// TOC is written as the NCX index of every book in the file, nested
 	// through parent and child tags as KindleGen writes it.
 	TOC []TOCEntry
@@ -336,7 +341,7 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 	after = append(after, images...)
 	// Trailer indexes count from the book's own header record.
 	fdstIndex := uint32(mobiNullIndex)
-	if version == 8 {
+	if version == 8 && !opts.KindleGenNoFDST {
 		fdstIndex = u32(1 + len(textRecords) + len(after))
 		if layout != nil {
 			after = append(after, layout.fdst())
@@ -479,7 +484,7 @@ func buildMOBIHeaderRecord(opts Options, spec mobiHeaderSpec) ([]byte, error) {
 	} else {
 		be.PutUint32(h[168:], mobiNullIndex)
 	}
-	if spec.version == 8 {
+	if spec.version == 8 && !opts.KindleGenNoFDST {
 		be.PutUint32(h[192:], spec.fdstIndex)
 	} else {
 		be.PutUint16(h[192:], 1) // first and last content records
@@ -499,8 +504,10 @@ func buildMOBIHeaderRecord(opts Options, spec mobiHeaderSpec) ([]byte, error) {
 		for off := 248; off < 280; off += 4 {
 			be.PutUint32(h[off:], mobiNullIndex)
 		}
-		if spec.version == 8 {
+		if spec.version == 8 && !opts.KindleGenNoFDST {
 			be.PutUint32(h[196:], spec.fdstCount)
+		}
+		if spec.version == 8 {
 			be.PutUint32(h[248:], spec.fragment)
 			be.PutUint32(h[252:], spec.skeleton)
 		}

@@ -31,6 +31,7 @@ const (
 	// content record (a uint16) where a KF8 header has the FDST record, and
 	// only a KF8 header has the fragment, skeleton, DATP, and guide indexes.
 	offFDST        = 192
+	offFDSTCount   = 196
 	offLastContent = 194
 	offFCIS        = 200
 	offFLIS        = 208

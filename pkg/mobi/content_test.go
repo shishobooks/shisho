@@ -190,3 +190,25 @@ func TestReadContent_KindleGenTextLength(t *testing.T) {
 	require.Len(t, book.Styles, 1)
 	assert.Contains(t, string(book.Styles[0].Content), "h1 { color: red; }")
 }
+
+// KindleGen writes a KF8 book of one flow, a book with no stylesheet,
+// without an FDST record, leaving a MOBI6 header's first and last text
+// records where the FDST record's index goes and a flow count of 1.
+func TestReadContent_KindleGenWithoutFDST(t *testing.T) {
+	t.Parallel()
+	opts := testgen.MOBIOptions{
+		Kind:            testgen.MOBIKindKF8,
+		Title:           "One Flow",
+		KindleGenNoFDST: true,
+		KF8: &testgen.MOBIKF8Content{Parts: []testgen.MOBIKF8Part{{
+			Head:      `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title></head><body aid="0">`,
+			Tail:      `</body></html>`,
+			Fragments: []string{`<p aid="1">Only one flow.</p>`},
+		}}},
+	}
+	book, err := readBuiltContent(t, opts)
+	require.NoError(t, err)
+	require.Len(t, book.Documents, 1)
+	assert.Contains(t, string(book.Documents[0].Content), `<p>Only one flow.</p>`)
+	assert.Empty(t, book.Styles)
+}

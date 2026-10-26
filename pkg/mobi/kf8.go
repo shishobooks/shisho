@@ -214,8 +214,11 @@ var kindleRef = regexp.MustCompile(`kindle:(?:(pos:fid:([0-9A-Va-v]+):off:[0-9A-
 // readFlows returns each flow's start and end in the text. A book without
 // an FDST record has one flow.
 func readFlows(db *pdb, base int, rec []byte, textLength int) ([][2]int, error) {
+	// KindleGen writes no FDST record for a book of one flow, and leaves a
+	// MOBI6 header's first and last text records where its index goes,
+	// with a flow count of 1.
 	index := headerField(rec, offFDST)
-	if index == nullIndex || index == 0 {
+	if count := headerField(rec, offFDSTCount); index == nullIndex || index == 0 || count <= 1 {
 		return [][2]int{{0, textLength}}, nil
 	}
 	data, err := db.record(base+int(index), maxIndexRecord)
