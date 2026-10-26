@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -175,6 +176,12 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		return nil, NewGenerationError(models.FileTypeAZW3, fmt.Errorf("%w: %w", ErrUnsupportedContent, mobi.ErrNoDocuments),
 			"this book can't be converted to AZW3: its EPUB has no documents")
 	}
+	for _, m := range pkg.Metadata.Meta {
+		if m.Property == "rendition:layout" && strings.TrimSpace(m.Text) == "pre-paginated" {
+			book.FixedLayout = true
+			book.OriginalResolution = viewportSize(book.Documents[0].Content)
+		}
+	}
 	if opf.CoverFilepath != "" {
 		// The parser joins the OPF's href as written, still escaped.
 		cover := opf.CoverFilepath
@@ -254,4 +261,26 @@ func kf8Metadata(opf *epub.OPF) mobi.Metadata {
 	}
 	meta.Identifiers = ids
 	return meta
+}
+
+var (
+	viewportMeta = regexp.MustCompile(`<meta\s+name=["']viewport["']\s+content=["']([^"']*)["']`)
+	viewportSide = regexp.MustCompile(`(width|height)\s*=\s*(\d+)`)
+)
+
+// viewportSize returns the page size a fixed-layout document's viewport
+// gives, as "800x1200", or "" when it gives none.
+func viewportSize(doc []byte) string {
+	m := viewportMeta.FindSubmatch(doc)
+	if m == nil {
+		return ""
+	}
+	size := map[string]string{}
+	for _, side := range viewportSide.FindAllSubmatch(m[1], -1) {
+		size[string(side[1])] = string(side[2])
+	}
+	if size["width"] == "" || size["height"] == "" {
+		return ""
+	}
+	return size["width"] + "x" + size["height"]
 }

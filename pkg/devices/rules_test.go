@@ -53,6 +53,7 @@ func TestService_Rules(t *testing.T) {
 			want: []delivery.Rule{
 				rule(models.FileTypeAZW3, models.FileTypeAZW3), rule(models.FileTypeMOBI, models.FileTypeMOBI),
 				rule(models.FileTypeEPUB, models.FileTypeAZW3), rule(models.FileTypeKePub, models.FileTypeAZW3),
+				rule(models.FileTypeCBZ, models.FileTypeAZW3),
 			},
 		},
 		{
@@ -182,7 +183,7 @@ func TestKoboPreset_DeliversKindleBooksAsKePub(t *testing.T) {
 }
 
 // Under the Kindle preset, a book with no Kindle file reaches the Kindle as
-// AZW3 from its EPUB or KePub, a book with an AZW3 or MOBI sends that
+// AZW3 from its EPUB, KePub, or CBZ, a book with an AZW3 or MOBI sends that
 // instead, and a book with nothing that reaches a Kindle File Type is not
 // delivered.
 func TestKindlePreset_DeliversEPUBBooksAsAZW3(t *testing.T) {
@@ -195,7 +196,7 @@ func TestKindlePreset_DeliversEPUBBooksAsAZW3(t *testing.T) {
 		}
 		return book
 	}
-	for _, fileType := range []string{models.FileTypeEPUB, models.FileTypeKePub} {
+	for _, fileType := range []string{models.FileTypeEPUB, models.FileTypeKePub, models.FileTypeCBZ} {
 		result := delivery.Resolve(preset, only(fileType))
 		require.Len(t, result.Ebook, 1, fileType)
 		assert.Equal(t, models.FileTypeAZW3, result.Ebook[0].DeliveredFileType, fileType)

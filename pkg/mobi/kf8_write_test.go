@@ -335,3 +335,29 @@ func TestWriteKF8_CleansTheTableOfContents(t *testing.T) {
 	assert.True(t, strings.HasPrefix(long, content.TOC[1].Title))
 	assert.Less(t, len(content.TOC[1].Title), len(long))
 }
+
+// A fixed-layout book, such as a comic, says so in its EXTH block with the
+// size its pages were made for; a reflowable one has neither record.
+func TestWriteKF8_MarksFixedLayout(t *testing.T) {
+	t.Parallel()
+	header := func(b *KF8Book) *header {
+		data, err := os.ReadFile(writeKF8File(t, b))
+		require.NoError(t, err)
+		db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		rec, err := db.record(0, maxHeaderRecord)
+		require.NoError(t, err)
+		h, err := parseHeader(rec)
+		require.NoError(t, err)
+		return h
+	}
+	doc := []Document{{Name: "p.xhtml", Content: []byte(`<html><body><img src="p.jpg"/></body></html>`)}}
+
+	h := header(&KF8Book{Metadata: Metadata{Title: "Comic"}, Documents: doc, FixedLayout: true, OriginalResolution: "1072x1448"})
+	assert.Equal(t, "true", h.text(exthFixedLayout))
+	assert.Equal(t, "1072x1448", h.text(exthOriginalResolution))
+
+	h = header(&KF8Book{Metadata: Metadata{Title: "Novel"}, Documents: doc})
+	assert.Empty(t, h.text(exthFixedLayout))
+	assert.Empty(t, h.text(exthOriginalResolution))
+}

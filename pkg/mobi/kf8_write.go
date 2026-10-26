@@ -46,6 +46,11 @@ type KF8Book struct {
 	// TOC is the table of contents. An Href names a document and, after a
 	// #, the id of an element in it.
 	TOC []*NavPoint
+	// FixedLayout marks a book whose pages each fill the screen, such as a
+	// comic, and OriginalResolution is the size in pixels its pages were
+	// made for, as "800x1200".
+	FixedLayout        bool
+	OriginalResolution string
 }
 
 // KF8Image is an image of a KF8Book. It is read only while the file is
@@ -72,9 +77,13 @@ const (
 	// Calibre leaves it, so a Kindle can rewrite the record in place.
 	headerPadding = 1024
 
-	exthDocType  = 501
-	exthASINAlt  = 504
-	ncxTagLength = 2
+	exthDocType = 501
+	// A fixed-layout book carries "true" in the first, and the page size
+	// it was made for in the second.
+	exthFixedLayout        = 122
+	exthOriginalResolution = 307
+	exthASINAlt            = 504
+	ncxTagLength           = 2
 	// extraFlagsMBEntry says each text record ends in a multibyte entry
 	// alone. The trailing byte sequences that name the index entries a
 	// record touches are not written: the flags tell a reader they are
@@ -625,6 +634,12 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 		// Other writers put the identifier here as well, so a Kindle that
 		// reads this record finds the same one.
 		exth = append(exth, exthRecord{typ: exthASINAlt, data: []byte(l.book.Identifier)})
+	}
+	if l.book.FixedLayout {
+		exth = append(exth, exthRecord{typ: exthFixedLayout, data: []byte("true")})
+		if l.book.OriginalResolution != "" {
+			exth = append(exth, exthRecord{typ: exthOriginalResolution, data: []byte(l.book.OriginalResolution)})
+		}
 	}
 	rec = append(rec, encodeEXTH(exth)...)
 
