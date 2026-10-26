@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -531,7 +532,7 @@ func TestShareLinks_RecipientDownloadsAsReachableFileTypes(t *testing.T) {
 	for _, file := range shared.Files {
 		reachable[file.ID] = file.ReachableFileTypes
 	}
-	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub}, reachable[f.epubA.ID])
+	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub, models.FileTypeAZW3}, reachable[f.epubA.ID])
 	assert.Equal(t, []string{models.FileTypePDF}, reachable[f.suppA.ID], "a supplement downloads only as itself")
 
 	downloadAs := func(file *models.File, fileType string) string {
@@ -541,6 +542,17 @@ func TestShareLinks_RecipientDownloadsAsReachableFileTypes(t *testing.T) {
 		rec = f.do(nil, method, downloadAs(f.epubA, models.FileTypeKePub), "")
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), ".kepub.epub")
+
+		// An AZW3 is built before it is sent, so even its first download
+		// has an exact length.
+		rec = f.do(nil, method, downloadAs(f.epubA, models.FileTypeAZW3), "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Header().Get("Content-Disposition"), ".azw3")
+		assert.NotEmpty(t, rec.Header().Get("Content-Length"))
+		if method == http.MethodGet {
+			assert.Equal(t, rec.Header().Get("Content-Length"), strconv.Itoa(rec.Body.Len()))
+			assert.Equal(t, "BOOKMOBI", string(rec.Body.Bytes()[60:68]))
+		}
 	}
 	rec = f.do(nil, http.MethodGet, downloadAs(f.epubA, models.FileTypeEPUB), "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())

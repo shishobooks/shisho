@@ -146,7 +146,7 @@ Choose the type when adding a Device. It decides which connections the Device ca
 | Type | Connections | Can receive | Starts with |
 |------|-------------|-------------|-------------|
 | **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub, then AZW3 as KePub, then MOBI as KePub |
-| **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI |
+| **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI, then EPUB as AZW3, then KePub as AZW3, then CBZ as AZW3 |
 | **OPDS app** | OPDS, for reading apps such as KOReader, Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
@@ -180,9 +180,9 @@ A list shared with you can hold books from libraries you cannot access; those bo
 
 Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends. Under **Delivery Rules** on its page, choose one:
 
-- **My default**: your default rules from **Preferences > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no AZW3 or MOBI rule receives nothing, and its page says so.
+- **My default**: your default rules from **Preferences > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no rule delivering AZW3 or MOBI receives nothing, and its page says so.
 - **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
-- **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **Preferences > Delivery Rules**.
+- **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB, though one can send EPUB as AZW3. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **Preferences > Delivery Rules**.
 
 Under the rules, the Device's page previews how many books in its scope the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
 

@@ -97,8 +97,8 @@ type Entry struct {
 	Load func() ([]byte, error)
 }
 
-// content returns the entry's uncompressed data.
-func (e Entry) content() ([]byte, error) {
+// Data returns the entry's uncompressed data.
+func (e Entry) Data() ([]byte, error) {
 	switch {
 	case e.Load != nil:
 		return e.Load()
@@ -110,7 +110,7 @@ func (e Entry) content() ([]byte, error) {
 
 // compressReplaced compresses an entry that is not read from a zip.
 func compressReplaced(e Entry) (*ziputil.Entry, error) {
-	data, err := e.content()
+	data, err := e.Data()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read %s", e.Name)
 	}
@@ -141,7 +141,7 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 			continue
 		}
 		opfPath = e.Name
-		data, err := e.content()
+		data, err := e.Data()
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OPF manifest")
 		}
@@ -160,7 +160,7 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 		}
 		switch {
 		case contentFiles[e.Name]:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to transform content file: %s", e.Name)
 			}
@@ -173,7 +173,7 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 			}
 			return ziputil.Compress(e.Name, zip.Deflate, buf.Bytes())
 		case e.Name == opfPath:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to transform OPF file")
 			}

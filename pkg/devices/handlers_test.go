@@ -290,7 +290,7 @@ func TestHandler_Update_SetsDeliveryRules(t *testing.T) {
 	for _, option := range resp.DeliveryRuleOptions {
 		sources = append(sources, option.SourceFileType)
 	}
-	assert.Equal(t, []string{models.FileTypeAZW3, models.FileTypeMOBI}, sources)
+	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub, models.FileTypeAZW3, models.FileTypeMOBI, models.FileTypeCBZ}, sources)
 
 	rec, err = f.call(f.h.Update, user, `{"delivery_rules":{"mode":"custom","rules":[{"source_file_type":"mobi","delivered_file_type":"mobi"}]}}`, device.ID)
 	require.NoError(t, err)

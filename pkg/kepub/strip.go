@@ -66,7 +66,7 @@ func PrepareStrip(ctx context.Context, entries []Entry) (*Strip, error) {
 		return nil, errors.New("no OPF file found")
 	}
 	s.opfPath = opf.Name
-	opfData, err := opf.content()
+	opfData, err := opf.Data()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read OPF")
 	}
@@ -88,7 +88,7 @@ func PrepareStrip(ctx context.Context, entries []Entry) (*Strip, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, errors.Wrap(err, "conversion cancelled")
 		}
-		data, err := e.content()
+		data, err := e.Data()
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read %s", e.Name)
 		}
@@ -117,7 +117,7 @@ func PrepareStrip(ctx context.Context, entries []Entry) (*Strip, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, errors.Wrap(err, "conversion cancelled")
 		}
-		data, err := e.content()
+		data, err := e.Data()
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read %s", e.Name)
 		}
@@ -154,7 +154,7 @@ func (s *Strip) Write(ctx context.Context, w io.Writer) error {
 		}
 		switch {
 		case s.contentFiles[e.Name]:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to strip content file: %s", e.Name)
 			}
@@ -164,13 +164,13 @@ func (s *Strip) Write(ctx context.Context, w io.Writer) error {
 			}
 			return ziputil.Compress(e.Name, zip.Deflate, out)
 		case e.Name == s.opfPath:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to strip OPF file")
 			}
 			return ziputil.Compress(e.Name, zip.Deflate, s.rewriteLinkAttrs(e.Name, s.stripOPF(data)))
 		case e.Name == s.ncxPath:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to strip NCX file")
 			}

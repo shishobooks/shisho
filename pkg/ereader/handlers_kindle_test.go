@@ -79,10 +79,10 @@ func TestKindleFilename(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-// kindleFixture is the access fixture with six books in libA: one with an
+// kindleFixture is the access fixture with seven books in libA: one with an
 // EPUB, a MOBI, an AZW3, and a PDF, one with an EPUB and an AZW3, one with an
-// EPUB and a MOBI, one with an EPUB and a PDF, one with only an EPUB, and one
-// with an EPUB main file and a MOBI supplement.
+// EPUB and a MOBI, one with an EPUB and a PDF, one with only an EPUB, one
+// with an EPUB main file and a MOBI supplement, and one with only a PDF.
 type kindleFixture struct {
 	*eReaderAccessFixture
 	allFormats *models.Book
@@ -91,6 +91,7 @@ type kindleFixture struct {
 	epubPDF    *models.Book
 	epubOnly   *models.Book
 	supplement *models.Book
+	pdfOnly    *models.Book
 	files      map[string]*models.File
 }
 
@@ -140,6 +141,7 @@ func newKindleFixture(t *testing.T) *kindleFixture {
 	f.epubPDF = addBook("Has PDF", models.FileTypeEPUB, models.FileTypePDF)
 	f.epubOnly = addBook("EPUB Only", models.FileTypeEPUB)
 	f.supplement = addBook("Has Supplement", models.FileTypeEPUB, "supplement:"+models.FileTypeMOBI)
+	f.pdfOnly = addBook("PDF Only", models.FileTypePDF)
 	return f
 }
 
@@ -199,7 +201,9 @@ func TestDownload_KindleDeviceGetsAZW3First(t *testing.T) {
 	assert.NotContains(t, body, f.fileLinkPrefix("Has MOBI", models.FileTypeEPUB))
 }
 
-func TestDownload_KindleDeviceBookWithoutKindleFileIsNotDelivered(t *testing.T) {
+// A book with no Kindle file reaches a Kindle Device as AZW3 converted from
+// its EPUB, through the Kindle download URL.
+func TestDownload_KindleDeviceGetsEPUBBooksAsAZW3(t *testing.T) {
 	t.Parallel()
 	f := newKindleFixture(t)
 	f.setType(t, devices.DeviceTypeKindle)
@@ -207,10 +211,25 @@ func TestDownload_KindleDeviceBookWithoutKindleFileIsNotDelivered(t *testing.T) 
 	for _, book := range []*models.Book{f.epubOnly, f.epubPDF, f.supplement} {
 		body := f.page(t, "/download/"+strconv.Itoa(book.ID), kindleUserAgent)
 
-		assert.Contains(t, body, "Not delivered to this Device.", book.Title)
-		assert.NotContains(t, body, "/file/", book.Title)
-		assert.NotContains(t, body, "Download ", book.Title)
+		assert.Contains(t, body, f.kindleLink(book.Title, models.FileTypeEPUB, strings.ReplaceAll(book.Title, " ", "_")+".azw3"), book.Title)
+		assert.Contains(t, body, "Download AZW3", book.Title)
+		assert.NotContains(t, body, "Not delivered to this Device.", book.Title)
+		assert.NotContains(t, body, f.fileLink(book.Title, models.FileTypeEPUB), book.Title)
+		// Putting MOBI first does nothing for a book with no MOBI.
+		assert.NotContains(t, body, "refuse AZW3", book.Title)
 	}
+}
+
+// A book with nothing its rules can deliver to a Kindle says so.
+func TestDownload_KindleDeviceBookWithoutKindleFileTypeIsNotDelivered(t *testing.T) {
+	t.Parallel()
+	f := newKindleFixture(t)
+	f.setType(t, devices.DeviceTypeKindle)
+
+	body := f.page(t, "/download/"+strconv.Itoa(f.pdfOnly.ID), kindleUserAgent)
+	assert.Contains(t, body, "Not delivered to this Device.")
+	assert.NotContains(t, body, "/file/")
+	assert.NotContains(t, body, "Download ")
 }
 
 // What a Device is served depends on its type and rules alone. A Browser
@@ -265,12 +284,10 @@ func TestBookLists_FollowTheDeviceRules(t *testing.T) {
 
 	f.setType(t, devices.DeviceTypeKindle)
 	body := f.page(t, lib, kindleUserAgent)
-	for _, title := range []string{"All Formats", "Has AZW3", "Has MOBI"} {
+	for _, title := range []string{"All Formats", "Has AZW3", "Has MOBI", "EPUB Only", "Has PDF", "Has Supplement"} {
 		assert.Contains(t, body, ">"+title+"<")
 	}
-	for _, title := range []string{"EPUB Only", "Has PDF", "Has Supplement"} {
-		assert.NotContains(t, body, ">"+title+"<")
-	}
+	assert.NotContains(t, body, ">PDF Only<")
 
 	f.setType(t, devices.DeviceTypeKobo)
 	body = f.page(t, lib, koboUserAgent)
@@ -302,10 +319,12 @@ func TestFilterBar_FollowsTheDeviceRules(t *testing.T) {
 	f := newKindleFixture(t)
 	lib := strconv.Itoa(f.libA.ID)
 
-	// The built-in rules send every book here as its EPUB, so there is
-	// nothing to filter by.
+	// The built-in rules send every book here as its EPUB but the PDF-only
+	// one, so those are the filters.
 	body := f.page(t, "/libraries/"+lib+"/all", "")
-	assert.NotContains(t, body, "types=")
+	assert.Contains(t, body, "types=epub")
+	assert.Contains(t, body, "types=pdf")
+	assert.NotContains(t, body, "types=azw3")
 
 	// A Kindle gets AZW3 before MOBI, so a book with both is sent as AZW3,
 	// and a MOBI supplement doesn't count.
@@ -318,6 +337,7 @@ func TestFilterBar_FollowsTheDeviceRules(t *testing.T) {
 	body = f.page(t, "/libraries/"+lib+"/all?types=azw3", kindleUserAgent)
 	assert.Contains(t, body, "All Formats")
 	assert.Contains(t, body, "Has AZW3")
+	assert.Contains(t, body, "EPUB Only", "an EPUB is sent as AZW3")
 	assert.NotContains(t, body, "Has MOBI")
 
 	body = f.page(t, "/libraries/"+lib+"/all?types=mobi", kindleUserAgent)
@@ -430,11 +450,11 @@ func TestEmptyEntriesAreLeftOut(t *testing.T) {
 	person := &models.Person{LibraryID: f.libA.ID, Name: "Writer", SortName: "Writer", SortNameSource: models.DataSourceFilepath}
 	_, err := f.db.NewInsert().Model(person).Exec(ctx)
 	require.NoError(t, err)
-	_, err = f.db.NewInsert().Model(&models.Author{BookID: f.epubOnly.ID, PersonID: person.ID, SortOrder: 1}).Exec(ctx)
+	_, err = f.db.NewInsert().Model(&models.Author{BookID: f.pdfOnly.ID, PersonID: person.ID, SortOrder: 1}).Exec(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, f.page(t, libA, ""), libA+"/authors")
 
-	// A Kindle receives nothing from that EPUB-only book, so not for it.
+	// A Kindle receives nothing from that PDF-only book, so not for it.
 	f.setType(t, devices.DeviceTypeKindle)
 	assert.NotContains(t, f.page(t, libA, kindleUserAgent), libA+"/authors")
 }
