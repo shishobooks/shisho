@@ -61,6 +61,7 @@ import {
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { isEbookFileType, isMainEligibleFileType } from "@/utils/fileTypes";
 import { fileTypeLabel, formatCount } from "@/utils/format";
+import { pageThumbnailSize } from "@/utils/pageUrl";
 import { reviewDraftChanged } from "@/utils/review";
 
 interface FileEditDialogProps {
@@ -710,7 +711,11 @@ export function FileEditDialog({
                             <img
                               alt="Pending cover page"
                               className="w-full h-full object-cover"
-                              src={filePageUrl(file, pendingCoverPage)}
+                              src={filePageUrl(
+                                file,
+                                pendingCoverPage,
+                                pageThumbnailSize(300),
+                              )}
                             />
                           ) : file.cover_mime_type ||
                             file.cover_image_filename ? (

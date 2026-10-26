@@ -40,6 +40,7 @@ import {
 } from "@/types";
 import { fileStreamUrl } from "@/utils/downloadUrl";
 import { canAddChapters, isReflowableFileType } from "@/utils/fileTypes";
+import { pageThumbnailSize } from "@/utils/pageUrl";
 
 export interface FileChaptersEditorHandle {
   save: () => void;
@@ -856,7 +857,7 @@ const FileChaptersEditor = forwardRef<
               <img
                 alt="Page 1"
                 className="h-[60px] w-auto rounded border border-border object-contain bg-muted"
-                src={filePageUrl(file, 0)}
+                src={filePageUrl(file, 0, pageThumbnailSize(90))}
               />
               <div className="flex-1 min-w-0">
                 <span className="text-amber-600 dark:text-amber-400 font-medium">

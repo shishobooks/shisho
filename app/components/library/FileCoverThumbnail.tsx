@@ -91,32 +91,20 @@ function FileCoverThumbnail({
         )
       )}
 
-      {hasCover && image?.isPage && (
-        <img
-          alt=""
-          className={cn(
-            "absolute inset-0 h-full w-full bg-white object-cover object-top",
-            !imageLoaded && "opacity-0",
-          )}
-          key={coverUrl}
-          loading="lazy"
-          onError={() => setImageError(true)}
-          onLoad={() => setImageLoaded(true)}
-          src={coverUrl}
-        />
-      )}
-
-      {hasCover && !image?.isPage && (
+      {hasCover && (
         <CoverImage
           alt=""
           className={cn(
             "absolute inset-0 w-full h-full object-cover",
+            // A page stands in for a cover from its top, on paper white.
+            image?.isPage && "bg-white object-top",
             !imageLoaded && "opacity-0",
           )}
           key={coverUrl}
           onError={() => setImageError(true)}
           onLoad={() => setImageLoaded(true)}
           src={coverUrl}
+          thumbnailUrl={image?.thumbnailUrl}
         />
       )}
     </div>

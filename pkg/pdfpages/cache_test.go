@@ -306,3 +306,44 @@ func TestCache_SetMaxBytes_EvictsLeastRecentlyUsedPages(t *testing.T) {
 	assert.FileExists(t, fresh)
 	assert.NoFileExists(t, old, "publishing a page over the limit evicts the least recently used page")
 }
+
+func TestGetThumbnailPage_RendersWithinTheSize(t *testing.T) {
+	t.Parallel()
+	cache := NewCache(t.TempDir(), 200, 85)
+
+	cachedPath, err := cache.GetThumbnailPage(testPDFPath, 1, 0, 256)
+	require.NoError(t, err)
+
+	f, err := os.Open(cachedPath)
+	require.NoError(t, err)
+	defer f.Close()
+	cfg, err := jpeg.DecodeConfig(f)
+	require.NoError(t, err)
+	// A US Letter page (612x792 points) fits a 256px box by its height,
+	// keeping its shape, instead of rendering at 200 DPI (1700x2200).
+	assert.Equal(t, 256, cfg.Height)
+	assert.InDelta(t, 198, cfg.Width, 1)
+
+	again, err := cache.GetThumbnailPage(testPDFPath, 1, 0, 256)
+	require.NoError(t, err)
+	assert.Equal(t, cachedPath, again)
+}
+
+func TestGetThumbnailPage_InvalidateRemovesThumbnails(t *testing.T) {
+	t.Parallel()
+	cache := NewCache(t.TempDir(), 200, 85)
+	cachedPath, err := cache.GetThumbnailPage(testPDFPath, 1, 0, 128)
+	require.NoError(t, err)
+
+	require.NoError(t, cache.Invalidate(1))
+
+	assert.NoFileExists(t, cachedPath)
+}
+
+func TestGetThumbnailPage_PageOutOfRange(t *testing.T) {
+	t.Parallel()
+	cache := NewCache(t.TempDir(), 200, 85)
+
+	_, err := cache.GetThumbnailPage(testPDFPath, 1, 3, 128)
+	assert.ErrorIs(t, err, ErrPageOutOfRange)
+}

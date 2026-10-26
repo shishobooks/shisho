@@ -411,20 +411,16 @@ const BookFileRow = ({
                     : "aspect-[2/3] max-w-xs",
                 )}
               >
-                {image?.isPage ? (
-                  <img
-                    alt={`${name} first page`}
-                    className="size-full bg-white object-contain"
-                    src={coverUrl}
-                  />
-                ) : (
-                  <CoverImage
-                    alt={`${name} cover`}
-                    className="size-full object-cover"
-                    key={coverUrl}
-                    src={coverUrl}
-                  />
-                )}
+                <CoverImage
+                  alt={image?.isPage ? `${name} first page` : `${name} cover`}
+                  className={cn(
+                    "size-full",
+                    image?.isPage ? "bg-white object-contain" : "object-cover",
+                  )}
+                  key={coverUrl}
+                  src={coverUrl}
+                  thumbnailUrl={image?.thumbnailUrl}
+                />
               </div>
             </DialogBody>
           </DialogContent>

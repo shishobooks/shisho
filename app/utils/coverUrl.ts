@@ -87,6 +87,17 @@ export const COVER_THUMBNAIL_SIZES = [
   ThumbnailSize2048,
 ] as const;
 
+/**
+ * The smallest tier that fills `cssPixels` on this screen, or undefined
+ * above the largest, where the original is the better image.
+ */
+export const thumbnailSizeFor = (
+  cssPixels: number,
+): ThumbnailSize | undefined => {
+  const pixels = Math.ceil(cssPixels * (window.devicePixelRatio || 1));
+  return COVER_THUMBNAIL_SIZES.find((size) => size >= pixels);
+};
+
 /** Adds a thumbnail size while retaining the original cover's cache key. */
 export const coverThumbnailUrl = (
   url: string,

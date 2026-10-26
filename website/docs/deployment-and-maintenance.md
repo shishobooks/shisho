@@ -166,6 +166,8 @@ Generated downloads, cover thumbnails, extracted CBZ pages, and rendered PDF pag
 
 Cover thumbnails are generated only when the web interface requests a size. Scanning a library does not generate every thumbnail size. The first view of an uncached cover or size can take longer; later requests reuse the saved thumbnail, including after a server restart. See [Gallery Size](./browsing-search-bulk-actions.md#gallery-size) for the display controls.
 
+Small versions of CBZ pages, shown wherever a page is smaller than in the reader, are kept in **Cover Thumbnails**. Small versions of PDF pages are rendered at their size rather than at `pdf_render_dpi`, and are kept in **PDF Pages**.
+
 To change a limit, set **Maximum size (GiB)** on the cache's card under **Administration > Cache**, then select **Save limit**. Fractional values are allowed, from 0 to 1024 GiB. Select **No limit** instead to let the cache use as much disk space as it needs; the size stays filled in, so clearing **No limit** later restores it. A saved limit applies immediately and survives restarts. Lowering a limit removes the least recently used files until the cache fits.
 
 | Cache | Default limit | Over the limit |

@@ -1,14 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { CBZPageKey, FileTypeCBZ } from "@/types";
+import { CBZPageKey, FileTypeCBZ, ThumbnailRenderKey } from "@/types";
 
 import PagePreview from "./PagePreview";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 describe("PagePreview", () => {
-  it("loads the page thumbnail with the file's cache key", () => {
+  // A 60px thumbnail on a 1x screen asks for the smallest tier that fills
+  // a landscape page's width, half again its height.
+  const thumbnail = `/api/books/files/100/page/4?v=1717200000000&size=128&r=${encodeURIComponent(`${CBZPageKey}.${ThumbnailRenderKey}`)}`;
+
+  it("loads a thumbnail of the page with the file's cache key", () => {
     render(
       <PagePreview
         file={{
@@ -19,10 +23,7 @@ describe("PagePreview", () => {
         page={4}
       />,
     );
-    expect(screen.getByAltText("Page 5")).toHaveAttribute(
-      "src",
-      `/api/books/files/100/page/4?v=1717200000000&r=${CBZPageKey}`,
-    );
+    expect(screen.getByAltText("Page 5")).toHaveAttribute("src", thumbnail);
   });
 
   it("retries the image when the page URL changes after an error", () => {
@@ -49,9 +50,6 @@ describe("PagePreview", () => {
         page={4}
       />,
     );
-    expect(screen.getByAltText("Page 5")).toHaveAttribute(
-      "src",
-      `/api/books/files/100/page/4?v=1717200000000&r=${CBZPageKey}`,
-    );
+    expect(screen.getByAltText("Page 5")).toHaveAttribute("src", thumbnail);
   });
 });
