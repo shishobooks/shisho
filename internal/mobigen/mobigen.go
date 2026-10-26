@@ -98,6 +98,10 @@ type Options struct {
 	// the first and last text records, as a MOBI6 header's does, and its
 	// flow count is 1.
 	KindleGenNoFDST bool
+	// JunkTextRecord adds a text record that is counted in the header but
+	// lies past its text length and does not decompress, as some old
+	// Mobipocket files have.
+	JunkTextRecord bool
 	// TOC is written as the NCX index of every book in the file, nested
 	// through parent and child tags as KindleGen writes it.
 	TOC []TOCEntry
@@ -288,6 +292,15 @@ func buildMOBIBook(opts Options, version uint32, base int, images [][]byte, kf8I
 			textRecords[i] = append(textRecords[i], overlap...)
 			textRecords[i] = append(textRecords[i], byte(len(overlap)), 0x86, 0x80, 0x07, 0x84)
 		}
+	}
+
+	if opts.JunkTextRecord {
+		// A PalmDOC back-reference before the start of the record.
+		junk := []byte{0x80, 0x08}
+		if extraFlags != 0 {
+			junk = append(junk, 0x00, 0x86, 0x80, 0x07, 0x84)
+		}
+		textRecords = append(textRecords, junk)
 	}
 
 	var after [][]byte

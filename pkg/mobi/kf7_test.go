@@ -288,3 +288,15 @@ func TestKF7Documents_PageBreakInWrappers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, docs, 1)
 }
+
+// A MOBI6 book's text is as long as its header says: a text record past
+// that, which old files may hold and which need not decompress, is not
+// read.
+func TestReadContent_KF7IgnoresTextPastItsLength(t *testing.T) {
+	t.Parallel()
+	opts := testgen.KF7Sample()
+	opts.JunkTextRecord = true
+	book, err := readBuiltContent(t, opts)
+	require.NoError(t, err)
+	checkKF7Content(t, book)
+}

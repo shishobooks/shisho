@@ -153,11 +153,12 @@ func toUTF8(b []byte, h *header) []byte {
 }
 
 // readText returns the book's text: each text record without its trailing
-// entries, decompressed. The header's text length is not always all of it:
-// KindleGen gives a KF8 book's as the end of its documents, though the
-// records hold its stylesheets after them, so the text is every record's,
-// and the length only the least it may be.
-func readText(ctx context.Context, db *pdb, base int, rec []byte, compression uint16) ([]byte, error) {
+// entries, decompressed, up to the text length the header gives. With all
+// set, it is every record's text, and the length only the least it may be:
+// KindleGen gives a KF8 book's length as the end of its documents, though
+// the records hold its stylesheets after them. A MOBI6 book's length is
+// right, and old ones may hold a record past it that does not decompress.
+func readText(ctx context.Context, db *pdb, base int, rec []byte, compression uint16, all bool) ([]byte, error) {
 	be := binary.BigEndian
 	length := int64(be.Uint32(rec[4:]))
 	count := int(be.Uint16(rec[offTextRecords:]))
@@ -182,7 +183,7 @@ func readText(ctx context.Context, db *pdb, base int, rec []byte, compression ui
 	// A record decompresses to about 4 KiB, so a header claiming more text
 	// than its records hold does not get its whole length allocated.
 	text := make([]byte, 0, min(length, int64(count)*8192))
-	for i := base + 1; i <= base+count; i++ {
+	for i := base + 1; i <= base+count && (all || int64(len(text)) < length); i++ {
 		if err := ctx.Err(); err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -211,6 +212,9 @@ func readText(ctx context.Context, db *pdb, base int, rec []byte, compression ui
 	}
 	if int64(len(text)) < length {
 		return nil, errors.New("MOBI text is shorter than its header says")
+	}
+	if !all {
+		text = text[:length]
 	}
 	return text, nil
 }

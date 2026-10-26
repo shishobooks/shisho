@@ -34,7 +34,7 @@ func readKF8(ctx context.Context, db *pdb, b *book, ref bookRef) (*Content, erro
 	if err != nil {
 		return nil, err
 	}
-	text, err := readText(ctx, db, ref.base, rec, h.compression)
+	text, err := readText(ctx, db, ref.base, rec, h.compression, true)
 	if err != nil {
 		return nil, err
 	}
