@@ -1410,6 +1410,27 @@ func TestEPUBGenerator_NCXFollowsNavEdits(t *testing.T) {
 	})
 }
 
+// TestEPUBGenerator_NCXFollowingNavRenumbersPlayOrder covers an EPUB 3
+// package whose NCX follows the nav document's edits: a deletion carried to
+// the NCX renumbers its playOrder too.
+func TestEPUBGenerator_NCXFollowingNavRenumbersPlayOrder(t *testing.T) {
+	t.Parallel()
+
+	nav := simpleNav(`<li><a href="text/a.xhtml">A</a></li><li><a href="text/b.xhtml">B</a></li><li><a href="text/c.xhtml">C</a></li>`)
+	ncx := simpleNCX(`<navPoint id="a" playOrder="1"><navLabel><text>A</text></navLabel><content src="text/a.xhtml"/></navPoint>` +
+		`<navPoint id="b" playOrder="2"><navLabel><text>B</text></navLabel><content src="text/b.xhtml"/></navPoint>` +
+		`<navPoint id="c" playOrder="3"><navLabel><text>C</text></navLabel><content src="text/c.xhtml"/></navPoint>`)
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+		{title: "A", href: "text/a.xhtml"},
+		{title: "See", href: "text/c.xhtml"},
+	})}
+	entries := zipEntries(t, generateVersioned(t, tocSource("nav.xhtml", nav, ncx), coverBook(), file, nil, ""))
+
+	got := string(entries["OEBPS/toc.ncx"])
+	assert.NotContains(t, got, "text/b.xhtml")
+	assert.Contains(t, got, `<navPoint id="c" playOrder="2"><navLabel><text>See</text></navLabel>`)
+}
+
 // TestEPUBGenerator_RenameOntoDeletedTitleKeepsHref covers deleting A and
 // renaming B to "A": the entry kept is B's, so it still links to b.
 func TestEPUBGenerator_RenameOntoDeletedTitleKeepsHref(t *testing.T) {

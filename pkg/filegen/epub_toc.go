@@ -594,8 +594,8 @@ func applyTOCChanges(doc *tocDoc, changes tocChanges) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// playOrderAttr matches an NCX start tag's playOrder attribute, with its
-// value in group 2.
+// playOrderAttr matches an NCX start tag's unprefixed playOrder attribute,
+// with its value in group 2.
 var playOrderAttr = regexp.MustCompile(`\splayOrder\s*=\s*(["'])([^"']*)["']`)
 
 // playOrderEdits returns the byte edits that renumber the playOrder of an
@@ -613,21 +613,26 @@ func playOrderEdits(doc *tocDoc, edits []byteEdit) []byteEdit {
 		i := sort.Search(len(edits), func(i int) bool { return edits[i].start > n.start }) - 1
 		return i >= 0 && edits[i].end >= n.end
 	}
+	// numbered is an element with a playOrder, which is read from the start
+	// tag's bytes so it is the one rewritten; value is at [start, end).
 	type numbered struct {
-		node  *xmlNode
-		value int
+		value      int
+		start, end int64
 	}
 	var kept []numbered
 	lost := false
 	var walk func(*xmlNode)
 	walk = func(n *xmlNode) {
 		for _, c := range n.children {
-			if value, err := strconv.Atoi(strings.TrimSpace(c.attr("playOrder"))); err == nil {
-				if removed(c) {
-					lost = true
-					continue
+			m := playOrderAttr.FindSubmatchIndex(doc.data[c.start:c.innerStart])
+			if m != nil {
+				if value, err := strconv.Atoi(strings.TrimSpace(string(doc.data[c.start+int64(m[4]) : c.start+int64(m[5])]))); err == nil {
+					if removed(c) {
+						lost = true
+						continue
+					}
+					kept = append(kept, numbered{value, c.start + int64(m[4]), c.start + int64(m[5])})
 				}
-				kept = append(kept, numbered{c, value})
 			}
 			walk(c)
 		}
@@ -645,11 +650,9 @@ func playOrderEdits(doc *tocDoc, edits []byteEdit) []byteEdit {
 	var out []byteEdit
 	for _, k := range kept {
 		order, _ := slices.BinarySearch(values, k.value)
-		m := playOrderAttr.FindSubmatchIndex(doc.data[k.node.start:k.node.innerStart])
-		if m == nil || order+1 == k.value {
-			continue
+		if order+1 != k.value {
+			out = append(out, byteEdit{start: k.start, end: k.end, text: []byte(strconv.Itoa(order + 1))})
 		}
-		out = append(out, byteEdit{start: k.node.start + int64(m[4]), end: k.node.start + int64(m[5]), text: []byte(strconv.Itoa(order + 1))})
 	}
 	return out
 }
