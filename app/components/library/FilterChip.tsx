@@ -4,6 +4,12 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+/** A selected genre or tag, as its chip shows it. */
+export interface SelectedFilter {
+  id: number;
+  name: string;
+}
+
 export type FilterChipKind =
   "fileType" | "genre" | "tag" | "language" | "reviewState";
 

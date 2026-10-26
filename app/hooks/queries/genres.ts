@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
@@ -55,6 +56,20 @@ export const useGenre = (
     },
   });
 };
+
+// Several genres at once, sharing the cache entries of useGenre.
+export const useGenresByIds = (ids: number[]) => {
+  const permitted = useRequires("books:read");
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: [QueryKey.RetrieveGenre, id],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        API.request<GenreResponse>("GET", `/genres/${id}`, null, null, signal),
+      enabled: permitted,
+    })),
+  });
+};
+
 export const useUpdateGenre = () => {
   const queryClient = useQueryClient();
 
