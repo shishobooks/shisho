@@ -7,13 +7,15 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
 
-// Laying out a document for a KF8 book: its image and stylesheet
-// references become kindle: references, every element in its body gets an
-// aid, and its body is cut into fragments.
+// Laying out a document for a KF8 book: its image, font, and stylesheet
+// references become kindle: references, its links into the book
+// placeholders for kindle:pos references, every element in its body gets
+// an aid, and its body is cut into fragments.
 
 // xnode is a node of a document's body: an element, or a run of text, a
 // comment, or anything else that is not an element.
@@ -110,7 +112,7 @@ func (l *kf8Layout) document(d Document) *kf8Doc {
 			end := tagEnd(src, i)
 			raw := src[i:end]
 			name := tagName(raw)
-			tag := l.editTag(d.Name, name, raw)
+			tag, links := l.editTag(d.Name, name, raw)
 			n := &xnode{name: name, element: true}
 			if name == "body" && body == nil {
 				body, inBody = n, true
@@ -118,7 +120,13 @@ func (l *kf8Layout) document(d Document) *kf8Doc {
 			if inBody {
 				n.aid = strings.ToUpper(strconv.FormatUint(uint64(l.nextAid), 32)) //nolint:gosec // a count
 				l.nextAid++
+				// The aid goes in before every attribute, so it moves each
+				// placeholder by its length.
+				before := len(tag)
 				tag = withAid(tag, n.aid)
+				for k := range links {
+					links[k].at += len(tag) - before
+				}
 			}
 			selfClosed := bytes.HasSuffix(raw, []byte("/>"))
 			if selfClosed && !voidElements[name] {
@@ -130,6 +138,10 @@ func (l *kf8Layout) document(d Document) *kf8Doc {
 				tag = append(tag, "</"+string(raw[1:nameEnd(raw)])+">"...)
 			}
 			n.start = out.Len()
+			for _, k := range links {
+				k.at += n.start
+				doc.links = append(doc.links, k)
+			}
 			out.Write(tag)
 			if id := tagID(tag); id != "" {
 				if _, taken := doc.ids[id]; !taken {
@@ -293,7 +305,8 @@ func tagAttrs(tag []byte) []tagAttr {
 				i = min(len(tag), j+2+end)
 			} else {
 				a.valueStart = j
-				for j < len(tag) && !isSpace(tag[j]) && tag[j] != '>' {
+				// An unquoted value ends before the "/>" closing the tag.
+				for j < len(tag) && !isSpace(tag[j]) && tag[j] != '>' && !bytes.HasPrefix(tag[j:], []byte("/>")) {
 					j++
 				}
 				a.valueEnd, i = j, j
@@ -306,10 +319,13 @@ func tagAttrs(tag []byte) []tagAttr {
 }
 
 // editTag returns a start tag with its image and stylesheet references
-// rewritten to kindle: references and any aid attribute removed.
-func (l *kf8Layout) editTag(from, name string, tag []byte) []byte {
+// rewritten to kindle: references, its links into the book replaced by
+// linkPlaceholder, and any aid attribute removed. It also returns the
+// links, each at its placeholder in the tag returned.
+func (l *kf8Layout) editTag(from, name string, tag []byte) ([]byte, []kf8Link) {
 	attrs := tagAttrs(tag)
 	var out []byte
+	var links []kf8Link
 	last := 0
 	for _, a := range attrs {
 		var value []byte
@@ -324,6 +340,11 @@ func (l *kf8Layout) editTag(from, name string, tag []byte) []byte {
 			value = l.embedRef(from, string(tag[a.valueStart:a.valueEnd]))
 		case name == "link" && a.name == "href":
 			value = l.flowRef(from, string(tag[a.valueStart:a.valueEnd]))
+		case (name == "a" || name == "area") && (a.name == "href" || a.name == "xlink:href"):
+			if target, id, ok := l.linkTarget(from, string(tag[a.valueStart:a.valueEnd])); ok {
+				value = []byte(linkPlaceholder)
+				links = append(links, kf8Link{at: len(out) + a.valueStart - last, name: target, id: id})
+			}
 		case a.name == "style":
 			if v := l.rewriteCSS(from, tag[a.valueStart:a.valueEnd]); !bytes.Equal(v, tag[a.valueStart:a.valueEnd]) {
 				value = v
@@ -337,9 +358,28 @@ func (l *kf8Layout) editTag(from, name string, tag []byte) []byte {
 		last = a.valueEnd
 	}
 	if out == nil {
-		return tag
+		return tag, nil
 	}
-	return append(out, tag[last:]...)
+	return append(out, tag[last:]...), links
+}
+
+// linkTarget returns the document and id a link from the document at from
+// names, or false when it names no document of the book. The id is "" for
+// a link to a whole document.
+func (l *kf8Layout) linkTarget(from, ref string) (string, string, bool) {
+	ref = strings.TrimSpace(html.UnescapeString(ref))
+	u, err := url.Parse(ref)
+	if err != nil || u.Scheme != "" || u.Host != "" || strings.HasPrefix(u.Path, "/") || ref == "" {
+		return "", "", false
+	}
+	name := from
+	if u.Path != "" {
+		name = path.Join(path.Dir(from), u.Path)
+	}
+	if _, ok := l.byName[name]; !ok {
+		return "", "", false
+	}
+	return name, u.Fragment, true
 }
 
 // embedRef returns the kindle:embed reference for an image reference from
@@ -370,19 +410,53 @@ func (l *kf8Layout) flowRef(from, ref string) []byte {
 	return []byte(fmt.Sprintf("kindle:flow:%04s?mime=text/css", base32(u32(n))))
 }
 
-var cssURL = regexp.MustCompile(`url\(\s*(['"]?)([^'")]*)(['"]?)\s*\)`)
+// fontRef returns the kindle:embed reference for a font reference, or nil
+// when it names no font the book stores.
+func (l *kf8Layout) fontRef(from, ref string) []byte {
+	name, ok := resolveRef(from, ref)
+	if !ok {
+		return nil
+	}
+	n, ok := l.fonts[name]
+	if !ok {
+		return nil
+	}
+	return []byte(kf8EmbedURI(u32(n - 1)))
+}
+
+var (
+	cssURL = regexp.MustCompile(`url\(\s*(['"]?)([^'")]*)(['"]?)\s*\)`)
+	// cssImport matches an @import that names its stylesheet with a string
+	// rather than url().
+	cssImport = regexp.MustCompile(`(@import\s+)(['"])([^'"]*)(['"])`)
+)
 
 // rewriteCSS returns CSS from the stylesheet or document at from with
-// each url() naming an image of the book turned into a kindle:embed
-// reference.
+// each url() naming an image or a font of the book turned into a
+// kindle:embed reference, and each naming a stylesheet, as @import does,
+// into a kindle:flow reference.
 func (l *kf8Layout) rewriteCSS(from string, css []byte) []byte {
-	return cssURL.ReplaceAllFunc(css, func(m []byte) []byte {
+	css = cssURL.ReplaceAllFunc(css, func(m []byte) []byte {
 		sub := cssURL.FindSubmatch(m)
 		ref := l.embedRef(from, string(sub[2]))
+		if ref == nil {
+			ref = l.fontRef(from, string(sub[2]))
+		}
+		if ref == nil {
+			ref = l.flowRef(from, string(sub[2]))
+		}
 		if ref == nil {
 			return m
 		}
 		return []byte("url(" + string(sub[1]) + string(ref) + string(sub[3]) + ")")
+	})
+	return cssImport.ReplaceAllFunc(css, func(m []byte) []byte {
+		sub := cssImport.FindSubmatch(m)
+		ref := l.flowRef(from, string(sub[3]))
+		if ref == nil {
+			return m
+		}
+		return slices.Concat(sub[1], sub[2], ref, sub[4])
 	})
 }
 

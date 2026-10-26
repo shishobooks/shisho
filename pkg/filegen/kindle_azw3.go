@@ -1,9 +1,13 @@
 package filegen
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha1" //nolint:gosec // the IDPF font obfuscation key is a SHA-1
 	"crypto/sha256"
+	"encoding/hex"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/url"
@@ -26,9 +30,9 @@ import (
 // epubToAZW3 is the Conversion step from EPUB to AZW3. It runs the EPUB
 // generator's preparation first, so the book's metadata, cover, and chapter
 // edits are applied as for any EPUB, and builds a KF8 book from the result:
-// its spine documents, stylesheets, images, and table of contents. An AZW3
-// lists every record's offset before the records, so it is built in full
-// before it is sent.
+// its spine documents, stylesheets, images, fonts, table of contents, and
+// guide. An AZW3 lists every record's offset before the records, so it is
+// built in full before it is sent.
 type epubToAZW3 struct{}
 
 func (epubToAZW3) builtInFull() {}
@@ -44,7 +48,7 @@ func (epubToAZW3) prepare(ctx context.Context, in stepInput) (Prepared, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, NewGenerationError(models.FileTypeAZW3, err, "generation cancelled")
 	}
-	book, err := kf8Book(entries)
+	book, err := kf8Book(entries, sourceIdentifiers(in.src)...)
 	if err != nil {
 		return nil, err
 	}
@@ -102,10 +106,55 @@ func (p *preparedAZW3) Write(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
+// sourceIdentifiers returns the identifiers in the OPF of an EPUB or KePub
+// source, the package's unique identifier first, or nil for any other
+// source. Preparation can replace the unique identifier, which keys the
+// obfuscation of the source's fonts.
+func sourceIdentifiers(src Source) []string {
+	if src == nil {
+		return nil
+	}
+	zr, err := zip.NewReader(src, src.Size())
+	if err != nil {
+		return nil
+	}
+	for _, f := range zr.File {
+		if path.Ext(f.Name) != ".opf" {
+			continue
+		}
+		r, err := f.Open()
+		if err != nil {
+			return nil
+		}
+		parsed, err := epub.ParseOPF(f.Name, r)
+		if err != nil {
+			return nil
+		}
+		return packageIdentifiers(parsed.Package)
+	}
+	return nil
+}
+
+// packageIdentifiers returns a package's identifiers, its unique
+// identifier first.
+func packageIdentifiers(pkg *epub.Package) []string {
+	var ids []string
+	for _, id := range pkg.Metadata.Identifier {
+		v := strings.TrimSpace(id.Text)
+		if id.ID == pkg.UniqueIdentifier && pkg.UniqueIdentifier != "" {
+			ids = append([]string{v}, ids...)
+		} else {
+			ids = append(ids, v)
+		}
+	}
+	return ids
+}
+
 // kf8Book reads an EPUB's entries into a book for mobi.WriteKF8. The
-// documents and stylesheets are read now; the images only as they are
-// written.
-func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
+// documents, stylesheets, and fonts are read now; the images only as they
+// are written. sourceIDs are the source's identifiers, tried first as keys
+// to obfuscated fonts.
+func kf8Book(entries []kepub.Entry, sourceIDs ...string) (*mobi.KF8Book, error) {
 	byName := make(map[string]kepub.Entry, len(entries))
 	var opfName string
 	for _, e := range entries {
@@ -143,6 +192,11 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		}
 		return path.Join(path.Dir(opfName), href)
 	}
+	obfuscated, err := obfuscatedFonts(byName)
+	if err != nil {
+		return nil, err
+	}
+	keys := append(slices.Clone(sourceIDs), packageIdentifiers(pkg)...)
 	items := map[string]string{}
 	for _, item := range pkg.Manifest.Item {
 		name := entryName(item.Href)
@@ -160,6 +214,15 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		case strings.HasPrefix(item.MediaType, "image/"):
 			e := byName[name]
 			book.Images = append(book.Images, mobi.KF8Image{Name: name, MediaType: item.MediaType, Load: e.Data})
+		case isFontItem(item.MediaType, name):
+			data, err := read(name)
+			if err != nil {
+				return nil, err
+			}
+			if algorithm, ok := obfuscated[name]; ok {
+				data = deobfuscateFont(data, algorithm, keys)
+			}
+			book.Fonts = append(book.Fonts, mobi.Document{Name: name, MediaType: item.MediaType, Content: data})
 		}
 	}
 	for _, ref := range pkg.Spine.Itemref {
@@ -206,6 +269,7 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 			ncxName = entryName(item.Href)
 		}
 	}
+	var navData []byte
 	for _, toc := range []struct {
 		name    string
 		entries func(*xmlNode, string) []*tocEntry
@@ -217,12 +281,164 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		if err != nil {
 			return nil, err
 		}
+		if toc.name == navName {
+			navData = data
+		}
 		if doc := readTOCDoc(toc.name, data, toc.entries); doc.hasChapters() {
 			book.TOC = kf8NavPoints(doc.entries)
 			break
 		}
 	}
+
+	// The guide is the OPF's, or, in an EPUB 3 without one, the nav
+	// document's landmarks.
+	for _, ref := range pkg.Guide.Reference {
+		book.Guide = append(book.Guide, mobi.GuideRef{Type: ref.Type, Title: ref.Title, Href: resolveHref(opfName, ref.Href)})
+	}
+	if len(book.Guide) == 0 {
+		// The nav document, when the book has one, was read for the table
+		// of contents.
+		book.Guide = landmarks(navName, navData)
+	}
 	return book, nil
+}
+
+// landmarkTypes maps an EPUB 3 landmark's type to the guide type a Kindle
+// reads.
+var landmarkTypes = map[string]string{
+	"bodymatter": "text", "toc": "toc", "cover": "cover", "titlepage": "title-page",
+	"copyright-page": "copyright-page", "dedication": "dedication", "preface": "preface",
+	"foreword": "foreword", "acknowledgments": "acknowledgements", "bibliography": "bibliography",
+	"glossary": "glossary", "index": "index", "loi": "loi", "lot": "lot", "colophon": "colophon",
+	"epigraph": "epigraph",
+}
+
+// landmarks returns the guide references a nav document's landmarks nav
+// gives, leaving out types a guide has none of.
+func landmarks(navName string, data []byte) []mobi.GuideRef {
+	if data == nil {
+		return nil
+	}
+	root, err := parseXMLNodes(data)
+	if err != nil || root.name != "html" {
+		return nil
+	}
+	ol := navList(root, "landmarks")
+	if ol == nil {
+		return nil
+	}
+	var refs []mobi.GuideRef
+	for _, li := range ol.children {
+		a := li.child("a")
+		if li.name != "li" || a == nil {
+			continue
+		}
+		typ, ok := landmarkTypes[strings.TrimSpace(a.attr("type"))]
+		if !ok || a.attr("href") == "" {
+			continue
+		}
+		refs = append(refs, mobi.GuideRef{Type: typ, Title: strings.TrimSpace(a.text.String()), Href: resolveHref(navName, a.attr("href"))})
+	}
+	return refs
+}
+
+// fontExtensions are the extensions of font files, for a manifest that
+// gives a font a media type other than a font one.
+var fontExtensions = map[string]bool{".ttf": true, ".otf": true, ".woff": true, ".woff2": true}
+
+// isFontItem reports whether a manifest item is a font. EPUBs in the wild
+// give fonts many media types, so the item's extension counts too; the
+// writer leaves out anything that turns out to be no font.
+func isFontItem(mediaType, name string) bool {
+	return strings.Contains(mediaType, "font") ||
+		mediaType == "application/vnd.ms-opentype" || fontExtensions[strings.ToLower(path.Ext(name))]
+}
+
+// The font obfuscation algorithms, which pkg/epub also knows, as the ones
+// that leave a book readable, and how much of a font each obfuscates.
+const (
+	idpfObfuscation    = "http://www.idpf.org/2008/embedding"
+	adobeObfuscation   = "http://ns.adobe.com/pdf/enc#RC"
+	idpfObfuscatedLen  = 1040
+	adobeObfuscatedLen = 1024
+)
+
+// obfuscatedFonts returns the entries an EPUB's encryption.xml says are
+// obfuscated fonts, with the algorithm of each. An encryption.xml that
+// can't be read names none.
+func obfuscatedFonts(byName map[string]kepub.Entry) (map[string]string, error) {
+	out := map[string]string{}
+	e, ok := byName["META-INF/encryption.xml"]
+	if !ok {
+		return out, nil
+	}
+	data, err := e.Data()
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeAZW3, err, "failed to read META-INF/encryption.xml from EPUB")
+	}
+	var doc struct {
+		Data []struct {
+			Method struct {
+				Algorithm string `xml:"Algorithm,attr"`
+			} `xml:"EncryptionMethod"`
+			Cipher struct {
+				Reference struct {
+					URI string `xml:"URI,attr"`
+				} `xml:"CipherReference"`
+			} `xml:"CipherData"`
+		} `xml:"EncryptedData"`
+	}
+	if err := xml.Unmarshal(data, &doc); err != nil {
+		return out, nil //nolint:nilerr // an unreadable encryption.xml names no fonts
+	}
+	for _, d := range doc.Data {
+		if a := d.Method.Algorithm; a == idpfObfuscation || a == adobeObfuscation {
+			uri := d.Cipher.Reference.URI
+			if unescaped, err := url.PathUnescape(uri); err == nil {
+				uri = unescaped
+			}
+			out[path.Clean(strings.TrimPrefix(uri, "/"))] = a
+		}
+	}
+	return out, nil
+}
+
+// deobfuscateFont undoes a font's obfuscation. The IDPF algorithm XORs the
+// first 1040 bytes with the SHA-1 of the book's unique identifier, its
+// whitespace removed; Adobe's XORs the first 1024 with the 16 bytes of a
+// UUID identifier. Which identifier keyed it isn't recorded, and Shisho's
+// metadata can replace it, so each of ids is tried in turn, and the first
+// that gives a font a Kindle shows wins. Otherwise the font is returned as
+// it is, and the writer leaves it out.
+func deobfuscateFont(data []byte, algorithm string, ids []string) []byte {
+	for _, id := range ids {
+		var key []byte
+		n := idpfObfuscatedLen
+		switch algorithm {
+		case idpfObfuscation:
+			sum := sha1.Sum([]byte(strings.Map(func(r rune) rune { //nolint:gosec // the algorithm's key
+				if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
+					return -1
+				}
+				return r
+			}, id)))
+			key = sum[:]
+		case adobeObfuscation:
+			decoded, err := hex.DecodeString(strings.ReplaceAll(strings.TrimPrefix(strings.ToLower(id), "urn:uuid:"), "-", ""))
+			if err != nil || len(decoded) != 16 {
+				continue
+			}
+			key, n = decoded, adobeObfuscatedLen
+		}
+		out := bytes.Clone(data)
+		for i := range min(n, len(out)) {
+			out[i] ^= key[i%len(key)]
+		}
+		if mobi.KindleFont(out) {
+			return out
+		}
+	}
+	return data
 }
 
 // kf8NavPoints turns table of contents entries into the writer's, leaving

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"maps"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -19,11 +21,12 @@ import (
 // stylesheets, and images of a book, as the format's specification
 // describes it (ADR 0009). Each document is cut into a
 // skeleton and fragments, every element in its body gets an aid attribute,
-// and image and stylesheet references become kindle:embed and kindle:flow
+// image, font, and stylesheet references become kindle:embed and
+// kindle:flow references, and links between documents become kindle:pos
 // references. The text is compressed with PalmDOC into records of 4096
 // bytes, each ending in a multibyte trailing entry, followed by the NCX,
-// skeleton, and fragment indexes, the images, and the FDST, FLIS, FCIS, and
-// EOF records.
+// skeleton, fragment, and guide indexes, the images and fonts, and the
+// FDST, FLIS, FCIS, and EOF records.
 
 // KF8Book is a book for WriteKF8. Names are paths in one namespace, such
 // as an EPUB's zip entry names, which references in the documents and
@@ -41,16 +44,28 @@ type KF8Book struct {
 	// Styles are the stylesheets the documents link.
 	Styles []Document
 	Images []KF8Image
+	// Fonts are the embedded fonts the stylesheets name. A font is stored
+	// as a FONT resource; data that is no font a Kindle shows is left out.
+	Fonts []Document
 	// Cover is the name of the image to show as the book's cover, or "".
 	Cover string
 	// TOC is the table of contents. An Href names a document and, after a
 	// #, the id of an element in it.
 	TOC []*NavPoint
+	// Guide names the book's landmarks, such as where its text starts.
+	Guide []GuideRef
 	// FixedLayout marks a book whose pages each fill the screen, such as a
 	// comic, and OriginalResolution is the size in pixels its pages were
 	// made for, as "800x1200".
 	FixedLayout        bool
 	OriginalResolution string
+}
+
+// GuideRef is an entry of a KF8Book's guide: its type, as an EPUB 2
+// guide names it ("text", "toc", "cover"), a title, and an Href in the
+// form of a NavPoint's.
+type GuideRef struct {
+	Type, Title, Href string
 }
 
 // KF8Image is an image of a KF8Book. It is read only while the file is
@@ -78,6 +93,10 @@ const (
 	headerPadding = 1024
 
 	exthDocType = 501
+	// exthStartReading holds where the book opens: a place in the text.
+	exthStartReading = 116
+	// guideTagTitle is the guide index tag holding an entry's title.
+	guideTagTitle = 1
 	// A fixed-layout book carries "true" in the first, and the page size
 	// it was made for in the second.
 	exthFixedLayout        = 122
@@ -123,9 +142,11 @@ func WriteKF8(ctx context.Context, w io.WriteSeeker, b *KF8Book) error {
 	return l.write(ctx, w)
 }
 
-// kf8Resource is an image stored as a resource record.
+// kf8Resource is an image or a font stored as a resource record.
 type kf8Resource struct {
 	image KF8Image
+	// record is a font's FONT record, written as it is.
+	record []byte
 	// mediaType is what the record holds.
 	mediaType string
 	// convert re-encodes the image as a JPEG, for an image a Kindle can't
@@ -143,9 +164,33 @@ type kf8Doc struct {
 	// body's first element.
 	first int
 	frags []fragRange
+	// links are the kindle:pos placeholders in out, filled in once every
+	// document is laid out.
+	links []kf8Link
 	// start is where the document starts in flow 0, and firstFrag the
 	// book-wide number of its first fragment.
 	start, firstFrag int
+}
+
+// kf8Link is a link to a place in the book: where its placeholder sits in
+// a document's out, and the document and id it names.
+type kf8Link struct {
+	at       int
+	name, id string
+}
+
+// linkPlaceholder holds a link's place in a document until every document
+// is laid out and the place is known. A kindle:pos reference has a fixed
+// width, so filling it in moves nothing after it.
+const linkPlaceholder = "kindle:pos:fid:0000:off:0000000000"
+
+// maxFragments is one more than the largest fragment number the four base32
+// digits of a kindle:pos reference hold.
+const maxFragments = 32 * 32 * 32 * 32
+
+// posURI returns the kindle:pos reference to offset off in fragment fid.
+func posURI(fid, off int) string {
+	return fmt.Sprintf("kindle:pos:fid:%04s:off:%010s", base32(u32(fid)), base32(u32(off)))
 }
 
 // fragRange is a fragment of a document: a run of sibling nodes, and the
@@ -158,9 +203,9 @@ type fragRange struct {
 type kf8Layout struct {
 	book      *KF8Book
 	resources []*kf8Resource
-	// embeds maps an image's name to the record it is stored in, counted
-	// from 1 as kindle:embed numbers are.
-	embeds map[string]int
+	// embeds and fonts map an image's or a font's name to the record it is
+	// stored in, counted from 1 as kindle:embed numbers are.
+	embeds, fonts map[string]int
 	// flows maps a stylesheet's name to its flow number.
 	flows map[string]int
 	// cover is the record of the cover, counted from 0, or -1.
@@ -175,10 +220,11 @@ type kf8Layout struct {
 	ncx      [][]byte
 	skel     [][]byte
 	frags    [][]byte
+	guide    [][]byte
 }
 
 func newKF8Layout(b *KF8Book) *kf8Layout {
-	l := &kf8Layout{book: b, embeds: map[string]int{}, flows: map[string]int{}, byName: map[string]int{}, cover: -1}
+	l := &kf8Layout{book: b, embeds: map[string]int{}, fonts: map[string]int{}, flows: map[string]int{}, byName: map[string]int{}, cover: -1}
 	for _, img := range b.Images {
 		r := &kf8Resource{image: img, mediaType: img.MediaType}
 		switch img.MediaType {
@@ -196,6 +242,22 @@ func newKF8Layout(b *KF8Book) *kf8Layout {
 		if img.Name == b.Cover {
 			l.cover = len(l.resources) - 1
 		}
+	}
+	fontsSize := 0
+	for _, f := range b.Fonts {
+		// A Kindle shows TrueType and OpenType fonts. Fonts past what a
+		// reader takes together are left out, as are fonts too large for a
+		// record.
+		if !KindleFont(f.Content) || fontsSize+len(f.Content) > maxFontsSize {
+			continue
+		}
+		rec := fontRecord(f.Content)
+		if len(rec) > maxImageRecord {
+			continue
+		}
+		fontsSize += len(f.Content)
+		l.resources = append(l.resources, &kf8Resource{record: rec})
+		l.fonts[f.Name] = len(l.resources)
 	}
 	if l.cover >= 0 {
 		if cover := l.resources[l.cover]; cover.mediaType != "image/jpeg" && cover.mediaType != "image/gif" {
@@ -218,18 +280,31 @@ func newKF8Layout(b *KF8Book) *kf8Layout {
 
 // layout builds the text and the indexes.
 func (l *kf8Layout) layout(ctx context.Context) error {
-	var flow0 bytes.Buffer
-	var skeletons, fragments []*ncxEntry
-	selectors := &cncxWriter{}
-	for i, d := range l.book.Documents {
+	start, frags := 0, 0
+	for _, d := range l.book.Documents {
 		if err := ctx.Err(); err != nil {
 			return errors.WithStack(err)
 		}
 		doc := l.document(d)
-		doc.start = flow0.Len()
-		doc.firstFrag = len(fragments)
+		doc.start, doc.firstFrag = start, frags
+		start += len(doc.out)
+		frags += len(doc.frags)
 		l.docs = append(l.docs, doc)
+	}
+	if frags >= maxFragments {
+		return errors.New("the book has too many fragments for a Kindle book")
+	}
+	for _, doc := range l.docs {
+		for _, k := range doc.links {
+			fid, off := l.place(k.name, k.id)
+			copy(doc.out[k.at:], posURI(fid, off))
+		}
+	}
 
+	var flow0 bytes.Buffer
+	var skeletons, fragments []*ncxEntry
+	selectors := &cncxWriter{}
+	for i, doc := range l.docs {
 		last := 0
 		for _, f := range doc.frags {
 			flow0.Write(doc.out[last:f.start])
@@ -281,6 +356,9 @@ func (l *kf8Layout) layout(ctx context.Context) error {
 			return err
 		}
 	}
+	if l.guide, err = l.guideIndex(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -323,13 +401,20 @@ func (l *kf8Layout) target(href string) (int, int, int) {
 	if unescaped, err := url.PathUnescape(id); err == nil {
 		id = unescaped
 	}
+	fid, off := l.place(name, id)
+	return fid, off, l.docs[l.byName[name]].docStartOf(fid) + off
+}
+
+// place returns the fragment and offset of the element with id in the
+// document called name, or of the document's first element when id is ""
+// or names nothing in it.
+func (l *kf8Layout) place(name, id string) (int, int) {
 	d := l.docs[l.byName[name]]
 	pos, ok := d.ids[id]
 	if !ok || id == "" {
 		pos = d.first
 	}
-	fid, off := d.locate(pos)
-	return fid, off, d.docStartOf(fid) + off
+	return d.locate(pos)
 }
 
 // docStartOf returns where fragment fid is inserted in the text.
@@ -353,17 +438,65 @@ func (l *kf8Layout) navPoints(points []*NavPoint) []*NavPoint {
 			out = append(out, children...)
 			continue
 		}
-		title := p.Title
-		if len(title) > maxLabel {
-			cut := maxLabel
-			for cut > 0 && !utf8.RuneStart(title[cut]) {
-				cut--
-			}
-			title = title[:cut]
-		}
-		out = append(out, &NavPoint{Title: title, Href: p.Href, Children: children})
+		out = append(out, &NavPoint{Title: cutLabel(p.Title), Href: p.Href, Children: children})
 	}
 	return out
+}
+
+// cutLabel cuts a title to maxLabel bytes, at a character boundary.
+func cutLabel(title string) string {
+	if len(title) <= maxLabel {
+		return title
+	}
+	cut := maxLabel
+	for cut > 0 && !utf8.RuneStart(title[cut]) {
+		cut--
+	}
+	return title[:cut]
+}
+
+// guideIndex returns the guide index, naming each place the book's guide
+// gives as a fragment and an offset, or nil for a book with no guide. A
+// reference to a document the book doesn't have is left out, and so is a
+// second reference of a type. Entries are in order of their type.
+func (l *kf8Layout) guideIndex() ([][]byte, error) {
+	refs := map[string]GuideRef{}
+	for _, g := range l.book.Guide {
+		name, _, _ := strings.Cut(g.Href, "#")
+		_, ok := l.byName[name]
+		if _, taken := refs[g.Type]; !ok || taken || g.Type == "" || len(g.Type) > maxLabel {
+			continue
+		}
+		refs[g.Type] = g
+	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	labels := &cncxWriter{}
+	entries := make([]*ncxEntry, 0, len(refs))
+	for _, typ := range slices.Sorted(maps.Keys(refs)) {
+		g := refs[typ]
+		fid, off, _ := l.target(g.Href)
+		entries = append(entries, &ncxEntry{ident: []byte(typ), values: map[byte][]uint32{
+			guideTagTitle: {labels.add([]byte(cutLabel(g.Title)))},
+			ncxTagPosFID:  {u32(fid), u32(off)},
+		}})
+	}
+	tags := []tagxEntry{{tag: guideTagTitle, valuesPerEntry: 1, mask: 0x01}, {tag: ncxTagPosFID, valuesPerEntry: 2, mask: 0x02}}
+	return writeIndex(tags, entries, labels.records)
+}
+
+// startReading returns where the guide's "text" entry, the start of the
+// book's text, is in the text, or false when the guide has none.
+func (l *kf8Layout) startReading() (int, bool) {
+	for _, g := range l.book.Guide {
+		name, _, _ := strings.Cut(g.Href, "#")
+		if _, ok := l.byName[name]; ok && g.Type == "text" {
+			_, _, pos := l.target(g.Href)
+			return pos, true
+		}
+	}
+	return 0, false
 }
 
 // ncxIndex returns the NCX index of the table of contents. Entries are
@@ -473,7 +606,8 @@ func (l *kf8Layout) write(ctx context.Context, w io.WriteSeeker) error {
 	ncxAt := 1 + textCount
 	skelAt := ncxAt + len(l.ncx)
 	fragAt := skelAt + len(l.skel)
-	imageAt := fragAt + len(l.frags)
+	guideAt := fragAt + len(l.frags)
+	imageAt := guideAt + len(l.guide)
 	fdstAt := imageAt + len(l.resources)
 	count := fdstAt + 4 // FDST, FLIS, FCIS, EOF
 	if count > 0xFFFF {
@@ -482,7 +616,7 @@ func (l *kf8Layout) write(ctx context.Context, w io.WriteSeeker) error {
 
 	rec0, err := l.headerRecord(kf8Indexes{
 		firstNonBook: ncxAt, ncx: ncxAt, skeleton: skelAt, fragment: fragAt,
-		firstImage: imageAt, fdst: fdstAt, flis: fdstAt + 1, fcis: fdstAt + 2,
+		guide: guideAt, firstImage: imageAt, fdst: fdstAt, flis: fdstAt + 1, fcis: fdstAt + 2,
 	})
 	if err != nil {
 		return err
@@ -518,6 +652,7 @@ func (l *kf8Layout) write(ctx context.Context, w io.WriteSeeker) error {
 	records = append(records, l.ncx...)
 	records = append(records, l.skel...)
 	records = append(records, l.frags...)
+	records = append(records, l.guide...)
 	for _, rec := range records {
 		if err := put(rec); err != nil {
 			return err
@@ -526,6 +661,12 @@ func (l *kf8Layout) write(ctx context.Context, w io.WriteSeeker) error {
 	for _, r := range l.resources {
 		if err := ctx.Err(); err != nil {
 			return errors.WithStack(err)
+		}
+		if r.record != nil {
+			if err := put(r.record); err != nil {
+				return err
+			}
+			continue
 		}
 		data, err := r.image.Load()
 		if err != nil {
@@ -572,7 +713,7 @@ func (l *kf8Layout) write(ctx context.Context, w io.WriteSeeker) error {
 
 // kf8Indexes are the record indexes the header names.
 type kf8Indexes struct {
-	firstNonBook, ncx, skeleton, fragment, firstImage, fdst, flis, fcis int
+	firstNonBook, ncx, skeleton, fragment, guide, firstImage, fdst, flis, fcis int
 }
 
 // headerRecord returns the header record: the PalmDOC and MOBI headers, then
@@ -623,6 +764,9 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 	}
 	be.PutUint32(rec[offFragment:], u32(at.fragment))
 	be.PutUint32(rec[offSkeleton:], u32(at.skeleton))
+	if len(l.guide) > 0 {
+		be.PutUint32(rec[offGuide:], u32(at.guide))
+	}
 
 	count := make([]byte, 4)
 	be.PutUint32(count, u32(len(l.resources)))
@@ -634,6 +778,9 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 		// Other writers put the identifier here as well, so a Kindle that
 		// reads this record finds the same one.
 		exth = append(exth, exthRecord{typ: exthASINAlt, data: []byte(l.book.Identifier)})
+	}
+	if start, ok := l.startReading(); ok {
+		exth = append(exth, exthRecord{typ: exthStartReading, data: binary.BigEndian.AppendUint32(nil, u32(start))})
 	}
 	if l.book.FixedLayout {
 		exth = append(exth, exthRecord{typ: exthFixedLayout, data: []byte("true")})
