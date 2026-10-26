@@ -1273,7 +1273,60 @@ func TestEPUBGenerator_DeletesTheEditedEntryAmongSameHrefs(t *testing.T) {
 
 	ncx := string(entries["OEBPS/toc.ncx"])
 	assert.Equal(t, []tocChapter{{title: "Opening, continued", href: "text/ch1.xhtml"}}, ncxTree(t, entries["OEBPS/toc.ncx"]))
-	assert.Contains(t, ncx, `<navPoint id="b" playOrder="3">`, "the second entry is the one kept")
+	assert.Contains(t, ncx, `<navPoint id="b" playOrder="1">`, "the second entry is the one kept, numbered first now")
+}
+
+// TestEPUBGenerator_NCXDeletionRenumbersPlayOrder covers deleting an NCX
+// entry: playOrder must run without gaps across the navMap and the
+// pageList, which share it, and entries that shared a value still do.
+func TestEPUBGenerator_NCXDeletionRenumbersPlayOrder(t *testing.T) {
+	t.Parallel()
+
+	src := tocEPUB("2.0")
+	src.files["OEBPS/toc.ncx"] = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <navMap>
+    <navPoint id="a" playOrder="1">
+      <navLabel><text>Opening</text></navLabel>
+      <content src="text/ch1.xhtml"/>
+      <navPoint id="a1" playOrder='2'><navLabel><text>Scene</text></navLabel><content src="text/ch1.xhtml#s"/></navPoint>
+    </navPoint>
+    <navPoint id="b" playOrder="3">
+      <navLabel><text>Middle</text></navLabel>
+      <content src="text/ch2.xhtml"/>
+    </navPoint>
+    <navPoint id="c" playOrder="4">
+      <navLabel><text>End</text></navLabel>
+      <content src="text/ch3.xhtml"/>
+    </navPoint>
+    <navPoint id="c2" playOrder="4">
+      <navLabel><text>End, again</text></navLabel>
+      <content src="text/ch3.xhtml"/>
+    </navPoint>
+  </navMap>
+  <pageList>
+    <navLabel><text>Pages</text></navLabel>
+    <pageTarget id="p1" type="normal" value="1" playOrder="5"><navLabel><text>1</text></navLabel><content src="text/ch3.xhtml#p1"/></pageTarget>
+  </pageList>
+</ncx>`
+	file := &models.File{FileType: models.FileTypeEPUB, Chapters: storedChapters([]tocChapter{
+		{title: "Opening", href: "text/ch1.xhtml", children: []tocChapter{{title: "Scene", href: "text/ch1.xhtml#s"}}},
+		{title: "End", href: "text/ch3.xhtml"},
+		{title: "End, again", href: "text/ch3.xhtml"},
+	})}
+	entries := zipEntries(t, generateVersioned(t, src, coverBook(), file, nil, ""))
+
+	ncx := string(entries["OEBPS/toc.ncx"])
+	assert.NotContains(t, ncx, "Middle")
+	for _, want := range []string{
+		`<navPoint id="a" playOrder="1">`,
+		`<navPoint id="a1" playOrder='2'>`,
+		`<navPoint id="c" playOrder="3">`,
+		`<navPoint id="c2" playOrder="3">`,
+		`<pageTarget id="p1" type="normal" value="1" playOrder="4">`,
+	} {
+		assert.Contains(t, ncx, want)
+	}
 }
 
 // tocSource builds an EPUB 3 package whose nav document lives at navHref

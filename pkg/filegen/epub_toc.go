@@ -6,8 +6,10 @@ import (
 	"encoding/xml"
 	"net/url"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/robinjoseph08/golib/logger"
@@ -277,6 +279,7 @@ func ncxPointEntries(parent *xmlNode, docPath string) []*tocEntry {
 type tocDoc struct {
 	path    string
 	data    []byte
+	root    *xmlNode
 	entries []*tocEntry
 }
 
@@ -288,7 +291,7 @@ func readTOCDoc(docPath string, data []byte, entriesOf func(*xmlNode, string) []
 	if err != nil {
 		return nil
 	}
-	return &tocDoc{path: docPath, data: data, entries: entriesOf(root, docPath)}
+	return &tocDoc{path: docPath, data: data, root: root, entries: entriesOf(root, docPath)}
 }
 
 // hasChapters reports whether the parser gets any chapter from doc.
@@ -576,6 +579,10 @@ func applyTOCChanges(doc *tocDoc, changes tocChanges) ([]byte, error) {
 		return nil, err
 	}
 	sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
+	if renumbered := playOrderEdits(doc, edits); len(renumbered) > 0 {
+		edits = append(edits, renumbered...)
+		sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
+	}
 	var out bytes.Buffer
 	var pos int64
 	for _, e := range edits {
@@ -585,6 +592,66 @@ func applyTOCChanges(doc *tocDoc, changes tocChanges) ([]byte, error) {
 	}
 	out.Write(doc.data[pos:])
 	return out.Bytes(), nil
+}
+
+// playOrderAttr matches an NCX start tag's playOrder attribute, with its
+// value in group 2.
+var playOrderAttr = regexp.MustCompile(`\splayOrder\s*=\s*(["'])([^"']*)["']`)
+
+// playOrderEdits returns the byte edits that renumber the playOrder of an
+// NCX's elements once edits, sorted by start, have removed some: the NCX
+// spec requires the values of the navMap, pageList, and navList together to
+// run from 1 without gaps. Elements that shared a value still share one. An
+// NCX that loses no numbered element is left as written.
+func playOrderEdits(doc *tocDoc, edits []byteEdit) []byteEdit {
+	if doc.root == nil || doc.root.name != "ncx" {
+		return nil
+	}
+	// removed reports whether an edit removes all of n. Removals do not
+	// overlap, so only the last one starting at or before n can.
+	removed := func(n *xmlNode) bool {
+		i := sort.Search(len(edits), func(i int) bool { return edits[i].start > n.start }) - 1
+		return i >= 0 && edits[i].end >= n.end
+	}
+	type numbered struct {
+		node  *xmlNode
+		value int
+	}
+	var kept []numbered
+	lost := false
+	var walk func(*xmlNode)
+	walk = func(n *xmlNode) {
+		for _, c := range n.children {
+			if value, err := strconv.Atoi(strings.TrimSpace(c.attr("playOrder"))); err == nil {
+				if removed(c) {
+					lost = true
+					continue
+				}
+				kept = append(kept, numbered{c, value})
+			}
+			walk(c)
+		}
+	}
+	walk(doc.root)
+	if !lost {
+		return nil
+	}
+	values := make([]int, 0, len(kept))
+	for _, k := range kept {
+		values = append(values, k.value)
+	}
+	slices.Sort(values)
+	values = slices.Compact(values)
+	var out []byteEdit
+	for _, k := range kept {
+		order, _ := slices.BinarySearch(values, k.value)
+		m := playOrderAttr.FindSubmatchIndex(doc.data[k.node.start:k.node.innerStart])
+		if m == nil || order+1 == k.value {
+			continue
+		}
+		out = append(out, byteEdit{start: k.node.start + int64(m[4]), end: k.node.start + int64(m[5]), text: []byte(strconv.Itoa(order + 1))})
+	}
+	return out
 }
 
 // rewriteTOCs applies the file's chapter edits to the nav document and NCX,
