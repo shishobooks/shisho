@@ -24,7 +24,7 @@ For image bytes from outside the file (enricher, download, upload), the validity
 
 ## Cache-Control
 
-Every file-serving response carries `Cache-Control`; without it, reverse proxies heuristically cache anything with `Last-Modified` and keep serving stale content after Shisho's caches clear. All are `private`. A URL versioned with a `?v=` key is immutable for a year; an unversioned URL (device covers, plugin icons) is `no-cache` so it revalidates; generated downloads and streams are `no-store`, since they change without the URL changing.
+Every file-serving response carries `Cache-Control`; without it, reverse proxies heuristically cache anything with `Last-Modified` and keep serving stale content after Shisho's caches clear. All are `private`. A URL versioned with a `?v=` key, or a Kobo cover whose image id carries the cover's cache key, is immutable for a year; an unversioned URL (other device covers, plugin icons) is `no-cache` so it revalidates; generated downloads and streams are `no-store`, since they change without the URL changing.
 
 ## Downloads
 

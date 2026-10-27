@@ -51,28 +51,27 @@ func TestIsKindle(t *testing.T) {
 	}
 }
 
+// A Kindle download's filename comes from the File's ID, never its title:
+// a Kindle keeps a reading position per filename, so a download after a
+// rename replaces the book in place, where a new name would add a second
+// copy that opens at the start.
 func TestKindleFilename(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		file *models.File
-		want string
+		name          string
+		file          *models.File
+		deliveredType string
+		want          string
 	}{
-		{"book title", &models.File{FileType: models.FileTypeMOBI}, "The_Book_s_Title.mobi"},
-		{"delivered as another type", &models.File{FileType: models.FileTypeEPUB}, "The_Book_s_Title.azw3"},
-		{"file name with accents", &models.File{FileType: models.FileTypeAZW3, Name: strPtr("Édition Spéciale (2nd)")}, "Edition_Speciale_2nd.azw3"},
-		{"name ending in its extension", &models.File{FileType: models.FileTypeMOBI, Name: strPtr("Some Book.MOBI")}, "Some_Book.mobi"},
-		{"nothing ascii", &models.File{FileType: models.FileTypeMOBI, Name: strPtr("日本語")}, "book.mobi"},
+		{"own file type", &models.File{ID: 42, FileType: models.FileTypeMOBI}, models.FileTypeMOBI, "Shisho_42.mobi"},
+		{"delivered as another type", &models.File{ID: 42, FileType: models.FileTypeEPUB}, models.FileTypeAZW3, "Shisho_42.azw3"},
+		{"named file", &models.File{ID: 7, FileType: models.FileTypeAZW3, Name: strPtr("Édition Spéciale (2nd)")}, models.FileTypeAZW3, "Shisho_7.azw3"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			deliveredType := tt.file.FileType
-			if deliveredType == models.FileTypeEPUB {
-				deliveredType = models.FileTypeAZW3
-			}
-			assert.Equal(t, tt.want, kindleFilename("The Book's Title", tt.file, deliveredType))
+			assert.Equal(t, tt.want, kindleFilename(tt.file, tt.deliveredType))
 		})
 	}
 }
@@ -169,9 +168,11 @@ func (f *kindleFixture) fileLink(title, fileType string) string {
 	return `/file/` + strconv.Itoa(f.files[title+"/"+fileType].ID) + `"`
 }
 
-// kindleLink is a file's Kindle download link, which ends in the filename.
-func (f *kindleFixture) kindleLink(title, fileType, filename string) string {
-	return `/file/` + strconv.Itoa(f.files[title+"/"+fileType].ID) + `/kindle/` + filename + `"`
+// kindleLink is a file's Kindle download link, which ends in a filename
+// named for the file's ID with the extension it is delivered as.
+func (f *kindleFixture) kindleLink(title, fileType, ext string) string {
+	id := strconv.Itoa(f.files[title+"/"+fileType].ID)
+	return `/file/` + id + `/kindle/Shisho_` + id + `.` + ext + `"`
 }
 
 // fileLinkPrefix matches any download link for a file.
@@ -187,7 +188,7 @@ func TestDownload_KindleDeviceGetsAZW3First(t *testing.T) {
 	f.setType(t, devices.DeviceTypeKindle)
 
 	body := f.page(t, "/download/"+strconv.Itoa(f.allFormats.ID), kindleUserAgent)
-	assert.Contains(t, body, f.kindleLink("All Formats", models.FileTypeAZW3, "All_Formats.azw3"))
+	assert.Contains(t, body, f.kindleLink("All Formats", models.FileTypeAZW3, "azw3"))
 	assert.Contains(t, body, "Download AZW3")
 	assert.Contains(t, body, "Some Kindles refuse AZW3 downloads. If yours does, put MOBI first in this Device's Delivery Rules.")
 	for _, fileType := range []string{models.FileTypeMOBI, models.FileTypePDF, models.FileTypeEPUB} {
@@ -195,7 +196,7 @@ func TestDownload_KindleDeviceGetsAZW3First(t *testing.T) {
 	}
 
 	body = f.page(t, "/download/"+strconv.Itoa(f.mobiOnly.ID), kindleUserAgent)
-	assert.Contains(t, body, f.kindleLink("Has MOBI", models.FileTypeMOBI, "Has_MOBI.mobi"))
+	assert.Contains(t, body, f.kindleLink("Has MOBI", models.FileTypeMOBI, "mobi"))
 	assert.Contains(t, body, "Download MOBI")
 	assert.NotContains(t, body, "refuse AZW3")
 	assert.NotContains(t, body, f.fileLinkPrefix("Has MOBI", models.FileTypeEPUB))
@@ -211,7 +212,7 @@ func TestDownload_KindleDeviceGetsEPUBBooksAsAZW3(t *testing.T) {
 	for _, book := range []*models.Book{f.epubOnly, f.epubPDF, f.supplement} {
 		body := f.page(t, "/download/"+strconv.Itoa(book.ID), kindleUserAgent)
 
-		assert.Contains(t, body, f.kindleLink(book.Title, models.FileTypeEPUB, strings.ReplaceAll(book.Title, " ", "_")+".azw3"), book.Title)
+		assert.Contains(t, body, f.kindleLink(book.Title, models.FileTypeEPUB, "azw3"), book.Title)
 		assert.Contains(t, body, "Download AZW3", book.Title)
 		assert.NotContains(t, body, "Not delivered to this Device.", book.Title)
 		assert.NotContains(t, body, f.fileLink(book.Title, models.FileTypeEPUB), book.Title)

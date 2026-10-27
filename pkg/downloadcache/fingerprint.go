@@ -44,7 +44,10 @@ import (
 //   - 9: Fingerprints carry the File's own File Type (SourceFileType), so a
 //     File reclassified as KePub misses what was cached while it was an
 //     EPUB.
-const GeneratorVersion = 9
+//   - 10: MOBI and AZW3 downloads are marked as personal documents (PDOC),
+//     and fixed-layout AZW3s carry the comic EXTH records
+//     (pkg/mobi/write.go, pkg/mobi/kf8_write.go).
+const GeneratorVersion = 10
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.

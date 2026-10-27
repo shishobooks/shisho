@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -18,7 +19,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
+// A cover's image id carries the cover's cache key after the entry id, so
+// the URL changes whenever the cover does and the Kobo may keep it for a
+// year. A bare entry id names no version, so it revalidates. Either way the
+// resized cover goes out with its length, as a Kobo keeps an image it can
+// size.
+func TestHandleCover_CacheControlFollowsTheImageIDVersion(t *testing.T) {
 	t.Parallel()
 
 	db := newSyncPointTestDB(t)
@@ -26,7 +32,6 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	e := echo.New()
 	bookService := books.NewService(db, appsettings.NewService(db))
 
-	// Create library
 	library := &models.Library{
 		Name:             "Test Library",
 		CoverAspectRatio: "book",
@@ -34,7 +39,6 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
 
-	// Create book with a directory
 	bookDir := filepath.Join(t.TempDir(), "Test Book")
 	require.NoError(t, os.MkdirAll(bookDir, 0o755))
 
@@ -54,8 +58,7 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0o644))
 
 	coverFilename := "test.epub.cover.jpg"
-	coverPath := filepath.Join(bookDir, coverFilename)
-	coverFile, err := os.Create(coverPath)
+	coverFile, err := os.Create(filepath.Join(bookDir, coverFilename))
 	require.NoError(t, err)
 	require.NoError(t, jpeg.Encode(coverFile, image.NewRGBA(image.Rect(0, 0, 100, 150)), nil))
 	require.NoError(t, coverFile.Close())
@@ -75,22 +78,35 @@ func TestHandleCover_SetsCacheControlPrivateNoCache(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &handler{service: NewService(db), bookService: bookService}
+	entryID := insertEntry(t, db, testDeviceID, file.ID, models.FileTypeKePub)
 
-	// Use a resized request (w=100 h=150)
-	imageID := insertEntry(t, db, testDeviceID, file.ID, models.FileTypeKePub)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	withDeviceOwner(c)
-	c.SetParamNames("imageId", "w", "h")
-	c.SetParamValues(imageID, "100", "150")
+	tests := []struct {
+		name         string
+		imageID      string
+		cacheControl string
+	}{
+		{"versioned", entryID + "-1a2b3c4d", "private, max-age=31536000, immutable"},
+		{"bare entry id", entryID, "private, no-cache"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			withDeviceOwner(c)
+			c.SetParamNames("imageId", "w", "h")
+			c.SetParamValues(tt.imageID, "100", "150")
 
-	require.NoError(t, h.handleCover(c))
+			require.NoError(t, h.handleCover(c))
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "private, no-cache", rec.Header().Get("Cache-Control"))
-	assert.NotEmpty(t, rec.Header().Get("Last-Modified"))
-	assert.NotEmpty(t, rec.Body.Bytes())
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, tt.cacheControl, rec.Header().Get("Cache-Control"))
+			assert.NotEmpty(t, rec.Header().Get("Last-Modified"))
+			require.NotEmpty(t, rec.Body.Bytes())
+			assert.Equal(t, strconv.Itoa(rec.Body.Len()), rec.Header().Get("Content-Length"))
+		})
+	}
 }
 
 func TestHandleCover_Returns304WhenIfModifiedSinceMatches(t *testing.T) {

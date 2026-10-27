@@ -132,8 +132,11 @@ type route struct {
 	// failed Conversion: a Download as entry, or an OPDS download delivered
 	// through a Conversion.
 	strict bool
-	path   func(f *streamingFixture) string
-	auth   func(f *streamingFixture, req *http.Request)
+	// recipient marks a Share Link's Download as entry, which answers a
+	// remembered failure with a message its recipient can act on.
+	recipient bool
+	path      func(f *streamingFixture) string
+	auth      func(f *streamingFixture, req *http.Request)
 }
 
 func opdsRoute() route {
@@ -239,6 +242,7 @@ func shareKepubRoute() route {
 	r.name = "share link kepub"
 	r.kepub = true
 	r.strict = true
+	r.recipient = true
 	r.path = func(f *streamingFixture) string {
 		return fmt.Sprintf("/api/share/%s/files/%d/download/kepub", f.shareLink().Token, f.file.ID)
 	}
@@ -603,6 +607,11 @@ func TestGeneratedDownload_CorruptCBZPageFailsMidStream(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, again.Body.Close())
 			switch {
+			case r.recipient:
+				// Never the original, which is another File Type, and an
+				// error the Share Link page shows rather than a server error.
+				require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode)
+				assertSharedFailedPartwayBody(t, body)
 			case r.strict:
 				// The route asked for this File Type, and the original is
 				// another.
@@ -714,13 +723,24 @@ func assertFailedPartwayBody(t *testing.T, body []byte) {
 	assert.Equal(t, books.FailedPartwayMessage, res.Error.Message)
 }
 
+// assertSharedFailedPartwayBody checks a Share Link's answer to a
+// remembered failure of a Download as entry.
+func assertSharedFailedPartwayBody(t *testing.T, body []byte) {
+	t.Helper()
+	var res errcodes.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &res), string(body))
+	assert.Equal(t, "invalid_state", res.Error.Code)
+	assert.Equal(t, sharelinks.SharedFailedPartwayMessage, res.Error.Message)
+}
+
 // A real KePub conversion that fails partway, on an EPUB whose chapter data
 // is corrupt, cuts the download. Afterwards OPDS, Kobo sync, and a Kobo
 // Device's eReader browser return a 500, never the EPUB in the KePub's
-// place, and the web route returns the error.
+// place, and the web route and a Share Link's Download as entry return the
+// error.
 func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
 	t.Parallel()
-	for _, r := range []route{opdsKepubRoute(), webKepubRoute(), ereaderKepubRoute(), koboSyncRoute()} {
+	for _, r := range []route{opdsKepubRoute(), webKepubRoute(), shareKepubRoute(), ereaderKepubRoute(), koboSyncRoute()} {
 		t.Run(r.name, func(t *testing.T) {
 			t.Parallel()
 			gen := &gatedGenerator{StreamGenerator: kepubEPUBGenerator(t), gate: make(chan struct{})}
@@ -747,6 +767,11 @@ func TestGeneratedDownload_CorruptEPUBChapterFailsKepubMidStream(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, again.Body.Close())
 			switch {
+			case r.recipient:
+				// Never the original, which is another File Type, and an
+				// error the Share Link page shows rather than a server error.
+				require.Equal(t, http.StatusUnprocessableEntity, again.StatusCode)
+				assertSharedFailedPartwayBody(t, body)
 			case r.strict:
 				// The route asked for this File Type, and the original is
 				// another.

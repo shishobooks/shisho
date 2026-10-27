@@ -1,6 +1,7 @@
 package kobo
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -344,10 +345,19 @@ func (h *handler) handleCover(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	modTime := coverStat.ModTime().UTC().Truncate(time.Second)
+	// The image id Shisho syncs carries the cover's cache key after the
+	// entry id (buildBookMetadata), so its URL changes with the cover and the
+	// Kobo may keep it; a no-cache cover is fetched again on every page of
+	// the Kobo's library. A bare entry id names no version, so it
+	// revalidates.
+	cacheControl := covers.CacheControlNoCache
+	if c.Param("imageId") != entryID {
+		cacheControl = covers.CacheControlImmutable
+	}
 	// The cache headers go only on a response that carries the cover (or a
 	// 304 for it), never on an error.
 	setCoverHeaders := func() {
-		c.Response().Header().Set("Cache-Control", covers.CacheControlNoCache)
+		c.Response().Header().Set("Cache-Control", cacheControl)
 		c.Response().Header().Set("Last-Modified", modTime.Format(http.TimeFormat))
 	}
 	if ims := c.Request().Header.Get("If-Modified-Since"); ims != "" {
@@ -368,7 +378,7 @@ func (h *handler) handleCover(c echo.Context) error {
 		// Serve the original if dimensions are not specified. ServeContent
 		// sends Last-Modified from the same mtime.
 		return httputil.ServeFile(c, coverPath, errcodes.NotFound("Cover"),
-			httputil.WithCacheControl(covers.CacheControlNoCache))
+			httputil.WithCacheControl(cacheControl))
 	}
 
 	// Open and resize the image
@@ -397,10 +407,18 @@ func (h *handler) handleCover(c echo.Context) error {
 	dstImg := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
 	draw.BiLinear.Scale(dstImg, dstImg.Bounds(), srcImg, srcBounds, draw.Over, nil)
 
+	// Encoded in full first, so the response carries its length, as the
+	// Kobo store's images do.
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, dstImg, &jpeg.Options{Quality: 80}); err != nil {
+		return errors.WithStack(err)
+	}
 	setCoverHeaders()
 	c.Response().Header().Set("Content-Type", "image/jpeg")
+	c.Response().Header().Set("Content-Length", strconv.Itoa(encoded.Len()))
 	c.Response().WriteHeader(http.StatusOK)
-	return jpeg.Encode(c.Response().Writer, dstImg, &jpeg.Options{Quality: 80})
+	_, err = c.Response().Write(encoded.Bytes())
+	return errors.WithStack(err)
 }
 
 // handleMetadata handles GET /v1/library/:bookId/metadata.

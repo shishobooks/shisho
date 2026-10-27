@@ -339,7 +339,10 @@ const KoboSyncSetup = ({ device }: { device: DeviceResponse }) => {
   return (
     <div className="space-y-4">
       <CopyField label="Kobo sync URL" value={koboSyncURL(device.credential)} />
-      <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+      <ol
+        aria-label="Kobo sync setup"
+        className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
+      >
         <li>Connect your Kobo to your computer with USB.</li>
         <li>
           Open{" "}
@@ -355,8 +358,28 @@ const KoboSyncSetup = ({ device }: { device: DeviceResponse }) => {
           </code>{" "}
           and replace the URL with the one above.
         </li>
+        <li>
+          Delete the <code className="rounded bg-muted px-1">image_host</code>,{" "}
+          <code className="rounded bg-muted px-1">image_url_template</code>, and{" "}
+          <code className="break-all rounded bg-muted px-1">
+            image_url_quality_template
+          </code>{" "}
+          lines if they are there, so covers load from Shisho.
+        </li>
         <li>Eject the Kobo and sync.</li>
       </ol>
+      <p className="text-sm text-muted-foreground">
+        Not working? See{" "}
+        <a
+          className="underline underline-offset-2 hover:text-foreground"
+          href="https://www.shishobooks.com/docs/kobo-sync#troubleshooting"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Kobo sync troubleshooting
+        </a>
+        .
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Clear the sync history to send everything again on the next sync.

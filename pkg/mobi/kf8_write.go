@@ -35,9 +35,8 @@ type KF8Book struct {
 	// Metadata is written to the EXTH block. Its Cover, TOC, and
 	// OnTOCSkipped are not used: the cover is one of Images.
 	Metadata Metadata
-	// Identifier is written as the ASIN record. A Kindle keeps a reading
-	// position per identifier, so a book regenerated with the same one
-	// opens where the reader left it.
+	// Identifier is written as the ASIN records, the identifier the Kindle
+	// knows the book by.
 	Identifier string
 	// Documents are the XHTML documents in reading order.
 	Documents []Document
@@ -97,12 +96,18 @@ const (
 	exthStartReading = 116
 	// guideTagTitle is the guide index tag holding an entry's title.
 	guideTagTitle = 1
-	// A fixed-layout book carries "true" in the first, and the page size
-	// it was made for in the second.
-	exthFixedLayout        = 122
-	exthOriginalResolution = 307
-	exthASINAlt            = 504
-	ncxTagLength           = 2
+	// The records of a fixed-layout book, as Kindle comics carry them. The
+	// page size it was made for goes in both resolution records.
+	exthFixedLayout           = 122
+	exthBookType              = 123
+	exthOrientationLock       = 124
+	exthOriginalResolutionAlt = 126
+	exthZeroGutter            = 127
+	exthZeroMargin            = 128
+	exthRegionMagnification   = 132
+	exthOriginalResolution    = 307
+	exthASINAlt               = 504
+	ncxTagLength              = 2
 	// extraFlagsMBEntry says each text record ends in a multibyte entry
 	// alone. The trailing byte sequences that name the index entries a
 	// record touches are not written: the flags tell a reader they are
@@ -771,7 +776,6 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 	count := make([]byte, 4)
 	be.PutUint32(count, u32(len(l.resources)))
 	exth := []exthRecord{
-		{typ: exthDocType, data: []byte("EBOK")},
 		{typ: exthResourceCount, data: count},
 	}
 	if l.book.Identifier != "" {
@@ -783,9 +787,20 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 		exth = append(exth, exthRecord{typ: exthStartReading, data: binary.BigEndian.AppendUint32(nil, u32(start))})
 	}
 	if l.book.FixedLayout {
-		exth = append(exth, exthRecord{typ: exthFixedLayout, data: []byte("true")})
+		// The records Kindle comics carry, tested on a Kindle as a set.
+		// Without region magnification a Kindle trims each page's blank
+		// margins, cutting into pages whose art runs close to them.
+		exth = append(exth,
+			exthRecord{typ: exthFixedLayout, data: []byte("true")},
+			exthRecord{typ: exthBookType, data: []byte("comic")},
+			exthRecord{typ: exthOrientationLock, data: []byte("none")},
+			exthRecord{typ: exthZeroGutter, data: []byte("true")},
+			exthRecord{typ: exthZeroMargin, data: []byte("true")},
+			exthRecord{typ: exthRegionMagnification, data: []byte("true")})
 		if l.book.OriginalResolution != "" {
-			exth = append(exth, exthRecord{typ: exthOriginalResolution, data: []byte(l.book.OriginalResolution)})
+			exth = append(exth,
+				exthRecord{typ: exthOriginalResolutionAlt, data: []byte(l.book.OriginalResolution)},
+				exthRecord{typ: exthOriginalResolution, data: []byte(l.book.OriginalResolution)})
 		}
 	}
 	rec = append(rec, encodeEXTH(exth)...)
