@@ -186,7 +186,7 @@ func TestWriteKF8_ReadsBackContent(t *testing.T) {
 	assert.Equal(t, strings.NewReplacer(`"../images/cover.jpg"`, `"image0002.jpg"`, `"../css/style.css"`, `"flow0001.css"`).Replace(testChapterTwo), string(content.Documents[1].Content))
 
 	require.Len(t, content.Styles, 1)
-	assert.Equal(t, strings.Replace(testCSS, `"../images/pic.png"`, `"image0001.png"`, 1), string(content.Styles[0].Content))
+	assert.Equal(t, strings.Replace(testCSS, `url("../images/pic.png")`, `url(image0001.png)`, 1), string(content.Styles[0].Content))
 
 	require.Len(t, content.Resources, 2)
 	pic, err := content.ReadResource(content.Resources[0])
@@ -453,7 +453,7 @@ h1 { font-family: "Body", serif; }`)}},
 	assert.Equal(t, "font/ttf", content.Fonts[0].MediaType)
 	require.Len(t, content.Styles, 1)
 	css := string(content.Styles[0].Content)
-	assert.Contains(t, css, `src: url("`+content.Fonts[0].Name+`") format("truetype");`)
+	assert.Contains(t, css, `src: url(`+content.Fonts[0].Name+`) format("truetype");`)
 	assert.Contains(t, css, `src: url(../fonts/broken.otf);`)
 	require.Len(t, content.Resources, 1, "the image is still read")
 	assert.Contains(t, string(content.Documents[0].Content), `<img src="`+content.Resources[0].Name+`"/>`)
@@ -481,7 +481,7 @@ func TestWriteKF8_CarriesStylesheets(t *testing.T) {
 	}
 	content := openContent(t, writeKF8File(t, b))
 	require.Len(t, content.Styles, 3)
-	want := strings.NewReplacer(`url("base.css")`, `url("flow0002.css")`, `'extra.css'`, `'flow0003.css'`).Replace(heavy.String())
+	want := strings.NewReplacer(`url("base.css")`, `url(flow0002.css)`, `'extra.css'`, `url(flow0003.css)`).Replace(heavy.String())
 	assert.Equal(t, want, string(content.Styles[0].Content))
 	assert.Equal(t, "p { margin: 0; }", string(content.Styles[1].Content))
 	assert.Contains(t, string(content.Documents[0].Content), `href="flow0001.css"`)
@@ -574,4 +574,36 @@ func TestWriteKF8_NoGuideNoStartReading(t *testing.T) {
 	_, ok := h.number(exthStartReading)
 	assert.False(t, ok)
 	assert.Equal(t, uint32(nullIndex), headerField(rec, offGuide))
+}
+
+// A Kindle reads a kindle: reference in CSS only unquoted, as KindleGen
+// writes it, so the quotes around a rewritten url() are dropped, and an
+// @import naming its stylesheet with a string becomes an unquoted url().
+// A reference left as written keeps its quotes.
+func TestWriteKF8_WritesCSSReferencesUnquoted(t *testing.T) {
+	t.Parallel()
+	b := &KF8Book{
+		Metadata:  Metadata{Title: "Quotes"},
+		Documents: []Document{{Name: "a.xhtml", Content: []byte(`<html><head><style>p { background: url( 'pic.png' ); }</style></head><body><p style="background: url(&quot;pic.png&quot;)">A</p></body></html>`)}},
+		Styles: []Document{
+			{Name: "a.css", Content: []byte(`@import "b.css"; @import url('b.css') screen; @font-face { src: url("f.ttf") format("truetype"); } p { background: url("missing.png"); }`)},
+			{Name: "b.css", Content: []byte("p { margin: 0; }")},
+		},
+		Images: []KF8Image{{Name: "pic.png", MediaType: "image/png", Load: func() ([]byte, error) { return testPNG(t), nil }}},
+		Fonts:  []Document{{Name: "f.ttf", MediaType: "font/ttf", Content: testFont()}},
+	}
+	data, err := os.ReadFile(writeKF8File(t, b))
+	require.NoError(t, err)
+	db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+	rec, err := db.record(0, maxHeaderRecord)
+	require.NoError(t, err)
+	text, err := readText(context.Background(), db, 0, rec, compressionPalmDOC, true)
+	require.NoError(t, err)
+	assert.NotRegexp(t, `url\(\s*(["']|&quot;)kindle:`, string(text))
+	assert.Contains(t, string(text), `@import url(kindle:flow:0002?mime=text/css); @import url(kindle:flow:0002?mime=text/css) screen;`)
+	assert.Contains(t, string(text), `src: url(kindle:embed:0002) format("truetype");`)
+	assert.Contains(t, string(text), `background: url(kindle:embed:0001?mime=image/png); }</style>`)
+	assert.Contains(t, string(text), `style="background: url(kindle:embed:0001?mime=image/png)"`)
+	assert.Contains(t, string(text), `url("missing.png")`)
 }

@@ -219,9 +219,9 @@ func TestEPUBToAZW3_RoundTrip(t *testing.T) {
 	}
 	assert.ElementsMatch(t, [][]byte{plain, hidden}, fonts)
 	main := string(readZipEntry(t, findZipEntry(t, zr, "OEBPS/flow0001.css")))
-	assert.Regexp(t, `@import url\("flow0002\.css"\);`, main)
+	assert.Regexp(t, `@import url\(flow0002\.css\);`, main)
 	assert.Regexp(t, `src: url\(font\d{4}\.ttf\);`, main)
-	assert.Regexp(t, `src: url\("font\d{4}\.otf"\) format\("opentype"\);`, main)
+	assert.Regexp(t, `src: url\(font\d{4}\.otf\) format\("opentype"\);`, main)
 	assert.Contains(t, main, `.rule299::before { content: "§299"; margin-left: 4em; }`)
 	assert.Equal(t, `p { margin: 0; text-indent: 1.2em; }`, string(readZipEntry(t, findZipEntry(t, zr, "OEBPS/flow0002.css"))))
 }

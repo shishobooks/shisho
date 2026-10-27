@@ -425,38 +425,43 @@ func (l *kf8Layout) fontRef(from, ref string) []byte {
 }
 
 var (
-	cssURL = regexp.MustCompile(`url\(\s*(['"]?)([^'")]*)(['"]?)\s*\)`)
+	// cssURL matches a url() and its reference, in double quotes (group 1),
+	// single quotes (2), the &quot; of a style attribute (3), or none (4).
+	cssURL = regexp.MustCompile(`url\(\s*(?:"([^"]*)"|'([^']*)'|&quot;(.*?)&quot;|([^'")\s]*))\s*\)`)
 	// cssImport matches an @import that names its stylesheet with a string
 	// rather than url().
-	cssImport = regexp.MustCompile(`(@import\s+)(['"])([^'"]*)(['"])`)
+	cssImport = regexp.MustCompile(`(@import\s+)(?:"([^"]*)"|'([^']*)')`)
 )
 
 // rewriteCSS returns CSS from the stylesheet or document at from with
 // each url() naming an image or a font of the book turned into a
 // kindle:embed reference, and each naming a stylesheet, as @import does,
-// into a kindle:flow reference.
+// into a kindle:flow reference. A Kindle reads a kindle: reference only
+// unquoted, as KindleGen writes it, so a rewritten url() loses its quotes,
+// and an @import naming its stylesheet with a string gets a url().
 func (l *kf8Layout) rewriteCSS(from string, css []byte) []byte {
 	css = cssURL.ReplaceAllFunc(css, func(m []byte) []byte {
 		sub := cssURL.FindSubmatch(m)
-		ref := l.embedRef(from, string(sub[2]))
-		if ref == nil {
-			ref = l.fontRef(from, string(sub[2]))
+		ref := string(bytes.Join(sub[1:], nil))
+		value := l.embedRef(from, ref)
+		if value == nil {
+			value = l.fontRef(from, ref)
 		}
-		if ref == nil {
-			ref = l.flowRef(from, string(sub[2]))
+		if value == nil {
+			value = l.flowRef(from, ref)
 		}
-		if ref == nil {
+		if value == nil {
 			return m
 		}
-		return []byte("url(" + string(sub[1]) + string(ref) + string(sub[3]) + ")")
+		return slices.Concat([]byte("url("), value, []byte(")"))
 	})
 	return cssImport.ReplaceAllFunc(css, func(m []byte) []byte {
 		sub := cssImport.FindSubmatch(m)
-		ref := l.flowRef(from, string(sub[3]))
-		if ref == nil {
+		value := l.flowRef(from, string(sub[2])+string(sub[3]))
+		if value == nil {
 			return m
 		}
-		return slices.Concat(sub[1], sub[2], ref, sub[4])
+		return slices.Concat(sub[1], []byte("url("), value, []byte(")"))
 	})
 }
 
