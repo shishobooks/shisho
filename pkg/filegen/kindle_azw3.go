@@ -26,9 +26,9 @@ import (
 // epubToAZW3 is the Conversion step from EPUB to AZW3. It runs the EPUB
 // generator's preparation first, so the book's metadata, cover, and chapter
 // edits are applied as for any EPUB, and builds a KF8 book from the result:
-// its spine documents, stylesheets, images, and table of contents. An AZW3
-// lists every record's offset before the records, so it is built in full
-// before it is sent.
+// its spine documents, stylesheets, images, fonts, table of contents, and
+// guide. An AZW3 lists every record's offset before the records, so it is
+// built in full before it is sent.
 type epubToAZW3 struct{}
 
 func (epubToAZW3) builtInFull() {}
@@ -103,8 +103,8 @@ func (p *preparedAZW3) Write(ctx context.Context, w io.Writer) error {
 }
 
 // kf8Book reads an EPUB's entries into a book for mobi.WriteKF8. The
-// documents and stylesheets are read now; the images only as they are
-// written.
+// documents, stylesheets, and fonts are read now; the images only as they
+// are written.
 func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 	byName := make(map[string]kepub.Entry, len(entries))
 	var opfName string
@@ -143,6 +143,16 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		}
 		return path.Join(path.Dir(opfName), href)
 	}
+	var obfuscated map[string]string
+	if e, ok := byName[encryptionPath]; ok {
+		data, err := e.Data()
+		if err != nil {
+			return nil, NewGenerationError(models.FileTypeAZW3, err, "failed to read "+encryptionPath+" from EPUB")
+		}
+		obfuscated = obfuscatedFonts(data)
+	}
+	// Preparation keeps each font keyed on the identifiers the OPF holds.
+	keys := epubPackageIdentifiers(pkg)
 	items := map[string]string{}
 	for _, item := range pkg.Manifest.Item {
 		name := entryName(item.Href)
@@ -160,6 +170,17 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		case strings.HasPrefix(item.MediaType, "image/"):
 			e := byName[name]
 			book.Images = append(book.Images, mobi.KF8Image{Name: name, MediaType: item.MediaType, Load: e.Data})
+		case isFontItem(item.MediaType, name):
+			data, err := read(name)
+			if err != nil {
+				return nil, err
+			}
+			if algorithm, ok := obfuscated[name]; ok {
+				if plain, _, ok := deobfuscateFont(data, algorithm, keys); ok {
+					data = plain
+				}
+			}
+			book.Fonts = append(book.Fonts, mobi.Document{Name: name, MediaType: item.MediaType, Content: data})
 		}
 	}
 	for _, ref := range pkg.Spine.Itemref {
@@ -206,6 +227,7 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 			ncxName = entryName(item.Href)
 		}
 	}
+	var navData []byte
 	for _, toc := range []struct {
 		name    string
 		entries func(*xmlNode, string) []*tocEntry
@@ -217,12 +239,77 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		if err != nil {
 			return nil, err
 		}
+		if toc.name == navName {
+			navData = data
+		}
 		if doc := readTOCDoc(toc.name, data, toc.entries); doc.hasChapters() {
 			book.TOC = kf8NavPoints(doc.entries)
 			break
 		}
 	}
+
+	// The guide is the OPF's, or, in an EPUB 3 without one, the nav
+	// document's landmarks.
+	for _, ref := range pkg.Guide.Reference {
+		book.Guide = append(book.Guide, mobi.GuideRef{Type: ref.Type, Title: ref.Title, Href: resolveHref(opfName, ref.Href)})
+	}
+	if len(book.Guide) == 0 {
+		// The nav document, when the book has one, was read for the table
+		// of contents.
+		book.Guide = landmarks(navName, navData)
+	}
 	return book, nil
+}
+
+// landmarkTypes maps an EPUB 3 landmark's type to the guide type a Kindle
+// reads.
+var landmarkTypes = map[string]string{
+	"bodymatter": "text", "toc": "toc", "cover": "cover", "titlepage": "title-page",
+	"copyright-page": "copyright-page", "dedication": "dedication", "preface": "preface",
+	"foreword": "foreword", "acknowledgments": "acknowledgements", "bibliography": "bibliography",
+	"glossary": "glossary", "index": "index", "loi": "loi", "lot": "lot", "colophon": "colophon",
+	"epigraph": "epigraph",
+}
+
+// landmarks returns the guide references a nav document's landmarks nav
+// gives, leaving out types a guide has none of.
+func landmarks(navName string, data []byte) []mobi.GuideRef {
+	if data == nil {
+		return nil
+	}
+	root, err := parseXMLNodes(data)
+	if err != nil || root.name != "html" {
+		return nil
+	}
+	ol := navList(root, "landmarks")
+	if ol == nil {
+		return nil
+	}
+	var refs []mobi.GuideRef
+	for _, li := range ol.children {
+		a := li.child("a")
+		if li.name != "li" || a == nil {
+			continue
+		}
+		typ, ok := landmarkTypes[strings.TrimSpace(a.attr("type"))]
+		if !ok || a.attr("href") == "" {
+			continue
+		}
+		refs = append(refs, mobi.GuideRef{Type: typ, Title: strings.TrimSpace(a.text.String()), Href: resolveHref(navName, a.attr("href"))})
+	}
+	return refs
+}
+
+// fontExtensions are the extensions of font files, for a manifest that
+// gives a font a media type other than a font one.
+var fontExtensions = map[string]bool{".ttf": true, ".otf": true, ".woff": true, ".woff2": true}
+
+// isFontItem reports whether a manifest item is a font. EPUBs in the wild
+// give fonts many media types, so the item's extension counts too; the
+// writer leaves out anything that turns out to be no font.
+func isFontItem(mediaType, name string) bool {
+	return strings.Contains(mediaType, "font") ||
+		mediaType == "application/vnd.ms-opentype" || fontExtensions[strings.ToLower(path.Ext(name))]
 }
 
 // kf8NavPoints turns table of contents entries into the writer's, leaving

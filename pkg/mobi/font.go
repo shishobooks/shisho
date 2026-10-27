@@ -97,3 +97,27 @@ func fontType(data []byte) (string, string) {
 func fontName(n int, ext string) string {
 	return fmt.Sprintf("font%04d%s", n, ext)
 }
+
+// kindleFont reports whether data is a font a Kindle shows: TrueType or
+// OpenType. A Kindle takes no WOFF.
+func kindleFont(data []byte) bool {
+	mediaType, _ := fontType(data)
+	return mediaType == "font/ttf" || mediaType == "font/otf"
+}
+
+// fontRecord returns a FONT record holding font, zlib compressed and not
+// obfuscated, so it has no key. Compressing into memory can't fail.
+func fontRecord(font []byte) []byte {
+	rec := make([]byte, fontHeaderLen, fontHeaderLen+len(font))
+	copy(rec, "FONT")
+	be := binary.BigEndian
+	be.PutUint32(rec[4:], u32(len(font)))
+	be.PutUint32(rec[8:], fontFlagZlib)
+	be.PutUint32(rec[12:], fontHeaderLen)
+	be.PutUint32(rec[20:], fontHeaderLen) // the key, of length 0, would start here
+	buf := bytes.NewBuffer(rec)
+	zw := zlib.NewWriter(buf)
+	_, _ = zw.Write(font)
+	_ = zw.Close()
+	return buf.Bytes()
+}

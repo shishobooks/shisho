@@ -186,7 +186,7 @@ func TestWriteKF8_ReadsBackContent(t *testing.T) {
 	assert.Equal(t, strings.NewReplacer(`"../images/cover.jpg"`, `"image0002.jpg"`, `"../css/style.css"`, `"flow0001.css"`).Replace(testChapterTwo), string(content.Documents[1].Content))
 
 	require.Len(t, content.Styles, 1)
-	assert.Equal(t, strings.Replace(testCSS, `"../images/pic.png"`, `"image0001.png"`, 1), string(content.Styles[0].Content))
+	assert.Equal(t, strings.Replace(testCSS, `url("../images/pic.png")`, `url(image0001.png)`, 1), string(content.Styles[0].Content))
 
 	require.Len(t, content.Resources, 2)
 	pic, err := content.ReadResource(content.Resources[0])
@@ -360,4 +360,251 @@ func TestWriteKF8_MarksFixedLayout(t *testing.T) {
 	h = header(&KF8Book{Metadata: Metadata{Title: "Novel"}, Documents: doc})
 	assert.Empty(t, h.text(exthFixedLayout))
 	assert.Empty(t, h.text(exthOriginalResolution))
+}
+
+// testFont is a TrueType font as far as a sniff of its first bytes goes,
+// with bytes after the header that don't compress.
+func testFont() []byte {
+	font := []byte("\x00\x01\x00\x00")
+	for i := range 3000 {
+		font = append(font, byte(i*7919>>3))
+	}
+	return font
+}
+
+// linkedBook has links of every kind: a footnote reference into a notes
+// document and the note's link back, a link to a place later in the same
+// long document, which falls in another fragment, a link to a whole
+// document, a link to a document the book doesn't have, and a link out of
+// the book.
+func linkedBook() *KF8Book {
+	var one strings.Builder
+	one.WriteString(`<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>One</title></head><body>
+<h1 id="top">One</h1>
+<p>A claim.<a id="ref1" epub:type="noteref" href="../notes/notes.xhtml#n1">1</a> Skip <a href="#later">ahead</a>, read <a href="two.xhtml">two</a>, <a href="missing.xhtml#x">nowhere</a>, or <a href="https://example.com/#a">the web</a>.</p>
+`)
+	for i := range 300 {
+		fmt.Fprintf(&one, "<p>Filler paragraph %d keeps the chapter long enough for several fragments.</p>\n", i)
+	}
+	one.WriteString(`<p id="later">Later on.</p></body></html>`)
+	return &KF8Book{
+		Metadata: Metadata{Title: "Links"},
+		Documents: []Document{
+			{Name: "OEBPS/text/one.xhtml", Content: []byte(one.String())},
+			{Name: "OEBPS/text/two.xhtml", Content: []byte(`<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Two</title></head><body><h1>Two</h1><p>Back to <a href="one.xhtml#top">the start</a>.</p></body></html>`)},
+			{Name: "OEBPS/notes/notes.xhtml", Content: []byte(`<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Notes</title></head><body><aside id="n1" epub:type="footnote"><p><a href="../text/one.xhtml#ref1">1.</a> The note.</p></aside></body></html>`)},
+		},
+		TOC: []*NavPoint{{Title: "One", Href: "OEBPS/text/one.xhtml"}, {Title: "Two", Href: "OEBPS/text/two.xhtml"}},
+	}
+}
+
+// Links between the book's documents become kindle:pos references to the
+// place they name, which a reader resolves back to the element there; links
+// out of the book, and to documents it doesn't have, are kept as written.
+func TestWriteKF8_RewritesInternalLinks(t *testing.T) {
+	t.Parallel()
+	path := writeKF8File(t, linkedBook())
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+	rec, err := db.record(0, maxHeaderRecord)
+	require.NoError(t, err)
+	text, err := readText(context.Background(), db, 0, rec, compressionPalmDOC, true)
+	require.NoError(t, err)
+	assert.NotContains(t, string(text), `notes.xhtml#n1"`)
+	assert.Regexp(t, `href="kindle:pos:fid:[0-9A-V]{4}:off:[0-9A-V]{10}"`, string(text))
+
+	content := openContent(t, path)
+	require.Len(t, content.Documents, 3)
+	one, two, notes := string(content.Documents[0].Content), string(content.Documents[1].Content), string(content.Documents[2].Content)
+	assert.Contains(t, one, `epub:type="noteref" href="part0002.xhtml#n1">1</a>`)
+	assert.Contains(t, one, `<a href="part0000.xhtml#later">ahead</a>`)
+	assert.Regexp(t, `<a href="part0001\.xhtml#[^"]+">two</a>`, one, "a link to a whole document names its first element")
+	assert.Contains(t, one, `<a href="missing.xhtml#x">nowhere</a>`)
+	assert.Contains(t, one, `<a href="https://example.com/#a">the web</a>`)
+	assert.Contains(t, two, `<a href="part0000.xhtml#top">the start</a>`)
+	assert.Contains(t, notes, `<a href="part0000.xhtml#ref1">1.</a>`)
+	assert.Contains(t, one, `<p id="later">Later on.</p>`, "the target keeps its id")
+}
+
+// A font the stylesheets name is stored as a FONT resource, and a url()
+// naming it becomes a kindle:embed reference; data that is no font is left
+// out, its url() kept as written.
+func TestWriteKF8_WritesFonts(t *testing.T) {
+	t.Parallel()
+	font := testFont()
+	b := &KF8Book{
+		Metadata:  Metadata{Title: "Fonts"},
+		Documents: []Document{{Name: "OEBPS/text/a.xhtml", Content: []byte(`<html xmlns="http://www.w3.org/1999/xhtml"><head><title>A</title><link rel="stylesheet" href="../css/a.css"/></head><body><h1>Heading</h1><p><img src="../images/pic.png"/></p></body></html>`)}},
+		Styles: []Document{{Name: "OEBPS/css/a.css", Content: []byte(`@font-face { font-family: "Body"; src: url("../fonts/body.ttf") format("truetype"); }
+@font-face { font-family: "Broken"; src: url(../fonts/broken.otf); }
+h1 { font-family: "Body", serif; }`)}},
+		Images: []KF8Image{{Name: "OEBPS/images/pic.png", MediaType: "image/png", Load: func() ([]byte, error) { return testPNG(t), nil }}},
+		Fonts: []Document{
+			{Name: "OEBPS/fonts/body.ttf", MediaType: "font/ttf", Content: font},
+			{Name: "OEBPS/fonts/broken.otf", MediaType: "font/otf", Content: []byte("not a font at all")},
+		},
+	}
+	content := openContent(t, writeKF8File(t, b))
+	require.Len(t, content.Fonts, 1)
+	assert.Equal(t, font, content.Fonts[0].Content)
+	assert.Equal(t, "font/ttf", content.Fonts[0].MediaType)
+	require.Len(t, content.Styles, 1)
+	css := string(content.Styles[0].Content)
+	assert.Contains(t, css, `src: url(`+content.Fonts[0].Name+`) format("truetype");`)
+	assert.Contains(t, css, `src: url(../fonts/broken.otf);`)
+	require.Len(t, content.Resources, 1, "the image is still read")
+	assert.Contains(t, string(content.Documents[0].Content), `<img src="`+content.Resources[0].Name+`"/>`)
+}
+
+// A stylesheet imported by another becomes a kindle:flow reference, and a
+// large stylesheet, spanning text records and holding text that is not
+// ASCII, comes back as written.
+func TestWriteKF8_CarriesStylesheets(t *testing.T) {
+	t.Parallel()
+	var heavy strings.Builder
+	heavy.WriteString("@import url(\"base.css\");\n@import 'extra.css';\n")
+	for i := range 400 {
+		fmt.Fprintf(&heavy, ".c%d > p:first-child::before { content: \"→ %d «»\"; margin: %dpx 0 0 1em; }\n", i, i, i%9)
+	}
+	heavy.WriteString("@media (orientation: landscape) { p { text-indent: 2em; } }\n")
+	b := &KF8Book{
+		Metadata:  Metadata{Title: "Styles"},
+		Documents: []Document{{Name: "s/a.xhtml", Content: []byte(`<html xmlns="http://www.w3.org/1999/xhtml"><head><title>A</title><link rel="stylesheet" href="heavy.css"/></head><body><p class="c1">Styled.</p></body></html>`)}},
+		Styles: []Document{
+			{Name: "s/heavy.css", Content: []byte(heavy.String())},
+			{Name: "s/base.css", Content: []byte("p { margin: 0; }")},
+			{Name: "s/extra.css", Content: []byte("p { color: #333; }")},
+		},
+	}
+	content := openContent(t, writeKF8File(t, b))
+	require.Len(t, content.Styles, 3)
+	want := strings.NewReplacer(`url("base.css")`, `url(flow0002.css)`, `'extra.css'`, `url(flow0003.css)`).Replace(heavy.String())
+	assert.Equal(t, want, string(content.Styles[0].Content))
+	assert.Equal(t, "p { margin: 0; }", string(content.Styles[1].Content))
+	assert.Contains(t, string(content.Documents[0].Content), `href="flow0001.css"`)
+}
+
+// The guide index names the places the book's guide gives, as a fragment
+// and an offset, with each title in its CNCX.
+func TestWriteKF8_WritesTheGuide(t *testing.T) {
+	t.Parallel()
+	b := linkedBook()
+	b.Guide = []GuideRef{
+		{Type: "toc", Title: "Contents", Href: "OEBPS/text/two.xhtml"},
+		{Type: "text", Title: "Beginning", Href: "OEBPS/text/one.xhtml#later"},
+		{Type: "notes", Title: "Gone", Href: "OEBPS/missing.xhtml"},
+	}
+	path := writeKF8File(t, b)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+	rec, err := db.record(0, maxHeaderRecord)
+	require.NoError(t, err)
+	at := headerField(rec, offGuide)
+	require.NotEqual(t, uint32(nullIndex), at)
+	guide, err := readNCX(db, int(at))
+	require.NoError(t, err)
+	require.Len(t, guide.entries, 2, "a reference to a document the book doesn't have is left out")
+	assert.Equal(t, "text", string(guide.entries[0].ident))
+	assert.Equal(t, "toc", string(guide.entries[1].ident))
+	for i, want := range []string{"Beginning", "Contents"} {
+		offset, ok := guide.entries[i].value(guideTagTitle)
+		require.True(t, ok)
+		label, ok := guide.label(offset)
+		require.True(t, ok)
+		assert.Equal(t, want, string(label))
+	}
+
+	// A Kindle opens the book where the guide's text starts: the element
+	// with id "later", at its place in the assembled documents.
+	h, err := parseHeader(rec)
+	require.NoError(t, err)
+	start, ok := h.number(exthStartReading)
+	require.True(t, ok)
+	text, err := readText(context.Background(), db, 0, rec, compressionPalmDOC, true)
+	require.NoError(t, err)
+	parts, err := readParts(context.Background(), db, 0, rec, text)
+	require.NoError(t, err)
+	doc := parts.docs[0]
+	pos := int(start) - parts.starts[0]
+	require.Less(t, pos, len(doc))
+	assert.True(t, bytes.HasPrefix(doc[pos:], []byte(`<p aid="`)), "%q", doc[pos:min(len(doc), pos+40)])
+	assert.Contains(t, string(doc[pos:min(len(doc), pos+40)]), `id="later"`)
+
+	// The guide's places resolve like links do.
+	content := openContent(t, path)
+	for i, want := range []string{"part0000.xhtml#later", "part0001.xhtml#"} {
+		pos := guide.entries[i].values[ncxTagPosFID]
+		require.Len(t, pos, 2)
+		loc := posURI(int(pos[0]), int(pos[1]))
+		assert.True(t, strings.HasPrefix(content.hrefs[strings.ToUpper(loc)], want), "guide entry %d names %q", i, content.hrefs[strings.ToUpper(loc)])
+	}
+}
+
+// A link written with an unquoted value right before "/>" still gets its
+// end tag, and its value ends before the slash.
+func TestWriteKF8_LinksWithUnquotedValues(t *testing.T) {
+	t.Parallel()
+	b := &KF8Book{
+		Metadata: Metadata{Title: "Unquoted"},
+		Documents: []Document{
+			{Name: "one.xhtml", Content: []byte(`<html><body><p>See <a href=two.xhtml/>x</p></body></html>`)},
+			{Name: "two.xhtml", Content: []byte(`<html><body><p id="t">Two</p></body></html>`)},
+		},
+	}
+	content := openContent(t, writeKF8File(t, b))
+	assert.Contains(t, string(content.Documents[0].Content), `<a href=part0001.xhtml#t></a>x</p>`)
+}
+
+// A book whose guide has no "text" entry has no start reading record.
+func TestWriteKF8_NoGuideNoStartReading(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(writeKF8File(t, linkedBook()))
+	require.NoError(t, err)
+	db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+	rec, err := db.record(0, maxHeaderRecord)
+	require.NoError(t, err)
+	h, err := parseHeader(rec)
+	require.NoError(t, err)
+	_, ok := h.number(exthStartReading)
+	assert.False(t, ok)
+	assert.Equal(t, uint32(nullIndex), headerField(rec, offGuide))
+}
+
+// A Kindle reads a kindle: reference in CSS only unquoted, as KindleGen
+// writes it, so the quotes around a rewritten url() are dropped, and an
+// @import naming its stylesheet with a string becomes an unquoted url().
+// A reference left as written keeps its quotes.
+func TestWriteKF8_WritesCSSReferencesUnquoted(t *testing.T) {
+	t.Parallel()
+	b := &KF8Book{
+		Metadata:  Metadata{Title: "Quotes"},
+		Documents: []Document{{Name: "a.xhtml", Content: []byte(`<html><head><style>p { background: url( 'pic.png' ); }</style></head><body><p style="background: url(&quot;pic.png&quot;)">A</p><p style="background: url(&#34;pic.png&#34;)">B</p><p style='background: url(&#39;pic.png&#39;)'>C</p></body></html>`)}},
+		Styles: []Document{
+			{Name: "a.css", Content: []byte(`@import "b.css"; @import url('b.css') screen; @font-face { src: url("f.ttf") format("truetype"); } p { background: url("missing.png"); }`)},
+			{Name: "b.css", Content: []byte("p { margin: 0; }")},
+		},
+		Images: []KF8Image{{Name: "pic.png", MediaType: "image/png", Load: func() ([]byte, error) { return testPNG(t), nil }}},
+		Fonts:  []Document{{Name: "f.ttf", MediaType: "font/ttf", Content: testFont()}},
+	}
+	data, err := os.ReadFile(writeKF8File(t, b))
+	require.NoError(t, err)
+	db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+	rec, err := db.record(0, maxHeaderRecord)
+	require.NoError(t, err)
+	text, err := readText(context.Background(), db, 0, rec, compressionPalmDOC, true)
+	require.NoError(t, err)
+	assert.NotRegexp(t, `url\(\s*(["']|&quot;)kindle:`, string(text))
+	assert.Contains(t, string(text), `@import url(kindle:flow:0002?mime=text/css); @import url(kindle:flow:0002?mime=text/css) screen;`)
+	assert.Contains(t, string(text), `src: url(kindle:embed:0002) format("truetype");`)
+	assert.Contains(t, string(text), `background: url(kindle:embed:0001?mime=image/png); }</style>`)
+	assert.Equal(t, 2, strings.Count(string(text), `style="background: url(kindle:embed:0001?mime=image/png)"`))
+	assert.Contains(t, string(text), `style='background: url(kindle:embed:0001?mime=image/png)'`)
+	assert.Contains(t, string(text), `url("missing.png")`)
 }

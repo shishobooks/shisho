@@ -201,16 +201,25 @@ func navEntries(root *xmlNode, docPath string) []*tocEntry {
 	if root.name != "html" {
 		return nil
 	}
+	if ol := navList(root, "toc"); ol != nil {
+		return navListEntries(ol, docPath)
+	}
+	return nil
+}
+
+// navList returns the list of the first nav of a type, such as "toc" or
+// "landmarks", among a nav document's body's children that has one.
+func navList(root *xmlNode, typ string) *xmlNode {
 	body := root.child("body")
 	if body == nil {
 		return nil
 	}
 	for _, nav := range body.children {
-		if nav.name != "nav" || nav.attr("type") != "toc" {
+		if nav.name != "nav" || nav.attr("type") != typ {
 			continue
 		}
 		if ol := nav.child("ol"); ol != nil {
-			return navListEntries(ol, docPath)
+			return ol
 		}
 	}
 	return nil

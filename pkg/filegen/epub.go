@@ -191,7 +191,8 @@ type epubEntry struct {
 }
 
 // planEPUB reads what a Generated EPUB needs from src and rewrites the OPF,
-// nav, NCX, and cover. It reads only the zip directory, those entries, and
+// nav, NCX, and cover, and any obfuscated font the new identifiers no
+// longer unlock. It reads only the zip directory, those entries, and
 // each entry's local header, so a source that cannot be generated fails
 // here rather than partway through a download.
 func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.File) (*epubPlan, error) {
@@ -262,9 +263,17 @@ func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.F
 	title := file.ResolveTitle(book.Title)
 	addedNavPath, addedNav := addNavDocument(pkg, opfPath, navPath, srcNames, title, file.Chapters)
 
+	idsBefore, _ := opfPackageIdentifiers(pkg)
 	opfContent, err := modifyOPF(pkg, book, file, coverInfo, newCoverMimeType)
 	if err != nil {
 		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to modify OPF metadata")
+	}
+	// The new identifiers may no longer make the key the fonts are
+	// obfuscated with.
+	idsAfter, uniqueAfter := opfPackageIdentifiers(pkg)
+	rekeyed, encryption, err := rekeyFonts(srcZip, idsBefore, idsAfter, uniqueAfter)
+	if err != nil {
+		return nil, NewGenerationError(models.FileTypeEPUB, err, "failed to read obfuscated fonts from source EPUB")
 	}
 
 	var navData, ncxData []byte
@@ -295,6 +304,10 @@ func planEPUB(ctx context.Context, src Source, book *models.Book, file *models.F
 			entry.content = toc
 		} else if coverInfo != nil && f.Name == coverInfo.path && len(newCoverData) > 0 {
 			entry.content = newCoverData
+		} else if font, ok := rekeyed[f.Name]; ok {
+			entry.content = font
+		} else if f.Name == encryptionPath && encryption != nil {
+			entry.content = encryption
 		} else {
 			entry.source = f
 		}
