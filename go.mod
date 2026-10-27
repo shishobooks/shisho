@@ -8,7 +8,7 @@ require (
 	github.com/creasty/defaults v1.11.0
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/gabriel-vasile/mimetype v1.4.15
+	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/go-playground/mold/v4 v4.5.1
 	github.com/go-playground/universal-translator v0.18.2
 	github.com/go-playground/validator/v10 v10.30.5
@@ -22,9 +22,9 @@ require (
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
-	github.com/knadh/koanf/v2 v2.3.8
+	github.com/knadh/koanf/v2 v2.4.1
 	github.com/labstack/echo/v4 v4.16.0
-	github.com/pdfcpu/pdfcpu v0.16.2
+	github.com/pdfcpu/pdfcpu v0.16.3
 	github.com/pkg/errors v0.9.1
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/robinjoseph08/golib v0.6.0
@@ -36,7 +36,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
-	golang.org/x/net v0.60.0
+	golang.org/x/net v0.61.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -62,7 +62,7 @@ require (
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/mattn/go-runewidth v0.0.30 // indirect
+	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/mattn/go-sqlite3 v1.14.34 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
