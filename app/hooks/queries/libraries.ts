@@ -19,6 +19,7 @@ import { QueryKey as BooksQueryKey } from "./books";
 import { invalidateCoverPreviewLists } from "./coverPreviews";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 import { anyOf, useRequires } from "./permissions";
+import { QueryKey as TagsQueryKey } from "./tags";
 
 export enum QueryKey {
   RetrieveLibrary = "RetrieveLibrary",
@@ -85,6 +86,9 @@ export const useCreateLibrary = () => {
       );
       // The cover aspect ratio decides which file's cover a book shows.
       invalidateCoverPreviewLists(queryClient);
+      // The tag namespaces decide which tags each tab and count holds; the
+      // counts' key sits under ListTags.
+      queryClient.invalidateQueries({ queryKey: [TagsQueryKey.ListTags] });
     },
   });
 };

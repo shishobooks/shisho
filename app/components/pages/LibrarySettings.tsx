@@ -10,6 +10,7 @@ import LibraryLayout from "@/components/library/LibraryLayout";
 import LibraryPluginsTab from "@/components/library/LibraryPluginsTab";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
+import TagNamespacesEditor from "@/components/library/TagNamespacesEditor";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { isLoadFailure, toastRequestError } from "@/libraries/api";
 import type { CoverAspectRatio } from "@/types";
+import { draftNamespace, type DraftNamespace } from "@/utils/tagNamespaces";
 
 const LibrarySettings = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
@@ -45,6 +47,7 @@ const LibrarySettings = () => {
   const [coverAspectRatio, setCoverAspectRatio] =
     useState<CoverAspectRatio>("book");
   const [libraryPaths, setLibraryPaths] = useState<string[]>([""]);
+  const [tagNamespaces, setTagNamespaces] = useState<DraftNamespace[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [pluginsHaveChanges, setPluginsHaveChanges] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -59,6 +62,7 @@ const LibrarySettings = () => {
     organizeFileStructure: boolean;
     coverAspectRatio: CoverAspectRatio;
     libraryPaths: string[];
+    tagNamespaces: string[];
   } | null>(null);
 
   // Reset initialization state when library changes
@@ -82,11 +86,13 @@ const LibrarySettings = () => {
       const initialPaths = libraryQuery.data.library_paths?.map(
         (lp) => lp.filepath,
       ) || [""];
+      const initialNamespaces = libraryQuery.data.tag_namespaces ?? [];
 
       setName(initialName);
       setOrganizeFileStructure(initialOrganize);
       setCoverAspectRatio(initialCover);
       setLibraryPaths(initialPaths);
+      setTagNamespaces(initialNamespaces.map((n) => draftNamespace(n)));
       setIsInitialized(true);
 
       // Store initial values for comparison
@@ -95,6 +101,7 @@ const LibrarySettings = () => {
         organizeFileStructure: initialOrganize,
         coverAspectRatio: initialCover,
         libraryPaths: initialPaths,
+        tagNamespaces: initialNamespaces,
       });
     }
   }, [libraryQuery.isSuccess, libraryQuery.data, isInitialized, libraryId]);
@@ -106,13 +113,18 @@ const LibrarySettings = () => {
       name !== initialValues.name ||
       organizeFileStructure !== initialValues.organizeFileStructure ||
       coverAspectRatio !== initialValues.coverAspectRatio ||
-      !equal(libraryPaths, initialValues.libraryPaths)
+      !equal(libraryPaths, initialValues.libraryPaths) ||
+      !equal(
+        tagNamespaces.map((n) => n.name),
+        initialValues.tagNamespaces,
+      )
     );
   }, [
     name,
     organizeFileStructure,
     coverAspectRatio,
     libraryPaths,
+    tagNamespaces,
     isInitialized,
     initialValues,
   ]);
@@ -173,6 +185,9 @@ const LibrarySettings = () => {
         toast.error("At least one library path is required");
         return;
       }
+      const savedNamespaces = tagNamespaces
+        .map((n) => ({ ...n, name: n.name.trim() }))
+        .filter((n) => n.name !== "");
 
       await updateLibraryMutation.mutateAsync({
         id: libraryId,
@@ -181,6 +196,7 @@ const LibrarySettings = () => {
           organize_file_structure: organizeFileStructure,
           cover_aspect_ratio: coverAspectRatio,
           library_paths: validPaths,
+          tag_namespaces: savedNamespaces.map((n) => n.name),
         },
       });
 
@@ -190,6 +206,7 @@ const LibrarySettings = () => {
       const trimmedName = name.trim();
       setName(trimmedName);
       setLibraryPaths(validPaths);
+      setTagNamespaces(savedNamespaces);
 
       // Update initial values to match saved values so hasChanges becomes false
       setInitialValues({
@@ -197,6 +214,7 @@ const LibrarySettings = () => {
         organizeFileStructure,
         coverAspectRatio,
         libraryPaths: validPaths,
+        tagNamespaces: savedNamespaces.map((n) => n.name),
       });
     } catch (e) {
       toastRequestError(e, "Failed to save library settings");
@@ -353,6 +371,23 @@ const LibrarySettings = () => {
               </SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <Separator />
+
+        {/* Tag Namespaces */}
+        <div className="space-y-4">
+          <Label>Tag Namespaces</Label>
+          <p className="text-sm text-muted-foreground">
+            Group tags that start with a prefix and a colon. With Source listed,
+            the tag "Source: Audible" shows as Audible under its own Source tab
+            on the tags page and its own Source row on the book page. Rows
+            follow this order.
+          </p>
+          <TagNamespacesEditor
+            namespaces={tagNamespaces}
+            onChange={setTagNamespaces}
+          />
         </div>
 
         <Separator />

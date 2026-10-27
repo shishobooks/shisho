@@ -9,7 +9,7 @@ import {
   SquareCheckBig,
   Tags,
 } from "lucide-react";
-import { forwardRef, useId, useState } from "react";
+import { forwardRef, useId, useState, type ReactNode } from "react";
 
 import {
   FilterChip,
@@ -64,6 +64,7 @@ import {
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/libraries/utils";
 import type { Genre, Tag } from "@/types";
+import { splitTagNamespace, type TagScope } from "@/utils/tagNamespaces";
 
 type FilterOptionsQuery = RetryableQuery & { data: unknown };
 
@@ -89,6 +90,13 @@ interface FilterSheetProps {
   tagSearchInput: string;
   onTagSearchChange: (value: string) => void;
   onToggleTag: (tagId: number) => void;
+  /**
+   * The library's tag namespaces. When there are any, the tag picker can
+   * narrow to the plain tags or to one namespace.
+   */
+  tagNamespaces: readonly string[];
+  tagScope: TagScope;
+  onTagScopeChange: (scope: TagScope) => void;
   languageParam: string;
   languageOptions: { value: string; label: string }[];
   onLanguageChange: (value: string) => void;
@@ -153,6 +161,8 @@ const FilterCombobox = ({
   triggerLabel,
   searchPlaceholder,
   emptyText,
+  header,
+  optionLabel = (opt) => opt.name,
 }: {
   chipKind: "genre" | "tag";
   selected: SelectedFilter[];
@@ -170,6 +180,10 @@ const FilterCombobox = ({
   triggerLabel: string;
   searchPlaceholder: string;
   emptyText: string;
+  /** Controls between the search box and the options. */
+  header?: ReactNode;
+  /** What an option shows; its name by default. */
+  optionLabel?: (option: FilterComboboxOption) => ReactNode;
 }) => {
   const [open, setOpen] = useState(false);
   const selectedIds = new Set(selected.map((s) => s.id));
@@ -211,6 +225,7 @@ const FilterCombobox = ({
               placeholder={searchPlaceholder}
               value={searchInput}
             />
+            {header}
             <CommandList>
               {loading ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">
@@ -237,7 +252,7 @@ const FilterCombobox = ({
                       ) : (
                         <Square className="mr-2 h-4 w-4" />
                       )}
-                      {opt.name}
+                      {optionLabel(opt)}
                       {/* cmdk's aria-selected marks the highlighted option,
                           so the chosen state is spoken as text. */}
                       {selectedIds.has(opt.id) && (
@@ -254,6 +269,64 @@ const FilterCombobox = ({
           </Command>
         </PopoverContent>
       </Popover>
+    </div>
+  );
+};
+
+const scopeKey = (scope: TagScope) =>
+  scope.kind === "namespace" ? `ns:${scope.namespace}` : scope.kind;
+
+// Narrows the tag picker to every tag, the plain tags, or one namespace.
+const TagScopeSwitch = ({
+  namespaces,
+  scope,
+  onChange,
+}: {
+  namespaces: readonly string[];
+  scope: TagScope;
+  onChange: (scope: TagScope) => void;
+}) => {
+  const scopes: { scope: TagScope; label: string }[] = [
+    { scope: { kind: "all" }, label: "All" },
+    { scope: { kind: "plain" }, label: "Tags" },
+    ...namespaces.map((namespace) => ({
+      scope: { kind: "namespace", namespace } as TagScope,
+      label: namespace,
+    })),
+  ];
+  return (
+    <div
+      aria-label="Show tags from"
+      className="flex flex-wrap gap-1 border-b border-border p-2"
+      role="group"
+    >
+      {scopes.map((s) => {
+        const active = scopeKey(s.scope) === scopeKey(scope);
+        return (
+          <Button
+            aria-pressed={active}
+            className={cn(
+              "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors",
+              active
+                ? "border-primary bg-primary/5 text-primary"
+                : "border-border bg-card hover:bg-accent",
+            )}
+            key={scopeKey(s.scope)}
+            onClick={(e) => {
+              onChange(s.scope);
+              // Back to the search box, so typing narrows the new scope and
+              // Escape closes the picker rather than landing on this button.
+              e.currentTarget
+                .closest("[cmdk-root]")
+                ?.querySelector<HTMLInputElement>("[cmdk-input]")
+                ?.focus();
+            }}
+            variant="unstyled"
+          >
+            {s.label}
+          </Button>
+        );
+      })}
     </div>
   );
 };
@@ -278,6 +351,9 @@ const FilterContent = ({
   tagSearchInput,
   onTagSearchChange,
   onToggleTag,
+  tagNamespaces,
+  tagScope,
+  onTagScopeChange,
   languageParam,
   languageOptions,
   onLanguageChange,
@@ -379,15 +455,41 @@ const FilterContent = ({
           chipKind="tag"
           emptyText="No tags found."
           errorFallback="Failed to load tags"
+          header={
+            tagNamespaces.length > 0 && (
+              <TagScopeSwitch
+                namespaces={tagNamespaces}
+                onChange={onTagScopeChange}
+                scope={tagScope}
+              />
+            )
+          }
           label="Tags"
           labelId={tagsLabelId}
           loading={tagsLoading}
           onSearchChange={onTagSearchChange}
           onToggle={onToggleTag}
+          optionLabel={(opt) => {
+            const split = splitTagNamespace(opt.name, tagNamespaces);
+            // Under All, a namespaced tag names its namespace.
+            if (!split.namespace || tagScope.kind !== "all") return split.name;
+            return (
+              <>
+                <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {split.namespace}
+                </span>
+                {split.name}
+              </>
+            );
+          }}
           options={tags}
           query={tagsQuery}
           searchInput={tagSearchInput}
-          searchPlaceholder="Search tags..."
+          searchPlaceholder={
+            tagScope.kind === "namespace"
+              ? `Search ${tagScope.namespace}...`
+              : "Search tags..."
+          }
           selected={selectedTags}
           triggerLabel="Add tags..."
         />

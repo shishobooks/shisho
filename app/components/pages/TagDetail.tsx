@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { BookGallerySection } from "@/components/library/BookGallerySection";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import { useBooks } from "@/hooks/queries/books";
+import { useUserLibrary } from "@/hooks/queries/libraries";
 import {
   useDeleteTag,
   useMergeTag,
@@ -19,6 +20,7 @@ import { useSortParam } from "@/hooks/useSortParam";
 import { BOOK_DETAIL_SORT } from "@/libraries/sortSpec";
 import { formatCount } from "@/utils/format";
 import { writePermissionForEntity } from "@/utils/permissions";
+import { splitTagNamespace } from "@/utils/tagNamespaces";
 
 const TagDetail = () => {
   const { id, libraryId } = useParams<{ id: string; libraryId: string }>();
@@ -68,6 +70,11 @@ const TagDetail = () => {
   );
 
   const tag = tagQuery.data;
+  const library = useUserLibrary(libraryId);
+  const split = splitTagNamespace(
+    tag?.name ?? "",
+    library.data?.tag_namespaces ?? [],
+  );
   const aliases = tag?.aliases ?? [];
   const bookCount = tag?.book_count ?? 0;
 
@@ -98,19 +105,29 @@ const TagDetail = () => {
       bookCount={bookCount}
       breadcrumbItems={[
         { label: "Tags", to: `/libraries/${libraryId}/tags` },
-        { label: tag?.name ?? "" },
+        ...(split.namespace
+          ? [
+              {
+                label: split.namespace,
+                to: `/libraries/${libraryId}/tags?namespace=${encodeURIComponent(split.namespace)}`,
+              },
+            ]
+          : []),
+        { label: split.name },
       ]}
       deleteConfig={{
         isPending: deleteTagMutation.isPending,
         onDelete: handleDelete,
         disabled: bookCount > 0,
       }}
+      displayName={split.name}
       editConfig={{
         isPending: updateTagMutation.isPending,
         onSave: handleEdit,
       }}
       entityId={tagId!}
       entityType="tag"
+      eyebrow={split.namespace ?? undefined}
       libraryId={libraryId!}
       mergeConfig={{
         entities:

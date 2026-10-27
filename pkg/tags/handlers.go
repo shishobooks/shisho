@@ -92,6 +92,24 @@ func (h *handler) list(c echo.Context) error {
 		LibraryID: params.LibraryID,
 		Search:    params.Search,
 		Sort:      sortLevels,
+		Namespace: params.Namespace,
+	}
+
+	if params.ExcludeNamespaces {
+		if params.Namespace != nil {
+			return errcodes.ValidationError("Pass namespace or exclude_namespaces, not both.")
+		}
+		if params.LibraryID == nil {
+			return errcodes.ValidationError("Pass library_id with exclude_namespaces.")
+		}
+		if err := auth.RequireLibraryAccessFor(c, *params.LibraryID); err != nil {
+			return err
+		}
+		namespaces, err := h.tagService.LibraryTagNamespaces(ctx, *params.LibraryID)
+		if err != nil {
+			return err
+		}
+		opts.ExcludeNamespaces = namespaces
 	}
 
 	user, err := auth.RequireUser(c)
@@ -130,6 +148,40 @@ func (h *handler) list(c echo.Context) error {
 	response := ListTagsResponse{Items: result, Total: total}
 
 	return errors.WithStack(c.JSON(http.StatusOK, response))
+}
+
+// listNamespaces counts the tags behind each tab of the tags page: the
+// plain tags first, then each of the library's namespaces in its order.
+func (h *handler) listNamespaces(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	params := ListTagNamespacesQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := auth.RequireLibraryAccessFor(c, params.LibraryID); err != nil {
+		return err
+	}
+
+	namespaces, err := h.tagService.LibraryTagNamespaces(ctx, params.LibraryID)
+	if err != nil {
+		return err
+	}
+	plain, counts, err := h.tagService.CountByNamespace(ctx, ListTagsOptions{
+		LibraryID: &params.LibraryID,
+		Search:    params.Search,
+	}, namespaces)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	result := make([]TagNamespaceCount, 0, len(namespaces)+1)
+	result = append(result, TagNamespaceCount{Total: plain})
+	for i, ns := range namespaces {
+		result = append(result, TagNamespaceCount{Namespace: &ns, Total: counts[i]})
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, result))
 }
 
 func (h *handler) update(c echo.Context) error {

@@ -34,6 +34,26 @@ type ListTagsQuery struct {
 	LibraryID *int    `query:"library_id" json:"library_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
 	Sort      string  `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
+	// Namespace lists only the tags in that namespace ("Circle" for
+	// "Circle: Foo"), sorted by name without the prefix.
+	Namespace *string `query:"namespace" json:"namespace,omitempty" validate:"omitempty,min=1,max=50" tstype:"string"`
+	// ExcludeNamespaces lists only the tags outside every namespace of the
+	// library, which library_id names.
+	ExcludeNamespaces bool `query:"exclude_namespaces" json:"exclude_namespaces,omitempty"`
+}
+
+// ListTagNamespacesQuery asks how many tags each of a library's namespaces
+// holds, with the same search as the tag list.
+type ListTagNamespacesQuery struct {
+	LibraryID int     `query:"library_id" json:"library_id" validate:"required,min=1"`
+	Search    *string `query:"search" json:"search,omitempty" validate:"omitempty,max=100" tstype:"string"`
+}
+
+// TagNamespaceCount is how many tags one namespace holds. Namespace is null
+// for the plain tags, outside every namespace.
+type TagNamespaceCount struct {
+	Namespace *string `json:"namespace" tstype:"string | null,required"`
+	Total     int     `json:"total"`
 }
 
 type UpdateTagPayload struct {

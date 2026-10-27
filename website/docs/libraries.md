@@ -18,6 +18,10 @@ Saving a library queues a global scan of all libraries, unless a scan is already
 - **Audiobook Cover (1:1)** prefers an audiobook cover and always displays it in a square frame. If only an ebook cover is available, it uses that cover in the same square frame.
 - The two fallback modes use the preferred cover type when available, but adopt the available cover's native frame shape when falling back to the other type.
 
+### Tag Namespaces
+
+A library's settings can also list tag namespaces, which group tags such as `Circle: Moon Factory` under their own tabs and rows. See [Tag Namespaces](./metadata.md#tag-namespaces).
+
 Each user's [Delivery Rules](./supported-formats.md#delivery-rules) decide which file type a download button sends. See [Reading and Playback](./reading-and-playback.md) for the in-app readers.
 
 ## Directory Grouping

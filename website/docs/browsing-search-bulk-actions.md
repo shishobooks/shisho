@@ -22,6 +22,8 @@ Open **Filter** on the library gallery to combine any of these criteria:
 
 Active filters appear as removable chips. Filters apply together, so a book must satisfy the current combination.
 
+In a library with [tag namespaces](./metadata.md#tag-namespaces), the **Tags** picker can narrow its list to one namespace.
+
 ## Gallery Sort
 
 Open **Sort** to build a multi-level sort. Add levels, choose ascending or descending direction, remove levels, and drag them into priority order. Available fields include **Title**, **Author**, **Series**, **Date added**, **Date released**, **Page count**, and **Duration**.

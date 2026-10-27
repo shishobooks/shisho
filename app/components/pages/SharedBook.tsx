@@ -39,6 +39,7 @@ const shareLinkContext = (
   fileCoverUrl: (file) =>
     file.cover_mime_type ? shareFileCoverUrl(token, file) : null,
   coverAspectRatio: shared.cover_aspect_ratio,
+  tagNamespaces: shared.tag_namespaces,
 });
 
 // The one page for every link that cannot be used: unknown, mistyped,

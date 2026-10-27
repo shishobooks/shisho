@@ -220,6 +220,38 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
 		},
 		{
+			name:   "tags list with both namespace filters",
+			method: http.MethodGet, path: "/api/tags?namespace=Circle&exclude_namespaces=true&library_id=1",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Pass namespace or exclude_namespaces, not both.",
+		},
+		{
+			name:   "tags list excluding namespaces without a library",
+			method: http.MethodGet, path: "/api/tags?exclude_namespaces=true",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Pass library_id with exclude_namespaces.",
+		},
+		{
+			name:   "tag namespace counts for a library that does not exist",
+			method: http.MethodGet, path: "/api/tags/namespaces?library_id=999999",
+			status: http.StatusNotFound, code: "not_found",
+		},
+		{
+			name:   "library update with a tag namespace holding a colon",
+			method: http.MethodPost, path: "/api/libraries/1",
+			body:   `{"tag_namespaces":["Circle: Foo"]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Tag namespace "Circle: Foo" cannot contain a colon.`,
+		},
+		{
+			name:   "library update with a repeated tag namespace",
+			method: http.MethodPost, path: "/api/libraries/1",
+			body:   `{"tag_namespaces":["Circle","circle"]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Tag namespace "circle" is listed more than once.`,
+		},
+		{
+			name:   "tag namespace counts without a library",
+			method: http.MethodGet, path: "/api/tags/namespaces",
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "genres list with a sort field it does not offer",
 			method: http.MethodGet, path: "/api/genres?sort=title:asc",
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown sort field "title".`,
