@@ -675,15 +675,17 @@ const ChapterRow = (props: ChapterRowProps) => {
                 value={localTimestampValue}
               />
             </TooltipTrigger>
-            <TooltipContent side="bottom">
+            {/* Radix adds the content id to the trigger's aria-describedby
+                while open, so the tooltip takes our id rather than adding
+                a second one that would read the message twice. */}
+            <TooltipContent id={timestampErrorId} side="bottom">
               {timestampErrorMessage}
             </TooltipContent>
           </Tooltip>
-          {/* The tooltip shows the message; this copy is what the input's
-              aria-describedby points at and what is announced. Radix
-              renders tooltip text twice, so it cannot hold the id. */}
+          {/* Tooltip content is not a live region, so this copy announces
+              the error when it appears. */}
           {timestampErrorMessage && (
-            <span className="sr-only" id={timestampErrorId} role="alert">
+            <span className="sr-only" role="alert">
               {timestampErrorMessage}
             </span>
           )}
