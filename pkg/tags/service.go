@@ -29,6 +29,12 @@ type ListTagsOptions struct {
 	LibraryIDs []int // Filter by multiple library IDs (for access control)
 	Search     *string
 	Sort       []sortspec.SortLevel // Defaults to name ascending
+	// Namespace limits the list to tags in that namespace and sorts them by
+	// name without the prefix.
+	Namespace *string
+	// ExcludeNamespaces drops tags in any of these namespaces, leaving the
+	// plain tags when it holds the library's whole list.
+	ExcludeNamespaces []string
 
 	includeTotal bool
 }
@@ -150,28 +156,17 @@ func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 	var total int64
 	var err error
 
-	q := svc.db.
-		NewSelect().
-		Model(&tags)
+	q := svc.applyListFilters(svc.db.NewSelect().Model(&tags), opts)
 
-	if opts.LibraryID != nil {
-		q = q.Where("t.library_id = ?", *opts.LibraryID)
-	}
-	if len(opts.LibraryIDs) > 0 {
-		q = q.Where("t.library_id IN (?)", bun.List(opts.LibraryIDs))
-	}
-	// Search using FTS5
-	if opts.Search != nil && *opts.Search != "" {
-		ftsQuery := buildFTSPrefixQuery(*opts.Search)
-		if ftsQuery != "" {
-			q = q.Where("t.id IN (SELECT tag_id FROM tags_fts WHERE tags_fts MATCH ?)", ftsQuery)
-		}
+	sortFields := tagSortFields
+	if opts.Namespace != nil {
+		sortFields = namespaceSortFields(*opts.Namespace)
 	}
 	sortLevels := opts.Sort
 	if len(sortLevels) == 0 {
 		sortLevels = defaultTagsSort
 	}
-	for _, clause := range tagSortFields.OrderClauses(sortLevels, "t.id") {
+	for _, clause := range sortFields.OrderClauses(sortLevels, "t.id") {
 		q = q.OrderExpr(clause.Expression)
 	}
 	if opts.Limit != nil {
@@ -191,6 +186,95 @@ func (svc *Service) listTagsWithTotal(ctx context.Context, opts ListTagsOptions)
 	}
 
 	return tags, int(total), nil
+}
+
+// applyListFilters adds the library, search, and namespace filters the list
+// and the namespace counts share.
+func (svc *Service) applyListFilters(q *bun.SelectQuery, opts ListTagsOptions) *bun.SelectQuery {
+	if opts.LibraryID != nil {
+		q = q.Where("t.library_id = ?", *opts.LibraryID)
+	}
+	if len(opts.LibraryIDs) > 0 {
+		q = q.Where("t.library_id IN (?)", bun.List(opts.LibraryIDs))
+	}
+	// Search using FTS5
+	if opts.Search != nil && *opts.Search != "" {
+		ftsQuery := buildFTSPrefixQuery(*opts.Search)
+		if ftsQuery != "" {
+			q = q.Where("t.id IN (SELECT tag_id FROM tags_fts WHERE tags_fts MATCH ?)", ftsQuery)
+		}
+	}
+	if opts.Namespace != nil {
+		cond, args := namespaceMatch(*opts.Namespace)
+		q = q.Where(cond, args...)
+	}
+	for _, ns := range opts.ExcludeNamespaces {
+		cond, args := namespaceMatch(ns)
+		q = q.Where("NOT "+cond, args...)
+	}
+	return q
+}
+
+// CountByNamespace counts the tags in each of namespaces, in order, and the
+// plain tags in none of them, under the list's library and search filters.
+// Namespace and ExcludeNamespaces in opts are ignored.
+func (svc *Service) CountByNamespace(ctx context.Context, opts ListTagsOptions, namespaces []string) (plain int, counts []int, err error) {
+	opts.Namespace = nil
+	opts.ExcludeNamespaces = nil
+
+	// One pass over the filtered tags: a SUM per namespace beside the total.
+	// A name can match at most one namespace, since each is followed by its
+	// colon and the library's list holds no duplicates.
+	q := svc.applyListFilters(svc.db.NewSelect().Model((*models.Tag)(nil)), opts).
+		ColumnExpr("COUNT(*)")
+	for _, ns := range namespaces {
+		cond, args := namespaceMatch(ns)
+		q = q.ColumnExpr("COALESCE(SUM(CASE WHEN "+cond+" THEN 1 ELSE 0 END), 0)", args...)
+	}
+
+	rows, err := q.Rows(ctx)
+	if err != nil {
+		return 0, nil, errors.WithStack(err)
+	}
+	defer rows.Close()
+
+	values := make([]int, len(namespaces)+1)
+	dest := make([]any, len(values))
+	for i := range values {
+		dest[i] = &values[i]
+	}
+	if rows.Next() {
+		if err := rows.Scan(dest...); err != nil {
+			return 0, nil, errors.WithStack(err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, nil, errors.WithStack(err)
+	}
+
+	plain = values[0]
+	for _, c := range values[1:] {
+		plain -= c
+	}
+	return plain, values[1:], nil
+}
+
+// LibraryTagNamespaces returns a library's tag namespaces, or
+// errcodes.NotFound when the library does not exist.
+func (svc *Service) LibraryTagNamespaces(ctx context.Context, libraryID int) ([]string, error) {
+	var namespaces models.StringList
+	err := svc.db.NewSelect().
+		Model((*models.Library)(nil)).
+		Column("tag_namespaces").
+		Where("l.id = ?", libraryID).
+		Scan(ctx, &namespaces)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errcodes.NotFound("Library")
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return namespaces, nil
 }
 
 func (svc *Service) UpdateTag(ctx context.Context, tag *models.Tag, opts UpdateTagOptions) error {

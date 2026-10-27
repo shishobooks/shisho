@@ -572,6 +572,76 @@ describe("BookDetailBody in Share Link context", () => {
   });
 });
 
+// The tags in a LabelGrid row: the pills in the dd after its dt.
+const rowPills = (label: string) => {
+  const dt = screen.getByText(label, { selector: "dt" });
+  const pills = dt.nextElementSibling!.firstElementChild!;
+  return Array.from(pills.children).map((el) => el.textContent);
+};
+
+const namespacedBook = {
+  ...book,
+  book_tags: [
+    { id: 1, tag_id: 6, tag: { id: 6, name: "Favorite" } },
+    { id: 2, tag_id: 7, tag: { id: 7, name: "Source: Digital purchase" } },
+    { id: 3, tag_id: 8, tag: { id: 8, name: "circle:Moon Factory" } },
+    { id: 4, tag_id: 9, tag: { id: 9, name: "Star Wars: Clone Wars" } },
+  ],
+} as unknown as Book;
+
+describe("BookDetailBody tag namespaces", () => {
+  it("lists each namespace as its own row, in the library's order, without the prefix", () => {
+    renderBody({
+      book: namespacedBook,
+      library: {
+        id: 1,
+        name: "Doujin",
+        cover_aspect_ratio: "book",
+        organize_file_structure: false,
+        tag_namespaces: ["Circle", "Magazine", "Source"],
+      },
+    });
+
+    const labels = Array.from(document.querySelectorAll("dt")).map(
+      (dt) => dt.textContent,
+    );
+    expect(labels).toEqual(
+      expect.arrayContaining(["Tags", "Circle", "Source"]),
+    );
+    expect(labels).not.toContain("Magazine");
+    expect(labels.indexOf("Tags")).toBeLessThan(labels.indexOf("Circle"));
+    expect(labels.indexOf("Circle")).toBeLessThan(labels.indexOf("Source"));
+
+    expect(rowPills("Tags")).toEqual(["Favorite", "Star Wars: Clone Wars"]);
+    expect(rowPills("Circle")).toEqual(["Moon Factory"]);
+    expect(screen.getByText("Moon Factory").closest("a")).toHaveAttribute(
+      "href",
+      "/libraries/1?tag_ids=8",
+    );
+  });
+
+  it("groups tags on a Share Link page by the payload's namespaces", () => {
+    renderBody({
+      book: namespacedBook,
+      shareLink: { ...shareLink, tagNamespaces: ["Circle"] },
+    });
+
+    expect(rowPills("Circle")).toEqual(["Moon Factory"]);
+    expect(rowPills("Tags")).toEqual([
+      "Favorite",
+      "Source: Digital purchase",
+      "Star Wars: Clone Wars",
+    ]);
+  });
+
+  it("lists every tag under Tags when the library has no namespaces", () => {
+    renderBody({ book: namespacedBook });
+
+    expect(rowPills("Tags")).toHaveLength(4);
+    expect(screen.queryByText("Circle", { selector: "dt" })).toBeNull();
+  });
+});
+
 describe("BookDetailBody without Share Link context", () => {
   it("links resource names into the library", () => {
     renderBody();

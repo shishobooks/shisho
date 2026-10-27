@@ -29,6 +29,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 	}
 
 	g.GET("", h.list)
+	g.GET("/namespaces", h.listNamespaces)
 	g.GET("/:id", h.retrieve)
 	g.PATCH("/:id", h.update, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))
 	g.DELETE("/:id", h.deleteTag, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationWrite))

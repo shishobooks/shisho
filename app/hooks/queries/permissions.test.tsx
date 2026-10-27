@@ -180,6 +180,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useSharedBook: authenticated(["token"]),
   // tags
   useTagsList: requires("books:read", [{}, on]),
+  useTagNamespaceCounts: requires("books:read", [{ library_id: 1 }, on]),
   useTag: requires("books:read", [1, on]),
   useTagsByIds: requires("books:read", [[1, 2]]),
   // users

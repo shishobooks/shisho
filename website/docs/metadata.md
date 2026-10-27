@@ -30,6 +30,18 @@ Genres and tags categorize books. Genres often originate in file metadata, while
 
 Publishers belong to files, so different editions can have different publishers. Publishers can be arranged in a manually curated parent and child hierarchy for imprints and related organizations.
 
+### Tag Namespaces
+
+A library can group tags that share a prefix, such as the circle a doujin came from or the magazine a chapter ran in. List the prefixes under **Tag Namespaces** in the library's **Settings**, which requires Libraries Write. With **Circle** listed, a tag named `Circle: Moon Factory` or `Circle:Moon Factory` belongs to the Circle namespace and shows as **Moon Factory**. The prefix ignores the case of unaccented Latin letters, and it matches only when the colon follows it directly and a name comes after.
+
+Once a library has namespaces:
+
+- The **Tags** page opens on the tags outside every namespace and adds a tab for each namespace, with a count of its tags.
+- In **Filter**, the tag picker can narrow to **All**, the plain **Tags**, or one namespace.
+- The book page lists each namespace as its own row after **Tags**, in the order the namespaces are listed in **Settings**.
+
+Namespaces only change how tags are displayed. Tag names stay as they are in Shisho, in sidecars, and in file metadata, so adding, renaming, or removing a namespace changes no tags. A library with no namespaces shows its tags as before.
+
 ## Identifiers
 
 Identifiers belong to files. A file can have one value for each identifier type, including ISBN-10, ISBN-13, ASIN, UUID, Goodreads, Google, and types added by plugins. Shisho normalizes common formatting, such as ISBN hyphens and ASIN letter case, for reliable matching.

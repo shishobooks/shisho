@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import CoverFan from "@/components/library/CoverFan";
@@ -48,6 +48,8 @@ interface ResourceListProps<T extends { id: number }, F extends string> {
   itemConfig: (item: T) => ItemConfig;
   linkTo: (item: T, libraryId: string) => string;
   itemLabel: string;
+  /** Tabs under the search row that split the list (tag namespaces). */
+  tabs?: ReactNode;
 }
 
 const ResourceList = <T extends { id: number }, F extends string>({
@@ -60,6 +62,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
   itemConfig,
   linkTo,
   itemLabel,
+  tabs,
 }: ResourceListProps<T, F>) => {
   usePageTitle(title);
   // Covers come from Books Read routes; a role without it gets no slot.
@@ -178,6 +181,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
           }
           onReset={sort.reset}
         />
+        {tabs && <div className="mt-4">{tabs}</div>}
       </div>
 
       {/* One live region that stays mounted while the results load and

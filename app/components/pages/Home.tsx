@@ -44,6 +44,13 @@ import {
   type SortLevel,
 } from "@/libraries/sortSpec";
 import type { Book, Genre, ReviewedFilter, Tag } from "@/types";
+import {
+  ALL_TAGS_SCOPE,
+  tagScopeParams,
+  type TagScope,
+} from "@/utils/tagNamespaces";
+
+const NO_NAMESPACES: string[] = [];
 
 const parseIds = (param: string): number[] =>
   param
@@ -194,10 +201,22 @@ const HomeContent = () => {
     limit: 50,
     search: debouncedGenreSearch || undefined,
   });
+  // The tag picker can narrow to one of the library's tag namespaces. Like
+  // the picker's search text, the scope only narrows its options and changes
+  // no results, so it stays out of the URL.
+  const tagNamespaces = libraryQuery.data?.tag_namespaces ?? NO_NAMESPACES;
+  const [chosenTagScope, setTagScope] = useState<TagScope>(ALL_TAGS_SCOPE);
+  // A namespace chosen in another library falls back to every tag.
+  const tagScope =
+    chosenTagScope.kind === "namespace" &&
+    !tagNamespaces.includes(chosenTagScope.namespace)
+      ? ALL_TAGS_SCOPE
+      : chosenTagScope;
   const tagsQuery = useTagsList({
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     limit: 50,
     search: debouncedTagSearch || undefined,
+    ...(tagNamespaces.length > 0 ? tagScopeParams(tagScope) : {}),
   });
 
   const genres = useMemo(
@@ -543,6 +562,7 @@ const HomeContent = () => {
             onGenreSearchChange={setGenreSearchInput}
             onLanguageChange={setLanguageFilter}
             onReviewedFilterChange={setReviewedFilter}
+            onTagScopeChange={setTagScope}
             onTagSearchChange={setTagSearchInput}
             onToggleFileType={toggleFileType}
             onToggleGenre={toggleGenreFilter}
@@ -553,6 +573,8 @@ const HomeContent = () => {
             selectedGenres={selectedGenres}
             selectedTagIds={selectedTagIds}
             selectedTags={selectedTags}
+            tagNamespaces={tagNamespaces}
+            tagScope={tagScope}
             tagSearchInput={tagSearchInput}
             tags={tags}
             tagsLoading={tagsQuery.isLoading}

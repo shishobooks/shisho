@@ -70,6 +70,10 @@ interface ResourceDetailProps {
   entityId: number;
   entityType: EntityType;
   name: string;
+  /** The heading, when it differs from the name (a tag without its namespace). */
+  displayName?: string;
+  /** A small label above the heading (the tag's namespace). */
+  eyebrow?: string;
   /** Optional sort name displayed below the heading */
   sortName?: string;
   aliases: string[];
@@ -102,6 +106,8 @@ export function ResourceDetail({
   entityId,
   entityType,
   name,
+  displayName,
+  eyebrow,
   sortName,
   aliases,
   bookCount,
@@ -167,9 +173,14 @@ export function ResourceDetail({
       <div className="mb-6 md:mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
           <div className="min-w-0">
+            {eyebrow && (
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 break-words">
+                {eyebrow}
+              </div>
+            )}
             <div className="flex items-baseline gap-2 flex-wrap">
               <h1 className="text-2xl font-semibold min-w-0 break-words">
-                {name}
+                {displayName ?? name}
               </h1>
               {sortName && sortName !== name && (
                 <span className="text-sm text-muted-foreground">

@@ -13,6 +13,7 @@ import { getAuthorRoleLabel } from "@/utils/authorRoles";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { seriesNumberLabel } from "@/utils/seriesNumber";
+import { splitTagNamespace } from "@/utils/tagNamespaces";
 
 const Pill = ({ to, children }: { to: string | null; children: ReactNode }) => {
   const badge = (
@@ -59,6 +60,8 @@ interface BookDetailHeaderProps {
   isShareLink: boolean;
   linkPeople: boolean;
   linkSeries: boolean;
+  /** The library's tag namespaces, each listed as its own row. */
+  tagNamespaces: readonly string[];
 }
 
 /**
@@ -77,6 +80,7 @@ const BookDetailHeader = ({
   isShareLink,
   linkPeople,
   linkSeries,
+  tagNamespaces,
 }: BookDetailHeaderProps) => {
   const [coverLoaded, setCoverLoaded] = useState(false);
   const [coverError, setCoverError] = useState(false);
@@ -152,21 +156,38 @@ const BookDetailHeader = ({
       ),
     });
   }
-  if (book.book_tags?.length) {
+  // Plain tags under Tags, then a row per namespace in the library's order,
+  // each tag shown without its prefix.
+  const tagGroups = new Map<
+    string | null,
+    { id: number; tagId: number; name: string }[]
+  >([null, ...tagNamespaces].map((ns) => [ns, []]));
+  for (const bt of book.book_tags ?? []) {
+    const split = bt.tag
+      ? splitTagNamespace(bt.tag.name, tagNamespaces)
+      : { namespace: null, name: "Unknown" };
+    tagGroups.get(split.namespace)!.push({
+      id: bt.id,
+      tagId: bt.tag_id,
+      name: split.name,
+    });
+  }
+  for (const [ns, tags] of tagGroups) {
+    if (tags.length === 0) continue;
     rows.push({
-      label: "Tags",
+      label: ns ?? "Tags",
       value: (
         <span className="flex flex-wrap gap-1.5">
-          {book.book_tags.map((bt) => (
+          {tags.map((t) => (
             <Pill
-              key={bt.id}
+              key={t.id}
               to={
                 isShareLink
                   ? null
-                  : `/libraries/${libraryId}?tag_ids=${bt.tag_id}`
+                  : `/libraries/${libraryId}?tag_ids=${t.tagId}`
               }
             >
-              {bt.tag?.name ?? "Unknown"}
+              {t.name}
             </Pill>
           ))}
         </span>

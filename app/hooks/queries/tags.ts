@@ -8,7 +8,12 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type { ListTagsResponse, TagResponse } from "@/types";
-import type { ListTagsQuery, UpdateTagPayload } from "@/types/generated/tags";
+import type {
+  ListTagNamespacesQuery,
+  ListTagsQuery,
+  TagNamespaceCount,
+  UpdateTagPayload,
+} from "@/types/generated/tags";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
@@ -33,6 +38,26 @@ export const useTagsList = (
     queryKey: [QueryKey.ListTags, query],
     queryFn: ({ signal }) => {
       return API.request("GET", "/tags", null, query, signal);
+    },
+  });
+};
+
+// The tag counts behind the tags page's namespace tabs. The key starts with
+// ListTags so every mutation and event that invalidates the tag lists
+// refreshes the counts too.
+export const useTagNamespaceCounts = (
+  query: ListTagNamespacesQuery,
+  options: Omit<
+    UseQueryOptions<TagNamespaceCount[], ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<TagNamespaceCount[], ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ListTags, "namespaces", query],
+    queryFn: ({ signal }) => {
+      return API.request("GET", "/tags/namespaces", null, query, signal);
     },
   });
 };

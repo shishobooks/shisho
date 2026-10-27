@@ -86,7 +86,11 @@ export interface ShareLinkContext {
    * Defaults to "book" (2:3).
    */
   coverAspectRatio?: CoverAspectRatio;
+  /** The library's tag namespaces, which group the tags. */
+  tagNamespaces?: string[];
 }
+
+const NO_NAMESPACES: string[] = [];
 
 interface BookMenuEntry {
   label: string;
@@ -104,8 +108,8 @@ interface BookMenuEntry {
 interface BookDetailBodyProps {
   book: Book;
   /**
-   * The book's library, for the cover aspect ratio and the merge and move
-   * dialogs. Absent in Share Link context.
+   * The book's library, for the cover aspect ratio, the tag namespaces, and
+   * the merge and move dialogs. Absent in Share Link context.
    */
   library?: LibrarySummary;
   shareLink?: ShareLinkContext;
@@ -267,6 +271,8 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   // The cover box takes the shape the library's gallery gives the book.
   const libraryCoverAspectRatio =
     shareLink?.coverAspectRatio ?? library?.cover_aspect_ratio ?? "book";
+  const tagNamespaces =
+    shareLink?.tagNamespaces ?? library?.tag_namespaces ?? NO_NAMESPACES;
   const coverVariant = getCoverFileType(book.files, libraryCoverAspectRatio);
 
   // The ⋮ menu's entries, grouped by separator. Each entry carries its own
@@ -454,6 +460,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         linkPeople={linkPeople}
         linkSeries={linkSeries}
         sidePanel={relatedPanel}
+        tagNamespaces={tagNamespaces}
       />
 
       <section aria-labelledby="book-files-heading" className="mt-10">

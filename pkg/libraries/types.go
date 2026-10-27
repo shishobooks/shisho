@@ -18,6 +18,9 @@ type LibrarySummary struct {
 	Name                  string `json:"name"`
 	CoverAspectRatio      string `json:"cover_aspect_ratio" tstype:"CoverAspectRatio"`
 	OrganizeFileStructure bool   `json:"organize_file_structure"`
+	// TagNamespaces group the library's tags on the tags page, the tag
+	// filter, and the book page.
+	TagNamespaces []string `json:"tag_namespaces"`
 }
 
 type CreateLibraryPayload struct {
@@ -25,6 +28,7 @@ type CreateLibraryPayload struct {
 	OrganizeFileStructure *bool    `json:"organize_file_structure,omitempty"`
 	CoverAspectRatio      string   `json:"cover_aspect_ratio" validate:"required,oneof=book audiobook book_fallback_audiobook audiobook_fallback_book" tstype:"CoverAspectRatio"`
 	LibraryPaths          []string `json:"library_paths" validate:"required,min=1,max=50,dive"`
+	TagNamespaces         []string `json:"tag_namespaces,omitempty" mod:"dive,trim" validate:"omitempty,max=20,dive,max=50"`
 }
 
 type ListLibrariesQuery struct {
@@ -37,4 +41,6 @@ type UpdateLibraryPayload struct {
 	OrganizeFileStructure *bool    `json:"organize_file_structure,omitempty"`
 	CoverAspectRatio      *string  `json:"cover_aspect_ratio,omitempty" validate:"omitempty,oneof=book audiobook book_fallback_audiobook audiobook_fallback_book" tstype:"CoverAspectRatio"`
 	LibraryPaths          []string `json:"library_paths,omitempty" validate:"omitempty,min=1,max=50,dive"`
+	// TagNamespaces replaces the library's list when present; [] clears it.
+	TagNamespaces []string `json:"tag_namespaces,omitempty" mod:"dive,trim" validate:"omitempty,max=20,dive,max=50"`
 }

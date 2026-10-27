@@ -1,11 +1,15 @@
 package libraries
 
 import (
+	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -30,11 +34,16 @@ func (h *handler) create(c echo.Context) error {
 	if params.OrganizeFileStructure != nil {
 		organizeFileStructure = *params.OrganizeFileStructure
 	}
+	tagNamespaces, err := tagNamespacesFromPayload(params.TagNamespaces)
+	if err != nil {
+		return err
+	}
 
 	library := &models.Library{
 		Name:                  params.Name,
 		OrganizeFileStructure: organizeFileStructure,
 		CoverAspectRatio:      params.CoverAspectRatio,
+		TagNamespaces:         tagNamespaces,
 		LibraryPaths:          make([]*models.LibraryPath, 0, len(params.LibraryPaths)),
 	}
 	for _, path := range params.LibraryPaths {
@@ -43,7 +52,7 @@ func (h *handler) create(c echo.Context) error {
 		})
 	}
 
-	err := h.libraryService.CreateLibrary(ctx, library)
+	err = h.libraryService.CreateLibrary(ctx, library)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -154,6 +163,7 @@ func (h *handler) listForUser(c echo.Context) error {
 			Name:                  library.Name,
 			CoverAspectRatio:      library.CoverAspectRatio,
 			OrganizeFileStructure: library.OrganizeFileStructure,
+			TagNamespaces:         library.TagNamespaces,
 		})
 	}
 
@@ -196,6 +206,16 @@ func (h *handler) update(c echo.Context) error {
 		library.CoverAspectRatio = *params.CoverAspectRatio
 		opts.Columns = append(opts.Columns, "cover_aspect_ratio")
 	}
+	if params.TagNamespaces != nil {
+		tagNamespaces, err := tagNamespacesFromPayload(params.TagNamespaces)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(tagNamespaces, library.TagNamespaces) {
+			library.TagNamespaces = tagNamespaces
+			opts.Columns = append(opts.Columns, "tag_namespaces")
+		}
+	}
 	if params.LibraryPaths != nil {
 		library.LibraryPaths = make([]*models.LibraryPath, 0, len(params.LibraryPaths))
 		for _, path := range params.LibraryPaths {
@@ -225,6 +245,39 @@ func (h *handler) update(c echo.Context) error {
 	}
 
 	return errors.WithStack(c.JSON(http.StatusOK, library))
+}
+
+// tagNamespacesFromPayload rejects a blank namespace, one with a colon (which
+// ends a namespace in a tag name), and a repeat. Repeats compare with ASCII
+// letters folded, as tag names match namespaces. The binder has trimmed each.
+func tagNamespacesFromPayload(in []string) (models.StringList, error) {
+	out := make(models.StringList, 0, len(in))
+	seen := make(map[string]bool, len(in))
+	for _, ns := range in {
+		if ns == "" {
+			return nil, errcodes.ValidationError("Tag namespaces cannot be blank.")
+		}
+		if strings.Contains(ns, ":") {
+			return nil, errcodes.ValidationError(fmt.Sprintf("Tag namespace %q cannot contain a colon.", ns))
+		}
+		key := asciiLower(ns)
+		if seen[key] {
+			return nil, errcodes.ValidationError(fmt.Sprintf("Tag namespace %q is listed more than once.", ns))
+		}
+		seen[key] = true
+		out = append(out, ns)
+	}
+	return out, nil
+}
+
+// asciiLower lowercases A to Z only, as SQLite's LIKE compares.
+func asciiLower(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return r
+	}, s)
 }
 
 func (h *handler) delete(c echo.Context) error {

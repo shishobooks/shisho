@@ -119,6 +119,13 @@ func coverAspectRatio(book *models.Book) string {
 	return book.Library.CoverAspectRatio
 }
 
+func tagNamespaces(book *models.Book) []string {
+	if book.Library == nil || book.Library.TagNamespaces == nil {
+		return []string{}
+	}
+	return book.Library.TagNamespaces
+}
+
 func (h *publicHandler) book(c echo.Context) error {
 	link, book, err := h.resolve(c)
 	if err != nil {
@@ -126,6 +133,7 @@ func (h *publicHandler) book(c echo.Context) error {
 	}
 	countAccess(c.Request().Context(), link, h.service.RecordOpen)
 	aspectRatio := coverAspectRatio(book)
+	namespaces := tagNamespaces(book)
 	// The cache key reads cover filenames, so compute it before blanking.
 	book.CoverCacheKey = covers.CacheKey(book.Files, aspectRatio)
 	blankForRecipient(book)
@@ -135,6 +143,7 @@ func (h *publicHandler) book(c echo.Context) error {
 		SharedBy:         link.CreatedByUser.Username,
 		ExpiresAt:        link.ExpiresAt,
 		CoverAspectRatio: aspectRatio,
+		TagNamespaces:    namespaces,
 	}))
 }
 

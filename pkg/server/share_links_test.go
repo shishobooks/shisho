@@ -435,6 +435,26 @@ func TestShareLinks_RecipientFetchesBookWithoutPaths(t *testing.T) {
 	}
 	assert.Empty(t, shared.Filepath)
 	assert.Nil(t, shared.Library)
+	assert.Equal(t, []string{}, shared.TagNamespaces)
+}
+
+// The recipient's page groups tags by the library's namespaces, as the
+// book page does.
+func TestShareLinks_RecipientGetsTagNamespaces(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	_, err := f.db.NewUpdate().Model((*models.Library)(nil)).
+		Set("tag_namespaces = ?", models.StringList{"Circle", "Source"}).
+		Where("id = ?", f.bookA.LibraryID).Exec(context.Background())
+	require.NoError(t, err)
+	link := f.mustCreate(f.sharer, f.bookA, `{}`)
+
+	rec := f.do(nil, http.MethodGet, "/api/share/"+link.Token, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var shared sharelinks.SharedBookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &shared))
+	assert.Equal(t, []string{"Circle", "Source"}, shared.TagNamespaces)
 }
 
 func TestShareLinks_RecipientCovers(t *testing.T) {
