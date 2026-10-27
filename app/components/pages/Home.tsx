@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
+import type { SelectedFilter } from "@/components/library/FilterChip";
 import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
@@ -18,20 +19,20 @@ import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
 import { BulkSelectionProvider } from "@/contexts/BulkSelection";
 import { useBooks } from "@/hooks/queries/books";
-import { useGenresList } from "@/hooks/queries/genres";
+import { useGenresByIds, useGenresList } from "@/hooks/queries/genres";
 import { useLibraryLanguages, useUserLibrary } from "@/hooks/queries/libraries";
 import {
   useLibrarySettings,
   useUpdateLibrarySettings,
 } from "@/hooks/queries/librarySettings";
 import { useSeries } from "@/hooks/queries/series";
-import { useTagsList } from "@/hooks/queries/tags";
+import { useTagsByIds, useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
-import { toastRequestError } from "@/libraries/api";
+import { isNotFoundError, toastRequestError } from "@/libraries/api";
 import { resetPaging } from "@/libraries/pagination";
 import {
   BUILTIN_DEFAULT_SORT,
@@ -43,6 +44,31 @@ import {
   type SortLevel,
 } from "@/libraries/sortSpec";
 import type { Book, Genre, ReviewedFilter, Tag } from "@/types";
+
+const parseIds = (param: string): number[] =>
+  param
+    .split(",")
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+// The chips for the selected ids. A deleted or merged one (an old link, or
+// one gone since the dropdown loaded) still gets a chip, so the filter can be
+// seen and removed; any other failure names it by id.
+const selectedFilters = (
+  ids: number[],
+  cache: Map<number, SelectedFilter>,
+  queries: { data?: SelectedFilter; error: unknown }[],
+  noun: "genre" | "tag",
+): SelectedFilter[] =>
+  ids.flatMap((id, i) => {
+    const error = queries[i]?.error;
+    if (isNotFoundError(error)) return [{ id, name: `Unknown ${noun}` }];
+    const item = cache.get(id) ?? queries[i]?.data;
+    if (item) return [item];
+    if (!error) return [];
+    const label = noun === "tag" ? "Tag" : "Genre";
+    return [{ id, name: `${label} #${id}` }];
+  });
 
 const HomeContent = () => {
   const { libraryId } = useParams();
@@ -70,21 +96,9 @@ const HomeContent = () => {
     ? fileTypesParam.split(",").filter(Boolean)
     : [];
 
-  // Parse genre IDs from URL
-  const selectedGenreIds = genreIdsParam
-    ? genreIdsParam
-        .split(",")
-        .filter(Boolean)
-        .map((id) => parseInt(id, 10))
-    : [];
-
-  // Parse tag IDs from URL
-  const selectedTagIds = tagIdsParam
-    ? tagIdsParam
-        .split(",")
-        .filter(Boolean)
-        .map((id) => parseInt(id, 10))
-    : [];
+  // Parse genre and tag IDs from URL, dropping any that aren't ids
+  const selectedGenreIds = parseIds(genreIdsParam);
+  const selectedTagIds = parseIds(tagIdsParam);
 
   // Fetch distinct languages for the library
   const libraryIdNum = libraryId ? parseInt(libraryId, 10) : undefined;
@@ -221,13 +235,23 @@ const HomeContent = () => {
     }
   }, [tags]);
 
-  // Get selected genre/tag objects from cache for display
-  const selectedGenres = selectedGenreIds
-    .map((id) => genreCache.get(id))
-    .filter((g): g is Genre => g !== undefined);
-  const selectedTags = selectedTagIds
-    .map((id) => tagCache.get(id))
-    .filter((t): t is Tag => t !== undefined);
+  // The dropdowns list only the first page of matches, so a selection
+  // outside it (a long list, or a tag or genre link on a book page) is fetched
+  // by id. The cache still answers first, so a pick shows its chip at once.
+  const selectedGenreQueries = useGenresByIds(selectedGenreIds);
+  const selectedTagQueries = useTagsByIds(selectedTagIds);
+  const selectedGenres = selectedFilters(
+    selectedGenreIds,
+    genreCache,
+    selectedGenreQueries,
+    "genre",
+  );
+  const selectedTags = selectedFilters(
+    selectedTagIds,
+    tagCache,
+    selectedTagQueries,
+    "tag",
+  );
 
   const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
 

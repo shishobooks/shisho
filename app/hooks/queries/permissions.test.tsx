@@ -98,7 +98,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useDevice: authenticated(["abc"]),
   useAllDevices: requires("users:read", []),
   useDeliveryPreview: authenticated(["abc"]),
-  useBookDevices: requires("books:read", [1, "1:epub:main"]),
+  useBookDevices: requires("books:read", [{ id: 1, files: [] }]),
   // delivery
   useDeliveryRules: authenticated([]),
   // entity-search
@@ -116,6 +116,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   // genres
   useGenresList: requires("books:read", [{}, on]),
   useGenre: requires("books:read", [1, on]),
+  useGenresByIds: requires("books:read", [[1, 2]]),
   // jobs
   useJob: authenticated(["1", on]),
   useJobs: requires("jobs:read", [{}, on]),
@@ -180,6 +181,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   // tags
   useTagsList: requires("books:read", [{}, on]),
   useTag: requires("books:read", [1, on]),
+  useTagsByIds: requires("books:read", [[1, 2]]),
   // users
   useUser: requires("users:read", ["1", on]),
   useUsers: requires("users:read", [{}, on]),

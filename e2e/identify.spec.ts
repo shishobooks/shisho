@@ -73,8 +73,7 @@ test.describe("Identify", () => {
       waitUntil: "domcontentloaded",
     });
 
-    await page.getByRole("button", { name: "Book actions" }).click();
-    await page.getByRole("menuitem", { name: "Identify book" }).click();
+    await page.getByRole("button", { name: "Identify", exact: true }).click();
 
     // The dialog searches on open; pick the fixture's result.
     await page.getByRole("button", { name: /Fixture Title/ }).click();

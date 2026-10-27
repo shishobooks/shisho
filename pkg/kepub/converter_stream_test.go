@@ -95,3 +95,33 @@ func TestConvertAhead_RecoversPanic(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bad.xhtml")
 }
+
+// An entry with Load is read when it is converted, and stored as it is. A
+// failing Load ends the conversion with its error.
+func TestWriteEPUB_LoadsEntries(t *testing.T) {
+	t.Parallel()
+	image := []byte("\x89PNG not really")
+	loads := 0
+	entries := append(manyChapters(), Entry{Name: "image.png", Load: func() ([]byte, error) {
+		loads++
+		return image, nil
+	}})
+	var buf bytes.Buffer
+	require.NoError(t, NewConverter().WriteEPUB(context.Background(), &buf, entries))
+	assert.Equal(t, 1, loads)
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+	last := zr.File[len(zr.File)-1]
+	assert.Equal(t, "image.png", last.Name)
+	assert.Equal(t, zip.Store, last.Method)
+	r, err := last.Open()
+	require.NoError(t, err)
+	defer r.Close()
+	var got bytes.Buffer
+	_, err = got.ReadFrom(r)
+	require.NoError(t, err)
+	assert.Equal(t, image, got.Bytes())
+
+	failing := append(manyChapters(), Entry{Name: "image.png", Load: func() ([]byte, error) { return nil, errWriterFull }})
+	require.ErrorIs(t, NewConverter().WriteEPUB(context.Background(), &bytes.Buffer{}, failing), errWriterFull)
+}

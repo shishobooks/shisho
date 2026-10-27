@@ -10,7 +10,7 @@ const (
 )
 
 // BookDevice is what one of the current user's Devices gets of a book, for
-// the book page's "On your Devices" panel, which lists every Device.
+// the book page's Devices tab, which lists every Device.
 type BookDevice struct {
 	DeviceID   string `json:"device_id"`
 	DeviceName string `json:"device_name"`

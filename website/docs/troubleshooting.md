@@ -52,7 +52,7 @@ Before enabling file organization, back up the library and test the setting on a
 
 ## A File Is Marked Unreadable
 
-**Symptom:** A file shows an **Unreadable** badge on the book page, or the file details page shows a "This file could not be read" notice. The scan job log contains `failed to parse file metadata` for the same path, often with `zip: not a valid zip file` for EPUB and CBZ files.
+**Symptom:** A file shows an **Unreadable** badge on the book page, or the file's page shows a "This file could not be read" notice. The scan job log contains `failed to parse file metadata` for the same path, often with `zip: not a valid zip file` for EPUB and CBZ files.
 
 **Likely cause:** The file on disk is damaged. The most common case is a zip-based file (EPUB, CBZ) whose central directory was cut off by an interrupted copy or a reader application that rewrote the file over a network share. The book keeps the metadata from the last successful scan, but the in-app reader and KePub conversion will fail for that file until it is repaired.
 
@@ -108,7 +108,7 @@ Do not delete the database or its related files to clear a lock. Back it up befo
 
 **Likely cause:** The cache path is full or not writable, the source media is no longer readable, generation failed in a background job, or cached generated output needs to be rebuilt after its producer changed. A file or cached copy that exists but cannot be read, such as one whose permissions deny the Shisho user, returns `500 Internal Server Error`; `404 Not Found` means the file is missing from disk. When a generated copy cannot be made from a file's contents, OPDS, eReader, Kobo Sync, and Share Link downloads send the original file instead and log a warning, so an unchanged download on a device can also point to a generation failure. A conversion to another file type fails with an error instead of sending the original when it was picked by OPDS, the eReader Browser, or Kobo Sync through [Delivery Rules](./supported-formats.md#delivery-rules), such as EPUB delivered as KePub, or from a Share Link's **Download as** menu; no device sends the original for a failed conversion, and the server log names the file.
 
-A generated file that fails after its download has started ends that download with a connection error, so no truncated file is saved, and logs a warning naming the file. Shisho remembers the failure, even across restarts: later downloads on devices and Share Links get the original file, or an error for a conversion through OPDS, the eReader Browser, Kobo Sync, or a Share Link's **Download as** menu, and the web app shows the error with **Download Original**. Editing the book's metadata, or clearing the download cache, makes the next download try again.
+A generated file that fails after its download has started ends that download with a connection error, so no truncated file is saved, and logs a warning naming the file. Shisho remembers the failure, even across restarts: later downloads on devices and Share Links get the original file, or an error for a conversion through OPDS, the eReader Browser, Kobo Sync, or a Share Link's **Download as** menu, and the web app shows the error with a **Download unmodified file** button. Editing the book's metadata, or clearing the download cache, makes the next download try again.
 
 A download cache that is full or not writable does not stop downloads. Each download is generated straight to the client without being cached, and a warning is logged; the next download of the same file is generated again.
 

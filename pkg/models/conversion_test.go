@@ -13,9 +13,11 @@ func TestReachableFileTypes(t *testing.T) {
 		from string
 		want []string
 	}{
-		{FileTypeEPUB, []string{FileTypeEPUB, FileTypeKePub}},
-		{FileTypeCBZ, []string{FileTypeCBZ, FileTypeKePub, FileTypeEPUB}},
-		{FileTypeKePub, []string{FileTypeKePub, FileTypeEPUB}},
+		{FileTypeEPUB, []string{FileTypeEPUB, FileTypeKePub, FileTypeAZW3}},
+		{FileTypeCBZ, []string{FileTypeCBZ, FileTypeKePub, FileTypeEPUB, FileTypeAZW3}},
+		{FileTypeKePub, []string{FileTypeKePub, FileTypeEPUB, FileTypeAZW3}},
+		{FileTypeAZW3, []string{FileTypeAZW3, FileTypeEPUB, FileTypeKePub}},
+		{FileTypeMOBI, []string{FileTypeMOBI, FileTypeEPUB, FileTypeKePub, FileTypeAZW3}},
 		{FileTypeM4B, []string{FileTypeM4B}},
 		{FileTypePDF, []string{FileTypePDF}},
 	}
@@ -77,6 +79,6 @@ func TestFile_ReachableFileTypesResolved(t *testing.T) {
 	supplement := &File{FileType: FileTypeEPUB, FileRole: FileRoleSupplement}
 	ResolveFileDisplayNames([]*File{main, supplement})
 
-	assert.Equal(t, []string{FileTypeCBZ, FileTypeKePub, FileTypeEPUB}, main.ReachableFileTypes)
+	assert.Equal(t, []string{FileTypeCBZ, FileTypeKePub, FileTypeEPUB, FileTypeAZW3}, main.ReachableFileTypes)
 	assert.Equal(t, []string{FileTypeEPUB}, supplement.ReachableFileTypes, "a supplement downloads only as itself")
 }

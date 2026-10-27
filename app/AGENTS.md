@@ -60,7 +60,8 @@ Every form that creates or updates data has unsaved changes protection. Keep an 
 Cover and page endpoints are cached `immutable`, and browsers also keep an in-memory image cache that reuses the bitmap for any `src` already rendered this session, so a changed image needs a changed URL. Every URL carries a `?v=` key built by the helpers in `app/utils` (`coverUrl.ts`, `pageUrl.ts`, `downloadUrl.ts`), which document their keys.
 
 - Components take the model (book, series, file) and call the helper, never a bare id or key. Page URLs come from `useFilePageUrl()`, which adds the PDF render key.
-- Render server covers with `CoverImage`, keyed `key={coverUrl}` where the cover can change while mounted; use a plain `<img>` for local previews, provider images, and CBZ/PDF pages. Tests rendering covers call `mockCoverDimensions()` (jsdom has no layout).
+- Render server covers with `CoverImage`, keyed `key={coverUrl}` where the cover can change while mounted; use a plain `<img>` for local previews and provider images. Tests rendering covers call `mockCoverDimensions()` (jsdom has no layout).
+- A CBZ or PDF page shown smaller than the reader shows it asks for a thumbnail, never the whole page: a full PDF page is a render at `pdf_render_dpi`, one at a time on the server. Pass a size to `useFilePageUrl()`'s function, from `pageThumbnailSize(cssPixels)` for a fixed box, or render `CoverImage` with `thumbnailUrl` so it picks the size from its box. Only the readers load whole pages.
 - A cover-changing mutation invalidates the query whose data drives the key.
 
 ## Testing
@@ -74,6 +75,8 @@ Cover and page endpoints are cached `immutable`, and browsers also keep an in-me
 
 ## Gotchas
 
+- **The Share Link page is the book page**: `SharedBook` renders `BookDetailBody` with a `ShareLinkContext`, and a recipient sees what a reader sees minus the actions and the library's private details (paths, identifiers, the Related panel). A change to the book page lands on the Share Link page too, so check it there. Anything the change loads from an authenticated endpoint (a cover, a page image, a download) needs its public route in `pkg/sharelinks` and a builder in `ShareLinkContext`, or it shows a placeholder for a recipient.
+- **Every navigation scrolls to the top**: the root `<ScrollRestoration>` (`app/components/pages/Root.tsx`) resets on each one, search-param changes included. A navigation that keeps the reader on the same page in their eyes (a tab or filter kept in a search param, a pager, a link between a book's files) passes `preventScrollReset` to `navigate`, `setSearchParams`, or `<Link>`. A pager for one section of a page uses `useSectionPaging`, which also brings the section's top back into view.
 - **Queries never go stale on their own** (the global `staleTime` in `app/libraries/query-client.ts`), so a new query shows old data until something invalidates it. Invalidate it from every mutation and every SSE event (`app/hooks/useSSE.ts`) that changes its data.
 - **A custom component used as a Radix `asChild` trigger must `forwardRef` and spread props** onto the underlying `Button`, with `displayName` set. Without the ref, floating content anchors at `(0, 0)` off-screen and `Dialog`/`Sheet` cannot restore focus. jsdom runs no positioning, so unit tests pass; only a real browser shows it.
 - **Sortable lists need stable client-side row keys** assigned when a row enters the list. Index and content keys change on reorder and break dnd-kit drag tracking; server ids work only if unsaved rows have one too.

@@ -162,3 +162,22 @@ func TestDownloadFile_GeneratesMOBIAndAZW3(t *testing.T) {
 		})
 	}
 }
+
+// A Kindle file the conversion declines, such as a KF8 book with no index
+// of its documents, is a 422 that says why, so the web UI can show it next to
+// Download unmodified file.
+func TestDownloadFile_DeclinedKindleConversionSaysWhy(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	library, book := setupTestLibraryAndBook(t, db)
+	path := testgen.WriteFile(t, book.Filepath, "book.mobi", testgen.BuildMOBI(t, testgen.MOBIOptions{Kind: testgen.MOBIKindKF8, Title: "Bare"}))
+	file := setupTestFile(t, db, book, models.FileTypeMOBI, path)
+	user := setupTestUser(t, db, library.ID, true)
+
+	req := httptest.NewRequest(http.MethodGet, "/books/files/"+strconv.Itoa(file.ID)+"/download/epub", nil)
+	rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
+
+	require.Equal(t, http.StatusUnprocessableEntity, rr.Code, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "This Kindle book can't be converted: it has no skeleton or fragment index")
+	assert.Empty(t, rr.Header().Get(echo.HeaderContentDisposition))
+}

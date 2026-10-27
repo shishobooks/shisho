@@ -1,8 +1,10 @@
-import { FilterChip } from "@/components/library/FilterChip";
+import {
+  FilterChip,
+  type SelectedFilter,
+} from "@/components/library/FilterChip";
 import { Button } from "@/components/ui/button";
 import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
-import type { Genre, Tag } from "@/types";
 
 const REVIEWED_FILTER_LABELS: Record<string, string> = {
   needs_review: "Needs review",
@@ -12,8 +14,8 @@ const REVIEWED_FILTER_LABELS: Record<string, string> = {
 interface ActiveFilterChipsProps {
   hasActiveFilters: boolean;
   selectedFileTypes: string[];
-  selectedGenres: Genre[];
-  selectedTags: Tag[];
+  selectedGenres: SelectedFilter[];
+  selectedTags: SelectedFilter[];
   languageParam: string;
   reviewedFilter: string;
   onToggleFileType: (fileType: string) => void;

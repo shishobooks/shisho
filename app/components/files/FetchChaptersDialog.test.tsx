@@ -72,20 +72,48 @@ const audnexusResponse = {
 
 describe("FetchChaptersDialog", () => {
   describe("Entry stage", () => {
-    it("shows 'existing' note and enables Fetch when prefilled with valid ASIN", () => {
+    it("looks the file's ASIN up as soon as it opens", async () => {
+      const request = vi
+        .spyOn(API, "request")
+        .mockResolvedValue(audnexusResponse);
+      request.mockClear();
+      renderWithClient(
+        <FetchChaptersDialog {...defaultProps} initialAsin="b0aaaatest" />,
+      );
+
+      expect(
+        await screen.findByText(/2 chapters from audible/i),
+      ).toBeInTheDocument();
+      expect(request.mock.calls[0][1]).toContain("B0AAAATEST");
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    });
+
+    it("goes back to the ASIN field from the results", async () => {
+      const user = createUser();
+      vi.spyOn(API, "request").mockResolvedValue(audnexusResponse);
       renderWithClient(
         <FetchChaptersDialog {...defaultProps} initialAsin="B0AAAATEST" />,
       );
 
-      // Input should be prefilled
-      const input = screen.getByRole("textbox");
-      expect(input).toHaveValue("B0AAAATEST");
+      await user.click(
+        await screen.findByRole("button", { name: "Use a different ASIN" }),
+      );
 
-      // Fetch button should be enabled
-      const fetchButton = screen.getByRole("button", {
-        name: /fetch chapters/i,
-      });
-      expect(fetchButton).not.toBeDisabled();
+      expect(screen.getByRole("textbox")).toHaveValue("B0AAAATEST");
+      expect(
+        screen.getByRole("button", { name: /fetch chapters/i }),
+      ).not.toBeDisabled();
+    });
+
+    it("waits for an ASIN that is not a valid one", () => {
+      const request = vi.spyOn(API, "request");
+      request.mockClear();
+      renderWithClient(
+        <FetchChaptersDialog {...defaultProps} initialAsin="SHORT" />,
+      );
+
+      expect(screen.getByRole("textbox")).toHaveValue("SHORT");
+      expect(request).not.toHaveBeenCalled();
     });
 
     it("disables Fetch when ASIN is empty", () => {

@@ -1,5 +1,6 @@
 // Package mobi reads MOBI and AZW3 files: Mobipocket (MOBI6) books, KF8
-// books, and combo files that hold a MOBI6 book followed by a KF8 one. It is
+// books, and combo files that hold a MOBI6 book followed by a KF8 one. It
+// rewrites their metadata, and writes new AZW3 files (WriteKF8). It is
 // hand-written so Shisho takes on no GPL code (ADR 0009).
 package mobi
 
@@ -258,24 +259,13 @@ func parseDate(value string) *time.Time {
 }
 
 // cover returns the cover image and its mime type, or nothing when the file
-// names no cover or the record it names is not an image. The cover-offset
-// record counts from the first image; a KF8 file may name it only through a
-// kindle:embed URI, whose base-32 number counts from 1.
+// names no cover or the record it names is not an image.
 func (b *book) cover(db *pdb) ([]byte, string) {
-	if b.firstImage == nullIndex {
+	n, ok := b.coverEmbed()
+	if !ok {
 		return nil, ""
 	}
-	offset, ok := b.header.number(exthCoverOffset)
-	if !ok || offset == nullIndex {
-		uri := b.header.text(exthKF8CoverURI)
-		n, err := strconv.ParseUint(strings.TrimPrefix(uri, "kindle:embed:"), 32, 32)
-		if !strings.HasPrefix(uri, "kindle:embed:") || err != nil || n == 0 {
-			return nil, ""
-		}
-		offset = uint32(n - 1) //nolint:gosec // ParseUint with bitSize 32 keeps n within uint32
-	}
-
-	index := int64(b.firstImage) + int64(offset)
+	index := int64(b.firstImage) + int64(n) - 1 //nolint:gosec // n is a 32-bit record number
 	if index >= int64(db.count()) {
 		return nil, ""
 	}
@@ -288,6 +278,26 @@ func (b *book) cover(db *pdb) ([]byte, string) {
 		return nil, ""
 	}
 	return data, mimeType
+}
+
+// coverEmbed returns the resource number of the cover, counting from 1 as
+// a kindle:embed URI does, and false when the file names no cover. The
+// cover-offset record counts from 0; a KF8 file may name the cover only
+// through a kindle:embed URI.
+func (b *book) coverEmbed() (uint64, bool) {
+	if b.firstImage == nullIndex {
+		return 0, false
+	}
+	offset, ok := b.header.number(exthCoverOffset)
+	if ok && offset != nullIndex {
+		return uint64(offset) + 1, true
+	}
+	uri := b.header.text(exthKF8CoverURI)
+	n, err := strconv.ParseUint(strings.TrimPrefix(uri, "kindle:embed:"), 32, 32)
+	if !strings.HasPrefix(uri, "kindle:embed:") || err != nil || n == 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 func imageMimeType(data []byte) string {

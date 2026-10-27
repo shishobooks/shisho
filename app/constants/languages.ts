@@ -217,3 +217,9 @@ export function getLanguageName(tag: string): string | undefined {
   }
   return undefined;
 }
+
+/** A language for display: its name and code, or the bare code. */
+export function languageLabel(tag: string): string {
+  const name = getLanguageName(tag);
+  return name ? `${name} (${tag})` : tag;
+}

@@ -10,6 +10,7 @@ import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
+import { SECTION_CLASS, useSectionPaging } from "@/hooks/useSectionPaging";
 import { parsePageParam } from "@/libraries/pagination";
 import type { File, ResourceListResponse } from "@/types";
 import {
@@ -105,10 +106,12 @@ export function FileListSection({
       return params;
     }, options);
   };
+  const { sectionRef, sectionPageChange } =
+    useSectionPaging<HTMLElement>(handlePageChange);
 
   if (query.isLoading) {
     return (
-      <section className="mb-10">
+      <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <LoadingSpinner />
       </section>
@@ -117,7 +120,7 @@ export function FileListSection({
 
   if (query.error && !query.data) {
     return (
-      <section className="mb-10">
+      <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <QueryError fallback="Failed to load files" query={query} />
       </section>
@@ -126,7 +129,7 @@ export function FileListSection({
 
   if (total === 0) {
     return (
-      <section className="mb-10">
+      <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
         <div className="text-center py-8 text-muted-foreground">
           {emptyMessage ?? "No files found."}
@@ -136,7 +139,7 @@ export function FileListSection({
   }
 
   return (
-    <section className="mb-10">
+    <section className={SECTION_CLASS} ref={sectionRef}>
       <h2 className="text-xl font-semibold mb-4">{title}</h2>
 
       {showing && (
@@ -175,7 +178,7 @@ export function FileListSection({
       <PaginationFooter
         className="mb-8"
         currentPage={currentPage}
-        onPageChange={handlePageChange}
+        onPageChange={sectionPageChange}
         totalIsCurrent={!query.isPlaceholderData}
         totalPages={totalPages}
       />

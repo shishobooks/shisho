@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { useFileImage } from "@/hooks/useFileImage";
 import { cn } from "@/libraries/utils";
-import type { File } from "@/types";
-import { fileCoverUrl } from "@/utils/coverUrl";
+import { FileRoleSupplement, type File } from "@/types";
+import { fileTypeLabel } from "@/utils/format";
 
 interface FileCoverThumbnailProps {
   file: File;
@@ -39,11 +40,8 @@ function FileCoverThumbnail({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  const coverUrl = getCoverUrl
-    ? getCoverUrl(file)
-    : file.cover_image_filename
-      ? fileCoverUrl(file)
-      : null;
+  const image = useFileImage(file, getCoverUrl);
+  const coverUrl = image?.url ?? null;
 
   // Reset both flags when the URL would change — either the cover filename
   // was replaced or updated_at bumped from a data refetch. Without resetting
@@ -61,6 +59,9 @@ function FileCoverThumbnail({
   const placeholderVariant = isAudiobook ? "audiobook" : "book";
 
   const hasCover = coverUrl && !imageError;
+  // A supplement with no picture reads as a document of its type, not as a
+  // book with a missing cover.
+  const typeTile = !hasCover && file.file_role === FileRoleSupplement;
 
   return (
     <div
@@ -74,11 +75,20 @@ function FileCoverThumbnail({
       )}
       onClick={onClick}
     >
-      {(!imageLoaded || !hasCover) && (
-        <CoverPlaceholder
-          className="absolute inset-0"
-          variant={placeholderVariant}
-        />
+      {typeTile ? (
+        // Sized to its tile: a row thumbnail or the file page's header.
+        <div className="@container absolute inset-0 flex items-end justify-center bg-muted pb-[8%]">
+          <span className="text-[9px] font-semibold tracking-wide text-muted-foreground @[6rem]:text-sm">
+            {fileTypeLabel(file.file_type)}
+          </span>
+        </div>
+      ) : (
+        (!imageLoaded || !hasCover) && (
+          <CoverPlaceholder
+            className="absolute inset-0"
+            variant={placeholderVariant}
+          />
+        )
       )}
 
       {hasCover && (
@@ -86,12 +96,15 @@ function FileCoverThumbnail({
           alt=""
           className={cn(
             "absolute inset-0 w-full h-full object-cover",
+            // A page stands in for a cover from its top, on paper white.
+            image?.isPage && "bg-white object-top",
             !imageLoaded && "opacity-0",
           )}
           key={coverUrl}
           onError={() => setImageError(true)}
           onLoad={() => setImageLoaded(true)}
           src={coverUrl}
+          thumbnailUrl={image?.thumbnailUrl}
         />
       )}
     </div>

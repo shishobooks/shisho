@@ -87,17 +87,38 @@ func (c *Converter) ConvertEPUB(ctx context.Context, srcPath, destPath string) e
 // that replaces one.
 type Entry struct {
 	Name string
-	// File is the entry read from a zip, or nil when Content replaces it.
+	// File is the entry read from a zip, or nil when Content or Load
+	// replaces it.
 	File    *zip.File
 	Content []byte
+	// Load, when set, reads the entry's data as it is converted, for an
+	// already compressed resource, such as an image, a step before kept out
+	// of memory. It is stored rather than compressed again.
+	Load func() ([]byte, error)
 }
 
-// content returns the entry's uncompressed data.
-func (e Entry) content() ([]byte, error) {
-	if e.File == nil {
+// Data returns the entry's uncompressed data.
+func (e Entry) Data() ([]byte, error) {
+	switch {
+	case e.Load != nil:
+		return e.Load()
+	case e.File == nil:
 		return e.Content, nil
 	}
 	return readZipFile(e.File)
+}
+
+// compressReplaced compresses an entry that is not read from a zip.
+func compressReplaced(e Entry) (*ziputil.Entry, error) {
+	data, err := e.Data()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read %s", e.Name)
+	}
+	method := zip.Deflate
+	if e.Load != nil {
+		method = zip.Store
+	}
+	return ziputil.Compress(e.Name, method, data)
 }
 
 // lookahead is how many entries the conversion transforms ahead of the one
@@ -120,7 +141,7 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 			continue
 		}
 		opfPath = e.Name
-		data, err := e.content()
+		data, err := e.Data()
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OPF manifest")
 		}
@@ -139,7 +160,7 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 		}
 		switch {
 		case contentFiles[e.Name]:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to transform content file: %s", e.Name)
 			}
@@ -152,13 +173,13 @@ func (c *Converter) WriteEPUB(ctx context.Context, w io.Writer, entries []Entry)
 			}
 			return ziputil.Compress(e.Name, zip.Deflate, buf.Bytes())
 		case e.Name == opfPath:
-			data, err := e.content()
+			data, err := e.Data()
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to transform OPF file")
 			}
 			return ziputil.Compress(e.Name, zip.Deflate, transformKepubOPF(data, opfPath, contentFiles))
 		case e.File == nil:
-			return ziputil.Compress(e.Name, zip.Deflate, e.Content)
+			return compressReplaced(e)
 		default:
 			return nil, nil
 		}

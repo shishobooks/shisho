@@ -172,4 +172,39 @@ describe("AuthProvider session changes", () => {
       );
     },
   );
+
+  // A page still on screen when the session ends must not ask for its data
+  // again: the server has ended the session, so every request is a 401. A
+  // cache clear re-renders every mounted query ahead of a plain state
+  // update, so the signed-in page has to be gone before the clear. jsdom
+  // batches the two, so the test checks the order: what is on screen at
+  // the moment the cache is cleared.
+  it("leaves the signed-in page before clearing the cache on Sign out", async () => {
+    stubAuth({ id: 2, username: "bea", permissions: [] });
+    function Page() {
+      const { user, logout } = useAuth();
+      return (
+        <>
+          <button onClick={() => void logout()}>Sign out</button>
+          {user && <p>Signed-in page</p>}
+        </>
+      );
+    }
+    render(
+      <AuthProvider>
+        <Page />
+      </AuthProvider>,
+    );
+    await screen.findByText("Signed-in page");
+    let pageAtClear: boolean | undefined;
+    const clear = queryClient.clear.bind(queryClient);
+    vi.spyOn(queryClient, "clear").mockImplementation(() => {
+      pageAtClear = screen.queryByText("Signed-in page") !== null;
+      clear();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(pageAtClear).toBe(false));
+  });
 });

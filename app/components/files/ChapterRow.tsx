@@ -377,6 +377,7 @@ const ChapterRow = (props: ChapterRowProps) => {
       <>
         <div
           className="py-2 border-b border-border last:border-b-0"
+          data-chapter-row
           style={{ paddingLeft: `${indentPx}px` }}
         >
           <div className="flex items-center gap-3">
@@ -509,7 +510,10 @@ const ChapterRow = (props: ChapterRowProps) => {
   // Page-based edit mode (CBZ, PDF)
   if (isEditing && isPageBased) {
     return (
-      <div className="py-2 border-b border-border last:border-b-0">
+      <div
+        className="py-2 border-b border-border last:border-b-0"
+        data-chapter-row
+      >
         <div className="flex items-center gap-3">
           {/* Small thumbnail with hover preview (clickable to open page picker) */}
           {file != null && (
@@ -613,7 +617,10 @@ const ChapterRow = (props: ChapterRowProps) => {
   // M4B edit mode
   if (isEditing && isM4b) {
     return (
-      <div className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
+      <div
+        className="flex items-center gap-3 py-2 border-b border-border last:border-b-0"
+        data-chapter-row
+      >
         {/* Title input */}
         <Input
           aria-label="Chapter title"
@@ -658,7 +665,7 @@ const ChapterRow = (props: ChapterRowProps) => {
                 aria-invalid={hasTimestampError ? true : undefined}
                 aria-label="Start time"
                 className={cn(
-                  "w-28 text-center font-mono",
+                  "w-36 text-center font-mono",
                   hasTimestampError &&
                     "border-red-500 focus-visible:ring-red-500",
                 )}
@@ -713,6 +720,7 @@ const ChapterRow = (props: ChapterRowProps) => {
     <>
       <div
         className="flex items-center gap-3 py-2 border-b border-border last:border-b-0"
+        data-chapter-row
         style={{ paddingLeft: `${indentPx}px` }}
       >
         {/* Reflowable: Expand/collapse toggle for chapters with children */}

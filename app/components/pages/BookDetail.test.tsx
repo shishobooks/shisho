@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -113,7 +113,6 @@ vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/queries/review", () => ({
-  useSetBookReview: idle,
   useReviewCriteria: () => ({
     data: { book_fields: [], audio_fields: [] },
   }),
@@ -134,8 +133,13 @@ vi.mock("@/components/library/AddToListPopover", () => ({
     <div data-testid="add-to-list">{trigger}</div>
   ),
 }));
-vi.mock("@/components/library/CoverGalleryTabs", () => ({
-  default: () => <div>covers</div>,
+vi.mock("@/hooks/useBookRelatedTabs", () => ({
+  useBookRelatedTabs: () => ({
+    tabs: [],
+    series: [],
+    lists: [],
+    linkPeople: true,
+  }),
 }));
 vi.mock("@/components/library/BookEditDialog", () => ({
   BookEditDialog: () => null,
@@ -168,36 +172,56 @@ const renderPage = () =>
   );
 
 describe("BookDetail write controls", () => {
-  it("shows the book menu, review toggle, file actions, and Select for Books Write", () => {
+  const fileMenu = async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getAllByLabelText("File actions")[0]);
+    const items = within(screen.getByRole("menu"))
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent);
+    await user.keyboard("{Escape}");
+    return items;
+  };
+
+  it("shows Edit, Identify, the book menu, and the file edit actions for Books Write", async () => {
     renderPage();
+
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Identify" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Book actions")).toBeInTheDocument();
-    expect(screen.getByRole("switch")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("File actions").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Select" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Edit file" }).length,
+    ).toBeGreaterThan(0);
+    expect(await fileMenu()).toEqual([
+      "File details",
+      "Rescan file",
+      "Move to another book",
+      "Delete file",
+    ]);
   });
 
-  it("hides every Books Write control for a read-only user but keeps Add to list, reading, and downloads", () => {
+  it("hides every Books Write control for a read-only user but keeps Add to list, reading, and downloads", async () => {
     setAuth({ permissions: ["books:read"] });
     renderPage();
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Test Book" }),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
-    expect(screen.getByTestId("add-to-list")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /add to list/i }),
-    ).toBeInTheDocument();
-
-    // Review state is visible but not editable.
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    expect(screen.getByText("Reviewed")).toBeInTheDocument();
-
-    // Per-file mutation menus and the move/select flow are gone.
-    expect(screen.queryByLabelText("File actions")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Select" }),
+      screen.queryByRole("button", { name: "Edit" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Identify" }),
+    ).not.toBeInTheDocument();
+    // The book menu keeps what needs no write permission.
+    expect(screen.getByTestId("add-to-list")).toBeInTheDocument();
+
+    // A file has no Edit button, and its menu keeps only its details.
+    expect(
+      screen.queryByRole("button", { name: "Edit file" }),
+    ).not.toBeInTheDocument();
+    expect(await fileMenu()).toEqual(["File details"]);
 
     // Read-only actions remain.
     const readLinks = screen
@@ -205,7 +229,7 @@ describe("BookDetail write controls", () => {
       .filter((link) => link.getAttribute("href")?.endsWith("/read"));
     expect(readLinks.length).toBeGreaterThan(0);
     expect(
-      screen.getAllByRole("button", { name: "Download" }).length,
+      screen.getAllByRole("button", { name: /^Download [A-Z]/ }).length,
     ).toBeGreaterThan(0);
   });
 });

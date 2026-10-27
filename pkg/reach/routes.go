@@ -10,7 +10,7 @@ import (
 )
 
 // RegisterRoutes registers the routes that show what the current user's
-// Devices get: a book's "On your Devices" panel, which needs books:read
+// Devices get: a book page's Devices tab, which needs books:read
 // like the book page, and a Device's delivery preview, which like the rest
 // of a user's own Devices needs no permission. Both are GETs, so Demo Mode
 // lets them through.

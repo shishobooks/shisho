@@ -18,7 +18,7 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { cn } from "@/libraries/utils";
-import type { PageSourceFile } from "@/utils/pageUrl";
+import { pageThumbnailSize, type PageSourceFile } from "@/utils/pageUrl";
 
 export interface PagePickerProps {
   file: PageSourceFile;
@@ -334,7 +334,7 @@ const PagePicker = ({
                         alt={`Page ${(page + 1).toLocaleString()}`}
                         className="w-full h-full object-contain"
                         loading="lazy"
-                        src={filePageUrl(file, page)}
+                        src={filePageUrl(file, page, pageThumbnailSize(96))}
                       />
                     ) : (
                       <div className="w-full h-full bg-muted animate-pulse" />

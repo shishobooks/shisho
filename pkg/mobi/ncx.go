@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/bits"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -559,4 +560,124 @@ func idxtBlock(offsets []int) []byte {
 
 func padTo4(b *bytes.Buffer) {
 	b.Write(make([]byte, (4-b.Len()%4)%4))
+}
+
+// Index records written for a new book: the INDX header length, the type
+// fields Calibre's indexes carry, and how much of a data or CNCX record the
+// writer fills before starting another.
+const (
+	indxNewHeaderLength = 192
+	indxRecordTarget    = 0x8000
+)
+
+// writeIndex returns a new index's records: the primary INDX record with
+// the TAGX table and each data record's last identifier and entry count,
+// then the data records, then the CNCX records. Each entry is written with
+// encodeEntry, so every tag's values are counted in a single control byte.
+func writeIndex(tags []tagxEntry, entries []*ncxEntry, cncx [][]byte) ([][]byte, error) {
+	be := binary.BigEndian
+	idx := &ncxIndex{controlBytes: 1, tags: append(slices.Clone(tags), tagxEntry{end: true})}
+
+	type dataRecord struct {
+		body      bytes.Buffer
+		offsets   []int
+		lastIdent []byte
+	}
+	var data []*dataRecord
+	for _, e := range entries {
+		raw, err := idx.encodeEntry(e)
+		if err != nil {
+			return nil, err
+		}
+		if len(data) == 0 || indxNewHeaderLength+data[len(data)-1].body.Len()+len(raw)+2*len(data[len(data)-1].offsets) > indxRecordTarget {
+			data = append(data, &dataRecord{})
+		}
+		d := data[len(data)-1]
+		d.offsets = append(d.offsets, indxNewHeaderLength+d.body.Len())
+		d.body.Write(raw)
+		d.lastIdent = e.ident
+	}
+
+	records := [][]byte{nil} // the primary, built last
+	for _, d := range data {
+		padTo4(&d.body)
+		rec := newINDXHeader()
+		be.PutUint32(rec[12:], 1)
+		be.PutUint32(rec[indxIDXTOffset:], uint32(indxNewHeaderLength+d.body.Len())) //nolint:gosec // a record is under 64 KiB
+		be.PutUint32(rec[indxCount:], uint32(len(d.offsets)))                        //nolint:gosec // as above
+		rec = append(rec, d.body.Bytes()...)
+		rec = append(rec, idxtBlock(d.offsets)...)
+		if len(rec) > maxIndexRecord {
+			return nil, errors.New("an index entry is too large")
+		}
+		records = append(records, rec)
+	}
+	for _, c := range cncx {
+		b := bytes.NewBuffer(slices.Clone(c))
+		padTo4(b)
+		records = append(records, b.Bytes())
+	}
+
+	var tagx bytes.Buffer
+	tagx.WriteString("TAGX")
+	_ = binary.Write(&tagx, be, uint32(12+4*len(idx.tags))) //nolint:gosec // a few tags
+	_ = binary.Write(&tagx, be, uint32(idx.controlBytes))   //nolint:gosec // one control byte
+	for _, t := range idx.tags {
+		end := byte(0)
+		if t.end {
+			end = 1
+		}
+		tagx.Write([]byte{t.tag, t.valuesPerEntry, t.mask, end})
+	}
+	var geometry bytes.Buffer
+	geometry.Write(tagx.Bytes())
+	offsets := make([]int, 0, len(data))
+	for _, d := range data {
+		offsets = append(offsets, indxNewHeaderLength+geometry.Len())
+		geometry.WriteByte(byte(len(d.lastIdent)))
+		geometry.Write(d.lastIdent)
+		_ = binary.Write(&geometry, be, uint16(len(d.offsets))) //nolint:gosec // as above
+	}
+	padTo4(&geometry)
+
+	primary := newINDXHeader()
+	be.PutUint32(primary[16:], 2)
+	be.PutUint32(primary[indxIDXTOffset:], uint32(indxNewHeaderLength+geometry.Len())) //nolint:gosec // as above
+	be.PutUint32(primary[indxCount:], uint32(len(data)))                               //nolint:gosec // as above
+	be.PutUint32(primary[28:], encodingUTF8)
+	be.PutUint32(primary[indxTotal:], uint32(len(entries)))  //nolint:gosec // as above
+	be.PutUint32(primary[indxCNCXCount:], uint32(len(cncx))) //nolint:gosec // as above
+	be.PutUint32(primary[indxTAGXOffset:], indxNewHeaderLength)
+	primary = append(primary, geometry.Bytes()...)
+	primary = append(primary, idxtBlock(offsets)...)
+	records[0] = primary
+	return records, nil
+}
+
+// newINDXHeader returns an empty INDX record header.
+func newINDXHeader() []byte {
+	h := make([]byte, indxNewHeaderLength)
+	copy(h, "INDX")
+	binary.BigEndian.PutUint32(h[indxHeaderLength:], indxNewHeaderLength)
+	binary.BigEndian.PutUint32(h[32:], nullIndex)
+	return h
+}
+
+// cncxWriter collects the labels of a new index into CNCX records.
+type cncxWriter struct {
+	records [][]byte
+}
+
+// add stores a label and returns its CNCX offset: its record number times
+// 0x10000 plus its offset in that record.
+func (c *cncxWriter) add(label []byte) uint32 {
+	entry := appendForwardInt(nil, uint32(len(label))) //nolint:gosec // labels are short
+	entry = append(entry, label...)
+	if len(c.records) == 0 || len(c.records[len(c.records)-1])+len(entry) > indxRecordTarget {
+		c.records = append(c.records, nil)
+	}
+	last := len(c.records) - 1
+	offset := uint32(last)*maxIndexRecord + uint32(len(c.records[last])) //nolint:gosec // record counts and offsets are small
+	c.records[last] = append(c.records[last], entry...)
+	return offset
 }

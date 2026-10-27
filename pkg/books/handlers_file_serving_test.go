@@ -1,10 +1,13 @@
 package books
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,7 +15,10 @@ import (
 
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
+	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,6 +104,87 @@ func TestGetPage_SetsPrivateCacheControl(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	assert.Equal(t, "private, max-age=31536000, immutable", rr.Header().Get("Cache-Control"))
 	assert.NotEmpty(t, rr.Body.Bytes())
+}
+
+// pageThumbnailKey is what the frontend sends as r for a page thumbnail:
+// the page's own key and the thumbnail renderer's.
+func pageThumbnailKey(pageKey string) string {
+	return pageKey + "." + covers.ThumbnailRenderKey
+}
+
+// A page thumbnail comes from the shared thumbnail cache, sized like a
+// cover's, instead of the full page.
+func TestGetPage_ServesAThumbnailForASize(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	library, book := setupTestLibraryAndBook(t, db)
+	dir := t.TempDir()
+	cbzPath := filepath.Join(dir, "book.cbz")
+	createTestCBZWithPages(t, cbzPath, 3)
+	cbz := setupTestFile(t, db, book, models.FileTypeCBZ, cbzPath)
+	pdfFile := setupTestFile(t, db, book, models.FileTypePDF, testgen.GeneratePDF(t, dir, "book.pdf", testgen.PDFOptions{PageCount: 2}))
+	user := setupTestUser(t, db, library.ID, true)
+	e := setupTestServer(t, db)
+	pdfKey := pdfpages.RenderKey(config.NewForTest().PDFRenderDPI, config.NewForTest().PDFRenderQuality)
+
+	for _, tt := range []struct {
+		name string
+		file *models.File
+		key  string
+	}{
+		{"cbz", cbz, cbzpages.CBZPageKey},
+		{"pdf", pdfFile, pdfKey},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			target := "/books/files/" + strconv.Itoa(tt.file.ID) + "/page/1?size=128&r=" + url.QueryEscape(pageThumbnailKey(tt.key))
+			rr := executeRequestWithUser(t, e, httptest.NewRequest(http.MethodGet, target, nil), user)
+
+			require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+			assert.Equal(t, "image/jpeg", rr.Header().Get("Content-Type"))
+			assert.Equal(t, "private, max-age=31536000, immutable", rr.Header().Get("Cache-Control"))
+			cfg, err := jpeg.DecodeConfig(bytes.NewReader(rr.Body.Bytes()))
+			require.NoError(t, err)
+			assert.LessOrEqual(t, max(cfg.Width, cfg.Height), 128)
+		})
+	}
+}
+
+// A thumbnail asked for under another key (older settings, or the full
+// page's key) is served but not cached, as a full page is.
+func TestGetPage_ThumbnailUnderAStaleKeyIsNotCached(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	library, book := setupTestLibraryAndBook(t, db)
+	cbzPath := filepath.Join(t.TempDir(), "book.cbz")
+	createTestCBZWithPages(t, cbzPath, 3)
+	file := setupTestFile(t, db, book, models.FileTypeCBZ, cbzPath)
+	user := setupTestUser(t, db, library.ID, true)
+	e := setupTestServer(t, db)
+
+	url := "/books/files/" + strconv.Itoa(file.ID) + "/page/0?size=128&r=" + cbzpages.CBZPageKey
+	rr := executeRequestWithUser(t, e, httptest.NewRequest(http.MethodGet, url, nil), user)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, "private, no-store", rr.Header().Get("Cache-Control"))
+}
+
+func TestGetPage_RejectsAnUnknownThumbnailSize(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	library, book := setupTestLibraryAndBook(t, db)
+	cbzPath := filepath.Join(t.TempDir(), "book.cbz")
+	createTestCBZWithPages(t, cbzPath, 3)
+	file := setupTestFile(t, db, book, models.FileTypeCBZ, cbzPath)
+	user := setupTestUser(t, db, library.ID, true)
+	e := setupTestServer(t, db)
+
+	url := "/books/files/" + strconv.Itoa(file.ID) + "/page/0?size=300"
+	rr := executeRequestWithUser(t, e, httptest.NewRequest(http.MethodGet, url, nil), user)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code, rr.Body.String())
 }
 
 // A file cover missing from disk must return the errcodes "Cover not found."

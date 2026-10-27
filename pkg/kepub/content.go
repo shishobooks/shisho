@@ -31,12 +31,14 @@ func TransformContentWithOptions(r io.Reader, w io.Writer, counter *SpanCounter,
 
 var (
 	// noSpanElements are the elements whose content gets no spans: code,
-	// scripts, and markup of other vocabularies, along with the elements
-	// the HTML tokenizer reads as raw text, where a span would be text.
+	// scripts, and markup of other vocabularies, the elements the HTML
+	// tokenizer reads as raw text, where a span would be text, and an
+	// option, which HTML lets hold only text. A time element is one too
+	// when it has no datetime attribute (noSpans).
 	noSpanElements = map[string]bool{
 		"script": true, "style": true, "pre": true, "code": true, "svg": true, "math": true,
 		"iframe": true, "noembed": true, "noframes": true, "noscript": true, "plaintext": true,
-		"textarea": true, "title": true, "xmp": true,
+		"textarea": true, "title": true, "xmp": true, "option": true,
 	}
 	// paragraphElements are the elements that start a new paragraph of
 	// span ids.
@@ -93,6 +95,7 @@ func transformDocument(data []byte, counter *SpanCounter, scriptPath string) ([]
 		// or a stand-in where there is no body start tag.
 		body     bool
 		koboSpan bool
+		noSpans  bool
 	}
 	var stack []open
 	openCount := map[string]int{}
@@ -118,7 +121,7 @@ func transformDocument(data []byte, counter *SpanCounter, scriptPath string) ([]
 					out.WriteString(bookWrappersEnd)
 				}
 			}
-			if noSpanElements[o.name] {
+			if o.noSpans {
 				noSpans--
 			}
 			if o.koboSpan {
@@ -195,14 +198,14 @@ func transformDocument(data []byte, counter *SpanCounter, scriptPath string) ([]
 			if tt == html.SelfClosingTagToken || voidElements[name] {
 				return
 			}
-			o := open{name: name, body: startsBody, koboSpan: isKoboSpan(name, attrs)}
+			o := open{name: name, body: startsBody, koboSpan: isKoboSpan(name, attrs), noSpans: spanlessElement(name, attrs)}
 			if o.body {
 				inBody++
 				if wrapBody {
 					out.WriteString(bookWrappersStart)
 				}
 			}
-			if noSpanElements[name] {
+			if o.noSpans {
 				noSpans++
 			}
 			if o.koboSpan {
@@ -240,6 +243,17 @@ func transformDocument(data []byte, counter *SpanCounter, scriptPath string) ([]
 	// Whatever is still open ends with the document.
 	closeFrom(0)
 	return out.Bytes(), nil
+}
+
+// spanlessElement reports whether an element's content gets no spans. A
+// time element with no datetime attribute must hold only its date as text,
+// so a span would make it invalid; one with the attribute may hold markup.
+func spanlessElement(name string, attrs map[string]string) bool {
+	if name == "time" {
+		_, ok := attrs["datetime"]
+		return !ok
+	}
+	return noSpanElements[name]
 }
 
 // koboMarkup is the Kobo markup a content document already has.

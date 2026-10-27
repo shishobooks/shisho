@@ -51,6 +51,9 @@ var ConversionSteps = conversionGraph{
 	{From: FileTypeCBZ, To: FileTypeKePub},
 	{From: FileTypeCBZ, To: FileTypeEPUB},
 	{From: FileTypeKePub, To: FileTypeEPUB},
+	{From: FileTypeAZW3, To: FileTypeEPUB},
+	{From: FileTypeMOBI, To: FileTypeEPUB},
+	{From: FileTypeEPUB, To: FileTypeAZW3},
 }
 
 type conversionGraph []ConversionStep

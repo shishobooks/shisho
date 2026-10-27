@@ -23,10 +23,14 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/libraries/utils";
 
-/** `replace` is set when the footer corrects a page past the end, so Back skips it. */
+/**
+ * `replace` is set when the footer corrects a page past the end, so Back
+ * skips it. `preventScrollReset` is for a section's pager, which keeps the
+ * page where it is (`useSectionPaging`).
+ */
 export type PageChangeHandler = (
   page: number,
-  options?: { replace?: boolean },
+  options?: { replace?: boolean; preventScrollReset?: boolean },
 ) => void;
 
 interface PaginationFooterProps {

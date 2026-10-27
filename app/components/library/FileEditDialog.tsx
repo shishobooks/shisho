@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DialogBody,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -52,7 +53,6 @@ import {
   FileRoleMain,
   FileRoleSupplement,
   FileTypeM4B,
-  ReviewOverrideReviewed,
   type Book,
   type File,
   type FileRole,
@@ -61,6 +61,8 @@ import {
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { isEbookFileType, isMainEligibleFileType } from "@/utils/fileTypes";
 import { fileTypeLabel, formatCount } from "@/utils/format";
+import { pageThumbnailSize } from "@/utils/pageUrl";
+import { reviewDraftChanged } from "@/utils/review";
 
 interface FileEditDialogProps {
   file: File;
@@ -216,11 +218,11 @@ export function FileEditDialog({
     };
   }, []);
 
-  // Draft review override — toggling the panel updates this; the actual
-  // setFileReview mutation only fires on Save.
-  // null means "auto" (no explicit override on the file).
-  const [draftReviewOverride, setDraftReviewOverride] =
-    useState<ReviewOverride | null>(null);
+  // Draft review override: undefined until the panel is touched, null after
+  // Use automatic. The setFileReview mutation only fires on Save.
+  const [draftReviewOverride, setDraftReviewOverride] = useState<
+    ReviewOverride | null | undefined
+  >(undefined);
 
   // Store initial values for change detection
   const [initialValues, setInitialValues] = useState<{
@@ -235,7 +237,7 @@ export function FileEditDialog({
     language: string;
     abridged: string;
     isPreferredCover: boolean;
-    /** null means "auto" — no explicit override on the file. */
+    /** The file's saved override; null means "auto". */
     reviewOverride: ReviewOverride | null;
   } | null>(null);
 
@@ -295,7 +297,7 @@ export function FileEditDialog({
     setPendingCoverPage(null);
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
-    setDraftReviewOverride(initialReviewOverride);
+    setDraftReviewOverride(undefined);
     setIsPreferredCover(initialIsPreferredCover);
 
     // Store initial values for comparison
@@ -332,7 +334,8 @@ export function FileEditDialog({
       (pendingCoverPage !== null &&
         pendingCoverPage !== initialValues.coverPage) ||
       isPreferredCover !== initialValues.isPreferredCover ||
-      draftReviewOverride !== initialValues.reviewOverride
+      (fileRole !== FileRoleSupplement &&
+        reviewDraftChanged(draftReviewOverride, [initialValues.reviewOverride]))
     );
   }, [
     narrators,
@@ -504,17 +507,18 @@ export function FileEditDialog({
         setPendingCoverPage(null);
       }
 
-      // Apply pending review override change. Only fire if the user toggled
-      // to an explicit value that differs from the file's saved override.
-      // draftReviewOverride === null means "auto". It is never set by the
-      // user gesture, only by initial load when no override exists.
+      // Apply a pending review change: an override, or null to go back to
+      // the review criteria. A supplement has no review state, and the server
+      // rejects one, so the draft is dropped when the role changes to it.
       if (
-        draftReviewOverride !== null &&
-        draftReviewOverride !== (initialValues?.reviewOverride ?? null)
+        fileRole !== FileRoleSupplement &&
+        reviewDraftChanged(draftReviewOverride, [
+          initialValues?.reviewOverride ?? null,
+        ])
       ) {
         await setFileReviewMutation.mutateAsync({
           fileId: file.id,
-          override: draftReviewOverride,
+          override: draftReviewOverride ?? null,
         });
       }
     } catch (error) {
@@ -550,7 +554,10 @@ export function FileEditDialog({
       language: canonicalLanguage,
       abridged: canonicalAbridged,
       isPreferredCover,
-      reviewOverride: draftReviewOverride,
+      reviewOverride:
+        draftReviewOverride === undefined || fileRole === FileRoleSupplement
+          ? (initialValues?.reviewOverride ?? null)
+          : draftReviewOverride,
     });
     requestClose();
   };
@@ -704,7 +711,11 @@ export function FileEditDialog({
                             <img
                               alt="Pending cover page"
                               className="w-full h-full object-cover"
-                              src={filePageUrl(file, pendingCoverPage)}
+                              src={filePageUrl(
+                                file,
+                                pendingCoverPage,
+                                pageThumbnailSize(300),
+                              )}
                             />
                           ) : file.cover_mime_type ||
                             file.cover_image_filename ? (
@@ -980,20 +991,14 @@ export function FileEditDialog({
             </>
           )}
 
-          {/* Review Panel — controlled (deferred to Save button).
-              When draftReviewOverride is null (auto), pass undefined so the
-              panel falls back to the file-derived `reviewed` state. */}
+          {/* Review Panel: controlled, deferred to the Save button. */}
           {(book ?? file.book) && fileRole !== FileRoleSupplement && (
             <ReviewPanel
               book={(book ?? file.book)!}
+              draft={draftReviewOverride}
               files={[file]}
               isPending={setFileReviewMutation.isPending}
               onChange={(override) => setDraftReviewOverride(override)}
-              toggleValue={
-                draftReviewOverride === null
-                  ? undefined
-                  : draftReviewOverride === ReviewOverrideReviewed
-              }
             />
           )}
         </DialogBody>
@@ -1008,13 +1013,11 @@ export function FileEditDialog({
         )}
 
         <DialogFooter>
-          <Button
-            onClick={() => onOpenChange(false)}
-            size="sm"
-            variant="outline"
-          >
-            Cancel
-          </Button>
+          <DialogClose asChild>
+            <Button size="sm" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button disabled={isLoading} onClick={handleSubmit} size="sm">
             {isLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Save Changes

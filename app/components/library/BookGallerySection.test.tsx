@@ -5,6 +5,7 @@ import {
   createMemoryRouter,
   MemoryRouter,
   RouterProvider,
+  ScrollRestoration,
   useLocation,
 } from "react-router-dom";
 import { toast } from "sonner";
@@ -440,5 +441,46 @@ describe("BookGallerySection", () => {
 
     expect(container.querySelector(".aspect-square")).not.toBeNull();
     expect(container.querySelector(".aspect-\\[2\\/3\\]")).toBeNull();
+  });
+
+  // A section sits below the page's header, so its pager keeps the page
+  // where it is rather than jumping to the top as the app does on other
+  // navigations (ScrollRestoration in the root).
+  it("pages without scrolling the page to the top", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <>
+              <ScrollRestoration />
+              <BookGallerySection
+                libraryId="1"
+                query={makeQueryResult([makeBook(1)], 100)}
+                title="Books"
+              />
+            </>
+          ),
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    scrollTo.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Go to next page" }));
+
+    expect(router.state.location.search).toMatch(/start=/);
+    expect(scrollTo).not.toHaveBeenCalledWith(0, 0);
+    vi.unstubAllGlobals();
+    // @ts-expect-error - global defined by Vite
+    globalThis.__APP_VERSION__ = "test";
   });
 });

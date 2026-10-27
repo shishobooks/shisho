@@ -26,21 +26,30 @@ type deviceTypeRules struct {
 // live in code and change with releases, so a Device following one picks up
 // the change without a data migration.
 var typeRules = map[string]deviceTypeRules{
+	// The Kindle File Types come last: they reach KePub through EPUB, so a
+	// book with a File any earlier rule takes is converted less.
 	DeviceTypeKobo: {
 		allowed: []string{models.FileTypeKePub, models.FileTypeEPUB},
 		preset: []delivery.Rule{
 			{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeKePub},
 			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeKePub},
 			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeAZW3, DeliveredFileType: models.FileTypeKePub},
+			{SourceFileType: models.FileTypeMOBI, DeliveredFileType: models.FileTypeKePub},
 		},
 	},
 	// A Kindle's browser downloads only its own formats. AZW3 comes first
-	// because it renders as KF8; MOBI covers books without one.
+	// because it renders as KF8; MOBI covers books without one. A book with
+	// neither reaches the Kindle as AZW3 from its EPUB, KePub, or CBZ, which
+	// come last so a book's own Kindle file is sent unconverted.
 	DeviceTypeKindle: {
 		allowed: []string{models.FileTypeAZW3, models.FileTypeMOBI},
 		preset: []delivery.Rule{
 			{SourceFileType: models.FileTypeAZW3, DeliveredFileType: models.FileTypeAZW3},
 			{SourceFileType: models.FileTypeMOBI, DeliveredFileType: models.FileTypeMOBI},
+			{SourceFileType: models.FileTypeEPUB, DeliveredFileType: models.FileTypeAZW3},
+			{SourceFileType: models.FileTypeKePub, DeliveredFileType: models.FileTypeAZW3},
+			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeAZW3},
 		},
 	},
 	DeviceTypeOPDS:    {},

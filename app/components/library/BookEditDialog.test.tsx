@@ -2,7 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { FileRoleMain, type Book } from "@/types";
+import { ShishoAPIError } from "@/libraries/api";
+import { FileRoleMain, ReviewOverrideReviewed, type Book } from "@/types";
 import { forTitle } from "@/utils/sortname";
 
 import { BookEditDialog } from "./BookEditDialog";
@@ -282,5 +283,148 @@ describe("BookEditDialog series range editing", () => {
     expect(screen.queryByText("Unit")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("End"), "3");
     expect(screen.getByText("1-3")).toBeInTheDocument();
+  });
+});
+
+describe("BookEditDialog review override", () => {
+  function bookWithOverrides(
+    ...overrides: Array<typeof ReviewOverrideReviewed | undefined>
+  ): Book {
+    const book = makeBook("epub");
+    return {
+      ...book,
+      files: overrides.map((override, i) => ({
+        id: 10 + i,
+        file_role: FileRoleMain,
+        file_type: "epub",
+        reviewed: true,
+        review_override: override,
+        review_overridden_at: override ? "2024-10-03T12:00:00Z" : undefined,
+      })),
+    } as unknown as Book;
+  }
+
+  it("sends override null after Use automatic and save", async () => {
+    mocks.setBookReview.mockClear();
+    const onOpenChange = vi.fn();
+    const u = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(bookWithOverrides(ReviewOverrideReviewed), onOpenChange);
+
+    await u.click(screen.getByRole("button", { name: "Use automatic" }));
+    await u.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(mocks.setBookReview).toHaveBeenCalledWith({
+      bookId: 1,
+      override: null,
+    });
+    expect(screen.queryByText("Unsaved Changes")).not.toBeInTheDocument();
+  });
+
+  it("keeps the dialog and the draft when clearing the override fails", async () => {
+    mocks.setBookReview.mockRejectedValueOnce(
+      new ShishoAPIError("Could not save review", "internal", 500),
+    );
+    const onOpenChange = vi.fn();
+    const u = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(bookWithOverrides(ReviewOverrideReviewed), onOpenChange);
+
+    await u.click(screen.getByRole("button", { name: "Use automatic" }));
+    await u.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(
+      await screen.findByText("Could not save review"),
+    ).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(
+      screen.getByText(/Goes back to the review criteria when you save/),
+    ).toBeInTheDocument();
+  });
+
+  it("clears every main file's override when only some are overridden", async () => {
+    mocks.setBookReview.mockClear();
+    const u = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(bookWithOverrides(ReviewOverrideReviewed, undefined));
+
+    await u.click(screen.getByRole("button", { name: "Use automatic" }));
+    await u.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mocks.setBookReview).toHaveBeenCalledWith({
+        bookId: 1,
+        override: null,
+      });
+    });
+  });
+
+  it("sends no review request after ticking and then Use automatic on an automatic book", async () => {
+    mocks.setBookReview.mockClear();
+    const onOpenChange = vi.fn();
+    const u = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    const book = bookWithOverrides(undefined);
+    renderDialog(
+      {
+        ...book,
+        files: book.files!.map((f) => ({ ...f, reviewed: false })),
+      },
+      onOpenChange,
+    );
+
+    await u.click(screen.getByRole("checkbox", { name: "Reviewed" }));
+    await u.click(screen.getByRole("button", { name: "Use automatic" }));
+    await u.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(mocks.setBookReview).not.toHaveBeenCalled();
+  });
+
+  it("sends no review request when nothing changed", async () => {
+    mocks.setBookReview.mockClear();
+    mocks.updateBook.mockClear();
+    const onOpenChange = vi.fn();
+    const u = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(bookWithOverrides(ReviewOverrideReviewed), onOpenChange);
+
+    await u.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(mocks.setBookReview).not.toHaveBeenCalled();
+    expect(mocks.updateBook).not.toHaveBeenCalled();
+  });
+
+  it("protects Use automatic as an unsaved change", async () => {
+    const onOpenChange = vi.fn();
+    const u = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(bookWithOverrides(ReviewOverrideReviewed), onOpenChange);
+
+    await u.click(screen.getByRole("button", { name: "Use automatic" }));
+    await u.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByText("Unsaved Changes")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

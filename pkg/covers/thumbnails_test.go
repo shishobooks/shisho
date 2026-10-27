@@ -464,3 +464,138 @@ func TestThumbnailCache_RegeneratesThumbnailDeletedFromDisk(t *testing.T) {
 	require.Equal(t, 1, count)
 	require.FileExists(t, filepath.Join(dir, "cover-thumbnails", first.Key+".jpg"))
 }
+
+// pageImage writes a page image, as a CBZ or PDF page cache would.
+func pageImage(t *testing.T, width, height int) string {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	path := filepath.Join(t.TempDir(), "page.png")
+	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0644))
+	return path
+}
+
+func TestThumbnailCache_PageThumbnailFitsTheSize(t *testing.T) {
+	t.Parallel()
+	cache := covers.NewThumbnailCache(t.TempDir(), 1<<20)
+
+	thumb, err := cache.GetForPage(context.Background(), 1, 0, pageSource(t), pageImage(t, 1200, 600), 256)
+	require.NoError(t, err)
+
+	// A landscape page keeps its shape: no crop to a cover frame.
+	bounds := decodeThumbnail(t, thumb.Data).Bounds()
+	require.Equal(t, 256, bounds.Dx())
+	require.Equal(t, 128, bounds.Dy())
+}
+
+func TestThumbnailCache_PagesAndTheCoverOfAFileCoexist(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cache := covers.NewThumbnailCache(dir, 1<<20)
+	file := coverFixture(t, 1, color.NRGBA{A: 255})
+	ctx := context.Background()
+
+	_, err := cache.Get(ctx, file, 256)
+	require.NoError(t, err)
+	_, err = cache.GetForPage(ctx, file.ID, 0, pageSource(t), pageImage(t, 600, 900), 256)
+	require.NoError(t, err)
+	_, err = cache.GetForPage(ctx, file.ID, 1, pageSource(t), pageImage(t, 600, 900), 256)
+	require.NoError(t, err)
+
+	_, count, err := cache.SizeBytes()
+	require.NoError(t, err)
+	require.Equal(t, 3, count, "a page's thumbnail must not replace the cover's or another page's")
+
+	// A restart finds them all again, so they stay under the cache's budget.
+	_, count, err = covers.NewThumbnailCache(dir, 1<<20).SizeBytes()
+	require.NoError(t, err)
+	require.Equal(t, 3, count)
+}
+
+// pageSource is the book file a page comes from. It versions the page's
+// thumbnails, since the page cache's copy is touched as it is used.
+func pageSource(t *testing.T) covers.PageSource {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "book.cbz")
+	require.NoError(t, os.WriteFile(path, []byte("archive"), 0644))
+	return covers.PageSource{Path: path, Key: "1"}
+}
+
+func TestThumbnailCache_KeepsAPageThumbnailWhileThePageCacheTouchesItsCopy(t *testing.T) {
+	t.Parallel()
+	cache := covers.NewThumbnailCache(t.TempDir(), 1<<20)
+	source := pageSource(t)
+	page := pageImage(t, 600, 900)
+	ctx := context.Background()
+	first, err := cache.GetForPage(ctx, 1, 0, source, page, 256)
+	require.NoError(t, err)
+
+	// The page cache's LRU bumps its copy's mtime on a hit.
+	info, err := os.Stat(page)
+	require.NoError(t, err)
+	require.NoError(t, os.Chtimes(page, info.ModTime(), info.ModTime().Add(time.Minute)))
+	second, err := cache.GetForPage(ctx, 1, 0, source, page, 256)
+	require.NoError(t, err)
+
+	require.Equal(t, first.Key, second.Key)
+}
+
+func TestThumbnailCache_KeepsEachSizeOfAPage(t *testing.T) {
+	t.Parallel()
+	cache := covers.NewThumbnailCache(t.TempDir(), 1<<20)
+	source := pageSource(t)
+	page := pageImage(t, 600, 900)
+	ctx := context.Background()
+
+	_, err := cache.GetForPage(ctx, 1, 0, source, page, 128)
+	require.NoError(t, err)
+	_, err = cache.GetForPage(ctx, 1, 0, source, page, 256)
+	require.NoError(t, err)
+
+	_, count, err := cache.SizeBytes()
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+}
+
+func TestThumbnailCache_ReplacesPageThumbnailsWhenTheBookFileChanges(t *testing.T) {
+	t.Parallel()
+	cache := covers.NewThumbnailCache(t.TempDir(), 1<<20)
+	source := pageSource(t)
+	page := pageImage(t, 600, 900)
+	ctx := context.Background()
+	first, err := cache.GetForPage(ctx, 1, 0, source, page, 256)
+	require.NoError(t, err)
+
+	info, err := os.Stat(source.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.Chtimes(source.Path, info.ModTime(), info.ModTime().Add(time.Nanosecond)))
+	second, err := cache.GetForPage(ctx, 1, 0, source, page, 256)
+	require.NoError(t, err)
+
+	require.NotEqual(t, first.Key, second.Key)
+	_, count, err := cache.SizeBytes()
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+// Owners are told apart by the separator after them: file 1's cover, file
+// 12's cover, and file 1's pages 2 and 23 each keep their own thumbnail.
+func TestThumbnailCache_OwnersDoNotCollide(t *testing.T) {
+	t.Parallel()
+	cache := covers.NewThumbnailCache(t.TempDir(), 1<<20)
+	ctx := context.Background()
+	for _, id := range []int{1, 12} {
+		_, err := cache.Get(ctx, coverFixture(t, id, color.NRGBA{A: 255}), 256)
+		require.NoError(t, err)
+	}
+	source := pageSource(t)
+	for _, page := range []int{2, 23} {
+		_, err := cache.GetForPage(ctx, 1, page, source, pageImage(t, 600, 900), 256)
+		require.NoError(t, err)
+	}
+
+	_, count, err := cache.SizeBytes()
+	require.NoError(t, err)
+	require.Equal(t, 4, count)
+}

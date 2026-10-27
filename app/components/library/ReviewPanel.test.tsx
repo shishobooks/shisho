@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -91,6 +91,19 @@ const baseFile: File = {
 };
 
 describe("ReviewPanel", () => {
+  it("groups the checkbox under its Review label", () => {
+    const files: File[] = [{ ...baseFile, reviewed: true }];
+
+    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
+      wrapper,
+    });
+
+    const group = screen.getByRole("group", { name: "Review" });
+    expect(
+      within(group).getByRole("checkbox", { name: "Reviewed" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders Reviewed toggle ON when all main files are reviewed", () => {
     const files: File[] = [{ ...baseFile, reviewed: true }];
 
@@ -98,7 +111,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     expect(toggle).toBeChecked();
   });
 
@@ -118,11 +131,11 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     expect(toggle).not.toBeChecked();
   });
 
-  it("names each switch when two panels are on the page", () => {
+  it("names each checkbox when two panels are on the page", () => {
     const files: File[] = [{ ...baseFile, reviewed: true }];
 
     render(
@@ -133,12 +146,12 @@ describe("ReviewPanel", () => {
       { wrapper },
     );
 
-    const switches = screen.getAllByRole("switch", { name: "Reviewed" });
-    expect(switches).toHaveLength(2);
-    expect(switches[0].id).not.toBe(switches[1].id);
+    const boxes = screen.getAllByRole("checkbox", { name: "Reviewed" });
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0].id).not.toBe(boxes[1].id);
   });
 
-  it("renders status icon in green when book is reviewed", () => {
+  it("says the state is set automatically when no overrides are set", () => {
     const files: File[] = [
       { ...baseFile, reviewed: true, review_override: undefined },
     ];
@@ -147,44 +160,13 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen
-      .getByRole("button", { name: "Reviewed status" })
-      .querySelector("svg");
-    expect(icon?.getAttribute("class")).toMatch(/text-green/);
+    // Said under the checkbox, not in a tooltip, so it reads on a phone too.
+    expect(
+      screen.getByRole("checkbox", { name: "Reviewed" }),
+    ).toHaveAccessibleDescription(/Set automatically from the review criteria/);
   });
 
-  it("renders status icon in muted color when book needs review", () => {
-    const files: File[] = [
-      { ...baseFile, reviewed: false, review_override: undefined },
-    ];
-
-    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
-      wrapper,
-    });
-
-    const icon = screen
-      .getByRole("button", { name: "Needs review status" })
-      .querySelector("svg");
-    expect(icon?.getAttribute("class")).toMatch(/text-muted-foreground/);
-  });
-
-  it("status icon has tooltip describing auto behavior when no overrides are set", async () => {
-    const files: File[] = [
-      { ...baseFile, reviewed: true, review_override: undefined },
-    ];
-
-    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
-      wrapper,
-    });
-
-    const icon = screen.getByLabelText("Reviewed status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText(/automatically from the required/);
-    expect(tip.length).toBeGreaterThan(0);
-  });
-
-  it("status icon has tooltip with date when all files have reviewed override", async () => {
+  it("says when every file was marked reviewed by hand", () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -198,14 +180,12 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Reviewed status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText(/Manually marked reviewed on/);
-    expect(tip.length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Marked reviewed by hand on Jun 15, 2024/),
+    ).toBeInTheDocument();
   });
 
-  it("status icon has tooltip with date when all files have unreviewed override", async () => {
+  it("says when every file was marked as needing review by hand", () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -219,14 +199,12 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Needs review status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText(/Manually marked needs review on/);
-    expect(tip.length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Marked as needing review by hand on Jun 15, 2024/),
+    ).toBeInTheDocument();
   });
 
-  it("status icon has tooltip indicating mixed state when overrides differ across files", async () => {
+  it("says when overrides differ across files", () => {
     const files: File[] = [
       {
         ...baseFile,
@@ -250,11 +228,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const icon = screen.getByLabelText("Needs review status");
-    const user = createUser();
-    await user.hover(icon);
-    const tip = await screen.findAllByText("Manually set on multiple files");
-    expect(tip.length).toBeGreaterThan(0);
+    expect(screen.getByText(/Set by hand on some files/)).toBeInTheDocument();
   });
 
   it("shows missing fields list when book needs review", () => {
@@ -361,6 +335,48 @@ describe("ReviewPanel", () => {
     expect(hint.textContent).toMatch(/narrators.*M4B|M4B.*narrators/);
   });
 
+  it("names files that share a type instead of repeating the type", () => {
+    // Two audiobooks miss a cover and the EPUB has one, so "cover (M4B)"
+    // twice would not say which audiobooks.
+    const files: File[] = [
+      {
+        ...baseFile,
+        id: 10,
+        file_type: FileTypeEPUB,
+        reviewed: false,
+        cover_image_filename: "book.epub.cover.jpg",
+      },
+      {
+        ...baseFile,
+        id: 11,
+        file_type: FileTypeM4B,
+        display_name: "Read by Fry",
+        reviewed: false,
+        cover_image_filename: undefined,
+        cover_mime_type: undefined,
+        narrators: [{ id: 1 } as never],
+      },
+      {
+        ...baseFile,
+        id: 12,
+        file_type: FileTypeM4B,
+        display_name: "Read by Dale",
+        reviewed: false,
+        cover_image_filename: undefined,
+        cover_mime_type: undefined,
+        narrators: [{ id: 2 } as never],
+      },
+    ];
+
+    render(<ReviewPanel book={baseBook} files={files} onChange={vi.fn()} />, {
+      wrapper,
+    });
+
+    const hint = screen.getByText(/Missing:/);
+    expect(hint).toHaveTextContent("cover (Read by Fry, Read by Dale)");
+    expect(hint.textContent).not.toMatch(/M4B/);
+  });
+
   it("does not show missing fields hint when book is fully reviewed", () => {
     const files: File[] = [{ ...baseFile, reviewed: true }];
 
@@ -380,7 +396,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     await user.click(toggle);
 
     expect(onChange).toHaveBeenCalledWith(ReviewOverrideReviewed);
@@ -395,7 +411,7 @@ describe("ReviewPanel", () => {
       wrapper,
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("checkbox", { name: "Reviewed" });
     await user.click(toggle);
 
     expect(onChange).toHaveBeenCalledWith(ReviewOverrideUnreviewed);
@@ -410,8 +426,8 @@ describe("ReviewPanel", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  describe("controlled mode (toggleValue prop)", () => {
-    it("toggle reflects toggleValue=true even when committed reviewed is false", () => {
+  describe("controlled mode (draft prop)", () => {
+    it("toggle reflects a reviewed draft even when committed reviewed is false", () => {
       const files: File[] = [
         { ...baseFile, reviewed: false, review_override: undefined },
       ];
@@ -419,17 +435,17 @@ describe("ReviewPanel", () => {
       render(
         <ReviewPanel
           book={baseBook}
+          draft={ReviewOverrideReviewed}
           files={files}
           onChange={vi.fn()}
-          toggleValue={true}
         />,
         { wrapper },
       );
 
-      expect(screen.getByRole("switch")).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Reviewed" })).toBeChecked();
     });
 
-    it("toggle reflects toggleValue=false even when committed reviewed is true", () => {
+    it("toggle reflects an unreviewed draft even when committed reviewed is true", () => {
       const files: File[] = [
         { ...baseFile, reviewed: true, review_override: undefined },
       ];
@@ -437,17 +453,19 @@ describe("ReviewPanel", () => {
       render(
         <ReviewPanel
           book={baseBook}
+          draft={ReviewOverrideUnreviewed}
           files={files}
           onChange={vi.fn()}
-          toggleValue={false}
         />,
         { wrapper },
       );
 
-      expect(screen.getByRole("switch")).not.toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Reviewed" }),
+      ).not.toBeChecked();
     });
 
-    it("falls back to committed reviewed when toggleValue is undefined", () => {
+    it("falls back to committed reviewed when there is no draft", () => {
       const files: File[] = [
         { ...baseFile, reviewed: true, review_override: undefined },
       ];
@@ -455,17 +473,17 @@ describe("ReviewPanel", () => {
       render(
         <ReviewPanel
           book={baseBook}
+          draft={undefined}
           files={files}
           onChange={vi.fn()}
-          toggleValue={undefined}
         />,
         { wrapper },
       );
 
-      expect(screen.getByRole("switch")).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Reviewed" })).toBeChecked();
     });
 
-    it("missing-fields hint follows committed state, not toggleValue", () => {
+    it("missing-fields hint follows committed state, not the draft", () => {
       const bookWithoutDescription: Book = {
         ...baseBook,
         description: undefined,
@@ -480,14 +498,14 @@ describe("ReviewPanel", () => {
         },
       ];
 
-      // Even with toggleValue=true (drafted as reviewed), the missing-fields
+      // Even with a reviewed draft, the missing-fields
       // hint anchors to the saved data and still reports description missing.
       render(
         <ReviewPanel
           book={bookWithoutDescription}
+          draft={ReviewOverrideReviewed}
           files={files}
           onChange={vi.fn()}
-          toggleValue={true}
         />,
         { wrapper },
       );
@@ -496,86 +514,242 @@ describe("ReviewPanel", () => {
     });
   });
 
-  describe("readOnly", () => {
-    it("shows the reviewed state without a toggle", () => {
-      const files: File[] = [{ ...baseFile, reviewed: true }];
+  describe("Use automatic", () => {
+    const overriddenFile: File = {
+      ...baseFile,
+      reviewed: true,
+      review_override: ReviewOverrideReviewed,
+      review_overridden_at: "2024-10-03T12:00:00Z",
+    };
 
+    it("is not offered when no file has an override", () => {
       render(
         <ReviewPanel
           book={baseBook}
-          files={files}
+          files={[{ ...baseFile, review_override: undefined }]}
           onChange={vi.fn()}
-          readOnly
         />,
         { wrapper },
       );
 
-      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-      expect(screen.getByText("Reviewed")).toBeInTheDocument();
-      expect(screen.getByLabelText("Reviewed status")).toBeInTheDocument();
-    });
-
-    it("opens the status tooltip from the keyboard", async () => {
-      const user = createUser();
-      const files: File[] = [{ ...baseFile, reviewed: true }];
-
-      render(
-        <ReviewPanel
-          book={baseBook}
-          files={files}
-          onChange={vi.fn()}
-          readOnly
-        />,
-        { wrapper },
-      );
-
-      await user.tab();
       expect(
-        screen.getByRole("button", { name: "Reviewed status" }),
-      ).toHaveFocus();
-      expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        /determined automatically/,
-      );
+        screen.queryByRole("button", { name: "Use automatic" }),
+      ).not.toBeInTheDocument();
     });
 
-    it("does not tell a read-only user to toggle the state", async () => {
+    it("is offered after the help line when a file has an override", () => {
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={[overriddenFile]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      const help = screen.getByText(/Marked reviewed by hand on/);
+      expect(
+        within(help).getByRole("button", { name: "Use automatic" }),
+      ).toBeInTheDocument();
+    });
+
+    it("is offered when only some files have an override", () => {
+      render(
+        <ReviewPanel
+          book={baseBook}
+          files={[
+            overriddenFile,
+            { ...baseFile, id: 11, review_override: undefined },
+          ]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Use automatic" }),
+      ).toBeInTheDocument();
+    });
+
+    it("calls onChange with null when clicked", async () => {
       const user = createUser();
-      const files: File[] = [{ ...baseFile, reviewed: true }];
+      const onChange = vi.fn();
 
       render(
         <ReviewPanel
           book={baseBook}
-          files={files}
-          onChange={vi.fn()}
-          readOnly
+          files={[overriddenFile]}
+          onChange={onChange}
         />,
         { wrapper },
       );
 
-      await user.hover(screen.getByLabelText("Reviewed status"));
-      const tooltip = await screen.findByRole("tooltip");
-      expect(tooltip).toHaveTextContent(/determined automatically/);
-      expect(tooltip).not.toHaveTextContent(/Toggle manually/);
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+
+      expect(onChange).toHaveBeenCalledWith(null);
     });
 
-    it("shows the needs-review state and the missing hint without a toggle", () => {
-      const files: File[] = [
-        { ...baseFile, reviewed: false, cover_image_filename: undefined },
-      ];
-
+    it("says the state goes back to the criteria on save once drafted", () => {
       render(
         <ReviewPanel
           book={baseBook}
-          files={files}
+          draft={null}
+          files={[overriddenFile]}
           onChange={vi.fn()}
-          readOnly
         />,
         { wrapper },
       );
 
-      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-      expect(screen.getByText("Needs review")).toBeInTheDocument();
-      expect(screen.getByText(/Missing: cover/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Goes back to the review criteria when you save/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Use automatic" }),
+      ).not.toBeInTheDocument();
+      // Nothing the criteria require is missing, so it will be reviewed.
+      expect(screen.getByRole("checkbox", { name: "Reviewed" })).toBeChecked();
+    });
+
+    it("shows the automatic state the criteria predict once drafted", () => {
+      render(
+        <ReviewPanel
+          book={{ ...baseBook, description: undefined }}
+          draft={null}
+          files={[overriddenFile]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByRole("checkbox", { name: "Reviewed" }),
+      ).not.toBeChecked();
+      expect(
+        screen.getByText(
+          "Goes back to the review criteria when you save. Missing: description.",
+          { exact: false },
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("is offered once the checkbox drafts an override on an automatic file", async () => {
+      const user = createUser();
+      const onChange = vi.fn();
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          draft={ReviewOverrideReviewed}
+          files={[{ ...baseFile, reviewed: false, review_override: undefined }]}
+          onChange={onChange}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByText(/Marked reviewed by hand when you save\./),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+
+      expect(onChange).toHaveBeenCalledWith(null);
+    });
+
+    it("says a drafted override applies on save when only some files have it", () => {
+      render(
+        <ReviewPanel
+          book={baseBook}
+          draft={ReviewOverrideReviewed}
+          files={[
+            overriddenFile,
+            { ...baseFile, id: 11, review_override: undefined },
+          ]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByText(/Marked reviewed by hand when you save\./),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Use automatic" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the saved date when the draft matches the saved override", () => {
+      render(
+        <ReviewPanel
+          book={baseBook}
+          draft={ReviewOverrideReviewed}
+          files={[overriddenFile]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByText(/Marked reviewed by hand on/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Use automatic" }),
+      ).toBeInTheDocument();
+    });
+
+    it("says an unreviewed draft is marked as needing review on save", () => {
+      render(
+        <ReviewPanel
+          book={baseBook}
+          draft={ReviewOverrideUnreviewed}
+          files={[{ ...baseFile, reviewed: true, review_override: undefined }]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByText(/Marked as needing review by hand when you save\./),
+      ).toBeInTheDocument();
+    });
+
+    it("is not offered on an automatic file once the draft is back to automatic", () => {
+      render(
+        <ReviewPanel
+          book={baseBook}
+          draft={null}
+          files={[{ ...baseFile, reviewed: false, review_override: undefined }]}
+          onChange={vi.fn()}
+        />,
+        { wrapper },
+      );
+
+      expect(
+        screen.getByText(/Set automatically from the review criteria/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Use automatic" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("checkbox", { name: "Reviewed" }),
+      ).not.toBeChecked();
+    });
+
+    it("toggling the checkbox after Use automatic sets an override again", async () => {
+      const user = createUser();
+      const onChange = vi.fn();
+
+      render(
+        <ReviewPanel
+          book={baseBook}
+          draft={null}
+          files={[overriddenFile]}
+          onChange={onChange}
+        />,
+        { wrapper },
+      );
+
+      await user.click(screen.getByRole("checkbox", { name: "Reviewed" }));
+
+      expect(onChange).toHaveBeenCalledWith(ReviewOverrideUnreviewed);
     });
   });
 });

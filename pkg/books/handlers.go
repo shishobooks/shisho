@@ -1722,7 +1722,7 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 	if err != nil {
 		// A type with no generator, a file Shisho cannot decrypt, and a file
 		// whose earlier build failed partway (logged when it happened), are
-		// ones the user can work around with Download Original (422); any
+		// ones the user can work around with Download unmodified file (422); any
 		// other generation failure, a failed Conversion included, is a
 		// server fault. Device routes fall back to the original for a File's
 		// own File Type instead (ResolveFallbackDownload), since a device has
@@ -1735,6 +1735,9 @@ func (h *handler) serveDownloadAs(c echo.Context, deliveredType string) error {
 		}
 		if errors.Is(err, filegen.ErrCannotDecrypt) {
 			return errcodes.InvalidState(CannotDecryptMessage)
+		}
+		if message, ok := UnsupportedContentMessage(err); ok {
+			return errcodes.InvalidState(message)
 		}
 		if errors.Is(err, downloadcache.ErrFailedPartway) {
 			return errcodes.InvalidState(FailedPartwayMessage)
@@ -1960,12 +1963,27 @@ func (h *handler) getPage(c echo.Context) error {
 		return err
 	}
 
-	// Get or render the page from the appropriate cache
+	// A size asks for a thumbnail, in the tiers cover URLs use, for page
+	// grids and pickers instead of the reader.
+	thumbSize := 0
+	if value := c.QueryParam("size"); value != "" {
+		thumbSize, err = strconv.Atoi(value)
+		if err != nil || !covers.ValidThumbnailSize(thumbSize) {
+			return errcodes.ValidationError(covers.InvalidThumbnailSizeMessage)
+		}
+	}
+
+	// Get or render the page from the appropriate cache. A PDF thumbnail is
+	// rendered at its size, and cached per size, rather than rendered at the
+	// full page's DPI and shrunk, so it is served as rendered.
 	var cachedPath, mimeType string
-	switch file.FileType {
-	case models.FileTypeCBZ:
+	switch {
+	case file.FileType == models.FileTypeCBZ:
 		cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, pageNum)
-	case models.FileTypePDF:
+	case thumbSize > 0:
+		cachedPath, err = h.pdfPageCache.GetThumbnailPage(file.Filepath, file.ID, pageNum, thumbSize)
+		mimeType = "image/jpeg"
+	default:
 		cachedPath, mimeType, err = h.pdfPageCache.GetPage(file.Filepath, file.ID, pageNum)
 	}
 	// The stored page count can be missing, so the cache may be the first
@@ -1980,17 +1998,45 @@ func (h *handler) getPage(c echo.Context) error {
 	// Cache for 1 year since page content doesn't change. The route is
 	// authenticated, so private keeps shared caches from storing it. The URL
 	// carries as r what else decides the image: the render settings for a PDF
-	// page, cbzpages.CBZPageKey for a CBZ page. A tab loaded before a restart
-	// with new settings or an upgrade asks for the old key; caching the new
-	// page under that URL would show it if the key reverted, so only the
-	// current key is cached.
+	// page, cbzpages.CBZPageKey for a CBZ page, and for a thumbnail the
+	// thumbnail renderer's key too. A tab loaded before a restart with new
+	// settings or an upgrade asks for the old key; caching the new page under
+	// that URL would show it if the key reverted, so only the current key is
+	// cached.
 	currentKey := cbzpages.CBZPageKey
 	if file.FileType == models.FileTypePDF {
 		currentKey = h.pdfPageCache.RenderKey()
 	}
+	if thumbSize > 0 {
+		currentKey = covers.PageThumbnailKey(currentKey)
+	}
 	cacheControl := "private, max-age=31536000, immutable"
 	if c.QueryParam("r") != currentKey {
 		cacheControl = "private, no-store"
+	}
+
+	// A CBZ page's thumbnail comes from the shared thumbnail cache, resized
+	// from the extracted page. Without that cache (some tests) the whole page
+	// is served.
+	if thumbSize > 0 && file.FileType == models.FileTypeCBZ && h.coverCache != nil {
+		source := covers.PageSource{Path: file.Filepath, Key: cbzpages.CBZPageKey}
+		thumb, err := h.coverCache.GetForPage(ctx, file.ID, pageNum, source, cachedPath, thumbSize)
+		if errors.Is(err, os.ErrNotExist) {
+			// The page cache evicted its copy since GetPage; extract it again.
+			if cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, pageNum); err == nil {
+				thumb, err = h.coverCache.GetForPage(ctx, file.ID, pageNum, source, cachedPath, thumbSize)
+			}
+		}
+		switch {
+		case err == nil:
+			covers.WriteThumbnail(c, thumb, cacheControl)
+			return nil
+		case errors.Is(err, covers.ErrUnsupportedThumbnail):
+			// A page image the resizer cannot decode is served whole, uncached.
+			cacheControl = "private, no-store"
+		default:
+			return errors.WithStack(err)
+		}
 	}
 
 	return httputil.ServeFile(c, cachedPath, errcodes.NotFound("Page"),

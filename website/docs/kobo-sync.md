@@ -6,15 +6,15 @@ Kobo Sync sends books from Shisho to a Kobo eReader over Wi-Fi. Shisho handles p
 
 A Kobo receives what its Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) select, from the books in the Device's [scope](./users-and-permissions.md#scope). Change them under **Delivery Rules** on the Device's page. A new Kobo Device follows the [Kobo preset](./users-and-permissions.md#device-types).
 
-- For each book, the earliest rule that matches one of its main files decides what goes, and every file of that rule's type is delivered. Under the preset, a book with a KePub and an EPUB sends only the KePub, as it is, and a book with an EPUB and a CBZ sends only the EPUB, as a KePub. Two EPUB editions of one book each appear on the Kobo as their own book.
-- A Kobo can receive KePub or EPUB, so only KePub, EPUB, and CBZ files can sync. A rule can send KePub as KePub or as EPUB, EPUB as KePub or as EPUB, and CBZ as KePub or as EPUB. A CBZ sent as EPUB is a fixed-layout EPUB that opens with its pages in order. See [Conversions](./supported-formats.md#conversions).
-- M4B, PDF, MOBI, AZW3, and [supplement files](./supplement-files.md) do not sync. A Kobo cannot read them, and they cannot be converted to KePub or EPUB.
+- For each book, the earliest rule that matches one of its main files decides what goes, and every file of that rule's type is delivered. Under the preset, a book with a KePub and an EPUB sends only the KePub, as it is, a book with an EPUB and a CBZ sends only the EPUB, as a KePub, and a book with only an AZW3 or MOBI sends it as a KePub. Two EPUB editions of one book each appear on the Kobo as their own book.
+- A Kobo can receive KePub or EPUB, so only KePub, EPUB, CBZ, AZW3, and MOBI files can sync. A rule can send each of them as KePub or as EPUB. A CBZ sent as EPUB is a fixed-layout EPUB that opens with its pages in order. A Kindle file that cannot be converted, such as a damaged one, fails to download. See [Conversions](./supported-formats.md#conversions).
+- M4B, PDF, and [supplement files](./supplement-files.md) do not sync. A Kobo cannot read them, and they cannot be converted to KePub or EPUB.
 - A KePub's filename keeps only characters a Kobo can read: accented letters become plain ones, and other scripts are dropped. The book's metadata keeps them. See [Download Filenames](./supported-formats.md#download-filenames).
 - On the Kobo, each entry's title is the file's **Name**, or the book's title when the file has no name. The subtitle and authors come from the book. Changing a synced file's name updates the title on the Kobo at the next sync.
 - The first sync is full. Later syncs are incremental and send additions, removals, and detected metadata or cover changes, including books entering or leaving the Device's scope.
 - Moving, renaming, or replacing a synced file updates the book already on the Kobo instead of adding a second copy. The Kobo downloads the new file in place and keeps the reading position. Highlights can stay hidden for a while after the download, then reappear.
 
-To check what a Kobo gets before syncing, use the preview on the Device's page and the **On your Devices** panel on a book's page; see [Delivery Rules of a Device](./users-and-permissions.md#delivery-rules-of-a-device).
+To check what a Kobo gets before syncing, use the preview on the Device's page and the **Devices** tab on a book's page; see [Delivery Rules of a Device](./users-and-permissions.md#delivery-rules-of-a-device).
 
 ### Moving to a Different Edition
 
@@ -25,11 +25,11 @@ Shisho keeps each delivered file on the Kobo as one entry. The next sync moves t
 
 The Kobo downloads the other edition in place. It keeps the reading position when the two editions' chapter files line up, and may reopen the book at the start when they do not. Highlights can stay hidden for a while after the download, then reappear. When no other file of the book is delivered as the same type, the book is removed from the Kobo instead.
 
-The **On your Devices** panel on a book's page warns when a newly added file would move a Kobo to a different edition, and the Device's rules editor shows how many books a change would move and asks before saving it.
+The **Devices** tab on a book's page warns when a newly added file would move a Kobo to a different edition, and the Device's rules editor shows how many books a change would move and asks before saving it.
 
 ### Switching Between KePub and EPUB
 
-A Kobo cannot change a book's format in place. When a rule change switches what a Kobo receives for a book between KePub and EPUB, such as editing the rules so EPUB goes out as EPUB, the next sync removes each affected book from the Kobo and adds it again as a new book. A newly added file can do the same when the rules send it as another type, and the book's **On your Devices** panel warns about it.
+A Kobo cannot change a book's format in place. When a rule change switches what a Kobo receives for a book between KePub and EPUB, such as editing the rules so EPUB goes out as EPUB, the next sync removes each affected book from the Kobo and adds it again as a new book. A newly added file can do the same when the rules send it as another type, and the book's **Devices** tab warns about it.
 
 :::warning
 Each book that switches between KePub and EPUB comes back as a new book on the Kobo, without the old copy's reading position or highlights. Switching back later does the same again. The Device's rules editor asks before saving such a change and says how many books it affects.
@@ -124,7 +124,7 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Likely cause:** The Device's Delivery Rules do not deliver any of the book's files, or an earlier rule matched another of its files. Under the Kobo preset, a book with an EPUB and a CBZ sends only the EPUB, and a book with only PDF or M4B files sends nothing.
 
-**Verify:** Open the book's page and read the Kobo Device's line in the **On your Devices** panel. It says what the Kobo receives, or why it receives nothing.
+**Verify:** Open the book's page and read the Kobo Device's line in the **Devices** tab. It says what the Kobo receives, or why it receives nothing.
 
 **Fix:** Change the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) or [scope](./users-and-permissions.md#scope), then sync. Read the rules editor's warnings before saving, because some changes move books on the Kobo to a different edition or remove and re-add them.
 
@@ -132,11 +132,11 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Symptom:** A book appears on the Kobo, but downloading it fails, while other books download.
 
-**Likely cause:** Shisho could not convert the file to the type the Device's rules chose, such as a KePub made from a damaged EPUB. A failed conversion fails the download instead of sending the original EPUB or CBZ, because the Kobo did not ask for that file type.
+**Likely cause:** Shisho could not convert the file to the type the Device's rules chose, such as a KePub made from a damaged EPUB, or from a Kindle file Shisho cannot convert. A failed conversion fails the download instead of sending the original file, because the Kobo did not ask for that file type.
 
 **Verify:** Check the current-session server logs for an error naming the file, around the time of the download.
 
-**Fix:** Replace or repair the file in the library, then sync again. See [Downloads or Readers Fail](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high) for cache and permission causes.
+**Fix:** Replace or repair the file in the library, or for a Kindle file Shisho cannot convert, add an EPUB of the book, then sync again. See [Downloads or Readers Fail](./troubleshooting.md#downloads-or-readers-fail-or-cache-usage-is-high) for cache and permission causes.
 
 ### Kobo Store Features Fail
 

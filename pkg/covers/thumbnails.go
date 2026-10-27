@@ -40,6 +40,10 @@ type Thumbnail struct {
 // ErrInvalidThumbnailSize rejects sizes outside the fixed cache tiers.
 var ErrInvalidThumbnailSize = errors.New("thumbnail size must be 128, 256, 512, 1024, or 2048")
 
+// InvalidThumbnailSizeMessage is the 422 a cover or page route answers a
+// size outside the tiers with.
+const InvalidThumbnailSizeMessage = "Thumbnail size must be 128, 256, 512, 1024, or 2048."
+
 // ErrUnsupportedThumbnail preserves originals the bounded raster decoder cannot resize.
 var ErrUnsupportedThumbnail = errors.New("cover cannot be resized")
 
@@ -230,7 +234,15 @@ const (
 // ErrInvalidThumbnailAspect rejects unbounded crop variants.
 var ErrInvalidThumbnailAspect = errors.New("thumbnail aspect must be book or square")
 
-func validThumbnailSize(size int) bool {
+// PageThumbnailKey is the render key a page thumbnail's URL carries as r:
+// the page image's own key (the PDF render settings or the CBZ page key)
+// and this renderer's, so a change to either fetches the thumbnail anew.
+func PageThumbnailKey(pageKey string) string {
+	return pageKey + "." + ThumbnailRenderKey
+}
+
+// ValidThumbnailSize reports whether size is one of the cache's tiers.
+func ValidThumbnailSize(size int) bool {
 	return size == ThumbnailSize128 || size == ThumbnailSize256 || size == ThumbnailSize512 || size == ThumbnailSize1024 || size == ThumbnailSize2048
 }
 
@@ -284,22 +296,68 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 	if aspect != "" && aspect != "book" && aspect != "square" {
 		return Thumbnail{}, ErrInvalidThumbnailAspect
 	}
-	if !validThumbnailSize(size) {
+	cover := FileCoverPath(file)
+	return c.get(ctx, strconv.Itoa(file.ID), cover, "", cover, size, aspect)
+}
+
+// PageSource is the book file a page comes from, which versions the page's
+// thumbnails: its path, and the key of what decides which image a page
+// number names (cbzpages.CBZPageKey).
+type PageSource struct {
+	Path string
+	Key  string
+}
+
+// GetForPage returns a JPEG of a CBZ page, decoded from the copy the page
+// cache extracted at pagePath, fitting within size pixels on its longest
+// side and keeping the page's shape. Each page is cached on its own beside
+// the file's cover thumbnails, under the same budget, and is cleared with
+// them. Its version follows the book file, not pagePath, whose mtime the page
+// cache bumps as the copy is used.
+func (c *ThumbnailCache) GetForPage(ctx context.Context, fileID int, page int, source PageSource, pagePath string, size int) (Thumbnail, error) {
+	return c.get(ctx, pageOwner(fileID, page), source.Path, "#"+source.Key, pagePath, size, "")
+}
+
+// pageOwner names a page's thumbnails in their keys, as "{fileID}p{page}",
+// apart from the file's cover thumbnails, which are keyed by the file ID.
+func pageOwner(fileID int, page int) string {
+	return strconv.Itoa(fileID) + "p" + strconv.Itoa(page)
+}
+
+// validOwner reports whether a key's first part names a cover ("12") or a
+// page ("12p3").
+func validOwner(owner string) bool {
+	fileID, page, isPage := strings.Cut(owner, "p")
+	if _, err := strconv.Atoi(fileID); err != nil {
+		return false
+	}
+	if !isPage {
+		return true
+	}
+	_, err := strconv.Atoi(page)
+	return err == nil
+}
+
+// get returns the thumbnail for owner of the image at decodePath, generating
+// and publishing it when no current one is cached. The version comes from
+// versionPath (its path, mtime, and size) and versionSuffix; publishing
+// removes owner's thumbnails of earlier versions.
+func (c *ThumbnailCache) get(ctx context.Context, owner, versionPath, versionSuffix, decodePath string, size int, aspect string) (Thumbnail, error) {
+	if !ValidThumbnailSize(size) {
 		return Thumbnail{}, ErrInvalidThumbnailSize
 	}
 	if err := ctx.Err(); err != nil {
 		return Thumbnail{}, errors.WithStack(err)
 	}
 	// The source version is the path, nanosecond mtime, byte size, and render
-	// key, plus the file ID in the key prefix, so a metadata-only updated_at
-	// change does not regenerate thumbnails.
-	source := FileCoverPath(file)
-	info, err := os.Stat(source)
+	// key, plus the owner (the file ID, or file and page) in the key prefix,
+	// so a metadata-only updated_at change does not regenerate thumbnails.
+	info, err := os.Stat(versionPath)
 	if err != nil {
 		return Thumbnail{}, errors.WithStack(err)
 	}
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d:%d", ThumbnailRenderKey, source, info.ModTime().UnixNano(), info.Size())))
-	version := fmt.Sprintf("%d-%x-", file.ID, hash[:16])
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d:%d", ThumbnailRenderKey, versionPath+versionSuffix, info.ModTime().UnixNano(), info.Size())))
+	version := fmt.Sprintf("%s-%x-", owner, hash[:16])
 	kind := aspect
 	if kind == "" {
 		kind = "original"
@@ -343,11 +401,11 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 			close(done)
 			c.mu.Unlock()
 		}()
-		data, err := c.resize(ctx, source, size, aspect)
+		data, err := c.resize(ctx, decodePath, size, aspect)
 		if err != nil {
 			return Thumbnail{}, err
 		}
-		current, err := os.Stat(source)
+		current, err := os.Stat(versionPath)
 		if err != nil {
 			return Thumbnail{}, errors.WithStack(err)
 		}
@@ -360,7 +418,7 @@ func (c *ThumbnailCache) GetForAspect(ctx context.Context, file *models.File, si
 		if err = ctx.Err(); err != nil {
 			err = errors.WithStack(err)
 		} else if c.epoch == epoch {
-			err = c.publishLocked(key, version, file.ID, data)
+			err = c.publishLocked(key, version, owner, data)
 		}
 		c.mu.Unlock()
 		return Thumbnail{Data: data, Key: key}, err
@@ -474,11 +532,11 @@ func (c *ThumbnailCache) loadLocked() error {
 		if parts[3] != "original" && parts[3] != "book" && parts[3] != "square" {
 			continue
 		}
-		if _, err := strconv.Atoi(parts[0]); err != nil {
+		if !validOwner(parts[0]) {
 			continue
 		}
 		size, err := strconv.Atoi(parts[2])
-		if err != nil || !validThumbnailSize(size) {
+		if err != nil || !ValidThumbnailSize(size) {
 			continue
 		}
 		info, err := file.Info()
@@ -556,7 +614,7 @@ func (c *ThumbnailCache) read(entry *thumbnailEntry, touch bool) ([]byte, error)
 	return data, nil
 }
 
-func (c *ThumbnailCache) publishLocked(key, version string, fileID int, data []byte) error {
+func (c *ThumbnailCache) publishLocked(key, version, owner string, data []byte) error {
 	if err := os.MkdirAll(c.dir, 0755); err != nil {
 		return errors.WithStack(err)
 	}
@@ -564,7 +622,7 @@ func (c *ThumbnailCache) publishLocked(key, version string, fileID int, data []b
 		return err
 	}
 	c.addLocked(&thumbnailEntry{key: key, bytes: int64(len(data)), touched: time.Now()})
-	prefix := strconv.Itoa(fileID) + "-"
+	prefix := owner + "-"
 	for other, entry := range c.entries {
 		if strings.HasPrefix(other, prefix) && !strings.HasPrefix(other, version) {
 			if err := c.removeLocked(entry); err != nil {

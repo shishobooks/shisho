@@ -246,7 +246,9 @@ func TestGetScopedFiles_FollowsTheDeviceRules(t *testing.T) {
 	assert.Equal(t, models.FileTypeEPUB, files[0].DeliveredFileType)
 }
 
-func TestGetScopedFiles_MOBIAndAZW3Excluded(t *testing.T) {
+// Kindle Files reach a Kobo as KePub through EPUB, so the Kobo preset sends
+// one only for a book with no File an earlier rule takes.
+func TestGetScopedFiles_KindleFilesOnlyWithoutEPUB(t *testing.T) {
 	t.Parallel()
 	ctx, bookSvc, koboSvc, library, user := setupScopedFilesTest(t)
 
@@ -256,13 +258,16 @@ func TestGetScopedFiles_MOBIAndAZW3Excluded(t *testing.T) {
 	_ = createFile(ctx, t, bookSvc, library.ID, book.ID, "/tmp/test/kindle/book.azw3", models.FileTypeAZW3, models.FileRoleMain, 3000)
 
 	kindleOnly := createBook(ctx, t, bookSvc, library.ID, "Kindle Only")
-	_ = createFile(ctx, t, bookSvc, library.ID, kindleOnly.ID, "/tmp/test/kindle-only/book.azw3", models.FileTypeAZW3, models.FileRoleMain, 3000)
+	azw3 := createFile(ctx, t, bookSvc, library.ID, kindleOnly.ID, "/tmp/test/kindle-only/book.azw3", models.FileTypeAZW3, models.FileRoleMain, 3000)
 
 	scope := devices.Scope{Type: devices.ScopeAll}
 	files, err := koboSvc.GetScopedFiles(ctx, loadUserWithAccess(ctx, t, koboSvc, user.ID), koboFor(ctx, t, koboSvc, user.ID, scope))
 	require.NoError(t, err)
 
-	assert.Equal(t, []int{epub.ID}, scopedFileIDs(files))
+	assert.ElementsMatch(t, []int{epub.ID, azw3.ID}, scopedFileIDs(files))
+	for _, f := range files {
+		assert.Equal(t, models.FileTypeKePub, f.DeliveredFileType)
+	}
 }
 
 // insertList creates a list owned by the user holding the given books.

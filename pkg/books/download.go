@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -65,6 +66,22 @@ func originalDownload(book *models.Book, file *models.File, ext string) *Downloa
 // whose earlier build failed partway (downloadcache.ErrFailedPartway).
 const FailedPartwayMessage = "This file's generated download failed partway through an earlier attempt. Download the original, or edit the book's metadata to try again."
 
+// UnsupportedContentMessage returns the web UI routes' and Share Links'
+// answer to a Conversion that declined its source
+// (filegen.ErrUnsupportedContent), and false for any other error. The
+// reason comes from the Conversion.
+func UnsupportedContentMessage(err error) (string, bool) {
+	var genErr *filegen.GenerationError
+	if !errors.Is(err, filegen.ErrUnsupportedContent) || !errors.As(err, &genErr) {
+		return "", false
+	}
+	reason := genErr.Message
+	if reason != "" {
+		reason = strings.ToUpper(reason[:1]) + reason[1:]
+	}
+	return reason + ".", true
+}
+
 // CannotDecryptMessage is the web UI routes' answer to a file whose
 // encryption Shisho cannot open (filegen.ErrCannotDecrypt), such as a PDF
 // that needs a password.
@@ -74,7 +91,7 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 // for the file as its own File Type: the Generated File, or the Original
 // File when generation is not possible, since a failed generation of a
 // File's own File Type only loses Shisho's metadata. A device or a Share
-// recipient has no Download Original to turn to, so a supplement, a type
+// recipient has no Download unmodified file to turn to, so a supplement, a type
 // with no generator (filegen.ErrNotImplemented), and any other
 // filegen.GenerationError get the original. The exceptions are a permission
 // error and a canceled or timed-out request, which are faults the original
@@ -85,7 +102,7 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 // Nothing falls back from a Conversion: a channel delivering another File
 // Type uses ResolveDeliveryDownload, and a download menu entry
 // GeneratedDownload. The web app's download routes do not fall back either:
-// a browser user sees the error and has Download Original.
+// a browser user sees the error and has Download unmodified file.
 func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
 	if file.FileRole == models.FileRoleSupplement {

@@ -51,7 +51,7 @@ func TestHandler_SaveAndReset(t *testing.T) {
 	assert.Equal(t, BuiltInRules(), got.Rules)
 	assert.Contains(t, got.Options, RuleOption{
 		SourceFileType:     models.FileTypeCBZ,
-		DeliveredFileTypes: []string{models.FileTypeCBZ, models.FileTypeKePub, models.FileTypeEPUB},
+		DeliveredFileTypes: []string{models.FileTypeCBZ, models.FileTypeKePub, models.FileTypeEPUB, models.FileTypeAZW3},
 	})
 
 	rec, err = callHandler(t, h.update, `{"rules":[{"source_file_type":"cbz","delivered_file_type":"epub"}]}`)

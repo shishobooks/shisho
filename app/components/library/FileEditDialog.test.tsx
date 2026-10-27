@@ -19,6 +19,7 @@ import {
   FileRoleMain,
   FileTypeCBZ,
   FileTypeEPUB,
+  ReviewOverrideReviewed,
   type Book,
   type File,
 } from "@/types";
@@ -48,6 +49,7 @@ beforeAll(() => {
 const mockUpdateFile = vi.fn();
 const mockUploadFileCover = vi.fn();
 const mockSetFileCoverPage = vi.fn();
+const mockSetFileReview = vi.fn();
 
 vi.mock("@/hooks/queries/books", () => ({
   useUpdateFile: () => ({
@@ -81,7 +83,7 @@ vi.mock("@/hooks/queries/plugins", () => ({
 vi.mock("@/hooks/queries/review", () => ({
   useReviewCriteria: () => ({ data: { book_fields: [], audio_fields: [] } }),
   useSetFileReview: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockSetFileReview,
     isPending: false,
   }),
 }));
@@ -289,7 +291,9 @@ describe("FileEditDialog", () => {
     mockUpdateFile.mockClear();
     mockUploadFileCover.mockClear();
     mockSetFileCoverPage.mockClear();
+    mockSetFileReview.mockClear();
     mockUpdateFile.mockResolvedValue({});
+    mockSetFileReview.mockResolvedValue({});
     mockSetFileCoverPage.mockResolvedValue({});
     mockUploadFileCover.mockResolvedValue({});
   });
@@ -723,6 +727,140 @@ describe("FileEditDialog", () => {
       ).not.toBeInTheDocument();
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       expect(screen.getByPlaceholderText("YYYY-MM-DD")).toHaveValue("");
+    });
+  });
+
+  describe("review override", () => {
+    const reviewBook: Book = {
+      id: 1,
+      created_at: "2024-01-01",
+      updated_at: "2024-01-01",
+      library_id: 1,
+      filepath: "/test/book",
+      title: "Test Book",
+      title_source: DataSourceManual,
+      sort_title: "Test Book",
+      sort_title_source: DataSourceManual,
+      author_source: DataSourceManual,
+      cover_cache_key: "",
+      files: [],
+    };
+    const overriddenFile: File = {
+      ...mockFile,
+      reviewed: true,
+      review_override: ReviewOverrideReviewed,
+      review_overridden_at: "2024-10-03T12:00:00Z",
+    };
+
+    it("sends override null through the file endpoint after Use automatic", async () => {
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        book: reviewBook,
+        file: overriddenFile,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+      expect(mockSetFileReview).toHaveBeenCalledWith({
+        fileId: overriddenFile.id,
+        override: null,
+      });
+      expect(screen.queryByText("Unsaved Changes")).not.toBeInTheDocument();
+    });
+
+    it("keeps the dialog and the draft when clearing the override fails", async () => {
+      mockSetFileReview.mockRejectedValue(
+        new ShishoAPIError("Could not save review", "internal", 500),
+      );
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        book: reviewBook,
+        file: overriddenFile,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      expect(
+        await screen.findByText("Could not save review"),
+      ).toBeInTheDocument();
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+      expect(
+        screen.getByText(/Goes back to the review criteria when you save/),
+      ).toBeInTheDocument();
+    });
+
+    it("drops a pending review change when the file becomes a supplement", async () => {
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        book: reviewBook,
+        file: overriddenFile,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+      await user.click(screen.getByText("Main File").closest("button")!);
+      await user.click(
+        await screen.findByRole("option", { name: /supplement/i }),
+      );
+      // The first Save asks to confirm the downgrade, the second confirms.
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+      expect(mockUpdateFile).toHaveBeenCalled();
+      expect(mockSetFileReview).not.toHaveBeenCalled();
+    });
+
+    it("sends no review request after ticking and then Use automatic on an automatic file", async () => {
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        book: reviewBook,
+        file: { ...mockFile, reviewed: false },
+      });
+
+      await user.click(screen.getByRole("checkbox", { name: "Reviewed" }));
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+      expect(mockSetFileReview).not.toHaveBeenCalled();
+    });
+
+    it("sends no review request when nothing changed", async () => {
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        book: reviewBook,
+        file: overriddenFile,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+      expect(mockSetFileReview).not.toHaveBeenCalled();
+    });
+
+    it("protects Use automatic as an unsaved change", async () => {
+      const user = createUser();
+      const { onOpenChange } = renderDialog({
+        book: reviewBook,
+        file: overriddenFile,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Use automatic" }));
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByText("Unsaved Changes")).toBeInTheDocument();
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
     });
   });
 

@@ -52,7 +52,7 @@ Supplement files are not offered as book downloads. See [Libraries, Scanning, an
 
 ## Downloads
 
-What a book's page offers comes from the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), never from the browser. A new Kobo Device follows its preset and gets EPUB and CBZ files as KePub; a Browser Device follows your default rules. Each download is generated with the metadata its file type supports. The first download of some formats shows no progress or size on the device; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
+What a book's page offers comes from the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), never from the browser. A new Kobo Device follows its preset and gets EPUB, CBZ, AZW3, and MOBI files as KePub; a new Kindle Device gets EPUB, KePub, and CBZ files as AZW3 when a book has no AZW3 or MOBI; a Browser Device follows your default rules. Each download is generated with the metadata its file type supports. The first download of some formats shows no progress or size on the device; later downloads of the same book do. [First Downloads](./supported-formats.md#first-downloads) lists those formats.
 
 A download delivered through a [conversion](./supported-formats.md#conversions), such as a KePub made from an EPUB, fails with an error when the conversion fails, for example on a damaged EPUB, and never sends the original file in its place. A file delivered as its own file type still falls back to the original file when Shisho cannot write metadata into it.
 
@@ -62,13 +62,13 @@ Covers are off by default. Leave them off on slow devices or networks to reduce 
 
 ### On a Kindle
 
-A Kindle's browser downloads only MOBI and AZW3, and refuses EPUB, PDF, and everything else, so use a **Kindle** Device. Its preset offers each book's AZW3 files, or its MOBI files when it has no AZW3, with download links whose URL ends in a filename the Kindle accepts. Books with neither are left out of the lists, and a book's page reached directly says it is not delivered to this Device. Some Kindles refuse AZW3 downloads; if yours does, customize the Device's rules to put MOBI first.
+A Kindle's browser downloads only MOBI and AZW3, and refuses EPUB, PDF, and everything else, so use a **Kindle** Device. Its preset offers each book's AZW3 files, or its MOBI files when it has no AZW3. A book with neither gets its EPUB, or else its KePub, or else its CBZ, [converted to AZW3](./supported-formats.md#conversions). Download links end in a filename the Kindle accepts, ending in `.azw3` for a converted book. Books with none of these, such as a book with only a PDF, are left out of the lists, and a book's page reached directly says it is not delivered to this Device. Some Kindles refuse AZW3 downloads; if yours does, customize the Device's rules to put MOBI first. A book that has no MOBI file still arrives as AZW3.
 
 Fire tablets browse with Silk and have apps for other formats, so give one a **Browser** Device.
 
 A MOBI or AZW3 download carries the book's current metadata and cover; see [MOBI and AZW3](./supported-formats.md#mobi-and-azw3) for what is written.
 
-To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. To get a book onto a Kindle when it has only an EPUB, add a MOBI or AZW3 file to the book in Shisho.
+To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the full URL there. A downloaded book appears in the Kindle's library. A converted book's first download starts only once the whole AZW3 is built; later downloads come from the download cache.
 
 ## Troubleshooting
 

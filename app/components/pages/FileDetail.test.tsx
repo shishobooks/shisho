@@ -1,184 +1,307 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ChaptersActionState } from "@/components/files/FileChaptersTab";
-import { useBook, useDeleteFile } from "@/hooks/queries/books";
-import { useLibrary } from "@/hooks/queries/libraries";
+import type { ChaptersActionState } from "@/components/files/FileChaptersEditor";
+import { useBook } from "@/hooks/queries/books";
 import { setAuth } from "@/testing/auth";
+import { mockCoverDimensions } from "@/testing/coverDimensions";
+import type { Book, File } from "@/types";
 
 import FileDetail from "./FileDetail";
+
+mockCoverDimensions();
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/hooks/queries/books", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/queries/books")>(
     "@/hooks/queries/books",
   );
-  return { ...actual, useBook: vi.fn(), useDeleteFile: vi.fn() };
+  return { ...actual, useBook: vi.fn() };
 });
 vi.mock("@/hooks/queries/libraries", async () => {
   const actual = await vi.importActual<
     typeof import("@/hooks/queries/libraries")
   >("@/hooks/queries/libraries");
-  return { ...actual, useLibrary: vi.fn() };
+  return {
+    ...actual,
+    useUserLibrary: () => ({ data: { id: 1, name: "Lib" } }),
+  };
 });
-
-vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
-
-beforeEach(() => setAuth({ permissions: ["books:read", "books:write"] }));
-
-// useUnsavedChanges calls react-router's useBlocker, which requires a data
-// router. We don't exercise navigation blocking here, so stub it.
-vi.mock("@/hooks/useUnsavedChanges", () => ({
-  useUnsavedChanges: () => ({
-    showBlockerDialog: false,
-    proceedNavigation: vi.fn(),
-    cancelNavigation: vi.fn(),
-  }),
+vi.mock("@/hooks/queries/delivery", () => ({
+  useDeliveryRules: () => ({ data: { rules: [] }, isPending: false }),
+}));
+vi.mock("@/hooks/queries/plugins", () => ({
+  usePluginIdentifierTypes: () => ({ data: [] }),
+}));
+vi.mock("@/hooks/queries/review", () => ({
+  useReviewCriteria: () => ({ data: { book_fields: [], audio_fields: [] } }),
+}));
+vi.mock("@/hooks/queries/chapters", () => ({
+  useFileChapters: () => ({ data: chapters.list }),
 }));
 
-// LibraryLayout renders the app shell (sidebar/top nav) which needs an
-// AuthProvider. Stub it to a passthrough so we can render the page content
-// without standing up the whole shell.
+// The app shell needs an AuthProvider and the dialogs their own queries;
+// none of that is what these tests are about.
 vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@/components/library/LibraryBreadcrumbs", () => ({
   default: () => <nav />,
 }));
-
-// The tabs pull their own queries; we only care about the action buttons here.
-vi.mock("@/components/files/FileDetailsTab", () => ({
-  default: () => <div>details-tab</div>,
+vi.mock("@/components/library/FileEditDialog", () => ({
+  FileEditDialog: () => <div role="dialog">Edit file</div>,
 }));
-// The chapters stub keeps the action-state callback so a test can report
-// what the real tab would.
+vi.mock("@/components/library/BookEditDialog", () => ({
+  BookEditDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog">Edit book</div> : null,
+}));
+vi.mock("@/components/library/MoveFilesDialog", () => ({
+  MoveFilesDialog: () => null,
+}));
+
+// FileChaptersSection.test.tsx covers the chapter bar; here the editor only
+// reports what the real one would, so the page's guard can be checked.
 const chapters = vi.hoisted(() => ({
+  list: [] as unknown[],
   report: undefined as undefined | ((state: ChaptersActionState) => void),
 }));
-vi.mock("@/components/files/FileChaptersTab", () => ({
+vi.mock("@/components/files/FileChaptersEditor", () => ({
   default: ({
     onActionStateChange,
   }: {
     onActionStateChange?: (state: ChaptersActionState) => void;
   }) => {
     chapters.report = onActionStateChange;
-    return <div>chapters-tab</div>;
+    return <div>chapter list</div>;
   },
 }));
 
-const renderForFileType = (
-  fileType: string,
+const file = (overrides: Partial<File> = {}): File =>
+  ({
+    id: 42,
+    book_id: 7,
+    library_id: 1,
+    file_type: "epub",
+    file_role: "main",
+    filepath: "/lib/Ada Author/Book/book.epub",
+    filesize_bytes: 1000,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+    display_name: "Book",
+    reachable_file_types: ["epub"],
+    is_preferred_cover: false,
+    reviewed: true,
+    ...overrides,
+  }) as File;
+
+const book = (files: File[]): Book =>
+  ({
+    id: 7,
+    library_id: 1,
+    title: "Book",
+    authors: [{ id: 1, person_id: 10, person: { id: 10, name: "Ada Author" } }],
+    files,
+  }) as unknown as Book;
+
+const renderPage = (
+  files: File[] = [file()],
   path = "/libraries/1/books/7/files/42",
 ) => {
   vi.mocked(useBook).mockReturnValue({
-    data: {
-      id: 7,
-      title: "Book",
-      files: [
-        {
-          id: 42,
-          book_id: 7,
-          file_type: fileType,
-          filepath: "/lib/book." + fileType,
-        },
-      ],
-    },
+    data: book(files),
     isLoading: false,
     isSuccess: true,
   } as never);
-  vi.mocked(useLibrary).mockReturnValue({ data: { name: "Lib" } } as never);
-  vi.mocked(useDeleteFile).mockReturnValue({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  } as never);
-
-  return render(
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/libraries/:libraryId/books/:bookId/files/:fileId/:tab?",
+        element: <FileDetail />,
+      },
+      { path: "/libraries/:libraryId/books/:bookId", element: <p>Book</p> },
+    ],
+    { initialEntries: [path] },
+  );
+  render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route
-            element={<FileDetail />}
-            path="/libraries/:libraryId/books/:bookId/files/:fileId/:tab?"
-          />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
+  return router;
 };
 
-describe("FileDetail reading action", () => {
-  it("shows a Listen action for m4b files and not a Read action", () => {
-    renderForFileType("m4b");
-    const listen = screen.getByRole("link", { name: /listen/i });
-    expect(listen).toBeInTheDocument();
-    expect(listen).toHaveAttribute(
+const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+beforeEach(() => {
+  setAuth({ permissions: ["books:read", "books:write", "people:read"] });
+  chapters.list = [];
+});
+
+describe("FileDetail header", () => {
+  it("names the file and links back to its book and author", () => {
+    renderPage();
+
+    expect(screen.getByRole("heading", { name: "Book" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Book" })).toHaveAttribute(
+      "href",
+      "/libraries/1/books/7",
+    );
+    expect(screen.getByRole("link", { name: "Ada Author" })).toHaveAttribute(
+      "href",
+      "/libraries/1/people/10",
+    );
+  });
+
+  it("calls a supplement a supplement to its book", () => {
+    renderPage([
+      file({ id: 41 }),
+      file({ file_role: "supplement", file_type: "pdf", display_name: "Map" }),
+    ]);
+
+    expect(screen.getByText("Supplement to")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Ada Author" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a Listen action for an audiobook and Read for an ebook", () => {
+    renderPage([file({ file_type: "m4b" })]);
+    expect(screen.getByRole("link", { name: "Listen" })).toHaveAttribute(
       "href",
       "/libraries/1/books/7/files/42/read",
     );
-    expect(
-      screen.queryByRole("link", { name: /read/i }),
-    ).not.toBeInTheDocument();
   });
 
-  it("shows a Read action for epub files and not a Listen action", () => {
-    renderForFileType("epub");
-    expect(screen.getByRole("link", { name: /read/i })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /listen/i }),
-    ).not.toBeInTheDocument();
-  });
+  it("puts the file's on-disk facts in their own section", () => {
+    renderPage();
 
-  it("shows no reading action for unsupported file types", () => {
-    renderForFileType("txt");
-    expect(
-      screen.queryByRole("link", { name: /listen/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /read/i }),
-    ).not.toBeInTheDocument();
+    const disk = screen.getByRole("region", { name: "On disk" });
+    expect(within(disk).getByText("book.epub")).toBeInTheDocument();
+    expect(within(disk).getByText("/lib/Ada Author/Book")).toBeInTheDocument();
   });
 });
 
-describe("FileDetail write controls", () => {
-  it("shows Edit and Delete for a user with Books Write", () => {
-    renderForFileType("epub");
-    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+describe("FileDetail actions", () => {
+  it("offers Edit and the file actions for Books Write", async () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    await user().click(screen.getByRole("button", { name: "File actions" }));
+    for (const name of ["Rescan file", "Move to another book", "Delete file"]) {
+      expect(screen.getByRole("menuitem", { name })).toBeInTheDocument();
+    }
+    // The page lists everything the File details dialog would.
+    expect(
+      screen.queryByRole("menuitem", { name: "File details" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("hides Edit and Delete but keeps the reading action for a read-only user", () => {
+  it("keeps a supplement with its book", async () => {
+    renderPage([
+      file({ id: 41 }),
+      file({ file_role: "supplement", file_type: "pdf" }),
+    ]);
+
+    await user().click(screen.getByRole("button", { name: "File actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: "Move to another book" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides every write control for a read-only role", () => {
     setAuth({ permissions: ["books:read"] });
-    renderForFileType("epub");
-    expect(screen.getByRole("link", { name: /read/i })).toBeInTheDocument();
+    renderPage([file({ file_type: "m4b" })]);
+
+    expect(screen.getByRole("link", { name: "Listen" })).toBeInTheDocument();
+    for (const name of [
+      "Edit",
+      "File actions",
+      "Edit chapters",
+      "Fetch from Audible",
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+});
+
+describe("FileDetail review badge", () => {
+  it("speaks for this file and opens its editor", async () => {
+    renderPage([file({ reviewed: false })]);
+
+    await user().click(screen.getByRole("button", { name: "Needs review" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Edit file");
+  });
+
+  it("does not show for a reviewed file beside an unreviewed one", () => {
+    renderPage([file(), file({ id: 43, reviewed: false })]);
+
     expect(
-      screen.queryByRole("button", { name: /edit/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /delete/i }),
+      screen.queryByRole("button", { name: "Needs review" }),
     ).not.toBeInTheDocument();
   });
 });
 
-describe("FileDetail chapters Save", () => {
-  it("enables Save only while the chapters tab can save and is not saving", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderForFileType("m4b", "/libraries/1/books/7/files/42/chapters");
+describe("FileDetail files list", () => {
+  it("lists the book's files, this one marked instead of linked", () => {
+    renderPage([
+      file(),
+      file({ id: 43, file_type: "m4b", display_name: "Audiobook" }),
+    ]);
 
-    await user.click(screen.getByRole("button", { name: /edit/i }));
-    const save = screen.getByRole("button", { name: "Save" });
-    expect(save).toBeDisabled();
+    // One list beside the header from 1280px, one below it otherwise.
+    const [list] = screen.getAllByRole("region", {
+      name: "2 files in this book",
+    });
+    expect(within(list).getByText("EPUB · This file")).toBeInTheDocument();
+    expect(
+      within(list).getByRole("link", { name: /Audiobook/ }),
+    ).toHaveAttribute("href", "/libraries/1/books/7/files/43");
+  });
+
+  it("leaves the list out for a book's only file", () => {
+    renderPage();
+
+    expect(
+      screen.queryByRole("region", { name: /in this book/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("FileDetail old tab URLs", () => {
+  it("sends the old Chapters tab to the page", async () => {
+    const router = renderPage(
+      undefined,
+      "/libraries/1/books/7/files/42/chapters",
+    );
+
+    await vi.waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/libraries/1/books/7/files/42",
+      ),
+    );
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+});
+
+describe("FileDetail unsaved chapter edits", () => {
+  it("asks before leaving with unsaved chapter edits", async () => {
+    const router = renderPage();
 
     act(() =>
       chapters.report?.({ isSaving: false, canSave: true, hasChanges: true }),
     );
-    expect(save).toBeEnabled();
+    await user().click(screen.getByRole("link", { name: "Book" }));
 
-    act(() =>
-      chapters.report?.({ isSaving: true, canSave: true, hasChanges: true }),
+    expect(
+      screen.getByRole("dialog", { name: "Unsaved Changes" }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(
+      "/libraries/1/books/7/files/42",
     );
-    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
   });
 });

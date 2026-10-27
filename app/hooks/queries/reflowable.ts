@@ -42,7 +42,7 @@ export const useReflowableBlob = (
         // Demo Mode denies the original, so its rejection would only hide
         // why the Generated File failed.
         if (signal.aborted || demoMode) throw error;
-        // Read the file as it sits on disk, as Download Original would,
+        // Read the file as it sits on disk, as Download unmodified file would,
         // whatever kept the Generated File from arriving: no generator for
         // the type, a failed build, or a cut connection.
         const original = await fetch(fileOriginalDownloadUrl(fileId), {

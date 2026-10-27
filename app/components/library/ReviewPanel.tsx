@@ -1,128 +1,36 @@
-import { CircleCheck } from "lucide-react";
 import { useId } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useReviewCriteria } from "@/hooks/queries/review";
 import { cn } from "@/libraries/utils";
 import {
   FileRoleMain,
-  FileTypeM4B,
   ReviewOverrideReviewed,
   ReviewOverrideUnreviewed,
   type Book,
   type File,
   type ReviewOverride,
 } from "@/types";
-import { fileTypeLabel, formatDate } from "@/utils/format";
+import { fileLabel, fileTypeLabel, formatDate } from "@/utils/format";
+import { missingReviewFields } from "@/utils/review";
 
 interface ReviewPanelProps {
   book: Book;
   files: File[];
-  onChange: (override: ReviewOverride) => void;
+  /** Receives the override to apply on save; `null` returns to automatic. */
+  onChange: (override: ReviewOverride | null) => void;
   isPending?: boolean;
   /**
-   * When provided, the toggle (and the status icon's color) reflects this
-   * value instead of the aggregate `reviewed` state computed from `files`.
-   * Use for controlled / draft mode (e.g. edit dialogs that defer to Save).
-   * The committed-state-driven tooltip text and missing-fields hint are
-   * unaffected.
+   * The unsaved override from an edit dialog that defers to Save:
+   * `undefined` when untouched, `null` after Use automatic. A reviewed or
+   * unreviewed draft sets the checkbox. A `null` draft on an overridden item
+   * shows what the review criteria predict, or the saved state until they
+   * load; otherwise the checkbox shows the saved state. The missing-fields
+   * hint is built from saved metadata, never from a drafted override.
    */
-  toggleValue?: boolean;
-  /**
-   * Render the reviewed state as a label with no toggle. Use for users
-   * without Books Write, who can see review status but cannot change it.
-   */
-  readOnly?: boolean;
-}
-
-/**
- * Determine which fields are missing for a given file + book pair, given the
- * active review criteria.
- *
- * Book-level fields: authors, description, genres, tags, series, subtitle
- * File-level fields: cover, publisher, identifiers, release_date, language, url
- * Audio-only fields: narrators, chapters, abridged
- */
-function getMissingFields(
-  file: File,
-  book: Book,
-  bookFields: string[],
-  audioFields: string[],
-): string[] {
-  const isAudio = file.file_type === FileTypeM4B;
-  const missing: string[] = [];
-
-  for (const field of bookFields) {
-    switch (field) {
-      case "authors":
-        if (!book.authors || book.authors.length === 0) missing.push(field);
-        break;
-      case "description":
-        if (!book.description) missing.push(field);
-        break;
-      case "genres":
-        if (!book.book_genres || book.book_genres.length === 0)
-          missing.push(field);
-        break;
-      case "tags":
-        if (!book.book_tags || book.book_tags.length === 0) missing.push(field);
-        break;
-      case "series":
-        if (!book.book_series || book.book_series.length === 0)
-          missing.push(field);
-        break;
-      case "subtitle":
-        if (!book.subtitle) missing.push(field);
-        break;
-      case "cover":
-        if (!file.cover_image_filename && !file.cover_mime_type)
-          missing.push(field);
-        break;
-      case "publisher":
-        if (!file.publisher) missing.push(field);
-        break;
-      case "identifiers":
-        if (!file.identifiers || file.identifiers.length === 0)
-          missing.push(field);
-        break;
-      case "release_date":
-        if (!file.release_date) missing.push(field);
-        break;
-      case "language":
-        if (!file.language) missing.push(field);
-        break;
-      case "url":
-        if (!file.url) missing.push(field);
-        break;
-    }
-  }
-
-  if (isAudio) {
-    for (const field of audioFields) {
-      switch (field) {
-        case "narrators":
-          if (!file.narrators || file.narrators.length === 0)
-            missing.push(field);
-          break;
-        case "chapters":
-          if (!file.chapters || file.chapters.length === 0) missing.push(field);
-          break;
-        case "abridged":
-          if (file.abridged == null) missing.push(field);
-          break;
-      }
-    }
-  }
-
-  return missing;
+  draft?: ReviewOverride | null;
 }
 
 /**
@@ -130,11 +38,13 @@ function getMissingFields(
  * need review.
  *
  * - If a field is missing on all files → list once without qualifier
- * - If different files miss different fields → qualify with file type
- *   e.g. "cover (EPUB), narrators (M4B)"
+ * - If different files miss different fields → qualify with the files, once
+ *   per field: by type when no other main file shares it, else by name,
+ *   e.g. "cover (EPUB), narrators (Read by Fry, Read by Dale)"
  */
 function buildMissingHint(
   needsReviewFiles: File[],
+  mainFiles: File[],
   book: Book,
   bookFields: string[],
   audioFields: string[],
@@ -144,7 +54,7 @@ function buildMissingHint(
   // Collect missing fields per file
   const missingPerFile: Map<number, string[]> = new Map();
   for (const file of needsReviewFiles) {
-    const missing = getMissingFields(file, book, bookFields, audioFields);
+    const missing = missingReviewFields(file, book, bookFields, audioFields);
     if (missing.length > 0) {
       missingPerFile.set(file.id, missing);
     }
@@ -171,10 +81,14 @@ function buildMissingHint(
       // Missing on all files — list without qualifier
       parts.push(field);
     } else {
-      // Missing on some files — qualify with file type (uppercase)
-      for (const file of filesWithField) {
-        parts.push(`${field} (${fileTypeLabel(file.file_type)})`);
-      }
+      // Missing on some files: say which. Two files of one type would both
+      // read "(M4B)", so a shared type names the file instead.
+      const which = filesWithField.map((file) =>
+        mainFiles.filter((f) => f.file_type === file.file_type).length > 1
+          ? fileLabel(file)
+          : fileTypeLabel(file.file_type),
+      );
+      parts.push(`${field} (${[...new Set(which)].join(", ")})`);
     }
   }
 
@@ -187,8 +101,7 @@ export function ReviewPanel({
   files,
   onChange,
   isPending = false,
-  toggleValue,
-  readOnly = false,
+  draft,
 }: ReviewPanelProps) {
   const { data: criteria } = useReviewCriteria();
   // Book detail and an edit dialog over it can both render a panel.
@@ -203,10 +116,6 @@ export function ReviewPanel({
   // Used for the missing-fields hint (which always reflects saved state).
   const committedAllReviewed =
     mainFiles.length > 0 && mainFiles.every((f) => f.reviewed === true);
-
-  // The toggle's checked state and the icon's color follow `toggleValue`
-  // when caller is in controlled mode; otherwise default to committed state.
-  const allReviewed = toggleValue ?? committedAllReviewed;
 
   // Determine override indicator
   const allOverrideReviewed = mainFiles.every(
@@ -225,30 +134,67 @@ export function ReviewPanel({
   const mostRecentDate = sortedDates[sortedDates.length - 1];
 
   const isAuto = allNoOverride;
+  const revertingToAuto = !isAuto && draft === null;
+  // A ticked or unticked checkbox that saving would turn into an override.
+  const draftsOverride =
+    draft != null &&
+    mainFiles.some((f) => (f.review_override ?? null) !== draft);
+  // Use automatic is offered whenever saving would leave an override.
+  const offerAutomatic = draft !== null && (!isAuto || draft !== undefined);
 
-  let tooltipText: string;
-  if (isAuto) {
-    tooltipText =
-      "Reviewed state is determined automatically from the required fields configured on the Review Criteria settings page. Fill in all required fields and this will flip to reviewed; remove one and it flips back.";
-    if (!readOnly) tooltipText += " Toggle manually to override.";
+  // Going back to automatic, the criteria predict the state the server will
+  // compute; until they load, the checkbox keeps the saved state.
+  const predictedAllReviewed =
+    revertingToAuto && criteria
+      ? mainFiles.every(
+          (f) =>
+            missingReviewFields(
+              f,
+              book,
+              criteria.book_fields,
+              criteria.audio_fields,
+            ).length === 0,
+        )
+      : undefined;
+  const allReviewed =
+    draft == null
+      ? (predictedAllReviewed ?? committedAllReviewed)
+      : draft === ReviewOverrideReviewed;
+
+  // How the state was set, said under the checkbox rather than in a tooltip,
+  // so it reads the same on a phone.
+  let statusText: string;
+  if (revertingToAuto) {
+    statusText = "Goes back to the review criteria when you save.";
+  } else if (draftsOverride) {
+    statusText =
+      draft === ReviewOverrideReviewed
+        ? "Marked reviewed by hand when you save."
+        : "Marked as needing review by hand when you save.";
+  } else if (isAuto) {
+    statusText =
+      "Set automatically from the review criteria. Check or uncheck to set it by hand.";
   } else if (allOverrideReviewed && mostRecentDate) {
-    tooltipText = `Manually marked reviewed on ${formatDate(mostRecentDate)}`;
+    statusText = `Marked reviewed by hand on ${formatDate(mostRecentDate)}.`;
   } else if (allOverrideUnreviewed && mostRecentDate) {
-    tooltipText = `Manually marked needs review on ${formatDate(mostRecentDate)}`;
+    statusText = `Marked as needing review by hand on ${formatDate(mostRecentDate)}.`;
   } else {
-    tooltipText = "Manually set on multiple files";
+    statusText = "Set by hand on some files.";
   }
 
-  // Build missing-fields hint (only when book needs review).
-  // Uses committed state — the hint reflects what's actually missing on disk,
-  // not the draft toggle state in controlled mode.
-  const needsReview = !committedAllReviewed;
+  // Build the missing-fields hint when the book needs review, or will once it
+  // goes back to automatic. It follows saved data, not a drafted override.
+  const needsReview = !committedAllReviewed || predictedAllReviewed === false;
   let missingHint: string | null = null;
 
   if (needsReview && criteria) {
-    const needsReviewFiles = mainFiles.filter((f) => f.reviewed === false);
+    // buildMissingHint skips files with nothing missing.
+    const needsReviewFiles = revertingToAuto
+      ? mainFiles
+      : mainFiles.filter((f) => f.reviewed === false);
     missingHint = buildMissingHint(
       needsReviewFiles,
+      mainFiles,
       book,
       criteria.book_fields,
       criteria.audio_fields,
@@ -259,66 +205,50 @@ export function ReviewPanel({
     onChange(checked ? ReviewOverrideReviewed : ReviewOverrideUnreviewed);
   };
 
+  // Laid out like the dialogs' other checkboxes (Abridged, Preferred cover):
+  // a field label, the checkbox with its label, and a line of help.
   return (
-    <div className="border rounded-md p-4 space-y-2 bg-muted/30">
-      <div className="flex items-center gap-3">
-        {readOnly ? (
-          <span className="font-medium">
-            {allReviewed ? "Reviewed" : "Needs review"}
-          </span>
-        ) : (
+    <div
+      aria-labelledby={`${toggleId}-heading`}
+      className="space-y-2"
+      role="group"
+    >
+      <Label id={`${toggleId}-heading`}>Review</Label>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          aria-describedby={`${toggleId}-status`}
+          checked={allReviewed}
+          disabled={isPending}
+          id={toggleId}
+          onCheckedChange={(checked) => handleToggle(checked === true)}
+        />
+        <Label
+          className={cn(
+            "cursor-pointer font-normal text-muted-foreground",
+            isPending && "opacity-50",
+          )}
+          htmlFor={toggleId}
+        >
+          Reviewed
+        </Label>
+      </div>
+      <p className="text-xs text-muted-foreground" id={`${toggleId}-status`}>
+        {statusText}
+        {missingHint && ` ${missingHint}.`}
+        {offerAutomatic && (
           <>
-            <Switch
-              checked={allReviewed}
-              className="cursor-pointer"
+            {" "}
+            <Button
+              className="text-xs"
               disabled={isPending}
-              id={toggleId}
-              onCheckedChange={handleToggle}
-            />
-            <Label
-              className={cn(
-                "cursor-pointer font-medium",
-                isPending && "opacity-50",
-              )}
-              htmlFor={toggleId}
+              onClick={() => onChange(null)}
+              variant="link"
             >
-              Reviewed
-            </Label>
+              Use automatic
+            </Button>
           </>
         )}
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            {/* A button, so the keyboard can open the tooltip, the only
-                place that says how the state was set. */}
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={
-                  allReviewed ? "Reviewed status" : "Needs review status"
-                }
-                className="flex cursor-help rounded-sm"
-                variant="unstyled"
-              >
-                <CircleCheck
-                  aria-hidden="true"
-                  className={cn(
-                    "h-4 w-4",
-                    allReviewed
-                      ? "text-green-600 dark:text-green-500"
-                      : "text-muted-foreground",
-                  )}
-                />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              <p>{tooltipText}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {missingHint && (
-        <p className="text-xs text-muted-foreground pl-0">{missingHint}</p>
-      )}
+      </p>
     </div>
   );
 }

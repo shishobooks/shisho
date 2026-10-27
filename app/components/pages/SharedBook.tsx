@@ -34,10 +34,11 @@ const shareLinkContext = (
   // An empty key means the book has no cover file to show.
   bookCoverUrl: (book) =>
     book.cover_cache_key ? shareBookCoverUrl(token, book) : null,
+  // The payload blanks cover filenames, but the cover's type stays and is
+  // cleared along with them, so it says whether the file has a cover.
   fileCoverUrl: (file) =>
-    file.file_role === "supplement" ? null : shareFileCoverUrl(token, file),
+    file.cover_mime_type ? shareFileCoverUrl(token, file) : null,
   coverAspectRatio: shared.cover_aspect_ratio,
-  coverFileId: shared.cover_file_id,
 });
 
 // The one page for every link that cannot be used: unknown, mistyped,

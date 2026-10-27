@@ -1,35 +1,78 @@
-import { BookOpen, Headphones, Pencil, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import {
+  BookOpen,
+  Headphones,
+  MoreHorizontal,
+  MoveRight,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import FileChaptersTab, {
-  type ChaptersActionState,
-  type FileChaptersTabHandle,
-} from "@/components/files/FileChaptersTab";
-import FileDetailsTab from "@/components/files/FileDetailsTab";
+import BookFilesList from "@/components/files/BookFilesList";
+import type { ChaptersActionState } from "@/components/files/FileChaptersEditor";
+import FileChaptersSection from "@/components/files/FileChaptersSection";
+import FileDetailHeader from "@/components/files/FileDetailHeader";
+import {
+  fileDiskRows,
+  fileEditionRows,
+  fileIdentifierRows,
+} from "@/components/files/fileFacts";
+import FilePageGrid from "@/components/files/FilePageGrid";
+import { BookEditDialog } from "@/components/library/BookEditDialog";
+import BookReviewBadge from "@/components/library/BookReviewBadge";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
+import DownloadErrorDialog from "@/components/library/DownloadErrorDialog";
+import FileDownloadControl from "@/components/library/FileDownloadControl";
 import { FileEditDialog } from "@/components/library/FileEditDialog";
+import LabelGrid from "@/components/library/LabelGrid";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
 import QueryError from "@/components/library/QueryError";
+import { RescanDialog } from "@/components/library/RescanDialog";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
-import { useBook, useDeleteFile } from "@/hooks/queries/books";
+import { useBook, useDeleteFile, useResyncFile } from "@/hooks/queries/books";
+import { useDeliveryRules } from "@/hooks/queries/delivery";
 import { useUserLibrary } from "@/hooks/queries/libraries";
+import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useCan } from "@/hooks/useCan";
+import { useFileDownload } from "@/hooks/useFileDownload";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { isLoadFailure, toastRequestError } from "@/libraries/api";
-import type { File } from "@/types";
+import {
+  FileRoleMain,
+  FileTypeCBZ,
+  FileTypePDF,
+  type ResyncMode,
+} from "@/types";
+import { defaultDeliveredFileType } from "@/utils/delivery";
 import { fileLabel } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
 
-const validTabs = ["details", "chapters"] as const;
-type TabValue = (typeof validTabs)[number];
+const NO_CHANGES: ChaptersActionState = {
+  isSaving: false,
+  canSave: false,
+  hasChanges: false,
+};
 
+/**
+ * A file's page, shaped like its book's: the header with the file's cover,
+ * name, facts, and actions, the book's other files beside it, then the
+ * pages of a PDF or CBZ, the chapters, and the file's on-disk facts.
+ */
 const FileDetail = () => {
   const { fileId, bookId, libraryId, tab } = useParams<{
     fileId: string;
@@ -38,104 +81,48 @@ const FileDetail = () => {
     tab?: string;
   }>();
   const navigate = useNavigate();
-  // File metadata, cover, chapters, and deletion all require Books Write.
+  // File metadata, chapters, rescan, move, and delete all require Books
+  // Write. People pages need People Read; without it names are plain text.
   const canWriteBooks = useCan("books:write");
-
-  // Derive active tab from URL param, defaulting to "details"
-  const activeTab: TabValue = validTabs.includes(tab as TabValue)
-    ? (tab as TabValue)
-    : "details";
-
-  // Navigate to new tab URL
-  const navigateToTab = (value: string) => {
-    const basePath = `/libraries/${libraryId}/books/${bookId}/files/${fileId}`;
-    if (value === "details") {
-      navigate(basePath);
-    } else {
-      navigate(`${basePath}/${value}`);
-    }
-  };
-
-  // Handle tab change with unsaved changes check
-  const handleTabChange = (value: string) => {
-    if (chaptersActionState.hasChanges) {
-      setPendingTabChange(value);
-      return;
-    }
-    navigateToTab(value);
-  };
-
-  // Handle confirming tab change (discard changes)
-  const handleConfirmTabChange = () => {
-    if (pendingTabChange) {
-      setIsEditingChapters(false);
-      navigateToTab(pendingTabChange);
-      setPendingTabChange(null);
-    }
-  };
-
-  // Handle canceling tab change
-  const handleCancelTabChange = () => {
-    setPendingTabChange(null);
-  };
-
-  // Edit states for each tab
-  const [editingFile, setEditingFile] = useState<File | null>(null);
-  const [isEditingChapters, setIsEditingChapters] = useState(false);
-
-  // Delete file state
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const deleteFileMutation = useDeleteFile();
-
-  // Chapters tab ref and action state
-  const chaptersRef = useRef<FileChaptersTabHandle>(null);
-  const [chaptersActionState, setChaptersActionState] =
-    useState<ChaptersActionState>({
-      isSaving: false,
-      canSave: false,
-      hasChanges: false,
-    });
-
-  // Pending tab change (when user tries to switch tabs with unsaved changes)
-  const [pendingTabChange, setPendingTabChange] = useState<string | null>(null);
-
-  // Unsaved changes protection for SPA navigation
-  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
-    useUnsavedChanges(chaptersActionState.hasChanges);
+  const linkPeople = useCan("people:read");
 
   const bookQuery = useBook(bookId);
   const libraryQuery = useUserLibrary(libraryId);
+  const { data: pluginIdentifierTypes } = usePluginIdentifierTypes();
+  // The main download button follows the user's default Delivery Rules.
+  const deliveryRulesQuery = useDeliveryRules();
+  const downloads = useFileDownload();
+  const resyncFileMutation = useResyncFile();
+  const deleteFileMutation = useDeleteFile();
 
-  // Handle file deletion
-  const handleDeleteFile = async () => {
-    if (!fileId) return;
-    try {
-      const result = await deleteFileMutation.mutateAsync(parseInt(fileId));
-      if (result.book_deleted) {
-        toast.success("Book deleted");
-        // Book was deleted because this was the last file
-        navigate("/");
-      } else {
-        toast.success("File deleted");
-        // Navigate back to book detail
-        navigate(`/libraries/${libraryId}/books/${bookId}`);
-      }
-      setShowDeleteDialog(false);
-    } catch (error) {
-      toastRequestError(error, "Failed to delete file");
-    }
-  };
+  const [editFileOpen, setEditFileOpen] = useState(false);
+  const [editBookOpen, setEditBookOpen] = useState(false);
+  const [rescanOpen, setRescanOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [chaptersState, setChaptersState] =
+    useState<ChaptersActionState>(NO_CHANGES);
+  // The page had Details and Chapters tabs. An old link to either lands
+  // here under the plain URL, scrolled to the Chapters section for
+  // `/chapters`.
+  const [scrollToChapters, setScrollToChapters] = useState(tab === "chapters");
 
-  // Find file for page title
-  const fileForTitle = bookQuery.data?.files?.find(
-    (f) => f.id === parseInt(fileId || "0"),
-  );
-  usePageTitle(fileForTitle ? fileLabel(fileForTitle) : "File Details");
+  // Leaving with unsaved chapter edits asks first.
+  const { showBlockerDialog, proceedNavigation, cancelNavigation } =
+    useUnsavedChanges(chaptersState.hasChanges);
 
-  // Find file in book.files array
   const file = bookQuery.data?.files?.find(
     (f) => f.id === parseInt(fileId || "0"),
   );
+  usePageTitle(file ? fileLabel(file) : undefined);
+
+  useEffect(() => {
+    if (!tab) return;
+    navigate(`/libraries/${libraryId}/books/${bookId}/files/${fileId}`, {
+      replace: true,
+      preventScrollReset: true,
+    });
+  }, [tab, libraryId, bookId, fileId, navigate]);
 
   if (bookQuery.isLoading) {
     return (
@@ -153,26 +140,15 @@ const FileDetail = () => {
     );
   }
 
-  if (!bookQuery.data) {
+  if (!bookQuery.data || !file) {
+    const noun = bookQuery.data ? "File" : "Book";
     return (
       <LibraryLayout>
         <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">Book Not Found</h1>
+          <h1 className="mb-4 text-2xl font-semibold">{noun} Not Found</h1>
           <p className="text-muted-foreground">
-            The book you're looking for doesn't exist or may have been removed.
-          </p>
-        </div>
-      </LibraryLayout>
-    );
-  }
-
-  if (!file) {
-    return (
-      <LibraryLayout>
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">File Not Found</h1>
-          <p className="text-muted-foreground">
-            The file you're looking for doesn't exist or may have been removed.
+            The {noun.toLowerCase()} you're looking for doesn't exist or may
+            have been removed.
           </p>
         </div>
       </LibraryLayout>
@@ -181,162 +157,260 @@ const FileDetail = () => {
 
   const book = bookQuery.data;
   const library = libraryQuery.data;
-  const filename = fileLabel(file);
+  const bookUrl = `/libraries/${libraryId}/books/${bookId}`;
+  const isMain = file.file_role === FileRoleMain;
+  const files = book.files ?? [];
+  const readingAction = getReadingAction(file.file_type);
+  const deliveredFileType = deliveryRulesQuery.isPending
+    ? undefined
+    : defaultDeliveredFileType(file, deliveryRulesQuery.data?.rules);
+
+  const handleRescan = async (mode: ResyncMode) => {
+    try {
+      const result = await resyncFileMutation.mutateAsync({
+        fileId: file.id,
+        payload: { mode },
+      });
+      setRescanOpen(false);
+      if ("book_deleted" in result && result.book_deleted) {
+        toast.success("Book removed (no files remain)");
+        navigate("/");
+      } else if ("file_deleted" in result && result.file_deleted) {
+        toast.success("File removed (no longer on disk, or DRM-protected)");
+        navigate(bookUrl);
+      } else {
+        toast.success("File rescanned");
+      }
+    } catch (error) {
+      toastRequestError(error, "Failed to rescan file");
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      const result = await deleteFileMutation.mutateAsync(file.id);
+      setDeleteOpen(false);
+      if (result.book_deleted) {
+        toast.success("Book deleted");
+        navigate("/");
+      } else {
+        toast.success("File deleted");
+        navigate(bookUrl);
+      }
+    } catch (error) {
+      toastRequestError(error, "Failed to delete file");
+    }
+  };
+
+  const actions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {readingAction && (
+        <Button asChild size="sm">
+          <Link to={`${bookUrl}/files/${file.id}/read`}>
+            {readingAction === "listen" ? (
+              <Headphones aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <BookOpen aria-hidden="true" className="h-4 w-4" />
+            )}
+            {readingAction === "listen" ? "Listen" : "Read"}
+          </Link>
+        </Button>
+      )}
+      <FileDownloadControl
+        bookTitle={book.title}
+        deliveredFileType={deliveredFileType}
+        file={file}
+        isDownloading={downloads.downloadingFileId === file.id}
+        isSupplement={!isMain}
+        onCancelDownload={downloads.cancel}
+        onDownload={() =>
+          deliveredFileType && downloads.download(file, deliveredFileType)
+        }
+        onDownloadAs={(fileType) => downloads.downloadAs(file, fileType)}
+        onDownloadOriginal={() => downloads.downloadOriginal(file)}
+      />
+      {canWriteBooks && (
+        <>
+          <Button
+            aria-label="Edit"
+            onClick={() => setEditFileOpen(true)}
+            size="sm"
+            variant="outline"
+          >
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+            <span className="hidden sm:inline">Edit</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button aria-label="File actions" size="icon-sm" variant="ghost">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              <DropdownMenuItem
+                disabled={resyncFileMutation.isPending}
+                onSelect={() => setRescanOpen(true)}
+              >
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                Rescan file
+              </DropdownMenuItem>
+              {/* A supplement belongs with its book, as on the book page. */}
+              {isMain && library && (
+                <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
+                  <MoveRight aria-hidden="true" className="h-4 w-4" />
+                  Move to another book
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => setDeleteOpen(true)}
+              >
+                <Trash2 aria-hidden="true" className="h-4 w-4" />
+                Delete file
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
+    </div>
+  );
+
+  const filesList = files.length > 1 && (
+    <BookFilesList book={book} file={file} />
+  );
 
   return (
     <LibraryLayout>
       <LibraryBreadcrumbs
-        items={[
-          { label: book.title, to: `/libraries/${libraryId}/books/${bookId}` },
-          { label: filename },
-        ]}
+        items={[{ label: book.title, to: bookUrl }, { label: fileLabel(file) }]}
         libraryId={libraryId!}
         libraryName={library?.name ?? book.library?.name}
       />
 
-      {/* File title with Edit/Save/Cancel buttons */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-semibold">{filename}</h1>
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Read button for ebooks/comics, Listen for M4B audiobooks */}
-          {(() => {
-            const action = getReadingAction(file.file_type);
-            if (!action) return null;
-            const isListen = action === "listen";
-            return (
-              <Button
-                aria-label={isListen ? "Listen" : "Read"}
-                asChild
-                size="sm"
-              >
-                <Link
-                  to={`/libraries/${libraryId}/books/${bookId}/files/${fileId}/read`}
-                >
-                  {isListen ? (
-                    <Headphones className="h-4 w-4 sm:mr-2" />
-                  ) : (
-                    <BookOpen className="h-4 w-4 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {isListen ? "Listen" : "Read"}
-                  </span>
-                </Link>
-              </Button>
-            );
-          })()}
-
-          {activeTab === "chapters" && isEditingChapters ? (
-            <>
-              <Button
-                disabled={
-                  !chaptersActionState.canSave || chaptersActionState.isSaving
+      {/* Keyed by the file, so moving to another of the book's files starts
+          its sections fresh: pages collapsed, chapters out of edit mode. */}
+      <div className="space-y-10" key={file.id}>
+        <FileDetailHeader
+          actions={actions}
+          book={book}
+          coverBadge={
+            isMain && (
+              <BookReviewBadge
+                book={book}
+                files={[file]}
+                onEditBook={
+                  canWriteBooks ? () => setEditBookOpen(true) : undefined
                 }
-                onClick={() => chaptersRef.current?.save()}
-                size="sm"
-              >
-                {chaptersActionState.isSaving ? "Saving..." : "Save"}
-              </Button>
-              <Button
-                disabled={chaptersActionState.isSaving}
-                onClick={() => chaptersRef.current?.cancel()}
-                size="sm"
-                variant="outline"
-              >
-                Cancel
-              </Button>
-            </>
-          ) : canWriteBooks ? (
-            <>
-              <Button
-                aria-label="Edit"
-                onClick={() => {
-                  if (activeTab === "details") {
-                    setEditingFile(file);
-                  } else {
-                    setIsEditingChapters(true);
-                  }
-                }}
-                size="sm"
-                variant="outline"
-              >
-                <Pencil className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Edit</span>
-              </Button>
-              <Button
-                aria-label="Delete"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => setShowDeleteDialog(true)}
-                size="sm"
-                variant="outline"
-              >
-                <Trash2 className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Delete</span>
-              </Button>
-            </>
-          ) : null}
-        </div>
+                onEditFile={
+                  canWriteBooks ? () => setEditFileOpen(true) : undefined
+                }
+              />
+            )
+          }
+          file={file}
+          linkPeople={linkPeople}
+          rows={[
+            ...fileEditionRows(file),
+            ...fileIdentifierRows(file, pluginIdentifierTypes),
+          ]}
+          sidePanel={filesList}
+        />
+
+        {/* Under 1280px the book's files come before the long lists below. */}
+        {filesList && <div className="xl:hidden">{filesList}</div>}
+
+        {(file.file_type === FileTypeCBZ || file.file_type === FileTypePDF) && (
+          <FilePageGrid file={file} />
+        )}
+
+        <FileChaptersSection
+          canEdit={canWriteBooks}
+          file={file}
+          onActionStateChange={setChaptersState}
+          onScrolledIntoView={() => setScrollToChapters(false)}
+          scrollIntoViewOnLoad={scrollToChapters}
+        />
+
+        <section aria-labelledby="file-disk-heading">
+          <h2
+            className="mb-3 text-sm text-muted-foreground"
+            id="file-disk-heading"
+          >
+            On disk
+          </h2>
+          <LabelGrid rows={fileDiskRows(file)} />
+        </section>
       </div>
 
-      {/* Tabs */}
-      <Tabs onValueChange={handleTabChange} value={activeTab}>
-        <TabsList>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="chapters">Chapters</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details">
-          <FileDetailsTab file={file} />
-        </TabsContent>
-
-        <TabsContent value="chapters">
-          <FileChaptersTab
-            canEdit={canWriteBooks}
-            file={file}
-            isEditing={isEditingChapters}
-            onActionStateChange={setChaptersActionState}
-            onEditingChange={setIsEditingChapters}
-            ref={chaptersRef}
-          />
-        </TabsContent>
-      </Tabs>
-
-      {/* FileEditDialog for editing file details */}
-      {canWriteBooks && editingFile && (
-        <FileEditDialog
-          file={editingFile}
-          onOpenChange={(open) => {
-            if (!open) {
-              setEditingFile(null);
-            }
-          }}
-          open={!!editingFile}
-        />
-      )}
-
-      {/* Unsaved changes dialog for tab switching */}
-      <UnsavedChangesDialog
-        onDiscard={handleConfirmTabChange}
-        onStay={handleCancelTabChange}
-        open={pendingTabChange !== null}
+      <DownloadErrorDialog
+        failure={downloads.failure}
+        onClose={downloads.clearFailure}
+        onDownloadOriginal={(failure) =>
+          downloads.downloadOriginal(failure.file)
+        }
       />
 
-      {/* Unsaved changes dialog for SPA navigation */}
       <UnsavedChangesDialog
         onDiscard={proceedNavigation}
         onStay={cancelNavigation}
         open={showBlockerDialog}
       />
 
-      {/* Delete file confirmation dialog */}
       {canWriteBooks && (
-        <DeleteConfirmationDialog
-          isPending={deleteFileMutation.isPending}
-          onConfirm={handleDeleteFile}
-          onOpenChange={setShowDeleteDialog}
-          open={showDeleteDialog}
-          title={filename}
-          variant="file"
-        />
+        <>
+          {editFileOpen && (
+            <FileEditDialog
+              book={book}
+              file={file}
+              onOpenChange={setEditFileOpen}
+              open={editFileOpen}
+            />
+          )}
+          {/* For the review badge, when a book field is what is missing. */}
+          <BookEditDialog
+            book={book}
+            onOpenChange={setEditBookOpen}
+            open={editBookOpen}
+          />
+          <RescanDialog
+            entityName={fileLabel(file)}
+            entityType="file"
+            isPending={resyncFileMutation.isPending}
+            onConfirm={handleRescan}
+            onOpenChange={setRescanOpen}
+            open={rescanOpen}
+          />
+          {library && isMain && (
+            <MoveFilesDialog
+              library={library}
+              onOpenChange={setMoveOpen}
+              onSuccess={(targetBook) => {
+                setMoveOpen(false);
+                // The file now lives under another book; follow it there.
+                // Replace history so Back does not return to the old URL.
+                navigate(
+                  `/libraries/${libraryId}/books/${targetBook.id}/files/${file.id}`,
+                  { replace: true },
+                );
+              }}
+              open={moveOpen}
+              selectedFiles={[file]}
+              sourceBook={book}
+            />
+          )}
+          <DeleteConfirmationDialog
+            isPending={deleteFileMutation.isPending}
+            onConfirm={handleDelete}
+            onOpenChange={setDeleteOpen}
+            open={deleteOpen}
+            title={fileLabel(file)}
+            variant="file"
+          />
+        </>
       )}
     </LibraryLayout>
   );

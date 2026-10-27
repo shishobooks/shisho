@@ -628,7 +628,8 @@ func (h *handler) Download(c echo.Context) error {
 	switch {
 	case len(deliveries) == 0:
 		content.WriteString(`<p><b>Not delivered to this Device.</b> Its Delivery Rules have no rule for this book's file types.</p>`)
-	case kindle && deliveries[0].DeliveredFileType == models.FileTypeAZW3:
+	case kindle && deliveries[0].DeliveredFileType == models.FileTypeAZW3 && hasMainFile(book, models.FileTypeMOBI):
+		// Putting MOBI first only helps a book that has a MOBI.
 		content.WriteString(`<p><i>Some Kindles refuse AZW3 downloads. If yours does, put MOBI first in this Device's Delivery Rules.</i></p>`)
 	}
 	for _, d := range deliveries {
@@ -636,6 +637,13 @@ func (h *handler) Download(c echo.Context) error {
 	}
 
 	return h.render(c, content.String())
+}
+
+// hasMainFile reports whether book has a main File of fileType.
+func hasMainFile(book *models.Book, fileType string) bool {
+	return slices.ContainsFunc(book.Files, func(f *models.File) bool {
+		return f.FileType == fileType && f.FileRole == models.FileRoleMain
+	})
 }
 
 // Cover serves a book cover image.

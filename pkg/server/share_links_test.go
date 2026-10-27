@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -421,12 +422,6 @@ func TestShareLinks_RecipientFetchesBookWithoutPaths(t *testing.T) {
 	assert.NotEmpty(t, shared.CoverCacheKey)
 	assert.Equal(t, "book", shared.CoverAspectRatio)
 	require.Len(t, shared.Files, 2)
-	require.NotNil(t, shared.CoverFileID, "the page opens its cover tabs on the file the cover comes from")
-	for _, file := range shared.Files {
-		if file.FileRole == models.FileRoleMain {
-			assert.Equal(t, file.ID, *shared.CoverFileID)
-		}
-	}
 	for _, file := range shared.Files {
 		assert.Empty(t, file.Filepath)
 		assert.Nil(t, file.CoverImageFilename)
@@ -460,6 +455,25 @@ func TestShareLinks_RecipientCovers(t *testing.T) {
 
 	rec = f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/cover", link.Token, f.epubB.ID), "")
 	assert.Equal(t, http.StatusNotFound, rec.Code, "a file outside the link's book is not served")
+}
+
+// A supplement shows its cover on the Share Link page, as on the book page.
+func TestShareLinks_RecipientSupplementCover(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	link := f.mustCreate(f.admin, f.bookA, `{}`)
+
+	coverName := "notes.pdf.cover.png"
+	require.NoError(t, os.WriteFile(filepath.Join(f.bookA.Filepath, coverName), []byte("cover-notes"), 0o600))
+	_, err := f.db.NewUpdate().Model(f.suppA).
+		Set("cover_image_filename = ?", coverName).
+		WherePK().Exec(context.Background())
+	require.NoError(t, err)
+
+	rec := f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/cover", link.Token, f.suppA.ID), "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "cover-notes", rec.Body.String())
 }
 
 func TestShareLinks_RecipientDownloads(t *testing.T) {
@@ -518,7 +532,7 @@ func TestShareLinks_RecipientDownloadsAsReachableFileTypes(t *testing.T) {
 	for _, file := range shared.Files {
 		reachable[file.ID] = file.ReachableFileTypes
 	}
-	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub}, reachable[f.epubA.ID])
+	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub, models.FileTypeAZW3}, reachable[f.epubA.ID])
 	assert.Equal(t, []string{models.FileTypePDF}, reachable[f.suppA.ID], "a supplement downloads only as itself")
 
 	downloadAs := func(file *models.File, fileType string) string {
@@ -528,6 +542,17 @@ func TestShareLinks_RecipientDownloadsAsReachableFileTypes(t *testing.T) {
 		rec = f.do(nil, method, downloadAs(f.epubA, models.FileTypeKePub), "")
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Contains(t, rec.Header().Get("Content-Disposition"), ".kepub.epub")
+
+		// An AZW3 is built before it is sent, so even its first download
+		// has an exact length.
+		rec = f.do(nil, method, downloadAs(f.epubA, models.FileTypeAZW3), "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Header().Get("Content-Disposition"), ".azw3")
+		assert.NotEmpty(t, rec.Header().Get("Content-Length"))
+		if method == http.MethodGet {
+			assert.Equal(t, rec.Header().Get("Content-Length"), strconv.Itoa(rec.Body.Len()))
+			assert.Equal(t, "BOOKMOBI", string(rec.Body.Bytes()[60:68]))
+		}
 	}
 	rec = f.do(nil, http.MethodGet, downloadAs(f.epubA, models.FileTypeEPUB), "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -989,4 +1014,27 @@ func TestShareLinks_RevokeAndDeleteWorkWhileSharingDisabled(t *testing.T) {
 	f.setSharing(true, false)
 	assert.Equal(t, http.StatusNotFound, f.do(nil, http.MethodGet, "/api/share/"+leaked.Token, "").Code)
 	assert.Equal(t, models.ShareLinkStateRevoked, f.listed(f.bookA)[leaked.ID].State)
+}
+
+// A Download as entry whose Conversion declines the file is a 422 saying
+// why, as in the web app, and counts no download.
+func TestShareLinks_DeclinedConversionSaysWhy(t *testing.T) {
+	t.Parallel()
+	f := newShareLinksFixture(t)
+	f.setSharing(true, false)
+	ctx := context.Background()
+	path := testgen.GenerateMOBI(t, f.bookA.Filepath, "bare.mobi", testgen.MOBIOptions{Kind: testgen.MOBIKindKF8, Title: "Bare"})
+	mobiFile := &models.File{LibraryID: f.bookA.LibraryID, BookID: f.bookA.ID, FileType: models.FileTypeMOBI, FileRole: models.FileRoleMain, Filepath: path, FilesizeBytes: 1}
+	_, err := f.db.NewInsert().Model(mobiFile).Exec(ctx)
+	require.NoError(t, err)
+	link := f.mustCreate(f.admin, f.bookA, `{}`)
+
+	for _, fileType := range []string{models.FileTypeEPUB, models.FileTypeKePub} {
+		rec := f.do(nil, http.MethodGet, fmt.Sprintf("/api/share/%s/files/%d/download/%s", link.Token, mobiFile.ID, fileType), "")
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Body.String(), `"code":"invalid_state"`)
+		assert.Contains(t, rec.Body.String(), "This Kindle book can't be converted: it has no skeleton or fragment index")
+		assert.Empty(t, rec.Header().Get("Content-Disposition"))
+	}
+	assert.Zero(t, f.listed(f.bookA)[link.ID].DownloadCount)
 }

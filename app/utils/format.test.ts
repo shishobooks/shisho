@@ -4,6 +4,7 @@ import {
   fileLabel,
   fileTitle,
   fileTypeLabel,
+  formatBitrate,
   formatCount,
   formatDate,
   formatDateTime,
@@ -13,7 +14,22 @@ import {
   formatPersonCredits,
   formatPlayerTime,
   formatShowingRange,
+  formatYear,
 } from "./format";
+
+describe("formatBitrate", () => {
+  it("rounds to whole kilobits per second", () => {
+    expect(formatBitrate(64000)).toBe("64 kbps");
+    expect(formatBitrate(127_600)).toBe("128 kbps");
+  });
+});
+
+describe("formatYear", () => {
+  it("reads the year in UTC, so January 1 stays in its year west of UTC", () => {
+    // Tests run in America/Chicago, where this instant is still 2014.
+    expect(formatYear("2015-01-01T00:00:00Z")).toBe("2015");
+  });
+});
 
 describe("formatDate", () => {
   it("preserves the UTC date regardless of local timezone", () => {

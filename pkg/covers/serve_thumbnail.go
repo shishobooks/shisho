@@ -28,8 +28,8 @@ func serveThumbnail(c echo.Context, file *models.File, cacheControl, resource st
 	params := CoverThumbnailQuery{Aspect: c.QueryParam("aspect"), RenderKey: c.QueryParam("r")}
 	var err error
 	params.Size, err = strconv.Atoi(value)
-	if err != nil || !validThumbnailSize(params.Size) {
-		return true, errcodes.ValidationError(ErrInvalidThumbnailSize.Error())
+	if err != nil || !ValidThumbnailSize(params.Size) {
+		return true, errcodes.ValidationError(InvalidThumbnailSizeMessage)
 	}
 	aspect := params.Aspect
 	if aspect != "" && aspect != "book" && aspect != "square" {
@@ -48,7 +48,15 @@ func serveThumbnail(c echo.Context, file *models.File, cacheControl, resource st
 	if params.RenderKey != ThumbnailRenderKey {
 		cacheControl = "private, no-store"
 	}
-	// Generation and cache reads succeed before any cacheable image headers are set.
+	WriteThumbnail(c, thumb, cacheControl)
+	return true, nil
+}
+
+// WriteThumbnail sends a generated thumbnail with its ETag, answering a
+// matching If-None-Match with 304, for the cover and page routes. Call it
+// only once generation has succeeded, so no cacheable image headers precede
+// an error.
+func WriteThumbnail(c echo.Context, thumb Thumbnail, cacheControl string) {
 	header := c.Response().Header()
 	header.Set("Content-Type", "image/jpeg")
 	header.Set("Cache-Control", cacheControl)
@@ -57,8 +65,7 @@ func serveThumbnail(c echo.Context, file *models.File, cacheControl, resource st
 	if rng := req.Header.Get("Range"); rng != "" && !strings.HasPrefix(rng, "bytes=") {
 		req.Header.Del("Range")
 	}
-	http.ServeContent(c.Response(), req, "cover.jpg", time.Time{}, bytes.NewReader(thumb.Data))
-	return true, nil
+	http.ServeContent(c.Response(), req, "thumbnail.jpg", time.Time{}, bytes.NewReader(thumb.Data))
 }
 
 // serveOriginalThumbnailFallback preserves formats the thumbnail decoder cannot handle.

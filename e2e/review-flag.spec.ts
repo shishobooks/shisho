@@ -7,6 +7,8 @@
  * 2. Manually toggling a complete book back to "needs review" keeps it in
  *    the queue even though it was previously marked reviewed.
  * 3. Bulk-mark-reviewed via multi-select cascades to all selected books.
+ * 4. Use automatic in the book edit dialog clears a manual override, so the
+ *    book page's badge follows the review criteria again.
  *
  * Running:
  *   pnpm e2e:chromium e2e/review-flag.spec.ts   # Chromium only
@@ -232,5 +234,52 @@ test.describe("Review flag", () => {
     // The filtered view should now show neither book (they were marked reviewed).
     await expect(page.getByText("Bulk Book Alpha")).not.toBeVisible();
     await expect(page.getByText("Bulk Book Beta")).not.toBeVisible();
+  });
+
+  test("Use automatic in the book edit dialog returns the book to the review criteria", async ({
+    page,
+    apiContext,
+  }) => {
+    // A seeded book misses fields the criteria require, so it needs review
+    // until someone marks it reviewed by hand.
+    const bookResp = await apiContext.post("/api/test/books", {
+      data: {
+        libraryId: testData.libraryId,
+        title: "Use Automatic Book",
+        fileType: "epub",
+      },
+    });
+    const book = (await bookResp.json()) as { id: number; fileId: number };
+
+    await loginAndOpenLibrary(page);
+
+    const patchResp = await page.request.patch(`/api/books/${book.id}/review`, {
+      data: { override: "reviewed" },
+    });
+    expect(patchResp.status()).toBe(200);
+
+    await page.goto(`/libraries/${testData.libraryId}/books/${book.id}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("heading", { name: "Use Automatic Book" }),
+    ).toBeVisible();
+    const badge = page.getByRole("button", {
+      name: "Needs review",
+      exact: true,
+    });
+    await expect(badge).not.toBeVisible();
+
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit Book" });
+    await expect(dialog.getByText(/Marked reviewed by hand on/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Use automatic" }).click();
+    await expect(
+      dialog.getByText("Goes back to the review criteria when you save."),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Save Changes" }).click();
+
+    await expect(dialog).not.toBeVisible();
+    await expect(badge).toBeVisible();
   });
 });
