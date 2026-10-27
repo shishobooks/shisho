@@ -426,8 +426,9 @@ func (l *kf8Layout) fontRef(from, ref string) []byte {
 
 var (
 	// cssURL matches a url() and its reference, in double quotes (group 1),
-	// single quotes (2), the &quot; of a style attribute (3), or none (4).
-	cssURL = regexp.MustCompile(`url\(\s*(?:"([^"]*)"|'([^']*)'|&quot;(.*?)&quot;|([^'")\s]*))\s*\)`)
+	// single quotes (2), a quote a style attribute escapes, as &quot; or a
+	// numeric reference (3), or none (4).
+	cssURL = regexp.MustCompile(`url\(\s*(?:"([^"]*)"|'([^']*)'|(?:&quot;|&apos;|&#3[49];|&#[xX]2[27];)(.*?)(?:&quot;|&apos;|&#3[49];|&#[xX]2[27];)|([^'")\s]*))\s*\)`)
 	// cssImport matches an @import that names its stylesheet with a string
 	// rather than url().
 	cssImport = regexp.MustCompile(`(@import\s+)(?:"([^"]*)"|'([^']*)')`)

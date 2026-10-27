@@ -584,7 +584,7 @@ func TestWriteKF8_WritesCSSReferencesUnquoted(t *testing.T) {
 	t.Parallel()
 	b := &KF8Book{
 		Metadata:  Metadata{Title: "Quotes"},
-		Documents: []Document{{Name: "a.xhtml", Content: []byte(`<html><head><style>p { background: url( 'pic.png' ); }</style></head><body><p style="background: url(&quot;pic.png&quot;)">A</p></body></html>`)}},
+		Documents: []Document{{Name: "a.xhtml", Content: []byte(`<html><head><style>p { background: url( 'pic.png' ); }</style></head><body><p style="background: url(&quot;pic.png&quot;)">A</p><p style="background: url(&#34;pic.png&#34;)">B</p><p style='background: url(&#39;pic.png&#39;)'>C</p></body></html>`)}},
 		Styles: []Document{
 			{Name: "a.css", Content: []byte(`@import "b.css"; @import url('b.css') screen; @font-face { src: url("f.ttf") format("truetype"); } p { background: url("missing.png"); }`)},
 			{Name: "b.css", Content: []byte("p { margin: 0; }")},
@@ -604,6 +604,7 @@ func TestWriteKF8_WritesCSSReferencesUnquoted(t *testing.T) {
 	assert.Contains(t, string(text), `@import url(kindle:flow:0002?mime=text/css); @import url(kindle:flow:0002?mime=text/css) screen;`)
 	assert.Contains(t, string(text), `src: url(kindle:embed:0002) format("truetype");`)
 	assert.Contains(t, string(text), `background: url(kindle:embed:0001?mime=image/png); }</style>`)
-	assert.Contains(t, string(text), `style="background: url(kindle:embed:0001?mime=image/png)"`)
+	assert.Equal(t, 2, strings.Count(string(text), `style="background: url(kindle:embed:0001?mime=image/png)"`))
+	assert.Contains(t, string(text), `style='background: url(kindle:embed:0001?mime=image/png)'`)
 	assert.Contains(t, string(text), `url("missing.png")`)
 }

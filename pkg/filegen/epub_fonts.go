@@ -6,6 +6,8 @@ import (
 	"crypto/sha1" //nolint:gosec // the IDPF font obfuscation key is a SHA-1
 	"encoding/hex"
 	"encoding/xml"
+	"html"
+	"io"
 	"net/url"
 	"path"
 	"regexp"
@@ -184,7 +186,9 @@ func uniqueFirst(ids []string, isUnique func(int) bool) []string {
 // and after are the package's identifiers before and after the generator
 // rewrote them, and newUnique its unique identifier after, or "" for none.
 // A font no identifier unlocks is left as it is, since nothing can read it
-// either way.
+// either way, and so is one that can't be read, which the generator copies
+// raw as it does any entry. Only a font's first bytes are read to find its
+// key, and the rest only when it needs rekeying.
 //
 // A font is obfuscated again with the IDPF algorithm, keyed on the new
 // unique identifier, since an Adobe key needs a UUID the new identifiers
@@ -212,14 +216,19 @@ func rekeyFonts(src *zip.Reader, before, after []string, newUnique string) (map[
 		if !ok {
 			continue
 		}
-		data, err := readZipFile(f)
+		head, err := readFontHead(f)
 		if err != nil {
-			return nil, nil, err
+			continue
 		}
-		plain, id, ok := deobfuscateFont(data, algorithm, before)
+		_, id, ok := deobfuscateFont(head, algorithm, before)
 		if !ok || keyStillMade(algorithm, id, after, newUnique) {
 			continue
 		}
+		data, err := readZipFile(f)
+		if err != nil {
+			continue
+		}
+		plain, _, _ := deobfuscateFont(data, algorithm, []string{id})
 		if newUnique == "" {
 			fonts[name], algorithms[name] = plain, ""
 			continue
@@ -233,15 +242,29 @@ func rekeyFonts(src *zip.Reader, before, after []string, newUnique string) (map[
 	return fonts, rewriteEncryption(encData, algorithms), nil
 }
 
-// keyStillMade reports whether the new identifiers still make the key id
-// made: for the IDPF algorithm, id is still the unique identifier, and for
-// Adobe's, still one of the identifiers.
-func keyStillMade(algorithm, id string, after []string, newUnique string) bool {
-	if algorithm == idpfObfuscation {
-		return id == newUnique
+// readFontHead returns the first bytes of a font entry, as many as any
+// algorithm obfuscates.
+func readFontHead(f *zip.File) ([]byte, error) {
+	r, err := f.Open()
+	if err != nil {
+		return nil, err
 	}
-	for _, a := range after {
-		if a == id {
+	defer r.Close()
+	head, err := io.ReadAll(io.LimitReader(r, max(idpfObfuscatedLen, adobeObfuscatedLen)))
+	return head, err
+}
+
+// keyStillMade reports whether the new identifiers still make the key id
+// made: for the IDPF algorithm, the unique identifier makes it, and for
+// Adobe's, any identifier does.
+func keyStillMade(algorithm, id string, after []string, newUnique string) bool {
+	want, _, _ := obfuscationKey(algorithm, id)
+	candidates := after
+	if algorithm == idpfObfuscation {
+		candidates = []string{newUnique}
+	}
+	for _, a := range candidates {
+		if key, _, ok := obfuscationKey(algorithm, a); ok && bytes.Equal(key, want) {
 			return true
 		}
 	}
@@ -250,8 +273,8 @@ func keyStillMade(algorithm, id string, after []string, newUnique string) bool {
 
 var (
 	encryptedData = regexp.MustCompile(`(?s)<(?:[\w.-]+:)?EncryptedData\b.*?</(?:[\w.-]+:)?EncryptedData\s*>`)
-	cipherURI     = regexp.MustCompile(`\bURI\s*=\s*(?:"([^"]*)"|'([^']*)')`)
-	algorithmAttr = regexp.MustCompile(`(\bAlgorithm\s*=\s*["'])[^"']*(["'])`)
+	cipherURI     = regexp.MustCompile(`<(?:[\w.-]+:)?CipherReference\b[^>]*?\sURI\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+	algorithmAttr = regexp.MustCompile(`(<(?:[\w.-]+:)?EncryptionMethod\b[^>]*?\sAlgorithm\s*=\s*["'])[^"']*(["'])`)
 )
 
 // rewriteEncryption returns an encryption.xml with the algorithm of each
@@ -263,7 +286,7 @@ func rewriteEncryption(data []byte, algorithms map[string]string) []byte {
 		if m == nil {
 			return block
 		}
-		algorithm, ok := algorithms[encryptionEntry(string(m[1])+string(m[2]))]
+		algorithm, ok := algorithms[encryptionEntry(html.UnescapeString(string(m[1])+string(m[2])))]
 		switch {
 		case !ok:
 			return block

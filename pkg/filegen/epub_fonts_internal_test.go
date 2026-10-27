@@ -76,3 +76,69 @@ func TestRekeyFonts(t *testing.T) {
 	assert.Nil(t, fonts)
 	assert.Nil(t, enc)
 }
+
+// A font entry that can't be read, such as one whose checksum is wrong or
+// whose compression Go can't decode, is left for the generator to copy as
+// it is, as it was before fonts were checked, so the book still downloads.
+func TestRekeyFonts_SkipsUnreadableFonts(t *testing.T) {
+	t.Parallel()
+	font := append([]byte("OTTO"), make([]byte, 1200)...)
+	key, n, _ := obfuscationKey(idpfObfuscation, "old")
+	hidden := xorFont(font, key, n)
+	enc := `<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+<enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/><enc:CipherData><enc:CipherReference URI="bad.otf"/></enc:CipherData></enc:EncryptedData>
+<enc:EncryptedData><enc:EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/><enc:CipherData><enc:CipherReference URI="bzip.otf"/></enc:CipherData></enc:EncryptedData>
+</encryption>`
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create(encryptionPath)
+	require.NoError(t, err)
+	_, err = w.Write([]byte(enc))
+	require.NoError(t, err)
+	for name, method := range map[string]uint16{"bad.otf": zip.Store, "bzip.otf": 12} {
+		w, err := zw.CreateRaw(&zip.FileHeader{Name: name, Method: method, CRC32: 1, CompressedSize64: uint64(len(hidden)), UncompressedSize64: uint64(len(hidden))})
+		require.NoError(t, err)
+		_, err = w.Write(hidden)
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	src, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+
+	for _, after := range []string{"old", "new"} {
+		fonts, rewritten, err := rekeyFonts(src, []string{"old"}, []string{after}, after)
+		require.NoError(t, err, "identifiers %s", after)
+		assert.Nil(t, fonts)
+		assert.Nil(t, rewritten)
+	}
+}
+
+// encryption.xml is rewritten by the URI its CipherReference gives,
+// entities decoded, past any other URI in the block, and only the
+// EncryptionMethod's algorithm changes.
+func TestRewriteEncryption_MatchesTheCipherReference(t *testing.T) {
+	t.Parallel()
+	enc := `<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<enc:EncryptedData><enc:EncryptionMethod Algorithm="http://ns.adobe.com/pdf/enc#RC"/><ds:KeyInfo><ds:RetrievalMethod URI="#k" Type="t" Algorithm="keep"/></ds:KeyInfo><enc:CipherData><enc:CipherReference URI="OEBPS/a&amp;b.otf"/></enc:CipherData></enc:EncryptedData>
+</encryption>`
+	got := string(rewriteEncryption([]byte(enc), map[string]string{"OEBPS/a&b.otf": idpfObfuscation}))
+	assert.Contains(t, got, `<enc:EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>`)
+	assert.Contains(t, got, `Algorithm="keep"`)
+	assert.Equal(t, map[string]string{"OEBPS/a&b.otf": idpfObfuscation}, obfuscatedFonts([]byte(got)))
+}
+
+// An Adobe font stays as it is when the new identifiers still make its
+// key, however the UUID is written.
+func TestRekeyFonts_AdobeKeyWrittenAnotherWay(t *testing.T) {
+	t.Parallel()
+	font := append([]byte("OTTO"), make([]byte, 1200)...)
+	key, n, _ := obfuscationKey(adobeObfuscation, "urn:uuid:0F1E2D3C-4B5A-4968-8776-A5B4C3D2E1F0")
+	src := fontsZip(t, map[string][]byte{
+		encryptionPath: []byte(fontsEncryption),
+		"OEBPS/a.otf":  xorFont(font, key, n),
+	})
+	fonts, enc, err := rekeyFonts(src, []string{"urn:uuid:0F1E2D3C-4B5A-4968-8776-A5B4C3D2E1F0"}, []string{"isbn", "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0"}, "isbn")
+	require.NoError(t, err)
+	assert.Nil(t, fonts)
+	assert.Nil(t, enc)
+}
