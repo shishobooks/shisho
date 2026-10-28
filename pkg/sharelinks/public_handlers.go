@@ -243,6 +243,11 @@ func (h *publicHandler) serveDownload(c echo.Context, deliveredType string) erro
 	if message, ok := books.UnsupportedContentMessage(err); ok {
 		return errcodes.InvalidState(message)
 	}
+	// Only a Conversion gets here: a File's own File Type falls back to the
+	// original. The failure was logged when it happened.
+	if errors.Is(err, downloadcache.ErrFailedPartway) {
+		return errcodes.InvalidState(SharedFailedPartwayMessage)
+	}
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -260,6 +265,11 @@ func (h *publicHandler) serveDownload(c echo.Context, deliveredType string) erro
 	}
 	return download.Serve(c)
 }
+
+// SharedFailedPartwayMessage is a Share Link's answer to a Download as entry
+// whose earlier build failed partway (downloadcache.ErrFailedPartway). The
+// recipient cannot edit the book, so it points them to the sharer.
+const SharedFailedPartwayMessage = "This file couldn't be converted to this format. Download it in another format, or ask the person who shared it with you."
 
 // startsDownload reports whether a download request counts as a download. HEAD
 // only checks the file, and a range past the first byte continues a download

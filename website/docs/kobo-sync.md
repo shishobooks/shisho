@@ -62,7 +62,8 @@ The **Kobo sync URL** contains the Device's credential. Treat the complete URL l
 3. Open `.kobo/Kobo/Kobo eReader.conf` on the device.
 4. Find `api_endpoint=https://storeapi.kobo.com`.
 5. Replace the value with the complete **Kobo sync URL**.
-6. Safely eject the Kobo and start a sync.
+6. Delete the `image_host`, `image_url_template`, and `image_url_quality_template` lines if they are there, so covers load from Shisho. The Kobo writes them again from Shisho on the next sync; see [Covers Are Missing After Changing the Sync URL](#covers-are-missing-after-changing-the-sync-url).
+7. Safely eject the Kobo and start a sync.
 
 If `.kobo` is hidden, enable hidden files in your file manager. On macOS, press `Cmd+Shift+.` in Finder.
 
@@ -107,6 +108,16 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 **Verify:** Check whether `api_endpoint` uses a port other than `80` or `443`, and whether a Docker port mapping or reverse proxy sits between the Kobo and Shisho.
 
 **Fix:** Without a proxy, publish the same port on both sides of the Docker mapping, setting `SERVER_PORT` to it if it is not `5173`. Behind a proxy on a non-default port, have the proxy send its public port as `X-Forwarded-Port`. Then sync again.
+
+### Covers Are Missing After Changing the Sync URL
+
+**Symptom:** Books sync and download, but their covers stay blank after you set or changed `api_endpoint`.
+
+**Likely cause:** The Kobo saves cover addresses from the server it last got its settings from, which is Kobo's own store on a Kobo new to Shisho, and keeps using them for a while after `api_endpoint` changes.
+
+**Verify:** In `.kobo/Kobo/Kobo eReader.conf`, check whether `image_host`, `image_url_template`, or `image_url_quality_template` start with something other than the **Kobo sync URL**.
+
+**Fix:** Delete those three lines, safely eject the Kobo, and sync. The Kobo gets new cover addresses from Shisho during the sync. A book downloaded while its cover was missing keeps no cover of its own on the Kobo, so its cover loads again each time it is shown; remove the download and download the book again to keep its cover.
 
 ### Books or Metadata Are Stale
 

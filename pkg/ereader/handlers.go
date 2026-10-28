@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -27,7 +26,6 @@ import (
 	"github.com/shishobooks/shisho/pkg/series"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sortspec"
-	"golang.org/x/text/unicode/norm"
 )
 
 const defaultPageSize = 50
@@ -844,43 +842,14 @@ func isKobo(userAgent string) bool {
 }
 
 // kindleFilename returns the filename that ends a file's Kindle download
-// URL: its display name with accents removed, reduced to ASCII letters and
-// digits joined by underscores, plus the extension of the File Type it is
-// delivered as. A Kindle checks the extension and has failed on non-ASCII
-// filenames, and DownloadFileKindle reads the delivered File Type from it.
-func kindleFilename(bookTitle string, f *models.File, deliveredType string) string {
-	name := f.ResolveTitle(bookTitle)
-	// Decompose accented letters so "É" keeps its "E".
-	name = norm.NFD.String(name)
-	if ext := "." + f.FileType; strings.HasSuffix(strings.ToLower(name), ext) {
-		name = name[:len(name)-len(ext)]
-	}
-	const maxLength = 100
-	var b strings.Builder
-	separate := false
-	for _, r := range name {
-		if b.Len() >= maxLength {
-			break
-		}
-		if unicode.Is(unicode.Mn, r) {
-			// A decomposed accent; its letter was already written.
-			continue
-		}
-		if r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
-			if separate {
-				b.WriteByte('_')
-				separate = false
-			}
-			b.WriteRune(r)
-		} else if b.Len() > 0 {
-			separate = true
-		}
-	}
-	slug := b.String()
-	if slug == "" {
-		slug = "book"
-	}
-	return slug + "." + models.DeliveredFileTypeExtension(deliveredType)
+// URL: the File's ID plus the extension of the File Type it is delivered
+// as, which DownloadFileKindle reads the delivered File Type from. A Kindle
+// keeps a reading position per filename, so the name never comes from the
+// title: a download after a rename replaces the book in place and opens
+// where the reader left off, where a new name would add a second copy that
+// opens at the start. The Kindle's library shows the title inside the file.
+func kindleFilename(f *models.File, deliveredType string) string {
+	return fmt.Sprintf("Shisho_%d.%s", f.ID, models.DeliveredFileTypeExtension(deliveredType))
 }
 
 // buildBookURL builds a book detail URL with optional covers param.
@@ -923,7 +892,7 @@ func fileDownloadEntry(baseURL, bookTitle string, d delivery.Delivery, kindle bo
 	var downloadURL string
 	switch {
 	case kindle:
-		downloadURL = fmt.Sprintf("%s/file/%d/kindle/%s", baseURL, f.ID, kindleFilename(bookTitle, f, d.DeliveredFileType))
+		downloadURL = fmt.Sprintf("%s/file/%d/kindle/%s", baseURL, f.ID, kindleFilename(f, d.DeliveredFileType))
 	case d.DeliveredFileType == f.FileType:
 		downloadURL = fmt.Sprintf("%s/file/%d", baseURL, f.ID)
 	default:

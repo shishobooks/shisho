@@ -248,7 +248,9 @@ func TestWriteKF8_CarriesTheIdentifier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, b.Identifier, h.text(exthASIN))
 	assert.Equal(t, b.Identifier, h.text(exthASINAlt))
-	assert.Equal(t, "EBOK", h.text(exthDocType))
+	// A personal document: a Kindle shows a store book's (EBOK) cover
+	// only from Amazon, so it would show none.
+	assert.Equal(t, "PDOC", h.text(exthDocType))
 	assert.True(t, h.isKF8())
 }
 
@@ -337,7 +339,9 @@ func TestWriteKF8_CleansTheTableOfContents(t *testing.T) {
 }
 
 // A fixed-layout book, such as a comic, says so in its EXTH block with the
-// size its pages were made for; a reflowable one has neither record.
+// size its pages were made for, and is marked as a comic with region
+// magnification on, which keeps a Kindle from trimming each page's blank
+// margins; a reflowable one has none of these records.
 func TestWriteKF8_MarksFixedLayout(t *testing.T) {
 	t.Parallel()
 	header := func(b *KF8Book) *header {
@@ -354,12 +358,24 @@ func TestWriteKF8_MarksFixedLayout(t *testing.T) {
 	doc := []Document{{Name: "p.xhtml", Content: []byte(`<html><body><img src="p.jpg"/></body></html>`)}}
 
 	h := header(&KF8Book{Metadata: Metadata{Title: "Comic"}, Documents: doc, FixedLayout: true, OriginalResolution: "1072x1448"})
-	assert.Equal(t, "true", h.text(exthFixedLayout))
-	assert.Equal(t, "1072x1448", h.text(exthOriginalResolution))
+	comic := map[uint32]string{
+		exthFixedLayout:           "true",
+		exthBookType:              "comic",
+		exthOrientationLock:       "none",
+		exthOriginalResolution:    "1072x1448",
+		exthOriginalResolutionAlt: "1072x1448",
+		exthZeroGutter:            "true",
+		exthZeroMargin:            "true",
+		exthRegionMagnification:   "true",
+	}
+	for typ, want := range comic {
+		assert.Equal(t, want, h.text(typ), "record %d", typ)
+	}
 
 	h = header(&KF8Book{Metadata: Metadata{Title: "Novel"}, Documents: doc})
-	assert.Empty(t, h.text(exthFixedLayout))
-	assert.Empty(t, h.text(exthOriginalResolution))
+	for typ := range comic {
+		assert.Empty(t, h.text(typ), "record %d", typ)
+	}
 }
 
 // testFont is a TrueType font as far as a sniff of its first bytes goes,

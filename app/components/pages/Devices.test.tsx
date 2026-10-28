@@ -220,6 +220,30 @@ describe("DeviceDetail", () => {
     expect(copyText).toHaveBeenCalledWith("abcdefghjkmnpqrs");
   });
 
+  it("tells every Kobo to drop its cover lines, and links to troubleshooting", async () => {
+    stubAPI(kobo());
+    renderAt("/user/devices/kobo-1");
+
+    const steps = await screen.findByRole("list", {
+      name: "Kobo sync setup",
+    });
+    for (const key of [
+      "image_host",
+      "image_url_template",
+      "image_url_quality_template",
+    ]) {
+      expect(steps).toHaveTextContent(key);
+    }
+    const help = screen.getByRole("link", {
+      name: /Kobo sync troubleshooting/,
+    });
+    expect(help).toHaveAttribute(
+      "href",
+      "https://www.shishobooks.com/docs/kobo-sync#troubleshooting",
+    );
+    expect(help).toHaveAttribute("target", "_blank");
+  });
+
   it("toasts an error when copying fails", async () => {
     stubAPI(kobo());
     vi.mocked(copyText).mockResolvedValue(false);

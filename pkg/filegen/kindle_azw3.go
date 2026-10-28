@@ -52,10 +52,10 @@ func (epubToAZW3) prepare(ctx context.Context, in stepInput) (Prepared, error) {
 	return &preparedAZW3{book: book}, nil
 }
 
-// kindleFileIdentifier returns the identifier of a file delivered as AZW3,
-// a UUID derived from the File, so a Kindle, which keeps a reading position
-// per identifier, opens a regenerated file where the reader left it, and
-// another file of the book, whose text differs, has its own.
+// kindleFileIdentifier returns the identifier written as the ASIN of a
+// file delivered as AZW3: a UUID derived from the File, the same on every
+// regeneration and different for each File of a book. Reading positions on
+// a Kindle follow the filename instead (kindleFilename in pkg/ereader).
 func kindleFileIdentifier(file *models.File) string {
 	d := sha256.Sum256([]byte(fmt.Sprintf("shisho:file:%d", file.ID)))
 	d[6] = d[6]&0x0F | 0x50 // a name-based UUID

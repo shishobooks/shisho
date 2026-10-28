@@ -472,6 +472,11 @@ func rebuildHeaderRecord(rec []byte, h *header, meta *Metadata, edits headerEdit
 		added = append(added, exthRecord{typ: typ, data: data})
 	}
 
+	// Every file Shisho writes is a personal document (PDOC), whatever type
+	// it had, such as Calibre's store book (EBOK): a Kindle shows a store
+	// book's cover only from Amazon, never the one written here. A Kindle
+	// lists personal documents under Docs.
+	addText(exthDocType, "PDOC")
 	if meta.Title != "" {
 		addText(exthUpdatedTitle, meta.Title)
 	}

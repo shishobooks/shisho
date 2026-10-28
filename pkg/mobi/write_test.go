@@ -225,6 +225,28 @@ func assertRecordsUnchanged(t *testing.T, src, out *pdb, from, to int) {
 	}
 }
 
+// Every header of a rewritten file marks it a personal document (PDOC),
+// whatever type the file had, such as Calibre's store book (EBOK): a Kindle
+// shows a store book's cover only from Amazon, never the one Shisho writes.
+func TestRewrite_MarksPersonalDocument(t *testing.T) {
+	t.Parallel()
+
+	for name, kind := range map[string]testgen.MOBIKind{"mobi6": testgen.MOBIKindMOBI6, "kf8": testgen.MOBIKindKF8, "combo": testgen.MOBIKindCombo} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			src, out := rewriteBuilt(t, calibreOptions(kind), &Metadata{Title: "Retitled"})
+			require.Equal(t, []string{"EBOK"}, headerAt(t, openPDB(t, src), 0).texts(exthDocType))
+
+			db := openPDB(t, out)
+			first := headerAt(t, db, 0)
+			assert.Equal(t, []string{"PDOC"}, first.texts(exthDocType))
+			if index, ok := first.number(exthKF8Boundary); ok {
+				assert.Equal(t, []string{"PDOC"}, headerAt(t, db, int(index)).texts(exthDocType))
+			}
+		})
+	}
+}
+
 func TestRewrite_NoCoverInsertsImageRecord(t *testing.T) {
 	t.Parallel()
 
