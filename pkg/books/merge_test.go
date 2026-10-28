@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -612,4 +614,270 @@ func TestMoveFilesToBook_RecomputesReviewedForBothBooks(t *testing.T) {
 	require.NoError(t, db.NewSelect().Model(&targetFileAfter).Where("f.id = ?", targetFile.ID).Scan(ctx))
 	require.NotNil(t, targetFileAfter.Reviewed, "reviewed must be set for target book's original file after recompute")
 	assert.False(t, *targetFileAfter.Reviewed, "target book's original file should be reviewed=false because target book has no authors")
+}
+
+// seedReading records a user's Read-throughs and Rating on a Book through
+// the reading service. Each transition is "start", "pause", "finish", or
+// "abandon", applied on its day.
+func seedReading(t *testing.T, db *bun.DB, userID, bookID int, ratingUnits *int, transitions ...[2]string) {
+	t.Helper()
+	ctx := context.Background()
+	svc := reading.NewService(db)
+	for _, tr := range transitions {
+		action, day := tr[0], tr[1]
+		switch action {
+		case "start":
+			require.NoError(t, svc.Start(ctx, userID, bookID, day))
+		case "pause":
+			require.NoError(t, svc.SetPaused(ctx, userID, bookID, true))
+		case "finish":
+			require.NoError(t, svc.End(ctx, userID, bookID, models.ReadThroughOutcomeFinished, day))
+		case "abandon":
+			require.NoError(t, svc.End(ctx, userID, bookID, models.ReadThroughOutcomeAbandoned, day))
+		default:
+			t.Fatalf("unknown transition %q", action)
+		}
+	}
+	if ratingUnits != nil {
+		require.NoError(t, svc.SetRating(ctx, userID, bookID, ratingUnits))
+	}
+}
+
+func createMergeTestUser(t *testing.T, db *bun.DB, username string) int {
+	t.Helper()
+	user := &models.User{Username: username, PasswordHash: "test", RoleID: 2, IsActive: true}
+	_, err := db.NewInsert().Model(user).Exec(context.Background())
+	require.NoError(t, err)
+	return user.ID
+}
+
+func moveAllFiles(t *testing.T, db *bun.DB, library *models.Library, file *models.File, target *models.Book) *MoveFilesResult {
+	t.Helper()
+	svc := NewService(db, appsettings.NewService(db))
+	result, err := svc.MoveFilesToBook(context.Background(), MoveFilesOptions{
+		FileIDs:      []int{file.ID},
+		TargetBookID: &target.ID,
+		LibraryID:    library.ID,
+	})
+	require.NoError(t, err)
+	return result
+}
+
+func TestMoveFilesToBook_MergeMovesReadThroughsAndKeepsTargetRating(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+
+	seedReading(t, db, userID, source.ID, pointerutil.Int(8), [2]string{"finish", "2024-03-01"})
+	seedReading(t, db, userID, target.ID, pointerutil.Int(15), [2]string{"start", "2025-01-01"}, [2]string{"abandon", "2025-02-01"})
+
+	result := moveAllFiles(t, db, library, sourceFile, target)
+	require.True(t, result.SourceBookDeleted)
+
+	got, err := reading.NewService(db).RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	require.Len(t, got.ReadThroughs, 2, "both histories end up on the target")
+	assert.Equal(t, pointerutil.Int(15), got.RatingUnits, "the target keeps its own Rating")
+	assert.Equal(t, pointerutil.String(models.ReadingStatusDidNotFinish), got.Status)
+}
+
+func TestMoveFilesToBook_MergeTakesSourceRatingWhenTargetHasNone(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	reader := createMergeTestUser(t, db, "reader")
+	other := createMergeTestUser(t, db, "other")
+
+	seedReading(t, db, reader, source.ID, pointerutil.Int(11))
+	// Another user's record on the target, with no Rating, doesn't block it.
+	seedReading(t, db, other, target.ID, nil, [2]string{"finish", "2025-01-01"})
+	seedReading(t, db, reader, target.ID, nil, [2]string{"finish", "2025-01-01"})
+
+	moveAllFiles(t, db, library, sourceFile, target)
+
+	got, err := reading.NewService(db).RetrieveBookReading(ctx, reader, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, pointerutil.Int(11), got.RatingUnits)
+	otherGot, err := reading.NewService(db).RetrieveBookReading(ctx, other, target.ID)
+	require.NoError(t, err)
+	assert.Nil(t, otherGot.RatingUnits, "a user's Rating never moves to another user")
+}
+
+func TestMoveFilesToBook_MergeCollapsesTwoUnderwayIntoEarlierStart(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+
+	seedReading(t, db, userID, source.ID, nil,
+		[2]string{"finish", "2023-05-01"},
+		[2]string{"start", "2026-01-10"})
+	seedReading(t, db, userID, target.ID, nil,
+		[2]string{"start", "2026-03-01"},
+		[2]string{"pause", ""})
+
+	moveAllFiles(t, db, library, sourceFile, target)
+
+	got, err := reading.NewService(db).RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	require.Len(t, got.ReadThroughs, 2, "the two underway collapse into one; the finished one moves")
+	underway := got.ReadThroughs[0]
+	assert.Equal(t, models.ReadThroughOutcomeUnderway, underway.Outcome)
+	assert.Equal(t, pointerutil.String("2026-01-10"), underway.BeginDay, "the earlier start wins")
+	assert.False(t, underway.Paused, "one of the two was still being read")
+	assert.Equal(t, pointerutil.String(models.ReadingStatusCurrentlyReading), got.Status)
+}
+
+func TestMoveFilesToBook_PartialMoveLeavesReadingData(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	secondPath := filepath.Join(filepath.Dir(sourceFile.Filepath), "Second.epub")
+	require.NoError(t, os.WriteFile(secondPath, []byte("x"), 0644))
+	_, err := db.NewInsert().Model(&models.File{
+		LibraryID: library.ID, BookID: source.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain,
+		Filepath: secondPath, FilesizeBytes: 1, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}).Exec(ctx)
+	require.NoError(t, err)
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+	seedReading(t, db, userID, source.ID, pointerutil.Int(4), [2]string{"finish", "2024-03-01"})
+
+	result := moveAllFiles(t, db, library, sourceFile, target)
+	require.False(t, result.SourceBookDeleted)
+
+	svc := reading.NewService(db)
+	got, err := svc.RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.ReadThroughs)
+	assert.Nil(t, got.RatingUnits)
+	kept, err := svc.RetrieveBookReading(ctx, userID, source.ID)
+	require.NoError(t, err)
+	assert.Len(t, kept.ReadThroughs, 1)
+	assert.Equal(t, pointerutil.Int(4), kept.RatingUnits)
+}
+
+func moveFilesFromBooks(t *testing.T, db *bun.DB, library *models.Library, target *models.Book, files ...*models.File) *MoveFilesResult {
+	t.Helper()
+	ids := make([]int, len(files))
+	for i, f := range files {
+		ids[i] = f.ID
+	}
+	svc := NewService(db, appsettings.NewService(db))
+	result, err := svc.MoveFilesToBook(context.Background(), MoveFilesOptions{
+		FileIDs:      ids,
+		TargetBookID: &target.ID,
+		LibraryID:    library.ID,
+	})
+	require.NoError(t, err)
+	return result
+}
+
+// With several sources rated and an unrated target, the target takes the
+// Rating of the source with the lowest id, whatever order Go's maps give.
+func TestMoveFilesToBook_MergeOfSeveralSourcesIsDeterministic(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	first, firstFile := setupTestBookWithFile(t, db, library, "First Source")
+	second, secondFile := setupTestBookWithFile(t, db, library, "Second Source")
+	third, thirdFile := setupTestBookWithFile(t, db, library, "Third Source")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+	seedReading(t, db, userID, first.ID, pointerutil.Int(4))
+	seedReading(t, db, userID, second.ID, pointerutil.Int(12))
+	seedReading(t, db, userID, third.ID, pointerutil.Int(20))
+
+	result := moveFilesFromBooks(t, db, library, target, thirdFile, secondFile, firstFile)
+	require.Len(t, result.DeletedBookIDs, 3)
+
+	got, err := reading.NewService(db).RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, pointerutil.Int(4), got.RatingUnits)
+}
+
+func TestMoveFilesToBook_MergeKeepsBothPausedOnlyWhenBothWere(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+	seedReading(t, db, userID, source.ID, nil, [2]string{"start", "2026-02-01"}, [2]string{"pause", ""})
+	seedReading(t, db, userID, target.ID, nil, [2]string{"start", "2026-03-01"}, [2]string{"pause", ""})
+
+	moveAllFiles(t, db, library, sourceFile, target)
+
+	got, err := reading.NewService(db).RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	require.Len(t, got.ReadThroughs, 1)
+	assert.True(t, got.ReadThroughs[0].Paused)
+	assert.Equal(t, pointerutil.String(models.ReadingStatusPaused), got.Status)
+}
+
+// A Read-through underway that moves onto a Book on To Read takes it off
+// To Read, as starting one does.
+func TestMoveFilesToBook_MergeOfUnderwayOntoToReadTakesItOff(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+	seedReading(t, db, userID, source.ID, nil, [2]string{"start", "2026-02-01"})
+	_, err := db.NewInsert().Model(&models.UserBook{UserID: userID, BookID: target.ID, ToReadPosition: pointerutil.Int(1)}).Exec(ctx)
+	require.NoError(t, err)
+
+	moveAllFiles(t, db, library, sourceFile, target)
+
+	got, err := reading.NewService(db).RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	assert.False(t, got.OnToRead)
+	assert.Equal(t, pointerutil.String(models.ReadingStatusCurrentlyReading), got.Status)
+}
+
+// When one source's reading data can't move, that source stays, with its
+// data, and the other sources still merge.
+func TestMoveFilesToBook_FailedReadingMergeKeepsThatSource(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	moved, movedFile := setupTestBookWithFile(t, db, library, "Moved Source")
+	stuck, stuckFile := setupTestBookWithFile(t, db, library, "Stuck Source")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	userID := createMergeTestUser(t, db, "reader")
+	seedReading(t, db, userID, moved.ID, nil, [2]string{"finish", "2024-01-01"})
+	seedReading(t, db, userID, stuck.ID, pointerutil.Int(8), [2]string{"finish", "2025-01-01"})
+	_, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE TRIGGER fail_stuck BEFORE UPDATE OF book_id ON read_throughs
+		WHEN OLD.book_id = %d BEGIN SELECT RAISE(ABORT, 'injected'); END`, stuck.ID))
+	require.NoError(t, err)
+
+	result := moveFilesFromBooks(t, db, library, target, movedFile, stuckFile)
+	assert.Equal(t, []int{moved.ID}, result.DeletedBookIDs)
+
+	svc := reading.NewService(db)
+	got, err := svc.RetrieveBookReading(ctx, userID, target.ID)
+	require.NoError(t, err)
+	assert.Len(t, got.ReadThroughs, 1, "only the merged source's history moved")
+	assert.Nil(t, got.RatingUnits, "nothing of the stuck source's moved")
+	kept, err := svc.RetrieveBookReading(ctx, userID, stuck.ID)
+	require.NoError(t, err)
+	assert.Len(t, kept.ReadThroughs, 1)
+	assert.Equal(t, pointerutil.Int(8), kept.RatingUnits)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -205,4 +206,45 @@ func TestTemplates_ResponseShape(t *testing.T) {
 	assert.Equal(t, models.ListSortManual, resp[0].DefaultSort)
 	assert.Equal(t, "favorites", resp[1].Name)
 	assert.Equal(t, models.ListSortAddedAtDesc, resp[1].DefaultSort)
+}
+
+// A shared List shows each viewer their own Reading Status, never the
+// owner's.
+func TestListBooks_AttachesOnlyTheCallersReadingStatus(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	e := newTestEcho(t)
+	owner := createTestUser(t, db, "owner")
+	owner.LibraryAccess = []*models.UserLibraryAccess{{UserID: owner.ID}}
+	viewer := createTestUser(t, db, "viewer")
+	viewer.LibraryAccess = []*models.UserLibraryAccess{{UserID: viewer.ID}}
+	lib := createTestLibrary(t, db, "Lib")
+	book := createTestBook(t, db, lib.ID, "Alpha")
+	h := newTestHandler(db)
+
+	list, err := h.listsService.CreateList(t.Context(), CreateListOptions{UserID: owner.ID, Name: "Shared"})
+	require.NoError(t, err)
+	require.NoError(t, h.listsService.AddBooks(t.Context(), AddBooksOptions{ListID: list.ID, BookIDs: []int{book.ID}, AddedByUserID: owner.ID}))
+	_, err = h.listsService.CreateShare(t.Context(), CreateShareOptions{ListID: list.ID, UserID: viewer.ID, Permission: models.ListPermissionViewer, SharedByUserID: owner.ID})
+	require.NoError(t, err)
+	require.NoError(t, reading.NewService(db).Start(t.Context(), owner.ID, book.ID, "2026-03-01"))
+
+	statusFor := func(user *models.User) *string {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		auth.SetUser(c, user)
+		c.SetParamNames("id")
+		c.SetParamValues(strconv.Itoa(list.ID))
+		require.NoError(t, h.listBooks(c))
+		var resp ListListBooksResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Len(t, resp.Items, 1)
+		return resp.Items[0].Book.ReadingStatus
+	}
+
+	got := statusFor(owner)
+	require.NotNil(t, got)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, *got)
+	assert.Nil(t, statusFor(viewer))
 }

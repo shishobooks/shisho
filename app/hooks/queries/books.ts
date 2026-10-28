@@ -33,6 +33,7 @@ import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as PeopleQueryKey } from "./people";
 import { useRequires } from "./permissions";
 import { QueryKey as PublishersQueryKey } from "./publishers";
+import { QueryKey as ReadingQueryKey } from "./reading";
 import { QueryKey as SearchQueryKey } from "./search";
 import { QueryKey as SeriesQueryKey } from "./series";
 import { QueryKey as TagsQueryKey } from "./tags";
@@ -238,6 +239,10 @@ export const useMoveFiles = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // A merge that empties the source moves its reading data to the target.
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.BookReading],
+      });
       // Filenames and narrators on both source and target books shift —
       // books_fts changes for both.
       queryClient.invalidateQueries({
@@ -265,6 +270,10 @@ export const useMergeBooks = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // The sources' reading data moves to the target.
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.BookReading],
+      });
       // Source book disappears, target book absorbs files — books_fts changes.
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],

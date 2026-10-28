@@ -179,6 +179,18 @@ export const formatDate = (dateString: string): string => {
 };
 
 /**
+ * The month and year of a date, as UTC like formatDate.
+ * @example formatMonthYear("2024-03-02") // "Mar 2024"
+ */
+export const formatMonthYear = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+};
+
+/**
  * An audio bitrate in kilobits per second.
  * @example formatBitrate(64000) // "64 kbps"
  */

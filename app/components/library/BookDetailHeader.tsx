@@ -54,6 +54,8 @@ interface BookDetailHeaderProps {
   coverBadge?: ReactNode;
   /** The book's action buttons. */
   actions?: ReactNode;
+  /** The signed-in user's Reading Status and Rating, under the actions. */
+  reading?: ReactNode;
   /** Beside the header from 1280px; the caller places it otherwise. */
   sidePanel?: ReactNode;
   /** Share Link context: every name is plain text. */
@@ -66,7 +68,7 @@ interface BookDetailHeaderProps {
 
 /**
  * The top of the book page: the cover, then the title, who wrote it, the
- * actions, the series, genres, and tags, and the description, which fades
+ * actions, the reader's status and rating, the series, genres, and tags, and the description, which fades
  * out when long. Raw details (paths, dates, sort title) live in the Book
  * details dialog, off the page.
  */
@@ -76,6 +78,7 @@ const BookDetailHeader = ({
   coverVariant,
   coverBadge,
   actions,
+  reading,
   sidePanel,
   isShareLink,
   linkPeople,
@@ -270,6 +273,7 @@ const BookDetailHeader = ({
           )}
         </div>
         {actions}
+        {reading}
         <LabelGrid rows={rows} />
         {book.description && <FadedText text={book.description} />}
       </div>

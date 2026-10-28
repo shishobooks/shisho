@@ -35,6 +35,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/publishers"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sidecar"
@@ -236,6 +237,9 @@ func (h *handler) list(c echo.Context) error {
 			aspectRatio = b.Library.CoverAspectRatio
 		}
 		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
+	}
+	if err := reading.AttachStatuses(ctx, h.bookService.db, user.ID, books); err != nil {
+		return err
 	}
 
 	resp := ListBooksResponse{Items: books, Total: total}

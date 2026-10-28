@@ -54,6 +54,8 @@ Merge is also limited to books in the same library. Choose the target carefully:
 - With file organization enabled, the files, covers, and file sidecars move physically into the target directory.
 - With file organization disabled, only Shisho's grouping changes.
 
+Each user's reading history and rating move to the target too; see [Tracking Your Reading](./reading-tracking.md#merging-and-deleting-books).
+
 If source books contain metadata you need, copy it to the target before merging. Check for filename conflicts, untracked directory contents, and a current backup before confirming.
 
 ## Safer Workflow

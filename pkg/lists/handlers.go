@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 )
 
 type handler struct {
@@ -308,6 +309,15 @@ func (h *handler) listBooks(c echo.Context) error {
 			}
 			lb.Book.CoverCacheKey = covers.CacheKey(lb.Book.Files, aspectRatio)
 		}
+	}
+	books := make([]*models.Book, 0, len(listBooks))
+	for _, lb := range listBooks {
+		if lb.Book != nil {
+			books = append(books, lb.Book)
+		}
+	}
+	if err := reading.AttachStatuses(ctx, h.listsService.db, user.ID, books); err != nil {
+		return err
 	}
 
 	response := ListListBooksResponse{Items: listBooks, Total: total}

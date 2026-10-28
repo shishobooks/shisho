@@ -17,6 +17,7 @@ import AddToListPopover from "@/components/library/AddToListPopover";
 import BookDetailHeader from "@/components/library/BookDetailHeader";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import BookFileRow from "@/components/library/BookFileRow";
+import BookReadingControls from "@/components/library/BookReadingControls";
 import BookRelatedPanel from "@/components/library/BookRelatedPanel";
 import BookReviewBadge from "@/components/library/BookReviewBadge";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
@@ -26,6 +27,7 @@ import { FileEditDialog } from "@/components/library/FileEditDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
 import { MergeIntoDialog } from "@/components/library/MergeIntoDialog";
 import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
+import ReadingHistory from "@/components/library/ReadingHistory";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import { ShareLinkDialog } from "@/components/library/ShareLinkDialog";
 import { Button } from "@/components/ui/button";
@@ -69,8 +71,9 @@ import { anyOf } from "@/utils/permissions";
  * the recipient of a Share Link. Its presence switches the body into share
  * context: resource names render as plain text, and every action control
  * (book actions, file edits, Read and Listen, Add to list, the review badge,
- * and the Related panel) is hidden regardless of the viewer's permissions.
- * The builders replace the authenticated download and cover endpoints.
+ * the reading controls and history, and the Related panel) is hidden
+ * regardless of the viewer's permissions. The builders replace the
+ * authenticated download and cover endpoints.
  */
 export interface ShareLinkContext {
   /** Endpoint the file's download button fetches (HEAD, then navigates). */
@@ -459,6 +462,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         key={book.id}
         linkPeople={linkPeople}
         linkSeries={linkSeries}
+        reading={!isShareLink && <BookReadingControls bookId={book.id} />}
         sidePanel={relatedPanel}
         tagNamespaces={tagNamespaces}
       />
@@ -488,6 +492,8 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
           </div>
         </section>
       )}
+
+      {!isShareLink && <ReadingHistory bookId={book.id} />}
 
       {/* Under 1280px the Related panel follows the files: they matter more.
           It renders twice, one copy hidden by CSS at each width, so it can

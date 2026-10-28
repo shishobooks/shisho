@@ -47,6 +47,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/publishers"
 	"github.com/shishobooks/shisho/pkg/reach"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
@@ -347,6 +348,13 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	listsGroup := e.Group("/lists")
 	listsGroup.Use(authMiddleware.Authenticate)
 	lists.RegisterRoutes(listsGroup, db, authMiddleware)
+
+	// Reading routes. Each user's reading data is their own, so the group
+	// needs only Books Read; the handlers scope every query to the caller.
+	readingGroup := e.Group("/reading")
+	readingGroup.Use(authMiddleware.Authenticate)
+	readingGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	reading.RegisterRoutes(readingGroup, db)
 
 	// Genres routes
 	genresGroup := e.Group("/genres")

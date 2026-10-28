@@ -45,6 +45,7 @@ import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { fileTypeLabel } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
+import { readingStatusLabel } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -278,14 +279,21 @@ const BookItem = ({
               src={coverUrl}
             />
           )}
-          {/* Needs review badge */}
-          {isBookNeedsReview(book) && (
-            <Badge
-              className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0 pointer-events-none"
-              variant="secondary"
-            >
-              Needs review
-            </Badge>
+          {/* Badges stack in the bottom-left corner so a long status and
+              Needs review never overlap on a narrow card. */}
+          {(isBookNeedsReview(book) || book.reading_status) && (
+            <div className="absolute bottom-1 left-1 right-1 flex flex-col items-start gap-0.5 pointer-events-none">
+              {book.reading_status && (
+                <Badge className="text-[10px] px-1.5 py-0" variant="secondary">
+                  {readingStatusLabel(book.reading_status)}
+                </Badge>
+              )}
+              {isBookNeedsReview(book) && (
+                <Badge className="text-[10px] px-1.5 py-0" variant="secondary">
+                  Needs review
+                </Badge>
+              )}
+            </div>
           )}
         </div>
         <TruncatedText

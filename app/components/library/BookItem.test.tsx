@@ -357,3 +357,30 @@ describe("BookItem selection mode", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("BookItem reading status badge", () => {
+  it("shows the signed-in user's Reading Status", () => {
+    render(
+      wrap(
+        <BookItem
+          book={makeBook({ reading_status: "currently_reading" })}
+          libraryId="1"
+        />,
+      ),
+    );
+    expect(screen.getByText("Currently Reading")).toBeInTheDocument();
+  });
+
+  it("shows no badge without a status", () => {
+    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+    for (const label of [
+      "Currently Reading",
+      "Paused",
+      "To Read",
+      "Read",
+      "Did Not Finish",
+    ]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+  });
+});
