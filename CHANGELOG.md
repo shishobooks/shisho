@@ -7,6 +7,137 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-28
+
+### Breaking Changes
+- **KePub becomes a File Type, delivered as itself (#763)**
+  - `.kepub.epub` and `.kepub` files are now the KePub File Type, and
+    existing `.kepub.epub` Files are retyped on upgrade with no rescan. A
+    user's or Device's customized Delivery Rules with no KePub rule stop
+    delivering books whose only file is a KePub, and a Kobo on such a list
+    removes those books at its next sync. Add a KePub rule (Preferences >
+    Delivery Rules, or the Device's page) to keep them. Lists that follow
+    Shisho's defaults or the Kobo preset need nothing.
+  - Under the Kobo preset, a book with both an EPUB and a `.kepub.epub`
+    now syncs only the KePub, so the copy made from the EPUB is removed from
+    the Kobo at its next sync.
+  - `.kepub` files an earlier version attached to a book as supplements
+    stay supplements. Set **File Role** to **Main File** in the file's
+    **Edit File** dialog to make one a KePub main File; new `.kepub` files
+    import as main Files.
+  - Plugins: metadata enricher search contexts report `fileType: "kepub"`
+    for these files instead of `"epub"`. Enrichers that declare `epub` still
+    run on them, but code that branches on the value sees the new one.
+    `kepub` is now a reserved built-in extension, so a file parser that
+    declared it is ignored for it.
+  - API: `file_type` is `"kepub"` for these files, and the
+    `file_types=epub` book filter no longer matches books whose only file is
+    a KePub.
+  - Every cached download is regenerated once on first request after
+    upgrade, since cache fingerprints now include the File's own File Type.
+- **Kobo sync follows a Kobo Device's Delivery Rules, and users see what each Device gets (#757)**
+  - A book that synced to a Kobo as both an EPUB and a CBZ keeps only the
+    entry its Device's rules select. Under the Kobo preset, its CBZ copy is
+    removed from the Kobo at the next sync. Nothing else on the Kobo
+    changes: existing books keep their ids, RevisionIds, and reading
+    positions.
+- **Devices get their own Delivery Rules in OPDS and the eReader browser (#755)**
+  - The eReader browser no longer reads the User-Agent to decide what to
+    offer; each Device's type and Delivery Rules do. An API key that had
+    only eReader browser access became a **Browser** Device, so on a Kindle
+    it now offers every File the rules deliver instead of only MOBI and
+    AZW3. Open the Device under **Devices** and use **Change Type** to make
+    it a **Kindle** Device; until then the Kindle shows a banner saying so.
+  - Existing Kobo Devices follow the **Kobo preset**, so their eReader
+    browser offers EPUB and CBZ as KePub and nothing else. Books with only a
+    PDF, M4B, MOBI, or AZW3 no longer appear there. To get them back, choose
+    **Custom** under the Device's **Delivery Rules** (a Kobo can receive
+    EPUB and KePub), or switch to **My default**.
+  - An eReader browser download delivered through a Conversion, such as
+    EPUB as KePub, now returns an error when the Conversion fails, instead
+    of sending the Original File. A File delivered as its own File Type
+    still falls back to the original.
+  - An old eReader browser `/file/<id>/kepub` link for a File that can't
+    become KePub, such as a PDF, now returns an error instead of the
+    Original File. Shisho no longer generates such links, so only old
+    bookmarks are affected; open the book's page again to get a working
+    link.
+- **User default Delivery Rules drive the web UI and OPDS (#754)**
+  - The per-library **Download Format Preference** setting (Original,
+    KePub, Ask) is removed, along with the `download_format_preference`
+    field of the library API. Each user's Delivery Rules under **User
+    Settings > Delivery Rules** decide which File Type the download button
+    sends. If a library used KePub, add rules delivering EPUB as KePub and
+    CBZ as KePub. Otherwise downloads come in each File's own type.
+  - OPDS catalog URLs no longer carry a File Type segment, and the KePub
+    catalog is gone, with no redirects. `/opds/v1/{types}/...`,
+    `/opds/v1/kepub/{types}/...`, and `/opds/download/{id}/kepub` return
+  - Re-add the catalog in each reading app as
+    `https://your-server/opds/v1/catalog`, and pick File Types with Delivery
+    Rules.
+  - OPDS now lists only what the signed-in user's Delivery Rules deliver.
+    With the default rules, a book offers its EPUB, or else its earliest
+    other ebook type in the order AZW3, MOBI, CBZ, PDF, plus its M4B. A book
+    with an EPUB and a PDF no longer offers the PDF. To get a File Type
+    back, reorder or edit the rules. The web app's **Download as** menu
+    still offers every File Type.
+  - An OPDS download delivered through a Conversion, such as EPUB as
+    KePub, returns an error when the Conversion fails, instead of sending
+    the Original File. A File delivered as its own File Type still falls
+    back to the original.
+- **Devices replace API keys for Kobo sync and the eReader browser (#753)**
+  - Several Kobos that shared one API key with different scope URLs now
+    share one scope, set by whichever Kobo syncs first after the upgrade.
+    Add a Kobo Device for each of the others under **Devices**, choose its
+    scope, and replace its `api_endpoint` with the new **Kobo sync URL**.
+  - A Kobo's scope is now set on its Device page. The scope segment in an
+    existing sync URL is read once, on the Kobo's first sync after upgrading
+    (unless a scope is chosen in Shisho first), and ignored after that.
+    Editing the scope in `api_endpoint` no longer changes what syncs.
+  - Rolling back to an earlier release turns Devices back into API keys
+    and keeps migrated URLs working, but a Kobo set up with a new
+    `/kobo/<credential>` URL stops syncing until it is reconfigured.
+
+### Features
+- Finish Kindle Conversions: covers, whole comic pages, and kept reading positions (#788)
+- Group tags into per-library namespaces (#783)
+- Full EPUB to AZW3: links, fonts, guide, and large books (#782)
+- EPUB-only books reach a Kindle: EPUB to AZW3 (#781)
+- Every Kindle file reaches EPUB readers: KF7, HUFF/CDIC, and fonts (#779)
+- Serve page thumbnails from the shared thumbnail cache (#778)
+- Redesign the file page to match the book page (#777)
+- Let a book or file go back to the automatic review state (#776)
+- Kindle-only books reach EPUB readers: KF8 to EPUB (#775)
+- Redesign the book page and the Share Link page (#772)
+- Make download filenames consistent, sortable, and safe (#765)
+- Add a KePub to EPUB Conversion (#764)
+- KePub becomes a File Type, delivered as itself (#763)
+- Show book covers on people, genre, tag, and publisher list entries (#761)
+- Lay resource lists out in columns that fill the page (#760)
+- Fill galleries edge to edge with whole pages of full rows (#759)
+- Move Administration into the user menu and fold Security into Preferences (#758)
+- Kobo sync follows a Kobo Device's Delivery Rules, and users see what each Device gets (#757)
+- Devices get their own Delivery Rules in OPDS and the eReader browser (#755)
+- User default Delivery Rules drive the web UI and OPDS (#754)
+- Devices replace API keys for Kobo sync and the eReader browser (#753)
+- Download any File as any File Type it can become, with CBZ to EPUB (#752)
+
+### Bug Fixes
+- Show filter pills for tags and genres outside the dropdown's first page (#780)
+- Give the book page header and the narrow Related panel their own keys (#774)
+- Filter the eReader browser by the File Type each book is delivered as (#767)
+- Convert EPUB to KePub from tokens so other markup is kept as it was (#766)
+- Count a person's authored books once per book, not once per role (#762)
+
+### Other
+- Refresh transitive npm dependencies to clear security alerts (#787)
+- Bump qs from 6.16.0 to 6.16.1 (#786)
+- Bump echo from 4.16.0 to 4.16.1 (#784)
+- Bump the minor-and-patch group with 31 updates (#769)
+- Bump vitest from 4.1.11 to 5.0.5 (#770)
+- Bump mimetype, koanf, pdfcpu, and x/net (#768)
+- Bump vite from 8.3.0 to 8.3.3 (#756)
+
 ## [0.4.0] - 2026-10-19
 
 ### Features
