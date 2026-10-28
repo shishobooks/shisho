@@ -143,6 +143,32 @@ _Avoid_: public link, guest link, share (alone, which is ambiguous with list sha
 A grant of a **List** to a named user at a permission level (viewer, editor, manager). It never grants library access and requires the recipient to log in.
 _Avoid_: share (alone)
 
+### Reading
+
+**Reading Status**:
+Where one user stands with a **Book**: To Read, Currently Reading, Paused, Read, Did Not Finish, or none. It belongs to the Book, not a **File**, and is private to the user. Currently Reading, Paused, Read, and Did Not Finish describe the user's latest **Read-through**.
+_Avoid_: shelf, reading state
+
+**Read-through**:
+One pass a user makes through a **Book**, with the day it began if known and, once it ends, the day it ended and whether it was finished or abandoned. Rereading starts a new one; earlier ones stay as history. A Read-through still underway may be paused.
+_Avoid_: read (as a noun), session, reading (alone)
+
+**To Read**:
+One user's ordered queue of **Books** they intend to read. A book joins at the end, and the user can reorder it so the next books sit at the top. Being on it is not a **Read-through**.
+_Avoid_: TBR, want to read, wishlist, Up Next
+
+**Rating**:
+One user's score for a **Book**, from a quarter star to five stars in quarter-star steps. It does not depend on **Reading Status**, so an abandoned book can be rated. Private to the user.
+_Avoid_: review, score, favorite
+
+**Reading Position**:
+Where one user is within one **File**: a location in the text for a **Reflowable** File, a page for a **Page-based** one, a time for an audiobook, along with how far through the File that is. It belongs to the File, so a Book's ebook and audiobook each keep their own.
+_Avoid_: progress (alone), bookmark, location
+
+**Reading Session**:
+One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. It belongs to the **Read-through** underway at the time.
+_Avoid_: reading time, sitting, activity
+
 ### Deployment Modes
 
 **Demo Mode**:
@@ -167,6 +193,9 @@ _Avoid_: sample library, fixtures (those are test data)
 - A user has many **Devices**; a **Device** belongs to exactly one user and may connect several ways
 - A user has one set of default **Delivery Rules**, which follow Shisho's built-in rules until edited; a **Device** follows them, follows its Device type's preset, or has its own
 - A **Book** has many **Share Links**; a **Share Link** belongs to exactly one **Book** and is created by one user
+- A user has at most one **Reading Status** and one **Rating** per **Book**, many **Read-throughs** per Book (at most one underway), and one **To Read** queue
+- A user has at most one **Reading Position** per **File**
+- A **Read-through** has many **Reading Sessions**, each on one **File**
 - A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
 
@@ -182,4 +211,5 @@ _Avoid_: sample library, fixtures (those are test data)
 
 - Older UI copy and the "Supported Formats" docs page say "format" where the domain term is **File Type**.
 - The database table for persons is `persons`, but the URL path uses `people` and the Go package is `pkg/people`. The domain term is **Person**.
+- "To Read" names both the queue and the **Reading Status** a Book has while on it (when no Read-through is underway). Say "on To Read" for the queue membership.
 - **Publisher** is file-level metadata, not book-level. This differs from series/genre/tag/author which are book-level.
