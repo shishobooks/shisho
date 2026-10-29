@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import {
@@ -181,6 +181,62 @@ describe("BookRelatedPanel", () => {
       "href",
       "/libraries/1/series/3",
     );
+  });
+
+  it("draws the placeholder cover for a book without one", () => {
+    data.series = {
+      3: [
+        makeBook(1, "First", {
+          ...inSeries(1),
+          cover_cache_key: "abc",
+        } as Partial<Book>),
+        current,
+      ],
+    };
+    renderPanel();
+
+    const panel = screen.getByRole("tabpanel");
+    const row = (title: string) =>
+      within(panel)
+        .getByText(title)
+        .closest("a, [aria-current]") as HTMLElement;
+    expect(row("Second").querySelector("img")).toBeNull();
+    expect(row("Second").querySelector("svg")).not.toBeNull();
+    expect(row("First").querySelector("img")).not.toBeNull();
+  });
+
+  it("draws the placeholder cover when a book's cover fails to load, until the cover changes", () => {
+    const withCover = (key: string) => ({
+      3: [
+        makeBook(1, "First", {
+          ...inSeries(1),
+          cover_cache_key: key,
+        } as Partial<Book>),
+        current,
+      ],
+    });
+    data.series = withCover("abc");
+    const { rerender } = renderPanel();
+
+    const row = () =>
+      within(screen.getByRole("tabpanel"))
+        .getByText("First")
+        .closest("a") as HTMLElement;
+    fireEvent.error(row().querySelector("img")!);
+
+    expect(row().querySelector("img")).toBeNull();
+    expect(row().querySelector("svg")).not.toBeNull();
+
+    // A new cover gets its own try.
+    data.series = withCover("def");
+    rerender(
+      <MemoryRouter initialEntries={["/libraries/1/books/2"]}>
+        <Panel book={current} />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(row().querySelector("img")).not.toBeNull();
   });
 
   it("hides the Series tab without Series Read", () => {

@@ -1,8 +1,9 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import BookDevicesPanel from "@/components/library/BookDevicesPanel";
 import CoverImage from "@/components/library/CoverImage";
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError, {
   type RetryableQuery,
@@ -19,6 +20,7 @@ import {
 } from "@/hooks/useBookRelatedTabs";
 import { cn } from "@/libraries/utils";
 import { ListSortManual, type Book, type BookSeries, type List } from "@/types";
+import { getCoverFileType } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { formatCount, formatYear } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
@@ -46,25 +48,38 @@ const BookLine = ({
   // Carries the tab the reader picked, which the next book opens if it has
   // it. Only a tab's name: anything else in the param stays behind.
   const tab = relatedTabKey(searchParams.get(RELATED_TAB_PARAM));
+  const coverUrl = bookCoverUrl(book);
+  // Keyed by URL, so a new cover gets its own try.
+  const [failedCover, setFailedCover] = useState<string>();
+  const showCover = !!book.cover_cache_key && failedCover !== coverUrl;
   const row = (
-    <span
+    <div
       className={cn(
         "flex items-center gap-3 rounded-md px-1.5 py-1",
         current ? "bg-muted" : "hover:bg-muted/60",
       )}
       data-current={current || undefined}
     >
-      <span className="flex h-12 w-8 shrink-0 overflow-hidden rounded-sm bg-muted">
-        {book.cover_cache_key && (
+      <div className="flex h-12 w-8 shrink-0 overflow-hidden rounded-sm bg-muted">
+        {showCover ? (
           <CoverImage
             alt=""
             className="size-full object-cover"
-            key={bookCoverUrl(book)}
-            src={bookCoverUrl(book)}
+            key={coverUrl}
+            onError={() => setFailedCover(coverUrl)}
+            src={coverUrl}
+          />
+        ) : (
+          // The frame is always book-shaped, so the library's cover aspect
+          // ratio doesn't apply: the icon is headphones only for a book with
+          // nothing but audiobooks.
+          <CoverPlaceholder
+            className="h-full"
+            variant={getCoverFileType(book.files, "book")}
           />
         )}
-      </span>
-      <span className="min-w-0">
+      </div>
+      <div className="min-w-0">
         {(meta || current) && (
           <span className="block text-xs text-muted-foreground">
             {meta}
@@ -75,8 +90,8 @@ const BookLine = ({
         <TruncatedText className="line-clamp-2 text-sm leading-snug">
           {book.title}
         </TruncatedText>
-      </span>
-    </span>
+      </div>
+    </div>
   );
   if (current) return <div aria-current="page">{row}</div>;
   return (
