@@ -62,23 +62,33 @@ func (h *handler) requireReadThrough(c echo.Context, user *models.User) (*models
 	return rt, nil
 }
 
-func (h *handler) respond(c echo.Context, userID, bookID int) error {
-	resp, err := h.buildBookReadingResponse(c, userID, bookID)
+func (h *handler) respond(c echo.Context, user *models.User, bookID int) error {
+	resp, err := h.buildBookReadingResponse(c, user, bookID)
 	if err != nil {
 		return err
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
-func (h *handler) buildBookReadingResponse(c echo.Context, userID, bookID int) (BookReadingResponse, error) {
-	reading, err := h.readingService.RetrieveBookReading(c.Request().Context(), userID, bookID)
+func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bookID int) (BookReadingResponse, error) {
+	ctx := c.Request().Context()
+	reading, err := h.readingService.RetrieveBookReading(ctx, user.ID, bookID)
 	if err != nil {
 		return BookReadingResponse{}, err
+	}
+	var place *int
+	if reading.OnToRead {
+		p, err := h.readingService.ToReadPlace(ctx, user.ID, bookID, user.GetAccessibleLibraryIDs())
+		if err != nil {
+			return BookReadingResponse{}, err
+		}
+		place = &p
 	}
 	resp := BookReadingResponse{
 		BookID:       bookID,
 		Status:       reading.Status,
 		OnToRead:     reading.OnToRead,
+		ToReadPlace:  place,
 		ReadThroughs: reading.ReadThroughs,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
@@ -156,7 +166,7 @@ func (h *handler) retrieve(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return h.respond(c, user.ID, bookID)
+	return h.respond(c, user, bookID)
 }
 
 // dated runs a transition that needs the user's today.
@@ -179,7 +189,7 @@ func (h *handler) dated(c echo.Context, run func(userID, bookID int, today strin
 	if err := run(user.ID, bookID, params.Today); err != nil {
 		return transitionError(err)
 	}
-	return h.respond(c, user.ID, bookID)
+	return h.respond(c, user, bookID)
 }
 
 func (h *handler) start(c echo.Context) error {
@@ -212,7 +222,7 @@ func (h *handler) setPaused(c echo.Context, paused bool) error {
 	if err := h.readingService.SetPaused(c.Request().Context(), user.ID, bookID, paused); err != nil {
 		return transitionError(err)
 	}
-	return h.respond(c, user.ID, bookID)
+	return h.respond(c, user, bookID)
 }
 
 func (h *handler) pause(c echo.Context) error {
@@ -247,7 +257,7 @@ func (h *handler) setRating(c echo.Context) error {
 	if err := h.readingService.SetRating(c.Request().Context(), user.ID, bookID, units); err != nil {
 		return err
 	}
-	return h.respond(c, user.ID, bookID)
+	return h.respond(c, user, bookID)
 }
 
 func (h *handler) updateReadThrough(c echo.Context) error {
@@ -273,7 +283,7 @@ func (h *handler) updateReadThrough(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return h.respond(c, user.ID, rt.BookID)
+	return h.respond(c, user, rt.BookID)
 }
 
 func (h *handler) deleteReadThrough(c echo.Context) error {
@@ -288,7 +298,7 @@ func (h *handler) deleteReadThrough(c echo.Context) error {
 	if err := h.readingService.DeleteReadThrough(c.Request().Context(), rt); err != nil {
 		return err
 	}
-	return h.respond(c, user.ID, rt.BookID)
+	return h.respond(c, user, rt.BookID)
 }
 
 func (h *handler) addToRead(c echo.Context) error {
@@ -303,7 +313,7 @@ func (h *handler) addToRead(c echo.Context) error {
 	if err := h.readingService.AddToRead(c.Request().Context(), user.ID, bookID); err != nil {
 		return transitionError(err)
 	}
-	return h.respond(c, user.ID, bookID)
+	return h.respond(c, user, bookID)
 }
 
 func (h *handler) removeFromToRead(c echo.Context) error {
@@ -318,7 +328,7 @@ func (h *handler) removeFromToRead(c echo.Context) error {
 	if err := h.readingService.RemoveFromToRead(c.Request().Context(), user.ID, bookID); err != nil {
 		return err
 	}
-	return h.respond(c, user.ID, bookID)
+	return h.respond(c, user, bookID)
 }
 
 // reorderToRead needs no library check: it only moves the caller's own

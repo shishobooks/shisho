@@ -96,6 +96,8 @@ interface BookDetailHeaderProps {
   coverVariant: "book" | "audiobook";
   /** Drawn over the cover's bottom-left corner, as the gallery does. */
   coverBadge?: ReactNode;
+  /** Hangs from the cover's top edge, as on a book card. */
+  coverBookmark?: ReactNode;
   /** The book's action buttons. */
   actions?: ReactNode;
   /** The signed-in user's Reading Status and Rating, under the actions. */
@@ -121,6 +123,7 @@ const BookDetailHeader = ({
   coverUrl,
   coverVariant,
   coverBadge,
+  coverBookmark,
   actions,
   reading,
   sidePanel,
@@ -265,6 +268,9 @@ const BookDetailHeader = ({
         )}
         {coverBadge && (
           <div className="absolute bottom-2 left-2">{coverBadge}</div>
+        )}
+        {coverBookmark && (
+          <div className="absolute left-3 top-0">{coverBookmark}</div>
         )}
       </div>
 

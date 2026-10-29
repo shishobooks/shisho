@@ -175,6 +175,26 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 	return result, nil
 }
 
+// ToReadPlace returns bookID's 1-based place on userID's To Read, counting
+// only Books in libraryIDs (nil for every library), as the To Read page
+// lists them. Call it only for a Book on To Read.
+func (svc *Service) ToReadPlace(ctx context.Context, userID, bookID int, libraryIDs []int) (int, error) {
+	q := svc.db.NewSelect().
+		TableExpr("user_books AS other").
+		Join("JOIN user_books AS this ON this.user_id = other.user_id AND this.book_id = ?", bookID).
+		Where("other.user_id = ? AND other.to_read_position IS NOT NULL", userID).
+		// The To Read listing orders by position, then book id.
+		Where("(other.to_read_position < this.to_read_position OR (other.to_read_position = this.to_read_position AND other.book_id < this.book_id))")
+	if libraryIDs != nil {
+		q = q.Where("other.book_id IN (SELECT id FROM books WHERE library_id IN (?))", bun.List(libraryIDs))
+	}
+	ahead, err := q.Count(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	return int(ahead) + 1, nil
+}
+
 // Start begins a new Read-through on today and takes the Book off To Read.
 // Reading a finished or abandoned Book again is the same transition.
 func (svc *Service) Start(ctx context.Context, userID, bookID int, today string) error {

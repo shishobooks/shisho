@@ -1,4 +1,5 @@
 import { BookOpen, ChevronDown, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import StarRating from "@/components/library/StarRating";
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,15 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {reading.to_read_place != null && (
+          <Link
+            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+            to="/to-read"
+          >
+            #{reading.to_read_place.toLocaleString()} on To Read
+          </Link>
+        )}
 
         <div className="flex items-center gap-1">
           {/* Not disabled while a save is pending: a disabled slider

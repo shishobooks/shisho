@@ -88,7 +88,7 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *rea
 	if hasToRead {
 		toReadURL := baseURL + "/to-read"
 		entry := NewEntry(toReadURL, "To Read")
-		entry.Content = &Content{Type: "text", Value: "What you mean to read next"}
+		entry.Content = &Content{Type: "text", Value: "What you plan to read next"}
 		entry.AddLink(RelSubsection, toReadURL, MimeTypeAcquisition)
 		feed.AddEntry(entry)
 	}

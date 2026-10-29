@@ -4,7 +4,7 @@ Each user can record their reading of a book, rate it, and look back at its hist
 
 ## Reading Status
 
-A book's **Reading Status** shows on its page, next to its actions, and as a bookmark hanging from the top of its card wherever books are listed. Each status has its own bookmark color and icon, and hovering over the bookmark names it. It is one of:
+A book's **Reading Status** shows on its page, next to its actions, and as a bookmark hanging from the top of its cover, on its page and on its card wherever books are listed. Each status has its own bookmark color and icon, and hovering over the bookmark names it. It is one of:
 
 | Status | Meaning |
 |--------|---------|
@@ -32,11 +32,13 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 ## To Read
 
-**To Read** is your queue of books to read next, in the order you mean to read them. Open it from **To Read** in a library's sidebar or in the user menu. It lists the books on it from every library you can access.
+**To Read** is your queue of books to read next, in the order you plan to read them. Open it from **To Read** in a library's sidebar or in the user menu. It lists the books on it from every library you can access.
 
 - **Add a book** from the status button on its page, or from the **⋯** menu on its card wherever books are listed. A book joins at the end of the queue.
 - **Reorder** by dragging books on the To Read page, as on an [ordered list](./lists.md#sorting-and-reordering). Dragging is available when the whole queue fits on one page of up to 100 books.
 - **Remove a book** from the same status button or card menu.
+
+A queued book's page shows its place beside the status button, such as **#3 on To Read**, counting only books you can access. Choose it to open To Read.
 
 Starting a book, or marking it read, takes it off To Read. To plan a reread, add a book you have finished: it shows **To Read** again, and its earlier reads stay in the history.
 

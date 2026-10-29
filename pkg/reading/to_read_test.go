@@ -286,3 +286,42 @@ func TestAppendToRead_KeepsOrderAndSkipsQueuedAndUnderway(t *testing.T) {
 }
 
 func floatp(f float64) *float64 { return &f }
+
+// The reading record gives a queued Book's place on To Read as the To Read
+// page shows it: 1-based, counting only Books in libraries the user can
+// reach.
+func TestToRead_PlaceOnTheQueue(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	user := createUser(t, db, "reader", 2)
+	api := newReadingAPI(t, db, user)
+	a, hidden, b, c := createBook(t, db, "A"), createBook(t, db, "Hidden"), createBook(t, db, "B"), createBook(t, db, "C")
+	for _, book := range []*models.Book{a, hidden, b, c} {
+		api.addToRead(book.ID)
+	}
+	assert.Nil(t, api.get(createBook(t, db, "Not queued").ID).ToReadPlace, "a Book off To Read has no place")
+	assert.Equal(t, intp(3), api.get(b.ID).ToReadPlace)
+
+	api.removeFromToRead(a.ID)
+	assert.Equal(t, intp(2), api.get(b.ID).ToReadPlace, "places close up after a removal")
+
+	// Hidden's library is out of reach, so it doesn't count.
+	user.LibraryAccess = []*models.UserLibraryAccess{
+		{UserID: user.ID, LibraryID: &b.LibraryID},
+		{UserID: user.ID, LibraryID: &c.LibraryID},
+	}
+	limited := newReadingAPI(t, db, user)
+	assert.Equal(t, intp(1), limited.get(b.ID).ToReadPlace)
+	assert.Equal(t, intp(2), limited.get(c.ID).ToReadPlace)
+
+	// A reorder moves it.
+	assert.Equal(t, intp(1), limited.reorderAndGet(c.ID, b.ID))
+}
+
+// reorderAndGet reorders To Read and returns the first id's new place.
+func (a *readingAPI) reorderAndGet(bookIDs ...int) *int {
+	a.t.Helper()
+	rec := a.reorderToRead(bookIDs...)
+	require.Equal(a.t, http.StatusNoContent, rec.Code, rec.Body.String())
+	return a.get(bookIDs[0]).ToReadPlace
+}

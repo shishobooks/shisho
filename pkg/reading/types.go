@@ -4,13 +4,14 @@ import "github.com/shishobooks/shisho/pkg/models"
 
 // BookReadingResponse is the signed-in user's reading record for one Book:
 // the derived Reading Status, every Read-through, the Rating, and whether
-// the Book is on To Read. Read-throughs come newest first: the one underway,
+// and where the Book is on To Read. Read-throughs come newest first: the one underway,
 // then ended ones by end day, undated ones last.
 type BookReadingResponse struct {
 	BookID       int                   `json:"book_id"`
 	Status       *string               `json:"status" tstype:"ReadingStatus | null"`
 	Rating       *float64              `json:"rating" tstype:"number | null"` // Stars, in quarter steps from 0.25 to 5
 	OnToRead     bool                  `json:"on_to_read"`
+	ToReadPlace  *int                  `json:"to_read_place" tstype:"number | null"` // 1-based place on To Read as the To Read page shows it, among Books in libraries the user can reach
 	ReadThroughs []*models.ReadThrough `json:"read_throughs" tstype:"ReadThrough[]"`
 }
 

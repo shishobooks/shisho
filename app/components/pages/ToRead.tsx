@@ -161,7 +161,7 @@ const ToRead = () => {
             </div>
           </div>
           <p className="text-sm md:text-base text-muted-foreground mb-2">
-            What you mean to read next. Starting or finishing a book takes it
+            What you plan to read next. Starting or finishing a book takes it
             off.
           </p>
           {wholeQuery.data && (

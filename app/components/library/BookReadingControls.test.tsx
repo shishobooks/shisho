@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
@@ -39,8 +40,10 @@ const renderControls = (initial: BookReadingResponse) => {
   const request = vi.spyOn(API, "request").mockResolvedValue(initial);
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <BookReadingControls bookId={7} />
-      <ReadingHistory bookId={7} />
+      <MemoryRouter>
+        <BookReadingControls bookId={7} />
+        <ReadingHistory bookId={7} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return request;
@@ -110,6 +113,23 @@ describe("BookReadingControls", () => {
     expect(
       await screen.findByRole("button", { name: "Reading status: To Read" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows a queued book's place on To Read, linked to the page", async () => {
+    renderControls(
+      reading({ status: "to_read", on_to_read: true, to_read_place: 3 }),
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "#3 on To Read" }),
+    ).toHaveAttribute("href", "/to-read");
+  });
+
+  it("shows no place for a book off To Read", async () => {
+    renderControls(reading({ status: "read" }));
+
+    await screen.findByRole("button", { name: "Reading status: Read" });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("removes a book from To Read", async () => {

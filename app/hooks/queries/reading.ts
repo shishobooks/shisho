@@ -41,13 +41,25 @@ export const useBookReading = (
 
 // Every reading write returns the Book's whole reading record. The status
 // also shows on book cards, so book listings (library and List alike, which
-// share the ListBooks key) refetch.
+// share the ListBooks key) refetch. A Book joining or leaving To Read moves
+// every Book after it, so other Books' records refetch for their places.
 const onReadingChanged = (
   queryClient: QueryClient,
   data: BookReadingResponse,
 ) => {
   queryClient.setQueryData([QueryKey.BookReading, data.book_id], data);
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+  invalidateOtherBookReadings(queryClient, data.book_id);
+};
+
+const invalidateOtherBookReadings = (
+  queryClient: QueryClient,
+  exceptBookId?: number,
+) => {
+  queryClient.invalidateQueries({
+    queryKey: [QueryKey.BookReading],
+    predicate: (query) => query.queryKey[1] !== exceptBookId,
+  });
 };
 
 // Transitions that date a Read-through send the browser's local day.
@@ -166,6 +178,7 @@ export const useReorderToRead = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      invalidateOtherBookReadings(queryClient);
     },
   });
 };

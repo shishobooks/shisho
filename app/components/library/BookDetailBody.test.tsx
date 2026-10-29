@@ -731,6 +731,11 @@ describe("BookDetailBody without Share Link context", () => {
       "4 stars",
     );
     expect(screen.getByText("Reading history")).toBeInTheDocument();
+    // The cover carries the status bookmark book cards show.
+    expect(screen.getByRole("img", { name: "Read" })).toHaveAttribute(
+      "data-status",
+      "read",
+    );
   });
 
   it("links resource names into the library", () => {
