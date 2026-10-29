@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -600,6 +601,118 @@ func TestDeleteBookAndFiles_OrganizedStructure_DeletesEntireDirectory(t *testing
 	// Verify the entire book directory is deleted
 	_, err = os.Stat(bookDir)
 	assert.True(t, os.IsNotExist(err), "book directory should be deleted")
+}
+
+// insertOrganizedLibraryBook inserts an organized library rooted at
+// libraryDir and a book at bookPath holding one main EPUB at filePath, with a
+// cover and a file sidecar beside it on disk.
+func insertOrganizedLibraryBook(t *testing.T, db *bun.DB, libraryDir, bookPath, filePath string) (*models.Library, *models.Book) {
+	t.Helper()
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:                  "Test Library",
+		OrganizeFileStructure: true,
+		CoverAspectRatio:      "book",
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	lp := &models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}
+	_, err = db.NewInsert().Model(lp).Exec(ctx)
+	require.NoError(t, err)
+	library.LibraryPaths = []*models.LibraryPath{lp}
+
+	book := &models.Book{
+		LibraryID:       library.ID,
+		Title:           "Test Book",
+		TitleSource:     models.DataSourceFilepath,
+		SortTitle:       "Test Book",
+		SortTitleSource: models.DataSourceFilepath,
+		AuthorSource:    models.DataSourceFilepath,
+		Filepath:        bookPath,
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filePath, []byte("test content"), 0644))
+	coverFilename := filepath.Base(filePath) + ".cover.jpg"
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(filePath), coverFilename), []byte("cover"), 0644))
+	require.NoError(t, os.WriteFile(filePath+".metadata.json", []byte("{}"), 0644))
+	require.NoError(t, os.WriteFile(bookSidecarFor(filePath), []byte("{}"), 0644))
+	_, err = db.NewInsert().Model(&models.File{
+		LibraryID:          library.ID,
+		BookID:             book.ID,
+		FileType:           models.FileTypeEPUB,
+		FileRole:           models.FileRoleMain,
+		Filepath:           filePath,
+		FilesizeBytes:      12,
+		CoverImageFilename: &coverFilename,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	return library, book
+}
+
+// bookSidecarFor is the book sidecar beside a single-file book's file.
+func bookSidecarFor(filePath string) string {
+	return strings.TrimSuffix(filePath, filepath.Ext(filePath)) + ".metadata.json"
+}
+
+// TestDeleteBookAndFiles_OrganizedStructure_BookAtLibraryRoot covers a book
+// recorded at the library root itself. Deleting it removes only its own
+// files, never the library root and everything in it.
+func TestDeleteBookAndFiles_OrganizedStructure_BookAtLibraryRoot(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	otherFile := filepath.Join(libraryDir, "Other Book.epub")
+	require.NoError(t, os.WriteFile(otherFile, []byte("other"), 0644))
+	require.NoError(t, os.WriteFile(bookSidecarFor(otherFile), []byte("{}"), 0644))
+	filePath := filepath.Join(libraryDir, "Test Book.epub")
+	library, book := insertOrganizedLibraryBook(t, db, libraryDir, libraryDir, filePath)
+
+	bookSvc := NewService(db, appsettings.NewService(db))
+	_, err := bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
+	require.NoError(t, err)
+
+	_, err = os.Stat(otherFile)
+	require.NoError(t, err, "files of other books at the library root should survive")
+	require.FileExists(t, bookSidecarFor(otherFile), "other books' sidecars should survive")
+	for _, p := range []string{filePath, filePath + ".cover.jpg", filePath + ".metadata.json", bookSidecarFor(filePath)} {
+		_, err = os.Stat(p)
+		assert.True(t, os.IsNotExist(err), "%s should be deleted", p)
+	}
+}
+
+// TestDeleteBookAndFiles_OrganizedStructure_BookAtFilepath covers a
+// single-file book keyed by its file: the file's cover and sidecar go with it.
+func TestDeleteBookAndFiles_OrganizedStructure_BookAtFilepath(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	libraryDir := t.TempDir()
+	bookDir := filepath.Join(libraryDir, "Shared")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	otherFile := filepath.Join(bookDir, "Other Book.epub")
+	require.NoError(t, os.WriteFile(otherFile, []byte("other"), 0644))
+	require.NoError(t, os.WriteFile(bookSidecarFor(otherFile), []byte("{}"), 0644))
+	filePath := filepath.Join(bookDir, "Test Book.epub")
+	library, book := insertOrganizedLibraryBook(t, db, libraryDir, filePath, filePath)
+
+	bookSvc := NewService(db, appsettings.NewService(db))
+	_, err := bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
+	require.NoError(t, err)
+
+	_, err = os.Stat(otherFile)
+	require.NoError(t, err, "files of other books in the folder should survive")
+	require.FileExists(t, bookSidecarFor(otherFile), "other books' sidecars should survive")
+	for _, p := range []string{filePath, filePath + ".cover.jpg", filePath + ".metadata.json", bookSidecarFor(filePath)} {
+		_, err = os.Stat(p)
+		assert.True(t, os.IsNotExist(err), "%s should be deleted", p)
+	}
 }
 
 func TestDeleteFileAndCleanup_DeletesFileAndKeepsBook(t *testing.T) {

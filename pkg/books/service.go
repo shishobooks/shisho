@@ -1292,8 +1292,12 @@ func (svc *Service) organizeBookFiles(ctx context.Context, book *models.Book) er
 					"old_path": currentPath,
 					"new_path": newPath,
 				})
-				// A failure is logged and the rename undone inside.
-				_ = svc.RecordOrganizedFilepath(ctx, file, currentPath, newPath, true)
+				// A failure is logged and the rename undone inside. A Book
+				// keyed by the file follows it in the database, so keep the
+				// in-memory copy in step for callers that write its sidecar.
+				if svc.RecordOrganizedFilepath(ctx, file, currentPath, newPath, true) == nil && book.Filepath == currentPath {
+					book.Filepath = newPath
+				}
 			}
 		}
 	}
@@ -1916,7 +1920,8 @@ type DeleteBookAndFilesResult struct {
 }
 
 // DeleteBookAndFiles deletes a book and all its files from both disk and database.
-// If library.OrganizeFileStructure is true, the entire book directory is deleted.
+// If library.OrganizeFileStructure is true and the book owns its directory, the
+// entire directory is deleted.
 // Otherwise, each file is deleted individually with its cover and sidecar.
 func (svc *Service) DeleteBookAndFiles(ctx context.Context, bookID int, library *models.Library) (*DeleteBookAndFilesResult, error) {
 	result := &DeleteBookAndFilesResult{}
@@ -1938,16 +1943,37 @@ func (svc *Service) DeleteBookAndFiles(ctx context.Context, bookID int, library 
 	result.FilesDeleted = len(book.Files)
 
 	// Delete files from disk first (before DB transaction)
-	if library.OrganizeFileStructure && book.Filepath != "" {
+	ownsDir, err := svc.bookOwnsDirectory(ctx, &book)
+	if err != nil {
+		return nil, err
+	}
+	if library.OrganizeFileStructure && ownsDir {
 		// Organized structure: delete entire book directory
 		if err := os.RemoveAll(book.Filepath); err != nil && !os.IsNotExist(err) {
 			return nil, errors.Wrap(err, "failed to delete book directory")
 		}
 	} else {
-		// Root-level files: delete each file individually
+		// Delete each file individually with its cover and sidecar
 		for _, file := range book.Files {
 			if err := deleteFileFromDisk(file); err != nil {
 				return nil, errors.Wrap(err, "failed to delete file from disk")
+			}
+		}
+		// Then the book sidecar (best effort), which a book without a folder
+		// of its own keeps beside its main file. Left behind, it would hand
+		// this book's metadata to the next file with that name.
+		anchors := []string{book.Filepath}
+		if !ownsDir {
+			anchors = anchors[:0]
+			for _, file := range book.Files {
+				if file.FileRole == models.FileRoleMain {
+					anchors = append(anchors, file.Filepath)
+				}
+			}
+		}
+		for _, anchor := range anchors {
+			if sidecarPath := sidecar.BookSidecarPath(anchor); sidecarPath != "" {
+				_ = os.Remove(sidecarPath)
 			}
 		}
 	}
@@ -1958,6 +1984,26 @@ func (svc *Service) DeleteBookAndFiles(ctx context.Context, bookID int, library 
 	}
 
 	return result, nil
+}
+
+// bookOwnsDirectory reports whether book.Filepath is a directory on disk
+// that can be removed with the book. A book keyed by its file, or one keyed
+// by a library root, which split books once were, does not own a directory.
+func (svc *Service) bookOwnsDirectory(ctx context.Context, book *models.Book) (bool, error) {
+	if book.Filepath == "" {
+		return false, nil
+	}
+	if info, err := os.Stat(book.Filepath); err != nil || !info.IsDir() {
+		return false, nil
+	}
+	isRoot, err := svc.db.NewSelect().
+		Model((*models.LibraryPath)(nil)).
+		Where("filepath = ?", filepath.Clean(book.Filepath)).
+		Exists(ctx)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	return !isRoot, nil
 }
 
 // deleteFileFromDisk deletes a file and its associated cover and sidecar from disk.

@@ -77,7 +77,7 @@ var (
 )
 
 // MoveFilesToBook moves files from their current books to a target book.
-// If TargetBookID is nil, a new book is created from the first file's directory.
+// If TargetBookID is nil, a new book is created from the first file.
 // This method handles physical file relocation when the library has OrganizeFileStructure enabled.
 func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) (*MoveFilesResult, error) {
 	log := logger.FromContext(ctx)
@@ -477,7 +477,8 @@ func deleteSourceKeepingReading(ctx context.Context, tx bun.Tx, sourceBookID, ta
 //   - Creates a new directory using the [Author] Title format in the library path
 //
 // When OrganizeFileStructure is disabled:
-//   - Uses the file's current directory; returns an error if a book already exists there
+//   - Uses the file's current directory, or the file's own path when that
+//     directory is a library root or already belongs to a book
 func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, sourceBookID int, library *models.Library) (*models.Book, error) {
 	now := time.Now()
 
@@ -577,23 +578,30 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 			return nil, errors.Wrap(err, "failed to create directory for new book")
 		}
 	} else {
-		// Use the file's directory as the book's filepath
+		// The file stays where it is, so the book takes the file's directory
+		// when that is free. A library root is never a book's directory, and
+		// a directory another book owns can't be shared, so either way the
+		// book is keyed by the file itself, as a root-level single-file book is.
 		bookDir = filepath.Dir(file.Filepath)
-
-		// Check if a book already exists at this directory
-		existingCount, err := svc.db.NewSelect().
-			Model((*models.Book)(nil)).
-			Where("filepath = ? AND library_id = ?", bookDir, library.ID).
-			Count(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to check for existing book")
+		useFilepath := false
+		for _, lp := range library.LibraryPaths {
+			if filepath.Clean(lp.Filepath) == filepath.Clean(bookDir) {
+				useFilepath = true
+				break
+			}
 		}
-
-		if existingCount > 0 {
-			// Without organize_file_structure, we cannot create a new book because:
-			// 1. The directory is already used by another book
-			// 2. We cannot move the file to a new directory
-			return nil, errors.New("cannot create a new book: a book already exists at this location. Please select an existing book as the target, or enable 'Organize File Structure' in library settings to allow creating a subdirectory for the new book")
+		if !useFilepath {
+			existingCount, err := svc.db.NewSelect().
+				Model((*models.Book)(nil)).
+				Where("filepath = ? AND library_id = ?", bookDir, library.ID).
+				Count(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to check for existing book")
+			}
+			useFilepath = existingCount > 0
+		}
+		if useFilepath {
+			bookDir = file.Filepath
 		}
 	}
 

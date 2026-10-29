@@ -9,6 +9,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/uptrace/bun"
 )
 
 // Organizing moves a file on disk and then records its new path, so a failed
@@ -68,26 +69,40 @@ func (svc *Service) folderClaimedByOtherBook(ctx context.Context, libraryID, boo
 
 // RecordOrganizedFilepath records that organizing moved file from oldPath to
 // newPath on disk, along with its cover filename, which follows the file's
-// name. If the write fails, the file and the covers and sidecars that moved
+// name, and the path of its Book when the Book is keyed by the file. If the
+// write fails, the file and the covers and sidecars that moved
 // with it go back to oldPath so disk and database agree, and the write error
 // is returned. includeBookSidecar must match the move: see
 // fileutils.UndoOrganizedMove. On success file's in-memory path, cover
 // filename, and updated_at are updated too.
 func (svc *Service) RecordOrganizedFilepath(ctx context.Context, file *models.File, oldPath, newPath string, includeBookSidecar bool) error {
 	now := time.Now()
-	q := svc.db.NewUpdate().
-		Model((*models.File)(nil)).
-		Set("filepath = ?, updated_at = ?", newPath, now).
-		Where("id = ?", file.ID)
-
 	var newCover *string
 	if file.CoverImageFilename != nil {
 		cover := fileutils.ComputeNewCoverFilename(*file.CoverImageFilename, newPath)
 		newCover = &cover
-		q = q.Set("cover_image_filename = ?", cover)
 	}
 
-	if _, err := q.Exec(ctx); err != nil {
+	err := svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		q := tx.NewUpdate().
+			Model((*models.File)(nil)).
+			Set("filepath = ?, updated_at = ?", newPath, now).
+			Where("id = ?", file.ID)
+		if newCover != nil {
+			q = q.Set("cover_image_filename = ?", *newCover)
+		}
+		if _, err := q.Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		// A single-file Book keyed by its file follows the file.
+		_, err := tx.NewUpdate().
+			Model((*models.Book)(nil)).
+			Set("filepath = ?, updated_at = ?", newPath, now).
+			Where("id = ? AND filepath = ?", file.BookID, oldPath).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+	if err != nil {
 		log := logger.FromContext(ctx)
 		data := logger.Data{
 			"file_id":  file.ID,
@@ -101,7 +116,7 @@ func (svc *Service) RecordOrganizedFilepath(ctx context.Context, file *models.Fi
 		} else {
 			log.Error("failed to update file path in database, moved the file back", data)
 		}
-		return errors.WithStack(err)
+		return err
 	}
 
 	file.Filepath = newPath
