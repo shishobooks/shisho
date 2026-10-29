@@ -337,11 +337,15 @@ func parseSearchResponse(vm *goja.Runtime, val goja.Value, pluginScope, pluginID
 
 		md.SeriesNumber, md.SeriesNumberEnd, md.SeriesNumberUnit = parsePluginSeriesNumberGroup(itemObj)
 
-		// confidence -> *float64 (0-1 score)
+		// confidence -> *float64 (only accept 0-1; results are ranked by
+		// confidence across plugins, so NaN or an out-of-range score would
+		// break or dominate the ranking)
 		confidenceVal := itemObj.Get("confidence")
 		if confidenceVal != nil && !goja.IsUndefined(confidenceVal) && !goja.IsNull(confidenceVal) {
 			c := confidenceVal.ToFloat()
-			md.Confidence = &c
+			if c >= 0 && c <= 1 {
+				md.Confidence = &c
+			}
 		}
 
 		// coverPage -> *int (only accept finite non-negative integers; reject

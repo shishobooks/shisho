@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -3532,9 +3533,13 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 			continue
 		}
 
-		// Take the first result directly as ParsedMetadata (no conversion needed)
-		firstResult := searchResp.Results[0]
-		searchMeta := &firstResult
+		// Take the highest-confidence result, not the first: providers rank
+		// their own results, so the exact match can come after weak ones.
+		// Ties and unscored results keep the plugin's order.
+		bestResult := slices.MaxFunc(searchResp.Results, func(a, b mediafile.ParsedMetadata) int {
+			return mediafile.CompareConfidence(a.Confidence, b.Confidence)
+		})
+		searchMeta := &bestResult
 
 		// Check confidence threshold (if result provides a score)
 		if searchMeta.Confidence != nil {

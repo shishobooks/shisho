@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -150,6 +151,10 @@ type enricherRuntime interface {
 // aggregateEnricherSearches runs each enricher's search() hook in order and
 // aggregates the results, per-plugin errors, and file-type skips.
 //
+// Results are ranked by confidence, highest first, across all plugins. The
+// sort is stable, so equal scores keep plugin and provider order, and results
+// without a score go last.
+//
 // It checks the request context for cancellation before invoking each plugin
 // and stops early when the client has gone away, since there is no point
 // fanning out to the remaining plugins (and their outbound API calls) for a
@@ -227,6 +232,9 @@ func aggregateEnricherSearches[T enricherRuntime](
 			})
 		}
 	}
+	slices.SortStableFunc(results, func(a, b EnrichSearchResult) int {
+		return mediafile.CompareConfidence(b.Confidence, a.Confidence)
+	})
 	return results, pluginErrors, skippedPlugins
 }
 
