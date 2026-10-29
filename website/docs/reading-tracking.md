@@ -39,7 +39,7 @@ The status and summary update after each change.
 
 ## Ratings
 
-Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. Hovering over the stars previews, in paler stars, the rating a click would set, with its number beside them. The stars turn solid once the rating is saved. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
+Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. The rating's number shows beside the stars. Hovering over them previews, in paler stars and with its number, the rating a click would set, and the stars turn solid once it's saved. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
 
 Your rating also shows in the bottom-left corner of the book's card wherever books are listed.
 

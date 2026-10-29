@@ -71,8 +71,8 @@ export function MergeIntoDialog({
   const sourceFileCount = sourceBook.files?.length || 0;
 
   const warningMessage = library.organize_file_structure
-    ? "Files will be physically moved to the target book's folder. This book will be deleted, and its reading history and ratings move to the target book."
-    : "Files will be reassigned to the target book. This book will be deleted, and its reading history and ratings move to the target book.";
+    ? "Files will be physically moved to the target book's folder. This book will be deleted, and its reading history moves to the target book, along with ratings where the target has none."
+    : "Files will be reassigned to the target book. This book will be deleted, and its reading history moves to the target book, along with ratings where the target has none.";
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>

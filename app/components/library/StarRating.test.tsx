@@ -46,10 +46,32 @@ describe("StarRating", () => {
   });
 
   it("previews at least a quarter star at the far left", () => {
+    render(<StarRating onChange={vi.fn()} value={3} />);
+    const stars = placeStars();
+    fireEvent.pointerMove(stars, { clientX: 1 });
+    expect(screen.getByText("0.25")).toBeInTheDocument();
+  });
+
+  // A click in the first 1/40 of an unrated row sets nothing (the slider is
+  // already at 0), so it previews nothing either.
+  it("previews nothing where a click on an unrated book sets nothing", () => {
     render(<StarRating onChange={vi.fn()} value={null} />);
     const stars = placeStars();
-    fireEvent.pointerMove(stars, { clientX: 0 });
+    fireEvent.pointerMove(stars, { clientX: 1 });
+    expect(screen.queryByText(/^\d/)).not.toBeInTheDocument();
+    fireEvent.pointerMove(stars, { clientX: 4 });
     expect(screen.getByText("0.25")).toBeInTheDocument();
+  });
+
+  it("shows an arrow key's change while the pointer rests on the stars", () => {
+    render(<StarRating onChange={vi.fn()} value={3} />);
+    const stars = placeStars();
+    fireEvent.pointerMove(stars, { clientX: 105 });
+    expect(screen.getByText("4.5")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Rating" }), {
+      key: "ArrowRight",
+    });
+    expect(screen.getByText("3.25")).toBeInTheDocument();
   });
 
   it("doesn't preview when disabled", () => {

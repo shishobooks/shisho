@@ -78,8 +78,8 @@ export function MoveFilesDialog({
 
   const warningMessage = willDeleteBook
     ? library.organize_file_structure
-      ? "The selected files will be moved to the target book's folder. This book will be deleted, and its reading history and ratings move to the target book."
-      : "The selected files will be reassigned to the target book. This book will be deleted, and its reading history and ratings move to the target book."
+      ? "The selected files will be moved to the target book's folder. This book will be deleted, and its reading history moves to the target book, along with ratings where the target has none."
+      : "The selected files will be reassigned to the target book. This book will be deleted, and its reading history moves to the target book, along with ratings where the target has none."
     : library.organize_file_structure
       ? "The selected files will be moved to the target book's folder. Metadata from the source book will not be transferred."
       : "The selected files will be reassigned to the target book. Metadata from the source book will not be transferred.";

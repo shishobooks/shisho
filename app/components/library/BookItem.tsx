@@ -45,9 +45,8 @@ import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
-import { fileTypeLabel, formatCount } from "@/utils/format";
+import { fileTypeLabel, formatCount, formatRating } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
-import { formatRating } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {

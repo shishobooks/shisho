@@ -1,5 +1,5 @@
 import type { ReadingStatus, ReadThrough } from "@/types";
-import { formatMonthYear } from "@/utils/format";
+import { formatMonthYear, localDay } from "@/utils/format";
 
 // A reading transition, named by its route (pkg/reading/routes.go).
 export type ReadingTransition =
@@ -7,12 +7,7 @@ export type ReadingTransition =
 
 // The browser's local day as YYYY-MM-DD. A Read-through's days are days in
 // the user's time zone, so "today" comes from the browser, not the server.
-export const todayDay = (): string => {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
-};
+export const todayDay = (): string => localDay(new Date());
 
 const STATUS_LABELS: Record<ReadingStatus, string> = {
   currently_reading: "Currently Reading",
@@ -24,10 +19,6 @@ const STATUS_LABELS: Record<ReadingStatus, string> = {
 
 export const readingStatusLabel = (status: ReadingStatus): string =>
   STATUS_LABELS[status];
-
-// A Rating as a number of stars: "4.5", "4.25", "4".
-export const formatRating = (stars: number): string =>
-  stars.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 // The transitions the server accepts from status, which is all a status
 // control offers. Starting is "Read again" once the Book has been read.

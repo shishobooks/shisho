@@ -99,11 +99,14 @@ export const EditReadThroughDialog = ({
         </DialogHeader>
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="read-through-begin">Started</Label>
+            <Label htmlFor="read-through-begin" id="read-through-begin-label">
+              Started
+            </Label>
             <DateField
               aria-describedby={error ? "read-through-error" : undefined}
               aria-invalid={!!error}
               id="read-through-begin"
+              labelId="read-through-begin-label"
               max={today}
               onChange={setBeginDay}
               placeholder="Unknown"
@@ -112,13 +115,14 @@ export const EditReadThroughDialog = ({
           </div>
           {!underway && (
             <div className="space-y-2">
-              <Label htmlFor="read-through-end">
+              <Label htmlFor="read-through-end" id="read-through-end-label">
                 {readThrough.outcome === "abandoned" ? "Stopped" : "Finished"}
               </Label>
               <DateField
                 aria-describedby={error ? "read-through-error" : undefined}
                 aria-invalid={!!error}
                 id="read-through-end"
+                labelId="read-through-end-label"
                 max={today}
                 onChange={setEndDay}
                 placeholder="Unknown"

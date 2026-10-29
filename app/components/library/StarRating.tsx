@@ -3,8 +3,7 @@ import { Star } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/libraries/utils";
-import { formatCount } from "@/utils/format";
-import { formatRating } from "@/utils/readingStatus";
+import { formatCount, formatRating } from "@/utils/format";
 
 const STARS = [0, 1, 2, 3, 4];
 
@@ -12,14 +11,16 @@ const STARS = [0, 1, 2, 3, 4];
 const MIN_RATING = 0.25;
 const MAX_RATING = 5;
 
-// The quarter star a pointer at fraction of the way across picks. Radix
-// snaps a click to the nearest step, so the hover preview rounds the same
-// way and shows exactly what a click would save.
-const starsAt = (fraction: number): number =>
-  Math.min(
-    MAX_RATING,
-    Math.max(MIN_RATING, Math.round(fraction * MAX_RATING * 4) / 4),
-  );
+// The quarter star a click at fraction of the way across saves, or null when
+// it saves nothing. Radix snaps a click to the nearest step, so the hover
+// preview rounds the same way. A click that snaps to 0 is raised to the
+// minimum on commit, except on an unrated book, where the slider already
+// sits at 0 and Radix reports no change.
+const starsAt = (fraction: number, value: number | null): number | null => {
+  const snapped = Math.round(fraction * MAX_RATING * 4) / 4;
+  if (snapped <= 0 && value === null) return null;
+  return Math.min(MAX_RATING, Math.max(MIN_RATING, snapped));
+};
 
 interface StarRatingProps {
   /** Stars from 0.25 to 5 in quarter steps, or null when unrated. */
@@ -55,11 +56,13 @@ const StarRating = ({ value, onChange, disabled }: StarRatingProps) => {
         disabled={disabled}
         max={MAX_RATING}
         min={0}
+        // A key change shows at once, even with the pointer on the stars.
+        onKeyDown={() => setHover(null)}
         onPointerLeave={() => setHover(null)}
         onPointerMove={(e) => {
           if (disabled) return;
           const rect = e.currentTarget.getBoundingClientRect();
-          setHover(starsAt((e.clientX - rect.left) / rect.width));
+          setHover(starsAt((e.clientX - rect.left) / rect.width, value));
         }}
         onValueChange={([stars]) => setPreview(Math.max(MIN_RATING, stars))}
         onValueCommit={([stars]) => onChange(Math.max(MIN_RATING, stars))}
