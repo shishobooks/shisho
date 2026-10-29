@@ -4,7 +4,7 @@ Each user can record their reading of a book, rate it, and look back at its hist
 
 ## Reading Status
 
-A book's **Reading Status** shows on its page, next to its actions, and as a badge on its card wherever books are listed. It is one of:
+A book's **Reading Status** shows on its page, next to its actions, and as a bookmark hanging from the top of its card wherever books are listed. Each status has its own bookmark color and icon, and hovering over the bookmark names it. It is one of:
 
 | Status | Meaning |
 |--------|---------|
@@ -13,7 +13,7 @@ A book's **Reading Status** shows on its page, next to its actions, and as a bad
 | **Read** | The last time you read the book, you finished it. |
 | **Did Not Finish** | The last time you read the book, you abandoned it. |
 
-A book you have never tracked has no status and no badge.
+A book you have never tracked has no status and no bookmark.
 
 The status follows your history. A book you are reading or have paused shows that, whatever happened before. Otherwise it shows how your latest read ended, where latest means the latest end date. A read with no end date counts as older than any dated one, so editing or deleting a Read-through can change the status.
 
@@ -39,9 +39,9 @@ The status and summary update after each change.
 
 ## Ratings
 
-Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. Hovering over the stars previews the rating a click would set, with its number beside them. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
+Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. Hovering over the stars previews, in paler stars, the rating a click would set, with its number beside them. The stars turn solid once the rating is saved. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
 
-Your rating also shows in the top-left corner of the book's card wherever books are listed.
+Your rating also shows in the bottom-left corner of the book's card wherever books are listed.
 
 A rating doesn't depend on status. You can rate a book you abandoned or one you never marked read, and rereading keeps your rating.
 

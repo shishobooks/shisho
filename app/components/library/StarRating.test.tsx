@@ -58,4 +58,23 @@ describe("StarRating", () => {
     fireEvent.pointerMove(stars, { clientX: 105 });
     expect(screen.getByText("3")).toBeInTheDocument();
   });
+
+  it("turns solid once the hovered rating is saved, before the pointer leaves", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<StarRating onChange={onChange} value={2} />);
+    const stars = placeStars();
+    const fill = () => screen.getByTestId("star-rating-fill");
+
+    fireEvent.pointerMove(stars, { clientX: 105 });
+    expect(fill()).toHaveAttribute("data-previewing", "true");
+
+    // The click saved 4.5, and the pointer is still over 4.5.
+    rerender(<StarRating onChange={onChange} value={4.5} />);
+    expect(fill()).toHaveAttribute("data-previewing", "false");
+    expect(screen.getByText("4.5")).toBeInTheDocument();
+
+    // Moving to another quarter previews again.
+    fireEvent.pointerMove(stars, { clientX: 60 });
+    expect(fill()).toHaveAttribute("data-previewing", "true");
+  });
 });

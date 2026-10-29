@@ -358,30 +358,45 @@ describe("BookItem selection mode", () => {
   });
 });
 
-describe("BookItem reading status badge", () => {
-  it("shows the signed-in user's Reading Status", () => {
+describe("BookItem reading status bookmark", () => {
+  it.each([
+    ["currently_reading", "Currently Reading"],
+    ["paused", "Paused"],
+    ["to_read", "To Read"],
+    ["read", "Read"],
+    ["did_not_finish", "Did Not Finish"],
+  ] as const)("marks a %s book with its bookmark", (status, label) => {
+    render(
+      wrap(
+        <BookItem book={makeBook({ reading_status: status })} libraryId="1" />,
+      ),
+    );
+    const bookmark = screen.getByRole("img", { name: label });
+    expect(bookmark).toHaveAttribute("data-status", status);
+    // A bookmark, not a text badge that reads like "Needs review".
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
+  });
+
+  it("shows no bookmark without a status", () => {
+    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+    expect(
+      screen.queryByRole("img", {
+        name: /^(Currently Reading|Paused|To Read|Read|Did Not Finish)$/,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("gives way to the selection checkbox in selection mode", () => {
     render(
       wrap(
         <BookItem
-          book={makeBook({ reading_status: "currently_reading" })}
+          book={makeBook({ reading_status: "read" })}
+          isSelectionMode
           libraryId="1"
         />,
       ),
     );
-    expect(screen.getByText("Currently Reading")).toBeInTheDocument();
-  });
-
-  it("shows no badge without a status", () => {
-    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
-    for (const label of [
-      "Currently Reading",
-      "Paused",
-      "To Read",
-      "Read",
-      "Did Not Finish",
-    ]) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
-    }
+    expect(screen.queryByRole("img", { name: "Read" })).not.toBeInTheDocument();
   });
 });
 
@@ -396,7 +411,7 @@ describe("BookItem rating badge", () => {
     expect(screen.queryByLabelText(/^Rated/)).not.toBeInTheDocument();
   });
 
-  it("gives way to the selection checkbox in selection mode", () => {
+  it("stays in selection mode, away from the checkbox", () => {
     render(
       wrap(
         <BookItem
@@ -406,6 +421,6 @@ describe("BookItem rating badge", () => {
         />,
       ),
     );
-    expect(screen.queryByLabelText(/^Rated/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Rated 4 stars")).toBeInTheDocument();
   });
 });

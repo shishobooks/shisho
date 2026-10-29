@@ -41,6 +41,9 @@ const StarRating = ({ value, onChange, disabled }: StarRatingProps) => {
 
   const shown = hover ?? preview;
   const fill = shown ?? 0;
+  // Pale means "not saved": once a click's rating comes back as the saved
+  // value, the stars turn solid even with the pointer still over them.
+  const previewing = hover !== null && hover !== value;
   return (
     <div className="flex items-center gap-2">
       <SliderPrimitive.Root
@@ -72,16 +75,17 @@ const StarRating = ({ value, onChange, disabled }: StarRatingProps) => {
           <div
             aria-hidden
             className="absolute inset-y-0 left-0 flex overflow-hidden"
+            data-previewing={previewing}
+            data-testid="star-rating-fill"
             style={{ width: `${(fill / MAX_RATING) * 100}%` }}
           >
             {STARS.map((i) => (
               <Star
                 className={cn(
                   "h-6 w-6 shrink-0",
-                  // A hover preview is paler than the saved rating.
-                  hover === null
-                    ? "fill-amber-400 text-amber-400"
-                    : "fill-amber-400/60 text-amber-400/60",
+                  previewing
+                    ? "fill-amber-400/60 text-amber-400/60"
+                    : "fill-amber-400 text-amber-400",
                 )}
                 key={i}
               />
@@ -101,7 +105,7 @@ const StarRating = ({ value, onChange, disabled }: StarRatingProps) => {
         aria-hidden
         className={cn(
           "min-w-8 text-sm tabular-nums",
-          hover === null ? "text-muted-foreground" : "text-foreground",
+          previewing ? "text-foreground" : "text-muted-foreground",
         )}
       >
         {shown !== null && formatRating(shown)}

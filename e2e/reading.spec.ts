@@ -94,6 +94,9 @@ test.describe("Reading", () => {
       waitUntil: "domcontentloaded",
     });
     const card = page.getByRole("link").filter({ hasText: "Tracked Book" });
-    await expect(card.getByText("Read", { exact: true })).toBeVisible();
+    await expect(
+      card.getByRole("img", { name: "Read", exact: true }),
+    ).toBeVisible();
+    await expect(card.getByLabel("Rated 3.75 stars")).toBeVisible();
   });
 });

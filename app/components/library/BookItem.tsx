@@ -17,6 +17,7 @@ import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
+import ReadingStatusBookmark from "@/components/library/ReadingStatusBookmark";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +47,7 @@ import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { fileTypeLabel, formatCount } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
-import { formatRating, readingStatusLabel } from "@/utils/readingStatus";
+import { formatRating } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -281,27 +282,28 @@ const BookItem = ({
             />
           )}
           {/* The selection checkbox takes this corner in selection mode. */}
-          {!isSelectionMode && book.rating != null && (
-            <Badge
-              aria-label={`Rated ${formatCount(book.rating, "star")}`}
-              className="absolute top-1 left-1 gap-0.5 text-[10px] px-1.5 py-0 tabular-nums pointer-events-none"
-              role="img"
-              variant="secondary"
-            >
-              <Star
-                aria-hidden
-                className="h-2.5 w-2.5 fill-amber-400 text-amber-400"
-              />
-              {formatRating(book.rating)}
-            </Badge>
+          {!isSelectionMode && book.reading_status && (
+            <ReadingStatusBookmark
+              className="absolute top-0 left-2"
+              status={book.reading_status}
+            />
           )}
-          {/* Badges stack in the bottom-left corner so a long status and
-              Needs review never overlap on a narrow card. */}
-          {(isBookNeedsReview(book) || book.reading_status) && (
+          {/* Badges stack in the bottom-left corner so they never overlap
+              on a narrow card. */}
+          {(isBookNeedsReview(book) || book.rating != null) && (
             <div className="absolute bottom-1 left-1 right-1 flex flex-col items-start gap-0.5 pointer-events-none">
-              {book.reading_status && (
-                <Badge className="text-[10px] px-1.5 py-0" variant="secondary">
-                  {readingStatusLabel(book.reading_status)}
+              {book.rating != null && (
+                <Badge
+                  aria-label={`Rated ${formatCount(book.rating, "star")}`}
+                  className="gap-0.5 text-[10px] px-1.5 py-0 tabular-nums"
+                  role="img"
+                  variant="secondary"
+                >
+                  <Star
+                    aria-hidden
+                    className="h-2.5 w-2.5 fill-amber-400 text-amber-400"
+                  />
+                  {formatRating(book.rating)}
                 </Badge>
               )}
               {isBookNeedsReview(book) && (

@@ -94,19 +94,13 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
           <DropdownMenuTrigger asChild>
             <Button
               aria-label={`Reading status: ${statusLabel}`}
-              // Wide enough for the longest status, so the stars beside it
-              // stay put as the status changes.
-              className="w-44 justify-start"
               disabled={demoMode}
               size="sm"
               variant="outline"
             >
               <BookOpen aria-hidden className="h-4 w-4" />
               {statusLabel}
-              <ChevronDown
-                aria-hidden
-                className="ml-auto h-3.5 w-3.5 opacity-60"
-              />
+              <ChevronDown aria-hidden className="h-3.5 w-3.5 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
