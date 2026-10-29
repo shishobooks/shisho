@@ -398,6 +398,27 @@ func TestProcessScanJob_RootLevelFile(t *testing.T) {
 	assert.Contains(t, book.Filepath, "[Root Author] Root Level Book")
 }
 
+// A library path entered with a trailing slash still makes root-level files
+// root-level: each gets its own Book, and none is keyed by the library root.
+func TestProcessScanJob_RootLevelFiles_LibraryPathWithTrailingSlash(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath + string(filepath.Separator)})
+
+	testgen.GenerateEPUB(t, libraryPath, "first.epub", testgen.EPUBOptions{Title: "First Book", Authors: []string{"Author"}})
+	testgen.GenerateEPUB(t, libraryPath, "second.epub", testgen.EPUBOptions{Title: "Second Book", Authors: []string{"Author"}})
+
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 2)
+	for _, book := range allBooks {
+		assert.NotEqual(t, libraryPath, book.Filepath, "no Book is keyed by the library root")
+	}
+}
+
 func TestProcessScanJob_DirectoryWithMultipleFiles(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

@@ -380,6 +380,55 @@ func TestUpdateLibrary_SetsLibraryPathTimestamps(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), paths[0].UpdatedAt, time.Minute)
 }
 
+// Library paths are stored cleaned, so every comparison against a file's
+// directory matches, and entering a path twice stores it once.
+func TestCreateLibrary_CleansLibraryPaths(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+		LibraryPaths: []*models.LibraryPath{
+			{Filepath: "/tmp/books/"},
+			{Filepath: "/tmp/books"},
+			{Filepath: "/tmp/audio//sub/../"},
+		},
+	}
+	require.NoError(t, svc.CreateLibrary(ctx, library))
+
+	var stored []string
+	require.NoError(t, db.NewSelect().Model((*models.LibraryPath)(nil)).Column("filepath").
+		Where("library_id = ?", library.ID).Order("filepath ASC").Scan(ctx, &stored))
+	assert.Equal(t, []string{"/tmp/audio", "/tmp/books"}, stored)
+}
+
+func TestUpdateLibrary_CleansLibraryPaths(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	library := &models.Library{
+		Name:             "Test Library",
+		CoverAspectRatio: "book",
+		LibraryPaths:     []*models.LibraryPath{{Filepath: "/tmp/original"}},
+	}
+	require.NoError(t, svc.CreateLibrary(ctx, library))
+
+	library.LibraryPaths = []*models.LibraryPath{{Filepath: "/tmp/replacement/"}, {Filepath: "/tmp/replacement"}}
+	require.NoError(t, svc.UpdateLibrary(ctx, library, UpdateLibraryOptions{UpdateLibraryPaths: true}))
+
+	var stored []string
+	require.NoError(t, db.NewSelect().Model((*models.LibraryPath)(nil)).Column("filepath").
+		Where("library_id = ?", library.ID).Scan(ctx, &stored))
+	assert.Equal(t, []string{"/tmp/replacement"}, stored)
+}
+
 // A non-nil empty LibraryIDs means the caller reaches no library, so the
 // list is empty. Only a nil filter lists every library.
 func TestListLibraries_EmptyLibraryIDsListsNothing(t *testing.T) {

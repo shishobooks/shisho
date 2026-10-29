@@ -1074,3 +1074,21 @@ func TestDirectoryCleanupPatterns(t *testing.T) {
 	assert.False(t, removed)
 	assert.FileExists(t, filepath.Join(withNotes, "notes.txt"))
 }
+
+func TestIsWithin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		path, dir string
+		want      bool
+	}{
+		{"/books", "/books", true},
+		{"/books/a/b.epub", "/books", true},
+		{"/books/a", "/books/", true},
+		{"/books2/a", "/books", false},
+		{"/book", "/books", false},
+		{"/", "/books", false},
+		{"/books/../other", "/books", false},
+	} {
+		assert.Equal(t, tc.want, IsWithin(tc.path, tc.dir), "IsWithin(%q, %q)", tc.path, tc.dir)
+	}
+}

@@ -596,6 +596,16 @@ func matchesIgnoredPattern(filename string, patterns []string) bool {
 	return false
 }
 
+// IsWithin reports whether path is dir or inside it. Unlike a string prefix
+// check, "/books2/a" is not within "/books".
+func IsWithin(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // CleanupEmptyParentDirectories removes empty parent directories starting from startPath
 // up to (but not including) stopAt. ignoredPatterns are passed to CleanupEmptyDirectory.
 func CleanupEmptyParentDirectories(startPath, stopAt string, ignoredPatterns ...string) error {

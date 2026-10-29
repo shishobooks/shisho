@@ -731,7 +731,7 @@ func (w *Worker) removeFileRecord(ctx context.Context, file *models.File, book *
 			})
 			if libErr == nil && library != nil {
 				for _, libPath := range library.LibraryPaths {
-					if strings.HasPrefix(bookPath, libPath.Filepath) {
+					if fileutils.IsWithin(bookPath, libPath.Filepath) {
 						if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
 							logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
 						}
@@ -861,7 +861,7 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 		if libErr == nil && library != nil {
 			// Find which library path contains this book
 			for _, libPath := range library.LibraryPaths {
-				if strings.HasPrefix(bookPath, libPath.Filepath) {
+				if fileutils.IsWithin(bookPath, libPath.Filepath) {
 					if err := fileutils.CleanupEmptyParentDirectories(bookPath, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
 						logWarn("failed to cleanup empty directories", logger.Data{"path": bookPath, "error": err.Error()})
 					}
