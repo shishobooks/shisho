@@ -189,7 +189,7 @@ const LibrarySettings = () => {
         .map((n) => ({ ...n, name: n.name.trim() }))
         .filter((n) => n.name !== "");
 
-      await updateLibraryMutation.mutateAsync({
+      const savedLibrary = await updateLibraryMutation.mutateAsync({
         id: libraryId,
         payload: {
           name: name.trim(),
@@ -202,10 +202,13 @@ const LibrarySettings = () => {
 
       toast.success("Library settings saved!");
 
-      // Update form state to match saved values (trimmed name, filtered paths)
+      // Update form state to match saved values: the trimmed name, and the
+      // paths as the server stored them (cleaned, without repeats)
       const trimmedName = name.trim();
+      const savedPaths =
+        savedLibrary.library_paths?.map((lp) => lp.filepath) ?? validPaths;
       setName(trimmedName);
-      setLibraryPaths(validPaths);
+      setLibraryPaths(savedPaths);
       setTagNamespaces(savedNamespaces);
 
       // Update initial values to match saved values so hasChanges becomes false
@@ -213,7 +216,7 @@ const LibrarySettings = () => {
         name: trimmedName,
         organizeFileStructure,
         coverAspectRatio,
-        libraryPaths: validPaths,
+        libraryPaths: savedPaths,
         tagNamespaces: savedNamespaces.map((n) => n.name),
       });
     } catch (e) {
