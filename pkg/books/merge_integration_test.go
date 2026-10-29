@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 )
 
 func TestMoveFilesToBook_WithOrganizeFileStructure(t *testing.T) {
@@ -946,24 +947,21 @@ func TestMoveFilesToBook_CreateNewBook_WithOrganizeFileStructure_GeneratesUnique
 	assert.True(t, os.IsNotExist(err), "file should not exist at old location")
 }
 
-func TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_ReturnsError(t *testing.T) {
+func TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_SharedDirectory(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := testdb.New(t)
 	svc := NewService(db, appsettings.NewService(db))
 
-	// Create temp directory
 	tmpDir := t.TempDir()
 	sourceDir := filepath.Join(tmpDir, "BookDir")
 	require.NoError(t, os.MkdirAll(sourceDir, 0755))
 
-	// Create test files in the same directory
 	file1Path := filepath.Join(sourceDir, "book1.epub")
 	file2Path := filepath.Join(sourceDir, "book2.epub")
 	require.NoError(t, os.WriteFile(file1Path, []byte("content1"), 0644))
 	require.NoError(t, os.WriteFile(file2Path, []byte("content2"), 0644))
 
-	// Create library with OrganizeFileStructure DISABLED
 	library := &models.Library{
 		Name:                  "Test Library",
 		CoverAspectRatio:      "book",
@@ -971,61 +969,116 @@ func TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_ReturnsError
 	}
 	_, err := db.NewInsert().Model(library).Exec(ctx)
 	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: tmpDir}).Exec(ctx)
+	require.NoError(t, err)
 
-	// Create source book with two files
+	sourceBook, file2 := insertBookWithTwoFiles(t, db, library, sourceDir, file1Path, file2Path)
+
+	// The directory already belongs to the source book, so the new book is
+	// keyed by the file itself, as a single-file book is.
+	result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
+		FileIDs:   []int{file2.ID},
+		LibraryID: library.ID,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.NewBookCreated)
+	assert.NotEqual(t, sourceBook.ID, result.TargetBook.ID)
+	assert.Equal(t, file2Path, result.TargetBook.Filepath)
+	assert.Equal(t, "book2", result.TargetBook.Title)
+
+	_, err = os.Stat(file2Path)
+	require.NoError(t, err, "file should still exist at original location")
+}
+
+// TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_RootLevel
+// covers root-level files the scan grouped under one synthetic path because
+// their metadata matched. Splitting each of them out must work, and no new
+// book may be keyed by the library root.
+func TestMoveFilesToBook_CreateNewBook_WithoutOrganizeFileStructure_RootLevel(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := testdb.New(t)
+	svc := NewService(db, appsettings.NewService(db))
+
+	libraryDir := t.TempDir()
+	file1Path := filepath.Join(libraryDir, "Dune (2005).epub")
+	file2Path := filepath.Join(libraryDir, "Dune (2021).epub")
+	file3Path := filepath.Join(libraryDir, "Dune (2024).epub")
+	for _, p := range []string{file1Path, file2Path, file3Path} {
+		require.NoError(t, os.WriteFile(p, []byte("content"), 0644))
+	}
+
+	library := &models.Library{
+		Name:                  "Test Library",
+		CoverAspectRatio:      "book",
+		OrganizeFileStructure: false,
+	}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.LibraryPath{LibraryID: library.ID, Filepath: libraryDir}).Exec(ctx)
+	require.NoError(t, err)
+
+	syntheticPath := filepath.Join(libraryDir, "[Frank Herbert] Dune")
+	sourceBook, file2 := insertBookWithTwoFiles(t, db, library, syntheticPath, file1Path, file2Path)
+	file3 := &models.File{
+		LibraryID:     library.ID,
+		BookID:        sourceBook.ID,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		Filepath:      file3Path,
+		FilesizeBytes: 7,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	_, err = db.NewInsert().Model(file3).Exec(ctx)
+	require.NoError(t, err)
+
+	for _, f := range []*models.File{file2, file3} {
+		result, err := svc.MoveFilesToBook(ctx, MoveFilesOptions{
+			FileIDs:   []int{f.ID},
+			LibraryID: library.ID,
+		})
+		require.NoError(t, err)
+		assert.True(t, result.NewBookCreated)
+		assert.Equal(t, f.Filepath, result.TargetBook.Filepath)
+	}
+}
+
+// insertBookWithTwoFiles inserts a book at bookPath holding two main EPUB
+// files, and returns the book and its second file.
+func insertBookWithTwoFiles(t *testing.T, db *bun.DB, library *models.Library, bookPath, file1Path, file2Path string) (*models.Book, *models.File) {
+	t.Helper()
+	ctx := context.Background()
 	now := time.Now()
-	sourceBook := &models.Book{
+	book := &models.Book{
 		LibraryID:       library.ID,
-		Title:           "BookDir",
+		Title:           filepath.Base(bookPath),
 		TitleSource:     models.DataSourceFilepath,
-		SortTitle:       "BookDir",
+		SortTitle:       filepath.Base(bookPath),
 		SortTitleSource: models.DataSourceFilepath,
 		AuthorSource:    models.DataSourceFilepath,
-		Filepath:        sourceDir,
+		Filepath:        bookPath,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	_, err = db.NewInsert().Model(sourceBook).Exec(ctx)
+	_, err := db.NewInsert().Model(book).Exec(ctx)
 	require.NoError(t, err)
 
-	file1 := &models.File{
-		LibraryID:     library.ID,
-		BookID:        sourceBook.ID,
-		FileType:      models.FileTypeEPUB,
-		FileRole:      models.FileRoleMain,
-		Filepath:      file1Path,
-		FilesizeBytes: 8,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+	var second *models.File
+	for _, p := range []string{file1Path, file2Path} {
+		f := &models.File{
+			LibraryID:     library.ID,
+			BookID:        book.ID,
+			FileType:      models.FileTypeEPUB,
+			FileRole:      models.FileRoleMain,
+			Filepath:      p,
+			FilesizeBytes: 8,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+		_, err = db.NewInsert().Model(f).Exec(ctx)
+		require.NoError(t, err)
+		second = f
 	}
-	_, err = db.NewInsert().Model(file1).Exec(ctx)
-	require.NoError(t, err)
-
-	file2 := &models.File{
-		LibraryID:     library.ID,
-		BookID:        sourceBook.ID,
-		FileType:      models.FileTypeEPUB,
-		FileRole:      models.FileRoleMain,
-		Filepath:      file2Path,
-		FilesizeBytes: 8,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-	_, err = db.NewInsert().Model(file2).Exec(ctx)
-	require.NoError(t, err)
-
-	// Try to move file2 to a NEW book (TargetBookID = nil)
-	// This should fail because OrganizeFileStructure is disabled and a book
-	// already exists at the file's directory
-	_, err = svc.MoveFilesToBook(ctx, MoveFilesOptions{
-		FileIDs:      []int{file2.ID},
-		TargetBookID: nil, // Create new book
-		LibraryID:    library.ID,
-	})
-	require.Error(t, err, "should fail when creating new book without OrganizeFileStructure")
-	assert.Contains(t, err.Error(), "cannot create a new book", "error should explain the reason")
-
-	// Verify file was not moved
-	_, err = os.Stat(file2Path)
-	require.NoError(t, err, "file should still exist at original location")
+	return book, second
 }

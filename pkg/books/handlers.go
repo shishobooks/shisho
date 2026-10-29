@@ -1256,14 +1256,7 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 ) *models.File {
 	log := logger.FromContext(ctx)
 
-	isRootLevel := false
-	fileDir := filepath.Dir(file.Filepath)
-	for _, lp := range library.LibraryPaths {
-		if fileDir == lp.Filepath {
-			isRootLevel = true
-			break
-		}
-	}
+	isRootLevel := isFileAtLibraryRoot(file.Filepath, library.LibraryPaths)
 
 	if isRootLevel {
 		// OrganizeBookFiles reads files fresh from the DB, so flush any
@@ -1358,8 +1351,9 @@ func (h *handler) reorganizeFileAfterMetadataChange(
 		FileType:      file.FileType,
 		Claimed:       h.bookService.FilepathClaimedByOtherFile(ctx, file.LibraryID, file.ID),
 	}
-	// RenameOrganizedFileOnly leaves the book sidecar untouched — file-level
-	// changes must not rename the book sidecar.
+	// RenameOrganizedFileOnly leaves the book sidecar untouched, since
+	// file-level changes must not rename a folder book's sidecar.
+	// RecordOrganizedFilepath carries the sidecar of a book keyed by the file.
 	newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
 	if err != nil {
 		log.Error("failed to rename file after metadata change", logger.Data{
@@ -2255,7 +2249,7 @@ func (h *handler) moveFiles(c echo.Context) error {
 // out is a 422; a missing target book keeps its 404, and anything else is a
 // 500.
 func moveFilesError(err error) error {
-	if errors.Is(err, ErrNoFilesToMove) || errors.Is(err, ErrFilesNotInLibrary) {
+	if errors.Is(err, ErrNoFilesToMove) || errors.Is(err, ErrFilesNotInLibrary) || errors.Is(err, ErrNothingToSplit) {
 		return errcodes.ValidationError(err.Error())
 	}
 	return errors.WithStack(err)

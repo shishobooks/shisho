@@ -142,6 +142,25 @@ func TestOrganizeBookFiles_RootLevel_SkipsPathClaimedByAnotherFile(t *testing.T)
 	assert.NoFileExists(t, claimedPath)
 }
 
+// A root-level Book keyed by its file, as a split leaves it, ends up keyed by
+// the folder organizing moves the file into.
+func TestOrganizeBookFiles_RootLevel_BookKeyedByFileEndsAtFolder(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+
+	original := filepath.Join(f.libDir, "download.epub")
+	book := f.addBook("Beach Read", original)
+	file := f.addFile(book, original, true)
+
+	f.organize(book)
+
+	folder := filepath.Join(f.libDir, "[Emily Henry] Beach Read")
+	assert.Equal(t, folder, f.reloadBook(book).Filepath)
+	reloaded := f.reloadFile(file)
+	assert.Equal(t, filepath.Join(folder, "Beach Read.epub"), reloaded.Filepath)
+	assert.FileExists(t, reloaded.Filepath)
+}
+
 func TestOrganizeBookFiles_RootLevel_UndoesMoveWhenDatabaseUpdateFails(t *testing.T) {
 	t.Parallel()
 	f := newOrganizeFixture(t)
@@ -190,6 +209,24 @@ func TestOrganizeBookFiles_RenameInPlace_SkipsClaimedPathAndUndoesOnFailure(t *t
 	assert.FileExists(t, renamed.Filepath, "the file is moved back")
 	assert.NoFileExists(t, filepath.Join(subfolder, "Book Lovers.epub"))
 	assert.Equal(t, renamed.Filepath, f.reloadFile(file).Filepath)
+}
+
+// A Book split out of a shared folder is keyed by its file, so renaming the
+// file in place carries the Book along.
+func TestOrganizeBookFiles_RenameInPlace_BookKeyedByFileFollowsRename(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+
+	subfolder := filepath.Join(f.libDir, "Downloads")
+	original := filepath.Join(subfolder, "download.epub")
+	book := f.addBook("Beach Read", original)
+	f.addFile(book, original, true)
+
+	f.organize(book)
+
+	renamed := filepath.Join(subfolder, "Beach Read.epub")
+	assert.FileExists(t, renamed)
+	assert.Equal(t, renamed, f.reloadBook(book).Filepath)
 }
 
 func TestOrganizeBookFiles_DirectoryBased_SkipsFolderHoldingAnotherBooksFiles(t *testing.T) {

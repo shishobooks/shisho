@@ -74,10 +74,11 @@ func firstNonExistentAncestor(dir string) string {
 var (
 	ErrNoFilesToMove     = errors.New("no files specified to move")
 	ErrFilesNotInLibrary = errors.New("some files not found or not in the specified library")
+	ErrNothingToSplit    = errors.New("these are all of the book's files, so there is nothing to split into a new book")
 )
 
 // MoveFilesToBook moves files from their current books to a target book.
-// If TargetBookID is nil, a new book is created from the first file's directory.
+// If TargetBookID is nil, a new book is created from the first file.
 // This method handles physical file relocation when the library has OrganizeFileStructure enabled.
 func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) (*MoveFilesResult, error) {
 	log := logger.FromContext(ctx)
@@ -115,6 +116,19 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 		return nil, errors.WithStack(err)
 	}
 
+	// A book keyed by a file that is leaving takes another of its files as
+	// its key, so the key stays one of its own files and a new book can take
+	// the leaving file's path.
+	leaving := make([]*models.File, 0, len(files))
+	for _, file := range files {
+		if opts.TargetBookID == nil || file.BookID != *opts.TargetBookID {
+			leaving = append(leaving, file)
+		}
+	}
+	if err := rekeyBooksAwayFromFiles(ctx, svc.db, leaving); err != nil {
+		return nil, errors.Wrap(err, "failed to rekey source books")
+	}
+
 	// Get or create target book
 	var targetBook *models.Book
 	if opts.TargetBookID != nil {
@@ -127,9 +141,20 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 			return nil, errors.Wrap(err, "failed to retrieve target book")
 		}
 	} else {
-		// Create a new book from the first file
-		// Use the file's name as the title and copy authors from its source book
-		targetBook, err = svc.createBookFromFile(ctx, files[0], files[0].BookID, &library)
+		// Create a new book from the first selected file that can take a key
+		// (a file whose own book has no other file to be keyed by cannot),
+		// using its name as the title and its source book's metadata.
+		movingIDs := make([]int, len(files))
+		for i, file := range files {
+			movingIDs[i] = file.ID
+		}
+		err = ErrNothingToSplit
+		for _, file := range filesInRequestOrder(files, opts.FileIDs) {
+			targetBook, err = svc.createBookFromFile(ctx, file, file.BookID, movingIDs, &library)
+			if !errors.Is(err, ErrNothingToSplit) {
+				break
+			}
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create new book")
 		}
@@ -190,7 +215,15 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 
 			// Handle physical file move if organize is enabled
 			if library.OrganizeFileStructure {
-				newPath := filepath.Join(targetBook.Filepath, filepath.Base(file.Filepath))
+				// A book keyed by one of its files lives in that file's folder.
+				targetDir := targetBook.Filepath
+				for _, f := range targetBook.Files {
+					if f.Filepath == targetBook.Filepath {
+						targetDir = filepath.Dir(targetDir)
+						break
+					}
+				}
+				newPath := filepath.Join(targetDir, filepath.Base(file.Filepath))
 				// Generate unique path if a file already exists at the destination
 				newPath = fileutils.GenerateUniqueFilepathIfExists(newPath)
 
@@ -470,6 +503,22 @@ func deleteSourceKeepingReading(ctx context.Context, tx bun.Tx, sourceBookID, ta
 	return errors.WithStack(err)
 }
 
+// filesInRequestOrder returns files in the order their ids were requested.
+func filesInRequestOrder(files []*models.File, ids []int) []*models.File {
+	byID := make(map[int]*models.File, len(files))
+	for _, f := range files {
+		byID[f.ID] = f
+	}
+	ordered := make([]*models.File, 0, len(files))
+	for _, id := range ids {
+		if f, ok := byID[id]; ok {
+			ordered = append(ordered, f)
+			delete(byID, id)
+		}
+	}
+	return ordered
+}
+
 // createBookFromFile creates a new book based on a file.
 // The title is derived from the file's metadata name if available, otherwise from the filename on disk.
 // All other metadata (authors, series, genres, tags, description, etc.) is copied from the source book.
@@ -477,8 +526,10 @@ func deleteSourceKeepingReading(ctx context.Context, tx bun.Tx, sourceBookID, ta
 //   - Creates a new directory using the [Author] Title format in the library path
 //
 // When OrganizeFileStructure is disabled:
-//   - Uses the file's current directory; returns an error if a book already exists there
-func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, sourceBookID int, library *models.Library) (*models.Book, error) {
+//   - Uses the file's current directory, or the file's own path when that
+//     directory is a library root, already belongs to a book, or holds files
+//     that are not moving
+func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, sourceBookID int, movingIDs []int, library *models.Library) (*models.Book, error) {
 	now := time.Now()
 
 	// Fetch source book with all metadata
@@ -577,23 +628,49 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 			return nil, errors.Wrap(err, "failed to create directory for new book")
 		}
 	} else {
-		// Use the file's directory as the book's filepath
+		// The file stays where it is, so the book takes the file's directory
+		// when that is free: not a library root, not another book's key, and
+		// holding no file that stays behind. Otherwise the book is keyed by
+		// the file itself, as a root-level single-file book is.
 		bookDir = filepath.Dir(file.Filepath)
-
-		// Check if a book already exists at this directory
-		existingCount, err := svc.db.NewSelect().
-			Model((*models.Book)(nil)).
-			Where("filepath = ? AND library_id = ?", bookDir, library.ID).
-			Count(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to check for existing book")
+		useDir := !isLibraryRoot(bookDir, library.LibraryPaths)
+		if useDir {
+			taken, err := svc.db.NewSelect().
+				Model((*models.Book)(nil)).
+				Where("filepath = ? AND library_id = ?", bookDir, library.ID).
+				Exists(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to check for existing book")
+			}
+			useDir = !taken
 		}
-
-		if existingCount > 0 {
-			// Without organize_file_structure, we cannot create a new book because:
-			// 1. The directory is already used by another book
-			// 2. We cannot move the file to a new directory
-			return nil, errors.New("cannot create a new book: a book already exists at this location. Please select an existing book as the target, or enable 'Organize File Structure' in library settings to allow creating a subdirectory for the new book")
+		if useDir {
+			descendants := escapeLikePattern(bookDir) + escapeLikePattern(string(os.PathSeparator)) + "%"
+			shared, err := svc.db.NewSelect().
+				Model((*models.File)(nil)).
+				Where("library_id = ?", library.ID).
+				Where("id NOT IN (?)", bun.List(movingIDs)).
+				Where("filepath LIKE ? ESCAPE '\\'", descendants).
+				Exists(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to check for other files in the directory")
+			}
+			useDir = !shared
+		}
+		if !useDir {
+			bookDir = file.Filepath
+			taken, err := svc.db.NewSelect().
+				Model((*models.Book)(nil)).
+				Where("filepath = ? AND library_id = ?", bookDir, library.ID).
+				Exists(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to check for existing book")
+			}
+			if taken {
+				// Only the file's own book can hold its path, and only when
+				// the book has no other file to be keyed by.
+				return nil, ErrNothingToSplit
+			}
 		}
 	}
 
