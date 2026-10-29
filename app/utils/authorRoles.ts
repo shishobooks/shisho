@@ -33,6 +33,28 @@ export function getAuthorRoleLabel(
 }
 
 /**
+ * Joins authors into one credit line that names each person once with every
+ * role they hold, as the book page does: "Fujita (Writer, Penciller)".
+ * Groups by name because plugin results carry no person ids.
+ */
+export function formatAuthorCredits(
+  authors: { name: string; role?: string | null }[],
+): string {
+  const rolesByName = new Map<string, string[]>();
+  for (const author of authors) {
+    const roles = rolesByName.get(author.name) ?? [];
+    const label = getAuthorRoleLabel(author.role);
+    if (label && !roles.includes(label)) roles.push(label);
+    rolesByName.set(author.name, roles);
+  }
+  return [...rolesByName]
+    .map(([name, roles]) =>
+      roles.length > 0 ? `${name} (${roles.join(", ")})` : name,
+    )
+    .join(", ");
+}
+
+/**
  * Author role options for CBZ files, in the order they should appear in
  * dropdowns. Shared between BookEditDialog and IdentifyReviewForm so the
  * two stay in sync. Uses the tygo-generated `AuthorRoleX` constants so a

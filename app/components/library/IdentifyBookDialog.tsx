@@ -28,7 +28,7 @@ import {
 import { useFilePageUrl } from "@/hooks/useFilePageUrl";
 import { cn } from "@/libraries/utils";
 import { PluginHookMetadataEnricher, type Book } from "@/types";
-import { getAuthorRoleLabel } from "@/utils/authorRoles";
+import { formatAuthorCredits } from "@/utils/authorRoles";
 import {
   fileLabel,
   fileTypeLabel,
@@ -205,12 +205,7 @@ export function IdentifyBookDialog({
 
   const resolveAuthors = (result: PluginSearchResult): string | undefined => {
     if (!result.authors || result.authors.length === 0) return undefined;
-    return result.authors
-      .map((a) => {
-        const label = getAuthorRoleLabel(a.role);
-        return label ? `${a.name} (${label})` : a.name;
-      })
-      .join(", ");
+    return formatAuthorCredits(result.authors);
   };
 
   const handleSelectResult = (result: PluginSearchResult) => {

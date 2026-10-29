@@ -69,7 +69,7 @@ import {
   type File,
   type SourceIntents,
 } from "@/types";
-import { AUTHOR_ROLES, getAuthorRoleLabel } from "@/utils/authorRoles";
+import { AUTHOR_ROLES, formatAuthorCredits } from "@/utils/authorRoles";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import {
   fileTypeLabel,
@@ -1545,12 +1545,7 @@ export function IdentifyReviewForm({
                 <FieldRow
                   currentValue={
                     currentAuthors.length > 0
-                      ? currentAuthors
-                          .map((a) => {
-                            const role = getAuthorRoleLabel(a.role);
-                            return role ? `${a.name} (${role})` : a.name;
-                          })
-                          .join(", ")
+                      ? formatAuthorCredits(currentAuthors)
                       : undefined
                   }
                   decision={decisions.authors}

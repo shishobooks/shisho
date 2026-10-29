@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getAuthorRoleLabel } from "./authorRoles";
+import { formatAuthorCredits, getAuthorRoleLabel } from "./authorRoles";
 
 describe("getAuthorRoleLabel", () => {
   it("maps known canonical roles to capitalized labels", () => {
@@ -22,5 +22,28 @@ describe("getAuthorRoleLabel", () => {
     expect(getAuthorRoleLabel(undefined)).toBeNull();
     expect(getAuthorRoleLabel(null)).toBeNull();
     expect(getAuthorRoleLabel("")).toBeNull();
+  });
+});
+
+describe("formatAuthorCredits", () => {
+  it("credits each name once with every role it holds, in first-seen order", () => {
+    expect(
+      formatAuthorCredits([
+        { name: "Fujita", role: "writer" },
+        { name: "Someone", role: "inker" },
+        { name: "Fujita", role: "penciller" },
+        { name: "Fujita", role: "writer" },
+      ]),
+    ).toBe("Fujita (Writer, Penciller), Someone (Inker)");
+  });
+
+  it("leaves off the parentheses for a name with no role", () => {
+    expect(
+      formatAuthorCredits([
+        { name: "Ann", role: undefined },
+        { name: "Ann", role: "" },
+        { name: "Bo", role: "editor" },
+      ]),
+    ).toBe("Ann, Bo (Editor)");
   });
 });

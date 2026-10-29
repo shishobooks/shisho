@@ -353,6 +353,52 @@ describe("IdentifyReviewForm component", () => {
     ).toHaveLength(0);
   });
 
+  it("credits a current author once with every role they hold", async () => {
+    const user = createUser();
+    const fujita = {
+      id: 1,
+      library_id: 1,
+      name: "Fujita",
+      sort_name: "Fujita",
+      sort_name_source: DataSourceManual,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    } as const;
+    renderForm({
+      book: makeBook({
+        files: [makeFile({ file_type: FileTypeCBZ })],
+        authors: [
+          {
+            id: 1,
+            book_id: 1,
+            person_id: 1,
+            sort_order: 0,
+            role: "writer",
+            person: fujita,
+          },
+          {
+            id: 2,
+            book_id: 1,
+            person_id: 1,
+            sort_order: 1,
+            role: "penciller",
+            person: fujita,
+          },
+        ],
+      }),
+      fileId: 1,
+      result: makeResult({
+        authors: [{ name: "New Author", role: "writer" }],
+      }),
+    });
+    // Manual authors keep the change unselected, which collapses the section.
+    await user.click(
+      screen.getByRole("button", { name: /toggle book section/i }),
+    );
+
+    expect(screen.getByText("Fujita (Writer, Penciller)")).toBeInTheDocument();
+  });
+
   it("names each field's control by its row label, and per-entry selects by their entry", async () => {
     const user = createUser();
     renderForm({

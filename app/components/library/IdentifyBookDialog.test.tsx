@@ -14,6 +14,9 @@ import {
 import type { PluginSearchResponse } from "@/hooks/queries/plugins";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import {
+  AuthorRoleInker,
+  AuthorRolePenciller,
+  AuthorRoleWriter,
   DataSourceManual,
   FileRoleMain,
   FileTypeEPUB,
@@ -329,6 +332,26 @@ describe("IdentifyBookDialog search sequencing", () => {
     );
 
     expect(await screen.findByText("Epic Series 1-3")).toBeInTheDocument();
+  });
+
+  it("credits an author once with every role they hold in a plugin search result", async () => {
+    renderDialog(makeBook({ title: "Query A" }));
+
+    await waitFor(() => expect(requestMock).toHaveBeenCalled());
+    deferredFor("Query A").resolve(
+      response("Comic result", {
+        authors: [
+          { name: "Fujita", role: AuthorRoleWriter },
+          { name: "Fujita", role: AuthorRolePenciller },
+          { name: "Someone", role: AuthorRoleInker },
+          { name: "Fujita", role: AuthorRoleWriter },
+        ],
+      }),
+    );
+
+    expect(
+      await screen.findByText("Fujita (Writer, Penciller), Someone (Inker)"),
+    ).toBeInTheDocument();
   });
 
   it("aborts the superseded request when a newer search is submitted", async () => {
