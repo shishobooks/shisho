@@ -7,6 +7,7 @@ import FadedText from "@/components/library/FadedText";
 import LabelGrid, { type LabelGridRow } from "@/components/library/LabelGrid";
 import TextLink from "@/components/library/TextLink";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/libraries/utils";
 import type { Book } from "@/types";
 import { getAuthorRoleLabel } from "@/utils/authorRoles";
@@ -22,6 +23,49 @@ const Pill = ({ to, children }: { to: string | null; children: ReactNode }) => {
     </Badge>
   );
   return to ? <Link to={to}>{badge}</Link> : badge;
+};
+
+// How many pills a row shows before the rest collapse. Metadata sources like
+// MangaUpdates can attach dozens of tags, which would push the description
+// far down the page.
+const COLLAPSED_PILLS = 12;
+// How far past the limit a row may run before it collapses, so a button never
+// hides just one or two pills.
+const PILL_SLACK = 2;
+
+interface PillItem {
+  key: number;
+  to: string | null;
+  name: string;
+}
+
+/** A row of pills that collapses behind a "+N more" button when long. */
+const PillList = ({ items }: { items: PillItem[] }) => {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = items.length > COLLAPSED_PILLS + PILL_SLACK;
+  const shown =
+    collapsible && !expanded ? items.slice(0, COLLAPSED_PILLS) : items;
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {shown.map((item) => (
+        <Pill key={item.key} to={item.to}>
+          {item.name}
+        </Pill>
+      ))}
+      {collapsible && (
+        <Button
+          aria-expanded={expanded}
+          className="text-xs"
+          onClick={() => setExpanded(!expanded)}
+          variant="link"
+        >
+          {expanded
+            ? "Show less"
+            : `+${(items.length - COLLAPSED_PILLS).toLocaleString()} more`}
+        </Button>
+      )}
+    </span>
+  );
 };
 
 /** One entry per person, with every role they hold on the book. */
@@ -142,20 +186,15 @@ const BookDetailHeader = ({
     rows.push({
       label: "Genres",
       value: (
-        <span className="flex flex-wrap gap-1.5">
-          {book.book_genres.map((bg) => (
-            <Pill
-              key={bg.id}
-              to={
-                isShareLink
-                  ? null
-                  : `/libraries/${libraryId}?genre_ids=${bg.genre_id}`
-              }
-            >
-              {bg.genre?.name ?? "Unknown"}
-            </Pill>
-          ))}
-        </span>
+        <PillList
+          items={book.book_genres.map((bg) => ({
+            key: bg.id,
+            to: isShareLink
+              ? null
+              : `/libraries/${libraryId}?genre_ids=${bg.genre_id}`,
+            name: bg.genre?.name ?? "Unknown",
+          }))}
+        />
       ),
     });
   }
@@ -180,20 +219,15 @@ const BookDetailHeader = ({
     rows.push({
       label: ns ?? "Tags",
       value: (
-        <span className="flex flex-wrap gap-1.5">
-          {tags.map((t) => (
-            <Pill
-              key={t.id}
-              to={
-                isShareLink
-                  ? null
-                  : `/libraries/${libraryId}?tag_ids=${t.tagId}`
-              }
-            >
-              {t.name}
-            </Pill>
-          ))}
-        </span>
+        <PillList
+          items={tags.map((t) => ({
+            key: t.id,
+            to: isShareLink
+              ? null
+              : `/libraries/${libraryId}?tag_ids=${t.tagId}`,
+            name: t.name,
+          }))}
+        />
       ),
     });
   }
