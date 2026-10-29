@@ -2153,8 +2153,12 @@ func (svc *Service) DeleteFileAndCleanup(ctx context.Context, fileID int, librar
 	}
 	result.BookDeleted = true
 
-	// Clean up book directory if organized structure
-	if library.OrganizeFileStructure && file.Book != nil && file.Book.Filepath != "" {
+	// Clean up book directory if organized structure, never a library root
+	libraryPaths, err := svc.listLibraryPaths(ctx, file.LibraryID)
+	if err != nil {
+		return nil, err
+	}
+	if library.OrganizeFileStructure && file.Book != nil && file.Book.Filepath != "" && !isLibraryRoot(file.Book.Filepath, libraryPaths) {
 		// Clean up book directory (removes covers, sidecars, and OS junk files)
 		_, _ = fileutils.CleanupEmptyDirectory(file.Book.Filepath, fileutils.DirectoryCleanupPatterns()...)
 	}

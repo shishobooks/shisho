@@ -637,6 +637,28 @@ func TestWriteBookSidecarFromModel_SyntheticBookPath_AnchorsToFile(t *testing.T)
 	assert.True(t, os.IsNotExist(err), "synthetic book dir should not be created by sidecar write")
 }
 
+// A Book keyed by one of its files keeps its sidecar beside that file, even
+// when another main file comes first.
+func TestBookSidecarPathForBook_FileKeyedBookAnchorsToKeyFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	first := filepath.Join(tmpDir, "a.epub")
+	key := filepath.Join(tmpDir, "b.epub")
+	for _, p := range []string{first, key} {
+		require.NoError(t, os.WriteFile(p, []byte("epub"), 0644))
+	}
+
+	book := &models.Book{
+		Filepath: key,
+		Files: []*models.File{
+			{Filepath: first, FileRole: models.FileRoleMain},
+			{Filepath: key, FileRole: models.FileRoleMain},
+		},
+	}
+
+	assert.Equal(t, filepath.Join(tmpDir, "b.metadata.json"), BookSidecarPathForBook(book))
+}
+
 func TestWriteFileSidecar_SetsVersion(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

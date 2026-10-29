@@ -365,8 +365,9 @@ func BookSidecarPathForBook(book *models.Book) string {
 }
 
 // resolveBookSidecarAnchor returns the path to pass to BookSidecarPath for
-// writing. Prefers book.Filepath when it resolves to an existing directory;
-// otherwise falls back to a file in the book. Returns an empty string only
+// writing. Prefers book.Filepath when it resolves to an existing directory,
+// then the file book.Filepath names when the book is keyed by one of its
+// files; otherwise falls back to a file in the book. Returns an empty string only
 // when both book.Filepath and any file path are empty — WriteBookSidecar
 // guards empty input.
 func resolveBookSidecarAnchor(book *models.Book) string {
@@ -376,6 +377,12 @@ func resolveBookSidecarAnchor(book *models.Book) string {
 	if book.Filepath != "" {
 		if info, err := os.Stat(book.Filepath); err == nil && info.IsDir() {
 			return book.Filepath
+		}
+	}
+	// A book keyed by one of its files keeps its sidecar beside that file.
+	for _, f := range book.Files {
+		if f != nil && f.Filepath != "" && f.Filepath == book.Filepath {
+			return f.Filepath
 		}
 	}
 	// Fall back to a file's path. Prefer a main file for stable naming.

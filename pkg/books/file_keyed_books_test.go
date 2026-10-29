@@ -249,3 +249,72 @@ func TestRecordOrganizedFilepath_MovesSidecarOfFileKeyedBook(t *testing.T) {
 	assert.FileExists(t, bookSidecarFor(newPath))
 	assert.NoFileExists(t, bookSidecarFor(oldPath))
 }
+
+// Moving files from two Books into a new Book keys it by a file whose path is
+// free, rather than refusing because the first file's path is taken.
+func TestMoveFilesToBook_NewBookFromSeveralSources(t *testing.T) {
+	t.Parallel()
+	f := newUnorganizedFixture(t)
+
+	c := filepath.Join(f.libDir, "c.epub")
+	rootBook := f.addBook("C", c)
+	fileC := f.addFile(rootBook, c, true)
+	folder := filepath.Join(f.libDir, "Folder")
+	folderBook := f.addBook("D", folder)
+	fileD := f.addFile(folderBook, filepath.Join(folder, "d.epub"), true)
+	f.addFile(folderBook, filepath.Join(folder, "e.epub"), true)
+
+	result, err := f.moveFiles(nil, fileC, fileD)
+	require.NoError(t, err)
+	assert.Equal(t, fileD.Filepath, result.TargetBook.Filepath)
+}
+
+// Files leaving a folder together don't count against keying the new Book
+// by that folder.
+func TestMoveFilesToBook_NewBookTakesFolderAllItsFilesLeave(t *testing.T) {
+	t.Parallel()
+	f := newUnorganizedFixture(t)
+
+	sub := filepath.Join(f.libDir, "Series", "Sub")
+	source := f.addBook("Series", filepath.Join(f.libDir, "Series"))
+	fileA := f.addFile(source, filepath.Join(sub, "a.epub"), true)
+	fileB := f.addFile(source, filepath.Join(sub, "b.epub"), true)
+	f.addFile(source, filepath.Join(f.libDir, "Series", "c.epub"), true)
+
+	result, err := f.moveFiles(nil, fileA, fileB)
+	require.NoError(t, err)
+	assert.Equal(t, sub, result.TargetBook.Filepath)
+}
+
+// With organizing on, a target keyed by a file missing from disk still gets
+// the moved file in its folder, not in a directory named after the file.
+func TestMoveFilesToBook_Organized_IntoFileKeyedBookWithMissingKeyFile(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+
+	folder := filepath.Join(f.libDir, "Folder")
+	b := filepath.Join(folder, "b.epub")
+	target := f.addBook("B", b)
+	f.addFile(target, b, false)
+	require.NoError(t, os.MkdirAll(folder, 0755))
+	source := f.addBook("C", filepath.Join(f.libDir, "Other"))
+	fileC := f.addFile(source, filepath.Join(f.libDir, "Other", "c.epub"), true)
+
+	_, err := f.moveFiles(&target.ID, fileC)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(folder, "c.epub"), f.reloadFile(fileC).Filepath)
+}
+
+// With organizing on, deleting the last file of a Book keyed by a library
+// root leaves the root in place.
+func TestDeleteFileAndCleanup_Organized_KeepsLibraryRoot(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+
+	book := f.addBook("A", f.libDir)
+	file := f.addFile(book, filepath.Join(f.libDir, "a.epub"), true)
+
+	_, err := f.svc.DeleteFileAndCleanup(f.ctx, file.ID, f.library, map[string]struct{}{models.FileTypeEPUB: {}})
+	require.NoError(t, err)
+	assert.DirExists(t, f.libDir)
+}

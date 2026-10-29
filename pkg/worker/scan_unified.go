@@ -1932,8 +1932,10 @@ func (w *Worker) scanFileCore(
 
 			// Rename the file
 			// Use RenameOrganizedFileOnly to avoid renaming the book sidecar.
-			// File-level changes (name) should not affect the book's sidecar -
-			// only book-level changes (title, author) should rename the book sidecar.
+			// File-level changes (name) should not affect a folder book's
+			// sidecar; only book-level changes (title, author) rename it.
+			// RecordOrganizedFilepath carries the sidecar of a book keyed by
+			// the file.
 			newPath, err := fileutils.RenameOrganizedFileOnly(file.Filepath, organizeOpts)
 			if err != nil {
 				logWarn("failed to rename file after name change", logger.Data{

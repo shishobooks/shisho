@@ -55,7 +55,19 @@ func (svc *Service) bookOwnsDirectory(ctx context.Context, book *models.Book) (b
 	if isLibraryRoot(book.Filepath, libraryPaths) {
 		return false, nil
 	}
-	return !svc.folderClaimedByOtherBook(ctx, book.LibraryID, book.ID)(book.Filepath), nil
+	// Unlike folderClaimedByOtherBook, an error must not read as "unclaimed":
+	// that would remove another book's files.
+	descendants := escapeLikePattern(book.Filepath) + escapeLikePattern(string(os.PathSeparator)) + "%"
+	shared, err := svc.db.NewSelect().
+		Model((*models.File)(nil)).
+		Where("library_id = ?", book.LibraryID).
+		Where("book_id != ?", book.ID).
+		Where("filepath LIKE ? ESCAPE '\\'", descendants).
+		Exists(ctx)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	return !shared, nil
 }
 
 // rekeyBooksAwayFromFiles gives each Book keyed by one of files another of its
