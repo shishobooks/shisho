@@ -974,3 +974,87 @@ func TestScanEnricher_PartialEnrichment_SetsReviewedFalse(t *testing.T) {
 	require.NotNil(t, reviewed, "reviewed should not be NULL for a main file")
 	assert.False(t, *reviewed, "file missing required description field should be reviewed=FALSE")
 }
+
+// TestScanEnricher_AppliesHighestConfidenceResult verifies that a scan applies
+// the enricher's best-scoring result rather than the first one it returned.
+// Providers rank their own search results, so the first result can be a weak
+// match that fails the confidence threshold while a later one matches exactly.
+func TestScanEnricher_AppliesHighestConfidenceResult(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := t.TempDir()
+	tc := newTestContextWithPlugins(t, pluginDir)
+
+	parserManifest := `{
+  "manifestVersion": 1,
+  "id": "conftest-parser",
+  "name": "ConfTest Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses conftest files",
+      "types": ["conftest"]
+    }
+  }
+}`
+	parserJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(ctx) {
+        return { title: "Conf Book" };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "conftest-parser", parserManifest, parserJS)
+
+	enricherManifest := `{
+  "manifestVersion": 1,
+  "id": "ranked-enricher",
+  "name": "Ranked Enricher",
+  "version": "1.0.0",
+  "capabilities": {
+    "metadataEnricher": {
+      "description": "Returns results out of confidence order",
+      "fileTypes": ["conftest"],
+      "fields": ["description"]
+    }
+  }
+}`
+	enricherJS := `var plugin = (function() {
+  return {
+    metadataEnricher: {
+      search: function(ctx) {
+        return { results: [
+          { description: "Weak match", confidence: 0.3 },
+          { description: "Decent match", confidence: 0.9 },
+          { description: "Exact match", confidence: 1.0 }
+        ] };
+      }
+    }
+  };
+})();`
+	installTestPlugin(t, tc, pluginDir, "ranked-enricher", enricherManifest, enricherJS)
+
+	pluginService := plugins.NewService(tc.db)
+	require.NoError(t, pluginService.AppendToOrder(context.Background(), models.PluginHookMetadataEnricher, "test", "ranked-enricher"))
+	// The weak first result falls below this threshold, so taking the first
+	// result would skip the enricher entirely.
+	threshold := 0.85
+	require.NoError(t, pluginService.UpdateConfidenceThreshold(context.Background(), "test", "ranked-enricher", &threshold))
+	require.NoError(t, tc.worker.pluginManager.LoadAll(context.Background()))
+
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+
+	bookDir := filepath.Join(libraryPath, "Conf Book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.conftest"), []byte("content"), 0644))
+
+	require.NoError(t, tc.runScan())
+
+	books := tc.listBooks()
+	require.Len(t, books, 1)
+	require.NotNil(t, books[0].Description, "the exact match clears the threshold and should be applied")
+	assert.Equal(t, "Exact match", *books[0].Description)
+}

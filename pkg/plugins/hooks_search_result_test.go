@@ -331,6 +331,36 @@ func TestParseSearchResponse_Confidence(t *testing.T) {
 	assert.Nil(t, resp.Results[2].Confidence)
 }
 
+func TestParseSearchResponse_Confidence_Invalid(t *testing.T) {
+	t.Parallel()
+	vm := goja.New()
+	// Results from every enricher are ranked together by confidence, so a
+	// score outside 0-1 would outrank every other plugin's results, and NaN
+	// compares equal to every score. Such values are treated as missing.
+	val, err := vm.RunString(`({ results: [
+		{ title: "nan", confidence: NaN },
+		{ title: "text", confidence: "high" },
+		{ title: "inf", confidence: Infinity },
+		{ title: "percent", confidence: 85 },
+		{ title: "negative", confidence: -0.1 },
+		{ title: "zero", confidence: 0 },
+		{ title: "one", confidence: 1 },
+	] })`)
+	require.NoError(t, err)
+
+	resp := parseSearchResponse(vm, val, "", "")
+	require.Len(t, resp.Results, 7)
+	assert.Nil(t, resp.Results[0].Confidence, "NaN confidence should be dropped")
+	assert.Nil(t, resp.Results[1].Confidence, "non-numeric confidence should be dropped")
+	assert.Nil(t, resp.Results[2].Confidence, "Infinity confidence should be dropped")
+	assert.Nil(t, resp.Results[3].Confidence, "confidence above 1 should be dropped")
+	assert.Nil(t, resp.Results[4].Confidence, "negative confidence should be dropped")
+	require.NotNil(t, resp.Results[5].Confidence, "0 is a valid confidence")
+	assert.InDelta(t, 0.0, *resp.Results[5].Confidence, 0.001)
+	require.NotNil(t, resp.Results[6].Confidence, "1 is a valid confidence")
+	assert.InDelta(t, 1.0, *resp.Results[6].Confidence, 0.001)
+}
+
 func TestParseSearchResponse_DescriptionHTMLStripped(t *testing.T) {
 	t.Parallel()
 

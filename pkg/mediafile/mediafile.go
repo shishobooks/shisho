@@ -88,9 +88,28 @@ type ParsedMetadata struct {
 	// Chapters contains chapter information parsed from file metadata
 	Chapters []ParsedChapter `json:"chapters"`
 	// Confidence is an optional score (0-1) indicating how confident the plugin
-	// is that this result matches the search query. Used by the scan pipeline
-	// to decide whether to auto-apply enrichment results.
+	// is that this result matches the search query. Scans apply each
+	// enricher's highest-scoring result if it meets the confidence threshold,
+	// and identify lists results highest first.
 	Confidence *float64 `json:"confidence,omitempty"`
+}
+
+// CompareConfidence orders search result confidence scores ascending,
+// treating a missing score as lower than any present one.
+func CompareConfidence(a, b *float64) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return -1
+	case b == nil:
+		return 1
+	case *a < *b:
+		return -1
+	case *a > *b:
+		return 1
+	}
+	return 0
 }
 
 func (m *ParsedMetadata) String() string {

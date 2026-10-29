@@ -66,7 +66,7 @@ If books or files still use a resource when it is deleted, for example because a
 When **Organize file structure during scans** is enabled, applying path-affecting fields can rename or move media files. These path changes are not automatically reversible. Back up the media and verify the selected library before applying changes, or turn off organization under **Administration > Libraries** first if you need to preserve the current layout.
 :::
 
-Use **Edit** on a book or file for direct changes. Use **Identify** to search configured metadata plugins, compare proposed book and file values, and choose which fields to apply. Review every checked field when identifying a second edition because shared book metadata may differ between editions.
+Use **Edit** on a book or file for direct changes. Use **Identify** to search configured metadata plugins, compare proposed book and file values, and choose which fields to apply. Results from all plugins are listed together, best match first, when the plugin reports how confident it is in each match. Review every checked field when identifying a second edition because shared book metadata may differ between editions.
 
 If **Save Changes** fails in **Edit Book** or **Edit File**, the dialog shows an error banner above the save buttons and keeps your edits so you can retry. This includes a rejected cover upload, such as an image file Shisho cannot fully decode. A review-state update can fail after metadata has already saved; the error does not roll back that saved metadata.
 

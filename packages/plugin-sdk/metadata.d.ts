@@ -85,8 +85,9 @@ export interface ParsedMetadata {
   chapters?: ParsedChapter[];
   /**
    * Confidence score (0-1) indicating how well this result matches the search query.
-   * Used by the scan pipeline to decide whether to auto-apply enrichment.
-   * If omitted, the result is always applied (backwards compatible).
+   * Scans apply the highest-scoring result if it meets the confidence
+   * threshold, and identify lists results highest first. Results without a
+   * score rank below scored ones and are never rejected by the threshold.
    */
   confidence?: number;
 }

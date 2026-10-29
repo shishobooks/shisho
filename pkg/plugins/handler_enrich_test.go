@@ -148,6 +148,51 @@ func TestAggregateEnricherSearches_ResultsCarryPluginName(t *testing.T) {
 	assert.Equal(t, "Goodreads Metadata", results[0].PluginName)
 }
 
+// Results from every enricher are merged into one list ranked by confidence,
+// so a strong match from a later plugin (or one a provider's own search
+// ranked low) is shown first. Equal scores keep provider order, and results
+// without a score go last.
+func TestAggregateEnricherSearches_SortsByConfidence(t *testing.T) {
+	t.Parallel()
+
+	conf := func(c float64) *float64 { return &c }
+	responses := map[string][]mediafile.ParsedMetadata{
+		"first": {
+			{Title: "first-none"},
+			{Title: "first-low", Confidence: conf(0.3)},
+			{Title: "first-mid", Confidence: conf(0.7)},
+		},
+		"second": {
+			{Title: "second-high", Confidence: conf(1.0)},
+			{Title: "second-mid", Confidence: conf(0.7)},
+			{Title: "second-none"},
+		},
+	}
+	runtimes := []*fakeEnricherRuntime{
+		newFakeEnricher("first", []string{"epub"}),
+		newFakeEnricher("second", []string{"epub"}),
+	}
+	runSearch := func(_ context.Context, rt *fakeEnricherRuntime) (*SearchResponse, error) {
+		return &SearchResponse{Results: responses[rt.PluginID()]}, nil
+	}
+	disabled := func(_ context.Context, _ *fakeEnricherRuntime) []string { return nil }
+
+	results, _, _ := aggregateEnricherSearches(context.Background(), runtimes, "epub", runSearch, disabled, testLogger())
+
+	titles := make([]string, len(results))
+	for i, r := range results {
+		titles[i] = r.Title
+	}
+	assert.Equal(t, []string{
+		"second-high",
+		"first-mid",
+		"second-mid",
+		"first-low",
+		"first-none",
+		"second-none",
+	}, titles)
+}
+
 func testLogger() logger.Logger {
 	return logger.New()
 }

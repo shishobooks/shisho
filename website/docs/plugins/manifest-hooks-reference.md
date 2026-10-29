@@ -337,13 +337,13 @@ There is no separate enrich hook. Each result contains candidate metadata direct
 
 During automatic scans:
 
-1. Shisho uses the first result.
-2. A provided `confidence` below the effective threshold skips the result. Omitted confidence does not trigger threshold rejection.
+1. Shisho uses the result with the highest `confidence`. Results without `confidence` rank below scored ones, and ties keep the order the enricher returned.
+2. A provided `confidence` below the effective threshold skips the enricher for that file. Omitted confidence does not trigger threshold rejection.
 3. Returned fields not declared by the manifest are removed. Disabled declared fields are also removed.
 4. Enrichers run in administrator-defined order. The first enricher to provide a value for a field wins.
 5. File-parsed metadata fills fields that no enricher supplied.
 
-Interactive identification lets the user review candidate fields before applying them.
+Interactive identification lists results from every enricher together, highest `confidence` first, with unscored results last. The user reviews candidate fields before applying them.
 
 ## Parsed Metadata
 
