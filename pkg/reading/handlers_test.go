@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
@@ -646,4 +647,29 @@ func TestReadThrough_HiddenWithoutLibraryAccess(t *testing.T) {
 
 	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
 	assert.Len(t, newReadingAPI(t, db, user).get(book.ID).ReadThroughs, 1)
+}
+
+// The server doesn't know the user's time zone, so a day is too late only
+// once it's after today everywhere: today in UTC+14, the furthest-ahead zone.
+func TestReadThroughDays_RejectedAfterTodayEverywhere(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
+	book := createBook(t, db, "Dune")
+	latest := time.Now().In(furthestAheadZone)
+	latestDay := latest.Format(time.DateOnly)
+	// Two days ahead, so the handler's later read of the clock can't cross
+	// UTC+14 midnight onto it.
+	tooLate := latest.AddDate(0, 0, 2).Format(time.DateOnly)
+
+	rec := api.transition(book.ID, "start", tooLate)
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "validation_error")
+	assert.Nil(t, api.get(book.ID).Status, "a refused day records nothing")
+
+	rt := api.mustTransition(book.ID, "start", latestDay).ReadThroughs[0]
+	api.mustTransition(book.ID, "finish", latestDay)
+	assert.Equal(t, http.StatusUnprocessableEntity, api.patchReadThrough(rt.ID, nil, strp(tooLate)).Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, api.patchReadThrough(rt.ID, strp(tooLate), nil).Code)
+	assert.Equal(t, strp(latestDay), api.get(book.ID).ReadThroughs[0].EndDay)
 }

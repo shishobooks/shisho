@@ -147,6 +147,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A Read-through still underway can't have an end date.",
 		},
 		{
+			name:   "reading day in the future",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/finish", fileBook.ID),
+			body:   `{"today":"2999-01-01"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"2999-01-01" is in the future.`,
+		},
+		{
 			name:   "reading day that isn't a calendar day",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/finish", fileBook.ID),
 			body:   `{"today":"2026-02-30"}`,

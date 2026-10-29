@@ -122,15 +122,26 @@ func transitionError(err error) error {
 	return err
 }
 
+// furthestAheadZone is the earliest time zone to reach each new day. The
+// server doesn't know the user's zone, so a day is in the future only once
+// it's after today here.
+var furthestAheadZone = time.FixedZone("UTC+14", 14*60*60)
+
 // checkDays rejects a day that isn't a real calendar day, such as
-// 2026-02-30, which the binder's date format check lets through.
+// 2026-02-30, which the binder's date format check lets through, and a day
+// that hasn't begun anywhere yet: reading can't start or end in the future.
 func checkDays(days ...*string) error {
+	latest := time.Now().In(furthestAheadZone).Format(time.DateOnly)
 	for _, day := range days {
 		if day == nil {
 			continue
 		}
 		if _, err := time.Parse(time.DateOnly, *day); err != nil {
 			return errcodes.ValidationError(fmt.Sprintf("%q is not a valid date.", *day))
+		}
+		// Days are YYYY-MM-DD, so they compare as strings.
+		if *day > latest {
+			return errcodes.ValidationError(fmt.Sprintf("%q is in the future.", *day))
 		}
 	}
 	return nil
