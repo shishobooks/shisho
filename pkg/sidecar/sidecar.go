@@ -358,6 +358,12 @@ func WriteBookSidecarFromModel(book *models.Book) error {
 	return WriteBookSidecar(resolveBookSidecarAnchor(book), s)
 }
 
+// BookSidecarPathForBook returns where WriteBookSidecarFromModel writes the
+// book's sidecar. Call it while the book's folder or files still exist.
+func BookSidecarPathForBook(book *models.Book) string {
+	return BookSidecarPath(resolveBookSidecarAnchor(book))
+}
+
 // resolveBookSidecarAnchor returns the path to pass to BookSidecarPath for
 // writing. Prefers book.Filepath when it resolves to an existing directory;
 // otherwise falls back to a file in the book. Returns an empty string only

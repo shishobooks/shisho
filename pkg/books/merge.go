@@ -74,6 +74,7 @@ func firstNonExistentAncestor(dir string) string {
 var (
 	ErrNoFilesToMove     = errors.New("no files specified to move")
 	ErrFilesNotInLibrary = errors.New("some files not found or not in the specified library")
+	ErrNothingToSplit    = errors.New("these are all of the book's files, so there is nothing to split into a new book")
 )
 
 // MoveFilesToBook moves files from their current books to a target book.
@@ -113,6 +114,19 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+
+	// A book keyed by a file that is leaving takes another of its files as
+	// its key, so the key stays one of its own files and a new book can take
+	// the leaving file's path.
+	leaving := make([]*models.File, 0, len(files))
+	for _, file := range files {
+		if opts.TargetBookID == nil || file.BookID != *opts.TargetBookID {
+			leaving = append(leaving, file)
+		}
+	}
+	if err := rekeyBooksAwayFromFiles(ctx, svc.db, leaving); err != nil {
+		return nil, errors.Wrap(err, "failed to rekey source books")
 	}
 
 	// Get or create target book
@@ -190,7 +204,12 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 
 			// Handle physical file move if organize is enabled
 			if library.OrganizeFileStructure {
-				newPath := filepath.Join(targetBook.Filepath, filepath.Base(file.Filepath))
+				// A book keyed by a file lives in that file's folder.
+				targetDir := targetBook.Filepath
+				if info, statErr := os.Stat(targetDir); statErr == nil && !info.IsDir() {
+					targetDir = filepath.Dir(targetDir)
+				}
+				newPath := filepath.Join(targetDir, filepath.Base(file.Filepath))
 				// Generate unique path if a file already exists at the destination
 				newPath = fileutils.GenerateUniqueFilepathIfExists(newPath)
 
@@ -579,29 +598,48 @@ func (svc *Service) createBookFromFile(ctx context.Context, file *models.File, s
 		}
 	} else {
 		// The file stays where it is, so the book takes the file's directory
-		// when that is free. A library root is never a book's directory, and
-		// a directory another book owns can't be shared, so either way the
-		// book is keyed by the file itself, as a root-level single-file book is.
+		// when that is free: not a library root, not another book's key, and
+		// holding no other file. Otherwise the book is keyed by the file
+		// itself, as a root-level single-file book is.
 		bookDir = filepath.Dir(file.Filepath)
-		useFilepath := false
-		for _, lp := range library.LibraryPaths {
-			if filepath.Clean(lp.Filepath) == filepath.Clean(bookDir) {
-				useFilepath = true
-				break
-			}
-		}
-		if !useFilepath {
-			existingCount, err := svc.db.NewSelect().
+		useDir := !isLibraryRoot(bookDir, library.LibraryPaths)
+		if useDir {
+			taken, err := svc.db.NewSelect().
 				Model((*models.Book)(nil)).
 				Where("filepath = ? AND library_id = ?", bookDir, library.ID).
-				Count(ctx)
+				Exists(ctx)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to check for existing book")
 			}
-			useFilepath = existingCount > 0
+			useDir = !taken
 		}
-		if useFilepath {
+		if useDir {
+			descendants := escapeLikePattern(bookDir) + escapeLikePattern(string(os.PathSeparator)) + "%"
+			shared, err := svc.db.NewSelect().
+				Model((*models.File)(nil)).
+				Where("library_id = ?", library.ID).
+				Where("id != ?", file.ID).
+				Where("filepath LIKE ? ESCAPE '\\'", descendants).
+				Exists(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to check for other files in the directory")
+			}
+			useDir = !shared
+		}
+		if !useDir {
 			bookDir = file.Filepath
+			taken, err := svc.db.NewSelect().
+				Model((*models.Book)(nil)).
+				Where("filepath = ? AND library_id = ?", bookDir, library.ID).
+				Exists(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to check for existing book")
+			}
+			if taken {
+				// Only the file's own book can hold its path, and only when
+				// the book has no other file to be keyed by.
+				return nil, ErrNothingToSplit
+			}
 		}
 	}
 

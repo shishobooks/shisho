@@ -13,8 +13,10 @@ import (
 // Every later split then found the root taken and failed, and deleting the
 // Book with organizing on removed the whole library root. Such a Book with
 // one main File is keyed by that File instead, as a root-level single-file
-// Book is. One with several main Files is left alone: deleting it no longer
-// removes the root.
+// Book is. Library paths are stored as entered, so a trailing slash is
+// ignored. One with several main Files is left alone: deleting it no longer
+// removes the root, and organizing it moves its Files into a folder instead
+// of renaming the root.
 func init() {
 	up := func(ctx context.Context, db *bun.DB) error {
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -22,7 +24,9 @@ func init() {
 			err := tx.NewRaw(`
 				UPDATE books
 				SET filepath = (SELECT f.filepath FROM files f WHERE f.book_id = books.id AND f.file_role = 'main')
-				WHERE filepath IN (SELECT lp.filepath FROM library_paths lp WHERE lp.library_id = books.library_id)
+				WHERE rtrim(filepath, '/') IN (
+					SELECT rtrim(lp.filepath, '/') FROM library_paths lp WHERE lp.library_id = books.library_id
+				)
 				  AND (SELECT COUNT(*) FROM files f WHERE f.book_id = books.id AND f.file_role = 'main') = 1
 				  AND NOT EXISTS (
 					SELECT 1 FROM books other

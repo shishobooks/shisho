@@ -672,6 +672,9 @@ func TestDeleteBookAndFiles_OrganizedStructure_BookAtLibraryRoot(t *testing.T) {
 	require.NoError(t, os.WriteFile(bookSidecarFor(otherFile), []byte("{}"), 0644))
 	filePath := filepath.Join(libraryDir, "Test Book.epub")
 	library, book := insertOrganizedLibraryBook(t, db, libraryDir, libraryDir, filePath)
+	// A book keyed by a directory writes its sidecar inside it, named after it.
+	rootSidecar := filepath.Join(libraryDir, filepath.Base(libraryDir)+".metadata.json")
+	require.NoError(t, os.WriteFile(rootSidecar, []byte("{}"), 0644))
 
 	bookSvc := NewService(db, appsettings.NewService(db))
 	_, err := bookSvc.DeleteBookAndFiles(ctx, book.ID, library)
@@ -680,7 +683,7 @@ func TestDeleteBookAndFiles_OrganizedStructure_BookAtLibraryRoot(t *testing.T) {
 	_, err = os.Stat(otherFile)
 	require.NoError(t, err, "files of other books at the library root should survive")
 	require.FileExists(t, bookSidecarFor(otherFile), "other books' sidecars should survive")
-	for _, p := range []string{filePath, filePath + ".cover.jpg", filePath + ".metadata.json", bookSidecarFor(filePath)} {
+	for _, p := range []string{filePath, filePath + ".cover.jpg", filePath + ".metadata.json", rootSidecar} {
 		_, err = os.Stat(p)
 		assert.True(t, os.IsNotExist(err), "%s should be deleted", p)
 	}

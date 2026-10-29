@@ -2255,7 +2255,7 @@ func (h *handler) moveFiles(c echo.Context) error {
 // out is a 422; a missing target book keeps its 404, and anything else is a
 // 500.
 func moveFilesError(err error) error {
-	if errors.Is(err, ErrNoFilesToMove) || errors.Is(err, ErrFilesNotInLibrary) {
+	if errors.Is(err, ErrNoFilesToMove) || errors.Is(err, ErrFilesNotInLibrary) || errors.Is(err, ErrNothingToSplit) {
 		return errcodes.ValidationError(err.Error())
 	}
 	return errors.WithStack(err)

@@ -18,9 +18,9 @@ These actions have different consequences:
 
 ### Deleting a Book
 
-Deleting a book is destructive. When **Organize file structure during scans** is enabled and the book has an organized directory, Shisho removes the entire directory. This can delete untracked files that happen to be inside it, not only content visible in Shisho.
+Deleting a book is destructive. When **Organize file structure during scans** is enabled and the book has an organized directory of its own, Shisho removes the entire directory. This can delete untracked files that happen to be inside it, not only content visible in Shisho. A library path, or a directory that also holds another book's files, is never removed this way.
 
-When organization is disabled, Shisho deletes each tracked file separately, along with its associated cover and file sidecar. Do not use book deletion as a way to remove only Shisho's record.
+Otherwise, including whenever organization is disabled, Shisho deletes each tracked file separately, along with its associated cover and file sidecar, and then the book's sidecar. Do not use book deletion as a way to remove only Shisho's record.
 
 ### Deleting a File
 
