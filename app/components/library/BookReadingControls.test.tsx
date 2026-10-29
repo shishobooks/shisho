@@ -216,7 +216,11 @@ describe("ReadingHistory", () => {
     await user().click(
       await screen.findByRole("button", { name: "Edit dates" }),
     );
-    await user().clear(screen.getByLabelText("Started"));
+    const started = screen.getByLabelText("Started");
+    expect(started).toHaveTextContent("Mar 1, 2026");
+    await user().click(started);
+    await user().click(await screen.findByRole("button", { name: "Clear" }));
+    expect(screen.getByLabelText("Started")).toHaveTextContent("Unknown");
     request.mockResolvedValue(
       reading({
         status: "read",
@@ -256,6 +260,41 @@ describe("ReadingHistory", () => {
     );
     await waitFor(() =>
       expect(screen.queryByText("Reading history")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("picks a finish date from the calendar", async () => {
+    vi.setSystemTime(new Date(2026, 2, 25, 12));
+    const request = renderControls(
+      reading({
+        status: "read",
+        read_throughs: [
+          readThrough({ begin_day: "2026-03-01", end_day: "2026-03-20" }),
+        ],
+      }),
+    );
+    await user().click(
+      await screen.findByRole("button", { name: "Edit dates" }),
+    );
+    await user().click(screen.getByLabelText("Finished"));
+    // Days after today can't be picked.
+    expect(
+      await screen.findByRole("button", { name: /March 26th, 2026/ }),
+    ).toBeDisabled();
+    await user().click(
+      screen.getByRole("button", { name: /March 18th, 2026/ }),
+    );
+    expect(screen.getByLabelText("Finished")).toHaveTextContent("Mar 18, 2026");
+
+    request.mockResolvedValue(reading());
+    await user().click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "PATCH",
+        "/reading/read-throughs/1",
+        { begin_day: "2026-03-01", end_day: "2026-03-18" },
+        null,
+      ),
     );
   });
 });

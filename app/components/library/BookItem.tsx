@@ -5,6 +5,7 @@ import {
   MoreVertical,
   RefreshCw,
   Search,
+  Star,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -43,9 +44,9 @@ import { isBookNeedsReview } from "@/utils/book";
 import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
-import { fileTypeLabel } from "@/utils/format";
+import { fileTypeLabel, formatCount } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
-import { readingStatusLabel } from "@/utils/readingStatus";
+import { formatRating, readingStatusLabel } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -278,6 +279,21 @@ const BookItem = ({
               onLoad={handleCoverLoad}
               src={coverUrl}
             />
+          )}
+          {/* The selection checkbox takes this corner in selection mode. */}
+          {!isSelectionMode && book.rating != null && (
+            <Badge
+              aria-label={`Rated ${formatCount(book.rating, "star")}`}
+              className="absolute top-1 left-1 gap-0.5 text-[10px] px-1.5 py-0 tabular-nums pointer-events-none"
+              role="img"
+              variant="secondary"
+            >
+              <Star
+                aria-hidden
+                className="h-2.5 w-2.5 fill-amber-400 text-amber-400"
+              />
+              {formatRating(book.rating)}
+            </Badge>
           )}
           {/* Badges stack in the bottom-left corner so a long status and
               Needs review never overlap on a narrow card. */}

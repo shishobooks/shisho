@@ -248,7 +248,8 @@ export function MergeBooksDialog({
                       {library.organize_file_structure
                         ? "Files will be physically moved to the target book's folder."
                         : "Files will be reassigned to the target book."}{" "}
-                      Metadata from deleted books will not be transferred.
+                      Metadata from deleted books will not be transferred, but
+                      reading history and ratings move to the target book.
                     </p>
                   </div>
                 </div>

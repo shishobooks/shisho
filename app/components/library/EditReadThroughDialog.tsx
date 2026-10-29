@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import {
   DialogBody,
   DialogContent,
@@ -11,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FormDialog } from "@/components/ui/form-dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUpdateReadThrough } from "@/hooks/queries/reading";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
@@ -33,6 +33,8 @@ export const EditReadThroughDialog = ({
 }: EditReadThroughDialogProps) => {
   const updateMutation = useUpdateReadThrough();
   const underway = readThrough.outcome === "underway";
+  // Reading can't have started or ended in the future.
+  const today = useMemo(() => new Date(), []);
   const [beginDay, setBeginDay] = useState("");
   const [endDay, setEndDay] = useState("");
   const [initialValues, setInitialValues] = useState<{
@@ -92,18 +94,19 @@ export const EditReadThroughDialog = ({
         <DialogHeader>
           <DialogTitle>Edit dates</DialogTitle>
           <DialogDescription>
-            Leave a date empty if you don't know it.
+            Clear a date if you don't know it.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="read-through-begin">Started</Label>
-            <Input
+            <DateField
               aria-describedby={error ? "read-through-error" : undefined}
               aria-invalid={!!error}
               id="read-through-begin"
-              onChange={(e) => setBeginDay(e.target.value)}
-              type="date"
+              max={today}
+              onChange={setBeginDay}
+              placeholder="Unknown"
               value={beginDay}
             />
           </div>
@@ -112,12 +115,13 @@ export const EditReadThroughDialog = ({
               <Label htmlFor="read-through-end">
                 {readThrough.outcome === "abandoned" ? "Stopped" : "Finished"}
               </Label>
-              <Input
+              <DateField
                 aria-describedby={error ? "read-through-error" : undefined}
                 aria-invalid={!!error}
                 id="read-through-end"
-                onChange={(e) => setEndDay(e.target.value)}
-                type="date"
+                max={today}
+                onChange={setEndDay}
+                placeholder="Unknown"
                 value={endDay}
               />
             </div>

@@ -573,7 +573,7 @@ func TestPrivacy_OtherUsersAndAdminsSeeNothing(t *testing.T) {
 	assert.InDelta(t, 4.0, *resp.Rating, 0.0001)
 }
 
-func TestAttachStatuses_SetsOnlyTheUsersOwnStatus(t *testing.T) {
+func TestAttachReading_SetsOnlyTheUsersOwnStatusAndRating(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ownerUser := createUser(t, db, "owner", 2)
@@ -584,17 +584,23 @@ func TestAttachStatuses_SetsOnlyTheUsersOwnStatus(t *testing.T) {
 	untouched := createBook(t, db, "Untouched")
 	owner.mustTransition(reading.ID, "start", "2026-03-01")
 	owner.mustTransition(finished.ID, "finish", "2026-03-01")
+	stars := 4.5
+	require.Equal(t, http.StatusOK, owner.setRating(finished.ID, &stars).Code)
 
 	books := []*models.Book{{ID: reading.ID}, {ID: finished.ID}, {ID: untouched.ID}}
-	require.NoError(t, AttachStatuses(context.Background(), db, ownerUser.ID, books))
+	require.NoError(t, AttachReading(context.Background(), db, ownerUser.ID, books))
 	assert.Equal(t, strp(models.ReadingStatusCurrentlyReading), books[0].ReadingStatus)
 	assert.Equal(t, strp(models.ReadingStatusRead), books[1].ReadingStatus)
 	assert.Nil(t, books[2].ReadingStatus)
+	assert.Nil(t, books[0].Rating)
+	require.NotNil(t, books[1].Rating)
+	assert.InDelta(t, 4.5, *books[1].Rating, 0.0001)
 
 	others := []*models.Book{{ID: reading.ID}, {ID: finished.ID}}
-	require.NoError(t, AttachStatuses(context.Background(), db, otherUser.ID, others))
+	require.NoError(t, AttachReading(context.Background(), db, otherUser.ID, others))
 	assert.Nil(t, others[0].ReadingStatus)
 	assert.Nil(t, others[1].ReadingStatus)
+	assert.Nil(t, others[1].Rating, "another user's Rating stays private")
 }
 
 // A failed lookup is a 500, not a 404.

@@ -77,9 +77,9 @@ func StatusExpr(userID int, bookIDColumn string) string {
 	)
 }
 
-// AttachStatuses sets ReadingStatus on each Book to userID's status. Only a
-// listing served to userID may call it, since the status is private.
-func AttachStatuses(ctx context.Context, db bun.IDB, userID int, books []*models.Book) error {
+// AttachReading sets ReadingStatus and Rating on each Book to userID's.
+// Only a listing served to userID may call it, since both are private.
+func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.Book) error {
 	if len(books) == 0 {
 		return nil
 	}
@@ -87,25 +87,31 @@ func AttachStatuses(ctx context.Context, db bun.IDB, userID int, books []*models
 	for _, b := range books {
 		ids = append(ids, b.ID)
 	}
-	var rows []struct {
-		ID     int     `bun:"id"`
-		Status *string `bun:"status"`
+	type row struct {
+		ID          int     `bun:"id"`
+		Status      *string `bun:"status"`
+		RatingUnits *int    `bun:"rating"`
 	}
+	var rows []row
 	err := db.NewSelect().
 		TableExpr("books AS b").
 		Column("b.id").
 		ColumnExpr(StatusExpr(userID, "b.id")+" AS status").
+		ColumnExpr("ub.rating").
+		Join("LEFT JOIN user_books AS ub ON ub.book_id = b.id AND ub.user_id = ?", userID).
 		Where("b.id IN (?)", bun.List(ids)).
 		Scan(ctx, &rows)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	statuses := make(map[int]*string, len(rows))
-	for _, row := range rows {
-		statuses[row.ID] = row.Status
+	byID := make(map[int]row, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
 	}
 	for _, b := range books {
-		b.ReadingStatus = statuses[b.ID]
+		r := byID[b.ID]
+		b.ReadingStatus = r.Status
+		b.Rating = RatingStars(r.RatingUnits)
 	}
 	return nil
 }
@@ -320,6 +326,15 @@ func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadTh
 func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
 	_, err := svc.db.NewDelete().Model(rt).WherePK().Exec(ctx)
 	return errors.WithStack(err)
+}
+
+// RatingStars converts quarter-star units to stars, keeping nil as nil.
+func RatingStars(units *int) *float64 {
+	if units == nil {
+		return nil
+	}
+	stars := float64(*units) / 4
+	return &stars
 }
 
 // RatingUnits converts stars to quarter-star units, reporting false for a

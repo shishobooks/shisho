@@ -81,10 +81,7 @@ func (h *handler) buildBookReadingResponse(c echo.Context, userID, bookID int) (
 		OnToRead:     reading.OnToRead,
 		ReadThroughs: reading.ReadThroughs,
 	}
-	if reading.RatingUnits != nil {
-		stars := float64(*reading.RatingUnits) / 4
-		resp.Rating = &stars
-	}
+	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil
 }
 

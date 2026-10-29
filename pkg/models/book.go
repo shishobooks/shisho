@@ -36,8 +36,10 @@ type Book struct {
 	TagSource     *string      `json:"tag_source" tstype:"DataSource"`
 	Files         []*File      `bun:"rel:has-many" json:"files" tstype:"File[]"`
 	CoverCacheKey string       `bun:"-" json:"cover_cache_key"`
-	// ReadingStatus is the signed-in user's Reading Status, set only by
-	// listings that attach it (reading.AttachStatuses). It is private to
-	// that user, so nothing that serves another user may set it.
-	ReadingStatus *string `bun:"-" json:"reading_status,omitempty" tstype:"ReadingStatus"`
+	// ReadingStatus and Rating are the signed-in user's Reading Status and
+	// Rating (in stars), set only by listings that attach them
+	// (reading.AttachReading). They are private to that user, so nothing
+	// that serves another user may set them.
+	ReadingStatus *string  `bun:"-" json:"reading_status,omitempty" tstype:"ReadingStatus"`
+	Rating        *float64 `bun:"-" json:"rating,omitempty"`
 }

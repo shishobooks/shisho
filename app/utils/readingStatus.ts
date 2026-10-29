@@ -25,6 +25,10 @@ const STATUS_LABELS: Record<ReadingStatus, string> = {
 export const readingStatusLabel = (status: ReadingStatus): string =>
   STATUS_LABELS[status];
 
+// A Rating as a number of stars: "4.5", "4.25", "4".
+export const formatRating = (stars: number): string =>
+  stars.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
 // The transitions the server accepts from status, which is all a status
 // control offers. Starting is "Read again" once the Book has been read.
 export const readingTransitions = (

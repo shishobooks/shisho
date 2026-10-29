@@ -316,7 +316,7 @@ func (h *handler) listBooks(c echo.Context) error {
 			books = append(books, lb.Book)
 		}
 	}
-	if err := reading.AttachStatuses(ctx, h.listsService.db, user.ID, books); err != nil {
+	if err := reading.AttachReading(ctx, h.listsService.db, user.ID, books); err != nil {
 		return err
 	}
 

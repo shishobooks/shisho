@@ -238,7 +238,7 @@ func (h *handler) list(c echo.Context) error {
 		}
 		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
 	}
-	if err := reading.AttachStatuses(ctx, h.bookService.db, user.ID, books); err != nil {
+	if err := reading.AttachReading(ctx, h.bookService.db, user.ID, books); err != nil {
 		return err
 	}
 

@@ -310,7 +310,7 @@ func (h *handler) seriesBooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := reading.AttachStatuses(ctx, h.seriesService.db, user.ID, booksList); err != nil {
+	if err := reading.AttachReading(ctx, h.seriesService.db, user.ID, booksList); err != nil {
 		return err
 	}
 

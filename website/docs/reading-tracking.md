@@ -32,14 +32,16 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 Each time you read a book is a **Read-through**: when it started, when it ended, and whether you finished or abandoned it. Once a book has a Read-through, its page shows **Reading history** below its files, with a summary such as "Read twice, last finished Mar 2024" and every Read-through, newest first.
 
-- **Edit dates** changes a Read-through's start and end dates. Leave a date empty if you don't know it. A Read-through you're still on has no end date.
+- **Edit dates** changes a Read-through's start and end dates. Choose **Clear** in a date's calendar if you don't know it, and **Today** for today. Dates after today can't be picked. A Read-through you're still on has no end date.
 - **Delete** removes a Read-through you logged by mistake. It no longer counts toward the history or the status, and this can't be undone.
 
 The status and summary update after each change.
 
 ## Ratings
 
-Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
+Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. Hovering over the stars previews the rating a click would set, with its number beside them. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
+
+Your rating also shows in the top-left corner of the book's card wherever books are listed.
 
 A rating doesn't depend on status. You can rate a book you abandoned or one you never marked read, and rereading keeps your rating.
 
