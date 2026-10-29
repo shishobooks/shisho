@@ -651,14 +651,16 @@ func TestReadThrough_HiddenWithoutLibraryAccess(t *testing.T) {
 
 // The server doesn't know the user's time zone, so a day is too late only
 // once it's after today everywhere: today in UTC+14, the furthest-ahead zone.
-func TestDays_RejectsDaysAfterTodayEverywhere(t *testing.T) {
+func TestReadThroughDays_RejectedAfterTodayEverywhere(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
 	book := createBook(t, db, "Dune")
-	latest := time.Now().In(time.FixedZone("UTC+14", 14*60*60))
+	latest := time.Now().In(furthestAheadZone)
 	latestDay := latest.Format(time.DateOnly)
-	tooLate := latest.AddDate(0, 0, 1).Format(time.DateOnly)
+	// Two days ahead, so the handler's later read of the clock can't cross
+	// UTC+14 midnight onto it.
+	tooLate := latest.AddDate(0, 0, 2).Format(time.DateOnly)
 
 	rec := api.transition(book.ID, "start", tooLate)
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
