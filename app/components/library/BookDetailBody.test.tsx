@@ -664,6 +664,52 @@ describe("BookDetailBody tag namespaces", () => {
     ]);
   });
 
+  it("collapses a long row of tags behind a button that expands it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const manyTags = Array.from({ length: 20 }, (_, i) => ({
+      id: i + 1,
+      tag_id: i + 100,
+      tag: { id: i + 100, name: `Tag ${i + 1}` },
+    }));
+    renderBody({ book: { ...book, book_tags: manyTags } as unknown as Book });
+
+    expect(rowPills("Tags")).toEqual([
+      ...manyTags.slice(0, 12).map((t) => t.tag.name),
+      "+8 more",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "+8 more" }));
+    expect(rowPills("Tags")).toEqual([
+      ...manyTags.map((t) => t.tag.name),
+      "Show less",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Show less" }));
+    expect(rowPills("Tags")).toHaveLength(13);
+  });
+
+  it.each([
+    [14, 14, null],
+    [15, 13, "+3 more"],
+  ])(
+    "shows %i tags as %i pills, hiding no fewer than three",
+    (count, pills, button) => {
+      const tags = Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        tag_id: i + 100,
+        tag: { id: i + 100, name: `Tag ${i + 1}` },
+      }));
+      renderBody({ book: { ...book, book_tags: tags } as unknown as Book });
+
+      expect(rowPills("Tags")).toHaveLength(pills);
+      if (button) {
+        expect(screen.getByRole("button", { name: button })).toBeVisible();
+      } else {
+        expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+      }
+    },
+  );
+
   it("lists every tag under Tags when the library has no namespaces", () => {
     renderBody({ book: namespacedBook });
 
