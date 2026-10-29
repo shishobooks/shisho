@@ -179,6 +179,36 @@ export const formatDate = (dateString: string): string => {
 };
 
 /**
+ * A date's local calendar day as YYYY-MM-DD, the form the API takes days in.
+ * @example localDay(new Date(2026, 9, 28, 23, 30)) // "2026-10-28"
+ */
+export const localDay = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+/**
+ * A Rating as a number of stars.
+ * @example formatRating(4.25) // "4.25"
+ * @example formatRating(4) // "4"
+ */
+export const formatRating = (stars: number): string =>
+  stars.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+/**
+ * The month and year of a date, as UTC like formatDate.
+ * @example formatMonthYear("2024-03-02") // "Mar 2024"
+ */
+export const formatMonthYear = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+};
+
+/**
  * An audio bitrate in kilobits per second.
  * @example formatBitrate(64000) // "64 kbps"
  */

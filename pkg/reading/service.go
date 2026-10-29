@@ -1,0 +1,433 @@
+package reading
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"math"
+	"strconv"
+	"time"
+
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/database"
+	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/uptrace/bun"
+)
+
+// The transitions return these when the Book's current Read-throughs don't
+// allow them, which the handlers render as 422 invalid_state.
+var (
+	ErrAlreadyUnderway = errors.New("a read-through is already underway")
+	ErrNothingUnderway = errors.New("no read-through is underway")
+	ErrAlreadyPaused   = errors.New("the read-through is already paused")
+	ErrNotPaused       = errors.New("the read-through is not paused")
+)
+
+// UpdateReadThroughDays returns these for days it rejects, which the
+// handlers render as 422 validation_error.
+var (
+	ErrEndDayWhileUnderway = errors.New("a read-through underway has no end day")
+	ErrEndBeforeBegin      = errors.New("the end day is before the begin day")
+)
+
+// ErrReadThroughNotFound is returned for a Read-through that doesn't exist
+// or belongs to another user.
+var ErrReadThroughNotFound = errors.New("read-through not found")
+
+// maxRatingUnits is five stars in quarter-star units.
+const maxRatingUnits = 20
+
+type Service struct {
+	db *bun.DB
+}
+
+func NewService(db *bun.DB) *Service {
+	return &Service{db}
+}
+
+// StatusExpr is the SQL expression for userID's Reading Status of the Book
+// whose id is in bookIDColumn, or NULL when there is none. bookIDColumn is
+// interpolated into the SQL, so it must be a column name or an integer
+// literal from code, never request input. It is the one
+// place the status is derived (ADR 0013), so listings that show, filter, or
+// sort on it use this expression:
+//
+//  1. A Read-through underway: currently_reading, or paused.
+//  2. Otherwise, on To Read: to_read.
+//  3. Otherwise, the latest ended Read-through: read or did_not_finish.
+//     Latest means the latest end day; undated ones rank below dated ones,
+//     and ties go to the one recorded last.
+func StatusExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(CASE
+		WHEN EXISTS (SELECT 1 FROM read_throughs rts WHERE rts.user_id = %[1]d AND rts.book_id = %[2]s AND rts.outcome = '%[3]s' AND NOT rts.paused) THEN '%[6]s'
+		WHEN EXISTS (SELECT 1 FROM read_throughs rts WHERE rts.user_id = %[1]d AND rts.book_id = %[2]s AND rts.outcome = '%[3]s' AND rts.paused) THEN '%[7]s'
+		WHEN EXISTS (SELECT 1 FROM user_books ubs WHERE ubs.user_id = %[1]d AND ubs.book_id = %[2]s AND ubs.to_read_position IS NOT NULL) THEN '%[8]s'
+		ELSE (
+			SELECT CASE rts.outcome WHEN '%[4]s' THEN '%[9]s' WHEN '%[5]s' THEN '%[10]s' END
+			FROM read_throughs rts
+			WHERE rts.user_id = %[1]d AND rts.book_id = %[2]s AND rts.outcome != '%[3]s'
+			ORDER BY rts.end_day IS NULL, rts.end_day DESC, rts.id DESC
+			LIMIT 1
+		)
+	END)`,
+		userID, bookIDColumn,
+		models.ReadThroughOutcomeUnderway, models.ReadThroughOutcomeFinished, models.ReadThroughOutcomeAbandoned,
+		models.ReadingStatusCurrentlyReading, models.ReadingStatusPaused, models.ReadingStatusToRead,
+		models.ReadingStatusRead, models.ReadingStatusDidNotFinish,
+	)
+}
+
+// AttachReading sets ReadingStatus and Rating on each Book to userID's.
+// Only a listing served to userID may call it, since both are private.
+func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.Book) error {
+	if len(books) == 0 {
+		return nil
+	}
+	ids := make([]int, 0, len(books))
+	for _, b := range books {
+		ids = append(ids, b.ID)
+	}
+	type row struct {
+		ID          int     `bun:"id"`
+		Status      *string `bun:"status"`
+		RatingUnits *int    `bun:"rating"`
+	}
+	var rows []row
+	err := db.NewSelect().
+		TableExpr("books AS b").
+		Column("b.id").
+		ColumnExpr(StatusExpr(userID, "b.id")+" AS status").
+		ColumnExpr("ub.rating").
+		Join("LEFT JOIN user_books AS ub ON ub.book_id = b.id AND ub.user_id = ?", userID).
+		Where("b.id IN (?)", bun.List(ids)).
+		Scan(ctx, &rows)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	byID := make(map[int]row, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	for _, b := range books {
+		r := byID[b.ID]
+		b.ReadingStatus = r.Status
+		b.Rating = RatingStars(r.RatingUnits)
+	}
+	return nil
+}
+
+// BookReading is one user's reading record for one Book.
+type BookReading struct {
+	Status       *string
+	RatingUnits  *int
+	OnToRead     bool
+	ReadThroughs []*models.ReadThrough
+}
+
+// BookLibraryID returns the library of bookID, or sql.ErrNoRows when there
+// is no such Book.
+func (svc *Service) BookLibraryID(ctx context.Context, bookID int) (int, error) {
+	var libraryID int
+	err := svc.db.NewSelect().
+		Model((*models.Book)(nil)).
+		Column("b.library_id").
+		Where("b.id = ?", bookID).
+		Scan(ctx, &libraryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	return libraryID, errors.WithStack(err)
+}
+
+// RetrieveBookReading loads userID's reading record for bookID.
+func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int) (*BookReading, error) {
+	result := &BookReading{ReadThroughs: []*models.ReadThrough{}}
+
+	err := svc.db.NewSelect().
+		ColumnExpr(StatusExpr(userID, strconv.Itoa(bookID))+" AS status").
+		Scan(ctx, &result.Status)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	err = svc.db.NewSelect().
+		Model(&result.ReadThroughs).
+		Where("rt.user_id = ? AND rt.book_id = ?", userID, bookID).
+		OrderExpr("rt.outcome = ? DESC, rt.end_day IS NULL, rt.end_day DESC, rt.id DESC", models.ReadThroughOutcomeUnderway).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	userBook := &models.UserBook{}
+	err = svc.db.NewSelect().
+		Model(userBook).
+		Where("ub.user_id = ? AND ub.book_id = ?", userID, bookID).
+		Scan(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.WithStack(err)
+	}
+	if err == nil {
+		result.RatingUnits = userBook.Rating
+		result.OnToRead = userBook.ToReadPosition != nil
+	}
+
+	return result, nil
+}
+
+// Start begins a new Read-through on today and takes the Book off To Read.
+// Reading a finished or abandoned Book again is the same transition.
+func (svc *Service) Start(ctx context.Context, userID, bookID int, today string) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		now := time.Now()
+		_, err := tx.NewInsert().
+			Model(&models.ReadThrough{
+				CreatedAt: now,
+				UpdatedAt: now,
+				UserID:    userID,
+				BookID:    bookID,
+				BeginDay:  &today,
+				Outcome:   models.ReadThroughOutcomeUnderway,
+			}).
+			Exec(ctx)
+		if database.IsUniqueViolation(err) {
+			return ErrAlreadyUnderway
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		_, err = tx.NewUpdate().
+			Model((*models.UserBook)(nil)).
+			Set("to_read_position = NULL").
+			Set("updated_at = ?", now).
+			Where("user_id = ? AND book_id = ? AND to_read_position IS NOT NULL", userID, bookID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
+// SetPaused pauses or resumes the Read-through underway.
+func (svc *Service) SetPaused(ctx context.Context, userID, bookID int, paused bool) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+		if err != nil {
+			return err
+		}
+		if underway == nil {
+			return ErrNothingUnderway
+		}
+		if underway.Paused == paused {
+			if paused {
+				return ErrAlreadyPaused
+			}
+			return ErrNotPaused
+		}
+		underway.Paused = paused
+		underway.UpdatedAt = time.Now()
+		_, err = tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
+// End ends the Read-through underway on today with outcome. Finishing with
+// nothing underway records a finished Read-through with no begin day, for a
+// Book read before the user tracked it; abandoning needs one underway.
+func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today string) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		now := time.Now()
+		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+		if err != nil {
+			return err
+		}
+		if underway == nil {
+			if outcome != models.ReadThroughOutcomeFinished {
+				return ErrNothingUnderway
+			}
+			_, err = tx.NewInsert().
+				Model(&models.ReadThrough{
+					CreatedAt: now,
+					UpdatedAt: now,
+					UserID:    userID,
+					BookID:    bookID,
+					EndDay:    &today,
+					Outcome:   outcome,
+				}).
+				Exec(ctx)
+			return errors.WithStack(err)
+		}
+
+		underway.Outcome = outcome
+		underway.Paused = false
+		underway.EndDay = &today
+		underway.UpdatedAt = now
+		_, err = tx.NewUpdate().
+			Model(underway).
+			Column("outcome", "paused", "end_day", "updated_at").
+			WherePK().
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
+func retrieveUnderway(ctx context.Context, db bun.IDB, userID, bookID int) (*models.ReadThrough, error) {
+	rt := &models.ReadThrough{}
+	err := db.NewSelect().
+		Model(rt).
+		Where("rt.user_id = ? AND rt.book_id = ? AND rt.outcome = ?", userID, bookID, models.ReadThroughOutcomeUnderway).
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return rt, nil
+}
+
+// RetrieveReadThrough loads one of userID's Read-throughs, returning
+// ErrReadThroughNotFound when it doesn't exist or belongs to someone else.
+func (svc *Service) RetrieveReadThrough(ctx context.Context, userID, id int) (*models.ReadThrough, error) {
+	rt := &models.ReadThrough{}
+	err := svc.db.NewSelect().
+		Model(rt).
+		Where("rt.id = ? AND rt.user_id = ?", id, userID).
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrReadThroughNotFound
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return rt, nil
+}
+
+// UpdateReadThroughDays replaces both days of rt. Nil clears a day.
+func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadThrough, beginDay, endDay *string) error {
+	if endDay != nil && rt.Outcome == models.ReadThroughOutcomeUnderway {
+		return ErrEndDayWhileUnderway
+	}
+	// Days are YYYY-MM-DD, so they compare as strings.
+	if beginDay != nil && endDay != nil && *endDay < *beginDay {
+		return ErrEndBeforeBegin
+	}
+	rt.BeginDay = beginDay
+	rt.EndDay = endDay
+	rt.UpdatedAt = time.Now()
+	_, err := svc.db.NewUpdate().
+		Model(rt).
+		Column("begin_day", "end_day", "updated_at").
+		WherePK().
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// DeleteReadThrough deletes rt: the Read-through no longer counts.
+func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
+	_, err := svc.db.NewDelete().Model(rt).WherePK().Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// RatingStars converts quarter-star units to stars, keeping nil as nil.
+func RatingStars(units *int) *float64 {
+	if units == nil {
+		return nil
+	}
+	stars := float64(*units) / 4
+	return &stars
+}
+
+// RatingUnits converts stars to quarter-star units, reporting false for a
+// value that isn't a quarter step from 0.25 to 5.
+func RatingUnits(stars float64) (int, bool) {
+	units := stars * 4
+	rounded := math.Round(units)
+	if math.Abs(units-rounded) > 1e-9 || rounded < 1 || rounded > maxRatingUnits {
+		return 0, false
+	}
+	return int(rounded), true
+}
+
+// SetRating sets userID's Rating of bookID in quarter-star units, or clears
+// it when units is nil.
+func (svc *Service) SetRating(ctx context.Context, userID, bookID int, units *int) error {
+	now := time.Now()
+	_, err := svc.db.NewInsert().
+		Model(&models.UserBook{
+			UserID:    userID,
+			BookID:    bookID,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Rating:    units,
+		}).
+		On("CONFLICT (user_id, book_id) DO UPDATE").
+		Set("rating = EXCLUDED.rating").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// MergeBooks moves every user's reading data from sourceBookID to
+// targetBookID, for a merge that is about to delete the source. Run it in
+// the transaction that deletes the source, before the delete cascades the
+// source's rows away.
+//
+//   - The target keeps its Rating and To Read position, taking the source's
+//     where it has none.
+//   - The source's Read-throughs move to the target. When both have one
+//     underway, they collapse into the target's, which takes the earlier
+//     begin day and stays paused only if both were.
+//   - A user with a Read-through underway on the target afterwards has it
+//     off To Read.
+func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int) error {
+	if sourceBookID == targetBookID {
+		return nil
+	}
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`UPDATE user_books AS t
+			SET rating = COALESCE(t.rating, s.rating),
+				to_read_position = COALESCE(t.to_read_position, s.to_read_position)
+			FROM user_books AS s
+			WHERE s.book_id = ? AND t.book_id = ? AND s.user_id = t.user_id`,
+			[]any{sourceBookID, targetBookID}},
+		{`DELETE FROM user_books
+			WHERE book_id = ? AND user_id IN (SELECT user_id FROM user_books WHERE book_id = ?)`,
+			[]any{sourceBookID, targetBookID}},
+		{`UPDATE user_books SET book_id = ? WHERE book_id = ?`,
+			[]any{targetBookID, sourceBookID}},
+		// A NULL begin day is unknown, so the earlier of two is the earlier
+		// known one.
+		{`UPDATE read_throughs AS t
+			SET begin_day = CASE
+					WHEN t.begin_day IS NULL THEN s.begin_day
+					WHEN s.begin_day IS NULL THEN t.begin_day
+					ELSE MIN(t.begin_day, s.begin_day)
+				END,
+				paused = t.paused AND s.paused
+			FROM read_throughs AS s
+			WHERE s.book_id = ? AND t.book_id = ? AND s.user_id = t.user_id
+				AND s.outcome = ? AND t.outcome = ?`,
+			[]any{sourceBookID, targetBookID, models.ReadThroughOutcomeUnderway, models.ReadThroughOutcomeUnderway}},
+		{`DELETE FROM read_throughs
+			WHERE book_id = ? AND outcome = ?
+				AND user_id IN (SELECT user_id FROM read_throughs WHERE book_id = ? AND outcome = ?)`,
+			[]any{sourceBookID, models.ReadThroughOutcomeUnderway, targetBookID, models.ReadThroughOutcomeUnderway}},
+		{`UPDATE read_throughs SET book_id = ? WHERE book_id = ?`,
+			[]any{targetBookID, sourceBookID}},
+		// A Read-through underway takes the Book off To Read, as starting
+		// one does.
+		{`UPDATE user_books SET to_read_position = NULL
+			WHERE book_id = ? AND to_read_position IS NOT NULL
+				AND user_id IN (SELECT user_id FROM read_throughs WHERE book_id = ? AND outcome = ?)`,
+			[]any{targetBookID, targetBookID, models.ReadThroughOutcomeUnderway}},
+	}
+	for _, s := range statements {
+		if _, err := db.ExecContext(ctx, s.query, s.args...); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
+}

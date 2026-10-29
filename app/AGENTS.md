@@ -45,7 +45,7 @@ Hide a control the role cannot use and skip mounting the dialogs behind it; do n
 
 ## Demo Mode
 
-Branch on `demoMode` from `useAuth()`. `checkStatus` already toasts a Demo Mode rejection, and `toastRequestError` stays silent on it; new inline error UI skips it with `isDemoModeError(error)`. Test that through the real `API` with a `demo_mode` 403 and a real `<Toaster />`: a mocked rejection never reaches `checkStatus`. Demo Mode hides only a few controls (downloads, the Administration entries, and the Password section of Preferences); everything else the role may use stays visible and relies on the backend rejection. `useCan` and `can` know nothing about Demo Mode. Backend side: `docs/agents/backend/demo-mode.md`.
+Branch on `demoMode` from `useAuth()`. `checkStatus` already toasts a Demo Mode rejection, and `toastRequestError` stays silent on it; new inline error UI skips it with `isDemoModeError(error)`. Test that through the real `API` with a `demo_mode` 403 and a real `<Toaster />`: a mocked rejection never reaches `checkStatus`. Demo Mode hides only a few controls (downloads, the Administration entries, and the Password section of Preferences); everything else the role may use stays visible. It either stays enabled and relies on the backend rejection or, where a control should look unavailable, renders disabled with `DEMO_MODE_MESSAGE` (`@/libraries/api`) beside it. `useCan` and `can` know nothing about Demo Mode. Backend side: `docs/agents/backend/demo-mode.md`.
 
 ## Forms
 

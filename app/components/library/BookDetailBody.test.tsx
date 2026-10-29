@@ -131,6 +131,30 @@ vi.mock("@/hooks/queries/delivery", () => ({
         : { follows_built_in: false, rules: delivery.rules, options: [] },
   }),
 }));
+// BookReadingControls.test.tsx drives the reading controls through the API.
+vi.mock("@/hooks/queries/reading", () => ({
+  useBookReading: () => ({
+    data: {
+      book_id: 1,
+      status: "read",
+      rating: 4,
+      on_to_read: false,
+      read_throughs: [
+        {
+          id: 1,
+          book_id: 1,
+          outcome: "finished",
+          paused: false,
+          end_day: "2024-03-02",
+        },
+      ],
+    },
+  }),
+  useReadingTransition: idle,
+  useSetRating: idle,
+  useUpdateReadThrough: idle,
+  useDeleteReadThrough: idle,
+}));
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
 }));
@@ -313,6 +337,12 @@ describe("BookDetailBody in Share Link context", () => {
     }
     expect(screen.queryByTestId("add-to-list")).not.toBeInTheDocument();
     expect(screen.queryByTestId("related-panel")).not.toBeInTheDocument();
+    // The recipient isn't the reader: no reading status, rating, or history.
+    expect(
+      screen.queryByRole("button", { name: /^Reading status/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reading history")).not.toBeInTheDocument();
     expect(screen.queryAllByRole("link")).toHaveLength(0);
 
     // A file's menu keeps only its details, which change nothing.
@@ -643,6 +673,19 @@ describe("BookDetailBody tag namespaces", () => {
 });
 
 describe("BookDetailBody without Share Link context", () => {
+  it("shows the reader's status, rating, and history", () => {
+    renderBody();
+
+    expect(
+      screen.getByRole("button", { name: "Reading status: Read" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Rating" })).toHaveAttribute(
+      "aria-valuetext",
+      "4 stars",
+    );
+    expect(screen.getByText("Reading history")).toBeInTheDocument();
+  });
+
   it("links resource names into the library", () => {
     renderBody();
 

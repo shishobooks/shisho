@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -240,4 +242,48 @@ func TestSeriesBooks_InvalidSortReturns422(t *testing.T) {
 
 	rec := getSeriesBooks(t, newSeriesHandler(db), seriesID, "?sort=book_count:desc")
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+// A series' books carry the caller's own Reading Status, never another
+// user's.
+func TestSeriesBooks_AttachesOnlyTheCallersReadingStatus(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	seriesID := seedSeriesWithBooks(t, db, []string{"One", "Two"})
+	h := newSeriesHandler(db)
+
+	reader := &models.User{Username: "reader", PasswordHash: "x", RoleID: 2, IsActive: true}
+	other := &models.User{Username: "other", PasswordHash: "x", RoleID: 1, IsActive: true}
+	_, err := db.NewInsert().Model(reader).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(other).Exec(ctx)
+	require.NoError(t, err)
+
+	var first models.BookSeries
+	require.NoError(t, db.NewSelect().Model(&first).Where("series_id = ? AND sort_order = 1", seriesID).Scan(ctx))
+	require.NoError(t, reading.NewService(db).Start(ctx, reader.ID, first.BookID, "2026-03-01"))
+
+	statuses := func(user *models.User) map[int]*string {
+		e := newTestEchoSeries(t)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+		user.LibraryAccess = []*models.UserLibraryAccess{{}}
+		auth.SetUser(c, user)
+		c.SetParamNames("id")
+		c.SetParamValues(strconv.Itoa(seriesID))
+		require.NoError(t, h.seriesBooks(c))
+		var resp ListSeriesBooksResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		out := map[int]*string{}
+		for _, b := range resp.Items {
+			out[b.ID] = b.ReadingStatus
+		}
+		return out
+	}
+
+	got := statuses(reader)
+	require.NotNil(t, got[first.BookID])
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, *got[first.BookID])
+	assert.Nil(t, statuses(other)[first.BookID])
 }

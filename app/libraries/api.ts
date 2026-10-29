@@ -16,7 +16,7 @@ export class ShishoAPIError extends Error {
   }
 }
 
-const DEMO_MODE_MESSAGE = "This action is unavailable in the demo.";
+export const DEMO_MODE_MESSAGE = "This action is unavailable in the demo.";
 
 // True for the 403 the Demo Mode middleware returns. checkStatus has already
 // shown the Demo Mode toast for it, so callers report nothing further.

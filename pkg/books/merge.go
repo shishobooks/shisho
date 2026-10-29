@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
 	"github.com/uptrace/bun"
@@ -314,7 +316,15 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 	// Also track which books were deleted so we can remove their sidecars
 	deletedBookPaths := make(map[int]string)
 	err = svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		for sourceBookID, bookPath := range sourceBookPaths {
+		// Sources go in id order, so when several carry reading data the
+		// target's fallbacks come from the same one every time.
+		sourceIDs := make([]int, 0, len(sourceBookPaths))
+		for id := range sourceBookPaths {
+			sourceIDs = append(sourceIDs, id)
+		}
+		sort.Ints(sourceIDs)
+		for _, sourceBookID := range sourceIDs {
+			bookPath := sourceBookPaths[sourceBookID]
 			// Lock the book row and count files atomically
 			var count int64
 			count, err = tx.NewSelect().
@@ -330,12 +340,11 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 			}
 
 			if count == 0 {
-				// Delete the empty book within the transaction
-				_, err = tx.NewDelete().
-					Model((*models.Book)(nil)).
-					Where("id = ?", sourceBookID).
-					Exec(ctx)
-				if err != nil {
+				// The source's reading data moves to the target before
+				// the delete cascades it away. A savepoint keeps the move
+				// and the delete together: if either fails, the source
+				// stays with its reading data and the other sources go on.
+				if err = deleteSourceKeepingReading(ctx, tx, sourceBookID, targetBook.ID); err != nil {
 					log.Error("failed to delete empty source book", logger.Data{
 						"book_id": sourceBookID,
 						"error":   err.Error(),
@@ -431,6 +440,34 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 	}
 
 	return result, nil
+}
+
+// deleteSourceKeepingReading moves sourceBookID's reading data to
+// targetBookID and deletes the source, both or neither.
+func deleteSourceKeepingReading(ctx context.Context, tx bun.Tx, sourceBookID, targetBookID int) error {
+	if _, err := tx.ExecContext(ctx, "SAVEPOINT delete_source_book"); err != nil {
+		return errors.WithStack(err)
+	}
+	err := reading.MergeBooks(ctx, tx, sourceBookID, targetBookID)
+	if err == nil {
+		_, err = tx.NewDelete().
+			Model((*models.Book)(nil)).
+			Where("id = ?", sourceBookID).
+			Exec(ctx)
+		err = errors.WithStack(err)
+	}
+	if err != nil {
+		if _, rbErr := tx.ExecContext(ctx, "ROLLBACK TO delete_source_book"); rbErr != nil {
+			return errors.Wrap(rbErr, err.Error())
+		}
+		_, relErr := tx.ExecContext(ctx, "RELEASE delete_source_book")
+		if relErr != nil {
+			return errors.Wrap(relErr, err.Error())
+		}
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "RELEASE delete_source_book")
+	return errors.WithStack(err)
 }
 
 // createBookFromFile creates a new book based on a file.

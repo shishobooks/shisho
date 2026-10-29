@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -417,4 +418,43 @@ func TestListHandler_PersonIDKeepsLibraryAccess(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, 0, resp.Total)
 	assert.Empty(t, resp.Items)
+}
+
+// Each user sees only their own Reading Status on listed books.
+func TestListHandler_AttachesOnlyTheCallersReadingStatus(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	lib := seedLibrary(t, db, "Library R")
+	reader := seedUserWithLibAccess(t, db, "reader", lib)
+	admin := seedUserWithLibAccess(t, db, "admin", lib)
+
+	now := time.Now()
+	finished := seedBook(t, db, lib, "Finished", "Finished", now)
+	unread := seedBook(t, db, lib, "Unread", "Unread", now.Add(-time.Hour))
+	require.NoError(t, reading.NewService(db).End(context.Background(), reader.ID, finished.ID, models.ReadThroughOutcomeFinished, "2026-03-01"))
+
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
+	statuses := func(user *models.User) map[int]*string {
+		e := newTestEchoBooks(t)
+		req := httptest.NewRequest(http.MethodGet, "/books?library_id="+strconv.Itoa(lib.ID), nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		auth.SetUser(c, user)
+		require.NoError(t, h.list(c))
+		var resp ListBooksResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		out := map[int]*string{}
+		for _, b := range resp.Items {
+			out[b.ID] = b.ReadingStatus
+		}
+		return out
+	}
+
+	got := statuses(reader)
+	assert.Equal(t, models.ReadingStatusRead, *got[finished.ID])
+	assert.Nil(t, got[unread.ID])
+
+	got = statuses(admin)
+	assert.Nil(t, got[finished.ID], "an admin doesn't see another user's status")
 }

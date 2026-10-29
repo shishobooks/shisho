@@ -111,6 +111,13 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/user/devices", `{"name":"Kindle","device_type":"kindle"}`, http.StatusCreated)), &kindle))
+	var underway struct {
+		ReadThroughs []struct {
+			ID int `json:"id"`
+		} `json:"read_throughs"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, fmt.Sprintf("/api/reading/books/%d/start", seeded.bookID), `{"today":"2026-03-01"}`, http.StatusOK)), &underway))
+	require.Len(t, underway.ReadThroughs, 1)
 
 	tests := []struct {
 		name   string
@@ -122,6 +129,45 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		// message, when set, is the expected error message.
 		message string
 	}{
+		{
+			name:   "pausing a book nobody is reading",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/pause", fileBook.ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book isn't being read.",
+		},
+		{
+			name:   "starting a book already being read",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/start", seeded.bookID),
+			body:   `{"today":"2026-03-02"}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book is already being read.",
+		},
+		{
+			name:   "end date on a Read-through still underway",
+			method: http.MethodPatch, path: fmt.Sprintf("/api/reading/read-throughs/%d", underway.ReadThroughs[0].ID),
+			body:   `{"begin_day":"2026-03-01","end_day":"2026-03-05"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A Read-through still underway can't have an end date.",
+		},
+		{
+			name:   "reading day that isn't a calendar day",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/finish", fileBook.ID),
+			body:   `{"today":"2026-02-30"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
+			name:   "rating off the quarter-star scale",
+			method: http.MethodPut, path: fmt.Sprintf("/api/reading/books/%d/rating", fileBook.ID),
+			body:   `{"rating":3.3}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A rating is in quarter stars from 0.25 to 5.",
+		},
+		{
+			name:   "reading record of a book that does not exist",
+			method: http.MethodGet, path: "/api/reading/books/999999",
+			status: http.StatusNotFound, code: "not_found", message: "Book not found.",
+		},
+		{
+			name:   "read-through that does not exist",
+			method: http.MethodDelete, path: "/api/reading/read-throughs/999999",
+			status: http.StatusNotFound, code: "not_found", message: "Read-through not found.",
+		},
 		{
 			name:   "device with an unknown type",
 			method: http.MethodPost, path: "/api/user/devices",

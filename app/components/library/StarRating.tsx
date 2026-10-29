@@ -1,0 +1,120 @@
+import * as SliderPrimitive from "@radix-ui/react-slider";
+import { Star } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { cn } from "@/libraries/utils";
+import { formatCount, formatRating } from "@/utils/format";
+
+const STARS = [0, 1, 2, 3, 4];
+
+// The lowest Rating. Zero stars doesn't exist: an unrated Book has none.
+const MIN_RATING = 0.25;
+const MAX_RATING = 5;
+
+// The quarter star a click at fraction of the way across saves, or null when
+// it saves nothing. Radix snaps a click to the nearest step, so the hover
+// preview rounds the same way. A click that snaps to 0 is raised to the
+// minimum on commit, except on an unrated book, where the slider already
+// sits at 0 and Radix reports no change.
+const starsAt = (fraction: number, value: number | null): number | null => {
+  const snapped = Math.round(fraction * MAX_RATING * 4) / 4;
+  if (snapped <= 0 && value === null) return null;
+  return Math.min(MAX_RATING, Math.max(MIN_RATING, snapped));
+};
+
+interface StarRatingProps {
+  /** Stars from 0.25 to 5 in quarter steps, or null when unrated. */
+  value: number | null;
+  /** Called once the user settles on a value, not on every drag step. */
+  onChange: (stars: number) => void;
+  disabled?: boolean;
+}
+
+// A five-star row that rates in quarter stars, with the number beside it.
+// It's a slider underneath, so a pointer picks the quarter under it and the
+// arrow keys step by a quarter. Hovering previews what a click would set.
+const StarRating = ({ value, onChange, disabled }: StarRatingProps) => {
+  // The value shown while dragging, before it's committed.
+  const [preview, setPreview] = useState<number | null>(value);
+  useEffect(() => setPreview(value), [value]);
+  // The value under the pointer, before any click.
+  const [hover, setHover] = useState<number | null>(null);
+
+  const shown = hover ?? preview;
+  const fill = shown ?? 0;
+  // Pale means "not saved": once a click's rating comes back as the saved
+  // value, the stars turn solid even with the pointer still over them.
+  const previewing = hover !== null && hover !== value;
+  return (
+    <div className="flex items-center gap-2">
+      <SliderPrimitive.Root
+        className={cn(
+          "relative flex h-6 w-[120px] touch-none select-none items-center",
+          disabled ? "opacity-50" : "cursor-pointer",
+        )}
+        data-testid="star-rating"
+        disabled={disabled}
+        max={MAX_RATING}
+        min={0}
+        // A key change shows at once, even with the pointer on the stars.
+        onKeyDown={() => setHover(null)}
+        onPointerLeave={() => setHover(null)}
+        onPointerMove={(e) => {
+          if (disabled) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          setHover(starsAt((e.clientX - rect.left) / rect.width, value));
+        }}
+        onValueChange={([stars]) => setPreview(Math.max(MIN_RATING, stars))}
+        onValueCommit={([stars]) => onChange(Math.max(MIN_RATING, stars))}
+        step={0.25}
+        value={[preview ?? 0]}
+      >
+        <SliderPrimitive.Track className="relative h-6 w-full">
+          <div aria-hidden className="absolute inset-0 flex">
+            {STARS.map((i) => (
+              <Star className="h-6 w-6 text-muted-foreground/40" key={i} />
+            ))}
+          </div>
+          <div
+            aria-hidden
+            className="absolute inset-y-0 left-0 flex overflow-hidden"
+            data-previewing={previewing}
+            data-testid="star-rating-fill"
+            style={{ width: `${(fill / MAX_RATING) * 100}%` }}
+          >
+            {STARS.map((i) => (
+              <Star
+                className={cn(
+                  "h-6 w-6 shrink-0",
+                  previewing
+                    ? "fill-amber-400/60 text-amber-400/60"
+                    : "fill-amber-400 text-amber-400",
+                )}
+                key={i}
+              />
+            ))}
+          </div>
+        </SliderPrimitive.Track>
+        <SliderPrimitive.Thumb
+          aria-label="Rating"
+          aria-valuetext={
+            preview === null ? "Not rated" : formatCount(preview, "star")
+          }
+          className="block h-6 w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </SliderPrimitive.Root>
+      {/* The slider already announces its value, so the number is visual. */}
+      <span
+        aria-hidden
+        className={cn(
+          "min-w-8 text-sm tabular-nums",
+          previewing ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {shown !== null && formatRating(shown)}
+      </span>
+    </div>
+  );
+};
+
+export default StarRating;
