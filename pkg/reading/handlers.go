@@ -290,3 +290,50 @@ func (h *handler) deleteReadThrough(c echo.Context) error {
 	}
 	return h.respond(c, user.ID, rt.BookID)
 }
+
+func (h *handler) addToRead(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	bookID, err := h.requireBook(c)
+	if err != nil {
+		return err
+	}
+	if err := h.readingService.AddToRead(c.Request().Context(), user.ID, bookID); err != nil {
+		return transitionError(err)
+	}
+	return h.respond(c, user.ID, bookID)
+}
+
+func (h *handler) removeFromToRead(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	bookID, err := h.requireBook(c)
+	if err != nil {
+		return err
+	}
+	if err := h.readingService.RemoveFromToRead(c.Request().Context(), user.ID, bookID); err != nil {
+		return err
+	}
+	return h.respond(c, user.ID, bookID)
+}
+
+// reorderToRead needs no library check: it only moves the caller's own
+// positions, and ids not on their To Read are ignored.
+func (h *handler) reorderToRead(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReorderToReadPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.readingService.ReorderToRead(c.Request().Context(), user.ID, params.BookIDs); err != nil {
+		return err
+	}
+	return errors.WithStack(c.NoContent(http.StatusNoContent))
+}

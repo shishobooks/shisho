@@ -108,3 +108,9 @@ type CheckVisibilityQuery struct {
 type MoveBookPositionPayload struct {
 	Position int `json:"position" validate:"required,min=1"`
 }
+
+// CopyToToReadResponse says how many of a List's Books Copy to To Read
+// added. Books already on To Read, or being read, are skipped.
+type CopyToToReadResponse struct {
+	Added int `json:"added"`
+}

@@ -1,5 +1,7 @@
 import { uniqBy } from "lodash";
 import {
+  BookmarkMinus,
+  BookmarkPlus,
   Check,
   List,
   MoreVertical,
@@ -30,8 +32,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
+import { useSetOnToRead } from "@/hooks/queries/reading";
+import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
-import { toastRequestError } from "@/libraries/api";
+import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
   AuthorRolePenciller,
@@ -47,6 +51,7 @@ import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { fileTypeLabel, formatCount, formatRating } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
+import { canQueueToRead } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -96,7 +101,13 @@ const BookItem = ({
   const linkPeople = useCan("people:read");
   // Rescan, identify, and delete all require Books Write on the backend.
   // Adding to a list is governed by the list's own permission, so it stays.
+  // To Read is the user's own and needs only the Books Read a card implies.
   const canWriteBooks = useCan("books:write");
+  const { demoMode } = useAuth();
+  const canQueue = canQueueToRead(book.reading_status);
+  // Off the book page the card's status is all there is: a Book not being
+  // read is on To Read exactly when its status is To Read.
+  const onToRead = book.reading_status === "to_read";
 
   // Find the series number and unit for the specific series context (if provided)
   const seriesEntry = seriesId
@@ -116,6 +127,7 @@ const BookItem = ({
   const [showIdentifyDialog, setShowIdentifyDialog] = useState(false);
   const resyncBookMutation = useResyncBook();
   const deleteBookMutation = useDeleteBook();
+  const toReadMutation = useSetOnToRead();
 
   // For placeholder variant: use same priority logic as backend's selectCoverFile
   const placeholderVariant = getCoverFileType(book.files, coverAspectRatio);
@@ -143,6 +155,21 @@ const BookItem = ({
       toast.success("Book deleted");
     } catch (error) {
       toastRequestError(error, "Failed to delete book");
+    }
+  };
+
+  const handleToRead = async () => {
+    try {
+      await toReadMutation.mutateAsync({
+        bookId: book.id,
+        onToRead: !onToRead,
+      });
+      toast.success(onToRead ? "Removed from To Read" : "Added to To Read");
+    } catch (error) {
+      toastRequestError(
+        error,
+        onToRead ? "Failed to remove from To Read" : "Failed to add to To Read",
+      );
     }
   };
 
@@ -201,7 +228,7 @@ const BookItem = ({
               </Button>
             }
           />
-          {canWriteBooks && (
+          {(canQueue || canWriteBooks) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -217,25 +244,50 @@ const BookItem = ({
                 align="end"
                 onCloseAutoFocus={(e) => e.preventDefault()}
               >
-                <DropdownMenuItem
-                  disabled={resyncBookMutation.isPending}
-                  onClick={() => setShowRescanDialog(true)}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Rescan book
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowIdentifyDialog(true)}>
-                  <Search className="h-4 w-4 mr-2" />
-                  Identify book
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setShowDeleteDialog(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2 text-destructive" />
-                  Delete
-                </DropdownMenuItem>
+                {canQueue && (
+                  <DropdownMenuItem
+                    disabled={demoMode || toReadMutation.isPending}
+                    onClick={handleToRead}
+                  >
+                    {onToRead ? (
+                      <BookmarkMinus className="h-4 w-4 mr-2" />
+                    ) : (
+                      <BookmarkPlus className="h-4 w-4 mr-2" />
+                    )}
+                    {onToRead ? "Remove from To Read" : "Add to To Read"}
+                  </DropdownMenuItem>
+                )}
+                {canQueue && demoMode && (
+                  <p className="max-w-56 px-2 pb-1.5 text-xs text-muted-foreground">
+                    {DEMO_MODE_MESSAGE}
+                  </p>
+                )}
+                {canQueue && canWriteBooks && <DropdownMenuSeparator />}
+                {canWriteBooks && (
+                  <>
+                    <DropdownMenuItem
+                      disabled={resyncBookMutation.isPending}
+                      onClick={() => setShowRescanDialog(true)}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Rescan book
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowIdentifyDialog(true)}
+                    >
+                      <Search className="h-4 w-4 mr-2" />
+                      Identify book
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2 text-destructive" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

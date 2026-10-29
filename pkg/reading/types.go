@@ -33,3 +33,10 @@ type UpdateReadThroughPayload struct {
 type SetRatingPayload struct {
 	Rating *float64 `json:"rating" validate:"omitempty,min=0.25,max=5" tstype:"number | null"`
 }
+
+// ReorderToReadPayload puts the named Books, all on To Read, in this order.
+// Books on To Read it leaves out keep their places, so a page showing only
+// the Books in libraries the user can reach can reorder those.
+type ReorderToReadPayload struct {
+	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+}

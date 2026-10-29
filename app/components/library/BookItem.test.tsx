@@ -2,8 +2,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
+import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { FileRoleMain, FileRoleSupplement, type Book } from "@/types";
@@ -40,6 +49,13 @@ function wrap(ui: React.ReactNode) {
     </QueryClientProvider>
   );
 }
+
+const setupUser = () =>
+  userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+const openActions = async () => {
+  await setupUser().click(screen.getByLabelText("Book actions"));
+};
 
 function makeBook(overrides: Partial<Book> = {}): Book {
   return {
@@ -294,15 +310,94 @@ describe("BookItem write controls", () => {
     expect(screen.getByLabelText("Book actions")).toBeInTheDocument();
   });
 
-  it("hides the actions menu but keeps Add to list for a read-only user", () => {
+  it("offers a read-only user only To Read in the actions menu", async () => {
     setAuth({ permissions: READS });
     render(wrap(<BookItem book={makeBook()} libraryId="1" />));
     expect(screen.getByTitle("Add to list")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Test Book/ })).toHaveAttribute(
       "href",
       "/libraries/1/books/1",
     );
+
+    await openActions();
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Add to To Read"]);
+  });
+
+  it("shows no actions menu to a read-only user for a book being read", () => {
+    setAuth({ permissions: READS });
+    render(
+      wrap(
+        <BookItem
+          book={makeBook({ reading_status: "currently_reading" })}
+          libraryId="1"
+        />,
+      ),
+    );
+    expect(screen.queryByLabelText("Book actions")).not.toBeInTheDocument();
+  });
+});
+
+describe("BookItem To Read", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("adds a book to To Read from the card menu", async () => {
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_id: 1, status: "to_read", on_to_read: true });
+    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+
+    await openActions();
+    await setupUser().click(
+      screen.getByRole("menuitem", { name: "Add to To Read" }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/1/to-read",
+      null,
+      null,
+    );
+  });
+
+  it("removes a queued book from To Read", async () => {
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_id: 1, status: null, on_to_read: false });
+    render(
+      wrap(
+        <BookItem
+          book={makeBook({ reading_status: "to_read" })}
+          libraryId="1"
+        />,
+      ),
+    );
+
+    await openActions();
+    await setupUser().click(
+      screen.getByRole("menuitem", { name: "Remove from To Read" }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "DELETE",
+      "/reading/books/1/to-read",
+      null,
+      null,
+    );
+  });
+
+  it("is disabled in Demo Mode, with the demo's explanation", async () => {
+    setAuth({ permissions: READS, demoMode: true });
+    render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+
+    await openActions();
+    expect(
+      screen.getByRole("menuitem", { name: "Add to To Read" }),
+    ).toHaveAttribute("data-disabled");
+    expect(
+      screen.getByText("This action is unavailable in the demo."),
+    ).toBeInTheDocument();
   });
 });
 

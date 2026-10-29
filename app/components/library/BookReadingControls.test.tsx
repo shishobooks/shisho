@@ -62,24 +62,78 @@ describe("BookReadingControls", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it.each<[ReadingStatus | null, string, string[]]>([
-    [null, "Track reading", ["Start reading", "Mark as read"]],
-    ["to_read", "To Read", ["Start reading", "Mark as read"]],
+    [
+      null,
+      "Track reading",
+      ["Start reading", "Mark as read", "Add to To Read"],
+    ],
+    [
+      "to_read",
+      "To Read",
+      ["Start reading", "Mark as read", "Remove from To Read"],
+    ],
     [
       "currently_reading",
       "Currently Reading",
       ["Pause", "Mark as read", "Mark as Did Not Finish"],
     ],
     ["paused", "Paused", ["Resume", "Mark as read", "Mark as Did Not Finish"]],
-    ["read", "Read", ["Read again", "Mark as read"]],
-    ["did_not_finish", "Did Not Finish", ["Read again", "Mark as read"]],
+    ["read", "Read", ["Read again", "Mark as read", "Add to To Read"]],
+    [
+      "did_not_finish",
+      "Did Not Finish",
+      ["Read again", "Mark as read", "Add to To Read"],
+    ],
   ])(
     "offers only the valid transitions from %s",
     async (status, label, items) => {
-      renderControls(reading({ status }));
+      renderControls(reading({ status, on_to_read: status === "to_read" }));
       await openStatusMenu(label);
       expect(menuItems()).toEqual(items);
     },
   );
+
+  it("adds a read book to To Read to plan a reread", async () => {
+    const request = renderControls(reading({ status: "read" }));
+    await openStatusMenu("Read");
+    request.mockResolvedValue(reading({ status: "to_read", on_to_read: true }));
+    await user().click(
+      screen.getByRole("menuitem", { name: "Add to To Read" }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/7/to-read",
+      null,
+      null,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Reading status: To Read" }),
+    ).toBeInTheDocument();
+  });
+
+  it("removes a book from To Read", async () => {
+    const request = renderControls(
+      reading({ status: "to_read", on_to_read: true }),
+    );
+    await openStatusMenu("To Read");
+    request.mockResolvedValue(reading());
+    await user().click(
+      screen.getByRole("menuitem", { name: "Remove from To Read" }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "DELETE",
+      "/reading/books/7/to-read",
+      null,
+      null,
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: "Reading status: Track reading",
+      }),
+    ).toBeInTheDocument();
+  });
 
   it("marks a book read with the browser's local day", async () => {
     vi.setSystemTime(new Date(2026, 9, 28, 23, 30));

@@ -401,27 +401,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Where("lb.book_id IN (SELECT book_id FROM books_fts WHERE books_fts MATCH ?)", ftsQuery)
 	}
 
-	// Apply sort
-	switch opts.Sort {
-	case models.ListSortManual:
-		q = q.Order("lb.sort_order ASC NULLS LAST", "lb.added_at DESC")
-	case models.ListSortAddedAtAsc:
-		q = q.Order("lb.added_at ASC")
-	case models.ListSortTitleAsc:
-		q = q.OrderExpr("(SELECT sort_title FROM books WHERE id = lb.book_id) ASC")
-	case models.ListSortTitleDesc:
-		q = q.OrderExpr("(SELECT sort_title FROM books WHERE id = lb.book_id) DESC")
-	case models.ListSortAuthorAsc:
-		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) ASC NULLS LAST")
-	case models.ListSortAuthorDesc:
-		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) DESC NULLS LAST")
-	default: // added_at_desc
-		q = q.Order("lb.added_at DESC")
-	}
-	// Books added in one call share an added_at, and titles and authors can
-	// tie, so a final unique key keeps offset paging from repeating or
-	// skipping a book.
-	q = q.Order("lb.id ASC")
+	q = orderListBooks(q, opts.Sort)
 
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))
@@ -446,6 +426,46 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 
 	return listBooks, int(total), nil
+}
+
+// orderListBooks orders a query over list_books, aliased lb, by sort.
+func orderListBooks(q *bun.SelectQuery, sort string) *bun.SelectQuery {
+	switch sort {
+	case models.ListSortManual:
+		q = q.Order("lb.sort_order ASC NULLS LAST", "lb.added_at DESC")
+	case models.ListSortAddedAtAsc:
+		q = q.Order("lb.added_at ASC")
+	case models.ListSortTitleAsc:
+		q = q.OrderExpr("(SELECT sort_title FROM books WHERE id = lb.book_id) ASC")
+	case models.ListSortTitleDesc:
+		q = q.OrderExpr("(SELECT sort_title FROM books WHERE id = lb.book_id) DESC")
+	case models.ListSortAuthorAsc:
+		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) ASC NULLS LAST")
+	case models.ListSortAuthorDesc:
+		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) DESC NULLS LAST")
+	default: // added_at_desc
+		q = q.Order("lb.added_at DESC")
+	}
+	// Books added in one call share an added_at, and titles and authors can
+	// tie, so a final unique key keeps offset paging from repeating or
+	// skipping a book.
+	q = q.Order("lb.id ASC")
+	return q
+}
+
+// BookIDs returns the ids of listID's Books in sort's order, limited to
+// libraryIDs when it isn't nil.
+func (svc *Service) BookIDs(ctx context.Context, listID int, sort string, libraryIDs []int) ([]int, error) {
+	ids := []int{}
+	q := svc.db.NewSelect().
+		Model((*models.ListBook)(nil)).
+		Column("lb.book_id").
+		Where("lb.list_id = ?", listID)
+	if libraryIDs != nil {
+		q = q.Where("lb.book_id IN (SELECT id FROM books WHERE library_id IN (?))", bun.List(libraryIDs))
+	}
+	err := orderListBooks(q, sort).Scan(ctx, &ids)
+	return ids, errors.WithStack(err)
 }
 
 // BookLibraryIDs maps each existing book id in bookIDs to its library id. Ids

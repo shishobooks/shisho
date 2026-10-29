@@ -16,6 +16,7 @@ type ListBooksQuery struct {
 	IDs            []int    `query:"ids" json:"ids,omitempty"`                                                       // Filter by specific book IDs
 	Sort           string   `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 	ReviewedFilter string   `query:"reviewed_filter" json:"reviewed_filter,omitempty" validate:"omitempty,oneof=all needs_review reviewed" tstype:"ReviewedFilter"` // "" or "all" = all books, "needs_review", "reviewed"
+	ToRead         bool     `query:"to_read" json:"to_read,omitempty"`                                                                                              // Only the caller's To Read, in queue order, whatever the sort
 }
 
 // ListBooksResponse is the list-endpoint envelope for books.

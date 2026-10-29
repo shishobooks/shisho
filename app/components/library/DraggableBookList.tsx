@@ -24,12 +24,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import BookItem from "@/components/library/BookItem";
 import GalleryGrid from "@/components/library/GalleryGrid";
 import { cn } from "@/libraries/utils";
-import type { ListBook } from "@/types";
+import type { Book } from "@/types";
 
 type InsertPosition = "before" | "after" | null;
 
 interface DraggableBookItemProps {
-  listBook: ListBook;
+  book: Book;
   coverAspectRatioFor: (libraryId: number) => string;
   addedByUsername?: string;
   isDragOverlay?: boolean;
@@ -37,7 +37,7 @@ interface DraggableBookItemProps {
 }
 
 const DraggableBookItem = ({
-  listBook,
+  book,
   coverAspectRatioFor,
   addedByUsername,
   isDragOverlay = false,
@@ -50,15 +50,14 @@ const DraggableBookItem = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: listBook.book_id });
+  } = useSortable({ id: book.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
-  if (!listBook.book) return null;
-  const coverAspectRatio = coverAspectRatioFor(listBook.book.library_id);
+  const coverAspectRatio = coverAspectRatioFor(book.library_id);
 
   // For the drag overlay, render a clean lifted version with explicit width
   if (isDragOverlay) {
@@ -66,9 +65,9 @@ const DraggableBookItem = ({
       <div className="w-full opacity-95 rotate-1 scale-[1.02] drop-shadow-2xl">
         <BookItem
           addedByUsername={addedByUsername}
-          book={listBook.book}
+          book={book}
           coverAspectRatio={coverAspectRatio}
-          libraryId={listBook.book.library_id.toString()}
+          libraryId={book.library_id.toString()}
         />
       </div>
     );
@@ -93,21 +92,23 @@ const DraggableBookItem = ({
     >
       <BookItem
         addedByUsername={addedByUsername}
-        book={listBook.book}
+        book={book}
         coverAspectRatio={coverAspectRatio}
-        libraryId={listBook.book.library_id.toString()}
+        libraryId={book.library_id.toString()}
       />
     </div>
   );
 };
 
 interface DraggableBookListProps {
-  books: ListBook[];
+  /** In order. Each Book appears once, so its id keys its row. */
+  books: Book[];
   /** The cover aspect ratio of a book's library, which shapes its cover. */
   coverAspectRatioFor: (libraryId: number) => string;
   /** From `useGallerySizeParam`, matching the gallery the list replaces. */
   columns: number;
-  isOwner: boolean;
+  /** Who added a book, shown on its card, or undefined to show no one. */
+  addedByUsernameFor?: (bookId: number) => string | undefined;
   // Rejecting restores the order from before the drag.
   onReorder: (bookIds: number[]) => Promise<unknown>;
 }
@@ -116,7 +117,7 @@ export const DraggableBookList = ({
   books,
   coverAspectRatioFor,
   columns,
-  isOwner,
+  addedByUsernameFor,
   onReorder,
 }: DraggableBookListProps) => {
   const [items, setItems] = useState(books);
@@ -137,9 +138,11 @@ export const DraggableBookList = ({
   useEffect(() => {
     if (isDraggingRef.current) return;
 
+    // By identity, not id: a refetch that changes a book (its status after
+    // a To Read change) but not the order must still reach its card. Query
+    // results share unchanged objects, so an unchanged refetch matches.
     const booksChanged =
-      books.length !== items.length ||
-      books.some((b, i) => b.book_id !== items[i]?.book_id);
+      books.length !== items.length || books.some((b, i) => b !== items[i]);
 
     if (booksChanged) {
       setItems(books);
@@ -182,8 +185,8 @@ export const DraggableBookList = ({
       setOverId(null);
 
       if (over && active.id !== over.id) {
-        const oldIndex = items.findIndex((item) => item.book_id === active.id);
-        const newIndex = items.findIndex((item) => item.book_id === over.id);
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
 
         const newItems = arrayMove(items, oldIndex, newIndex);
         setItems(newItems);
@@ -191,7 +194,7 @@ export const DraggableBookList = ({
         // order unchanged, and an unchanged refetch would not resync the
         // props, so put the server order back here.
         const seq = ++reorderSeqRef.current;
-        onReorder(newItems.map((item) => item.book_id)).catch(() => {
+        onReorder(newItems.map((item) => item.id)).catch(() => {
           if (seq === reorderSeqRef.current) setItems(booksRef.current);
         });
       }
@@ -211,7 +214,7 @@ export const DraggableBookList = ({
   }, []);
 
   const activeItem = activeId
-    ? items.find((item) => item.book_id === activeId)
+    ? items.find((item) => item.id === activeId)
     : null;
 
   // Calculate insert position for each item
@@ -219,8 +222,8 @@ export const DraggableBookList = ({
     if (!activeId || !overId || activeId === overId) return null;
     if (bookId !== overId) return null;
 
-    const activeIndex = items.findIndex((item) => item.book_id === activeId);
-    const overIndex = items.findIndex((item) => item.book_id === overId);
+    const activeIndex = items.findIndex((item) => item.id === activeId);
+    const overIndex = items.findIndex((item) => item.id === overId);
 
     // If dragging from earlier position to later, show indicator after
     // If dragging from later position to earlier, show indicator before
@@ -237,19 +240,17 @@ export const DraggableBookList = ({
       sensors={sensors}
     >
       <SortableContext
-        items={items.map((item) => item.book_id)}
+        items={items.map((item) => item.id)}
         strategy={rectSortingStrategy}
       >
         <GalleryGrid className="mb-0 md:mb-0" columns={columns}>
-          {items.map((listBook) => (
+          {items.map((book) => (
             <DraggableBookItem
-              addedByUsername={
-                !isOwner ? listBook.added_by_user?.username : undefined
-              }
+              addedByUsername={addedByUsernameFor?.(book.id)}
+              book={book}
               coverAspectRatioFor={coverAspectRatioFor}
-              insertPosition={getInsertPosition(listBook.book_id)}
-              key={listBook.id}
-              listBook={listBook}
+              insertPosition={getInsertPosition(book.id)}
+              key={book.id}
             />
           ))}
         </GalleryGrid>
@@ -257,12 +258,10 @@ export const DraggableBookList = ({
       <DragOverlay>
         {activeItem ? (
           <DraggableBookItem
-            addedByUsername={
-              !isOwner ? activeItem.added_by_user?.username : undefined
-            }
+            addedByUsername={addedByUsernameFor?.(activeItem.id)}
+            book={activeItem}
             coverAspectRatioFor={coverAspectRatioFor}
             isDragOverlay
-            listBook={activeItem}
           />
         ) : null}
       </DragOverlay>

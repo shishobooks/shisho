@@ -152,6 +152,7 @@ vi.mock("@/hooks/queries/reading", () => ({
   }),
   useReadingTransition: idle,
   useSetRating: idle,
+  useSetOnToRead: idle,
   useUpdateReadThrough: idle,
   useDeleteReadThrough: idle,
 }));

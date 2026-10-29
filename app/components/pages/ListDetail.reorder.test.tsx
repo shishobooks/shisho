@@ -150,9 +150,12 @@ describe("ListDetail reorder failures", () => {
 
     await user.click(await screen.findByRole("button", { name: "Reorder" }));
 
+    // The page also notes the demo beside Copy to To Read; count toasts.
     await waitFor(() =>
       expect(
-        screen.getAllByText("This action is unavailable in the demo."),
+        screen
+          .getAllByText("This action is unavailable in the demo.")
+          .filter((node) => node.closest("[data-sonner-toast]")),
       ).toHaveLength(1),
     );
   });

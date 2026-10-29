@@ -47,6 +47,7 @@ import Setup from "@/components/pages/Setup";
 import { shareRoutes } from "@/components/pages/shareRoutes";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
+import ToRead from "@/components/pages/ToRead";
 import UserDetail from "@/components/pages/UserDetail";
 import { PASSWORD_SECTION_ID } from "@/components/preferences/PasswordSection";
 import { ROUTE_PERMISSIONS } from "@/utils/permissions";
@@ -274,6 +275,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute>
             <ListDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "to-read",
+        element: (
+          <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.toRead}>
+            <ToRead />
           </ProtectedRoute>
         ),
       },

@@ -160,6 +160,7 @@ export {
   type ListListsResponse,
   type ListListBooksResponse,
   type CheckVisibilityResponse,
+  type CopyToToReadResponse,
   type ListTemplate,
 } from "./generated/lists";
 

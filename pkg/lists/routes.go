@@ -11,8 +11,9 @@ import (
 // configured with authentication. Lists are user-scoped, so the handlers
 // check the caller's permission on the list rather than a role permission.
 // Reading a list's books also requires books:read, because it returns book
-// data. Sharing needs no users permission: recipients come from the
-// authenticated GET /users/directory.
+// data, as does copying them to To Read, since the reading routes need it.
+// Sharing needs no users permission: recipients come from the authenticated
+// GET /users/directory.
 func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) {
 	listsService := NewService(db)
 
@@ -33,6 +34,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware) 
 	g.DELETE("/:id/books", h.removeBooks)
 	g.PATCH("/:id/books/reorder", h.reorderBooks)
 	g.PATCH("/:id/books/:bookId/position", h.moveBookPosition)
+	g.POST("/:id/copy-to-to-read", h.copyToToRead, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 
 	// Sharing
 	g.GET("/:id/shares", h.listShares)

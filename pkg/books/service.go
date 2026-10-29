@@ -50,6 +50,7 @@ type ListBooksOptions struct {
 	ListID         *int     // Filter to books on this list
 	Search         *string  // Search query for title/author
 	ReviewedFilter string   // "" (default = all), "needs_review", "reviewed"
+	ToReadUserID   *int     // Filter to this user's To Read, ordered by its queue whatever the Sort
 
 	// MainFileMatches keeps the books that meet at least one of the matches.
 	// Nil means no filter; an empty list matches no book.
@@ -393,11 +394,15 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 
 	// Apply ordering.
-	// Precedence: orderByRecent (internal flag) > explicit Sort >
+	// Precedence: orderByRecent (internal flag) > To Read's queue > explicit Sort >
 	// series-number (when SeriesID is set) > sortspec.BuiltinDefault.
 	switch {
 	case opts.orderByRecent:
 		q = q.Order("b.updated_at DESC")
+
+	case opts.ToReadUserID != nil:
+		q = q.OrderExpr("(SELECT ub_q.to_read_position FROM user_books ub_q WHERE ub_q.user_id = ? AND ub_q.book_id = b.id) ASC", *opts.ToReadUserID).
+			Order("b.id ASC")
 
 	case len(opts.Sort) > 0:
 		for _, clause := range sortspec.OrderClauses(opts.Sort) {
@@ -468,6 +473,9 @@ func applyBookFilters(q *bun.SelectQuery, opts ListBooksOptions) *bun.SelectQuer
 	}
 	if opts.ListID != nil {
 		q = q.Where("b.id IN (SELECT lb.book_id FROM list_books lb WHERE lb.list_id = ?)", *opts.ListID)
+	}
+	if opts.ToReadUserID != nil {
+		q = q.Where("b.id IN (SELECT ub_f.book_id FROM user_books ub_f WHERE ub_f.user_id = ? AND ub_f.to_read_position IS NOT NULL)", *opts.ToReadUserID)
 	}
 
 	// Filter by author (person). Subquery rather than JOIN so it composes

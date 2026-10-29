@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -199,13 +200,30 @@ func TestTemplates_ResponseShape(t *testing.T) {
 
 	var resp []ListTemplate
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp, 2)
-	assert.Equal(t, "tbr", resp[0].Name)
-	assert.Equal(t, "To Be Read", resp[0].DisplayName)
-	assert.True(t, resp[0].IsOrdered)
-	assert.Equal(t, models.ListSortManual, resp[0].DefaultSort)
-	assert.Equal(t, "favorites", resp[1].Name)
-	assert.Equal(t, models.ListSortAddedAtDesc, resp[1].DefaultSort)
+	require.Len(t, resp, 1)
+	assert.Equal(t, "favorites", resp[0].Name)
+	assert.Equal(t, models.ListSortAddedAtDesc, resp[0].DefaultSort)
+}
+
+// To Read replaced the "To Be Read" template.
+func TestCreateFromTemplate_ToBeReadIsGone(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	e := newTestEcho(t)
+	h := newTestHandler(db)
+	user := createTestUser(t, db, "owner")
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	auth.SetUser(c, user)
+	c.SetParamNames("name")
+	c.SetParamValues("tbr")
+
+	err := h.createFromTemplate(c)
+	var codeErr *errcodes.Error
+	require.ErrorAs(t, err, &codeErr)
+	assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode)
 }
 
 // A shared List shows each viewer their own Reading Status, never the

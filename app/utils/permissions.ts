@@ -82,6 +82,7 @@ export const meetsRequirement = (
  */
 export const ROUTE_PERMISSIONS = {
   libraryBooks: "books:read",
+  toRead: "books:read",
   librarySeries: ["books:read", "series:read"],
   libraryPeople: ["books:read", "people:read"],
   librarySettings: ["libraries:read", "libraries:write"],

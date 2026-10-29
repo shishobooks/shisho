@@ -693,11 +693,6 @@ func (h *handler) createFromTemplate(c echo.Context) error {
 	var defaultSort string
 
 	switch templateName {
-	case "tbr":
-		name = "To Be Read"
-		description = "Books I want to read next"
-		isOrdered = true
-		defaultSort = models.ListSortManual
 	case "favorites":
 		name = "Favorites"
 		description = "My favorite books"
@@ -723,13 +718,6 @@ func (h *handler) createFromTemplate(c echo.Context) error {
 
 func (h *handler) templates(c echo.Context) error {
 	templates := []ListTemplate{
-		{
-			Name:        "tbr",
-			DisplayName: "To Be Read",
-			Description: "Books I want to read next",
-			IsOrdered:   true,
-			DefaultSort: models.ListSortManual,
-		},
 		{
 			Name:        "favorites",
 			DisplayName: "Favorites",
@@ -789,4 +777,40 @@ func (h *handler) moveBookPosition(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+// copyToToRead appends the List's Books, in the List's order, to the
+// caller's To Read. Viewing the List is enough: To Read is the caller's own.
+func (h *handler) copyToToRead(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := httputil.ParamID(c, "id", "List")
+	if err != nil {
+		return err
+	}
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	canView, err := h.listsService.CanView(ctx, id, user.ID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !canView {
+		return errcodes.NotFound("List")
+	}
+	list, err := h.listsService.RetrieveList(ctx, RetrieveListOptions{ID: &id})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	bookIDs, err := h.listsService.BookIDs(ctx, id, list.DefaultSort, user.GetAccessibleLibraryIDs())
+	if err != nil {
+		return err
+	}
+	added, err := reading.NewService(h.listsService.db).AppendToRead(ctx, user.ID, bookIDs)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, CopyToToReadResponse{Added: added}))
 }

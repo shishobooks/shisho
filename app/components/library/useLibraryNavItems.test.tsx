@@ -31,7 +31,13 @@ describe("useLibraryNavItems", () => {
   it("hides Series and People without their Read permissions", () => {
     setAuth({ permissions: ["books:read"] });
 
-    expect(shownLabels()).toEqual(["Books", "Genres", "Tags", "Publishers"]);
+    expect(shownLabels()).toEqual([
+      "Books",
+      "To Read",
+      "Genres",
+      "Tags",
+      "Publishers",
+    ]);
   });
 
   it("shows Series and People with their Read permissions", () => {
@@ -39,6 +45,7 @@ describe("useLibraryNavItems", () => {
 
     expect(shownLabels()).toEqual([
       "Books",
+      "To Read",
       "Series",
       "People",
       "Genres",

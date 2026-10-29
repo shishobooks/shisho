@@ -2,7 +2,7 @@ import type { DndContextProps } from "@dnd-kit/core";
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ListBook } from "@/types";
+import type { Book } from "@/types";
 
 import { DraggableBookList } from "./DraggableBookList";
 
@@ -23,27 +23,30 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
 
 vi.mock("@/components/library/BookItem", () => ({
   default: ({
+    addedByUsername,
     book,
     coverAspectRatio,
   }: {
-    book: { title: string };
+    addedByUsername?: string;
+    book: { title: string; reading_status?: string };
     coverAspectRatio?: string;
   }) => (
-    <span data-aspect={coverAspectRatio} data-testid="title">
+    <span
+      data-added-by={addedByUsername}
+      data-aspect={coverAspectRatio}
+      data-status={book.reading_status}
+      data-testid="title"
+    >
       {book.title}
     </span>
   ),
 }));
 
-const listBook = (id: number, title: string, library_id = 1) =>
-  ({
-    id,
-    book_id: id,
-    book: { id, title, library_id, cover_cache_key: "" },
-  }) as unknown as ListBook;
+const book = (id: number, title: string, library_id = 1) =>
+  ({ id, title, library_id, cover_cache_key: "" }) as unknown as Book;
 
-const books = [listBook(1, "First"), listBook(2, "Second")];
-const threeBooks = [...books, listBook(3, "Third")];
+const books = [book(1, "First"), book(2, "Second")];
+const threeBooks = [...books, book(3, "Third")];
 
 const titles = () =>
   screen.getAllByTestId("title").map((node) => node.textContent);
@@ -60,12 +63,11 @@ describe("DraggableBookList", () => {
   it("shapes each book's cover by its own library's cover aspect ratio", () => {
     render(
       <DraggableBookList
-        books={[listBook(1, "First"), listBook(2, "Second", 2)]}
+        books={[book(1, "First"), book(2, "Second", 2)]}
         columns={4}
         coverAspectRatioFor={(libraryId) =>
           libraryId === 2 ? "audiobook" : "book"
         }
-        isOwner
         onReorder={vi.fn()}
       />,
     );
@@ -82,7 +84,6 @@ describe("DraggableBookList", () => {
         books={books}
         columns={4}
         coverAspectRatioFor={() => "book"}
-        isOwner
         onReorder={onReorder}
       />,
     );
@@ -100,7 +101,6 @@ describe("DraggableBookList", () => {
         books={books}
         columns={4}
         coverAspectRatioFor={() => "book"}
-        isOwner
         onReorder={onReorder}
       />,
     );
@@ -126,7 +126,6 @@ describe("DraggableBookList", () => {
         books={threeBooks}
         columns={4}
         coverAspectRatioFor={() => "book"}
-        isOwner
         onReorder={onReorder}
       />,
     );
@@ -136,5 +135,43 @@ describe("DraggableBookList", () => {
     await act(async () => rejectFirst(new Error("rejected")));
 
     expect(titles()).toEqual(["Third", "Second", "First"]);
+  });
+
+  // A refetch after adding a card's book to To Read changes its status but
+  // not the order, and the card has to show it.
+  it("shows a refetched book's new status in the same order", () => {
+    const props = {
+      columns: 4,
+      coverAspectRatioFor: () => "book",
+      onReorder: vi.fn(),
+    };
+    const { rerender } = render(<DraggableBookList books={books} {...props} />);
+
+    rerender(
+      <DraggableBookList
+        books={[{ ...books[0], reading_status: "to_read" } as Book, books[1]]}
+        {...props}
+      />,
+    );
+
+    expect(
+      screen.getAllByTestId("title").map((node) => node.dataset.status),
+    ).toEqual(["to_read", undefined]);
+  });
+
+  it("names who added each book", () => {
+    render(
+      <DraggableBookList
+        addedByUsernameFor={(bookId) => (bookId === 2 ? "friend" : undefined)}
+        books={books}
+        columns={4}
+        coverAspectRatioFor={() => "book"}
+        onReorder={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getAllByTestId("title").map((node) => node.dataset.addedBy),
+    ).toEqual([undefined, "friend"]);
   });
 });

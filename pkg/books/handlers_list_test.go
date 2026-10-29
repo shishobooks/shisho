@@ -458,3 +458,57 @@ func TestListHandler_AttachesOnlyTheCallersReadingStatus(t *testing.T) {
 	got = statuses(admin)
 	assert.Nil(t, got[finished.ID], "an admin doesn't see another user's status")
 }
+
+// to_read lists the caller's To Read in queue order, whatever the sort, and
+// only Books in libraries the caller can reach.
+func TestListHandler_ToReadInQueueOrder(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	lib := seedLibrary(t, db, "Library Q")
+	hiddenLib := seedLibrary(t, db, "Hidden")
+	reader := seedUserWithLibAccess(t, db, "reader", lib)
+	other := seedUserWithLibAccess(t, db, "other", lib)
+
+	now := time.Now()
+	first := seedBook(t, db, lib, "Zebra", "Zebra", now)
+	second := seedBook(t, db, lib, "Apple", "Apple", now.Add(-time.Hour))
+	third := seedBook(t, db, lib, "Mango", "Mango", now.Add(-2*time.Hour))
+	hidden := seedBook(t, db, hiddenLib, "Hidden", "Hidden", now)
+	seedBook(t, db, lib, "Not queued", "Not queued", now)
+	svc := reading.NewService(db)
+	ctx := context.Background()
+	for _, b := range []*models.Book{third, hidden, first, second} {
+		require.NoError(t, svc.AddToRead(ctx, reader.ID, b.ID))
+	}
+	require.NoError(t, svc.ReorderToRead(ctx, reader.ID, []int{first.ID, second.ID, third.ID}))
+	require.NoError(t, svc.AddToRead(ctx, other.ID, third.ID))
+
+	h := &handler{bookService: NewService(db, appsettings.NewService(db)), settingsService: settings.NewService(db)}
+	list := func(user *models.User, query string) ([]int, int) {
+		e := newTestEchoBooks(t)
+		req := httptest.NewRequest(http.MethodGet, "/books?"+query, nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		auth.SetUser(c, user)
+		require.NoError(t, h.list(c))
+		var resp ListBooksResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		ids := []int{}
+		for _, b := range resp.Items {
+			ids = append(ids, b.ID)
+			assert.Equal(t, models.ReadingStatusToRead, *b.ReadingStatus)
+		}
+		return ids, resp.Total
+	}
+
+	ids, total := list(reader, "to_read=true")
+	assert.Equal(t, []int{first.ID, second.ID, third.ID}, ids)
+	assert.Equal(t, 3, total)
+
+	ids, _ = list(reader, "to_read=true&sort=title:asc")
+	assert.Equal(t, []int{first.ID, second.ID, third.ID}, ids, "the queue's order wins over a sort")
+
+	ids, _ = list(other, "to_read=true")
+	assert.Equal(t, []int{third.ID}, ids, "each user lists their own To Read")
+}
