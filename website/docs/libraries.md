@@ -77,7 +77,7 @@ A normal scan preserves higher-priority values, including manual edits. Use the 
 
 Review the job log when a scan finishes with warnings. Common causes include unreadable paths, unsupported or damaged files, plugin failures, and files changing while the scan is running.
 
-If a library path cannot be read, for example because its drive is not mounted, the scan skips that whole library and leaves its books as they were, rather than treating its files as removed. The other libraries are still scanned. The scan job then fails, and its error names each library and path it skipped.
+If a library path cannot be read, for example because its drive is not mounted, the scan skips that whole library and leaves its books as they were, rather than treating its files as removed. The other libraries are still scanned. The scan job then fails, and its log under **Administration > Jobs** names each library and path it skipped.
 
 ## File Identity and Move Detection
 
