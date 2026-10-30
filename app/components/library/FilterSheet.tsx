@@ -71,7 +71,7 @@ import {
   type ReadingFilters,
 } from "@/libraries/readingFilters";
 import { cn } from "@/libraries/utils";
-import type { Genre, Tag } from "@/types";
+import type { Genre, ReadingStatusFilter, Tag } from "@/types";
 import { formatCount } from "@/utils/format";
 import { splitTagNamespace, type TagScope } from "@/utils/tagNamespaces";
 
@@ -80,7 +80,8 @@ type FilterOptionsQuery = RetryableQuery & { data: unknown };
 interface FilterSheetProps {
   /** The reading filters, which read the signed-in user's own reading. */
   reading: ReadingFilters;
-  onReadingChange: (next: ReadingFilters) => void;
+  onToggleReadingStatus: (status: ReadingStatusFilter) => void;
+  onRatingChange: (min: number | undefined, max: number | undefined) => void;
   selectedFileTypes: string[];
   fileTypeOptions: readonly { value: string; label: string }[];
   onToggleFileType: (fileType: string) => void;
@@ -455,10 +456,13 @@ const RatingRangeSlider = ({
  */
 export const ReadingFilterSection = ({
   filters,
-  onChange,
+  onToggleStatus,
+  onRatingChange,
 }: {
   filters: ReadingFilters;
-  onChange: (next: ReadingFilters) => void;
+  onToggleStatus: (status: ReadingStatusFilter) => void;
+  /** Undefined leaves that end of the range open. */
+  onRatingChange: (min: number | undefined, max: number | undefined) => void;
 }) => {
   const statusLabelId = useId();
   const ratingLabelId = useId();
@@ -479,14 +483,7 @@ export const ReadingFilterSection = ({
         />
         <MultiSelectCombobox
           labelId={statusLabelId}
-          onToggle={(value) =>
-            onChange({
-              ...filters,
-              statuses: filters.statuses.includes(value)
-                ? filters.statuses.filter((s) => s !== value)
-                : [...filters.statuses, value],
-            })
-          }
+          onToggle={onToggleStatus}
           options={READING_STATUS_FILTER_OPTIONS}
           placeholder="Any status"
           selected={filters.statuses}
@@ -504,12 +501,7 @@ export const ReadingFilterSection = ({
           labelId={ratingLabelId}
           max={filters.ratingMax}
           min={filters.ratingMin}
-          onChange={(min, max) => {
-            const next: ReadingFilters = { statuses: filters.statuses };
-            if (min !== undefined) next.ratingMin = min;
-            if (max !== undefined) next.ratingMax = max;
-            onChange(next);
-          }}
+          onChange={onRatingChange}
         />
       </div>
     </>
@@ -576,7 +568,8 @@ const TagScopeSwitch = ({
 
 const FilterContent = ({
   reading,
-  onReadingChange,
+  onToggleReadingStatus,
+  onRatingChange,
   selectedFileTypes,
   fileTypeOptions,
   onToggleFileType,
@@ -612,7 +605,11 @@ const FilterContent = ({
   const reviewLabelId = useId();
   return (
     <div className="space-y-6">
-      <ReadingFilterSection filters={reading} onChange={onReadingChange} />
+      <ReadingFilterSection
+        filters={reading}
+        onRatingChange={onRatingChange}
+        onToggleStatus={onToggleReadingStatus}
+      />
 
       {/* File Type */}
       <div>

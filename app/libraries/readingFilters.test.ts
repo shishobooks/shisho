@@ -5,6 +5,8 @@ import {
   parseReadingFilters,
   ratingRangeLabel,
   readingFilterQuery,
+  setRatingRangeParams,
+  toggleReadingStatusParam,
   writeReadingFilters,
 } from "./readingFilters";
 
@@ -77,5 +79,24 @@ describe("ratingRangeLabel", () => {
     expect(ratingRangeLabel(3, 4)).toBe("3 to 4 stars");
     expect(ratingRangeLabel(5, 5)).toBe("5 stars");
     expect(ratingRangeLabel(1, 1)).toBe("1 star");
+  });
+});
+
+describe("toggleReadingStatusParam", () => {
+  it("adds or removes a status in the URL, keeping the others", () => {
+    const params = new URLSearchParams("reading_status=read&rating_min=4");
+    toggleReadingStatusParam(params, "paused");
+    expect(params.get("reading_status")).toBe("read,paused");
+    toggleReadingStatusParam(params, "read");
+    toggleReadingStatusParam(params, "paused");
+    expect(params.toString()).toBe("rating_min=4");
+  });
+});
+
+describe("setRatingRangeParams", () => {
+  it("sets the range in the URL, keeping the statuses", () => {
+    const params = new URLSearchParams("reading_status=read&rating_max=2");
+    setRatingRangeParams(params, 4, undefined);
+    expect(params.toString()).toBe("reading_status=read&rating_min=4");
   });
 });

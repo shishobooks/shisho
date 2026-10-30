@@ -278,9 +278,9 @@ func TestListHandler_ReadingFilterPagesAndTotals(t *testing.T) {
 	assert.Equal(t, 2, total)
 }
 
-// Sorting by Reading Status orders by the caller's status: Currently
-// Reading, Paused, To Read, Read, Did Not Finish, then no status, or the
-// reverse descending. Later levels order books with the same status.
+// Sorting by Reading Status orders by the caller's status, in the order
+// reading.StatusRankExpr gives, or the reverse descending. Later levels
+// order books with the same status.
 func TestListHandler_SortsByReadingStatus(t *testing.T) {
 	t.Parallel()
 

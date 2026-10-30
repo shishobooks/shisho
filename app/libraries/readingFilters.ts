@@ -34,9 +34,6 @@ export const READING_STATUS_FILTER_OPTIONS: readonly {
   { value: ReadingStatusFilterNone, label: "No status" },
 ];
 
-export const readingStatusFilterLabel = (value: ReadingStatusFilter): string =>
-  READING_STATUS_FILTER_OPTIONS.find((o) => o.value === value)?.label ?? value;
-
 const isStatus = (value: string): value is ReadingStatusFilter =>
   READING_STATUS_FILTER_OPTIONS.some((o) => o.value === value);
 
@@ -89,6 +86,34 @@ export function writeReadingFilters(
     if (value === undefined) params.delete(key);
     else params.set(key, String(value));
   }
+}
+
+/** Adds status to the URL's statuses, or takes it out. */
+export function toggleReadingStatusParam(
+  params: URLSearchParams,
+  status: ReadingStatusFilter,
+): void {
+  const filters = parseReadingFilters(params);
+  writeReadingFilters(params, {
+    ...filters,
+    statuses: filters.statuses.includes(status)
+      ? filters.statuses.filter((s) => s !== status)
+      : [...filters.statuses, status],
+  });
+}
+
+/** Sets the URL's rating range; undefined leaves that end open. */
+export function setRatingRangeParams(
+  params: URLSearchParams,
+  min: number | undefined,
+  max: number | undefined,
+): void {
+  const next: ReadingFilters = {
+    statuses: parseReadingFilters(params).statuses,
+  };
+  if (min !== undefined) next.ratingMin = min;
+  if (max !== undefined) next.ratingMax = max;
+  writeReadingFilters(params, next);
 }
 
 export const hasReadingFilters = (filters: ReadingFilters): boolean =>

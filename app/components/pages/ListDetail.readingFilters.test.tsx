@@ -143,6 +143,16 @@ describe("ListDetail reading filters", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists status chips in the picker's order, whatever order they were picked in", async () => {
+    renderList("/lists/5?reading_status=read,paused");
+
+    await screen.findByRole("button", { name: "Remove Read" });
+    const chips = screen
+      .getAllByRole("button", { name: /^Remove / })
+      .map((chip) => chip.getAttribute("aria-label"));
+    expect(chips).toEqual(["Remove Paused", "Remove Read"]);
+  });
+
   it("reads the filters from the URL and offers the reading sorts", async () => {
     const { bookRequests, user } = renderList(
       "/lists/5?reading_status=read&rating_min=4",

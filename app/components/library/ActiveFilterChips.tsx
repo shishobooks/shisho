@@ -7,9 +7,10 @@ import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
 import {
   ratingRangeLabel,
-  readingStatusFilterLabel,
+  READING_STATUS_FILTER_OPTIONS,
   type ReadingFilters,
 } from "@/libraries/readingFilters";
+import type { ReadingStatusFilter } from "@/types";
 
 const REVIEWED_FILTER_LABELS: Record<string, string> = {
   needs_review: "Needs review",
@@ -21,7 +22,8 @@ const REVIEWED_FILTER_LABELS: Record<string, string> = {
 interface ActiveFilterChipsProps {
   hasActiveFilters: boolean;
   reading: ReadingFilters;
-  onReadingChange: (next: ReadingFilters) => void;
+  onToggleReadingStatus: (status: ReadingStatusFilter) => void;
+  onClearRating: () => void;
   selectedFileTypes?: string[];
   selectedGenres?: SelectedFilter[];
   selectedTags?: SelectedFilter[];
@@ -38,7 +40,8 @@ interface ActiveFilterChipsProps {
 export const ActiveFilterChips = ({
   hasActiveFilters,
   reading,
-  onReadingChange,
+  onToggleReadingStatus,
+  onClearRating,
   selectedFileTypes = [],
   selectedGenres = [],
   selectedTags = [],
@@ -56,24 +59,22 @@ export const ActiveFilterChips = ({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">Filtering by</span>
-      {reading.statuses.map((status) => (
+      {/* In the picker's order, whatever order they were picked in. */}
+      {READING_STATUS_FILTER_OPTIONS.filter((option) =>
+        reading.statuses.includes(option.value),
+      ).map((option) => (
         <FilterChip
-          key={status}
+          key={option.value}
           kind="readingStatus"
-          label={readingStatusFilterLabel(status)}
-          onRemove={() =>
-            onReadingChange({
-              ...reading,
-              statuses: reading.statuses.filter((s) => s !== status),
-            })
-          }
+          label={option.label}
+          onRemove={() => onToggleReadingStatus(option.value)}
         />
       ))}
       {(reading.ratingMin !== undefined || reading.ratingMax !== undefined) && (
         <FilterChip
           kind="rating"
           label={ratingRangeLabel(reading.ratingMin, reading.ratingMax)}
-          onRemove={() => onReadingChange({ statuses: reading.statuses })}
+          onRemove={onClearRating}
         />
       )}
       {selectedFileTypes.map((fileType) => (

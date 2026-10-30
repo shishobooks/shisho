@@ -43,6 +43,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUpdateSearchParams } from "@/hooks/useUpdateSearchParams";
 import {
   DEMO_MODE_MESSAGE,
   isLoadFailure,
@@ -53,8 +54,9 @@ import {
   hasReadingFilters,
   parseReadingFilters,
   readingFilterQuery,
+  setRatingRangeParams,
+  toggleReadingStatusParam,
   writeReadingFilters,
-  type ReadingFilters,
 } from "@/libraries/readingFilters";
 import {
   ListSortAddedAtAsc,
@@ -71,6 +73,7 @@ import {
   ListSortTitleDesc,
   type ListBook,
   type ListSort,
+  type ReadingStatusFilter,
   type UpdateListPayload,
 } from "@/types";
 import { formatCount } from "@/utils/format";
@@ -99,17 +102,23 @@ const ListDetail = () => {
   const listId = id ? parseInt(id, 10) : undefined;
   // The reading filters read each viewer's own reading, so anyone who can
   // see the books can filter them.
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const readingFilters = parseReadingFilters(searchParams);
   const isFiltered = hasReadingFilters(readingFilters);
-  const setReadingFilters = (next: ReadingFilters) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      writeReadingFilters(params, next);
+  // Filter and sort changes build on any change still on its way, so fast
+  // clicks don't drop one another, and go back to the first page.
+  const updateSearchParams = useUpdateSearchParams();
+  const updateListView = (update: (params: URLSearchParams) => void) =>
+    updateSearchParams((params) => {
+      update(params);
       resetPaging(params);
-      return params;
     });
-  };
+  const toggleReadingStatus = (status: ReadingStatusFilter) =>
+    updateListView((params) => toggleReadingStatusParam(params, status));
+  const setRatingRange = (min: number | undefined, max: number | undefined) =>
+    updateListView((params) => setRatingRangeParams(params, min, max));
+  const clearReadingFilters = () =>
+    updateListView((params) => writeReadingFilters(params, { statuses: [] }));
   // A list's books and their covers come from Books Read routes. A role
   // without it still sees the list and can manage it, but not its books.
   const canReadBooks = useCan("books:read");
@@ -143,18 +152,14 @@ const ListDetail = () => {
     listQuery.data && !listQuery.data.is_ordered && isSortOption(sortParam)
       ? sortParam
       : undefined;
-  const setSort = (value: ListSort | undefined) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
+  const setSort = (value: ListSort | undefined) =>
+    updateListView((params) => {
       if (value && value !== listQuery.data?.default_sort) {
         params.set("sort", value);
       } else {
         params.delete("sort");
       }
-      resetPaging(params);
-      return params;
     });
-  };
   // A list can hold books from several libraries; each book's cover takes
   // the shape its own library's gallery gives it.
   const userLibrariesQuery = useUserLibraries();
@@ -391,12 +396,13 @@ const ListDetail = () => {
               <FilterPanel
                 description="Filter books by reading status or rating"
                 hasActiveFilters={isFiltered}
-                onClearAll={() => setReadingFilters({ statuses: [] })}
+                onClearAll={clearReadingFilters}
               >
                 <div className="space-y-6">
                   <ReadingFilterSection
                     filters={readingFilters}
-                    onChange={setReadingFilters}
+                    onRatingChange={setRatingRange}
+                    onToggleStatus={toggleReadingStatus}
                   />
                 </div>
               </FilterPanel>
@@ -448,8 +454,9 @@ const ListDetail = () => {
             </div>
             <ActiveFilterChips
               hasActiveFilters={isFiltered}
-              onClearAll={() => setReadingFilters({ statuses: [] })}
-              onReadingChange={setReadingFilters}
+              onClearAll={clearReadingFilters}
+              onClearRating={() => setRatingRange(undefined, undefined)}
+              onToggleReadingStatus={toggleReadingStatus}
               reading={readingFilters}
             />
           </div>

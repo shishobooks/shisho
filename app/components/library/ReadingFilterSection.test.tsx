@@ -7,11 +7,12 @@ import { ReadingFilterSection } from "./FilterSheet";
 describe("ReadingFilterSection", () => {
   it("picks statuses, No status included, from a combobox that shows what's chosen", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onChange = vi.fn();
+    const onToggleStatus = vi.fn();
     render(
       <ReadingFilterSection
         filters={{ statuses: ["read", "paused"] }}
-        onChange={onChange}
+        onRatingChange={vi.fn()}
+        onToggleStatus={onToggleStatus}
       />,
     );
 
@@ -23,17 +24,18 @@ describe("ReadingFilterSection", () => {
     );
 
     await user.click(screen.getByRole("option", { name: "No status" }));
-    expect(onChange).toHaveBeenLastCalledWith({
-      statuses: ["read", "paused", "none"],
-    });
-
+    expect(onToggleStatus).toHaveBeenLastCalledWith("none");
     await user.click(screen.getByRole("option", { name: /^Read/ }));
-    expect(onChange).toHaveBeenLastCalledWith({ statuses: ["paused"] });
+    expect(onToggleStatus).toHaveBeenLastCalledWith("read");
   });
 
   it("says when no status is chosen", () => {
     render(
-      <ReadingFilterSection filters={{ statuses: [] }} onChange={vi.fn()} />,
+      <ReadingFilterSection
+        filters={{ statuses: [] }}
+        onRatingChange={vi.fn()}
+        onToggleStatus={vi.fn()}
+      />,
     );
     expect(
       screen.getByRole("combobox", { name: "Reading status" }),
@@ -42,9 +44,13 @@ describe("ReadingFilterSection", () => {
 
   it("drags each end of the rating range in quarter stars, Any at both ends", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onChange = vi.fn();
+    const onRatingChange = vi.fn();
     const { rerender } = render(
-      <ReadingFilterSection filters={{ statuses: [] }} onChange={onChange} />,
+      <ReadingFilterSection
+        filters={{ statuses: [] }}
+        onRatingChange={onRatingChange}
+        onToggleStatus={vi.fn()}
+      />,
     );
 
     const lowest = screen.getByRole("slider", { name: "Lowest rating" });
@@ -55,15 +61,13 @@ describe("ReadingFilterSection", () => {
 
     await user.click(lowest);
     await user.keyboard("{ArrowRight}");
-    expect(onChange).toHaveBeenLastCalledWith({
-      statuses: [],
-      ratingMin: 0.25,
-    });
+    expect(onRatingChange).toHaveBeenLastCalledWith(0.25, undefined);
 
     rerender(
       <ReadingFilterSection
         filters={{ statuses: [], ratingMin: 4 }}
-        onChange={onChange}
+        onRatingChange={onRatingChange}
+        onToggleStatus={vi.fn()}
       />,
     );
     expect(lowest).toHaveAttribute("aria-valuetext", "4 stars");
@@ -71,20 +75,17 @@ describe("ReadingFilterSection", () => {
 
     await user.click(highest);
     await user.keyboard("{ArrowLeft}");
-    expect(onChange).toHaveBeenLastCalledWith({
-      statuses: [],
-      ratingMin: 4,
-      ratingMax: 4.75,
-    });
+    expect(onRatingChange).toHaveBeenLastCalledWith(4, 4.75);
 
     // Back to the right end is Any again.
     rerender(
       <ReadingFilterSection
         filters={{ statuses: [], ratingMin: 4, ratingMax: 4.75 }}
-        onChange={onChange}
+        onRatingChange={onRatingChange}
+        onToggleStatus={vi.fn()}
       />,
     );
     await user.keyboard("{End}");
-    expect(onChange).toHaveBeenLastCalledWith({ statuses: [], ratingMin: 4 });
+    expect(onRatingChange).toHaveBeenLastCalledWith(4, undefined);
   });
 });
