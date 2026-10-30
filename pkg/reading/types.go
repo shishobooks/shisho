@@ -13,6 +13,7 @@ type BookReadingResponse struct {
 	OnToRead     bool                  `json:"on_to_read"`
 	ToReadPlace  *int                  `json:"to_read_place" tstype:"number | null"` // 1-based place on To Read as the To Read page shows it, among Books in libraries the user can reach
 	ReadThroughs []*models.ReadThrough `json:"read_throughs" tstype:"ReadThrough[]"`
+	PageFlow     *string               `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
 }
 
 // DayPayload carries the user's "today" for a transition that dates
@@ -40,4 +41,10 @@ type SetRatingPayload struct {
 // the Books in libraries the user can reach can reorder those.
 type ReorderToReadPayload struct {
 	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+}
+
+// SetPageFlowPayload saves the flow the Page-based reader uses for the
+// Book. Null clears it, so the reader picks one from the page shapes again.
+type SetPageFlowPayload struct {
+	PageFlow *string `json:"page_flow" validate:"omitempty,oneof=paginated scrolled" tstype:"PageFlow | null"`
 }

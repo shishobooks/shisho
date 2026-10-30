@@ -29,12 +29,19 @@ CBZ and PDF use the same page-based reader. It provides:
 - **Fit Height** and **Fit Width** display modes
 - Configurable preloading of nearby pages
 - Optional automatic hiding of controls
+- **Paginated** and **Scrolled** flow modes
 
 A CBZ or PDF file's page shows its pages as a grid; select one to open the reader on that page.
 
 The current page is stored in the URL as `?page=`, so refreshing or bookmarking that URL returns to the same page. It is not stored as account-level reading progress.
 
-Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page.
+Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page. In the **Scrolled** flow, the Up and Down Arrows, Space, and Page Up and Page Down scroll the pages.
+
+### Scrolled Flow for Webtoons
+
+Comics made for vertical scrolling, often called webtoons, are usually stored as tall strips rather than printed-size pages. In the **Scrolled** flow, the reader shows every page in one continuous column that you scroll through, and the page counter and `?page=` follow your position.
+
+The flow is saved per book for each user, from the reader settings, and applies to both CBZ and PDF files. Until you choose one for a book, the reader checks the shape of the first two pages after the cover: if either is at least 2.5 times taller than it is wide, the book opens in the **Scrolled** flow, and otherwise in the **Paginated** flow.
 
 ## M4B Player
 

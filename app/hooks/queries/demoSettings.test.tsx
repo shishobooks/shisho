@@ -5,7 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
-import type { LibrarySettingsResponse, UserSettingsResponse } from "@/types";
+import type {
+  BookReadingResponse,
+  LibrarySettingsResponse,
+  UserSettingsResponse,
+} from "@/types";
 
 import {
   getDemoLibrarySettingsKey,
@@ -13,6 +17,12 @@ import {
   useLibrarySettings,
   useUpdateLibrarySettings,
 } from "./librarySettings";
+import {
+  getDemoPageFlowKey,
+  QueryKey as ReadingQueryKey,
+  useBookReading,
+  useSetPageFlow,
+} from "./reading";
 import {
   DEMO_USER_SETTINGS_KEY,
   QueryKey as UserSettingsQueryKey,
@@ -119,5 +129,85 @@ describe("Demo Mode settings", () => {
         libraryId,
       ]),
     ).toEqual({ sort_spec: null });
+  });
+
+  it("keeps a book's page flow in local storage and saves it without a PUT", async () => {
+    setAuth({ demoMode: true, permissions: ["books:read"] });
+    const bookId = 7;
+    const serverReading: BookReadingResponse = {
+      book_id: bookId,
+      status: null,
+      rating: null,
+      on_to_read: false,
+      to_read_place: null,
+      read_throughs: [],
+      page_flow: null,
+    };
+    const request = vi.spyOn(API, "request").mockResolvedValue(serverReading);
+    const wrapper = createWrapper(queryClient);
+    const reading = renderHook(() => useBookReading(bookId), { wrapper });
+    await waitFor(() => expect(reading.result.current.isSuccess).toBe(true));
+    expect(reading.result.current.data?.page_flow).toBeNull();
+
+    const update = renderHook(() => useSetPageFlow(), { wrapper });
+    await act(async () => {
+      await update.result.current.mutateAsync({
+        bookId,
+        payload: { page_flow: "scrolled" },
+      });
+    });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(
+      JSON.parse(localStorage.getItem(getDemoPageFlowKey(bookId)) ?? ""),
+    ).toEqual({ page_flow: "scrolled" });
+    expect(
+      queryClient.getQueryData<BookReadingResponse>([
+        ReadingQueryKey.BookReading,
+        bookId,
+      ])?.page_flow,
+    ).toBe("scrolled");
+
+    // A later visit reads the saved flow over the server's.
+    const fresh = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const reread = renderHook(() => useBookReading(bookId), {
+      wrapper: createWrapper(fresh),
+    });
+    await waitFor(() => expect(reread.result.current.isSuccess).toBe(true));
+    expect(reread.result.current.data).toEqual({
+      ...serverReading,
+      page_flow: "scrolled",
+    });
+  });
+
+  it("leaves no stored page flow for a book whose flow was never chosen, and ignores a value that isn't a flow", async () => {
+    setAuth({ demoMode: true, permissions: ["books:read"] });
+    const reading = (bookId: number): BookReadingResponse => ({
+      book_id: bookId,
+      status: null,
+      rating: null,
+      on_to_read: false,
+      to_read_place: null,
+      read_throughs: [],
+      page_flow: null,
+    });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      reading(Number(String(path).split("/").pop())),
+    );
+    localStorage.setItem(
+      getDemoPageFlowKey(9),
+      JSON.stringify({ page_flow: "sideways" }),
+    );
+    const wrapper = createWrapper(queryClient);
+
+    const untouched = renderHook(() => useBookReading(8), { wrapper });
+    await waitFor(() => expect(untouched.result.current.isSuccess).toBe(true));
+    expect(localStorage.getItem(getDemoPageFlowKey(8))).toBeNull();
+
+    const corrupt = renderHook(() => useBookReading(9), { wrapper });
+    await waitFor(() => expect(corrupt.result.current.isSuccess).toBe(true));
+    expect(corrupt.result.current.data?.page_flow).toBeNull();
   });
 });

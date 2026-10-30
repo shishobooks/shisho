@@ -8,14 +8,15 @@ import PDFReader from "./PDFReader";
 
 const pageReaderProps = vi.hoisted(() => ({
   current: undefined as
-    undefined | { getPageUrl: (page: number) => string; title?: string },
+    | undefined
+    | { getPageUrl: (page: number, size?: number) => string; title?: string },
 }));
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/components/pages/PageReader", () => ({
   default: (props: {
-    getPageUrl: (page: number) => string;
+    getPageUrl: (page: number, size?: number) => string;
     title?: string;
   }) => {
     pageReaderProps.current = props;
@@ -48,6 +49,19 @@ describe("page readers", () => {
       "/api/books/files/42/page/3?v=1717200000000&r=200-85",
     );
   });
+
+  it.each([
+    ["CBZReader", CBZReader, FileTypeCBZ],
+    ["PDFReader", PDFReader, FileTypePDF],
+  ] as const)(
+    "%s asks for a page thumbnail when given a size",
+    (_, Reader, fileType) => {
+      render(<Reader file={{ ...file, file_type: fileType }} libraryId="1" />);
+      expect(pageReaderProps.current?.getPageUrl(3, 256)).toContain(
+        "&size=256&",
+      );
+    },
+  );
 
   it.each([
     ["CBZReader", CBZReader, FileTypeCBZ],
