@@ -30,6 +30,9 @@ const data = vi.hoisted(() => ({
   // Each list's entries: the book and its position in an ordered list.
   listBooks: {} as Record<number, { book: Book; sort_order?: number }[]>,
   devices: [] as BookDevice[],
+  // Whether the book is on the reader's To Read, and the queue in order.
+  onToRead: false,
+  toRead: [] as Book[],
   // The sort each list's books were asked for in.
   listSorts: {} as Record<number, string | undefined>,
   // Which queries fail, by name.
@@ -58,10 +61,17 @@ vi.mock("@/hooks/queries/series", () => ({
         },
 }));
 vi.mock("@/hooks/queries/books", () => ({
-  useBooks: () =>
-    data.failing.has("author")
+  useBooks: (query: { to_read?: boolean }) => {
+    if (query.to_read) {
+      return { data: { items: data.toRead, total: data.toRead.length } };
+    }
+    return data.failing.has("author")
       ? failed()
-      : { data: { items: data.authorBooks, total: data.authorBooks.length } },
+      : { data: { items: data.authorBooks, total: data.authorBooks.length } };
+  },
+}));
+vi.mock("@/hooks/queries/reading", () => ({
+  useBookReading: () => ({ data: { on_to_read: data.onToRead } }),
 }));
 vi.mock("@/hooks/queries/lists", () => ({
   useBookLists: () =>
@@ -152,6 +162,8 @@ beforeEach(() => {
   data.listBooks = {};
   data.listSorts = {};
   data.devices = [];
+  data.onToRead = false;
+  data.toRead = [];
   data.failing = new Set();
 });
 
@@ -371,6 +383,37 @@ describe("BookRelatedPanel", () => {
       "href",
       "/lists/8",
     );
+  });
+
+  it("leads the Lists tab with To Read for a queued book, numbered by place", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    data.onToRead = true;
+    data.toRead = [makeBook(9, "Next"), makeBook(5, "After"), current];
+    data.lists = [{ id: 8, name: "Queue", is_ordered: false } as List];
+    data.listBooks = { 8: [{ book: current }] };
+    renderPanel();
+
+    expect(tabNames()).toContain("Lists 2");
+    await user.click(screen.getByRole("tab", { name: /^Lists/ }));
+    const panel = screen.getByRole("tabpanel");
+    const headings = within(panel).getAllByRole("link", {
+      name: /^(To Read|Queue)$/,
+    });
+    expect(headings.map((link) => link.textContent)).toEqual([
+      "To Read",
+      "Queue",
+    ]);
+    expect(headings[0]).toHaveAttribute("href", "/to-read");
+    expect(within(panel).getByText("#3 · This book")).toBeInTheDocument();
+    expect(within(panel).getByText("#1")).toBeInTheDocument();
+  });
+
+  it("shows the Lists tab for a queued book on no list", () => {
+    data.onToRead = true;
+    data.toRead = [current];
+    renderPanel();
+
+    expect(tabNames()).toContain("Lists 1");
   });
 
   it("keeps the open tab in the URL and carries it to the next book", async () => {

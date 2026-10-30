@@ -2,6 +2,7 @@ import type { RetryableQuery } from "@/components/library/QueryError";
 import { useBooks } from "@/hooks/queries/books";
 import { useBookDevices } from "@/hooks/queries/devices";
 import { useBookLists } from "@/hooks/queries/lists";
+import { useBookReading } from "@/hooks/queries/reading";
 import { useCan } from "@/hooks/useCan";
 import type { Book, BookSeries, List } from "@/types";
 import { deviceHasWarning } from "@/utils/devices";
@@ -45,6 +46,8 @@ export interface BookRelatedTabs {
   lists: List[];
   /** Set when the lists failed to load; `lists` is then empty. */
   listsFailed?: RetryableQuery;
+  /** Whether the book is on the reader's To Read, which leads the Lists tab. */
+  onToRead: boolean;
   linkPeople: boolean;
 }
 
@@ -52,8 +55,8 @@ export interface BookRelatedTabs {
  * Loads what the book page's Related panel shows and decides its tabs, so
  * the page can leave the panel out when no tab has anything. A tab appears
  * only with content: the series (Series Read), the first author's books
- * when they have another, the lists the book is on, and the reader's
- * Devices. `enabled: false` (a Share Link page) sends no request, even for
+ * when they have another, the lists the book is on (and To Read, which
+ * leads them), and the reader's Devices. `enabled: false` (a Share Link page) sends no request, even for
  * a viewer who is signed in.
  */
 export const useBookRelatedTabs = (
@@ -73,9 +76,12 @@ export const useBookRelatedTabs = (
     { enabled: enabled && Boolean(firstAuthor?.person) },
   );
   const lists = useBookLists(book.id, { enabled });
+  const reading = useBookReading(book.id, { enabled });
   const devices = useBookDevices(book, { enabled });
 
-  if (!enabled) return { tabs: [], series: [], lists: [], linkPeople };
+  if (!enabled) {
+    return { tabs: [], series: [], lists: [], onToRead: false, linkPeople };
+  }
   const series = canReadSeries ? (book.book_series ?? []) : [];
   const authorItems = authorBooks.data?.items ?? [];
   // A failure to load shows in its tab, which reports it with a Retry, so a
@@ -99,8 +105,13 @@ export const useBookRelatedTabs = (
   const tabs: RelatedTab[] = [];
   if (series.length > 0) tabs.push({ key: "series", label: "Series" });
   if (author) tabs.push({ key: "author", label: "Author" });
-  if (listData.length > 0 || listsFailed) {
-    tabs.push({ key: "lists", label: "Lists", count: lists.data?.length });
+  const onToRead = Boolean(reading.data?.on_to_read);
+  if (listData.length > 0 || listsFailed || onToRead) {
+    tabs.push({
+      key: "lists",
+      label: "Lists",
+      count: lists.data && lists.data.length + (onToRead ? 1 : 0),
+    });
   }
   if ((devices.data?.length ?? 0) > 0 || (devices.error && !devices.data)) {
     tabs.push({
@@ -111,5 +122,13 @@ export const useBookRelatedTabs = (
     });
   }
 
-  return { tabs, series, author, lists: listData, listsFailed, linkPeople };
+  return {
+    tabs,
+    series,
+    author,
+    lists: listData,
+    listsFailed,
+    onToRead,
+    linkPeople,
+  };
 };

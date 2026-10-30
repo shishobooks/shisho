@@ -11,6 +11,7 @@ import QueryError, {
 import TextLink from "@/components/library/TextLink";
 import TruncatedText from "@/components/library/TruncatedText";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useBooks } from "@/hooks/queries/books";
 import { useListBooks } from "@/hooks/queries/lists";
 import { useSeriesBooks } from "@/hooks/queries/series";
 import {
@@ -271,6 +272,32 @@ const ListGroup = ({ book, list }: { book: Book; list: List }) => {
   );
 };
 
+// The reader's To Read, which leads the Lists tab for a queued book. It
+// lists only books the reader can reach, so a row's number is its place as
+// the To Read page and the book page show it. The query matches the To Read
+// page's, so the two share a cache.
+const ToReadGroup = ({ book }: { book: Book }) => {
+  const query = useBooks({ to_read: true, limit: MAX_BOOKS, offset: 0 });
+  const books = query.data?.items ?? [];
+  return (
+    <section>
+      <GroupHeading>
+        <TextLink to="/to-read">To Read</TextLink>
+        {query.data && ` · ${formatCount(query.data.total, "book")}`}
+      </GroupHeading>
+      <GroupStatus fallback="Failed to load To Read" query={query} />
+      {books.map((b, index) => (
+        <BookLine
+          book={b}
+          current={b.id === book.id}
+          key={b.id}
+          meta={`#${(index + 1).toLocaleString()}`}
+        />
+      ))}
+    </section>
+  );
+};
+
 /**
  * A fixed-height window, four and a half books tall so the cut-off book
  * says it scrolls. It keeps the current book centered while the rows load
@@ -319,7 +346,8 @@ interface BookRelatedPanelProps {
 
 /**
  * The book's neighbors, a tab for each kind: the rest of its series, its
- * author's books, the lists it is on, and what the reader's Devices get.
+ * author's books, the lists it is on (led by To Read when it's queued), and
+ * what the reader's Devices get.
  * Each tab is a scrolling window opened on this book, so clicking from book
  * to book keeps the panel in place. `useBookRelatedTabs` decides which tabs
  * exist; the page leaves the panel out when none does.
@@ -365,19 +393,19 @@ const BookRelatedPanel = ({ book, related }: BookRelatedPanelProps) => {
           )
         );
       case "lists":
-        if (related.listsFailed) {
-          return (
-            <QueryError
-              fallback="Failed to load the lists this book is on"
-              query={related.listsFailed}
-            />
-          );
-        }
         return (
           <div className="space-y-3">
-            {related.lists.map((list) => (
-              <ListGroup book={book} key={list.id} list={list} />
-            ))}
+            {related.onToRead && <ToReadGroup book={book} />}
+            {related.listsFailed ? (
+              <QueryError
+                fallback="Failed to load the lists this book is on"
+                query={related.listsFailed}
+              />
+            ) : (
+              related.lists.map((list) => (
+                <ListGroup book={book} key={list.id} list={list} />
+              ))
+            )}
           </div>
         );
       default:
