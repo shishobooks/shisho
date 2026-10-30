@@ -24,11 +24,12 @@ const stubRequests = (libraries = defaultLibraries) =>
       return {
         items: [
           { id: 10, name: "Favorites", book_count: 4 },
-          { id: 11, name: "To Read", book_count: 2 },
+          { id: 11, name: "Queue", book_count: 2 },
         ],
         total: 2,
       };
     }
+    if (path === "/books") return { items: [], total: 3 };
     return { items: [], total: 0 };
   });
 
@@ -41,16 +42,20 @@ const HistoryProbe = ({ visited }: { visited: string[] }) => {
   return null;
 };
 
-const renderPicker = ({ visited }: { visited?: string[] } = {}) =>
+const renderPicker = ({
+  visited,
+  path = "/libraries/1/books/7",
+}: { visited?: string[]; path?: string } = {}) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={["/libraries/1/books/7"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route
             element={<LibraryListPicker />}
             path="/libraries/:libraryId/*"
           />
           <Route element={<LibraryListPicker />} path="/lists/:id" />
+          <Route element={<LibraryListPicker />} path="/to-read" />
         </Routes>
         {visited && <HistoryProbe visited={visited} />}
       </MemoryRouter>
@@ -87,9 +92,9 @@ describe("LibraryListPicker", () => {
     expect(
       screen.getByRole("menuitem", { name: "Comics" }),
     ).not.toHaveAttribute("aria-current");
-    expect(
-      screen.getByRole("menuitem", { name: /To Read/ }),
-    ).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("menuitem", { name: /Queue/ })).not.toHaveAttribute(
+      "aria-current",
+    );
 
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitem", { name: "Comics" })).toHaveFocus();
@@ -101,14 +106,14 @@ describe("LibraryListPicker", () => {
       expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
     );
 
-    // Reopen and arrow past both libraries to the second list.
+    // Reopen and arrow past both libraries and To Read to the second list.
     screen.getByRole("button", { name: /Comics/ }).focus();
     await user.keyboard("{Enter}");
     await waitFor(() =>
       expect(screen.getByRole("menuitem", { name: "Fiction" })).toHaveFocus(),
     );
-    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
-    expect(screen.getByRole("menuitem", { name: /To Read/ })).toHaveFocus();
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: /Queue/ })).toHaveFocus();
     await user.keyboard("{Enter}");
     await waitFor(() =>
       expect(visited).toEqual([
@@ -119,11 +124,11 @@ describe("LibraryListPicker", () => {
     );
 
     // On a list page the list is the current page and no library is current.
-    const trigger = await screen.findByRole("button", { name: /To Read/ });
+    const trigger = await screen.findByRole("button", { name: /Queue/ });
     trigger.focus();
     await user.keyboard("{Enter}");
     expect(
-      await screen.findByRole("menuitem", { name: /To Read/ }),
+      await screen.findByRole("menuitem", { name: /Queue/ }),
     ).toHaveAttribute("aria-current", "page");
     expect(
       screen.getByRole("menuitem", { name: /Favorites/ }),
@@ -166,5 +171,37 @@ describe("LibraryListPicker", () => {
     expect(request.mock.calls.map((call) => call[1])).not.toContain(
       "/user/libraries",
     );
+  });
+
+  it("leads the Lists section with To Read and its count", async () => {
+    stubRequests();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPicker();
+
+    await user.click(await screen.findByRole("button", { name: /Fiction/ }));
+    const toRead = await screen.findByRole("menuitem", { name: /To Read/ });
+    expect(toRead).toHaveAttribute("href", "/to-read");
+    await waitFor(() => expect(toRead).toHaveTextContent("3"));
+    const lists = screen
+      .getAllByRole("menuitem")
+      .filter((item) => item.getAttribute("href") !== null)
+      .map((item) => item.getAttribute("href"))
+      .filter((href) => !href!.startsWith("/libraries/"));
+    expect(lists).toEqual(["/to-read", "/lists/10", "/lists/11"]);
+  });
+
+  it("names To Read as the current page on it", async () => {
+    stubRequests();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPicker({ path: "/to-read" });
+
+    const trigger = await screen.findByRole("button", { name: /To Read/ });
+    await user.click(trigger);
+    expect(
+      await screen.findByRole("menuitem", { name: /To Read/ }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("menuitem", { name: "Fiction" }),
+    ).not.toHaveAttribute("aria-current");
   });
 });

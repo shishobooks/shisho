@@ -1,4 +1,5 @@
 import {
+  BookmarkCheck,
   Check,
   ChevronRight,
   Library,
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { Button } from "@/components/ui/button";
 import { useMobileNav } from "@/contexts/MobileNav";
+import { useBooks } from "@/hooks/queries/books";
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,7 +54,7 @@ const MobileDrawer = () => {
   const { libraryId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { demoMode, user, logout } = useAuth();
+  const { can, demoMode, user, logout } = useAuth();
   const { isOpen, close } = useMobileNav();
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
@@ -68,7 +70,13 @@ const MobileDrawer = () => {
   const listMatch = location.pathname.match(/^\/lists\/(\d+)/);
   const currentListId = listMatch ? Number(listMatch[1]) : null;
   const currentList = lists.find((list) => list.id === currentListId);
-  const isViewingList = currentListId !== null;
+  // To Read leads the Lists section: it spans libraries and opens like a
+  // list, though it isn't one. Its books are book data, so it needs Books
+  // Read.
+  const canReadBooks = can("books:read");
+  const isViewingToRead = location.pathname === "/to-read";
+  const toReadCount = useBooks({ to_read: true, limit: 1 }).data?.total;
+  const isViewingList = currentListId !== null || isViewingToRead;
 
   // Determine if we're in a library context
   const isLibraryContext = Boolean(libraryId);
@@ -180,7 +188,7 @@ const MobileDrawer = () => {
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
           {/* Library/List Picker */}
-          {(libraries.length > 0 || lists.length > 0) && (
+          {(libraries.length > 0 || lists.length > 0 || canReadBooks) && (
             <div className="border-b border-border">
               <Button
                 aria-expanded={showLibraryPicker}
@@ -189,19 +197,27 @@ const MobileDrawer = () => {
                 variant="unstyled"
               >
                 <div className="flex items-center gap-3">
-                  {isViewingList ? (
+                  {isViewingToRead ? (
+                    <BookmarkCheck className="h-5 w-5 text-muted-foreground" />
+                  ) : isViewingList ? (
                     <List className="h-5 w-5 text-muted-foreground" />
                   ) : (
                     <Library className="h-5 w-5 text-muted-foreground" />
                   )}
                   <div>
                     <div className="text-sm text-muted-foreground">
-                      {isViewingList ? "List" : "Library"}
+                      {isViewingToRead
+                        ? "Queue"
+                        : isViewingList
+                          ? "List"
+                          : "Library"}
                     </div>
                     <div className="font-medium">
-                      {isViewingList
-                        ? currentList?.name || "List"
-                        : currentLibrary?.name || "Select Library"}
+                      {isViewingToRead
+                        ? "To Read"
+                        : isViewingList
+                          ? currentList?.name || "List"
+                          : currentLibrary?.name || "Select Library"}
                     </div>
                   </div>
                 </div>
@@ -252,12 +268,42 @@ const MobileDrawer = () => {
                   </div>
                 )}
 
-                {/* Lists section */}
-                {lists.length > 0 && (
+                {/* Lists section, led by To Read */}
+                {(lists.length > 0 || canReadBooks) && (
                   <div className="bg-muted/50 py-1 border-t border-border/50">
                     <div className="px-6 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                       Lists
                     </div>
+                    {canReadBooks && (
+                      <Link
+                        aria-current={isViewingToRead ? "page" : undefined}
+                        className={cn(
+                          "flex items-center gap-3 w-full px-6 py-2.5 text-left transition-colors",
+                          isViewingToRead
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted",
+                        )}
+                        onClick={close}
+                        to="/to-read"
+                      >
+                        <span className="flex-1 truncate">To Read</span>
+                        {toReadCount !== undefined && (
+                          <span
+                            className={cn(
+                              "shrink-0 tabular-nums text-xs",
+                              isViewingToRead
+                                ? "text-primary/70"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {toReadCount.toLocaleString()}
+                          </span>
+                        )}
+                        {isViewingToRead && (
+                          <Check className="h-4 w-4 shrink-0" />
+                        )}
+                      </Link>
+                    )}
                     {lists.slice(0, 5).map((list) => {
                       const isActive = currentListId === list.id;
                       return (

@@ -120,11 +120,14 @@ const renderToRead = ({
   };
 };
 
-const booksRequest = () =>
+// The book listings requested, as their query params. The library picker
+// also asks for To Read's count.
+const booksRequests = () =>
   vi
     .mocked(globalThis.fetch)
     .mock.calls.map(([input]) => String(input))
-    .find((url) => url.startsWith("/api/books?"));
+    .filter((url) => url.startsWith("/api/books?"))
+    .map((url) => Object.fromEntries(new URL(url, "http://x").searchParams));
 
 describe("ToRead", () => {
   it("lists the whole queue in order", async () => {
@@ -132,9 +135,11 @@ describe("ToRead", () => {
 
     const queue = await screen.findByRole("list", { name: "Queue" });
     expect(queue.textContent).toBe("DuneEmmaUbik");
-    const params = new URL(booksRequest()!, "http://x").searchParams;
-    expect(params.get("to_read")).toBe("true");
-    expect(params.get("limit")).toBe("100");
+    expect(booksRequests()).toContainEqual({
+      to_read: "true",
+      limit: "100",
+      offset: "0",
+    });
   });
 
   it("saves a reorder", async () => {

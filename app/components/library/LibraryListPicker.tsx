@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Library, List } from "lucide-react";
+import { BookmarkCheck, Check, ChevronDown, Library, List } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useBooks } from "@/hooks/queries/books";
 import { useNavLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
 import { useCan } from "@/hooks/useCan";
@@ -33,8 +34,13 @@ const LibraryListPicker = () => {
   const currentListId = listMatch ? Number(listMatch[1]) : null;
   const currentList = lists.find((list) => list.id === currentListId);
 
+  // To Read leads the Lists section: it spans libraries and opens like a
+  // list, though it isn't one.
+  const isViewingToRead = location.pathname === "/to-read";
+  const toReadCount = useBooks({ to_read: true, limit: 1 }).data?.total;
+
   // Determine what to show in the trigger
-  const isViewingList = currentListId !== null;
+  const isViewingList = currentListId !== null || isViewingToRead;
 
   if (!canReadBooks) {
     return null;
@@ -47,7 +53,12 @@ const LibraryListPicker = () => {
           className="h-9 gap-2 text-muted-foreground hover:text-foreground cursor-pointer"
           variant="ghost"
         >
-          {isViewingList ? (
+          {isViewingToRead ? (
+            <>
+              <BookmarkCheck className="h-4 w-4" />
+              To Read
+            </>
+          ) : isViewingList ? (
             <>
               <List className="h-4 w-4" />
               {currentList?.name || "List"}
@@ -120,71 +131,110 @@ const LibraryListPicker = () => {
           </div>
         </div>
 
-        {/* Lists Section */}
-        {lists.length > 0 && (
-          <div className="border-t border-border bg-muted/30 p-1.5">
-            <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-              Lists
-            </div>
-            <div className="space-y-0.5">
-              {lists.slice(0, 5).map((list) => {
-                const isActive = currentListId === list.id;
-                return (
-                  <DropdownMenuItem
-                    asChild
+        {/* Lists Section, led by To Read, which every user has */}
+        <div className="border-t border-border bg-muted/30 p-1.5">
+          <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Lists
+          </div>
+          <div className="space-y-0.5">
+            <DropdownMenuItem
+              asChild
+              className={cn(
+                "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
+                isViewingToRead
+                  ? "bg-primary/10 text-primary focus:bg-primary/15 focus:text-primary"
+                  : "text-foreground focus:bg-accent/50 focus:text-foreground",
+              )}
+            >
+              <Link
+                aria-current={isViewingToRead ? "page" : undefined}
+                to="/to-read"
+              >
+                <div
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                    isViewingToRead
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground group-hover:bg-background/80",
+                  )}
+                >
+                  <BookmarkCheck className="size-3.5 text-current" />
+                </div>
+                <span className="flex-1 truncate text-left font-medium">
+                  To Read
+                </span>
+                {toReadCount !== undefined && (
+                  <span
                     className={cn(
-                      "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
-                      isActive
-                        ? "bg-primary/10 text-primary focus:bg-primary/15 focus:text-primary"
-                        : "text-foreground focus:bg-accent/50 focus:text-foreground",
+                      "shrink-0 tabular-nums text-xs",
+                      isViewingToRead
+                        ? "text-primary/70"
+                        : "text-muted-foreground",
                     )}
-                    key={list.id}
                   >
-                    <Link
-                      aria-current={isActive ? "page" : undefined}
-                      to={`/lists/${list.id}`}
-                    >
-                      <div
-                        className={cn(
-                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-background text-muted-foreground group-hover:bg-background/80",
-                        )}
-                      >
-                        <List className="size-3.5 text-current" />
-                      </div>
-                      <span className="flex-1 truncate text-left font-medium">
-                        {list.name}
-                      </span>
-                      <span
-                        className={cn(
-                          "shrink-0 tabular-nums text-xs",
-                          isActive
-                            ? "text-primary/70"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {list.book_count.toLocaleString()}
-                      </span>
-                      {isActive && (
-                        <Check className="size-4 shrink-0 text-primary" />
-                      )}
-                    </Link>
-                  </DropdownMenuItem>
-                );
-              })}
-              {lists.length > 5 && (
+                    {toReadCount.toLocaleString()}
+                  </span>
+                )}
+                {isViewingToRead && (
+                  <Check className="size-4 shrink-0 text-primary" />
+                )}
+              </Link>
+            </DropdownMenuItem>
+            {lists.slice(0, 5).map((list) => {
+              const isActive = currentListId === list.id;
+              return (
                 <DropdownMenuItem
                   asChild
-                  className="flex w-full items-center justify-center rounded-md px-2 py-2 text-xs text-muted-foreground transition-colors focus:bg-accent/50 focus:text-foreground"
+                  className={cn(
+                    "group relative flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary focus:bg-primary/15 focus:text-primary"
+                      : "text-foreground focus:bg-accent/50 focus:text-foreground",
+                  )}
+                  key={list.id}
                 >
-                  <Link to="/lists">View all {lists.length} lists →</Link>
+                  <Link
+                    aria-current={isActive ? "page" : undefined}
+                    to={`/lists/${list.id}`}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground group-hover:bg-background/80",
+                      )}
+                    >
+                      <List className="size-3.5 text-current" />
+                    </div>
+                    <span className="flex-1 truncate text-left font-medium">
+                      {list.name}
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 tabular-nums text-xs",
+                        isActive ? "text-primary/70" : "text-muted-foreground",
+                      )}
+                    >
+                      {list.book_count.toLocaleString()}
+                    </span>
+                    {isActive && (
+                      <Check className="size-4 shrink-0 text-primary" />
+                    )}
+                  </Link>
                 </DropdownMenuItem>
-              )}
-            </div>
+              );
+            })}
+            {lists.length > 5 && (
+              <DropdownMenuItem
+                asChild
+                className="flex w-full items-center justify-center rounded-md px-2 py-2 text-xs text-muted-foreground transition-colors focus:bg-accent/50 focus:text-foreground"
+              >
+                <Link to="/lists">View all {lists.length} lists →</Link>
+              </DropdownMenuItem>
+            )}
           </div>
-        )}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

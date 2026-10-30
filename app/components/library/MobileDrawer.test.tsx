@@ -130,7 +130,7 @@ describe("MobileDrawer", () => {
 
 describe("MobileDrawer library picker", () => {
   beforeEach(() => {
-    server.lists = [{ id: 3, name: "To Read", book_count: 2 }];
+    server.lists = [{ id: 3, name: "Queue", book_count: 2 }];
   });
 
   it("offers the role's libraries without Libraries Read", async () => {
@@ -209,8 +209,41 @@ describe("MobileDrawer library picker", () => {
     renderDrawer("/lists/3");
 
     const link = await within(getDrawer()).findByRole("link", {
-      name: /To Read/,
+      name: /Queue/,
     });
     expect(link).toHaveAttribute("aria-current", "page");
+  });
+
+  it("leads the Lists section with To Read, current on its page", async () => {
+    setAuth({
+      permissions: ["books:read"],
+      user: { username: "reader", role_name: "Reader" },
+    });
+    isOpen = true;
+    renderDrawer("/to-read");
+
+    const drawer = getDrawer();
+    const toRead = await within(drawer).findByRole("link", {
+      name: /^To Read/,
+    });
+    expect(toRead).toHaveAttribute("href", "/to-read");
+    expect(toRead).toHaveAttribute("aria-current", "page");
+    expect(
+      within(drawer).getByRole("button", { name: /To Read/ }),
+    ).toHaveAttribute("aria-expanded");
+  });
+
+  it("leaves To Read out for a role without Books Read", async () => {
+    setAuth({
+      permissions: ["shares:read"],
+      user: { username: "reader", role_name: "Shares Only" },
+    });
+    isOpen = true;
+    renderDrawer("/lists/3");
+
+    await within(getDrawer()).findByRole("link", { name: /Queue/ });
+    expect(
+      within(getDrawer()).queryByRole("link", { name: /^To Read/ }),
+    ).not.toBeInTheDocument();
   });
 });
