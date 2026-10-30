@@ -142,3 +142,24 @@ func TestPositionRoutes_DatabaseFailureIs500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodGet, path, nil).Code)
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, path, map[string]any{"cfi": "epubcfi(/6/4!/4/2)", "percentage": 0.5}).Code)
 }
+
+func TestPositionRoutes_ASessionWithoutAPositionRecordsOnlyTheSession(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	api := newReadingAPI(t, f.db, f.user)
+
+	rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", f.file.ID), map[string]any{
+		"percentage": 0.125,
+		"session": map[string]any{
+			"started_at": "2026-10-15T11:59:00Z", "ended_at": "2026-10-15T12:00:00Z",
+			"start_percentage": 0.125, "end_percentage": 0.125,
+		},
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	resp := decode[UpdatePositionResponse](t, rec.Body.Bytes())
+	assert.False(t, resp.Started)
+	assert.Equal(t, f.book.ID, resp.BookID)
+	assert.Nil(t, f.position(f.file))
+	assert.Equal(t, 1, f.count("reading_sessions"))
+	assert.Empty(t, f.status())
+}

@@ -400,6 +400,22 @@ describe("ReadingHistory", () => {
     );
   });
 
+  it("says deleting the read underway resets the book and its To Read place", async () => {
+    renderControls(
+      reading({
+        status: "currently_reading",
+        read_throughs: [readThrough({ id: 5, outcome: "underway" })],
+      }),
+    );
+    await user().click(
+      await screen.findByRole("button", { name: "Delete Read-through" }),
+    );
+
+    expect(
+      await screen.findByText(/Every file opens at the start again/),
+    ).toBeInTheDocument();
+  });
+
   it("picks a finish date from the calendar", async () => {
     vi.setSystemTime(new Date(2026, 2, 25, 12));
     const request = renderControls(

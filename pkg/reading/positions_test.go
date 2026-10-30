@@ -720,3 +720,37 @@ func TestDeleteReadThrough_EndedLeavesToReadAlone(t *testing.T) {
 
 	assert.Equal(t, 0, f.toReadPlace(f.book), "only taking back a start restores the queue")
 }
+
+func TestRecordSession_LeavesThePositionAndStatusAlone(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.addToRead()
+
+	// Opening a book and closing it reports only the time it was open.
+	_, err := f.svc.RecordSession(f.ctx, f.user.ID, f.file.ID, models.ReadingSourceWebReader, SessionInput{
+		StartedAt: f.clock.now.Add(-time.Minute), EndedAt: f.clock.now,
+		StartPercentage: 0.125, EndPercentage: 0.125, Measured: true,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, models.ReadingStatusToRead, f.status())
+	assert.Nil(t, f.position(f.file))
+	assert.Equal(t, 0, f.count("reading_position_updates"))
+	assert.Equal(t, 1, f.count("reading_sessions"))
+}
+
+func TestRecordSession_BelongsToTheReadThroughUnderway(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+
+	_, err := f.svc.RecordSession(f.ctx, f.user.ID, f.file.ID, models.ReadingSourceWebReader, SessionInput{
+		StartedAt: f.clock.now.Add(-time.Minute), EndedAt: f.clock.now,
+		StartPercentage: 0.5, EndPercentage: 0.5, Measured: true,
+	})
+	require.NoError(t, err)
+
+	var session models.ReadingSession
+	require.NoError(t, f.db.NewSelect().Model(&session).Scan(f.ctx))
+	assert.Equal(t, f.readThroughs()[0].ID, *session.ReadThroughID)
+}

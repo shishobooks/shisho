@@ -234,6 +234,29 @@ func readThroughID(rt *models.ReadThrough) *int {
 	return &rt.ID
 }
 
+// RecordSession records a Reading Session a source finished without
+// moving, such as a reader opened and closed where it was. It changes no
+// Reading Position and no Read-through, and belongs to the Read-through
+// underway, if any. It returns the File's Book.
+func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, source string, session SessionInput) (int, error) {
+	var bookID int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrFileNotFound
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+		if err != nil {
+			return err
+		}
+		return recordSession(ctx, tx, PositionUpdate{UserID: userID, FileID: fileID, Source: source, Session: &session}, underway, svc.now())
+	})
+	return bookID, err
+}
+
 // recordSession records u's session, if it has one, on rt.
 func recordSession(ctx context.Context, tx bun.Tx, u PositionUpdate, rt *models.ReadThrough, now time.Time) error {
 	if u.Session == nil {

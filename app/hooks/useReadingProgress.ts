@@ -70,36 +70,45 @@ export const useReadingProgress = (
         timerRef.current = null;
       }
       const current = currentRef.current;
-      if (!current || (current === savedRef.current && !session)) return;
+      if (!current) return;
+      // Nothing moved since the last save (or since opening, which isn't
+      // reading): only a session has anything to report, and it goes alone
+      // so where the reader opened can't start or finish a Read-through.
+      const moved = current !== savedRef.current;
+      if (!moved && !session) return;
       savedRef.current = current;
 
       // A reader reopened before the save lands opens here, not where the
       // server last said.
-      queryClient.setQueryData<FilePositionResponse>(
-        [QueryKey.FilePosition, fileId],
-        (old) => ({
-          position: {
-            created_at: current.occurredAt,
-            updated_at: current.occurredAt,
-            ...old?.position,
-            file_id: fileId,
-            cfi: current.cfi,
-            percentage: current.percentage,
-            source: ReadingSourceWebReader,
-            occurred_at: current.occurredAt,
-          },
-        }),
-      );
+      if (moved) {
+        queryClient.setQueryData<FilePositionResponse>(
+          [QueryKey.FilePosition, fileId],
+          (old) => ({
+            position: {
+              created_at: current.occurredAt,
+              updated_at: current.occurredAt,
+              ...old?.position,
+              file_id: fileId,
+              cfi: current.cfi,
+              percentage: current.percentage,
+              source: ReadingSourceWebReader,
+              occurred_at: current.occurredAt,
+            },
+          }),
+        );
+      }
 
       saveFilePosition(
         fileId,
-        {
-          cfi: current.cfi,
-          percentage: current.percentage,
-          at_end: current.atEnd || undefined,
-          occurred_at: current.occurredAt,
-          session,
-        },
+        moved
+          ? {
+              cfi: current.cfi,
+              percentage: current.percentage,
+              at_end: current.atEnd || undefined,
+              occurred_at: current.occurredAt,
+              session,
+            }
+          : { percentage: current.percentage, session },
         keepalive,
       )
         .then((result) => {

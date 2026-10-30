@@ -127,7 +127,11 @@ const ReadingHistory = ({ bookId }: ReadingHistoryProps) => {
       )}
       <ConfirmDialog
         confirmLabel="Delete"
-        description="It won't count toward this book's history or its Reading Status."
+        description={
+          deleting?.outcome === "underway"
+            ? "It won't count toward this book's history or its Reading Status. Every file opens at the start again, and if starting it took the book off To Read, it goes back to its place there."
+            : "It won't count toward this book's history or its Reading Status."
+        }
         isPending={deleteMutation.isPending}
         onConfirm={handleDelete}
         onOpenChange={(open) => !open && setDeleting(null)}

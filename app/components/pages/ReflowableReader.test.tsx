@@ -778,24 +778,51 @@ describe("ReflowableReader resuming", () => {
     });
   });
 
-  it("sends the saved place unchanged until the reader moves", async () => {
-    savedCfi = "epubcfi(/6/14!/4/2/10)";
-    // foliate reports the start of the page it laid out, which differs
-    // from the saved location on another screen size.
+  it.each([
+    ["a saved place", "epubcfi(/6/14!/4/2/10)"],
+    ["no saved place", null],
+  ])(
+    "sends only the session when closed without moving, from %s",
+    async (_, cfi) => {
+      savedCfi = cfi;
+      // foliate reports the first page above 0%, and a layout on another
+      // screen size starts somewhere other than the saved location, so
+      // where it opened must never read as reading.
+      const view = await openBook();
+      (view as unknown as { lastLocation: object }).lastLocation = {
+        cfi: "epubcfi(/6/4!/4/2)",
+        fraction: 0.125,
+      };
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+        window.dispatchEvent(new Event("pagehide"));
+      });
+      const saves = positionSaves();
+      expect(saves).toEqual([
+        expect.objectContaining({ session: expect.anything() }),
+      ]);
+      expect(saves[0].cfi).toBeUndefined();
+      expect(saves[0].at_end).toBeUndefined();
+    },
+  );
+
+  it("sends the place with the session once the reader has moved", async () => {
     const view = await openBook();
+    relocate(view, {
+      cfi: "epubcfi(/6/6!/4/2)",
+      fraction: 0.2,
+      reason: "page",
+    });
     act(() => {
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(1000);
       window.dispatchEvent(new Event("pagehide"));
     });
     expect(positionSaves()).toEqual([
       expect.objectContaining({
-        cfi: "epubcfi(/6/14!/4/2/10)",
-        percentage: 0.4,
-        occurred_at: SAVED_AT,
+        cfi: "epubcfi(/6/6!/4/2)",
         session: expect.anything(),
       }),
     ]);
-    expect(view).toBeTruthy();
   });
 
   it("saves nothing when the saved place failed to load", async () => {

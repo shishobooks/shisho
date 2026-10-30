@@ -417,7 +417,7 @@ func (h *handler) updatePosition(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
-	if params.CFI == nil {
+	if params.CFI == nil && params.Session == nil {
 		return errcodes.ValidationError("A position is required.")
 	}
 	update := PositionUpdate{
@@ -446,6 +446,18 @@ func (h *handler) updatePosition(c echo.Context) error {
 			EndPercentage:   *s.EndPercentage,
 			Measured:        true,
 		}
+	}
+	// A session with no position is a reader closed where it opened: it
+	// records only the time.
+	if params.CFI == nil {
+		bookID, err := h.readingService.RecordSession(c.Request().Context(), user.ID, fileID, update.Source, *update.Session)
+		if errors.Is(err, ErrFileNotFound) {
+			return errcodes.NotFound("File")
+		}
+		if err != nil {
+			return err
+		}
+		return errors.WithStack(c.JSON(http.StatusOK, UpdatePositionResponse{BookID: bookID}))
 	}
 	result, err := h.readingService.UpdatePosition(c.Request().Context(), update)
 	if errors.Is(err, ErrFileNotFound) {

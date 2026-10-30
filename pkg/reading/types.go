@@ -56,7 +56,8 @@ type SetPageFlowPayload struct {
 // UpdatePositionPayload is a web reader reporting where the user is in a
 // File. It carries the position in the form the reader keeps (a CFI for
 // the ebook reader), and optionally a Reading Session the reader just
-// finished.
+// finished. A reader that hasn't moved since opening sends only the
+// session, which changes no position or status.
 type UpdatePositionPayload struct {
 	CFI        *string  `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
 	Percentage *float64 `json:"percentage" validate:"required,min=0,max=1" tstype:",required"`
@@ -82,8 +83,8 @@ type SessionPayload struct {
 // source.
 type UpdatePositionResponse struct {
 	BookID int `json:"book_id"`
-	// Accepted is false for an update older than the saved position, which
-	// changed nothing.
+	// Accepted is false for an update older than the saved position, or
+	// one that carried only a session: neither changed the position.
 	Accepted bool `json:"accepted"`
 	// Started is true when the update started a Read-through.
 	Started bool `json:"started"`
