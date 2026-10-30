@@ -30,6 +30,29 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 "Today" is the date on your device when you choose the action.
 
+## Reading in Shisho
+
+The EPUB, KePub, MOBI, and AZW3 reader keeps your place and your reading history current as you read, with nothing to click. [Reading and Playback](./reading-and-playback.md) covers the reader itself.
+
+### Resuming Where You Left Off
+
+A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own.
+
+- The reader saves your place a few seconds after you turn pages, and right away when you switch to another tab or close the reader.
+- Reading the same book in two browsers, the place you reached most recently wins, so opening the book on your laptop after reading on your phone continues from the phone's place.
+- **Read again**, or deleting the Read-through you're on from **Reading history**, sends every file of the book back to the start.
+
+### Starting and Finishing Automatically
+
+- **Starting**: turning past the first page of a book you aren't reading starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing.
+- **Resuming**: turning a page of a paused book makes it **Currently Reading** again.
+- **Finishing**: reaching the last page finishes the Read-through, dated today. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
+- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way. After 15 minutes, going back counts as starting a reread.
+
+### Your Time Zone
+
+Automatic starts and finishes are dated by the day in your time zone, under **Preferences > Reading > Time zone**. Shisho fills it in from your browser while it's unset. Changing it later, when you travel for example, doesn't change any date already recorded.
+
 ## To Read
 
 **To Read** is your queue of books to read next, in the order you plan to read them. Open it from the top of the **Lists** page, the top of the lists in the library picker, or **To Read** in the user menu. It sits with your lists and opens like one, but it isn't a list: it's yours alone, can't be shared, renamed, or deleted, and follows your reading as described below. It lists the books on it from every library you can access.

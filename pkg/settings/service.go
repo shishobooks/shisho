@@ -63,6 +63,7 @@ type UserSettingsUpdate struct {
 	HideChrome         *bool
 	PlaybackSpeed      *float64
 	DefaultLibraryID   httputil.NullableInt
+	TimeZone           *string
 }
 
 // UpdateUserSettings applies a partial update to a user's settings,
@@ -121,6 +122,9 @@ func (svc *Service) UpdateUserSettings(
 		if update.DefaultLibraryID.Set {
 			current.DefaultLibraryID = update.DefaultLibraryID.Value
 		}
+		if update.TimeZone != nil {
+			current.TimeZone = update.TimeZone
+		}
 
 		now := time.Now()
 		current.UserID = userID
@@ -142,6 +146,7 @@ func (svc *Service) UpdateUserSettings(
 			Set("viewer_hide_chrome = EXCLUDED.viewer_hide_chrome").
 			Set("viewer_playback_speed = EXCLUDED.viewer_playback_speed").
 			Set("default_library_id = EXCLUDED.default_library_id").
+			Set("time_zone = EXCLUDED.time_zone").
 			Returning("*").
 			Exec(ctx)
 		if err != nil {

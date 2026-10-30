@@ -27,4 +27,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	g.PUT("/to-read/order", h.reorderToRead)
 	g.PATCH("/read-throughs/:id", h.updateReadThrough)
 	g.DELETE("/read-throughs/:id", h.deleteReadThrough)
+	g.POST("/read-throughs/:id/undo-finish", h.undoFinish)
+	g.GET("/files/:id/position", h.retrievePosition)
+	g.POST("/files/:id/position", h.updatePosition)
 }

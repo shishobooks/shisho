@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"archive/zip"
+	"fmt"
 	"html"
 	"os"
 
@@ -9,9 +10,11 @@ import (
 )
 
 // writeMinimalEPUB writes a small valid EPUB at path so E2E tests can download
-// a generated file. It carries only a title, an identifier, and one chapter,
-// styled with a white body and black text the way Project Gutenberg EPUBs
-// are, so the reader e2e test can check that themes override book colors.
+// a generated file. It carries only a title, an identifier, and four short
+// chapters, so the reader e2e tests can turn pages and reach the end. The
+// first is styled with a white body and black text the way Project Gutenberg
+// EPUBs are, so the reader e2e test can check that themes override book
+// colors.
 func writeMinimalEPUB(path, title string) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -50,9 +53,15 @@ func writeMinimalEPUB(path, title string) (err error) {
   </metadata>
   <manifest>
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapter3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapter4" href="chapter4.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
   <spine>
     <itemref idref="chapter1"/>
+    <itemref idref="chapter2"/>
+    <itemref idref="chapter3"/>
+    <itemref idref="chapter4"/>
   </spine>
 </package>`},
 		{"OEBPS/chapter1.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
@@ -62,6 +71,16 @@ func writeMinimalEPUB(path, title string) (err error) {
 <style>body { color: black; background-color: white; } a { color: blue; }</style></head>
 <body><p>Test chapter. <a href="#end">A link.</a></p><p id="end">The end.</p></body>
 </html>`},
+	}
+	for i, name := range []string{"Two", "Three", "Four"} {
+		entries = append(entries, struct{ name, body string }{
+			fmt.Sprintf("OEBPS/chapter%d.xhtml", i+2), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>` + escaped + `</title></head>
+<body><p>Chapter ` + name + ` text.</p></body>
+</html>`,
+		})
 	}
 	for _, e := range entries {
 		w, err := zw.Create(e.name)

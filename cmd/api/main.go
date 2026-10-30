@@ -11,6 +11,10 @@ import (
 	"strconv"
 	"time"
 
+	// The image has no zone database, and users' time zones date their
+	// reading (pkg/settings validates them, pkg/reading uses them).
+	_ "time/tzdata"
+
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/robinjoseph08/golib/signals"

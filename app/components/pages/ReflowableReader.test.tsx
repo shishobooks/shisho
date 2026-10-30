@@ -3,14 +3,18 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { POSITION_SAVE_DELAY_MS } from "@/hooks/useReadingProgress";
+import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
+import type { UpdatePositionPayload } from "@/types";
 
 import ReflowableReader from "./ReflowableReader";
 
@@ -18,12 +22,22 @@ import ReflowableReader from "./ReflowableReader";
 // browser-only module specifiers and dynamic imports that jsdom can't resolve).
 vi.mock("@/libraries/foliate/view.js", () => ({}));
 
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
 vi.mock("@/hooks/queries/reflowable", () => ({
   useReflowableBlob: vi.fn(),
 }));
 
 // The table of contents the mocked foliate view reports once a book opens.
 let mockToc: unknown[] = [];
+// Whether the mocked renderer is at the end of the book.
+let mockAtEnd = false;
+// The saved position GET /reading/files/:id/position returns.
+let savedCfi: string | null = null;
+const SAVED_AT = "2026-10-01T09:00:00.000Z";
+// What POST /reading/files/:id/position reports it did.
+let saveResult: object = {};
+let positionLoadFails = false;
 
 beforeAll(() => {
   if (!customElements.get("foliate-view")) {
@@ -35,7 +49,18 @@ beforeAll(() => {
         goRight = vi.fn();
         goTo = vi.fn();
         goToFraction = vi.fn();
-        book = { toc: mockToc };
+        init = vi.fn().mockResolvedValue(undefined);
+        renderer = {
+          get atEnd() {
+            return mockAtEnd;
+          },
+          setStyles: vi.fn(),
+          setAttribute: vi.fn(),
+        };
+        lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
+        get book() {
+          return { toc: mockToc };
+        }
       },
     );
   }
@@ -46,8 +71,45 @@ vi.mock("@/hooks/queries/settings", () => ({
   useUpdateUserSettings: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
-const renderReader = (fileType = "epub", name?: string) => {
-  const client = new QueryClient();
+beforeEach(() => {
+  setAuth({ permissions: ["books:read"] });
+  mockAtEnd = false;
+  savedCfi = null;
+  saveResult = {};
+  positionLoadFails = false;
+  vi.spyOn(API, "request").mockImplementation(((
+    method: string,
+    endpoint: string,
+  ) => {
+    if (method === "GET" && endpoint === "/reading/files/7/position") {
+      if (positionLoadFails) return Promise.reject(new Error("offline"));
+      return Promise.resolve({
+        position: savedCfi
+          ? {
+              file_id: 7,
+              cfi: savedCfi,
+              percentage: 0.4,
+              occurred_at: SAVED_AT,
+            }
+          : null,
+      });
+    }
+    return Promise.resolve({
+      book_id: 3,
+      accepted: true,
+      started: false,
+      reverted: false,
+      finished_read_through_id: null,
+      ...saveResult,
+    });
+  }) as never);
+});
+
+const renderReader = (
+  fileType = "epub",
+  name?: string,
+  client = new QueryClient(),
+) => {
   const file = {
     id: 7,
     book_id: 3,
@@ -227,9 +289,10 @@ describe("ReflowableReader", () => {
 
     const { container } = renderReader("mobi");
     const view = container.querySelector("foliate-view");
-    await act(async () => {});
-
     expect(view).not.toBeNull();
+    // The book opens once the saved location has loaded.
+    await vi.waitFor(() => expect(vi.mocked(view!.open)).toHaveBeenCalled());
+
     const opened = vi.mocked(view!.open).mock.calls[0][0] as globalThis.File;
     expect(opened.name).toBe("book.mobi");
     expect(opened.type).toBe("application/x-mobipocket-ebook");
@@ -570,5 +633,203 @@ describe("ReflowableReader", () => {
     expect(
       await screen.findByRole("slider", { name: "Font size" }),
     ).toHaveAttribute("aria-valuenow", "100");
+  });
+});
+
+describe("ReflowableReader resuming", () => {
+  const openBook = async (client?: QueryClient) => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader("epub", undefined, client);
+    const view = container.querySelector(
+      "foliate-view",
+    ) as unknown as HTMLElement & { init: ReturnType<typeof vi.fn> };
+    await vi.waitFor(() => expect(view.init).toHaveBeenCalled());
+    // Let init's promise settle so the reader leaves its restoring state.
+    await act(async () => {});
+    return view;
+  };
+
+  const relocate = (view: HTMLElement, detail: object) =>
+    act(() => {
+      view.dispatchEvent(new CustomEvent("relocate", { detail }));
+    });
+
+  const positionSaves = () =>
+    vi
+      .mocked(API.request)
+      .mock.calls.filter(
+        ([method, endpoint]) =>
+          method === "POST" && endpoint === "/reading/files/7/position",
+      )
+      .map(([, , payload]) => payload as UpdatePositionPayload);
+
+  it("opens at the saved location", async () => {
+    savedCfi = "epubcfi(/6/14!/4/2/10)";
+    const view = await openBook();
+    expect(view.init).toHaveBeenCalledWith({
+      lastLocation: "epubcfi(/6/14!/4/2/10)",
+    });
+  });
+
+  it("opens at the start without a saved location", async () => {
+    const view = await openBook();
+    expect(view.init).toHaveBeenCalledWith({ showTextStart: false });
+  });
+
+  it("saves where the reader moves, a few seconds later", async () => {
+    const view = await openBook();
+    relocate(view, {
+      cfi: "epubcfi(/6/4!/4/2)",
+      fraction: 0.1,
+      reason: "page",
+    });
+    relocate(view, {
+      cfi: "epubcfi(/6/6!/4/2)",
+      fraction: 0.2,
+      reason: "page",
+    });
+    expect(positionSaves()).toEqual([]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(positionSaves()).toEqual([
+      expect.objectContaining({ cfi: "epubcfi(/6/6!/4/2)", percentage: 0.2 }),
+    ]);
+  });
+
+  it("doesn't save a re-layout that keeps the place", async () => {
+    const view = await openBook();
+    relocate(view, {
+      cfi: "epubcfi(/6/2!/4/4)",
+      fraction: 0.01,
+      reason: "anchor",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS * 2);
+    });
+    expect(positionSaves()).toEqual([]);
+  });
+
+  it("saves at once when it reaches the end", async () => {
+    const view = await openBook();
+    mockAtEnd = true;
+    relocate(view, { cfi: "epubcfi(/6/40!/4/2)", fraction: 1, reason: "page" });
+    expect(positionSaves()).toEqual([
+      expect.objectContaining({ cfi: "epubcfi(/6/40!/4/2)", at_end: true }),
+    ]);
+  });
+
+  it("saves at once when the page is hidden", async () => {
+    const view = await openBook();
+    relocate(view, {
+      cfi: "epubcfi(/6/4!/4/2)",
+      fraction: 0.1,
+      reason: "page",
+    });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    try {
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(positionSaves()).toEqual([
+        expect.objectContaining({ cfi: "epubcfi(/6/4!/4/2)" }),
+      ]);
+    } finally {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "visible",
+      });
+    }
+  });
+
+  it("saves nothing in Demo Mode", async () => {
+    setAuth({ permissions: ["books:read"], demoMode: true });
+    const view = await openBook();
+    relocate(view, {
+      cfi: "epubcfi(/6/4!/4/2)",
+      fraction: 0.1,
+      reason: "page",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(positionSaves()).toEqual([]);
+  });
+
+  it("opens at the place saved on the server, not one cached earlier", async () => {
+    savedCfi = "epubcfi(/6/30!/4/2)";
+    const client = new QueryClient();
+    client.setQueryData(["FilePosition", 7], {
+      position: { file_id: 7, cfi: "epubcfi(/6/4!/4/2)", percentage: 0.1 },
+    });
+    const view = await openBook(client);
+    expect(view.init).toHaveBeenCalledWith({
+      lastLocation: "epubcfi(/6/30!/4/2)",
+    });
+  });
+
+  it("sends the saved place unchanged until the reader moves", async () => {
+    savedCfi = "epubcfi(/6/14!/4/2/10)";
+    // foliate reports the start of the page it laid out, which differs
+    // from the saved location on another screen size.
+    const view = await openBook();
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(positionSaves()).toEqual([
+      expect.objectContaining({
+        cfi: "epubcfi(/6/14!/4/2/10)",
+        percentage: 0.4,
+        occurred_at: SAVED_AT,
+        session: expect.anything(),
+      }),
+    ]);
+    expect(view).toBeTruthy();
+  });
+
+  it("saves nothing when the saved place failed to load", async () => {
+    positionLoadFails = true;
+    const error = vi.spyOn(toast, "error");
+    const view = await openBook();
+    expect(view.init).toHaveBeenCalledWith({ showTextStart: false });
+    expect(error).toHaveBeenCalledWith(
+      "Failed to load your reading position",
+      undefined,
+    );
+    relocate(view, {
+      cfi: "epubcfi(/6/4!/4/2)",
+      fraction: 0.1,
+      reason: "page",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(positionSaves()).toEqual([]);
+  });
+
+  it("takes the finish toast away when going back undoes the finish", async () => {
+    const dismiss = vi.spyOn(toast, "dismiss");
+    const view = await openBook();
+    saveResult = { reverted: true };
+    relocate(view, {
+      cfi: "epubcfi(/6/20!/4/2)",
+      fraction: 0.5,
+      reason: "page",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(dismiss).toHaveBeenCalledWith("reading-finished-3");
   });
 });

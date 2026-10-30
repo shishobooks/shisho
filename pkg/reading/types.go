@@ -1,6 +1,10 @@
 package reading
 
-import "github.com/shishobooks/shisho/pkg/models"
+import (
+	"time"
+
+	"github.com/shishobooks/shisho/pkg/models"
+)
 
 // BookReadingResponse is the signed-in user's reading record for one Book:
 // the derived Reading Status, every Read-through, the Rating, and whether
@@ -47,4 +51,52 @@ type ReorderToReadPayload struct {
 // Book. Null clears it, so the reader picks one from the page shapes again.
 type SetPageFlowPayload struct {
 	PageFlow *string `json:"page_flow" validate:"omitempty,oneof=paginated scrolled" tstype:"PageFlow | null"`
+}
+
+// UpdatePositionPayload is a web reader reporting where the user is in a
+// File. It carries the position in the form the reader keeps (a CFI for
+// the ebook reader), and optionally a Reading Session the reader just
+// finished.
+type UpdatePositionPayload struct {
+	CFI        *string  `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
+	Percentage *float64 `json:"percentage" validate:"required,min=0,max=1" tstype:",required"`
+	// AtEnd is the reader at the end of the File, which finishes the
+	// Read-through underway.
+	AtEnd bool `json:"at_end,omitempty"`
+	// OccurredAt is when the reader was at the position, so an update that
+	// arrives late can't replace a newer one. Omitted is now.
+	OccurredAt *time.Time      `json:"occurred_at,omitempty"`
+	Session    *SessionPayload `json:"session,omitempty"`
+}
+
+// SessionPayload is a finished Reading Session the web reader timed.
+type SessionPayload struct {
+	StartedAt       time.Time `json:"started_at" validate:"required"`
+	EndedAt         time.Time `json:"ended_at" validate:"required"`
+	StartPercentage *float64  `json:"start_percentage" validate:"required,min=0,max=1" tstype:",required"`
+	EndPercentage   *float64  `json:"end_percentage" validate:"required,min=0,max=1" tstype:",required"`
+}
+
+// UpdatePositionResponse says what a position update did, so the reader
+// can show the finish toast. The update service returns it for every
+// source.
+type UpdatePositionResponse struct {
+	BookID int `json:"book_id"`
+	// Accepted is false for an update older than the saved position, which
+	// changed nothing.
+	Accepted bool `json:"accepted"`
+	// Started is true when the update started a Read-through.
+	Started bool `json:"started"`
+	// Reverted is true when the update undid an automatic finish.
+	Reverted bool `json:"reverted"`
+	// FinishedReadThroughID is the Read-through the update finished, which
+	// the toast's Undo names.
+	FinishedReadThroughID *int `json:"finished_read_through_id" tstype:"number | null,required"`
+}
+
+// FilePositionResponse is the signed-in user's Reading Position in a File,
+// or null when they have none. The wrapper keeps "no position yet" a 200
+// the reader can open at the start from, rather than an error.
+type FilePositionResponse struct {
+	Position *models.ReadingPosition `json:"position" tstype:"ReadingPosition | null,required"`
 }

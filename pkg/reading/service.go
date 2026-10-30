@@ -40,10 +40,19 @@ const maxRatingUnits = 20
 
 type Service struct {
 	db *bun.DB
+	// now is the update service's clock, which tests move to check its
+	// time windows.
+	now func() time.Time
 }
 
 func NewService(db *bun.DB) *Service {
-	return &Service{db}
+	return newServiceWithClock(db, time.Now)
+}
+
+// newServiceWithClock is NewService on another clock, for tests of the
+// position update service's time windows.
+func newServiceWithClock(db *bun.DB, now func() time.Time) *Service {
+	return &Service{db: db, now: now}
 }
 
 // StatusExpr is the SQL expression for userID's Reading Status of the Book
@@ -281,30 +290,39 @@ func (svc *Service) ToReadPlace(ctx context.Context, userID, bookID int, library
 	return int(ahead) + 1, nil
 }
 
-// Start begins a new Read-through on today and takes the Book off To Read.
+// Start begins a new Read-through on today, takes the Book off To Read, and
+// resets the Book's Reading Positions so its readers open at the start.
 // Reading a finished or abandoned Book again is the same transition.
 func (svc *Service) Start(ctx context.Context, userID, bookID int, today string) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		now := time.Now()
-		_, err := tx.NewInsert().
-			Model(&models.ReadThrough{
-				CreatedAt: now,
-				UpdatedAt: now,
-				UserID:    userID,
-				BookID:    bookID,
-				BeginDay:  &today,
-				Outcome:   models.ReadThroughOutcomeUnderway,
-			}).
-			Exec(ctx)
-		if database.IsUniqueViolation(err) {
-			return ErrAlreadyUnderway
-		}
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		return leaveToRead(ctx, tx, userID, bookID, now)
+		_, err := startReadThrough(ctx, tx, userID, bookID, today, svc.now(), 0)
+		return err
 	})
+}
+
+// startReadThrough inserts a Read-through underway begun on day, takes the
+// Book off To Read, and resets the Book's Reading Positions except on
+// keepFileID (0 keeps none), whose update started it.
+func startReadThrough(ctx context.Context, tx bun.Tx, userID, bookID int, day string, now time.Time, keepFileID int) (*models.ReadThrough, error) {
+	rt := &models.ReadThrough{
+		CreatedAt: now,
+		UpdatedAt: now,
+		UserID:    userID,
+		BookID:    bookID,
+		BeginDay:  &day,
+		Outcome:   models.ReadThroughOutcomeUnderway,
+	}
+	_, err := tx.NewInsert().Model(rt).Exec(ctx)
+	if database.IsUniqueViolation(err) {
+		return nil, ErrAlreadyUnderway
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if err := resetPositions(ctx, tx, userID, bookID, keepFileID); err != nil {
+		return nil, err
+	}
+	return rt, leaveToRead(ctx, tx, userID, bookID, now)
 }
 
 // leaveToRead takes bookID off userID's To Read, if it's there.
@@ -441,10 +459,20 @@ func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadTh
 	return errors.WithStack(err)
 }
 
-// DeleteReadThrough deletes rt: the Read-through no longer counts.
+// DeleteReadThrough deletes rt: the Read-through no longer counts. Its
+// position updates and Reading Sessions go with it, and deleting the one
+// underway resets the Book's Reading Positions so the next read starts at
+// the beginning.
 func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
-	_, err := svc.db.NewDelete().Model(rt).WherePK().Exec(ctx)
-	return errors.WithStack(err)
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+		if rt.Outcome != models.ReadThroughOutcomeUnderway {
+			return nil
+		}
+		return resetPositions(ctx, tx, rt.UserID, rt.BookID, 0)
+	})
 }
 
 // AddToRead puts bookID at the end of userID's To Read. A Book already on
@@ -687,6 +715,12 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 			WHERE s.book_id = ? AND t.book_id = ? AND s.user_id = t.user_id
 				AND s.outcome = ? AND t.outcome = ?`,
 			[]any{sourceBookID, targetBookID, models.ReadThroughOutcomeUnderway, models.ReadThroughOutcomeUnderway}},
+		// The collapsed Read-through's history joins the one it collapses
+		// into, so deleting it below doesn't cascade that history away.
+		{collapsedHistoryUpdate("reading_position_updates"),
+			[]any{targetBookID, models.ReadThroughOutcomeUnderway, sourceBookID, models.ReadThroughOutcomeUnderway}},
+		{collapsedHistoryUpdate("reading_sessions"),
+			[]any{targetBookID, models.ReadThroughOutcomeUnderway, sourceBookID, models.ReadThroughOutcomeUnderway}},
 		{`DELETE FROM read_throughs
 			WHERE book_id = ? AND outcome = ?
 				AND user_id IN (SELECT user_id FROM read_throughs WHERE book_id = ? AND outcome = ?)`,
@@ -706,4 +740,31 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 		}
 	}
 	return nil
+}
+
+// collapsedHistoryUpdate is MergeBooks' statement moving table's rows from
+// the source's Read-through underway to the target's, for users with one
+// underway on both. Its arguments are the target Book id, the underway
+// outcome, the source Book id, and the underway outcome again.
+func collapsedHistoryUpdate(table string) string {
+	return fmt.Sprintf(`UPDATE %[1]s
+		SET read_through_id = t.id
+		FROM read_throughs AS s
+		JOIN read_throughs AS t ON t.user_id = s.user_id AND t.book_id = ? AND t.outcome = ?
+		WHERE %[1]s.read_through_id = s.id AND s.book_id = ? AND s.outcome = ?`, table)
+}
+
+// FileLibraryID returns the library of fileID, or sql.ErrNoRows when there
+// is no such File.
+func (svc *Service) FileLibraryID(ctx context.Context, fileID int) (int, error) {
+	var libraryID int
+	err := svc.db.NewSelect().
+		Model((*models.File)(nil)).
+		Column("f.library_id").
+		Where("f.id = ?", fileID).
+		Scan(ctx, &libraryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	return libraryID, errors.WithStack(err)
 }

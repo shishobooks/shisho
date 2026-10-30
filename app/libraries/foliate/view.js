@@ -346,7 +346,9 @@ export class View extends HTMLElement {
         this.lastLocation = { ...progress, tocItem, pageItem, cfi, range }
         if (reason === 'snap' || reason === 'page' || reason === 'scroll')
             this.history.replaceState(cfi)
-        this.#emit('relocate', this.lastLocation)
+        // Shisho patch: pass the renderer's reason on, so the reader can tell
+        // a page turn from a re-layout ('anchor') that only keeps the place.
+        this.#emit('relocate', { ...this.lastLocation, reason })
     }
     #onLoad({ doc, index }) {
         // set language and dir if not already set

@@ -68,6 +68,9 @@ type UserSettings struct {
 	// DefaultLibraryID is the library `/` opens. Nil opens the first library
 	// the user can access.
 	DefaultLibraryID *int `json:"default_library_id" tstype:"number | null"`
+	// TimeZone is the IANA zone that dates the user's automatic Read-through
+	// days. Nil until the browser fills it in; days are then dated in UTC.
+	TimeZone *string `json:"time_zone" tstype:"string | null"`
 }
 
 // DefaultUserSettings returns a UserSettings with default values.

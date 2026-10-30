@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { useFilePosition } from "@/hooks/queries/reading";
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
@@ -17,9 +18,10 @@ import {
 } from "@/hooks/queries/settings";
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import type { File, UserSettingsPayload } from "@/types";
+import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
 import { fileTitle } from "@/utils/format";
 
 import "@/libraries/foliate/view.js";
@@ -40,7 +42,16 @@ interface RelocateDetail {
   fraction: number;
   tocItem?: { label?: string; href?: string } | null;
   cfi?: string;
+  // Why foliate moved (a Shisho patch in view.js). "anchor" is a re-layout
+  // that keeps the place, such as a resize or a font change.
+  reason?: string;
 }
+
+type FoliateRenderer = {
+  atEnd?: boolean;
+  setStyles?: (styles: string | [string, string]) => void;
+  setAttribute?: (name: string, value: string) => void;
+};
 
 // Flattens foliate's table of contents into menu entries, keeping headings
 // (entries without an href) so the menu shows the book's structure.
@@ -92,12 +103,56 @@ export default function ReflowableReader({
   const { chromeVisible, revealChrome, toggleChrome } =
     useAutoHideChrome(hideChrome);
 
+  // The reader opens at the saved location once it has loaded, fetched anew
+  // so a place saved in another browser since wins over a cached one. A
+  // failed load opens at the start, and saves nothing, so a page turn there
+  // can't replace the place saved on the server.
+  const positionQuery = useFilePosition(file.id, {
+    refetchOnMount: "always",
+    retry: 1,
+  });
+  const positionFailed =
+    Boolean(positionQuery.error) && !positionQuery.isFetching;
+  const positionSettled =
+    (positionQuery.isFetchedAfterMount && !positionQuery.isFetching) ||
+    positionFailed ||
+    !positionQuery.isEnabled;
+  useEffect(() => {
+    if (positionFailed) {
+      toastRequestError(
+        positionQuery.error,
+        "Failed to load your reading position",
+      );
+    }
+  }, [positionFailed, positionQuery.error]);
+  // Read when the book opens, so a later refetch doesn't move the reader.
+  const savedRef = useRef<ReadingPosition | null>(null);
+  const saved = positionQuery.data?.position ?? null;
+  useEffect(() => {
+    savedRef.current = saved;
+  }, [saved]);
+  const { opened, moved, recordActivity } = useReadingProgress(file.id, {
+    enabled: !positionFailed,
+  });
+  // True while the book opens at its saved location, which isn't reading.
+  const restoringRef = useRef(true);
+
   // Events inside the book's iframe never reach the window, so the listeners
   // that foliate's "load" event adds to each section read the latest values
   // through this ref.
-  const bookEventsRef = useRef({ flow, revealChrome, toggleChrome });
+  const bookEventsRef = useRef({
+    flow,
+    revealChrome,
+    toggleChrome,
+    recordActivity,
+  });
   useEffect(() => {
-    bookEventsRef.current = { flow, revealChrome, toggleChrome };
+    bookEventsRef.current = {
+      flow,
+      revealChrome,
+      toggleChrome,
+      recordActivity,
+    };
   });
 
   // Local draft state lets the slider thumb and label update live while the
@@ -137,9 +192,10 @@ export default function ReflowableReader({
   const [bookReady, setBookReady] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
 
-  // Load the blob into foliate once both are available.
+  // Load the blob into foliate once both it and the saved location are
+  // available.
   useEffect(() => {
-    if (!blob) return;
+    if (!blob || !positionSettled) return;
     const view = viewRef.current as
       | (HTMLElement & {
           open?: (book: Blob | File) => Promise<void>;
@@ -165,6 +221,8 @@ export default function ReflowableReader({
         }) => Promise<void>;
       }
     ).init;
+    const saved = savedRef.current;
+    const savedCfi = saved?.cfi;
 
     let cancelled = false;
     setBookReady(false);
@@ -187,8 +245,43 @@ export default function ReflowableReader({
       // the first page and triggers rendering. Without it the view stays at
       // 0% with an empty content area.
       if (viewInit) {
-        await viewInit.call(view, { showTextStart: false });
+        restoringRef.current = true;
+        let restored = Boolean(savedCfi);
+        try {
+          await viewInit.call(
+            view,
+            savedCfi ? { lastLocation: savedCfi } : { showTextStart: false },
+          );
+        } catch (err) {
+          // A saved location this copy of the book can't resolve (the file
+          // changed) opens at the start.
+          if (!savedCfi) throw err;
+          console.warn("ReflowableReader: saved location failed", err);
+          restored = false;
+          await viewInit.call(view, { showTextStart: false });
+        }
         if (cancelled) return;
+        restoringRef.current = false;
+        // Where it opened isn't a move, so until the reader moves it reports
+        // the saved place as it was: foliate's location for the page it laid
+        // out differs on another screen size.
+        const openedView = view as HTMLElement & {
+          lastLocation?: { cfi?: string; fraction?: number } | null;
+          renderer?: FoliateRenderer;
+        };
+        const location = openedView.lastLocation;
+        if (restored && saved?.cfi) {
+          opened(
+            { cfi: saved.cfi, percentage: saved.percentage, atEnd: false },
+            saved.occurred_at,
+          );
+        } else if (location?.cfi) {
+          opened({
+            cfi: location.cfi,
+            percentage: location.fraction ?? 0,
+            atEnd: openedView.renderer?.atEnd ?? false,
+          });
+        }
       }
       setBookReady(true);
     })().catch((err: unknown) => {
@@ -213,7 +306,7 @@ export default function ReflowableReader({
         // no-op
       }
     };
-  }, [blob, fileType]);
+  }, [blob, fileType, positionSettled, opened]);
 
   // Pointer movement over the book shows auto-hidden controls, as it does
   // over the rest of the page. In scrolled flow there are no tap zones over
@@ -224,6 +317,13 @@ export default function ReflowableReader({
 
     const handleLoad = (evt: Event) => {
       const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
+      // Input inside the book's frame never reaches the window, where the
+      // reading-session tracker listens.
+      for (const name of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+        doc.addEventListener(name, () =>
+          bookEventsRef.current.recordActivity(),
+        );
+      }
       doc.addEventListener("pointermove", (e) => {
         if (isMouseMove(e)) bookEventsRef.current.revealChrome();
       });
@@ -254,23 +354,28 @@ export default function ReflowableReader({
       if (typeof detail.fraction === "number") setFraction(detail.fraction);
       setCurrentTocHref(detail.tocItem?.href ?? null);
       setCurrentTocLabel(detail.tocItem?.label ?? null);
+      // Opening at the saved location and re-layouts aren't moves.
+      if (restoringRef.current || detail.reason === "anchor" || !detail.cfi) {
+        return;
+      }
+      const renderer = (view as HTMLElement & { renderer?: FoliateRenderer })
+        .renderer;
+      moved({
+        cfi: detail.cfi,
+        percentage: detail.fraction ?? 0,
+        atEnd: renderer?.atEnd ?? false,
+      });
     };
 
     view.addEventListener("relocate", handleRelocate);
     return () => view.removeEventListener("relocate", handleRelocate);
-  }, [bookReady]);
+  }, [bookReady, moved]);
 
   // Push viewer settings (font size / theme / flow) to the foliate renderer.
   useEffect(() => {
     if (!bookReady) return;
     const view = viewRef.current as
-      | (HTMLElement & {
-          renderer?: {
-            setStyles?: (styles: string | [string, string]) => void;
-            setAttribute?: (name: string, value: string) => void;
-          };
-        })
-      | null;
+      (HTMLElement & { renderer?: FoliateRenderer }) | null;
     const renderer = view?.renderer;
     if (!renderer) return;
 
