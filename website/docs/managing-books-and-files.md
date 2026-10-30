@@ -30,7 +30,7 @@ If you delete the last main file, Shisho promotes the oldest supported supplemen
 
 ## Main Files and Supplements
 
-A main file represents an edition of the book. A supplement is related content that does not normally supply the book's metadata or review state. See [Supplement Files](./supplement-files.md) for discovery rules.
+A main file represents an edition of the book. A supplement is related content that does not normally supply the book's metadata or review status. See [Supplement Files](./supplement-files.md) for discovery rules.
 
 You can promote a supported supplement to a main file or demote a main file to a supplement from file editing. Promotion causes Shisho to treat the file as an edition and scan its metadata. Demotion removes it from main-file behavior. Make sure another appropriate main file remains, especially before later deletions or merges.
 

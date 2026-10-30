@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
-import CurrentlyReadingRow from "@/components/library/CurrentlyReadingRow";
 import type { SelectedFilter } from "@/components/library/FilterChip";
 import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
@@ -564,22 +563,6 @@ const HomeContent = () => {
           )}
         </div>
       )}
-
-      {/* Only on the library's landing view: a series, a search, a filter,
-          or a later page is looking for something else, and the row would
-          push those results down. */}
-      {!seriesId &&
-        !searchQuery &&
-        !hasActiveFilters &&
-        offset === 0 &&
-        libraryId &&
-        settingsResolved && (
-          <CurrentlyReadingRow
-            columns={columns}
-            coverAspectRatio={coverAspectRatio}
-            libraryId={libraryId}
-          />
-        )}
 
       {/* Search and Filters */}
       <div className="mb-6 space-y-4">

@@ -85,8 +85,9 @@ describe("FilterSheet", () => {
     ).toBeInTheDocument();
   });
 
-  it("names the file type and review state groups and says which genres are chosen", async () => {
+  it("picks file types from a combobox that shows what's chosen, names the review status group, and says which genres are chosen", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onToggleFileType = vi.fn();
     const genres = [
       { id: 1, name: "Fantasy", book_count: 1200 },
       { id: 2, name: "Horror", book_count: 1 },
@@ -111,7 +112,7 @@ describe("FilterSheet", () => {
         onReviewedFilterChange={vi.fn()}
         onTagScopeChange={vi.fn()}
         onTagSearchChange={vi.fn()}
-        onToggleFileType={vi.fn()}
+        onToggleFileType={onToggleFileType}
         onToggleGenre={vi.fn()}
         onToggleTag={vi.fn()}
         reading={{ statuses: [] }}
@@ -131,11 +132,17 @@ describe("FilterSheet", () => {
     );
     await user.click(screen.getByRole("button", { name: /Filter/ }));
 
-    const fileTypes = screen.getByRole("group", { name: "File type" });
-    expect(
-      within(fileTypes).getByRole("button", { name: "EPUB" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    const review = screen.getByRole("radiogroup", { name: "Review state" });
+    const fileTypes = screen.getByRole("combobox", { name: "File type" });
+    expect(fileTypes).toHaveTextContent("EPUB");
+    await user.click(fileTypes);
+    expect(screen.getByRole("option", { name: /EPUB/ })).toHaveTextContent(
+      "(chosen)",
+    );
+    await user.click(screen.getByRole("option", { name: "CBZ" }));
+    expect(onToggleFileType).toHaveBeenCalledWith("cbz");
+    await user.keyboard("{Escape}");
+
+    const review = screen.getByRole("radiogroup", { name: "Review status" });
     expect(
       within(review).getByRole("radio", { name: "Needs review" }),
     ).toBeChecked();

@@ -54,7 +54,7 @@ After the root catalog, clients follow these routes under `/opds/v1`:
 | Authors list | `/libraries/{libraryID}/authors` |
 | Books by an author | `/libraries/{libraryID}/authors/{authorName}` |
 | Search | `/libraries/{libraryID}/search?q={query}` |
-| The books the user is [reading](./reading-tracking.md#currently-reading), paused ones last | `/currently-reading` |
+| The books the user is [reading](./reading-tracking.md#reading-status), most recently started first, paused ones last | `/currently-reading` |
 | The user's To Read, in queue order | `/to-read` |
 | Lists the user owns or has been shared | `/lists` |
 | Books in a list | `/lists/{listID}` |

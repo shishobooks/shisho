@@ -210,7 +210,7 @@ describe("AdminReviewCriteria", () => {
 
     // Dialog should appear with override count info
     await waitFor(() => {
-      expect(screen.getByText("Recompute review state?")).toBeInTheDocument();
+      expect(screen.getByText("Recompute review status?")).toBeInTheDocument();
     });
     expect(
       screen.getByText(/3 reviewed-overrides set out of 10/),
@@ -233,7 +233,7 @@ describe("AdminReviewCriteria", () => {
 
     // Wait for dialog
     await waitFor(() => {
-      expect(screen.getByText("Recompute review state?")).toBeInTheDocument();
+      expect(screen.getByText("Recompute review status?")).toBeInTheDocument();
     });
 
     // Check the "Also clear manual overrides" checkbox
@@ -282,7 +282,7 @@ describe("AdminReviewCriteria", () => {
     await user.click(screen.getByRole("button", { name: "Recompute now" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Recompute review state?")).toBeInTheDocument();
+      expect(screen.getByText("Recompute review status?")).toBeInTheDocument();
     });
     expect(
       screen.getByText(/5 reviewed-overrides set out of 10/),

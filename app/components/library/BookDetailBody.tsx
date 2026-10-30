@@ -132,7 +132,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;
   const navigate = useNavigate();
-  // Metadata, covers, chapters, review state, identify, rescan, merge, move,
+  // Metadata, covers, chapters, review status, identify, rescan, merge, move,
   // and delete all require Books Write. List membership is governed by the
   // list's own permission and stays available to everyone.
   const canWriteBooks = useCan("books:write") && !isShareLink;

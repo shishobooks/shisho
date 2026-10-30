@@ -62,7 +62,7 @@ const RecomputeDialog = ({
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Recompute review state?</DialogTitle>
+          <DialogTitle>Recompute review status?</DialogTitle>
           <DialogDescription asChild>
             <div>
               <p>
@@ -214,7 +214,7 @@ const AdminReviewCriteria = () => {
       toastRequestError(error, "Failed to queue recompute job");
       return;
     }
-    toast.success("Review state recompute queued.");
+    toast.success("Review status recompute queued.");
   };
 
   const handleRecomputeNow = async () => {
@@ -374,7 +374,7 @@ const AdminReviewCriteria = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">
-                  Recompute review state now
+                  Recompute review status now
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Re-evaluate all books against the current criteria and update

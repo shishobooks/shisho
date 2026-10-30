@@ -183,3 +183,20 @@ func TestListBooks_RejectsBadReadingFilters(t *testing.T) {
 		assert.Equal(t, http.StatusUnprocessableEntity, codeErr.HTTPCode, query)
 	}
 }
+
+// A List sorts by the caller's Reading Status, Currently Reading first or
+// last.
+func TestListBooks_SortsByReadingStatus(t *testing.T) {
+	t.Parallel()
+	f := newReadingListFixture(t)
+	read := f.add(t, f.libA, "Read")
+	untouched := f.add(t, f.libB, "Untouched")
+	current := f.add(t, f.libB, "Current")
+	finish(t, f.db, f.owner.ID, read.ID, "2026-01-01")
+	require.NoError(t, reading.NewService(f.db).Start(t.Context(), f.owner.ID, current.ID, "2026-01-01"))
+
+	ids, _ := listBookIDs(t, f.h, f.owner, f.list.ID, "sort=reading_status_asc")
+	assert.Equal(t, []int{current.ID, read.ID, untouched.ID}, ids)
+	ids, _ = listBookIDs(t, f.h, f.owner, f.list.ID, "sort=reading_status_desc")
+	assert.Equal(t, []int{untouched.ID, read.ID, current.ID}, ids)
+}

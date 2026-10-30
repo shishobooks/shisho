@@ -26,7 +26,7 @@ export type FilterChipKind =
   | "genre"
   | "tag"
   | "language"
-  | "reviewState";
+  | "reviewStatus";
 
 const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
   {
@@ -36,7 +36,7 @@ const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
     },
     rating: {
       icon: <Star className="h-3 w-3 shrink-0" />,
-      color: "text-chart-4",
+      color: "text-amber-500",
     },
     fileType: {
       icon: <File className="h-3 w-3 shrink-0" />,
@@ -54,7 +54,7 @@ const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
       icon: <Languages className="h-3 w-3 shrink-0" />,
       color: "text-chart-5",
     },
-    reviewState: {
+    reviewStatus: {
       icon: <Eye className="h-3 w-3 shrink-0" />,
       color: "text-chart-3",
     },

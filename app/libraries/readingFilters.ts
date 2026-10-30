@@ -37,12 +37,6 @@ export const READING_STATUS_FILTER_OPTIONS: readonly {
 export const readingStatusFilterLabel = (value: ReadingStatusFilter): string =>
   READING_STATUS_FILTER_OPTIONS.find((o) => o.value === value)?.label ?? value;
 
-/** The stars a range end can be set to, in quarter stars as ratings are. */
-export const RATING_FILTER_STEPS: readonly number[] = Array.from(
-  { length: 20 },
-  (_, i) => (i + 1) / 4,
-);
-
 const isStatus = (value: string): value is ReadingStatusFilter =>
   READING_STATUS_FILTER_OPTIONS.some((o) => o.value === value);
 

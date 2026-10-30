@@ -272,12 +272,7 @@ describe("Home active filter chips", () => {
     renderHome("/libraries/1?tag_ids=abc,0,-1,1.5,5&genre_ids=xyz");
     await flush();
 
-    // The gallery's request, not the Currently Reading row's.
-    const booksCall = request.mock.calls.find(
-      (call) =>
-        call[1] === "/books" &&
-        !(call[3] as { currently_reading?: boolean }).currently_reading,
-    );
+    const booksCall = request.mock.calls.find((call) => call[1] === "/books");
     expect(booksCall?.[3]).toMatchObject({ tag_ids: [5] });
     expect(booksCall?.[3]).not.toHaveProperty("genre_ids");
     const tagPaths = requestedPaths(request).filter((path: string) =>
@@ -285,46 +280,4 @@ describe("Home active filter chips", () => {
     );
     expect(tagPaths).toEqual(["/tags/5"]);
   });
-});
-
-describe("Home Currently Reading row", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    setAuth({ permissions: ["books:read"] });
-  });
-
-  const asksForTheRow = async (entry: string) => {
-    const request = vi
-      .spyOn(API, "request")
-      .mockImplementation(async (_method, path) =>
-        path === "/user/libraries" || path.endsWith("/languages")
-          ? []
-          : { items: [], total: 0 },
-      );
-    renderHome(entry);
-    await flush();
-    return request.mock.calls.some(
-      (call) =>
-        call[1] === "/books" &&
-        (call[3] as { currently_reading?: boolean }).currently_reading,
-    );
-  };
-
-  it("shows on the library's first unfiltered page", async () => {
-    expect(await asksForTheRow("/libraries/1")).toBe(true);
-  });
-
-  it.each([
-    ["a search", "/libraries/1?search=dune"],
-    ["a reading filter", "/libraries/1?reading_status=read"],
-    ["a rating filter", "/libraries/1?rating_min=4"],
-    ["a file type filter", "/libraries/1?file_types=epub"],
-    ["a later page", "/libraries/1?start=48"],
-    ["a series", "/libraries/1?series_id=3"],
-  ])(
-    "is left out with %s, which is looking for something else",
-    async (_, entry) => {
-      expect(await asksForTheRow(entry)).toBe(false);
-    },
-  );
 });

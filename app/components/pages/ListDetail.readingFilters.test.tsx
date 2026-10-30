@@ -128,7 +128,9 @@ describe("ListDetail reading filters", () => {
     const { bookRequests, user } = renderList("/lists/5");
 
     await user.click(await screen.findByRole("button", { name: "Filter" }));
-    await user.click(screen.getByRole("button", { name: "Did Not Finish" }));
+    await user.click(screen.getByRole("combobox", { name: "Reading status" }));
+    await user.click(screen.getByRole("option", { name: "Did Not Finish" }));
+    await user.keyboard("{Escape}");
 
     await waitFor(() =>
       expect(
@@ -156,6 +158,12 @@ describe("ListDetail reading filters", () => {
     await user.click(screen.getByRole("combobox", { name: "Sort by:" }));
     expect(
       screen.getByRole("option", { name: "Recently Finished" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Currently Reading First" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Currently Reading Last" }),
     ).toBeInTheDocument();
     await user.click(
       screen.getByRole("option", { name: "Rating (high to low)" }),

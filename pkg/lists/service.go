@@ -442,7 +442,8 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 // to the default without one.
 func orderListBooks(q *bun.SelectQuery, sort string, readerID *int) *bun.SelectQuery {
 	if readerID == nil && (sort == models.ListSortRatingDesc || sort == models.ListSortRatingAsc ||
-		sort == models.ListSortDateFinishedDesc || sort == models.ListSortDateFinishedAsc) {
+		sort == models.ListSortDateFinishedDesc || sort == models.ListSortDateFinishedAsc ||
+		sort == models.ListSortReadingStatusAsc || sort == models.ListSortReadingStatusDesc) {
 		sort = models.ListSortAddedAtDesc
 	}
 	switch sort {
@@ -458,6 +459,10 @@ func orderListBooks(q *bun.SelectQuery, sort string, readerID *int) *bun.SelectQ
 		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) ASC NULLS LAST")
 	case models.ListSortAuthorDesc:
 		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) DESC NULLS LAST")
+	case models.ListSortReadingStatusAsc:
+		q = q.OrderExpr(reading.StatusRankExpr(*readerID, "lb.book_id") + " ASC")
+	case models.ListSortReadingStatusDesc:
+		q = q.OrderExpr(reading.StatusRankExpr(*readerID, "lb.book_id") + " DESC")
 	case models.ListSortRatingDesc:
 		q = q.OrderExpr(reading.RatingUnitsExpr(*readerID, "lb.book_id") + " DESC NULLS LAST")
 	case models.ListSortRatingAsc:

@@ -112,7 +112,7 @@ export const ActiveFilterChips = ({
       )}
       {reviewedFilter && reviewedFilter !== "all" && (
         <FilterChip
-          kind="reviewState"
+          kind="reviewStatus"
           label={REVIEWED_FILTER_LABELS[reviewedFilter] ?? reviewedFilter}
           onRemove={() => onClearReviewedFilter?.()}
         />

@@ -78,6 +78,17 @@ func StatusExpr(userID int, bookIDColumn string) string {
 	)
 }
 
+// StatusRankExpr is the SQL expression ranking userID's Reading Status of
+// the Book whose id is in bookIDColumn, for sorting: Currently Reading 1,
+// Paused 2, To Read 3, Read 4, Did Not Finish 5, and no status 6.
+// bookIDColumn is interpolated as in StatusExpr.
+func StatusRankExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(CASE %s WHEN '%s' THEN 1 WHEN '%s' THEN 2 WHEN '%s' THEN 3 WHEN '%s' THEN 4 WHEN '%s' THEN 5 ELSE 6 END)`,
+		StatusExpr(userID, bookIDColumn),
+		models.ReadingStatusCurrentlyReading, models.ReadingStatusPaused, models.ReadingStatusToRead,
+		models.ReadingStatusRead, models.ReadingStatusDidNotFinish)
+}
+
 // RatingUnitsExpr is the SQL expression for userID's Rating, in
 // quarter-star units, of the Book whose id is in bookIDColumn, or NULL when
 // unrated. bookIDColumn is interpolated as in StatusExpr.

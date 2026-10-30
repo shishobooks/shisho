@@ -35,7 +35,7 @@ Write permissions permit the create, edit, or delete operations associated with 
 
 Some library data is edited under a broader resource than its name suggests:
 
-- Genres, tags, and publishers are edited with Books Write, along with book and file metadata, covers, chapters, review state, Identify, rescans, merges, file moves, and deletion.
+- Genres, tags, and publishers are edited with Books Write, along with book and file metadata, covers, chapters, review status, Identify, rescans, merges, file moves, and deletion.
 - Series are edited with Series Write.
 - People (authors and narrators) are edited with People Write.
 - Library rescans create jobs, so they require Jobs Read and Jobs Write. Viewing jobs and their logs requires Jobs Read.

@@ -1,7 +1,7 @@
 /**
  * E2E test for reading tracking: marking a book read from its page, rating
  * it in quarter stars, seeing its status on the library's book card, and
- * seeing a book being read in the library's Currently Reading row.
+ * sorting the library by Reading Status.
  *
  * Running:
  *   pnpm e2e:chromium e2e/reading.spec.ts   # Chromium only
@@ -57,7 +57,7 @@ test.describe("Reading", () => {
     await apiContext.dispose();
   });
 
-  test("marks a book read, rates it, and shows the status on its card and in Currently Reading", async ({
+  test("marks a book read, rates it, and shows the status on its card, and sorts by it", async ({
     page,
   }) => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -107,11 +107,6 @@ test.describe("Reading", () => {
     ).toBeVisible();
     await expect(card.getByLabel("Rated 3.75 stars")).toBeVisible();
 
-    // Nothing is underway yet, so the library has no Currently Reading row.
-    await expect(
-      page.getByRole("region", { name: "Currently Reading" }),
-    ).toHaveCount(0);
-
     await page.goto(`/libraries/${libraryId}/books/${underwayBookId}`, {
       waitUntil: "domcontentloaded",
     });
@@ -123,15 +118,20 @@ test.describe("Reading", () => {
       page.getByRole("button", { name: "Reading status: Currently Reading" }),
     ).toBeVisible();
 
-    await page.goto(`/libraries/${libraryId}`, {
+    // Currently Reading comes before Read ascending, and after it
+    // descending.
+    const cardTitles = page
+      .getByRole("link")
+      .filter({ hasText: /(Tracked|Underway) Book/ });
+    await page.goto(`/libraries/${libraryId}?sort=reading_status:asc`, {
       waitUntil: "domcontentloaded",
     });
-    const row = page.getByRole("region", { name: "Currently Reading" });
-    await expect(
-      row.getByRole("link").filter({ hasText: "Underway Book" }).first(),
-    ).toBeVisible();
-    await expect(
-      row.getByRole("link").filter({ hasText: "Tracked Book" }),
-    ).toHaveCount(0);
+    await expect(cardTitles.first()).toContainText("Underway Book");
+    await expect(cardTitles.last()).toContainText("Tracked Book");
+    await page.goto(`/libraries/${libraryId}?sort=reading_status:desc`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(cardTitles.first()).toContainText("Tracked Book");
+    await expect(cardTitles.last()).toContainText("Underway Book");
   });
 });

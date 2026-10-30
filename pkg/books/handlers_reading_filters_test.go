@@ -278,9 +278,10 @@ func TestListHandler_ReadingFilterPagesAndTotals(t *testing.T) {
 	assert.Equal(t, 2, total)
 }
 
-// The Currently Reading listing has the caller's Books underway, the ones
-// being read before the paused ones, each most recently begun first.
-func TestListHandler_CurrentlyReadingPutsPausedLast(t *testing.T) {
+// Sorting by Reading Status orders by the caller's status: Currently
+// Reading, Paused, To Read, Read, Did Not Finish, then no status, or the
+// reverse descending. Later levels order books with the same status.
+func TestListHandler_SortsByReadingStatus(t *testing.T) {
 	t.Parallel()
 
 	db := testdb.New(t)
@@ -289,23 +290,28 @@ func TestListHandler_CurrentlyReadingPutsPausedLast(t *testing.T) {
 	other := seedUserWithLibAccess(t, db, "other", lib)
 
 	now := time.Now()
-	pausedNew := seedBook(t, db, lib, "Paused new", "Paused new", now)
-	older := seedBook(t, db, lib, "Older", "Older", now.Add(-1*time.Hour))
-	pausedOld := seedBook(t, db, lib, "Paused old", "Paused old", now.Add(-2*time.Hour))
-	newer := seedBook(t, db, lib, "Newer", "Newer", now.Add(-3*time.Hour))
-	finished := seedBook(t, db, lib, "Finished", "Finished", now.Add(-4*time.Hour))
-	othersBook := seedBook(t, db, lib, "Other's", "Other's", now.Add(-5*time.Hour))
+	untouched := seedBook(t, db, lib, "Untouched", "Untouched", now)
+	dnf := seedBook(t, db, lib, "DNF", "DNF", now.Add(-1*time.Hour))
+	read := seedBook(t, db, lib, "Read", "Read", now.Add(-2*time.Hour))
+	queued := seedBook(t, db, lib, "Queued", "Queued", now.Add(-3*time.Hour))
+	paused := seedBook(t, db, lib, "Paused", "Paused", now.Add(-4*time.Hour))
+	readingB := seedBook(t, db, lib, "Reading B", "Reading B", now.Add(-5*time.Hour))
+	readingA := seedBook(t, db, lib, "Reading A", "Reading A", now.Add(-6*time.Hour))
 
-	seedReading(t, db, reader.ID, older.ID, nil, [2]string{"start", "2026-01-01"})
-	seedReading(t, db, reader.ID, newer.ID, nil, [2]string{"start", "2026-03-01"})
-	seedReading(t, db, reader.ID, pausedOld.ID, nil, [2]string{"start", "2026-01-05"}, [2]string{"pause", ""})
-	seedReading(t, db, reader.ID, pausedNew.ID, nil, [2]string{"start", "2026-02-05"}, [2]string{"pause", ""})
-	seedReading(t, db, reader.ID, finished.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"finish", "2026-01-02"})
-	seedReading(t, db, other.ID, othersBook.ID, nil, [2]string{"start", "2026-01-01"})
+	seedReading(t, db, reader.ID, readingA.ID, nil, [2]string{"start", "2026-01-01"})
+	seedReading(t, db, reader.ID, readingB.ID, nil, [2]string{"start", "2026-01-01"})
+	seedReading(t, db, reader.ID, paused.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"pause", ""})
+	require.NoError(t, reading.NewService(db).AddToRead(context.Background(), reader.ID, queued.ID))
+	seedReading(t, db, reader.ID, read.ID, nil, [2]string{"finish", "2026-02-01"})
+	seedReading(t, db, reader.ID, dnf.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"abandon", "2026-02-01"})
+	// Another user's reading doesn't sort the reader's listing.
+	seedReading(t, db, other.ID, untouched.ID, nil, [2]string{"start", "2026-01-01"})
 
-	ids, total := listBookIDs(t, db, reader, "currently_reading=true&sort=title:asc")
-	assert.Equal(t, []int{newer.ID, older.ID, pausedNew.ID, pausedOld.ID}, ids, "the reading order wins over a sort")
-	assert.Equal(t, 4, total)
+	ids, _ := listBookIDs(t, db, reader, "library_id="+itoa(lib.ID)+"&sort=reading_status:asc,title:asc")
+	assert.Equal(t, []int{readingA.ID, readingB.ID, paused.ID, queued.ID, read.ID, dnf.ID, untouched.ID}, ids)
+
+	ids, _ = listBookIDs(t, db, reader, "library_id="+itoa(lib.ID)+"&sort=reading_status:desc,title:asc")
+	assert.Equal(t, []int{untouched.ID, dnf.ID, read.ID, queued.ID, paused.ID, readingA.ID, readingB.ID}, ids)
 }
 
 func reloadUser(t *testing.T, db *bun.DB, id int) *models.User {

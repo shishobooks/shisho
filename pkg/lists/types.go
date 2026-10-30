@@ -58,7 +58,7 @@ type ListListsQuery struct {
 type ListBooksQuery struct {
 	Limit  int     `query:"limit" json:"limit,omitempty" default:"24" validate:"min=1,max=100"`
 	Offset int     `query:"offset" json:"offset,omitempty" validate:"min=0"`
-	Sort   *string `query:"sort" json:"sort,omitempty" validate:"omitempty,oneof=manual added_at_desc added_at_asc title_asc title_desc author_asc author_desc rating_desc rating_asc date_finished_desc date_finished_asc" tstype:"ListSort"`
+	Sort   *string `query:"sort" json:"sort,omitempty" validate:"omitempty,oneof=manual added_at_desc added_at_asc title_asc title_desc author_asc author_desc rating_desc rating_asc date_finished_desc date_finished_asc reading_status_asc reading_status_desc" tstype:"ListSort"`
 	// Only Books whose caller's Reading Status is any of these; "none"
 	// matches Books with no status.
 	ReadingStatuses []string `query:"reading_status" json:"reading_status,omitempty" validate:"omitempty,max=6,dive,oneof=currently_reading paused to_read read did_not_finish none" tstype:"ReadingStatusFilter[]"`
@@ -72,14 +72,14 @@ type CreateListPayload struct {
 	Name        string  `json:"name" validate:"required,min=1,max=200"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=2000" tstype:"string"`
 	IsOrdered   bool    `json:"is_ordered"`
-	DefaultSort *string `json:"default_sort,omitempty" validate:"omitempty,oneof=manual added_at_desc added_at_asc title_asc title_desc author_asc author_desc rating_desc rating_asc date_finished_desc date_finished_asc" tstype:"ListSort"`
+	DefaultSort *string `json:"default_sort,omitempty" validate:"omitempty,oneof=manual added_at_desc added_at_asc title_asc title_desc author_asc author_desc rating_desc rating_asc date_finished_desc date_finished_asc reading_status_asc reading_status_desc" tstype:"ListSort"`
 }
 
 type UpdateListPayload struct {
 	Name        *string `json:"name,omitempty" validate:"omitempty,min=1,max=200" tstype:"string"`
 	Description *string `json:"description,omitempty" validate:"omitempty,max=2000" tstype:"string"`
 	IsOrdered   *bool   `json:"is_ordered,omitempty" tstype:"boolean"`
-	DefaultSort *string `json:"default_sort,omitempty" validate:"omitempty,oneof=manual added_at_desc added_at_asc title_asc title_desc author_asc author_desc rating_desc rating_asc date_finished_desc date_finished_asc" tstype:"ListSort"`
+	DefaultSort *string `json:"default_sort,omitempty" validate:"omitempty,oneof=manual added_at_desc added_at_asc title_asc title_desc author_asc author_desc rating_desc rating_asc date_finished_desc date_finished_asc reading_status_asc reading_status_desc" tstype:"ListSort"`
 }
 
 type AddBooksPayload struct {

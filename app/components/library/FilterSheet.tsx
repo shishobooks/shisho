@@ -1,3 +1,4 @@
+import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Bookmark,
   BookOpenCheck,
@@ -11,7 +12,7 @@ import {
   Star,
   Tags,
 } from "lucide-react";
-import { forwardRef, useId, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useId, useState, type ReactNode } from "react";
 
 import {
   FilterChip,
@@ -65,7 +66,7 @@ import {
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
-  RATING_FILTER_STEPS,
+  ratingRangeLabel,
   READING_STATUS_FILTER_OPTIONS,
   type ReadingFilters,
 } from "@/libraries/readingFilters";
@@ -284,53 +285,169 @@ const FilterCombobox = ({
   );
 };
 
-// A pressed-or-not chip in a group of options, as the file types show.
-const toggleClass = (pressed: boolean) =>
-  cn(
-    "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
-    pressed
-      ? "border-primary bg-primary/5 text-primary"
-      : "border-border bg-card hover:bg-accent",
-  );
-
-const ANY_RATING = "any";
-
-// One end of the rating range. Ends that would put the range's minimum above
-// its maximum are disabled.
-const RatingEndSelect = ({
-  label,
-  value,
-  onChange,
-  isAllowed,
+/**
+ * A combobox of a few fixed options, any number of them chosen. The trigger
+ * names the chosen ones, so the sheet stays short however many there are.
+ */
+const MultiSelectCombobox = <V extends string>({
+  labelId,
+  options,
+  selected,
+  onToggle,
+  placeholder,
 }: {
-  label: string;
-  value: number | undefined;
-  onChange: (value: number | undefined) => void;
-  isAllowed: (stars: number) => boolean;
-}) => (
-  <Select
-    onValueChange={(next) =>
-      onChange(next === ANY_RATING ? undefined : Number(next))
-    }
-    value={value === undefined ? ANY_RATING : String(value)}
-  >
-    <SelectTrigger aria-label={label} className="w-full">
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value={ANY_RATING}>Any</SelectItem>
-      {RATING_FILTER_STEPS.map((stars) => (
-        <SelectItem
-          disabled={!isAllowed(stars)}
-          key={stars}
-          value={String(stars)}
+  /** The id of the section header, which names the trigger. */
+  labelId: string;
+  options: readonly { value: V; label: string }[];
+  selected: readonly V[];
+  onToggle: (value: V) => void;
+  /** What the trigger says with nothing chosen. */
+  placeholder: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const chosen = options.filter((o) => selected.includes(o.value));
+  return (
+    <Popover modal onOpenChange={setOpen} open={open}>
+      <PopoverTrigger asChild>
+        <Button
+          aria-expanded={open}
+          aria-labelledby={labelId}
+          className={cn(
+            "w-full justify-between font-normal",
+            chosen.length === 0 && "text-muted-foreground",
+          )}
+          role="combobox"
+          variant="outline"
         >
-          {formatCount(stars, "star")}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
+          <span className="truncate">
+            {chosen.length > 0
+              ? chosen.map((o) => o.label).join(", ")
+              : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+      >
+        <Command shouldFilter={false}>
+          <CommandList>
+            <CommandGroup>
+              {options.map((option) => {
+                const isSelected = selected.includes(option.value);
+                return (
+                  <CommandItem
+                    key={option.value}
+                    onSelect={() => onToggle(option.value)}
+                    value={option.value}
+                  >
+                    {isSelected ? (
+                      <SquareCheckBig className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Square className="mr-2 h-4 w-4" />
+                    )}
+                    {option.label}
+                    {/* cmdk's aria-selected marks the highlighted option,
+                        so the chosen state is spoken as text. */}
+                    {isSelected && <span className="sr-only">(chosen)</span>}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+// The rating slider's ends. Each end at its edge of the track sets no bound.
+const RATING_FLOOR = 0;
+const RATING_CEILING = 5;
+
+const ratingEndText = (stars: number, edge: number) =>
+  stars === edge ? "Any" : formatCount(stars, "star");
+
+/**
+ * The rating range as a slider with a thumb for each end, in quarter stars.
+ * Either thumb at its edge of the track leaves that end unbounded, so the
+ * whole track is any rating, unrated books included.
+ */
+const RatingRangeSlider = ({
+  labelId,
+  min,
+  max,
+  onChange,
+}: {
+  labelId: string;
+  min: number | undefined;
+  max: number | undefined;
+  onChange: (min: number | undefined, max: number | undefined) => void;
+}) => {
+  const committed: [number, number] = [
+    min ?? RATING_FLOOR,
+    max ?? RATING_CEILING,
+  ];
+  // The range shown while dragging, before it's committed to the URL.
+  const [preview, setPreview] = useState<[number, number] | null>(null);
+  // Radix reports a key press's commit before its change, so the preview
+  // clears once the committed range arrives rather than on commit.
+  useEffect(() => setPreview(null), [min, max]);
+  const [low, high] = preview ?? committed;
+  const range = (lo: number, hi: number) => ({
+    min: lo === RATING_FLOOR ? undefined : lo,
+    // The top of the range is at least the lowest rating there is.
+    max: hi === RATING_CEILING ? undefined : Math.max(hi, 0.25),
+  });
+  const shown = range(low, high);
+
+  return (
+    <div className="space-y-2">
+      <div className="text-right text-xs tabular-nums text-muted-foreground">
+        {ratingRangeLabel(shown.min, shown.max)}
+      </div>
+      <SliderPrimitive.Root
+        aria-labelledby={labelId}
+        className="relative flex w-full touch-none select-none items-center py-2"
+        max={RATING_CEILING}
+        min={RATING_FLOOR}
+        minStepsBetweenThumbs={0}
+        onValueChange={([lo, hi]) => setPreview([lo, hi])}
+        onValueCommit={([lo, hi]) => {
+          const next = range(lo, hi);
+          onChange(next.min, next.max);
+        }}
+        step={0.25}
+        value={[low, high]}
+      >
+        <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-amber-400/20">
+          <SliderPrimitive.Range className="absolute h-full bg-amber-400" />
+        </SliderPrimitive.Track>
+        {(
+          [
+            ["Lowest rating", low, RATING_FLOOR],
+            ["Highest rating", high, RATING_CEILING],
+          ] as const
+        ).map(([label, stars, edge]) => (
+          <SliderPrimitive.Thumb
+            aria-label={label}
+            aria-valuetext={ratingEndText(stars, edge)}
+            className="block h-4 w-4 rounded-full border border-amber-500 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            key={label}
+          />
+        ))}
+      </SliderPrimitive.Root>
+      <div
+        aria-hidden
+        className="flex justify-between text-[10px] text-muted-foreground"
+      >
+        <span>Any</span>
+        <span>Any</span>
+      </div>
+    </div>
+  );
+};
 
 /**
  * The Reading Status and rating filters. Both read the signed-in user's own
@@ -345,16 +462,6 @@ export const ReadingFilterSection = ({
 }) => {
   const statusLabelId = useId();
   const ratingLabelId = useId();
-  const { ratingMin, ratingMax } = filters;
-
-  // Rebuilds filters with one end of the range changed, leaving an unset
-  // end out rather than undefined.
-  const withRange = (min: number | undefined, max: number | undefined) => {
-    const next: ReadingFilters = { statuses: filters.statuses };
-    if (min !== undefined) next.ratingMin = min;
-    if (max !== undefined) next.ratingMax = max;
-    return next;
-  };
 
   return (
     <>
@@ -370,61 +477,40 @@ export const ReadingFilterSection = ({
           label="Reading status"
           labelId={statusLabelId}
         />
-        <div
-          aria-labelledby={statusLabelId}
-          className="flex flex-wrap gap-1.5"
-          role="group"
-        >
-          {READING_STATUS_FILTER_OPTIONS.map((option) => {
-            const isSelected = filters.statuses.includes(option.value);
-            return (
-              <Button
-                aria-pressed={isSelected}
-                className={toggleClass(isSelected)}
-                key={option.value}
-                onClick={() =>
-                  onChange({
-                    ...filters,
-                    statuses: isSelected
-                      ? filters.statuses.filter((s) => s !== option.value)
-                      : [...filters.statuses, option.value],
-                  })
-                }
-                variant="unstyled"
-              >
-                {option.label}
-              </Button>
-            );
-          })}
-        </div>
+        <MultiSelectCombobox
+          labelId={statusLabelId}
+          onToggle={(value) =>
+            onChange({
+              ...filters,
+              statuses: filters.statuses.includes(value)
+                ? filters.statuses.filter((s) => s !== value)
+                : [...filters.statuses, value],
+            })
+          }
+          options={READING_STATUS_FILTER_OPTIONS}
+          placeholder="Any status"
+          selected={filters.statuses}
+        />
       </div>
 
       <div>
         <SectionHeader
-          colorClass="bg-chart-4/20 text-chart-4"
+          colorClass="bg-amber-400/20 text-amber-500"
           icon={<Star className="h-3 w-3" />}
           label="Rating"
           labelId={ratingLabelId}
         />
-        <div
-          aria-labelledby={ratingLabelId}
-          className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"
-          role="group"
-        >
-          <RatingEndSelect
-            isAllowed={(stars) => ratingMax === undefined || stars <= ratingMax}
-            label="Lowest rating"
-            onChange={(min) => onChange(withRange(min, ratingMax))}
-            value={ratingMin}
-          />
-          <span className="text-xs text-muted-foreground">to</span>
-          <RatingEndSelect
-            isAllowed={(stars) => ratingMin === undefined || stars >= ratingMin}
-            label="Highest rating"
-            onChange={(max) => onChange(withRange(ratingMin, max))}
-            value={ratingMax}
-          />
-        </div>
+        <RatingRangeSlider
+          labelId={ratingLabelId}
+          max={filters.ratingMax}
+          min={filters.ratingMin}
+          onChange={(min, max) => {
+            const next: ReadingFilters = { statuses: filters.statuses };
+            if (min !== undefined) next.ratingMin = min;
+            if (max !== undefined) next.ratingMax = max;
+            onChange(next);
+          }}
+        />
       </div>
     </>
   );
@@ -541,26 +627,13 @@ const FilterContent = ({
           label="File type"
           labelId={fileTypeLabelId}
         />
-        <div
-          aria-labelledby={fileTypeLabelId}
-          className="flex flex-wrap gap-1.5"
-          role="group"
-        >
-          {fileTypeOptions.map((option) => {
-            const isSelected = selectedFileTypes.includes(option.value);
-            return (
-              <Button
-                aria-pressed={isSelected}
-                className={toggleClass(isSelected)}
-                key={option.value}
-                onClick={() => onToggleFileType(option.value)}
-                variant="unstyled"
-              >
-                {option.label}
-              </Button>
-            );
-          })}
-        </div>
+        <MultiSelectCombobox
+          labelId={fileTypeLabelId}
+          onToggle={onToggleFileType}
+          options={fileTypeOptions}
+          placeholder="Any file type"
+          selected={selectedFileTypes}
+        />
       </div>
 
       {/* Genres */}
@@ -679,12 +752,12 @@ const FilterContent = ({
         </div>
       )}
 
-      {/* Review state */}
+      {/* Review status */}
       <div>
         <SectionHeader
           colorClass="bg-chart-3/20 text-chart-3"
           icon={<Eye className="h-3 w-3" />}
-          label="Review state"
+          label="Review status"
           labelId={reviewLabelId}
         />
         <RadioGroup

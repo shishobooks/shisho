@@ -88,6 +88,28 @@ describe("SortSheet", () => {
     ]);
   });
 
+  it("starts a reading status level with what's being read first", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    render(
+      <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
+        isDirty={false}
+        isSaving={false}
+        levels={[]}
+        onChange={onChange}
+        onSaveAsDefault={vi.fn()}
+        trigger={<Trigger />}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Open Sort/i }));
+    await user.click(screen.getByRole("button", { name: /^Reading status$/ }));
+    expect(onChange).toHaveBeenLastCalledWith([
+      { field: "reading_status", direction: "asc" },
+    ]);
+  });
+
   it("toggles direction when the arrow button is clicked", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();

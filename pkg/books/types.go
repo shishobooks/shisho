@@ -17,9 +17,6 @@ type ListBooksQuery struct {
 	Sort           string   `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 	ReviewedFilter string   `query:"reviewed_filter" json:"reviewed_filter,omitempty" validate:"omitempty,oneof=all needs_review reviewed" tstype:"ReviewedFilter"` // "" or "all" = all books, "needs_review", "reviewed"
 	ToRead         bool     `query:"to_read" json:"to_read,omitempty"`                                                                                              // Only the caller's To Read, in queue order, whatever the sort
-	// Only the caller's Books with a Read-through underway, the ones being
-	// read before the paused ones, whatever the sort.
-	CurrentlyReading bool `query:"currently_reading" json:"currently_reading,omitempty"`
 	// Only Books whose caller's Reading Status is any of these; "none"
 	// matches Books with no status.
 	ReadingStatuses []string `query:"reading_status" json:"reading_status,omitempty" validate:"omitempty,max=6,dive,oneof=currently_reading paused to_read read did_not_finish none" tstype:"ReadingStatusFilter[]"`

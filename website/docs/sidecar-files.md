@@ -2,7 +2,7 @@
 
 Shisho stores portable metadata beside media files as JSON sidecars. Sidecars let scans recover supported book and file metadata without modifying the source media.
 
-Sidecars are Shisho metadata portability artifacts, not complete database backups. They do not capture libraries, users, permissions, lists, review state, jobs, plugin configuration, source-priority history, or every database relationship. Intrinsic file properties such as file size, bitrate, duration, codec, and page count are intentionally excluded.
+Sidecars are Shisho metadata portability artifacts, not complete database backups. They do not capture libraries, users, permissions, lists, review status, jobs, plugin configuration, source-priority history, or every database relationship. Intrinsic file properties such as file size, bitrate, duration, codec, and page count are intentionally excluded.
 
 ## Naming and Location
 

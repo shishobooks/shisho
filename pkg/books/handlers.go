@@ -223,9 +223,6 @@ func (h *handler) list(c echo.Context) error {
 	if params.ToRead {
 		opts.ToReadUserID = &user.ID
 	}
-	if params.CurrentlyReading {
-		opts.CurrentlyReadingUserID = &user.ID
-	}
 	opts.ReaderID = &user.ID
 	opts.Reading = readingFilter
 
