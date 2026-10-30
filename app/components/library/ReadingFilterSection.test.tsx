@@ -40,6 +40,13 @@ describe("ReadingFilterSection", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Lowest rating" }));
+    // Quarter stars, as ratings are.
+    expect(
+      screen.getByRole("option", { name: "3.75 stars" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "0.25 stars" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "4.5 stars" })).toHaveAttribute(
       "aria-disabled",
       "true",

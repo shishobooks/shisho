@@ -50,7 +50,7 @@ Reading apps can download from your queue through the [OPDS catalog](./opds.md#c
 
 Your statuses and ratings are ways to browse, in a library's gallery and on any [list](./lists.md). Each user filters and sorts by their own.
 
-- **Filter** has a **Reading status** section, where you can pick one or more statuses, and **No status** for books you have never tracked. A book matching any picked status shows. It also has a **Rating** range: choose the lowest rating, the highest, or both, in half stars. Unrated books never match a rating range.
+- **Filter** has a **Reading status** section, where you can pick one or more statuses, and **No status** for books you have never tracked. A book matching any picked status shows. It also has a **Rating** range: choose the lowest rating, the highest, or both, in quarter stars. Unrated books never match a rating range.
 - **Sort** offers **Rating** and **Date finished**, which start highest and latest first. Date finished is the end date of your latest finished read; a book you abandoned, or finished with no end date, has none. Books with no rating or finish date come last in either direction. A list's sort menu offers **Rating (high to low)**, **Rating (low to high)**, **Recently Finished**, and **Earliest Finished**.
 
 Filters apply before the gallery or list pages, so the count and every page hold only matching books. An ordered list can't be dragged into a new order while it's filtered.
