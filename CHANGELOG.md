@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-30
+
+### Features
+- Find books by Reading Status and Rating (#824)
+- Scrolled flow for webtoons in the CBZ and PDF reader (#823)
+- To Read queue, replacing the To Be Read List template (#822)
+- Collapse long tag and genre rows on the book page (#818)
+- Track reading from the book page: Read-throughs, Reading Status, and Rating (#815)
+
+### Bug Fixes
+- Store library paths cleaned and keep scans safe across library path edge cases (#821)
+- Credit each author once with all their roles in identify results (#820)
+- Allow splitting a file into a new book when organize is off (#819)
+- Refuse future reading dates on the server and use Tailwind v4 CSS variables (#817)
+- Rank plugin search results by confidence in identify and scans (#816)
+- Show the placeholder cover in the related panel (#814)
+
+### Documentation
+- Add reading tracking ADRs and glossary terms (#813)
+
 ## [0.5.0] - 2026-10-28
 
 ### Breaking Changes
