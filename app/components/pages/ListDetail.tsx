@@ -86,6 +86,9 @@ const SORT_OPTIONS = [
   { value: ListSortDateFinishedAsc, label: "Earliest Finished" },
 ];
 
+const isSortOption = (value: string | null): value is ListSort =>
+  SORT_OPTIONS.some((option) => option.value === value);
+
 const ListDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -123,12 +126,31 @@ const ListDetail = () => {
     saveSizeAsDefault,
   } = useGallerySizeParam();
 
-  const [sort, setSort] = useState<ListSort | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
+
+  // A sort chosen on an unordered list lives in the URL, left out when it's
+  // the list's default. An ordered list always shows its manual order.
+  const sortParam = searchParams.get("sort");
+  const sort =
+    listQuery.data && !listQuery.data.is_ordered && isSortOption(sortParam)
+      ? sortParam
+      : undefined;
+  const setSort = (value: ListSort | undefined) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (value && value !== listQuery.data?.default_sort) {
+        params.set("sort", value);
+      } else {
+        params.delete("sort");
+      }
+      resetPaging(params);
+      return params;
+    });
+  };
   // A list can hold books from several libraries; each book's cover takes
   // the shape its own library's gallery gives it.
   const userLibrariesQuery = useUserLibraries();
@@ -405,9 +427,9 @@ const ListDetail = () => {
                       disabled={updateListMutation.isPending}
                       onClick={() => {
                         // handleUpdate displays the error; no dialog awaits this action.
-                        void handleUpdate({ default_sort: sort }).catch(
-                          () => {},
-                        );
+                        void handleUpdate({ default_sort: sort })
+                          .then(() => setSort(undefined))
+                          .catch(() => {});
                       }}
                       size="sm"
                       title="Save as default sort"
@@ -444,6 +466,11 @@ const ListDetail = () => {
                 {canReorder && (
                   <span className="text-sm font-normal text-muted-foreground ml-2">
                     (drag to reorder)
+                  </span>
+                )}
+                {list.is_ordered && canEdit && isFiltered && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    (clear the filters to reorder)
                   </span>
                 )}
               </h2>

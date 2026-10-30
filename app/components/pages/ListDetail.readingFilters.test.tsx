@@ -1,7 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "@/components/contexts/Auth";
@@ -12,6 +18,10 @@ import ListDetail from "./ListDetail";
 vi.mock("@/components/library/DraggableBookList", () => ({
   DraggableBookList: () => <p>Draggable list</p>,
 }));
+
+const Location = () => (
+  <output aria-label="Location">{useLocation().search}</output>
+);
 
 afterEach(() => {
   cleanup();
@@ -56,8 +66,13 @@ const renderList = (entry: string, listOverrides = {}) => {
     })),
   );
   const bookRequests: URLSearchParams[] = [];
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  const patches: unknown[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const [path, search] = String(input).split("?");
+    if (init?.method === "PATCH" && path === "/api/lists/5") {
+      patches.push(JSON.parse(String(init.body)));
+      return Response.json({ ...baseList, ...listOverrides });
+    }
     if (path === "/api/auth/status")
       return Response.json({ needs_setup: false, demo_mode: false });
     if (path === "/api/auth/me")
@@ -88,16 +103,21 @@ const renderList = (entry: string, listOverrides = {}) => {
     <QueryClientProvider client={client}>
       <AuthProvider>
         <MobileNavProvider>
-          <MemoryRouter initialEntries={[entry]}>
+          {/* Without transitions, a navigation made after a request
+              settles (as saving the default sort does) renders in jsdom,
+              where a transition started outside act never flushes. */}
+          <MemoryRouter initialEntries={[entry]} useTransitions={false}>
             <Routes>
               <Route element={<ListDetail />} path="/lists/:id" />
             </Routes>
+            <Location />
           </MemoryRouter>
         </MobileNavProvider>
       </AuthProvider>
     </QueryClientProvider>,
   );
   return {
+    patches,
     bookRequests,
     user: userEvent.setup({ advanceTimers: vi.advanceTimersByTime }),
   };
@@ -155,5 +175,68 @@ describe("ListDetail reading filters", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Draggable list")).not.toBeInTheDocument();
     expect(screen.queryByText("(drag to reorder)")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("(clear the filters to reorder)"),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about reordering to someone who can't reorder", async () => {
+    renderList("/lists/5?reading_status=read", {
+      is_ordered: true,
+      permission: "viewer",
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Remove Read" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/to reorder/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ListDetail sort in the URL", () => {
+  const location = () => screen.getByRole("status", { name: "Location" });
+
+  it("reads the sort from the URL", async () => {
+    const { bookRequests } = renderList("/lists/5?sort=rating_desc");
+
+    await waitFor(() => expect(bookRequests.length).toBeGreaterThan(0));
+    expect(bookRequests[0].get("sort")).toBe("rating_desc");
+    expect(
+      await screen.findByRole("combobox", { name: "Sort by:" }),
+    ).toHaveTextContent("Rating (high to low)");
+  });
+
+  it("ignores a sort the List doesn't have", async () => {
+    const { bookRequests } = renderList("/lists/5?sort=bogus");
+
+    await waitFor(() => expect(bookRequests.length).toBeGreaterThan(0));
+    expect(bookRequests[0].get("sort")).toBeNull();
+    expect(
+      await screen.findByRole("combobox", { name: "Sort by:" }),
+    ).toHaveTextContent("Recently Added");
+  });
+
+  it("puts a chosen sort in the URL, and leaves the default out", async () => {
+    const { user } = renderList("/lists/5?start=24");
+
+    await user.click(await screen.findByRole("combobox", { name: "Sort by:" }));
+    await user.click(screen.getByRole("option", { name: "Recently Finished" }));
+    expect(location()).toHaveTextContent("?sort=date_finished_desc");
+
+    await user.click(screen.getByRole("combobox", { name: "Sort by:" }));
+    await user.click(screen.getByRole("option", { name: "Recently Added" }));
+    expect(location()).toBeEmptyDOMElement();
+  });
+
+  it("saves the URL's sort as the default and drops it from the URL", async () => {
+    const { patches } = renderList("/lists/5?sort=title_asc");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save as default" }),
+    );
+    await waitFor(() =>
+      expect(patches).toEqual([{ default_sort: "title_asc" }]),
+    );
+    await waitFor(() => expect(location()).toBeEmptyDOMElement());
   });
 });

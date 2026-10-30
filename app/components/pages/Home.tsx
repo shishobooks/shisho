@@ -565,14 +565,21 @@ const HomeContent = () => {
         </div>
       )}
 
-      {/* The library's own page, not a series within it. */}
-      {!seriesId && libraryId && settingsResolved && (
-        <CurrentlyReadingRow
-          columns={columns}
-          coverAspectRatio={coverAspectRatio}
-          libraryId={libraryId}
-        />
-      )}
+      {/* Only on the library's landing view: a series, a search, a filter,
+          or a later page is looking for something else, and the row would
+          push those results down. */}
+      {!seriesId &&
+        !searchQuery &&
+        !hasActiveFilters &&
+        offset === 0 &&
+        libraryId &&
+        settingsResolved && (
+          <CurrentlyReadingRow
+            columns={columns}
+            coverAspectRatio={coverAspectRatio}
+            libraryId={libraryId}
+          />
+        )}
 
       {/* Search and Filters */}
       <div className="mb-6 space-y-4">

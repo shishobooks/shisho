@@ -59,7 +59,7 @@ A list's saved default sort can be by rating or finish date. Each person viewing
 
 ## Currently Reading
 
-A library's gallery opens with a **Currently Reading** row when you are reading or have paused any of its books. Books you are reading come first, the most recently started first, then the paused ones. The row is one gallery row wide; when more books are underway, **Show all** filters the gallery to **Currently Reading** and **Paused**. The row isn't shown on a series' page.
+A library's gallery opens with a **Currently Reading** row when you are reading or have paused any of its books. Books you are reading come first, the most recently started first, then the paused ones. The row is one gallery row wide; when more books are underway, **Show all** filters the gallery to **Currently Reading** and **Paused**. The row shows only on the first page of the gallery with no search or filter, and not on a series' page.
 
 Reading apps can download the books you're reading through the [OPDS catalog](./opds.md#catalog-structure).
 

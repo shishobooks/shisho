@@ -35,7 +35,7 @@ Unordered lists can sort by:
 
 Any list can also be filtered by reading status and rating with **Filter**. A filtered ordered list can't be reordered until the filters are cleared.
 
-Save the chosen sort as the list default when you want other visits to open in that order.
+A chosen sort is kept in the page URL, so it survives a reload and can be bookmarked or shared. Save it as the list default when you want other visits to open in that order.
 
 ## Copying to To Read
 
