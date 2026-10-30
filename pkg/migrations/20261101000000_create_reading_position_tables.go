@@ -78,6 +78,10 @@ func init() {
 			// The IANA zone that dates a user's automatic Read-through days.
 			// NULL until the browser fills it in.
 			`ALTER TABLE user_settings ADD COLUMN time_zone TEXT`,
+
+			// The To Read position a Read-through took its Book from when it
+			// started, so deleting it while underway puts the Book back.
+			`ALTER TABLE read_throughs ADD COLUMN left_to_read_position INTEGER`,
 		}
 		for _, s := range statements {
 			if _, err := db.Exec(s); err != nil {
@@ -89,6 +93,7 @@ func init() {
 
 	down := func(_ context.Context, db *bun.DB) error {
 		statements := []string{
+			"ALTER TABLE read_throughs DROP COLUMN left_to_read_position",
 			"ALTER TABLE user_settings DROP COLUMN time_zone",
 			"DROP TABLE IF EXISTS reading_sessions",
 			"DROP TABLE IF EXISTS reading_position_updates",

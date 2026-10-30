@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -68,33 +68,96 @@ describe("BookReadingControls", () => {
     [
       null,
       "Track reading",
-      ["Start reading", "Mark as read", "Add to To Read"],
+      ["Add to To Read", "Start reading", "Mark as read"],
     ],
     [
       "to_read",
       "To Read",
-      ["Start reading", "Mark as read", "Remove from To Read"],
+      ["Remove from To Read", "Start reading", "Mark as read"],
     ],
     [
       "currently_reading",
       "Currently Reading",
-      ["Pause", "Mark as read", "Mark as Did Not Finish"],
+      [
+        "Pause",
+        "Mark as read",
+        "Mark as Did Not Finish",
+        "Mark as not started",
+      ],
     ],
-    ["paused", "Paused", ["Resume", "Mark as read", "Mark as Did Not Finish"]],
-    ["read", "Read", ["Read again", "Mark as read", "Add to To Read"]],
+    [
+      "paused",
+      "Paused",
+      [
+        "Resume",
+        "Mark as read",
+        "Mark as Did Not Finish",
+        "Mark as not started",
+      ],
+    ],
+    ["read", "Read", ["Add to To Read", "Read again", "Mark as read"]],
     [
       "did_not_finish",
       "Did Not Finish",
-      ["Read again", "Mark as read", "Add to To Read"],
+      ["Add to To Read", "Read again", "Mark as read"],
     ],
   ])(
     "offers only the valid transitions from %s",
     async (status, label, items) => {
-      renderControls(reading({ status, on_to_read: status === "to_read" }));
+      const underway = status === "currently_reading" || status === "paused";
+      renderControls(
+        reading({
+          status,
+          on_to_read: status === "to_read",
+          read_throughs: underway
+            ? [
+                readThrough({
+                  outcome: "underway",
+                  paused: status === "paused",
+                }),
+              ]
+            : [],
+        }),
+      );
       await openStatusMenu(label);
       expect(menuItems()).toEqual(items);
     },
   );
+
+  it("marks a book being read as not started after confirming", async () => {
+    const underway = readThrough({ id: 12, outcome: "underway" });
+    const request = renderControls(
+      reading({ status: "currently_reading", read_throughs: [underway] }),
+    );
+    await openStatusMenu("Currently Reading");
+    await user().click(
+      screen.getByRole("menuitem", { name: "Mark as not started" }),
+    );
+    expect(request).not.toHaveBeenCalledWith(
+      "DELETE",
+      expect.anything(),
+      null,
+      null,
+    );
+
+    request.mockResolvedValue(reading({ status: "to_read", on_to_read: true }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Mark as not started?",
+    });
+    await user().click(
+      within(dialog).getByRole("button", { name: "Mark as not started" }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "DELETE",
+      "/reading/read-throughs/12",
+      null,
+      null,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Reading status: To Read" }),
+    ).toBeInTheDocument();
+  });
 
   it("adds a read book to To Read to plan a reread", async () => {
     const request = renderControls(reading({ status: "read" }));

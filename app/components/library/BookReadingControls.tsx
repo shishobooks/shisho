@@ -1,8 +1,11 @@
 import { BookOpen, ChevronDown, X } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import StarRating from "@/components/library/StarRating";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   useBookReading,
+  useDeleteReadThrough,
   useReadingTransition,
   useSetOnToRead,
   useSetRating,
@@ -68,6 +72,8 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const transitionMutation = useReadingTransition();
   const ratingMutation = useSetRating();
   const toReadMutation = useSetOnToRead();
+  const deleteMutation = useDeleteReadThrough();
+  const [confirmingNotStarted, setConfirmingNotStarted] = useState(false);
 
   // A failed load leaves the controls out; the history section reports it.
   const reading = readingQuery.data;
@@ -96,6 +102,22 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
     }
   };
 
+  // Taking back a start deletes the Read-through underway, which the server
+  // undoes completely: positions, history, and the place on To Read.
+  const underway = (reading.read_throughs ?? []).find(
+    (rt) => rt.outcome === "underway",
+  );
+  const handleNotStarted = async () => {
+    if (!underway) return;
+    try {
+      await deleteMutation.mutateAsync(underway.id);
+      toast.success("Marked as not started");
+      setConfirmingNotStarted(false);
+    } catch (error) {
+      toastRequestError(error, "Failed to mark as not started");
+    }
+  };
+
   const handleRating = async (stars: number | null) => {
     try {
       await ratingMutation.mutateAsync({ bookId, payload: { rating: stars } });
@@ -120,7 +142,24 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
               <ChevronDown aria-hidden className="h-3.5 w-3.5 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
+          {/* The confirmation takes focus from the closing menu. */}
+          <DropdownMenuContent
+            align="start"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            {/* Queueing a book usually comes before reading it. */}
+            {canQueueToRead(status) && (
+              <>
+                <DropdownMenuItem
+                  onSelect={() => handleToRead(!reading.on_to_read)}
+                >
+                  {reading.on_to_read
+                    ? "Remove from To Read"
+                    : "Add to To Read"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             {readingTransitions(status).map((transition) => (
               <DropdownMenuItem
                 key={transition}
@@ -129,15 +168,13 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
                 {transitionLabel(transition, status)}
               </DropdownMenuItem>
             ))}
-            {canQueueToRead(status) && (
+            {underway && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onSelect={() => handleToRead(!reading.on_to_read)}
+                  onSelect={() => setConfirmingNotStarted(true)}
                 >
-                  {reading.on_to_read
-                    ? "Remove from To Read"
-                    : "Add to To Read"}
+                  Mark as not started
                 </DropdownMenuItem>
               </>
             )}
@@ -177,6 +214,15 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       {demoMode && (
         <p className="text-xs text-muted-foreground">{DEMO_MODE_MESSAGE}</p>
       )}
+      <ConfirmDialog
+        confirmLabel="Mark as not started"
+        description="This read is deleted along with the reading time and places recorded during it, and every file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
+        isPending={deleteMutation.isPending}
+        onConfirm={handleNotStarted}
+        onOpenChange={setConfirmingNotStarted}
+        open={confirmingNotStarted}
+        title="Mark as not started?"
+      />
     </div>
   );
 };

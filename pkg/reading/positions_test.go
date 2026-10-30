@@ -644,3 +644,79 @@ func TestUpdatePosition_ResendingTheSamePlaceDoesNotUndoAFinish(t *testing.T) {
 	assert.False(t, result.Reverted)
 	assert.Equal(t, models.ReadingStatusRead, f.status())
 }
+
+// queueWithBookSecond puts three Books on To Read with f.book second.
+func (f *positionsFixture) queueWithBookSecond() (first, third *models.Book) {
+	f.t.Helper()
+	first = createBook(f.t, f.db, "First")
+	third = createBook(f.t, f.db, "Third")
+	_, err := f.svc.AppendToRead(f.ctx, f.user.ID, []int{first.ID, f.book.ID, third.ID})
+	require.NoError(f.t, err)
+	return first, third
+}
+
+func (f *positionsFixture) toReadPlace(book *models.Book) int {
+	f.t.Helper()
+	reading, err := f.svc.RetrieveBookReading(f.ctx, f.user.ID, book.ID)
+	require.NoError(f.t, err)
+	if !reading.OnToRead {
+		return 0
+	}
+	place, err := f.svc.ToReadPlace(f.ctx, f.user.ID, book.ID, nil)
+	require.NoError(f.t, err)
+	return place
+}
+
+func TestDeleteReadThrough_UnderwayPutsTheBookBackOnToRead(t *testing.T) {
+	t.Parallel()
+	for name, start := range map[string]func(f *positionsFixture){
+		"started by hand": func(f *positionsFixture) {
+			require.NoError(f.t, f.svc.Start(f.ctx, f.user.ID, f.book.ID, "2026-10-15"))
+		},
+		"started by reading": func(f *positionsFixture) {
+			f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newPositionsFixture(t)
+			first, third := f.queueWithBookSecond()
+			start(f)
+			require.Equal(t, 0, f.toReadPlace(f.book))
+			// The queue moves on while the book is being read.
+			fourth := createBook(t, f.db, "Fourth")
+			require.NoError(t, f.svc.AddToRead(f.ctx, f.user.ID, fourth.ID))
+
+			require.NoError(t, f.svc.DeleteReadThrough(f.ctx, f.readThroughs()[0]))
+
+			assert.Equal(t, models.ReadingStatusToRead, f.status())
+			assert.Equal(t, 1, f.toReadPlace(first))
+			assert.Equal(t, 2, f.toReadPlace(f.book), "back in its old place")
+			assert.Equal(t, 3, f.toReadPlace(third))
+			assert.Equal(t, 4, f.toReadPlace(fourth))
+		})
+	}
+}
+
+func TestDeleteReadThrough_UnderwayNotFromToReadLeavesItOff(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+
+	require.NoError(t, f.svc.DeleteReadThrough(f.ctx, f.readThroughs()[0]))
+
+	assert.Empty(t, f.status())
+	assert.Equal(t, 0, f.toReadPlace(f.book))
+}
+
+func TestDeleteReadThrough_EndedLeavesToReadAlone(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.queueWithBookSecond()
+	require.NoError(t, f.svc.Start(f.ctx, f.user.ID, f.book.ID, "2026-10-15"))
+	require.NoError(t, f.svc.End(f.ctx, f.user.ID, f.book.ID, models.ReadThroughOutcomeFinished, "2026-10-16"))
+
+	require.NoError(t, f.svc.DeleteReadThrough(f.ctx, f.readThroughs()[0]))
+
+	assert.Equal(t, 0, f.toReadPlace(f.book), "only taking back a start restores the queue")
+}

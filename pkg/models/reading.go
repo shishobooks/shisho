@@ -48,6 +48,9 @@ type ReadThrough struct {
 	EndDay    *string   `json:"end_day"`
 	Outcome   string    `bun:",nullzero" json:"outcome" tstype:"ReadThroughOutcome"`
 	Paused    bool      `bun:",notnull" json:"paused"`
+	// LeftToReadPosition is the To Read position the Book left when this
+	// Read-through started, which deleting it while underway restores.
+	LeftToReadPosition *int `json:"-"`
 }
 
 // Page flows: how the Page-based reader lays out a Book's pages, one at a

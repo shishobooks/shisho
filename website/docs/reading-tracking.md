@@ -22,11 +22,12 @@ The status follows your history. A book you are reading or have paused shows tha
 
 On a book's page, open the status button (**Track reading** on a book you haven't tracked) and choose an action. The menu offers only the actions that make sense from the current status:
 
+- **Add to To Read** or **Remove from To Read** puts the book at the end of your [To Read](#to-read) queue or takes it off. It isn't offered while you're reading the book or have paused it.
 - **Start reading** begins a new read dated today. It's called **Read again** once you have read the book before, and the earlier reads stay in the history.
 - **Pause** sets aside the book you're reading. **Resume** picks it back up with its original start date.
 - **Mark as read** finishes the read you're on, dated today. With nothing underway, it records a finished read that ended today with no start date, for a book you read before you used Shisho.
 - **Mark as Did Not Finish** ends the read you're on as abandoned, dated today.
-- **Add to To Read** or **Remove from To Read** puts the book at the end of your [To Read](#to-read) queue or takes it off. It isn't offered while you're reading the book or have paused it.
+- **Mark as not started** takes back the read you're on, as if you had never started it: it's deleted from the history, every file of the book opens at the start again, and a book that left To Read when you started it goes back to its place there.
 
 "Today" is the date on your device when you choose the action.
 
@@ -91,7 +92,7 @@ Reading apps can download the books you're reading, or have paused, through the 
 Each time you read a book is a **Read-through**: when it started, when it ended, and whether you finished or abandoned it. Once a book has a Read-through, its page shows **Reading history** below its files, with a summary such as "Read twice, last finished Mar 2024" and every Read-through, newest first.
 
 - **Edit dates** changes a Read-through's start and end dates. Choose **Clear** in a date's calendar if you don't know it, and **Today** for today. Dates after today can't be picked. A Read-through you're still on has no end date.
-- **Delete** removes a Read-through you logged by mistake. It no longer counts toward the history or the status, and this can't be undone.
+- **Delete** removes a Read-through you logged by mistake. It no longer counts toward the history or the status, and this can't be undone. Deleting the one you're on is the same as **Mark as not started**.
 
 The status and summary update after each change.
 

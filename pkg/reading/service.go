@@ -304,15 +304,25 @@ func (svc *Service) Start(ctx context.Context, userID, bookID int, today string)
 // Book off To Read, and resets the Book's Reading Positions except on
 // keepFileID (0 keeps none), whose update started it.
 func startReadThrough(ctx context.Context, tx bun.Tx, userID, bookID int, day string, now time.Time, keepFileID int) (*models.ReadThrough, error) {
-	rt := &models.ReadThrough{
-		CreatedAt: now,
-		UpdatedAt: now,
-		UserID:    userID,
-		BookID:    bookID,
-		BeginDay:  &day,
-		Outcome:   models.ReadThroughOutcomeUnderway,
+	var leftPosition *int
+	err := tx.NewSelect().
+		Model((*models.UserBook)(nil)).
+		Column("ub.to_read_position").
+		Where("ub.user_id = ? AND ub.book_id = ?", userID, bookID).
+		Scan(ctx, &leftPosition)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.WithStack(err)
 	}
-	_, err := tx.NewInsert().Model(rt).Exec(ctx)
+	rt := &models.ReadThrough{
+		CreatedAt:          now,
+		UpdatedAt:          now,
+		UserID:             userID,
+		BookID:             bookID,
+		BeginDay:           &day,
+		Outcome:            models.ReadThroughOutcomeUnderway,
+		LeftToReadPosition: leftPosition,
+	}
+	_, err = tx.NewInsert().Model(rt).Exec(ctx)
 	if database.IsUniqueViolation(err) {
 		return nil, ErrAlreadyUnderway
 	}
@@ -460,9 +470,9 @@ func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadTh
 }
 
 // DeleteReadThrough deletes rt: the Read-through no longer counts. Its
-// position updates and Reading Sessions go with it, and deleting the one
-// underway resets the Book's Reading Positions so the next read starts at
-// the beginning.
+// position updates and Reading Sessions go with it. Deleting the one
+// underway takes the Book back to before it started: its Reading Positions
+// reset, and a Book that left To Read to start it returns to its place.
 func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx); err != nil {
@@ -471,7 +481,13 @@ func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThroug
 		if rt.Outcome != models.ReadThroughOutcomeUnderway {
 			return nil
 		}
-		return resetPositions(ctx, tx, rt.UserID, rt.BookID, 0)
+		if err := resetPositions(ctx, tx, rt.UserID, rt.BookID, 0); err != nil {
+			return err
+		}
+		if rt.LeftToReadPosition == nil {
+			return nil
+		}
+		return returnToRead(ctx, tx, rt.UserID, rt.BookID, *rt.LeftToReadPosition, svc.now())
 	})
 }
 
@@ -679,7 +695,8 @@ func (svc *Service) SetPageFlow(ctx context.Context, userID, bookID int, flow *s
 //     the source's where it has none.
 //   - The source's Read-throughs move to the target. When both have one
 //     underway, they collapse into the target's, which takes the earlier
-//     begin day and stays paused only if both were.
+//     begin day, stays paused only if both were, and remembers a To Read
+//     place either left.
 //   - A user with a Read-through underway on the target afterwards has it
 //     off To Read.
 func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int) error {
@@ -710,7 +727,8 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 					WHEN s.begin_day IS NULL THEN t.begin_day
 					ELSE MIN(t.begin_day, s.begin_day)
 				END,
-				paused = t.paused AND s.paused
+				paused = t.paused AND s.paused,
+				left_to_read_position = COALESCE(t.left_to_read_position, s.left_to_read_position)
 			FROM read_throughs AS s
 			WHERE s.book_id = ? AND t.book_id = ? AND s.user_id = t.user_id
 				AND s.outcome = ? AND t.outcome = ?`,
@@ -767,4 +785,26 @@ func (svc *Service) FileLibraryID(ctx context.Context, fileID int) (int, error) 
 		return 0, err
 	}
 	return libraryID, errors.WithStack(err)
+}
+
+// returnToRead puts bookID back on userID's To Read at position, moving the
+// Books from there on down one, so it's back among the Books it was queued
+// between.
+func returnToRead(ctx context.Context, tx bun.Tx, userID, bookID, position int, now time.Time) error {
+	_, err := tx.NewUpdate().
+		Model((*models.UserBook)(nil)).
+		Set("to_read_position = to_read_position + 1").
+		Set("updated_at = ?", now).
+		Where("user_id = ? AND to_read_position >= ?", userID, position).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	_, err = tx.NewUpdate().
+		Model((*models.UserBook)(nil)).
+		Set("to_read_position = ?", position).
+		Set("updated_at = ?", now).
+		Where("user_id = ? AND book_id = ?", userID, bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
