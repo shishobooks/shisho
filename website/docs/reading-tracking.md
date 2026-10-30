@@ -38,7 +38,7 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 - **Reorder** by dragging books on the To Read page, as on an [ordered list](./lists.md#sorting-and-reordering). Dragging is available when the whole queue fits on one page of up to 100 books.
 - **Remove a book** from any of the same places.
 
-A queued book's page shows its place beside the status button, such as **#3 on To Read**, counting only books you can access. Choose it to open To Read. The **Lists** tab of the page's Related panel also shows To Read first, with the books before and after it.
+A queued book's page shows its place beside the status button, such as **#3 on To Read**, counting only books you can access. Choose it to open To Read. The **Lists** tab of the page's Related panel also shows To Read first, up to its first 100 books.
 
 Starting a book, or marking it read, takes it off To Read. To plan a reread, add a book you have finished: it shows **To Read** again, and its earlier reads stay in the history.
 

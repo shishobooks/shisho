@@ -22,6 +22,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse, ListTemplate } from "@/types";
 import { formatCount } from "@/utils/format";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 const ListsIndex = () => {
   usePageTitle("Lists");
@@ -35,8 +36,8 @@ const ListsIndex = () => {
 
   // To Read is pinned above the lists: it's every user's own queue, opened
   // like a list, but not one (it can't be shared, renamed, or deleted).
-  // Its books are book data, so it needs Books Read.
-  const canReadBooks = useCan("books:read");
+  // It shows when the role passes the To Read page's route guard.
+  const canReadBooks = useCan(ROUTE_PERMISSIONS.toRead);
   const toReadCountQuery = useBooks({ to_read: true, limit: 1 });
   const toReadCount = toReadCountQuery.data?.total;
 

@@ -1,4 +1,5 @@
 import { BookmarkCheck, Check, ChevronDown, Library, List } from "lucide-react";
+import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -36,8 +37,11 @@ const LibraryListPicker = () => {
 
   // To Read leads the Lists section: it spans libraries and opens like a
   // list, though it isn't one.
+  // The count loads only while the menu is open.
+  const [open, setOpen] = useState(false);
   const isViewingToRead = location.pathname === "/to-read";
-  const toReadCount = useBooks({ to_read: true, limit: 1 }).data?.total;
+  const toReadCount = useBooks({ to_read: true, limit: 1 }, { enabled: open })
+    .data?.total;
 
   // Determine what to show in the trigger
   const isViewingList = currentListId !== null || isViewingToRead;
@@ -47,7 +51,7 @@ const LibraryListPicker = () => {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={setOpen} open={open}>
       <DropdownMenuTrigger asChild>
         <Button
           className="h-9 gap-2 text-muted-foreground hover:text-foreground cursor-pointer"

@@ -23,8 +23,9 @@ Rereads, finish dates, and reading stats all need history, and history that was 
 
 - **Controls act on the records, not on a status.**
   - "Mark as read" ends the Read-through underway as finished, or creates a finished one when none is underway.
-  - "Add to To Read" adds the Book to the queue.
+  - "Add to To Read" adds the Book to the end of the queue. A Book with a Read-through underway can't be added, since its status would stay Currently Reading or Paused.
   - Starting a Read-through takes the Book off To Read and resets the Book's Reading Positions to the start.
+  - Ending a Read-through, by hand or from a device, also takes the Book off To Read, so "Mark as read" on a queued Book shows Read. Adding it again afterwards plans a reread.
 - **Deleting a Read-through means "this one doesn't count".** The Reading Sessions and the history of Reading Position updates recorded while it was underway belong to it, so they go with it. Deleting the one underway also resets the Book's Reading Positions.
 - **Rating and To Read membership live on a separate per-user, per-Book record**, not on a Read-through. That way a Rating survives rereads, and a one-tap favorite, if it's ever wanted, is one more field on that record.
 - **Finishing from position updates.** Reaching the end of a File finishes the Read-through underway. A finish inferred this way is undone if the next update for that File arrives within a short window and is back before the end. An explicit finish is never undone this way, whether it's a user's "Mark as read" or a device reporting the book finished.

@@ -56,8 +56,8 @@ export interface BookRelatedTabs {
  * the page can leave the panel out when no tab has anything. A tab appears
  * only with content: the series (Series Read), the first author's books
  * when they have another, the lists the book is on (and To Read, which
- * leads them), and the reader's Devices. `enabled: false` (a Share Link page) sends no request, even for
- * a viewer who is signed in.
+ * leads them), and the reader's Devices. `enabled: false` (a Share Link
+ * page) sends no request, even for a viewer who is signed in.
  */
 export const useBookRelatedTabs = (
   book: Book,

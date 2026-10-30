@@ -96,7 +96,12 @@ const AddToListPopover = ({
     (bookListsQuery.data ?? []).map((list) => list.id),
   );
 
-  const isLoading = listsQuery.isLoading || bookListsQuery.isLoading;
+  const isLoading =
+    listsQuery.isLoading || bookListsQuery.isLoading || readingQuery.isLoading;
+  // A failed To Read lookup reports itself in To Read's place, leaving the
+  // lists usable.
+  const toReadFailed =
+    readingQuery.error && !readingQuery.data ? readingQuery : undefined;
   // Without either list the checkmarks would be wrong, so a failure of
   // either replaces the menu.
   const failedQuery = firstFailedQuery(listsQuery, bookListsQuery);
@@ -177,7 +182,15 @@ const AddToListPopover = ({
           Add to List
         </p>
 
-        {reading && (
+        {!isLoading && toReadFailed && (
+          <QueryError
+            className="mx-1 mb-1"
+            fallback="Failed to load To Read"
+            query={toReadFailed}
+          />
+        )}
+
+        {!isLoading && reading && (
           <div className="border-b px-1 pb-1 mb-1">
             <div
               aria-checked={onToRead}

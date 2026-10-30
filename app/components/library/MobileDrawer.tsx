@@ -22,6 +22,7 @@ import { useListLists } from "@/hooks/queries/lists";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 import { useLibraryNavItems } from "./useLibraryNavItems";
 
@@ -71,11 +72,12 @@ const MobileDrawer = () => {
   const currentListId = listMatch ? Number(listMatch[1]) : null;
   const currentList = lists.find((list) => list.id === currentListId);
   // To Read leads the Lists section: it spans libraries and opens like a
-  // list, though it isn't one. Its books are book data, so it needs Books
-  // Read.
-  const canReadBooks = can("books:read");
+  // list, though it isn't one. It shows when the role passes the To Read
+  // page's route guard. The count loads only while the drawer is open.
+  const canReadBooks = can(ROUTE_PERMISSIONS.toRead);
   const isViewingToRead = location.pathname === "/to-read";
-  const toReadCount = useBooks({ to_read: true, limit: 1 }).data?.total;
+  const toReadCount = useBooks({ to_read: true, limit: 1 }, { enabled: isOpen })
+    .data?.total;
   const isViewingList = currentListId !== null || isViewingToRead;
 
   // Determine if we're in a library context

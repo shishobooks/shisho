@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import type { BookReadingResponse } from "@/types";
 
@@ -128,5 +128,22 @@ describe("AddToListPopover To Read", () => {
     expect(item).toHaveAccessibleDescription(
       "This action is unavailable in the demo.",
     );
+  });
+
+  it("reports a failed To Read lookup in its place and keeps the lists", async () => {
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/lists") return { items: [], total: 0 };
+      if (path === "/reading/books/7") {
+        throw new ShishoAPIError("Server unreachable", "internal", 500);
+      }
+      return [];
+    });
+    renderPopover();
+
+    expect(await screen.findByText("Server unreachable")).toBeInTheDocument();
+    expect(screen.getByText("No lists yet")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /To Read/ }),
+    ).not.toBeInTheDocument();
   });
 });
