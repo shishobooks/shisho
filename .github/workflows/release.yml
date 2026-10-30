@@ -15,9 +15,11 @@ jobs:
     name: Validate
     uses: ./.github/workflows/ci.yml
 
+  # Published last so the docker pull and npm install lines in the release
+  # notes work as soon as anyone is notified of the release.
   release:
     name: GitHub Release
-    needs: validate
+    needs: [docker-manifest, npm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -178,7 +180,7 @@ jobs:
 
   demo:
     name: Deploy Demo
-    needs: [release, docker-manifest]
+    needs: release
     # Prereleases (tags containing "-") never reach the Public Demo.
     if: ${{ !contains(github.ref_name, '-') }}
     uses: ./.github/workflows/demo.yml
