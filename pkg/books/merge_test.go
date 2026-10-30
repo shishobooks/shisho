@@ -710,6 +710,33 @@ func TestMoveFilesToBook_MergeTakesSourceRatingWhenTargetHasNone(t *testing.T) {
 	assert.Nil(t, otherGot.RatingUnits, "a user's Rating never moves to another user")
 }
 
+func TestMoveFilesToBook_MergeKeepsPageFlows(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := setupTestLibrary(t, db)
+	source, sourceFile := setupTestBookWithFile(t, db, library, "Source Book")
+	target, _ := setupTestBookWithFile(t, db, library, "Target Book")
+	reader := createMergeTestUser(t, db, "reader")
+	other := createMergeTestUser(t, db, "other")
+	svc := reading.NewService(db)
+
+	// The reader saved a flow only on the source; the other user saved one
+	// on both, and the target's wins.
+	require.NoError(t, svc.SetPageFlow(ctx, reader, source.ID, pointerutil.String(models.PageFlowScrolled)))
+	require.NoError(t, svc.SetPageFlow(ctx, other, source.ID, pointerutil.String(models.PageFlowScrolled)))
+	require.NoError(t, svc.SetPageFlow(ctx, other, target.ID, pointerutil.String(models.PageFlowPaginated)))
+
+	moveAllFiles(t, db, library, sourceFile, target)
+
+	got, err := svc.RetrieveBookReading(ctx, reader, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, pointerutil.String(models.PageFlowScrolled), got.PageFlow)
+	otherGot, err := svc.RetrieveBookReading(ctx, other, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, pointerutil.String(models.PageFlowPaginated), otherGot.PageFlow, "the target keeps its own flow")
+}
+
 func TestMoveFilesToBook_MergeCollapsesTwoUnderwayIntoEarlierStart(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)

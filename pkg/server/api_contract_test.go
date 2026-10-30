@@ -190,6 +190,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
+			name:   "page flow that isn't paginated or scrolled",
+			method: http.MethodPut, path: fmt.Sprintf("/api/reading/books/%d/page-flow", fileBook.ID),
+			body:   `{"page_flow":"sideways"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "reading record of a book that does not exist",
 			method: http.MethodGet, path: "/api/reading/books/999999",
 			status: http.StatusNotFound, code: "not_found", message: "Book not found.",

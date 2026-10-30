@@ -525,6 +525,62 @@ func TestRating_DoesNotDependOnStatus(t *testing.T) {
 	assert.NotNil(t, api.get(book.ID).Rating)
 }
 
+func (a *readingAPI) setPageFlow(bookID int, flow *string) *httptest.ResponseRecorder {
+	a.t.Helper()
+	return a.do(http.MethodPut, fmt.Sprintf("/books/%d/page-flow", bookID), SetPageFlowPayload{PageFlow: flow})
+}
+
+func TestPageFlow_SetAndClear(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
+	book := createBook(t, db, "Solo Leveling")
+
+	assert.Nil(t, api.get(book.ID).PageFlow, "a Book starts with no saved flow")
+
+	for _, flow := range []string{models.PageFlowScrolled, models.PageFlowPaginated} {
+		rec := api.setPageFlow(book.ID, &flow)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Equal(t, &flow, api.get(book.ID).PageFlow)
+	}
+
+	rec := api.setPageFlow(book.ID, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Nil(t, api.get(book.ID).PageFlow)
+}
+
+func TestPageFlow_RejectsUnknownFlows(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
+	book := createBook(t, db, "Solo Leveling")
+
+	rec := api.setPageFlow(book.ID, strp("sideways"))
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+}
+
+func TestPageFlow_LeavesTheReadingRecordAlone(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
+	book := createBook(t, db, "Solo Leveling")
+	stars := 4.0
+	require.Equal(t, http.StatusOK, api.setRating(book.ID, &stars).Code)
+	api.addToRead(book.ID)
+
+	resp := api.ok(http.MethodPut, fmt.Sprintf("/books/%d/page-flow", book.ID), SetPageFlowPayload{PageFlow: strp(models.PageFlowScrolled)})
+	assert.Equal(t, models.ReadingStatusToRead, status(resp))
+	assert.True(t, resp.OnToRead)
+	require.NotNil(t, resp.Rating)
+	assert.InDelta(t, stars, *resp.Rating, 0.0001)
+
+	// A saved flow alone is not reading: the Book has no status.
+	other := createBook(t, db, "Other")
+	require.Equal(t, http.StatusOK, api.setPageFlow(other.ID, strp(models.PageFlowScrolled)).Code)
+	assert.Nil(t, api.get(other.ID).Status)
+	assert.False(t, api.get(other.ID).OnToRead)
+}
+
 func TestPrivacy_OtherUsersAndAdminsSeeNothing(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)

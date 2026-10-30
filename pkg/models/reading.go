@@ -50,9 +50,18 @@ type ReadThrough struct {
 	Paused    bool      `bun:",notnull" json:"paused"`
 }
 
+// Page flows: how the Page-based reader lays out a Book's pages, one at a
+// time or as one continuous scroll.
+const (
+	//tygo:emit export type PageFlow = typeof PageFlowPaginated | typeof PageFlowScrolled;
+	PageFlowPaginated = "paginated"
+	PageFlowScrolled  = "scrolled"
+)
+
 // UserBook is one user's record for one Book of what doesn't belong to a
-// Read-through: the Rating, in quarter stars from 1 to 20, and the position
-// on To Read. Nil means unrated and not on To Read.
+// Read-through: the Rating, in quarter stars from 1 to 20, the position on
+// To Read, and the Page flow the user chose for reading it. Nil means
+// unrated, not on To Read, and no flow chosen.
 type UserBook struct {
 	bun.BaseModel `bun:"table:user_books,alias:ub" tstype:"-"`
 
@@ -62,4 +71,5 @@ type UserBook struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 	Rating         *int      `json:"rating_units"`
 	ToReadPosition *int      `json:"to_read_position"`
+	PageFlow       *string   `json:"page_flow" tstype:"PageFlow | null"`
 }

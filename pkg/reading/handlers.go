@@ -90,6 +90,7 @@ func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bo
 		OnToRead:     reading.OnToRead,
 		ToReadPlace:  place,
 		ReadThroughs: reading.ReadThroughs,
+		PageFlow:     reading.PageFlow,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil
@@ -255,6 +256,25 @@ func (h *handler) setRating(c echo.Context) error {
 		units = &u
 	}
 	if err := h.readingService.SetRating(c.Request().Context(), user.ID, bookID, units); err != nil {
+		return err
+	}
+	return h.respond(c, user, bookID)
+}
+
+func (h *handler) setPageFlow(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	bookID, err := h.requireBook(c)
+	if err != nil {
+		return err
+	}
+	params := SetPageFlowPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.readingService.SetPageFlow(c.Request().Context(), user.ID, bookID, params.PageFlow); err != nil {
 		return err
 	}
 	return h.respond(c, user, bookID)

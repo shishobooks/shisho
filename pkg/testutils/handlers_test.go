@@ -1,8 +1,11 @@
 package testutils
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
+	"image"
+	_ "image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/mobi"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -124,4 +128,52 @@ func TestCreateBookWithFileOnDiskWritesAMOBI(t *testing.T) {
 	parsed, err := mobi.Parse(file.Filepath)
 	require.NoError(t, err)
 	assert.Equal(t, "Kindle Book", parsed.Title)
+}
+
+// The page reader e2e tests need a real CBZ, with pages as tall as a
+// webtoon's strips or shaped like printed pages.
+func TestCreateBookWithFileOnDiskWritesACBZ(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+
+	e := echo.New()
+	RegisterRoutes(e.Group("/api"), db, nil, nil, t.TempDir())
+
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		return rec
+	}
+	rec := do(http.MethodPost, "/api/test/libraries", `{"name":"Lib"}`)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var lib createLibraryResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &lib))
+
+	rec = do(http.MethodPost, "/api/test/books", `{"libraryId":`+strconv.Itoa(lib.ID)+`,"title":"Strips","fileType":"cbz","withFileOnDisk":true,"pageCount":3,"pageWidth":200,"pageHeight":1000}`)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var book createBookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &book))
+
+	file := &models.File{}
+	require.NoError(t, db.NewSelect().Model(file).Where("id = ?", book.FileID).Scan(context.Background()))
+	assert.Equal(t, "Strips.cbz", filepath.Base(file.Filepath))
+	require.NotNil(t, file.PageCount)
+	assert.Equal(t, 3, *file.PageCount)
+
+	archive, err := zip.OpenReader(file.Filepath)
+	require.NoError(t, err)
+	defer archive.Close()
+	pages := cbz.PageImages(&archive.Reader)
+	require.Len(t, pages, 3)
+	for _, page := range pages {
+		r, err := page.Open()
+		require.NoError(t, err)
+		cfg, _, err := image.DecodeConfig(r)
+		r.Close()
+		require.NoError(t, err)
+		assert.Equal(t, 200, cfg.Width, page.Name)
+		assert.Equal(t, 1000, cfg.Height, page.Name)
+	}
 }

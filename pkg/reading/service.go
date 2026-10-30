@@ -205,6 +205,7 @@ type BookReading struct {
 	Status       *string
 	RatingUnits  *int
 	OnToRead     bool
+	PageFlow     *string
 	ReadThroughs []*models.ReadThrough
 }
 
@@ -254,6 +255,7 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 	if err == nil {
 		result.RatingUnits = userBook.Rating
 		result.OnToRead = userBook.ToReadPosition != nil
+		result.PageFlow = userBook.PageFlow
 	}
 
 	return result, nil
@@ -622,13 +624,31 @@ func (svc *Service) SetRating(ctx context.Context, userID, bookID int, units *in
 	return errors.WithStack(err)
 }
 
+// SetPageFlow saves the Page flow userID chose for bookID; nil clears it.
+func (svc *Service) SetPageFlow(ctx context.Context, userID, bookID int, flow *string) error {
+	now := time.Now()
+	_, err := svc.db.NewInsert().
+		Model(&models.UserBook{
+			UserID:    userID,
+			BookID:    bookID,
+			CreatedAt: now,
+			UpdatedAt: now,
+			PageFlow:  flow,
+		}).
+		On("CONFLICT (user_id, book_id) DO UPDATE").
+		Set("page_flow = EXCLUDED.page_flow").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // MergeBooks moves every user's reading data from sourceBookID to
 // targetBookID, for a merge that is about to delete the source. Run it in
 // the transaction that deletes the source, before the delete cascades the
 // source's rows away.
 //
-//   - The target keeps its Rating and To Read position, taking the source's
-//     where it has none.
+//   - The target keeps its Rating, To Read position, and Page flow, taking
+//     the source's where it has none.
 //   - The source's Read-throughs move to the target. When both have one
 //     underway, they collapse into the target's, which takes the earlier
 //     begin day and stays paused only if both were.
@@ -644,7 +664,8 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 	}{
 		{`UPDATE user_books AS t
 			SET rating = COALESCE(t.rating, s.rating),
-				to_read_position = COALESCE(t.to_read_position, s.to_read_position)
+				to_read_position = COALESCE(t.to_read_position, s.to_read_position),
+				page_flow = COALESCE(t.page_flow, s.page_flow)
 			FROM user_books AS s
 			WHERE s.book_id = ? AND t.book_id = ? AND s.user_id = t.user_id`,
 			[]any{sourceBookID, targetBookID}},

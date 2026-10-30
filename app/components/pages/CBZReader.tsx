@@ -19,7 +19,7 @@ export default function CBZReader({
     <PageReader
       bookId={file.book_id}
       fileId={file.id}
-      getPageUrl={(page) => filePageUrl(file, page)}
+      getPageUrl={(page, size) => filePageUrl(file, page, size)}
       libraryId={libraryId}
       title={fileTitle(file, bookTitle)}
       totalPages={file.page_count || 0}

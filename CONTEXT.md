@@ -161,6 +161,10 @@ _Avoid_: TBR, want to read, wishlist, Up Next
 One user's score for a **Book**, from a quarter star to five stars in quarter-star steps. It does not depend on **Reading Status**, so an abandoned book can be rated. Private to the user.
 _Avoid_: review, score, favorite
 
+**Page flow**:
+How the reader lays out a **Page-based** File's pages: paginated, one page at a time, or scrolled, every page in one continuous column for comics made for vertical scrolling. One user chooses it per **Book**; until they do, the reader picks it from the shape of the pages.
+_Avoid_: scroll mode, webtoon mode, layout
+
 **Reading Position**:
 Where one user is within one **File**: a location in the text for a **Reflowable** File, a page for a **Page-based** one, a time for an audiobook, along with how far through the File that is. It belongs to the File, so a Book's ebook and audiobook each keep their own.
 _Avoid_: progress (alone), bookmark, location
