@@ -410,6 +410,17 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 	jobLog.Info("processing libraries", logger.Data{"count": len(allLibraries)})
 
+	// A library with a path that can't be read is skipped whole: scanning
+	// only its other paths would let orphan cleanup treat every file under
+	// the unreadable one as deleted. The other libraries are still scanned,
+	// and the job fails at the end naming what it skipped.
+	var skipped []string
+	skip := func(library *models.Library, libraryPath string, err error) {
+		jobLog.Error("skipping library: a library path can't be read", err, logger.Data{"library_id": library.ID, "library_path": libraryPath})
+		skipped = append(skipped, fmt.Sprintf("library %d (%s): %s", library.ID, libraryPath, err.Error()))
+	}
+
+libraries:
 	for _, library := range allLibraries {
 		// Honor cancellation between libraries — if the worker is shutting
 		// down mid-scan, don't start a fresh per-library walk.
@@ -446,7 +457,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		// Go through all the library paths to find all the .cbz files.
 		for _, libraryPath := range library.LibraryPaths {
 			jobLog.Info("processing library path", logger.Data{"library_path_id": libraryPath.ID, "library_path": libraryPath.Filepath})
-			err := filepath.WalkDir(libraryPath.Filepath, func(path string, info fs.DirEntry, err error) error {
+			err := fileutils.WalkDirFollowingRoot(libraryPath.Filepath, func(path string, info fs.DirEntry, err error) error {
 				// Stop walking the tree if the worker is shutting down. Returning
 				// the cancellation error aborts the outer WalkDir call so we bail
 				// out of the library rather than enumerating thousands more paths.
@@ -505,8 +516,12 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 				return nil
 			})
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			if err != nil {
-				return errors.WithStack(err)
+				skip(library, libraryPath.Filepath, err)
+				continue libraries
 			}
 		}
 
@@ -690,6 +705,10 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 	// Rebuild FTS indexes after scan completes
 	rebuilt = true
 	w.rebuildSearchIndexes(ctx, jobLog)
+
+	if len(skipped) > 0 {
+		return errors.Errorf("skipped %d of %d libraries: %s", len(skipped), len(allLibraries), strings.Join(skipped, "; "))
+	}
 
 	jobLog.Info("finished scan job", nil)
 	return nil

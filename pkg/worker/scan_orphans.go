@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -273,7 +272,7 @@ func (w *Worker) cleanupOrphanedFiles(
 
 	for dir := range orphanDirs {
 		for _, libPath := range library.LibraryPaths {
-			if strings.HasPrefix(dir, libPath.Filepath) {
+			if fileutils.IsWithin(dir, libPath.Filepath) {
 				if err := fileutils.CleanupEmptyParentDirectories(dir, libPath.Filepath, cleanupIgnoredPatterns...); err != nil {
 					jobLog.Warn("failed to cleanup empty directories", logger.Data{"path": dir, "error": err.Error()})
 				}

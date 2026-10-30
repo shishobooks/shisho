@@ -27,7 +27,7 @@ type CreateLibraryPayload struct {
 	Name                  string   `json:"name" validate:"required,max=100"`
 	OrganizeFileStructure *bool    `json:"organize_file_structure,omitempty"`
 	CoverAspectRatio      string   `json:"cover_aspect_ratio" validate:"required,oneof=book audiobook book_fallback_audiobook audiobook_fallback_book" tstype:"CoverAspectRatio"`
-	LibraryPaths          []string `json:"library_paths" validate:"required,min=1,max=50,dive"`
+	LibraryPaths          []string `json:"library_paths" mod:"dive,trim" validate:"required,min=1,max=50,dive,required"`
 	TagNamespaces         []string `json:"tag_namespaces,omitempty" mod:"dive,trim" validate:"omitempty,max=20,dive,max=50"`
 }
 
@@ -40,7 +40,7 @@ type UpdateLibraryPayload struct {
 	Name                  *string  `json:"name,omitempty" validate:"omitempty,max=100"`
 	OrganizeFileStructure *bool    `json:"organize_file_structure,omitempty"`
 	CoverAspectRatio      *string  `json:"cover_aspect_ratio,omitempty" validate:"omitempty,oneof=book audiobook book_fallback_audiobook audiobook_fallback_book" tstype:"CoverAspectRatio"`
-	LibraryPaths          []string `json:"library_paths,omitempty" validate:"omitempty,min=1,max=50,dive"`
+	LibraryPaths          []string `json:"library_paths,omitempty" mod:"dive,trim" validate:"omitempty,min=1,max=50,dive,required"`
 	// TagNamespaces replaces the library's list when present; [] clears it.
 	TagNamespaces []string `json:"tag_namespaces,omitempty" mod:"dive,trim" validate:"omitempty,max=20,dive,max=50"`
 }

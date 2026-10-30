@@ -262,6 +262,56 @@ func TestMonitor_WatchRecursive(t *testing.T) {
 	assert.Contains(t, watchList, sub2)
 }
 
+// A library path that is a symlink to a directory gets its subdirectories
+// watched, under clean paths.
+func TestMonitor_WatchRecursive_SymlinkedRoot(t *testing.T) {
+	t.Parallel()
+
+	target := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(target, "sub"), 0755))
+	root := filepath.Join(t.TempDir(), "books")
+	require.NoError(t, os.Symlink(target, root))
+
+	m := newTestMonitor(t)
+	watcher, err := fsnotify.NewWatcher()
+	require.NoError(t, err)
+	defer watcher.Close()
+
+	count, err := m.watchLibraryPath(watcher, root)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+	assert.ElementsMatch(t, []string{root, filepath.Join(root, "sub")}, watcher.WatchList())
+}
+
+// A symlink to a folder created inside a library is not followed, matching
+// the full scan, which only follows a library path itself.
+func TestMonitor_WatchRecursive_DoesNotFollowNestedSymlink(t *testing.T) {
+	t.Parallel()
+
+	target := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(target, "sub"), 0755))
+	link := filepath.Join(t.TempDir(), "comics")
+	require.NoError(t, os.Symlink(target, link))
+
+	m := newTestMonitor(t)
+	watcher, err := fsnotify.NewWatcher()
+	require.NoError(t, err)
+	defer watcher.Close()
+
+	count, err := m.watchRecursive(watcher, link)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+	assert.Empty(t, watcher.WatchList())
+}
+
+func TestMonitor_FindLibraryID_RootLibraryPath(t *testing.T) {
+	t.Parallel()
+	m := newTestMonitor(t)
+	m.pathToLibrary = map[string]int{"/": 7}
+
+	assert.Equal(t, 7, m.findLibraryID("/books/book.epub"))
+}
+
 func TestMonitor_EnqueueExistingFiles(t *testing.T) {
 	t.Parallel()
 

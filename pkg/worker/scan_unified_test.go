@@ -2385,6 +2385,33 @@ func TestProcessScanJob_CleansUpOrphanedFiles(t *testing.T) {
 	assert.Empty(t, tc.listBooks())
 }
 
+// Cleaning up after an orphaned file climbs only to the library path the
+// file is under, not to another library path that merely shares its prefix.
+func TestProcessScanJob_CleansUpOrphanedFile_StopsAtItsOwnLibraryPath(t *testing.T) {
+	t.Parallel()
+	tc := newTestContextWithSearchService(t)
+
+	base := testgen.TempLibraryDir(t)
+	books := testgen.CreateSubDir(t, base, "books")
+	books2 := testgen.CreateSubDir(t, base, "books2")
+	tc.createLibrary([]string{books, books2})
+
+	bookDir := testgen.CreateSubDir(t, books2, "[Test Author] Orphan Book")
+	epubPath := testgen.GenerateEPUB(t, bookDir, "orphan.epub", testgen.EPUBOptions{
+		Title:   "Orphan Book",
+		Authors: []string{"Test Author"},
+	})
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+
+	require.NoError(t, os.Remove(epubPath))
+	require.NoError(t, tc.runScan())
+
+	assert.Empty(t, tc.listBooks())
+	assert.NoDirExists(t, bookDir)
+	assert.DirExists(t, books2, "the library path itself survives")
+}
+
 func TestProcessScanJob_CleansUpOrphanedFile_KeepsBookWithOtherFiles(t *testing.T) {
 	t.Parallel()
 	tc := newTestContextWithSearchService(t)

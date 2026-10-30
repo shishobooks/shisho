@@ -429,30 +429,28 @@ func (svc *Service) MoveFilesToBook(ctx context.Context, opts MoveFilesOptions) 
 			}
 		}
 
-		// Find the library root path for boundary checking
-		var libraryRootPath string
-		if len(library.LibraryPaths) > 0 {
-			libraryRootPath = library.LibraryPaths[0].Filepath
-		}
-
-		// Clean up empty directories (also removing ignored files like .DS_Store)
+		// Clean up each directory and its empty parents up to the library
+		// path it is under (also removing ignored files like .DS_Store). A
+		// directory under no library path gets only itself cleaned.
 		for dir := range dirsToClean {
-			// Try to clean up the directory and any empty parents up to the library root
-			if libraryRootPath != "" {
-				if err := fileutils.CleanupEmptyParentDirectories(dir, libraryRootPath, fileutils.JunkFilePatterns()...); err != nil {
-					log.Warn("failed to cleanup empty source directory", logger.Data{
-						"directory": dir,
-						"error":     err.Error(),
-					})
+			stopAt := ""
+			for _, lp := range library.LibraryPaths {
+				if fileutils.IsWithin(dir, lp.Filepath) {
+					stopAt = lp.Filepath
+					break
 				}
+			}
+			var err error
+			if stopAt != "" {
+				err = fileutils.CleanupEmptyParentDirectories(dir, stopAt, fileutils.JunkFilePatterns()...)
 			} else {
-				// If no library root, just try to clean the immediate directory
-				if _, err := fileutils.CleanupEmptyDirectory(dir, fileutils.JunkFilePatterns()...); err != nil {
-					log.Warn("failed to cleanup empty source directory", logger.Data{
-						"directory": dir,
-						"error":     err.Error(),
-					})
-				}
+				_, err = fileutils.CleanupEmptyDirectory(dir, fileutils.JunkFilePatterns()...)
+			}
+			if err != nil {
+				log.Warn("failed to cleanup empty source directory", logger.Data{
+					"directory": dir,
+					"error":     err.Error(),
+				})
 			}
 		}
 	}

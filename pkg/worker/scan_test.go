@@ -398,6 +398,27 @@ func TestProcessScanJob_RootLevelFile(t *testing.T) {
 	assert.Contains(t, book.Filepath, "[Root Author] Root Level Book")
 }
 
+// A library path entered with a trailing slash still makes root-level files
+// root-level: each gets its own Book, and none is keyed by the library root.
+func TestProcessScanJob_RootLevelFiles_LibraryPathWithTrailingSlash(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath + string(filepath.Separator)})
+
+	testgen.GenerateEPUB(t, libraryPath, "first.epub", testgen.EPUBOptions{Title: "First Book", Authors: []string{"Author"}})
+	testgen.GenerateEPUB(t, libraryPath, "second.epub", testgen.EPUBOptions{Title: "Second Book", Authors: []string{"Author"}})
+
+	require.NoError(t, tc.runScan())
+
+	allBooks := tc.listBooks()
+	require.Len(t, allBooks, 2)
+	for _, book := range allBooks {
+		assert.NotEqual(t, libraryPath, book.Filepath, "no Book is keyed by the library root")
+	}
+}
+
 func TestProcessScanJob_DirectoryWithMultipleFiles(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)
@@ -723,6 +744,69 @@ func TestProcessScanJob_LibraryWalkError(t *testing.T) {
 	// Should return an error because path doesn't exist
 	err := tc.runScan()
 	assert.Error(t, err)
+}
+
+// A library path that can't be reached, like an unmounted drive, skips only
+// its library: the other libraries are still scanned, the skipped library's
+// Books are kept rather than treated as deleted, and the job still fails so
+// the problem is visible.
+func TestProcessScanJob_MissingLibraryPathSkipsOnlyItsLibrary(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	base := testgen.TempLibraryDir(t)
+	unmounted := testgen.CreateSubDir(t, base, "unmounted")
+	present := testgen.CreateSubDir(t, unmounted, "present")
+	missing := testgen.CreateSubDir(t, unmounted, "missing")
+	healthy := testgen.CreateSubDir(t, base, "healthy")
+	// The unreachable library is scanned first, so a scan that stops there
+	// never reaches the healthy one.
+	for _, lib := range []struct {
+		name  string
+		paths []string
+	}{{"A Unmounted", []string{present, missing}}, {"B Healthy", []string{healthy}}} {
+		lps := make([]*models.LibraryPath, len(lib.paths))
+		for i, p := range lib.paths {
+			lps[i] = &models.LibraryPath{Filepath: p}
+		}
+		require.NoError(t, tc.libraryService.CreateLibrary(tc.ctx, &models.Library{Name: lib.name, CoverAspectRatio: "book", LibraryPaths: lps}))
+	}
+
+	testgen.GenerateEPUB(t, testgen.CreateSubDir(t, present, "Kept"), "kept.epub", testgen.EPUBOptions{Title: "Kept", Authors: []string{"A"}})
+	testgen.GenerateEPUB(t, testgen.CreateSubDir(t, missing, "Gone"), "gone.epub", testgen.EPUBOptions{Title: "Gone", Authors: []string{"A"}})
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 2)
+
+	require.NoError(t, os.RemoveAll(missing))
+	testgen.GenerateEPUB(t, testgen.CreateSubDir(t, healthy, "New"), "new.epub", testgen.EPUBOptions{Title: "New", Authors: []string{"A"}})
+
+	err := tc.runScan()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), missing)
+
+	titles := make([]string, 0, 3)
+	for _, book := range tc.listBooks() {
+		titles = append(titles, book.Title)
+	}
+	assert.ElementsMatch(t, []string{"Kept", "Gone", "New"}, titles)
+}
+
+// A library path that is a symlink to a directory is scanned through the
+// link, and its Books survive a rescan.
+func TestProcessScanJob_SymlinkedLibraryPath(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	target := testgen.TempLibraryDir(t)
+	link := filepath.Join(testgen.TempLibraryDir(t), "books")
+	require.NoError(t, os.Symlink(target, link))
+	tc.createLibrary([]string{link})
+	testgen.GenerateEPUB(t, testgen.CreateSubDir(t, target, "Book"), "book.epub", testgen.EPUBOptions{Title: "Linked", Authors: []string{"A"}})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.NoError(t, tc.runScan())
+	assert.Len(t, tc.listBooks(), 1)
 }
 
 func TestProcessScanJob_MetadataUpdateOnRescan(t *testing.T) {

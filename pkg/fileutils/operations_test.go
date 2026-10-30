@@ -1,6 +1,7 @@
 package fileutils
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1073,4 +1074,41 @@ func TestDirectoryCleanupPatterns(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, removed)
 	assert.FileExists(t, filepath.Join(withNotes, "notes.txt"))
+}
+
+func TestIsWithin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		path, dir string
+		want      bool
+	}{
+		{"/books", "/books", true},
+		{"/books/a/b.epub", "/books", true},
+		{"/books/a", "/books/", true},
+		{"/books2/a", "/books", false},
+		{"/book", "/books", false},
+		{"/", "/books", false},
+		{"/books/../other", "/books", false},
+	} {
+		assert.Equal(t, tc.want, IsWithin(tc.path, tc.dir), "IsWithin(%q, %q)", tc.path, tc.dir)
+	}
+}
+
+// A library path that is a symlink to a directory is walked into, and every
+// path reported, the root's included, is clean.
+func TestWalkDirFollowingRoot_SymlinkedRoot(t *testing.T) {
+	t.Parallel()
+	target := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(target, "sub"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(target, "sub", "book.epub"), []byte("x"), 0644))
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(target, link))
+
+	var seen []string
+	require.NoError(t, WalkDirFollowingRoot(link, func(path string, _ fs.DirEntry, err error) error {
+		require.NoError(t, err)
+		seen = append(seen, path)
+		return nil
+	}))
+	assert.Equal(t, []string{link, filepath.Join(link, "sub"), filepath.Join(link, "sub", "book.epub")}, seen)
 }

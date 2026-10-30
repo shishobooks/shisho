@@ -3,6 +3,7 @@ package libraries
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -39,6 +40,26 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db}
 }
 
+// cleanLibraryPaths cleans each path and drops repeats. Code across the app
+// compares a file's directory (always clean) against library paths, so a
+// stored "/books/" would never match and root-level files would be treated
+// as a Book keyed by the library root.
+func cleanLibraryPaths(paths []*models.LibraryPath) []*models.LibraryPath {
+	seen := make(map[string]bool, len(paths))
+	cleaned := make([]*models.LibraryPath, 0, len(paths))
+	for _, path := range paths {
+		if path.Filepath != "" {
+			path.Filepath = filepath.Clean(path.Filepath)
+		}
+		if seen[path.Filepath] {
+			continue
+		}
+		seen[path.Filepath] = true
+		cleaned = append(cleaned, path)
+	}
+	return cleaned
+}
+
 func (svc *Service) CreateLibrary(ctx context.Context, library *models.Library) error {
 	now := time.Now()
 	if library.CreatedAt.IsZero() {
@@ -56,6 +77,7 @@ func (svc *Service) CreateLibrary(ctx context.Context, library *models.Library) 
 			return errors.WithStack(err)
 		}
 
+		library.LibraryPaths = cleanLibraryPaths(library.LibraryPaths)
 		for _, path := range library.LibraryPaths {
 			path.LibraryID = library.ID
 			path.CreatedAt = library.CreatedAt
@@ -200,6 +222,7 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, 
 				return errors.WithStack(err)
 			}
 
+			library.LibraryPaths = cleanLibraryPaths(library.LibraryPaths)
 			for _, path := range library.LibraryPaths {
 				path.LibraryID = library.ID
 				path.CreatedAt = now
