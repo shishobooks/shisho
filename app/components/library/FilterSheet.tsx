@@ -12,7 +12,14 @@ import {
   Star,
   Tags,
 } from "lucide-react";
-import { forwardRef, useEffect, useId, useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   FilterChip,
@@ -306,6 +313,7 @@ const MultiSelectCombobox = <V extends string>({
   placeholder: string;
 }) => {
   const [open, setOpen] = useState(false);
+  const commandRef = useRef<HTMLDivElement>(null);
   const chosen = options.filter((o) => selected.includes(o.value));
   return (
     <Popover modal onOpenChange={setOpen} open={open}>
@@ -331,8 +339,19 @@ const MultiSelectCombobox = <V extends string>({
       <PopoverContent
         align="start"
         className="w-[var(--radix-popover-trigger-width)] p-0"
+        // With no search box, cmdk's root takes focus so the arrow keys and
+        // Enter reach it.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          commandRef.current?.focus();
+        }}
       >
-        <Command shouldFilter={false}>
+        <Command
+          className="outline-none"
+          ref={commandRef}
+          shouldFilter={false}
+          tabIndex={-1}
+        >
           <CommandList>
             <CommandGroup>
               {options.map((option) => {
@@ -393,8 +412,11 @@ const RatingRangeSlider = ({
   // The range shown while dragging, before it's committed to the URL.
   const [preview, setPreview] = useState<[number, number] | null>(null);
   // Radix reports a key press's commit before its change, so the preview
-  // clears once the committed range arrives rather than on commit.
-  useEffect(() => setPreview(null), [min, max]);
+  // clears after the render that follows a commit, or once a new range
+  // arrives, rather than on commit itself. A commit that changes nothing
+  // (an end clamped back) still clears it.
+  const [commits, setCommits] = useState(0);
+  useEffect(() => setPreview(null), [min, max, commits]);
   const [low, high] = preview ?? committed;
   const range = (lo: number, hi: number) => ({
     min: lo === RATING_FLOOR ? undefined : lo,
@@ -416,6 +438,7 @@ const RatingRangeSlider = ({
         minStepsBetweenThumbs={0}
         onValueChange={([lo, hi]) => setPreview([lo, hi])}
         onValueCommit={([lo, hi]) => {
+          setCommits((n) => n + 1);
           const next = range(lo, hi);
           onChange(next.min, next.max);
         }}
@@ -434,8 +457,20 @@ const RatingRangeSlider = ({
           <SliderPrimitive.Thumb
             aria-label={label}
             aria-valuetext={ratingEndText(stars, edge)}
+            // Radix's Home and End move the first and last thumbs; these
+            // move the focused end as far as it goes instead.
             className="block h-4 w-4 rounded-full border border-amber-500 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             key={label}
+            onKeyDown={(e) => {
+              if (e.key !== "Home" && e.key !== "End") return;
+              e.preventDefault();
+              const isLow = edge === RATING_FLOOR;
+              const lo = isLow ? (e.key === "Home" ? RATING_FLOOR : high) : low;
+              const hi = isLow ? high : e.key === "Home" ? low : RATING_CEILING;
+              setCommits((n) => n + 1);
+              const next = range(lo, hi);
+              onChange(next.min, next.max);
+            }}
           />
         ))}
       </SliderPrimitive.Root>

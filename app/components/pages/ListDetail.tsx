@@ -437,8 +437,16 @@ const ListDetail = () => {
                       disabled={updateListMutation.isPending}
                       onClick={() => {
                         // handleUpdate displays the error; no dialog awaits this action.
+                        // The URL drops the saved sort, unless the sort
+                        // changed while saving.
                         void handleUpdate({ default_sort: sort })
-                          .then(() => setSort(undefined))
+                          .then(() =>
+                            updateListView((params) => {
+                              if (params.get("sort") === sort) {
+                                params.delete("sort");
+                              }
+                            }),
+                          )
                           .catch(() => {});
                       }}
                       size="sm"
@@ -479,11 +487,14 @@ const ListDetail = () => {
                     (drag to reorder)
                   </span>
                 )}
-                {list.is_ordered && canEdit && isFiltered && (
-                  <span className="text-sm font-normal text-muted-foreground ml-2">
-                    (clear the filters to reorder)
-                  </span>
-                )}
+                {list.is_ordered &&
+                  canEdit &&
+                  isFiltered &&
+                  bookCount <= GALLERY_MAX_PAGE_SIZE && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      (clear the filters to reorder)
+                    </span>
+                  )}
               </h2>
               <div className="hidden sm:flex">
                 <SizePopover

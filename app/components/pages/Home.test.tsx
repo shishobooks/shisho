@@ -281,3 +281,25 @@ describe("Home active filter chips", () => {
     expect(tagPaths).toEqual(["/tags/5"]);
   });
 });
+
+describe("Home filter chips", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setAuth({ permissions: ["books:read"] });
+  });
+
+  it("lists file type chips in the picker's order, and keeps a type it doesn't offer", async () => {
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      path === "/user/libraries" || path.endsWith("/languages")
+        ? []
+        : { items: [], total: 0 },
+    );
+    renderHome("/libraries/1?file_types=cbz,zzz,epub");
+    await flush();
+
+    const chips = screen
+      .getAllByRole("button", { name: /^Remove / })
+      .map((chip) => chip.getAttribute("aria-label"));
+    expect(chips).toEqual(["Remove EPUB", "Remove CBZ", "Remove zzz"]);
+  });
+});

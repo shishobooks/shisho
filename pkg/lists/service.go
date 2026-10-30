@@ -438,8 +438,8 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 }
 
 // orderListBooks orders a query over list_books, aliased lb, by sort. The
-// rating and finish date sorts read readerID's reading data, and fall back
-// to the default without one.
+// reading status, rating, and finish date sorts read readerID's reading
+// data, and fall back to the default without one.
 func orderListBooks(q *bun.SelectQuery, sort string, readerID *int) *bun.SelectQuery {
 	if readerID == nil && (sort == models.ListSortRatingDesc || sort == models.ListSortRatingAsc ||
 		sort == models.ListSortDateFinishedDesc || sort == models.ListSortDateFinishedAsc ||

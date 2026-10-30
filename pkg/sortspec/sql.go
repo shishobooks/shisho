@@ -86,8 +86,12 @@ func OrderClauses(levels []SortLevel, readerID *int) []OrderClause {
 			out = append(out, nullsLast(newestFileCoalesce("audiobook_duration_seconds"), l.Direction))
 
 		case FieldReadingStatus:
+			// The rank is never NULL, so it needs no NULLS-LAST term, which
+			// would derive the status twice per row.
 			if readerID != nil {
-				out = append(out, nullsLast(reading.StatusRankExpr(*readerID, "b.id"), l.Direction))
+				out = append(out, OrderClause{
+					Expression: fmt.Sprintf("%s %s", reading.StatusRankExpr(*readerID, "b.id"), strings.ToUpper(string(l.Direction))),
+				})
 			}
 
 		case FieldRating:

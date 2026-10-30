@@ -88,4 +88,62 @@ describe("ReadingFilterSection", () => {
     await user.keyboard("{End}");
     expect(onRatingChange).toHaveBeenLastCalledWith(4, undefined);
   });
+
+  // Dragging the top end below a quarter star clamps it back, so the range
+  // doesn't change. The thumb must show the range, not where it was dragged.
+  it("shows the committed range after a drag that changes nothing", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onRatingChange = vi.fn();
+    render(
+      <ReadingFilterSection
+        filters={{ statuses: [], ratingMax: 0.25 }}
+        onRatingChange={onRatingChange}
+        onToggleStatus={vi.fn()}
+      />,
+    );
+
+    const highest = screen.getByRole("slider", { name: "Highest rating" });
+    await user.click(highest);
+    await user.keyboard("{ArrowLeft}");
+    expect(onRatingChange).toHaveBeenLastCalledWith(undefined, 0.25);
+    expect(highest).toHaveAttribute("aria-valuetext", "0.25 stars");
+  });
+
+  it("picks a status from the keyboard", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onToggleStatus = vi.fn();
+    render(
+      <ReadingFilterSection
+        filters={{ statuses: [] }}
+        onRatingChange={vi.fn()}
+        onToggleStatus={onToggleStatus}
+      />,
+    );
+
+    screen.getByRole("combobox", { name: "Reading status" }).focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onToggleStatus).toHaveBeenCalledWith("paused");
+  });
+
+  // Home and End move the focused end to its edge of the track, not the
+  // first and last thumbs.
+  it("moves the focused end with Home and End", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onRatingChange = vi.fn();
+    render(
+      <ReadingFilterSection
+        filters={{ statuses: [], ratingMin: 2, ratingMax: 4 }}
+        onRatingChange={onRatingChange}
+        onToggleStatus={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("slider", { name: "Highest rating" }));
+    await user.keyboard("{Home}");
+    expect(onRatingChange).toHaveBeenLastCalledWith(2, 2);
+    await user.click(screen.getByRole("slider", { name: "Lowest rating" }));
+    await user.keyboard("{End}");
+    expect(onRatingChange).toHaveBeenLastCalledWith(4, 4);
+  });
 });

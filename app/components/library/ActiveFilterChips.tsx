@@ -77,15 +77,21 @@ export const ActiveFilterChips = ({
           onRemove={onClearRating}
         />
       )}
-      {selectedFileTypes.map((fileType) => (
+      {/* In the picker's order, as the status chips are. A type the picker
+          doesn't offer (from an old link) still filters, so it keeps a chip. */}
+      {[
+        ...FILE_TYPE_OPTIONS.filter((option) =>
+          selectedFileTypes.includes(option.value),
+        ),
+        ...selectedFileTypes
+          .filter((type) => !FILE_TYPE_OPTIONS.some((o) => o.value === type))
+          .map((type) => ({ value: type, label: type })),
+      ].map((option) => (
         <FilterChip
-          key={fileType}
+          key={option.value}
           kind="fileType"
-          label={
-            FILE_TYPE_OPTIONS.find((o) => o.value === fileType)?.label ??
-            fileType
-          }
-          onRemove={() => onToggleFileType?.(fileType)}
+          label={option.label}
+          onRemove={() => onToggleFileType?.(option.value)}
         />
       ))}
       {selectedGenres.map((genre) => (

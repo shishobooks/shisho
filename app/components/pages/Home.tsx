@@ -94,7 +94,7 @@ const selectedFilters = (
 
 const HomeContent = () => {
   const { libraryId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const updateSearchParams = useUpdateSearchParams();
   const libraryQuery = useUserLibrary(libraryId);
 
@@ -292,7 +292,6 @@ const HomeContent = () => {
 
   const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
 
-  // Toggle file type filter
   // Filters edit the URL through updateFilters, which builds on any change
   // still on its way, so fast clicks don't drop one another. Each filter
   // change goes back to the first page.
@@ -364,20 +363,18 @@ const HomeContent = () => {
       {
         onError: (error) =>
           toastRequestError(error, "Failed to save the default sort"),
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("sort");
-            return params;
-          });
-        },
+        // The saved sort is the default now, so the URL drops it, unless
+        // the sort changed while saving.
+        onSuccess: () =>
+          updateSearchParams((params) => {
+            if (params.get("sort") === serialized) params.delete("sort");
+          }),
       },
     );
   };
 
-  const applySortLevels = (next: readonly SortLevel[]) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
+  const applySortLevels = (next: readonly SortLevel[]) =>
+    updateSearchParams((params) => {
       const serialized = serializeSortSpec(next);
       if (serialized && !sortSpecsEqual(next, defaultSort)) {
         params.set("sort", serialized);
@@ -385,9 +382,7 @@ const HomeContent = () => {
         params.delete("sort");
       }
       resetPaging(params);
-      return params;
     });
-  };
 
   const hasActiveFilters =
     readingFiltersActive ||
@@ -636,13 +631,7 @@ const HomeContent = () => {
             const next = effectiveSort.filter((_, i) => i !== index);
             applySortLevels(next);
           }}
-          onReset={() => {
-            setSearchParams((prev) => {
-              const params = new URLSearchParams(prev);
-              params.delete("sort");
-              return params;
-            });
-          }}
+          onReset={() => updateSearchParams((params) => params.delete("sort"))}
         />
       </div>
 
