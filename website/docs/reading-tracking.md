@@ -44,10 +44,11 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 
 ### Starting and Finishing Automatically
 
-- **Starting**: turning past the first page of a book you aren't reading starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing.
+- **Starting**: turning past the first page of a book you have never read starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing.
+- **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
 - **Resuming**: turning a page of a paused book makes it **Currently Reading** again.
 - **Finishing**: reaching the last page finishes the Read-through, dated today. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
-- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way. After 15 minutes, going back counts as starting a reread.
+- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way. After 15 minutes, the book stays **Read**.
 
 ### Your Time Zone
 

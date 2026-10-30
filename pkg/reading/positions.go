@@ -69,9 +69,9 @@ type SessionInput struct {
 //     session
 //  2. undoes the File's automatic finish when this is the next update back
 //     before the end, within RevertWindow
-//  3. starts a Read-through when none is underway and the update is real
-//     progress, taking the Book off To Read and resetting its other
-//     positions
+//  3. starts a Read-through when none is underway, the update is real
+//     progress, and the Book is unread or on To Read, taking it off To Read
+//     and resetting its other positions
 //  4. resumes a paused Read-through on real progress
 //  5. finishes the Read-through underway on reaching the end, dated in the
 //     user's time zone
@@ -125,7 +125,13 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			}
 		}
 
-		starting := underway == nil && progress
+		starting := false
+		if underway == nil && progress {
+			starting, err = startsOnProgress(ctx, tx, u.UserID, bookID)
+			if err != nil {
+				return err
+			}
+		}
 		// Staying at the end, as a reader closed there after Undo reports,
 		// doesn't finish again.
 		finishing := u.AtEnd && progress
@@ -387,4 +393,18 @@ func userDay(ctx context.Context, db bun.IDB, userID int, instant time.Time) (st
 		}
 	}
 	return instant.In(location).Format(time.DateOnly), nil
+}
+
+// startsOnProgress reports whether reading userID's bookID, with nothing
+// underway, starts a Read-through: for a Book never read, or one on To Read,
+// which plans a reread. Opening a Book already read or abandoned is looking
+// something up until the user chooses Read again.
+func startsOnProgress(ctx context.Context, db bun.IDB, userID, bookID int) (bool, error) {
+	var starts bool
+	err := db.NewSelect().
+		ColumnExpr(`NOT EXISTS (SELECT 1 FROM read_throughs WHERE user_id = ? AND book_id = ?)
+			OR EXISTS (SELECT 1 FROM user_books WHERE user_id = ? AND book_id = ? AND to_read_position IS NOT NULL)`,
+			userID, bookID, userID, bookID).
+		Scan(ctx, &starts)
+	return starts, errors.WithStack(err)
 }

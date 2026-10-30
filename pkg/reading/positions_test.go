@@ -283,10 +283,55 @@ func TestUpdatePosition_GoingBackAfterTheWindowKeepsTheFinish(t *testing.T) {
 	result := f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
 
 	assert.False(t, result.Reverted)
-	rts := f.readThroughs()
-	require.Len(t, rts, 2, "going back later starts a reread")
-	assert.Equal(t, models.ReadThroughOutcomeUnderway, rts[0].Outcome)
-	assert.Equal(t, models.ReadThroughOutcomeFinished, rts[1].Outcome)
+	assert.False(t, result.Started, "looking something up isn't a reread")
+	assert.Len(t, f.readThroughs(), 1)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+	assert.Equal(t, "epubcfi(/6/20!/4/2)", *f.position(f.file).CFI, "the place is still saved")
+}
+
+func TestUpdatePosition_ReadingAnAbandonedBookDoesNotStartIt(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	require.NoError(t, f.svc.End(f.ctx, f.user.ID, f.book.ID, models.ReadThroughOutcomeAbandoned, "2026-10-15"))
+
+	f.clock.advance(24 * time.Hour)
+	result := f.read(f.file, "epubcfi(/6/22!/4/2)", 0.55, false)
+
+	assert.False(t, result.Started)
+	assert.Equal(t, models.ReadingStatusDidNotFinish, f.status())
+}
+
+func TestUpdatePosition_ReachingTheEndOfAReadBookAgainChangesNothing(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	require.NoError(t, f.svc.End(f.ctx, f.user.ID, f.book.ID, models.ReadThroughOutcomeFinished, "2026-10-15"))
+
+	f.clock.advance(24 * time.Hour)
+	result := f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+
+	assert.False(t, result.Started)
+	assert.Nil(t, result.FinishedReadThroughID)
+	assert.Len(t, f.readThroughs(), 1)
+}
+
+func TestUpdatePosition_ReadingABookQueuedForARereadStartsIt(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	f.clock.advance(time.Hour)
+	f.addToRead()
+
+	result := f.read(f.file, "epubcfi(/6/6!/4/2)", 0.1, false)
+
+	assert.True(t, result.Started)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+	assert.Len(t, f.readThroughs(), 2)
+	reading, err := f.svc.RetrieveBookReading(f.ctx, f.user.ID, f.book.ID)
+	require.NoError(t, err)
+	assert.False(t, reading.OnToRead)
 }
 
 func TestUpdatePosition_OnlyTheNextUpdateCanUndoAFinish(t *testing.T) {
@@ -318,9 +363,7 @@ func TestUpdatePosition_AManualFinishIsNeverUndone(t *testing.T) {
 	result := f.read(f.file, "epubcfi(/6/22!/4/2)", 0.55, false)
 
 	assert.False(t, result.Reverted)
-	rts := f.readThroughs()
-	require.Len(t, rts, 2)
-	assert.Equal(t, models.ReadThroughOutcomeFinished, rts[1].Outcome)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
 }
 
 func TestUndoAutoFinish(t *testing.T) {
@@ -410,6 +453,7 @@ func TestUpdatePosition_AnAutomaticStartResetsTheBooksOtherFiles(t *testing.T) {
 	other := f.addFile(f.book, "dune-2.epub")
 	f.read(other, "epubcfi(/6/10!/4/2)", 0.3, false)
 	require.NoError(t, f.svc.End(f.ctx, f.user.ID, f.book.ID, models.ReadThroughOutcomeFinished, "2026-10-15"))
+	f.addToRead()
 
 	f.clock.advance(time.Hour)
 	result := f.read(f.file, "epubcfi(/6/6!/4/2)", 0.1, false)
@@ -440,7 +484,8 @@ func TestDeleteReadThrough_EndedKeepsPositionsAndRemovesOnlyItsHistory(t *testin
 	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
 	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
 	f.clock.advance(time.Hour)
-	f.read(f.file, "epubcfi(/6/6!/4/2)", 0.1, false) // starts a reread
+	f.addToRead()
+	f.read(f.file, "epubcfi(/6/6!/4/2)", 0.1, false) // starts the planned reread
 	f.recordSession(f.file, 0.05, 0.1)
 	rts := f.readThroughs()
 	require.Len(t, rts, 2)
